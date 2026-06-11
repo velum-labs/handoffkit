@@ -17,6 +17,9 @@ importers:
 
   examples/demos:
     dependencies:
+      '@warrant/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
       '@warrant/handoff':
         specifier: workspace:*
         version: link:../../packages/handoff

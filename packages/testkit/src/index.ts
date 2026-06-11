@@ -4,9 +4,9 @@
  * locally with the built-in mock agent: no vendor CLIs, no API keys.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { Plane, SecretStore, defaultPolicy, startPlaneServer } from "@warrant/plane";
 import { generateEd25519KeyPair } from "@warrant/protocol";
@@ -34,7 +34,9 @@ export function makeRepo(options: RepoFixtureOptions = {}): string {
   git(dir, ["config", "user.name", "warrant-fixture"]);
   const files = options.files ?? { "README.md": "# fixture\n" };
   for (const [path, content] of Object.entries(files)) {
-    writeFileSync(join(dir, path), content);
+    const target = join(dir, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
   }
   git(dir, ["add", "-A"]);
   git(dir, ["commit", "--quiet", "-m", "init"]);

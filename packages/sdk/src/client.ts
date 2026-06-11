@@ -29,6 +29,27 @@ export class PlaneClientError extends Error {
   }
 }
 
+/**
+ * Retry GETs (idempotent by construction in this API) on transport-level
+ * failures: a keep-alive socket the server closed while idle surfaces as a
+ * TypeError from fetch, not as an HTTP error.
+ */
+async function fetchIdempotent(
+  url: string,
+  init: RequestInit,
+  attempts = 3
+): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      const retryable = error instanceof TypeError && init.method === "GET";
+      if (!retryable || attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+    }
+  }
+}
+
 /** Thin HTTP client over the plane API, shared by the CLI, SDKs, and runner. */
 export class PlaneClient {
   readonly baseUrl: string;
@@ -49,7 +70,7 @@ export class PlaneClient {
     const auth = token ?? this.adminToken;
     if (auth) headers.authorization = `Bearer ${auth}`;
     if (body !== undefined) headers["content-type"] = "application/json";
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await fetchIdempotent(`${this.baseUrl}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body)
@@ -86,7 +107,9 @@ export class PlaneClient {
   }
 
   async getBlob(hash: string): Promise<Buffer> {
-    const response = await fetch(`${this.baseUrl}/v1/blobs/${hash}`);
+    const response = await fetchIdempotent(`${this.baseUrl}/v1/blobs/${hash}`, {
+      method: "GET"
+    });
     if (!response.ok) {
       throw new PlaneClientError(response.status, await response.json());
     }
@@ -160,7 +183,10 @@ export class PlaneClient {
     const query = since ? `?since=${encodeURIComponent(since)}` : "";
     const headers: Record<string, string> = {};
     if (this.adminToken) headers.authorization = `Bearer ${this.adminToken}`;
-    const response = await fetch(`${this.baseUrl}/v1/export${query}`, { headers });
+    const response = await fetchIdempotent(`${this.baseUrl}/v1/export${query}`, {
+      method: "GET",
+      headers
+    });
     if (!response.ok) {
       throw new PlaneClientError(response.status, await response.json());
     }

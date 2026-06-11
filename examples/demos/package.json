@@ -6,6 +6,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
+    "@warrant/cli": "workspace:*",
     "@warrant/handoff": "workspace:*",
     "@warrant/plane": "workspace:*",
     "@warrant/protocol": "workspace:*",
