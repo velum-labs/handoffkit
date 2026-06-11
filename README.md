@@ -106,6 +106,33 @@ pnpm demo all       # run the whole series (skips interactive demos)
 | 11 | Golden interface | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
 | 12 | Model escalation | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
 
+## Using real models
+
+The AI SDK demos (09, 11, 12) run with scripted mock models by default so the series is deterministic and key-free in CI. Point them at real models through any OpenAI-compatible endpoint and the same demos run live — the governance (contracts, sessions, receipts) is identical in both modes:
+
+```sh
+# real local model (Ollama, LM Studio, …)
+export WARRANT_DEMO_LOCAL_URL=http://localhost:11434/v1
+export WARRANT_DEMO_LOCAL_MODEL=qwen3:8b
+
+# real cloud model (OpenAI, a gateway, OpenRouter, …)
+export OPENAI_API_KEY=sk-...                       # or WARRANT_DEMO_CLOUD_API_KEY
+export WARRANT_DEMO_CLOUD_MODEL=gpt-4o-mini        # named explicitly, no silent default
+# export WARRANT_DEMO_CLOUD_URL=https://api.openai.com/v1   (default)
+
+pnpm demo 09   # a real model drives generateText; its tool calls run in governed sessions
+pnpm demo 12   # real local-first escalation: local model → cloud model, decision trace included
+```
+
+And the core product path has always been real models: the vendor agent harnesses wrap the actual CLIs, with API keys released by the secret broker — never present in prompts, contracts, logs, or receipts:
+
+```sh
+# org policy: make the key releasable and the API host reachable, then:
+warrant secrets set ANTHROPIC_API_KEY sk-ant-...
+warrant run --agent claude-code --secret ANTHROPIC_API_KEY \
+  --allow-host api.anthropic.com "fix the flaky auth test and run the suite"
+```
+
 ## The handoff SDK
 
 ```ts

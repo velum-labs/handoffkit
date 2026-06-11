@@ -1,6 +1,7 @@
 import { rmSync } from "node:fs";
 
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
+import type { LanguageModel } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 
 import { withCompute } from "@warrant/adapter-compute";
@@ -8,6 +9,7 @@ import { agents, handoff, localFirst, targets } from "@warrant/handoff";
 import type { ToolJournal } from "@warrant/protocol";
 import { makeRepo, startStack } from "@warrant/testkit";
 
+import { resolveDemoModels } from "../models.js";
 import { banner, detail, finale, ok, step } from "../narrate.js";
 import type { Demo } from "../registry.js";
 
@@ -67,43 +69,54 @@ export const demo: Demo = {
         })
       });
 
-      let calls = 0;
-      const model = new MockLanguageModelV3({
-        doGenerate: async () => {
-          calls++;
-          if (calls === 1) {
+      const resolved = resolveDemoModels();
+      detail(resolved.description);
+      let model: LanguageModel;
+      if (resolved.source === "live") {
+        model = resolved.loop;
+      } else {
+        let calls = 0;
+        model = new MockLanguageModelV3({
+          doGenerate: async () => {
+            calls++;
+            if (calls === 1) {
+              return {
+                content: [
+                  {
+                    type: "tool-call" as const,
+                    toolCallId: "call-1",
+                    toolName: "lookupOwner",
+                    input: JSON.stringify({ service: "checkout" })
+                  }
+                ],
+                finishReason: { unified: "tool-calls" as const, raw: "tool-calls" },
+                usage,
+                warnings: []
+              };
+            }
             return {
               content: [
-                {
-                  type: "tool-call" as const,
-                  toolCallId: "call-1",
-                  toolName: "lookupOwner",
-                  input: JSON.stringify({ service: "checkout" })
-                }
+                { type: "text" as const, text: "checkout is owned by platform-team" }
               ],
-              finishReason: { unified: "tool-calls" as const, raw: "tool-calls" },
+              finishReason: { unified: "stop" as const, raw: "stop" },
               usage,
               warnings: []
             };
           }
-          return {
-            content: [
-              { type: "text" as const, text: "checkout is owned by platform-team" }
-            ],
-            finishReason: { unified: "stop" as const, raw: "stop" },
-            usage,
-            warnings: []
-          };
-        }
-      });
+        });
+      }
 
       const result = await generateText({
         model,
         tools,
-        prompt: "who owns the checkout service?",
-        stopWhen: stepCountIs(2)
+        prompt:
+          "Use the lookupOwner tool to find the owning team of the 'checkout' service, then state the owner.",
+        stopWhen: stepCountIs(4)
       });
-      ok(`model: "${result.text}" — the tool ran locally, journaled by the context`);
+      ok(`model: "${result.text.trim().slice(0, 120)}" — the tool ran locally, journaled by the context`);
+      if (h.trace().filter((e) => e.type === "tool.called").length === 0) {
+        throw new Error("the model never used the journaled tool");
+      }
 
       step("the golden gesture, gated by policy: if (h.needs(target)) await h.continueIn(target)");
       const target = targets.pool(POOL);

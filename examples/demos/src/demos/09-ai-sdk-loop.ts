@@ -1,11 +1,13 @@
 import { rmSync } from "node:fs";
 
 import { generateText, stepCountIs } from "ai";
+import type { LanguageModel } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 
 import { remoteTools } from "@warrant/adapter-ai-sdk";
 import { makeRepo, startStack } from "@warrant/testkit";
 
+import { resolveDemoModels } from "../models.js";
 import { banner, detail, finale, ok, step } from "../narrate.js";
 import type { Demo } from "../registry.js";
 
@@ -47,50 +49,62 @@ export const demo: Demo = {
         actor: { kind: "human", id: "dana@example.com" }
       });
 
-      // A scripted model keeps the demo deterministic and key-free; swap in
-      // openai(...)/anthropic(...) and the tool wiring stays identical.
+      // Real models when configured (see models.ts), a scripted mock
+      // otherwise — the governance is identical in both modes.
+      const resolved = resolveDemoModels();
+      detail(resolved.description);
       const command = "tail -n +2 data.csv | wc -l > rows.txt && cat rows.txt";
-      let calls = 0;
-      const model = new MockLanguageModelV3({
-        doGenerate: async () => {
-          calls++;
-          if (calls === 1) {
+      let model: LanguageModel;
+      if (resolved.source === "live") {
+        model = resolved.loop;
+      } else {
+        let calls = 0;
+        model = new MockLanguageModelV3({
+          doGenerate: async () => {
+            calls++;
+            if (calls === 1) {
+              return {
+                content: [
+                  {
+                    type: "tool-call" as const,
+                    toolCallId: "call-1",
+                    toolName: "shell",
+                    input: JSON.stringify({ command })
+                  }
+                ],
+                finishReason: { unified: "tool-calls" as const, raw: "tool-calls" },
+                usage,
+                warnings: []
+              };
+            }
             return {
               content: [
-                {
-                  type: "tool-call" as const,
-                  toolCallId: "call-1",
-                  toolName: "shell",
-                  input: JSON.stringify({ command })
-                }
+                { type: "text" as const, text: "There are 3 data rows in data.csv." }
               ],
-              finishReason: { unified: "tool-calls" as const, raw: "tool-calls" },
+              finishReason: { unified: "stop" as const, raw: "stop" },
               usage,
               warnings: []
             };
           }
-          return {
-            content: [
-              { type: "text" as const, text: "There are 3 data rows in data.csv." }
-            ],
-            finishReason: { unified: "stop" as const, raw: "stop" },
-            usage,
-            warnings: []
-          };
-        }
-      });
+        });
+      }
 
       step("run a completely ordinary AI SDK loop: generateText({ model, tools: rt.tools, … })");
       const result = await generateText({
         model,
         tools: rt.tools,
-        prompt: "How many data rows are in data.csv? Use the sandbox.",
-        stopWhen: stepCountIs(2)
+        prompt:
+          "How many data rows are in data.csv (skip the header)? Use the shell tool to count them, then state the number.",
+        stopWhen: stepCountIs(4)
       });
-      ok(`model answered: "${result.text}"`);
+      ok(`model answered: "${result.text.trim().slice(0, 120)}"`);
 
       step("the tool call itself ran on a governed runner, with evidence");
-      for (const call of rt.calls()) {
+      const calls = rt.calls();
+      if (calls.length === 0) {
+        throw new Error("the model never used the governed shell tool");
+      }
+      for (const call of calls) {
         detail(`command: ${call.command}`);
         detail(
           `run ${call.runId}: ${call.status}, exit ${call.exitCode}, contract ${call.contractHash.slice(0, 12)}`
@@ -99,7 +113,7 @@ export const demo: Demo = {
           `receipt verified offline: ${call.receiptVerified} · results pulled: ${call.pullMode}`
         );
       }
-      const verified = rt.calls().every((call) => call.receiptVerified);
+      const verified = calls.every((call) => call.receiptVerified);
       if (!verified) throw new Error("every tool call must carry a verified receipt");
       ok("the loop stayed app-owned; the execution boundary became governed");
       finale(

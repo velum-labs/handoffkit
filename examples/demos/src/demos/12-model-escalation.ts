@@ -2,11 +2,13 @@ import { rmSync } from "node:fs";
 
 import { generateText } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
+import type { LanguageModelV3 } from "@ai-sdk/provider";
 
 import { withModel } from "@warrant/adapter-ai-sdk";
 import { handoff, localFirst, targets, triggers } from "@warrant/handoff";
 import { makeRepo, startStack } from "@warrant/testkit";
 
+import { resolveDemoModels } from "../models.js";
 import { banner, detail, finale, ok, step } from "../narrate.js";
 import type { Demo } from "../registry.js";
 
@@ -22,40 +24,43 @@ const usage = {
   outputTokens: { total: 4, text: 4, reasoning: undefined }
 };
 
+function mockModel(id: string, text: string): MockLanguageModelV3 {
+  return new MockLanguageModelV3({
+    modelId: id,
+    doGenerate: async () => ({
+      content: [{ type: "text" as const, text }],
+      finishReason: { unified: "stop" as const, raw: "stop" },
+      usage,
+      warnings: []
+    })
+  });
+}
+
 export const demo: Demo = {
   id: "12",
   title: "model escalation",
   summary:
-    "h.model starts on the local model and escalates to cloud under deterministic conditions — a local failure, a context overflow, a prompt-size threshold. Every routing decision lands in the trace, and escalation makes continuation 'needed'.",
+    "h.model starts on the local model and escalates to cloud under deterministic conditions — here, a prompt-size threshold standing in for 'context too large'. Every routing decision lands in the trace, and escalation makes continuation 'needed'.",
   async run() {
     banner(this.id, this.title, this.summary);
 
     const stack = await startStack({ pool: POOL, startRunner: true });
     const repo = makeRepo({ files: { "notes.md": "# scratch\n" } });
     try {
-      step("two models: a small local one (which will choke) and a cloud one");
-      const local = new MockLanguageModelV3({
-        modelId: "tiny-local-8b",
-        doGenerate: async () => {
-          throw new Error("prompt exceeds maximum context length of 2048 tokens");
-        }
-      });
-      const cloud = new MockLanguageModelV3({
-        modelId: "frontier-cloud",
-        doGenerate: async () => ({
-          content: [
-            {
-              type: "text" as const,
-              text: "Here is the migration plan, computed with the larger context."
-            }
-          ],
-          finishReason: { unified: "stop" as const, raw: "stop" },
-          usage,
-          warnings: []
-        })
-      });
+      step("two models: a small local one and a cloud one (real when configured)");
+      const resolved = resolveDemoModels();
+      detail(resolved.description);
+      const local: LanguageModelV3 =
+        (resolved.source === "live" ? resolved.local : undefined) ??
+        mockModel("tiny-local-8b", "Quick local answer: the notes file is fine.");
+      const cloud: LanguageModelV3 =
+        (resolved.source === "live" ? resolved.cloud : undefined) ??
+        mockModel(
+          "frontier-cloud",
+          "Here is the migration plan, computed with the larger context."
+        );
 
-      step("h = withModel(handoff({ … continueWhen: [triggers.modelEscalated()] }), { local, cloud })");
+      step("h = withModel(handoff({ … continueWhen: [triggers.modelEscalated()] }), { local, cloud, maxLocalPromptBytes: 600 })");
       const h = withModel(
         handoff({
           workspace: repo,
@@ -66,17 +71,24 @@ export const demo: Demo = {
             continueWhen: [triggers.modelEscalated()]
           })
         }),
-        { local, cloud }
+        { local, cloud, maxLocalPromptBytes: 600 }
       );
       detail(`h.model = ${h.model.modelId}`);
       detail(`h.needs(targets.pool("${POOL}")) before any call → ${h.needs(targets.pool(POOL))}`);
 
-      step("one ordinary generateText call — the local model fails, h.model escalates");
-      const result = await generateText({
+      step("a small prompt stays on the local model");
+      const small = await generateText({
         model: h.model,
-        prompt: "analyze the whole repo and produce a migration plan"
+        prompt: "In one short sentence: is notes.md worth keeping?"
       });
-      ok(`answer (from cloud): "${result.text}"`);
+      ok(`local answer: "${small.text.trim().slice(0, 100)}"`);
+
+      step("a prompt past the local threshold escalates to the cloud model");
+      const bigPrompt =
+        "Analyze the repository and produce a migration plan. Context dump: " +
+        "module inventory and dependency edges ".repeat(20);
+      const big = await generateText({ model: h.model, prompt: bigPrompt });
+      ok(`cloud answer: "${big.text.trim().slice(0, 100)}"`);
 
       step("the decision trace explains why the model boundary moved");
       for (const event of h.trace()) {

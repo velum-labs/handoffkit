@@ -107,6 +107,7 @@ if (!currentSpec.includes("Supersedes:")) {
 // installed frozen in CI with scripts ignored, store integrity verified, and
 // a minimum release age enforced (see .npmrc).
 const TRUSTED_THIRD_PARTY = new Map([
+  ["@ai-sdk/openai-compatible", "2.0.48"],
   ["@ai-sdk/provider", "3.0.10"],
   ["ai", "6.0.200"],
   ["zod", "4.4.3"]

@@ -6,6 +6,8 @@
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
+    "@ai-sdk/openai-compatible": "2.0.48",
+    "@ai-sdk/provider": "3.0.10",
     "@warrant/adapter-ai-sdk": "workspace:*",
     "@warrant/adapter-compute": "workspace:*",
     "@warrant/cli": "workspace:*",
