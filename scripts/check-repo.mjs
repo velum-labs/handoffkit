@@ -8,7 +8,8 @@ const requiredFiles = [
   ".github/workflows/ci.yml",
   ".github/dependabot.yml",
   ".github/CODEOWNERS",
-  "spec/2026-06-11-local-first-handoff-platform-spec.md"
+  "spec/2026-06-11-local-first-handoff-platform-spec.md",
+  "spec/2026-06-11-governed-agent-execution-plane-spec.md"
 ];
 
 const fail = (message) => {
@@ -40,9 +41,23 @@ for (const setting of [
   if (!npmrc.includes(setting)) fail(`.npmrc missing ${setting}`);
 }
 
-const spec = readFileSync("spec/2026-06-11-local-first-handoff-platform-spec.md", "utf8");
-if (!spec.includes("The coordination layer for hybrid distributed AI compute.")) {
-  fail("spec does not contain current positioning");
+const supersededSpec = readFileSync(
+  "spec/2026-06-11-local-first-handoff-platform-spec.md",
+  "utf8"
+);
+if (!supersededSpec.includes("The coordination layer for hybrid distributed AI compute.")) {
+  fail("superseded spec does not contain its original positioning");
+}
+
+const currentSpec = readFileSync(
+  "spec/2026-06-11-governed-agent-execution-plane-spec.md",
+  "utf8"
+);
+if (!currentSpec.includes("The governed execution and provenance plane for AI agents.")) {
+  fail("current spec does not contain current positioning");
+}
+if (!currentSpec.includes("Supersedes:")) {
+  fail("current spec must declare what it supersedes");
 }
 if (existsSync("src")) {
   fail("implementation is intentionally blocked; src/ should not exist yet");
