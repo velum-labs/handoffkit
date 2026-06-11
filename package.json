@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "description": "The coordination layer for hybrid distributed AI compute.",
   "license": "UNLICENSED",
+  "packageManager": "pnpm@10.33.3",
   "scripts": {
-    "check": "echo 'design-stage repo: no implementation yet'"
+    "check": "node scripts/check-design-stage.mjs"
   }
 }
