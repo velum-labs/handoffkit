@@ -15,6 +15,114 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  examples/demos:
+    dependencies:
+      '@warrant/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@warrant/plane':
+        specifier: workspace:*
+        version: link:../../packages/plane
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@warrant/runner':
+        specifier: workspace:*
+        version: link:../../packages/runner
+      '@warrant/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
+  packages/cli:
+    dependencies:
+      '@warrant/handoff':
+        specifier: workspace:*
+        version: link:../handoff
+      '@warrant/plane':
+        specifier: workspace:*
+        version: link:../plane
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@warrant/runner':
+        specifier: workspace:*
+        version: link:../runner
+      '@warrant/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+    devDependencies:
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../testkit
+
+  packages/handoff:
+    dependencies:
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@warrant/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+
+  packages/plane:
+    dependencies:
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/protocol: {}
+
+  packages/runner:
+    dependencies:
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@warrant/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+
+  packages/sdk:
+    dependencies:
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/testkit:
+    dependencies:
+      '@warrant/plane':
+        specifier: workspace:*
+        version: link:../plane
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@warrant/runner':
+        specifier: workspace:*
+        version: link:../runner
+      '@warrant/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+
+  packages/workspace:
+    dependencies:
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
 packages:
 
   '@types/node@22.19.20':

@@ -1,0 +1,18 @@
+{
+  "name": "@warrant/sdk",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Warrant SDK: a thin client over the plane API plus offline receipt verification.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@warrant/protocol": "workspace:*"
+  }
+}

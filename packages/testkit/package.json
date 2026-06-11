@@ -1,0 +1,21 @@
+{
+  "name": "@warrant/testkit",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Test and demo harness: in-process plane + runner stacks and git repo fixtures.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@warrant/plane": "workspace:*",
+    "@warrant/protocol": "workspace:*",
+    "@warrant/runner": "workspace:*",
+    "@warrant/sdk": "workspace:*"
+  }
+}

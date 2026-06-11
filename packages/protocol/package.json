@@ -1,0 +1,15 @@
+{
+  "name": "@warrant/protocol",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Warrant protocol schemas and primitives: contracts, receipts, event chains, manifests, checkpoints, and handoff envelopes. Zero runtime dependencies.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"]
+}

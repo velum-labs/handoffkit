@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/handoff" },
+    { "path": "../../packages/plane" },
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/runner" },
+    { "path": "../../packages/sdk" },
+    { "path": "../../packages/testkit" },
+    { "path": "../../packages/workspace" }
+  ]
+}

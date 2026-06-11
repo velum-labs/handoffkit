@@ -10,13 +10,12 @@
     "node": ">=22.0.0",
     "pnpm": ">=10.33.4"
   },
-  "bin": {
-    "warrant": "./dist/cli/index.js"
-  },
   "scripts": {
     "check": "node scripts/check-repo.mjs",
-    "build": "tsc -p tsconfig.json",
-    "test": "node --test \"dist/test/*.test.js\"",
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean",
+    "test": "node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\"",
+    "demo": "node examples/demos/dist/run.js",
     "verify": "pnpm check && pnpm build && pnpm test"
   },
   "devDependencies": {
