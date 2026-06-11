@@ -1,6 +1,8 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/adapter-ai-sdk" },
+    { "path": "packages/adapter-compute" },
     { "path": "packages/protocol" },
     { "path": "packages/workspace" },
     { "path": "packages/sdk" },

@@ -25,6 +25,10 @@ export const agents = {
   /** Built-in mock harness: runs without vendor CLIs or API keys. */
   mock(): AgentDescriptor {
     return descriptor("mock");
+  },
+  /** One governed shell command; the task prompt is the command. */
+  command(): AgentDescriptor {
+    return descriptor("command");
   }
 };
 

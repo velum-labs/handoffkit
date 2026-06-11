@@ -20,7 +20,7 @@ function demo(args: string[]): { status: number; stdout: string; stderr: string 
 test("the series lists every demo", () => {
   const result = demo([]);
   assert.equal(result.status, 0, result.stderr);
-  for (const id of ["01", "02", "03", "04", "05", "06", "07", "08"]) {
+  for (const id of ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]) {
     assert.match(result.stdout, new RegExp(`\\b${id}\\b`), `demo ${id} must be listed`);
   }
 });
@@ -50,4 +50,18 @@ test("demo 06 (handoff) continues local work and pulls it back", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /became governed run/);
   assert.match(result.stdout, /pull mode: applied/);
+});
+
+test("demo 09 (AI SDK loop) executes governed tool calls with receipts", () => {
+  const result = demo(["09"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /receipt verified offline: true/);
+  assert.match(result.stdout, /3 data rows/);
+});
+
+test("demo 10 (compute sandbox) composes commands across sessions", () => {
+  const result = demo(["10"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /continuity via the workspace/);
+  assert.match(result.stdout, /receipt verified: true/);
 });

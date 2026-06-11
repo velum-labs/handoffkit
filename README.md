@@ -8,7 +8,7 @@ The two core objects are the **run contract** (a signed authorization to execute
 
 ## Status
 
-The kernel, control plane, runner, control panel UI, handoff SDK, CLI, demo series, and Docker deployment are implemented. Zero third-party runtime dependencies — everything runs on Node built-ins. The validation gate in the spec (design-partner interviews) still governs go-to-market.
+The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and compute adapters, CLI, demo series, and Docker deployment are implemented. The trust-critical kernel runs on Node built-ins only; adapters may use trusted, exact-pinned third-party dependencies (see "Dependency policy" below). The validation gate in the spec (design-partner interviews) still governs go-to-market.
 
 ## Repository layout
 
@@ -20,6 +20,8 @@ The kernel, control plane, runner, control panel UI, handoff SDK, CLI, demo seri
 | [`@warrant/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. |
 | [`@warrant/sdk`](packages/sdk) | Thin client over the plane API plus offline receipt verification. |
 | [`@warrant/handoff`](packages/handoff) | The continuation SDK: `handoff(...)`, `checkpoint`, `continueIn`, `parallel`, `review`, `pull` — typed descriptors, fail-closed planning, full provenance. |
+| [`@warrant/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops: `remoteTools(...)` returns AI SDK-compatible tools whose calls execute as signed contracts in governed sessions and return with receipts. |
+| [`@warrant/adapter-compute`](packages/adapter-compute) | ComputeSDK-shaped compute surface: `sandbox.create()`, `runCommand`, `filesystem` — every command a governed run with a receipt. |
 | [`@warrant/cli`](packages/cli) | The `warrant` CLI: the primary product surface. |
 | [`@warrant/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
 | [`examples/demos`](examples/demos) | The runnable demo series (below). |
@@ -91,6 +93,8 @@ pnpm demo all       # run the whole series (skips interactive demos)
 | 06 | Handoff | `h.continueIn(targets.pool("eng-prod"), …)`: checkpoint, envelope, governed run, trace, receipt, divergence-safe pull. |
 | 07 | Parallel fan-out | One checkpoint forked into isolated attempts, reviewed with typed deterministic strategies; every attempt keeps its receipt. |
 | 08 | Control panel | Boots a seeded plane + runner and leaves the UI up for you to explore (interactive). |
+| 09 | AI SDK loop | An ordinary `generateText` loop whose tool calls execute in governed sessions and return with verified receipts. |
+| 10 | Compute sandbox | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
 
 ## The handoff SDK
 
@@ -125,6 +129,39 @@ console.log(h.trace());                              // every planning, envelope
 ```
 
 Continuation is not a separate trust domain: the envelope is content-addressed, the signed run contract pins the envelope hash, the checkpoint appears in the hash-chained event log, and the result is an ordinary offline-verifiable receipt.
+
+## App-owned loops: AI SDK and compute adapters
+
+For applications that own their model loop, the adapters govern the execution boundary instead (spec §6.2 — supported, limited, honestly labeled: no durability claim attaches to the caller's loop, and there is no mid-generation continuation):
+
+```ts
+import { generateText } from "ai";
+import { remoteTools } from "@warrant/adapter-ai-sdk";
+
+const rt = remoteTools({ workspace: ".", plane, pool: "eng-prod" });
+const result = await generateText({
+  model: yourModel,            // your model, your loop
+  tools: rt.tools,             // tool calls become signed contracts with receipts
+  prompt: "run the tests and summarize the failures"
+});
+rt.calls();                    // [{ runId, contractHash, receiptVerified: true, … }]
+```
+
+```ts
+import { governedCompute } from "@warrant/adapter-compute";
+
+const compute = governedCompute({ workspace: ".", plane, pool: "eng-prod" });
+const sandbox = await compute.sandbox.create();
+await sandbox.filesystem.writeFile("task.md", task);
+await sandbox.runCommand("npm test");               // a governed run with a receipt
+sandbox.runs();                                      // evidence for every command
+```
+
+Each command runs in a fresh governed session materialized from the current workspace; continuity flows through the workspace's git history, and the receipts — not a long-lived remote process — are what persists.
+
+## Dependency policy
+
+Third-party dependencies are allowed, but only trusted, exact-pinned versions on the explicit allowlist in `scripts/check-repo.mjs`, and only in adapter and example packages. The trust-critical kernel — protocol, workspace, sdk, plane, runner, handoff, cli — stays on Node built-ins so receipts remain verifiable without trusting anyone's dependency tree. Reinforced by `.npmrc`: `save-exact`, `ignore-scripts`, `verify-store-integrity`, frozen lockfile installs, and a 24-hour `minimum-release-age` against fresh-release supply-chain attacks. Bumping a dependency requires updating the allowlist pin — that review step is the point.
 
 ## Thesis
 

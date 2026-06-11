@@ -30,21 +30,25 @@ export class PlaneClientError extends Error {
 }
 
 /**
- * Retry GETs (idempotent by construction in this API) on transport-level
- * failures: a keep-alive socket the server closed while idle surfaces as a
- * TypeError from fetch, not as an HTTP error.
+ * Retry idempotent requests on transport-level failures: a keep-alive
+ * socket the server closed while idle surfaces as a TypeError from fetch,
+ * not as an HTTP error. GETs are idempotent by construction in this API;
+ * blob uploads are content-addressed, so retrying them is also safe. Other
+ * POSTs (run requests, claims, events, completion) are never retried here.
  */
 async function fetchIdempotent(
   url: string,
-  init: RequestInit,
+  init: RequestInit & { idempotent?: boolean },
   attempts = 3
 ): Promise<Response> {
+  const retryable = init.idempotent ?? init.method === "GET";
   for (let attempt = 1; ; attempt++) {
     try {
       return await fetch(url, init);
     } catch (error) {
-      const retryable = error instanceof TypeError && init.method === "GET";
-      if (!retryable || attempt >= attempts) throw error;
+      if (!(error instanceof TypeError) || !retryable || attempt >= attempts) {
+        throw error;
+      }
       await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
     }
   }
@@ -94,10 +98,11 @@ export class PlaneClient {
     };
     const auth = token ?? this.adminToken;
     if (auth) headers.authorization = `Bearer ${auth}`;
-    const response = await fetch(`${this.baseUrl}/v1/blobs`, {
+    const response = await fetchIdempotent(`${this.baseUrl}/v1/blobs`, {
       method: "POST",
       headers,
-      body: new Uint8Array(content)
+      body: new Uint8Array(content),
+      idempotent: true
     });
     const payload = (await response.json()) as { hash?: string; error?: string };
     if (!response.ok || !payload.hash) {

@@ -57,7 +57,7 @@ global:
   --dir DIR    warrant home (default: ./.warrant)
 `;
 
-const AGENT_KINDS: AgentKind[] = ["claude-code", "codex", "mock"];
+const AGENT_KINDS: AgentKind[] = ["claude-code", "codex", "mock", "command"];
 
 function fail(message: string): never {
   console.error(`error: ${message}`);
@@ -72,6 +72,8 @@ function agentDescriptorFor(kind: string): AgentDescriptor {
       return agents.codex();
     case "mock":
       return agents.mock();
+    case "command":
+      return agents.command();
     default:
       fail(`unknown agent kind "${kind}" (expected ${AGENT_KINDS.join(" | ")})`);
   }
