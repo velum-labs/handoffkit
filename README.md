@@ -28,8 +28,16 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 
 ## Quickstart
 
+Prerequisites: Node >= 22 and git. The exact pnpm version is pinned via Corepack — no global install needed:
+
 ```sh
-pnpm install && pnpm build
+corepack enable          # one-time; activates the pinned pnpm from package.json
+pnpm install             # links all workspace packages from the frozen lockfile
+pnpm build               # tsc -b builds every package in dependency order
+pnpm verify              # repo checks + build + the full test suite
+```
+
+```sh
 
 # one-time: org keys, config, policy
 node packages/cli/dist/index.js init

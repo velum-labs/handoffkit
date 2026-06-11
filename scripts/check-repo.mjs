@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -151,6 +152,19 @@ for (const dir of workspaceDirs) {
         );
       }
     }
+  }
+}
+
+// Build artifacts must never be tracked: a committed .tsbuildinfo makes
+// `tsc -b` skip emit on fresh clones, which breaks `pnpm build` from scratch.
+const tracked = spawnSync(
+  "git",
+  ["ls-files", "*.tsbuildinfo", "**/dist/**"],
+  { encoding: "utf8" }
+);
+if (tracked.status === 0) {
+  for (const file of tracked.stdout.split("\n").filter((line) => line.length > 0)) {
+    fail(`build artifact is tracked in git: ${file}`);
   }
 }
 
