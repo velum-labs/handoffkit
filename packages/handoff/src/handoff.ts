@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { resolve } from "node:path";
 
-import { hashCanonical, PolicyDeniedError, sha256Hex } from "@warrant/protocol";
+import {
+  canonicalize,
+  hashCanonical,
+  PolicyDeniedError,
+  sha256Hex
+} from "@warrant/protocol";
 import type {
   ActorRef,
   BudgetSpec,
@@ -320,8 +325,10 @@ export class Handoff {
     options: ContinueOptions
   ): Promise<HandoffRun> {
     const envelope = this.buildEnvelope(target, checkpoint, options);
+    // Store the canonical JSON bytes so the blob address equals the
+    // envelope's content hash, which the signed contract pins.
     const envelopeHash = hashCanonical(envelope);
-    await this.client.putBlob(Buffer.from(JSON.stringify(envelope), "utf8"));
+    await this.client.putBlob(Buffer.from(canonicalize(envelope), "utf8"));
     this.lastEnvelopeValue = envelope;
     this.record({
       type: "envelope.created",
