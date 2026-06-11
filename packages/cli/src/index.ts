@@ -252,7 +252,7 @@ async function cmdContinue(dir: string, argv: string[]): Promise<void> {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const dirFlagIndex = args.indexOf("--dir");
-  let dir = resolve(".warrant");
+  let dir = resolve(process.env.WARRANT_HOME ?? ".warrant");
   if (dirFlagIndex !== -1) {
     const value = args[dirFlagIndex + 1];
     if (!value) fail("--dir requires a value");

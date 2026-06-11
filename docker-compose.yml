@@ -1,0 +1,56 @@
+# Warrant demo deployment: control plane + control panel, one outbound-only
+# runner, and a seeder that fills the panel with showcase runs.
+#
+#   docker compose up --build
+#   open http://localhost:7172/ui/
+#   docker compose exec plane warrant ui        # control panel login token
+#   docker compose exec plane warrant runs      # ...or use the CLI directly
+services:
+  plane:
+    build: .
+    init: true
+    command:
+      - sh
+      - -c
+      - |
+        test -f /data/warrant/config.json || warrant init --host 0.0.0.0 --plane-url http://plane:7172
+        exec warrant plane start
+    ports:
+      - "7172:7172"
+    volumes:
+      - warrant-home:/data/warrant
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7172/v1/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  runner:
+    build: .
+    init: true
+    depends_on:
+      plane:
+        condition: service_healthy
+    command: warrant runner start --pool default --plane http://plane:7172 --data-dir /data/runner
+    volumes:
+      # The runner reads only the enroll token from the shared home; its own
+      # identity and keys live in its private volume.
+      - warrant-home:/data/warrant
+      - runner-home:/data/runner
+
+  seed:
+    build: .
+    init: true
+    restart: "no"
+    depends_on:
+      plane:
+        condition: service_healthy
+      runner:
+        condition: service_started
+    command: node /app/examples/demos/dist/seed.js --dir /data/warrant
+    volumes:
+      - warrant-home:/data/warrant
+
+volumes:
+  warrant-home:
+  runner-home:
