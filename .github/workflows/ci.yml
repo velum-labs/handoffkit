@@ -41,5 +41,11 @@ jobs:
       - name: Check
         run: pnpm check
 
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
       - name: Audit dependencies
         run: pnpm audit --audit-level high

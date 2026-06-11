@@ -8,7 +8,37 @@ The two core objects are the **run contract** (a signed authorization to execute
 
 ## Status
 
-Design-stage repository. Implementation is intentionally blocked until the run contract, runner contract, and trust architecture are agreed — and until the validation gate in the spec (design-partner interviews) passes.
+MVP kernel implemented (`src/`): protocol (signed contracts, hash-chained events, offline-verifiable receipts), control plane, outbound-only runner, agent adapters (Claude Code, Codex, and a built-in mock for tests), workspace capture with divergence-safe pull, secret broker, and the `warrant` CLI. Zero runtime dependencies — the kernel runs on Node built-ins only.
+
+The validation gate in the spec (design-partner interviews) still governs go-to-market.
+
+## Quickstart
+
+```sh
+pnpm install && pnpm build
+
+# one-time: org keys, config, policy
+node dist/cli/index.js init
+
+# terminal 1: control plane
+node dist/cli/index.js plane start
+
+# terminal 2: an outbound-only runner (your machine is the "customer infra")
+node dist/cli/index.js runner start --pool default
+
+# terminal 3: a governed run in any git repo
+cd your-repo
+node ../path/to/dist/cli/index.js run --agent mock "try the kernel"      # no API keys needed
+node ../path/to/dist/cli/index.js run --agent claude-code "fix the bug"  # wraps the real CLI
+
+# what would move, without moving anything
+node dist/cli/index.js run --agent mock --dry-run "probe"
+
+# the product: one screen, five questions — then prove it offline
+node dist/cli/index.js receipt run_...
+node dist/cli/index.js bundle run_... --out bundle.json
+node dist/cli/index.js verify bundle.json
+```
 
 ## Thesis
 

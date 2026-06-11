@@ -4,7 +4,7 @@ Date: 2026-06-11
 Status: Draft
 Supersedes: [Local-first handoff platform SDK spec](2026-06-11-local-first-handoff-platform-spec.md)
 
-Design note: this document replaces the handoff-platform spec as the current artifact. The predecessor is retained for record. Implementation remains blocked until the run contract, runner contract, and trust architecture below are agreed.
+Design note: this document replaces the handoff-platform spec as the current artifact. The predecessor is retained for record. The MVP kernel described in section 16.2 is implemented in `src/` (protocol, plane, runner, CLI); the validation gate in section 16.1 still governs go-to-market, not code existence.
 
 ## 1. Positioning decision
 
