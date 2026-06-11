@@ -9,16 +9,17 @@
  * content-addressed envelope pinned by that contract, and the result is
  * an offline-verifiable receipt.
  */
-export { Handoff, handoff } from "./handoff.js";
+export { defineHandoffConfig, Handoff, handoff } from "./handoff.js";
 export type {
   ContinueOptions,
   HandoffConfig,
+  HandoffInit,
+  HandoffStreamEvent,
   HandoffSummary,
   HandoffTraceEvent,
+  ModelDecision,
   ParallelOptions
 } from "./handoff.js";
-export { wrapTools } from "./tools.js";
-export type { ToolCallObservation, ToolLike } from "./tools.js";
 export { HandoffRun } from "./run.js";
 export type { WaitOptions, WaitOutcome } from "./run.js";
 export { targets } from "./targets.js";
@@ -32,5 +33,16 @@ export type {
   PlanInput,
   PlanningDecision
 } from "./policy.js";
+export { evaluateTriggers, triggers } from "./triggers.js";
+export type { FiredTrigger, Trigger, TriggerState } from "./triggers.js";
+export { autoIsolation, branch } from "./isolation.js";
+export type { IsolationStrategy } from "./isolation.js";
 export { reviewRuns, reviewStrategies } from "./review.js";
-export type { ReviewedRun, ReviewResult, ReviewStrategy } from "./review.js";
+export type {
+  ReviewedRun,
+  ReviewResult,
+  ReviewStrategy,
+  Scorecard
+} from "./review.js";
+export { wrapTools } from "./tools.js";
+export type { ToolCallObservation, ToolLike } from "./tools.js";

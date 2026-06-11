@@ -10,7 +10,9 @@ import {
 } from "@warrant/protocol";
 import type {
   ActorRef,
+  ArtifactKind,
   BudgetSpec,
+  ChainedEvent,
   Checkpoint,
   CheckpointTier,
   DisclosureReport,
@@ -27,8 +29,11 @@ import type { CapturedWorkspace, PullResult } from "@warrant/workspace";
 
 import { agents, toAgentSpec } from "./agents.js";
 import type { AgentDescriptor } from "./agents.js";
+import type { IsolationStrategy } from "./isolation.js";
 import { localFirst, planContinuation } from "./policy.js";
 import type { ContinuationPolicy, PlanningDecision } from "./policy.js";
+import { evaluateTriggers } from "./triggers.js";
+import type { FiredTrigger, TriggerState } from "./triggers.js";
 import { reviewRuns, reviewStrategies } from "./review.js";
 import type { ReviewResult, ReviewStrategy } from "./review.js";
 import { HandoffRun } from "./run.js";
@@ -67,28 +72,68 @@ export type ContinueOptions = {
   /** Reuse an existing checkpoint instead of capturing a fresh one. */
   checkpoint?: Checkpoint;
   budget?: BudgetSpec;
+  /** How results land at pull time. Defaults to divergence-safe auto. */
+  isolate?: IsolationStrategy;
 };
 
 export type ParallelOptions = Omit<ContinueOptions, "task">;
 
+/** Module-level defaults set by defineHandoffConfig. */
+let handoffDefaults: Partial<HandoffConfig> = {};
+
+/**
+ * Register provider-style defaults once; subsequent `handoff({...})` calls
+ * merge them under their explicit config (explicit values win):
+ *
+ *   defineHandoffConfig({ plane, agent: agents.claudeCode(), policy: localFirst() });
+ *   const h = handoff({ workspace: "." });
+ */
+export function defineHandoffConfig(
+  defaults: Partial<HandoffConfig>
+): Partial<HandoffConfig> {
+  handoffDefaults = defaults;
+  return defaults;
+}
+
+/** Configuration accepted by handoff(): defaults can supply everything but the workspace. */
+export type HandoffInit = Partial<HandoffConfig> & { workspace: string };
+
 export type HandoffTraceEvent =
   | { type: "checkpoint.created"; ts: string; checkpointId: string; tier: CheckpointTier; message?: string }
   | { type: "continuation.planned"; ts: string; decision: PlanningDecision["decision"]; target: string; reasons: string[] }
+  | { type: "continuation.requested"; ts: string; reason?: string }
   | { type: "envelope.created"; ts: string; envelopeId: string; envelopeHash: string; target: string }
   | { type: "run.requested"; ts: string; runId: string; status: RunStatus; task: string }
   | { type: "run.terminal"; ts: string; runId: string; status: RunStatus }
   | { type: "results.pulled"; ts: string; runId: string; mode: PullResult["mode"] }
-  | { type: "tool.called"; ts: string; toolName: string; inputHash: string; outputHash?: string; ok: boolean; durationMs: number };
+  | { type: "tool.called"; ts: string; toolName: string; inputHash: string; outputHash?: string; ok: boolean; durationMs: number }
+  | { type: "model.routed"; ts: string; model: string; route: "local" | "cloud"; escalated: boolean; reason: string };
+
+/** A model routing decision reported by h.model (see withModel). */
+export type ModelDecision = {
+  model: string;
+  route: "local" | "cloud";
+  escalated: boolean;
+  reason: string;
+};
 
 /** Where the work stands: derivable, recomputed, never source of truth. */
 export type HandoffSummary = {
   workspace: string;
   checkpoints: number;
   toolCalls: number;
-  continuations: { planned: number; denied: number };
+  continuations: { planned: number; denied: number; requested: number };
+  modelRoutes: { local: number; cloud: number; escalations: number };
   runs: { runId: string; task: string; target: string; status: RunStatus }[];
   pulls: number;
 };
+
+/** Live event stream over a set of runs (see Handoff.stream). */
+export type HandoffStreamEvent =
+  | { type: "run.status"; runId: string; status: RunStatus }
+  | { type: "run.event"; runId: string; event: ChainedEvent }
+  | { type: "artifact.ready"; runId: string; kind: ArtifactKind; hash: string }
+  | { type: "run.terminal"; runId: string; status: RunStatus };
 
 function defaultActor(): ActorRef {
   return { kind: "human", id: process.env.USER ?? "developer" };
@@ -116,9 +161,18 @@ export class Handoff {
   private readonly traceEvents: HandoffTraceEvent[] = [];
   private readonly toolJournal: ToolCallRecord[] = [];
   private readonly requestedRuns: { runId: string; task: string; target: string }[] = [];
+  private readonly checkpointHistory: Checkpoint[] = [];
   private lastEnvelopeValue?: HandoffEnvelope;
+  private userRequestedContinuation = false;
+  private modelEscalationCount = 0;
 
-  constructor(config: HandoffConfig) {
+  constructor(init: HandoffInit) {
+    const config = { ...handoffDefaults, ...init };
+    if (!config.plane) {
+      throw new Error(
+        "handoff requires a plane (pass it in the config or via defineHandoffConfig)"
+      );
+    }
     this.client =
       config.plane instanceof PlaneClient
         ? config.plane
@@ -170,21 +224,73 @@ export class Handoff {
     );
   }
 
+  /** Snapshot of the observable state that continuation triggers evaluate. */
+  private triggerState(): TriggerState {
+    return {
+      userRequested: this.userRequestedContinuation,
+      toolFailures: this.toolJournal.filter((entry) => entry.error !== undefined)
+        .length,
+      totalToolDurationMs: this.toolJournal.reduce(
+        (total, entry) => total + entry.durationMs,
+        0
+      ),
+      modelEscalations: this.modelEscalationCount
+    };
+  }
+
+  /** Which of the policy's continueWhen triggers currently fire, and why. */
+  firedTriggers(): FiredTrigger[] {
+    return evaluateTriggers(this.policy.continueWhen ?? [], this.triggerState());
+  }
+
   /**
-   * Deterministic check: would the continuation policy permit moving this
-   * work to the target? Pure — evaluates nothing but policy, records
-   * nothing, moves nothing. The v1 planner has no model-based triggers;
-   * "needs" means "is allowed and available under policy".
+   * Explicitly request continuation (the user gesture). Makes
+   * triggers.userRequested() fire on the next needs() check.
+   */
+  requestContinuation(reason?: string): void {
+    this.userRequestedContinuation = true;
+    this.record({
+      type: "continuation.requested",
+      ts: new Date().toISOString(),
+      ...(reason ? { reason } : {})
+    });
+  }
+
+  /**
+   * Report a model routing decision (wired up by withModel from
+   * @warrant/adapter-ai-sdk). Escalations feed triggers.modelEscalated().
+   */
+  noteModelDecision(decision: ModelDecision): void {
+    if (decision.escalated) this.modelEscalationCount++;
+    this.record({
+      type: "model.routed",
+      ts: new Date().toISOString(),
+      model: decision.model,
+      route: decision.route,
+      escalated: decision.escalated,
+      reason: decision.reason
+    });
+  }
+
+  /**
+   * Deterministic check: should this work continue on the target?
+   * True when the continuation policy permits the target AND — if the
+   * policy declares continueWhen triggers — at least one trigger fires
+   * against observable context state (tool failures, slow tools, explicit
+   * requests, model escalations). Pure: records nothing, moves nothing.
    */
   needs(target: RuntimeTarget, options: Partial<ContinueOptions> = {}): boolean {
-    return (
+    const allowed =
       planContinuation(this.policy, {
         target,
         secrets: options.secrets ?? this.secrets,
         budget: options.budget ?? this.budget,
         parallelism: 1
-      }).decision === "continue"
-    );
+      }).decision === "continue";
+    if (!allowed) return false;
+    const triggersConfigured = this.policy.continueWhen ?? [];
+    if (triggersConfigured.length === 0) return true;
+    return this.firedTriggers().length > 0;
   }
 
   /** Recomputed view over the trace plus live run statuses from the plane. */
@@ -198,7 +304,11 @@ export class Handoff {
     let toolCalls = 0;
     let planned = 0;
     let denied = 0;
+    let requested = 0;
     let pulls = 0;
+    let localRoutes = 0;
+    let cloudRoutes = 0;
+    let escalations = 0;
     for (const event of this.traceEvents) {
       switch (event.type) {
         case "checkpoint.created":
@@ -210,6 +320,14 @@ export class Handoff {
         case "continuation.planned":
           planned++;
           if (event.decision === "deny") denied++;
+          break;
+        case "continuation.requested":
+          requested++;
+          break;
+        case "model.routed":
+          if (event.route === "local") localRoutes++;
+          else cloudRoutes++;
+          if (event.escalated) escalations++;
           break;
         case "results.pulled":
           pulls++;
@@ -228,10 +346,66 @@ export class Handoff {
       workspace: this.workspaceDir,
       checkpoints,
       toolCalls,
-      continuations: { planned, denied },
+      continuations: { planned, denied, requested },
+      modelRoutes: { local: localRoutes, cloud: cloudRoutes, escalations },
       runs,
       pulls
     };
+  }
+
+  /** Every checkpoint this context created, oldest first (lineage intact). */
+  checkpoints(): Checkpoint[] {
+    return [...this.checkpointHistory];
+  }
+
+  /**
+   * Live, typed event stream over a set of runs: status transitions, every
+   * appended chained event, artifact availability, and terminal states.
+   * Completes when all runs are terminal.
+   */
+  async *stream(
+    runs: HandoffRun[],
+    options: { pollMs?: number; timeoutMs?: number } = {}
+  ): AsyncGenerator<HandoffStreamEvent, void, void> {
+    const pollMs = options.pollMs ?? 300;
+    const deadline = Date.now() + (options.timeoutMs ?? 10 * 60 * 1000);
+    const lastStatus = new Map<string, RunStatus>();
+    const lastSeq = new Map<string, number>();
+    const terminal = new Set<string>();
+
+    while (terminal.size < runs.length) {
+      if (Date.now() > deadline) {
+        throw new Error("stream timed out before all runs reached a terminal state");
+      }
+      for (const run of runs) {
+        if (terminal.has(run.runId)) continue;
+        const view = await this.client.getRun(run.runId);
+        for (const entry of view.events) {
+          if (entry.seq <= (lastSeq.get(run.runId) ?? -1)) continue;
+          lastSeq.set(run.runId, entry.seq);
+          yield { type: "run.event", runId: run.runId, event: entry };
+          if (entry.event.type === "artifact.created") {
+            yield {
+              type: "artifact.ready",
+              runId: run.runId,
+              kind: entry.event.kind,
+              hash: entry.event.hash
+            };
+          }
+        }
+        if (view.status !== lastStatus.get(run.runId)) {
+          lastStatus.set(run.runId, view.status);
+          yield { type: "run.status", runId: run.runId, status: view.status };
+        }
+        if (["completed", "failed", "cancelled"].includes(view.status)) {
+          terminal.add(run.runId);
+          yield { type: "run.terminal", runId: run.runId, status: view.status };
+        }
+      }
+      if (terminal.size < runs.length) {
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+    }
   }
 
   /** The most recent envelope this context produced. */
@@ -283,6 +457,7 @@ export class Handoff {
     };
     const hasSemantic =
       transcriptHash !== undefined || toolJournalHash !== undefined;
+    const parent = this.checkpointHistory.at(-1)?.checkpointId;
     return {
       version: "warrant.checkpoint.v1",
       checkpointId: `chk_${randomUUID()}`,
@@ -290,7 +465,8 @@ export class Handoff {
       tier: "workspace",
       ...(message ? { message } : {}),
       ...(hasSemantic ? { semantic } : {}),
-      workspace: captured.manifest
+      workspace: captured.manifest,
+      ...(parent ? { parent } : {})
     };
   }
 
@@ -320,6 +496,7 @@ export class Handoff {
       transcriptHash,
       journal?.hash
     );
+    this.checkpointHistory.push(checkpoint);
     this.record({
       type: "checkpoint.created",
       ts: checkpoint.createdAt,
@@ -461,13 +638,14 @@ export class Handoff {
           ? { transcript: options.transcript }
           : {})
       }));
-    return this.submit(target, checkpoint, options);
+    return this.submit(target, checkpoint, options, decision);
   }
 
   private async submit(
     target: RuntimeTarget,
     checkpoint: Checkpoint,
-    options: ContinueOptions
+    options: ContinueOptions,
+    decision: PlanningDecision
   ): Promise<HandoffRun> {
     const envelope = this.buildEnvelope(target, checkpoint, options);
     // Store the canonical JSON bytes so the blob address equals the
@@ -503,6 +681,8 @@ export class Handoff {
       target,
       envelope,
       envelopeHash,
+      explanation: decision.reasons.join("; "),
+      ...(options.isolate ? { isolate: options.isolate } : {}),
       client: this.client,
       actor: this.actor,
       workspaceDir: this.workspaceDir,
@@ -551,7 +731,9 @@ export class Handoff {
       }));
     const runs: HandoffRun[] = [];
     for (const task of tasks) {
-      runs.push(await this.submit(target, checkpoint, { ...options, task, checkpoint }));
+      runs.push(
+        await this.submit(target, checkpoint, { ...options, task, checkpoint }, decision)
+      );
     }
     return runs;
   }
@@ -569,7 +751,11 @@ export class Handoff {
   }
 }
 
-/** Create a continuation context bound to a workspace and a plane. */
-export function handoff(config: HandoffConfig): Handoff {
-  return new Handoff(config);
+/**
+ * Create a continuation context bound to a workspace and a plane. Anything
+ * not supplied here falls back to defaults registered via
+ * defineHandoffConfig; the workspace is always explicit.
+ */
+export function handoff(init: HandoffInit): Handoff {
+  return new Handoff(init);
 }

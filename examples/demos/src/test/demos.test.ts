@@ -20,7 +20,7 @@ function demo(args: string[]): { status: number; stdout: string; stderr: string 
 test("the series lists every demo", () => {
   const result = demo([]);
   assert.equal(result.status, 0, result.stderr);
-  for (const id of ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"]) {
+  for (const id of ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]) {
     assert.match(result.stdout, new RegExp(`\\b${id}\\b`), `demo ${id} must be listed`);
   }
 });
@@ -71,4 +71,12 @@ test("demo 11 (golden interface) journals tools and carries them across the boun
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /pinned via the envelope inside the signed contract/);
   assert.match(result.stdout, /tool calls: {4}1/);
+});
+
+test("demo 12 (model escalation) escalates deterministically and continues", () => {
+  const result = demo(["12"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /ESCALATED/);
+  assert.match(result.stdout, /after escalation → true/);
+  assert.match(result.stdout, /1 escalation\(s\)/);
 });

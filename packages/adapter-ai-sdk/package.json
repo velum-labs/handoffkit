@@ -15,6 +15,7 @@
     "dist"
   ],
   "dependencies": {
+    "@ai-sdk/provider": "3.0.10",
     "@warrant/handoff": "workspace:*",
     "@warrant/protocol": "workspace:*",
     "@warrant/sdk": "workspace:*",

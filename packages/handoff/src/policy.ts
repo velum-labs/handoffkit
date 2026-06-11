@@ -1,6 +1,7 @@
 import type { CheckpointTier, DisclosureMode } from "@warrant/protocol";
 
 import type { RuntimeTarget } from "./targets.js";
+import type { Trigger } from "./triggers.js";
 
 /**
  * Client-side continuation policy. This is the SDK's own fail-closed gate,
@@ -19,6 +20,11 @@ export type ContinuationPolicy = {
   /** Ceiling for `parallel(...)` fan-out. */
   maxParallelRuns: number;
   disclosure: DisclosureMode;
+  /**
+   * Conditions under which `h.needs(target)` reports that work should
+   * continue. Empty or absent means "needs" reduces to "allowed by policy".
+   */
+  continueWhen?: Trigger[];
 };
 
 export type LocalFirstOptions = {
@@ -28,6 +34,7 @@ export type LocalFirstOptions = {
   maxDurationMin?: number;
   maxParallelRuns?: number;
   disclosure?: DisclosureMode;
+  continueWhen?: Trigger[];
 };
 
 /**
@@ -47,7 +54,8 @@ export function localFirst(options: LocalFirstOptions = {}): ContinuationPolicy 
       ? { maxDurationMin: options.maxDurationMin }
       : {}),
     maxParallelRuns: options.maxParallelRuns ?? 4,
-    disclosure: options.disclosure ?? "minimal-context"
+    disclosure: options.disclosure ?? "minimal-context",
+    ...(options.continueWhen ? { continueWhen: options.continueWhen } : {})
   };
 }
 

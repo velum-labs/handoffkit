@@ -15,3 +15,5 @@ export type {
   ShellToolInput,
   ShellToolOutput
 } from "./remote-tools.js";
+export { HandoffModel, handoffModel, withModel } from "./model.js";
+export type { EscalationReason, HandoffModelConfig } from "./model.js";

@@ -5,12 +5,13 @@ import { after, before, test } from "node:test";
 
 import {
   agents,
+  branch,
   handoff,
   localFirst,
   reviewStrategies,
   targets
 } from "@warrant/handoff";
-import type { Handoff } from "@warrant/handoff";
+import type { Handoff, HandoffStreamEvent } from "@warrant/handoff";
 import {
   hashCanonical,
   PolicyDeniedError,
@@ -186,6 +187,61 @@ test("parallel fan-out shares one checkpoint and review picks a winner", async (
 
   const first = await h.review(runs, { choose: reviewStrategies.firstCompleted() });
   assert.ok(first.reason.includes("first attempt to complete"));
+});
+
+test("stream, branch isolation, scorecards, and checkpoint lineage", async () => {
+  const run = await h.continueIn(targets.pool(POOL), {
+    task: "produce output for the streaming test",
+    reason: "exercise the live stream",
+    isolate: branch()
+  });
+
+  // ContinueResult parity: tier, explanation, and panel deep links.
+  assert.equal(run.tier, "workspace");
+  assert.ok(run.explanation.includes(`pool "${POOL}" is allowed`));
+  assert.ok(run.url.endsWith(`/ui/#/runs/${run.runId}`));
+  assert.ok(run.auditUrl.endsWith(`/v1/runs/${run.runId}/bundle`));
+
+  // Consume the live stream while the runner processes the run.
+  const consumer = (async () => {
+    const events: HandoffStreamEvent[] = [];
+    for await (const event of h.stream([run], { timeoutMs: 60_000 })) {
+      events.push(event);
+    }
+    return events;
+  })();
+  assert.equal(await stack.runOnce(), run.runId);
+  const events = await consumer;
+
+  const types = events.map((event) => event.type);
+  assert.ok(types.includes("run.status"));
+  assert.ok(types.includes("run.event"));
+  assert.ok(types.includes("artifact.ready"));
+  const terminal = events.find((event) => event.type === "run.terminal");
+  assert.ok(terminal && terminal.type === "run.terminal");
+  assert.equal(terminal.status, "completed");
+
+  // branch() isolation: results land on a branch even from a clean tree.
+  const pulled = await run.pull();
+  assert.equal(pulled.mode, "branch");
+
+  // Scorecards: evidence-derived comparison data.
+  const review = await h.review([run], {
+    choose: reviewStrategies.testsPassSmallestDiff()
+  });
+  assert.equal(review.chosen.scorecard.exitCode, 0);
+  assert.ok(review.chosen.scorecard.filesChanged >= 1);
+  assert.ok(review.chosen.scorecard.durationMs >= 0);
+  assert.equal(review.chosen.scorecard.secretsReleased, 1);
+  assert.ok(review.reason.includes("harness exited 0"));
+
+  // Checkpoint lineage: each checkpoint descends from the previous one.
+  const checkpoints = h.checkpoints();
+  assert.ok(checkpoints.length >= 2);
+  const last = checkpoints.at(-1);
+  const previous = checkpoints.at(-2);
+  assert.ok(last && previous);
+  assert.equal(last.parent, previous.checkpointId);
 });
 
 test("continuation policy fails closed before anything moves", async () => {

@@ -17,6 +17,7 @@ export type {
   BlobFetcher,
   CaptureOptions,
   CapturedWorkspace,
+  PullOptions,
   PullResult,
   WorkspaceOutput
 } from "./workspace.js";

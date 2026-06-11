@@ -303,6 +303,8 @@ export type Checkpoint = {
   message?: string;
   semantic?: SemanticState;
   workspace?: WorkspaceManifest;
+  /** Lineage: the checkpoint this one descends from, if any. */
+  parent?: string;
 };
 
 export type HandoffSource = {

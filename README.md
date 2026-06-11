@@ -104,6 +104,7 @@ pnpm demo all       # run the whole series (skips interactive demos)
 | 09 | AI SDK loop | An ordinary `generateText` loop whose tool calls execute in governed sessions and return with verified receipts. |
 | 10 | Compute sandbox | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
 | 11 | Golden interface | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
+| 12 | Model escalation | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
 
 ## The handoff SDK
 
@@ -168,8 +169,13 @@ console.log(await h.summary());     // recomputed story: tools, checkpoints, run
 ```
 
 - `h.tools(...)` wraps any AI SDK-shaped toolset: calls execute locally and are journaled (`warrant.tooljournal.v1`); the journal travels as content-addressed semantic state in the next checkpoint, pinned via the envelope inside the signed contract.
-- `h.needs(target)` is a pure, deterministic policy check — the v1 planner has no model-based triggers, so "needs" honestly means "allowed and available under policy".
-- `h.model` is deliberately absent: the current spec cedes model routing to gateways and rejects mid-generation handoff as a UX illusion. Bring your own model; Warrant governs the boundaries around it.
+- `h.model` (via `withModel(h, { local, cloud })` from `@warrant/adapter-ai-sdk`) is an AI SDK-compatible model that starts local and escalates to cloud under deterministic, explainable conditions — a local failure, a classified context overflow, a prompt-size threshold — with every routing decision recorded as a `model.routed` trace event. Honest limits: escalation happens *between* calls; there is no mid-generation handoff.
+- `h.needs(target)` is a pure, deterministic check: the target must be allowed by policy, and — when the policy declares `continueWhen: [triggers.…]` — at least one trigger must fire against observable state (`triggers.userRequested()`, `toolFailed()`, `slowTools({ thresholdMs })`, `modelEscalated()`). `h.requestContinuation(reason)` is the explicit user gesture.
+- `h.stream(runs)` yields a live, typed event stream (status transitions, every hash-chained event, `artifact.ready`, terminals) across any set of runs.
+- `h.parallel(..., { isolate: branch() })` and `run.pull({ isolate: branch() })` force results onto dedicated branches; the default stays divergence-safe auto.
+- `h.review(runs, { choose: reviewStrategies.testsPassSmallestDiff() })` compares attempts on evidence-derived scorecards (harness exit, diff size, files changed, duration, blocked egress, secrets released).
+- Every run carries `ContinueResult` parity: `tier`, `explanation` (the planner's reasons), `url` (control panel deep link), and `auditUrl`; checkpoints form a lineage (`parent`), listable via `h.checkpoints()`.
+- `defineHandoffConfig({...})` registers provider-style defaults once, so app code can be just `handoff({ workspace: "." })`.
 
 ## App-owned loops: AI SDK and compute adapters
 

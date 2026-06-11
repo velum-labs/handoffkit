@@ -30,7 +30,9 @@ const requiredFiles = [
   "packages/plane/ui/app.js",
   "packages/runner/src/runner.ts",
   "packages/handoff/src/handoff.ts",
+  "packages/handoff/src/triggers.ts",
   "packages/adapter-ai-sdk/src/remote-tools.ts",
+  "packages/adapter-ai-sdk/src/model.ts",
   "packages/adapter-compute/src/sandbox.ts",
   "packages/testkit/src/index.ts",
   "packages/cli/src/index.ts",
@@ -105,6 +107,7 @@ if (!currentSpec.includes("Supersedes:")) {
 // installed frozen in CI with scripts ignored, store integrity verified, and
 // a minimum release age enforced (see .npmrc).
 const TRUSTED_THIRD_PARTY = new Map([
+  ["@ai-sdk/provider", "3.0.10"],
   ["ai", "6.0.200"],
   ["zod", "4.4.3"]
 ]);

@@ -1,6 +1,7 @@
 import type {
   ActorRef,
   ChainedEvent,
+  CheckpointTier,
   HandoffEnvelope,
   ReceiptBundle,
   RunStatus
@@ -9,6 +10,7 @@ import { PlaneClient } from "@warrant/sdk";
 import { pullRun } from "@warrant/workspace";
 import type { PullResult } from "@warrant/workspace";
 
+import type { IsolationStrategy } from "./isolation.js";
 import type { RuntimeTarget } from "./targets.js";
 
 const TERMINAL: RunStatus[] = ["completed", "failed", "cancelled"];
@@ -33,6 +35,10 @@ export class HandoffRun {
   readonly target: RuntimeTarget;
   readonly envelope: HandoffEnvelope;
   readonly envelopeHash: string;
+  /** Human-readable planner explanation for why this continuation ran. */
+  readonly explanation: string;
+  /** Isolation strategy applied at pull time. */
+  readonly isolate?: IsolationStrategy;
   private readonly client: PlaneClient;
   private readonly actor: ActorRef;
   private readonly workspaceDir: string;
@@ -44,6 +50,8 @@ export class HandoffRun {
     target: RuntimeTarget;
     envelope: HandoffEnvelope;
     envelopeHash: string;
+    explanation?: string;
+    isolate?: IsolationStrategy;
     client: PlaneClient;
     actor: ActorRef;
     workspaceDir: string;
@@ -54,11 +62,28 @@ export class HandoffRun {
     this.target = input.target;
     this.envelope = input.envelope;
     this.envelopeHash = input.envelopeHash;
+    this.explanation = input.explanation ?? "";
+    if (input.isolate) this.isolate = input.isolate;
     this.client = input.client;
     this.actor = input.actor;
     this.workspaceDir = input.workspaceDir;
     this.onTerminal = input.onTerminal;
     this.onPulled = input.onPulled;
+  }
+
+  /** The checkpoint tier this continuation carried. */
+  get tier(): CheckpointTier {
+    return this.envelope.checkpoint.tier;
+  }
+
+  /** Deep link to this run in the control panel. */
+  get url(): string {
+    return `${this.client.baseUrl}/ui/#/runs/${this.runId}`;
+  }
+
+  /** Where the signed evidence lives: bundle download via the CLI. */
+  get auditUrl(): string {
+    return `${this.client.baseUrl}/v1/runs/${this.runId}/bundle`;
   }
 
   async status(): Promise<RunStatus> {
@@ -149,21 +174,27 @@ export class HandoffRun {
   /**
    * Divergence-safe pull of the run's output into the local workspace:
    * applied in place when the workspace is clean at the contract base ref,
-   * otherwise materialized on a dedicated branch.
+   * otherwise materialized on a dedicated branch. A `branch()` isolation
+   * strategy (set here or at continueIn/parallel time) always lands on a
+   * branch and never touches the working tree.
    */
-  async pull(options: { repoDir?: string } = {}): Promise<PullResult> {
+  async pull(
+    options: { repoDir?: string; isolate?: IsolationStrategy } = {}
+  ): Promise<PullResult> {
     const bundle = await this.receipt();
     const diffHash = bundle.receipt.workspaceOut.diffHash;
     if (!diffHash) {
       this.onPulled(this.runId, "empty");
       return { mode: "empty" };
     }
+    const isolate = options.isolate ?? this.isolate;
     const diff = await this.client.getBlob(diffHash);
     const result = pullRun(
       options.repoDir ?? this.workspaceDir,
       this.runId,
       bundle.contract.workspace.baseRef,
-      diff
+      diff,
+      { forceBranch: isolate?.id === "branch" }
     );
     this.onPulled(this.runId, result.mode);
     return result;

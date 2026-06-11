@@ -203,6 +203,11 @@ export type PullResult =
   | { mode: "branch"; branch: string }
   | { mode: "empty" };
 
+export type PullOptions = {
+  /** Always land results on a dedicated branch; never touch the checkout. */
+  forceBranch?: boolean;
+};
+
 /**
  * Divergence-safe pull: apply the run's output diff directly only when the
  * local workspace is clean and still at the contract's base ref; otherwise
@@ -212,7 +217,8 @@ export function pullRun(
   repoDir: string,
   runId: string,
   baseRef: string,
-  outDiff: Buffer
+  outDiff: Buffer,
+  options: PullOptions = {}
 ): PullResult {
   if (outDiff.length === 0) return { mode: "empty" };
 
@@ -224,7 +230,7 @@ export function pullRun(
   );
   writeFileSync(diffPath, outDiff);
 
-  if (head === baseRef && !dirty) {
+  if (!options.forceBranch && head === baseRef && !dirty) {
     git(repoDir, ["apply", "--binary", "--whitespace=nowarn", diffPath]);
     rmSync(dirname(diffPath), { recursive: true, force: true });
     return { mode: "applied" };
