@@ -272,7 +272,32 @@ What to borrow:
 - Artifacts are part of the handoff contract: logs, screenshots, diffs, previews.
 - Repo branch/worktree is often a better handoff unit than raw process memory.
 
-### 4.3 Vercel Sandbox and Conductor
+### 4.3 Cursor self-hosted cloud agents
+
+Cursor's self-hosted cloud agents sharpen the architecture: the control plane, agent harness, model access, and user experience can stay vendor-hosted while tool execution happens inside the customer's infrastructure through workers that connect outbound over HTTPS.[^cursor-self-hosted]
+
+Important distinction: this is self-hosted execution, not necessarily self-hosted intelligence. Planning and inference can still be vendor-hosted. That is a useful product shape, but it is not the strongest privacy shape.
+
+What to borrow:
+
+- Cursor-shaped workers: one isolated worker/session per agent run.
+- Outbound-only connectivity: no inbound ports, VPN, or firewall changes required for the common case.
+- Customer-network execution: code, builds, caches, internal services, and tool execution stay inside the customer's environment.
+- Fleet mode: Kubernetes operator, Helm chart, or fleet API for scaling worker pools.
+- Same product surface across managed and self-hosted workers.
+
+What to improve:
+
+- Make the worker/control-plane contract portable across agent vendors, not tied to one coding harness.
+- Support four deployment modes: managed control plane plus managed runners, managed control plane plus self-hosted runners, self-hosted control plane plus self-hosted runners, and confidential runners with attestation.
+- Make planning/model locality explicit: hosted model, customer API key, local/private model, or customer-hosted control plane.
+- Treat every tool result sent back to a hosted planner as data movement that needs policy and audit, even if raw source files never leave the customer network.
+
+Implication for HandoffKit:
+
+Self-hosted runners should be a first-class runtime target, not an enterprise add-on. They are the concrete execution substrate for the hybrid distributed compute thesis.
+
+### 4.4 Vercel Sandbox and Conductor
 
 Conductor is the clearest product reference for this SDK's first implementation target: parallel coding agents move from laptop-bound execution to cloud workspaces without changing the user-facing interface.[^vercel-conductor-sandbox]
 
@@ -291,7 +316,7 @@ Implication for HandoffKit:
 
 The first coding demo can borrow Conductor's Cloud Workspaces: start local, continue selected work in cloud sandboxes, review diffs/artifacts, and pull results back. But Conductor is a wedge example, not the whole thesis. The broader product is the continuation layer across the hybrid compute graph.
 
-### 4.4 OpenAI sandbox agents
+### 4.5 OpenAI sandbox agents
 
 OpenAI's sandbox docs make the correct architectural split: harness/control plane outside, sandbox execution plane inside. The manifest defines fresh-session workspace content, mounts, environment, repos, files, users, and groups; saved state and snapshots are separate from the manifest.[^openai-sandbox]
 
@@ -303,7 +328,7 @@ What to borrow:
 - Provider-specific sandbox clients hidden behind one contract.
 - Secrets as runtime configuration, never prompt content.
 
-### 4.5 LangGraph persistence
+### 4.6 LangGraph persistence
 
 LangGraph's checkpoint model is the closest agent-runtime precedent: state snapshots are saved at execution boundaries, grouped by thread IDs, enabling human-in-the-loop, memory, time travel, and fault tolerance.[^langgraph]
 
@@ -314,7 +339,7 @@ What to borrow:
 - Pending writes matter: if one parallel node fails, completed node outputs should not be recomputed unnecessarily.
 - Time travel/forking is a first-class debugging primitive.
 
-### 4.6 CRIU, Firecracker, and Kubernetes checkpoint/restore
+### 4.7 CRIU, Firecracker, and Kubernetes checkpoint/restore
 
 CRIU can freeze a running container or process and restore it later, enabling snapshots and live migration.[^criu] Kubernetes now has a checkpoint/restore working group focused on resource utilization, faster startup, fault tolerance, migration, and AI/ML workloads.[^k8s-cr]
 
@@ -332,7 +357,7 @@ What to avoid:
 - Depending on network connection survival.
 - Assuming GPU state, open file descriptors, local devices, or host-specific paths will restore cleanly.
 
-### 4.7 Model routers
+### 4.8 Model routers
 
 Microsoft Foundry's model router analyzes prompt complexity, reasoning needs, task type, and routing settings to pick an underlying model while honoring deployment/data-zone boundaries.[^foundry-router] OpenRouter exposes provider routing controls such as provider order, fallbacks, required parameters, zero-data-retention endpoints, latency, throughput, price, and provider allow/deny lists.[^openrouter]
 
@@ -342,7 +367,7 @@ What to borrow:
 - The effective context window is constrained by the smallest eligible model unless the policy filters models appropriately.[^foundry-router]
 - Automatic failover is good only inside an approved model/provider subset.
 
-### 4.8 ComputeSDK
+### 4.9 ComputeSDK
 
 ComputeSDK is the closest public API analogue for the compute half of this product. It exposes one TypeScript-native sandbox API across providers such as E2B, Modal, Vercel, Daytona, CodeSandbox, Cloudflare, and others; the same application code can create sandboxes, run commands, manipulate filesystems, use terminals, expose ports, and switch providers through configuration.[^computesdk-intro][^computesdk-features]
 
@@ -361,7 +386,7 @@ What to add beyond ComputeSDK:
 - Privacy-aware continuation planning and secret release.
 - Resume semantics across agent state, model state, workspace state, and runtime state.
 
-### 4.9 Vercel AI SDK
+### 4.10 Vercel AI SDK
 
 Vercel AI SDK is the closest public API analogue for the model/tool half of this product. It standardizes model providers through a language model specification, exposes `generateText` and `streamText`, supports tool calling, structured output, multi-step loops, lifecycle callbacks, provider metadata, and UI stream protocols.[^ai-sdk-intro][^ai-sdk-providers][^ai-sdk-tools][^ai-sdk-generating]
 
@@ -424,6 +449,8 @@ Examples:
 - `local-container`: Docker/Podman container.
 - `cloud-container`: managed container executor.
 - `cloud-microvm`: Firecracker/Kata microVM.
+- `self-hosted-worker`: outbound-only customer-infra worker.
+- `self-hosted-worker-pool`: Kubernetes or fleet-managed customer worker pool.
 - `confidential-container`: Kata/CoCo/TDX/SEV-SNP runtime.
 - `confidential-gpu`: CPU TEE plus GPU confidential compute.
 - `browser-sandbox`: remote desktop/browser sandbox.
@@ -669,7 +696,10 @@ flowchart LR
   WS --> Store
   Policy --> Planner["Continuation planner"]
   Planner --> Cloud["Cloud executor"]
+  Planner --> Worker["Self-hosted worker"]
   Planner --> Conf["Confidential executor"]
+  Worker --> Audit
+  Store --> Worker
   Conf --> Attest["Attestation verifier"]
   Attest --> KBS["Secret broker / KBS"]
   Store --> Cloud
@@ -686,6 +716,7 @@ Components:
 - Checkpoint store: encrypted, content-addressed state/artifact storage.
 - Continuation planner: selects target runtime based on capabilities, policy, cost, locality, and user intent.
 - Cloud executor: runs work in standard container/microVM sandbox.
+- Self-hosted worker: outbound-only customer-infra process that executes tool calls and workspace tasks under customer network, cache, and secret boundaries.
 - Confidential executor: runs work in TEE-backed container/microVM.
 - Attestation verifier: validates target evidence before secret release/resume.
 - Secret broker: releases scoped credentials only after policy and attestation pass.
@@ -762,6 +793,37 @@ A planner decision must include:
 - expected cost range
 - rollback/resume strategy
 - human-readable explanation
+
+### 7.3 Self-hosted runner architecture
+
+Self-hosted runners are customer-infra execution targets controlled by the HandoffKit run broker. They should be Cursor-shaped without being Cursor-specific.
+
+Worker contract:
+
+- Starts with `hk worker start` for a single machine or as a Kubernetes/fleet-managed worker pool.
+- Connects outbound to the run broker over mutually authenticated TLS or equivalent.
+- Receives signed work envelopes, scoped resumption tokens, and tool-call requests.
+- Materializes workspaces from repo refs, manifests, mounts, caches, and artifacts.
+- Executes commands/tools inside an isolated session.
+- Streams structured results, logs, artifact hashes, and side-effect receipts back to the broker.
+- Never requires inbound ports for the default deployment.
+- Can be single-use, long-lived, or autoscaled.
+
+Control-plane modes:
+
+1. HandoffKit-hosted control plane plus HandoffKit-hosted runners.
+2. HandoffKit-hosted control plane plus customer self-hosted runners.
+3. Customer self-hosted control plane plus customer self-hosted runners.
+4. Attested/confidential runners with policy-bound secret release.
+
+Planning/model modes:
+
+- hosted planner/model
+- customer-provided API key
+- local/private model behind the worker
+- fully customer-hosted planner/model in self-hosted control-plane mode
+
+Privacy invariant: if a hosted planner sees tool results, logs, traces, diffs, or snippets, that is still data movement. The audit model must not claim "code never leaves" unless the policy proves what content crossed the boundary.
 
 ## 8. Model continuation architecture
 
@@ -1086,7 +1148,56 @@ Expected UX:
 
 Vercel Sandbox should be a first-class runtime provider because it directly matches this flow, but not the only provider. The SDK's abstraction boundary should allow E2B, Modal, Daytona, customer VPC, and confidential runtimes to implement the same continuation contract.
 
-### 10.6 Explicit continuation sample
+### 10.6 Cursor-shaped self-hosted runner sample
+
+A customer should be able to run the execution plane in their own infrastructure while keeping the same HandoffKit control surface.
+
+```sh
+hk worker start \
+  --pool engineering-prod \
+  --connect outbound \
+  --isolation single-use \
+  --workspace-cache /var/cache/handoffkit
+```
+
+```ts
+import { handoff, localFirst, localProcess, targets, triggers } from "@handoff/core";
+import { selfHostedWorkers } from "@handoff/worker";
+
+const customerWorker = targets.customerWorker({ pool: "engineering-prod" });
+
+const h = handoff({
+  workspace: ".",
+  models,
+  compute: {
+    local: localProcess(),
+    customer: selfHostedWorkers({ pool: "engineering-prod" })
+  },
+  policy: localFirst({
+    allowAutoContinueTo: [customerWorker],
+    continueWhen: [triggers.longRunningTask(), triggers.needsInternalNetwork()],
+    deny: [targets.standardCloud()]
+  })
+});
+
+await h.continueIn(customerWorker, {
+  reason: "needs internal build cache and staging service access",
+  run: "pnpm test"
+});
+```
+
+Expected semantics:
+
+1. The local or hosted control plane creates a signed work envelope.
+2. A customer worker claims the run over an outbound connection.
+3. The worker materializes the workspace inside customer infrastructure.
+4. Tool execution, build artifacts, caches, and internal network calls stay inside the customer environment.
+5. Only policy-approved summaries, logs, hashes, diffs, or tool results flow back to the planner/control plane.
+6. The audit log records exactly what crossed the worker boundary.
+
+This is not a separate product. It is the customer-owned execution mode of the same continuation contract.
+
+### 10.7 Explicit continuation sample
 
 Sometimes the app knows exactly when it wants cloud.
 
@@ -1115,7 +1226,7 @@ Expected semantics:
 6. Resume from the same task boundary.
 7. Stream status back to the same UI.
 
-### 10.7 Implicit continuation sample
+### 10.8 Implicit continuation sample
 
 Sometimes the SDK should continue automatically because policy allows it.
 
@@ -1152,7 +1263,7 @@ console.log(await h.trace());
 // ]
 ```
 
-### 10.8 Sensitive-data sample
+### 10.9 Sensitive-data sample
 
 ```ts
 const h = handoff({
@@ -1187,7 +1298,7 @@ throw new HandoffPolicyError({
 
 If private compute is available, the app code does not change. HandoffKit releases secrets only after attestation and records the evidence in the trace.
 
-### 10.9 What `handoff(...)` returns
+### 10.10 What `handoff(...)` returns
 
 ```ts
 type Handoff = {
@@ -1219,7 +1330,15 @@ type ParallelOptions = {
 type RuntimeTarget = {
   kind: "runtime-target";
   id: string;
+  locality?: "local" | "managed-cloud" | "customer-worker" | "private" | "confidential";
   requirements?: CapabilityRequirements;
+};
+
+type WorkerTarget = RuntimeTarget & {
+  locality: "customer-worker";
+  pool: string;
+  connection: "outbound";
+  isolation?: "single-use" | "long-lived" | "pooled";
 };
 
 type IsolationStrategy = {
@@ -1267,7 +1386,7 @@ type ReviewStrategy = {
 
 `agent` is intentionally an adapter object, not a string. This should feel like the Vercel AI SDK model pattern: `openai("gpt-5.5")`, `ollama("qwen3:8b")`, `claudeCode({ model: anthropic("claude-opus-4-6") })`, `codex({ model: openai("gpt-5.5-codex") })`. Strings are acceptable CLI aliases, not SDK contracts.
 
-#### 10.9.1 Continue, checkpoint, and planner contracts
+#### 10.10.1 Continue, checkpoint, and planner contracts
 
 The earlier type sketch needs a concrete continuation result. Without this, the API hides too much critical state.
 
@@ -1334,7 +1453,7 @@ type DisclosureMode =
 
 `dryRun` is important. Developers and security teams need to ask "what would move?" without moving anything.
 
-### 10.10 No magic strings in semantic SDK configuration
+### 10.11 No magic strings in semantic SDK configuration
 
 The SDK should avoid stringly typed configuration for HandoffKit semantics. Follow the AI SDK pattern: provider functions and helper factories return typed descriptors, and the core API composes those descriptors.
 
@@ -1365,7 +1484,7 @@ Allowed strings:
 
 The important part is what is not exposed in the hot path: no registry lookup, no checkpoint store, no attestation verifier, no artifact store, no provider selection object. Those exist, but they are configuration and internals.
 
-### 10.11 Domain-specific adapters from the general API
+### 10.12 Domain-specific adapters from the general API
 
 Do not narrow the core SDK for specific domains. Siri-like assistants, coding agents, browser agents, and enterprise workflow agents should be adapters built from the same general primitives: models, tools, runtime targets, policies, checkpoints, review, and audit.
 
@@ -1412,7 +1531,7 @@ await siri.run("Move my gym to after my last meeting and text Ben the new time."
 
 This is not a separate Siri API. It is a domain adapter using the general HandoffKit API. App Intents are just typed tools. Private Cloud Compute is just a runtime/model target with stronger policy requirements. User approval is just review/consent over typed tool execution.
 
-### 10.12 Providers still exist, but off the hot path
+### 10.13 Providers still exist, but off the hot path
 
 Provider setup should feel like AI SDK provider setup: define it once, use simple handles everywhere.
 
@@ -1443,7 +1562,7 @@ const h = handoff({ workspace: "." });
 
 This is the ergonomic target. Provider architecture is how the SDK stays extensible, not what the developer should think about every time.
 
-### 10.13 Design rule
+### 10.14 Design rule
 
 If a normal AI SDK or ComputeSDK user cannot understand the first example in 30 seconds, the API is wrong.
 
@@ -1539,6 +1658,7 @@ The platform should explicitly defend against:
 - confused deputy secret release
 - malicious workspace files that exfiltrate secrets during resume
 - policy downgrade during fallback
+- hosted planner receiving more source, logs, diffs, or tool results than policy allowed
 - unbounded spend or runaway remote process
 - artifact tampering between runtime and reviewer
 - hidden support/debug access violating confidential-compute claims
@@ -1581,6 +1701,7 @@ Do now:
 - Refine the continuation-first API until `await h.continueIn(targets.cloud())` feels obvious and safe.
 - Add concrete before/after examples for AI SDK users, ComputeSDK users, CLI users, and coding-agent loops.
 - Add a Conductor-style parallel cloud workspace example backed by a Vercel Sandbox runtime provider.
+- Add a Cursor-shaped self-hosted runner example backed by an outbound-only customer worker.
 - Define the minimal `handoff(...)` context: AI SDK-compatible `model`, wrapped `tools`, ComputeSDK-shaped `compute`, `checkpoint`, `continueIn`, `trace`, and `envelope`.
 - Define provider configuration as setup, not the hot-path user experience.
 - Define the handoff envelope schema.
@@ -1617,6 +1738,7 @@ Build:
 - Vercel Sandbox runtime provider as a first concrete cloud workspace target.
 - AI SDK provider adapter for model calls, tool calls, approvals, lifecycle callbacks, step traces, and provider metadata.
 - Cloud Docker executor for the first owned runtime.
+- Self-hosted worker runtime provider with single-machine mode first.
 - Optional confidential executor interface with mock attestation first.
 - Model continuation middleware supporting one local provider and one cloud provider.
 - Audit log and run status UI/CLI.
@@ -1646,26 +1768,33 @@ Do not build in MVP:
    - Stream logs, diffs, previews, screenshots, costs, and policy events back to the local UI.
    - Pull results back to the local workspace, PR, dashboard, or action receipt.
 
-3. Optional parallel fan-out
+3. Self-hosted runner continuation
+   - Start from local or hosted control plane.
+   - Continue execution to a customer worker that connects outbound only.
+   - Run tests against internal caches, dependencies, or staging services.
+   - Stream only policy-approved artifacts and summaries back.
+   - Audit the worker boundary explicitly.
+
+4. Optional parallel fan-out
    - Fork multiple implementation strategies with `h.parallel(...)` when useful.
    - Treat each branch as a topology fan-out, not an agent competition.
    - Review outputs with tests, diffs, previews, screenshots, cost, and risk summary.
    - Select or merge the useful result.
 
-4. Agent run control plane
+5. Agent run control plane
    - Start a run from CLI, Slack, GitHub, or IDE.
    - Hosted run broker owns the run after local disconnect.
    - User watches logs/artifacts from web or Slack.
    - GitHub app opens or updates a PR.
    - Audit view shows commands, models, runtimes, secrets, costs, and approvals.
 
-5. Model escalation
+6. Model escalation
    - Start with local model.
    - Local model fails confidence/verifier threshold.
    - `h.model` escalates to cloud model with minimal context.
    - Decision trace shows why.
 
-6. Confidential policy simulation
+7. Confidential policy simulation
    - Mark input as `sensitive`.
    - Standard cloud route denied.
    - Confidential route requires attestation.
@@ -1677,10 +1806,10 @@ Do not build in MVP:
 - A developer can add handoff to an AI SDK app by replacing `model` with `h.model` and `tools` with `h.tools(tools)`.
 - A developer can explicitly continue work elsewhere with one line: `await h.continueIn(targets.cloud())`.
 - A developer can continue work from local to cloud, cloud to private, and private back to local without changing the application-level control surface.
-- A team can start, observe, stop, review, and resume a run after the original laptop, cloud sandbox, or model runtime disconnects.
+- A team can start, observe, stop, review, and resume a run after the original laptop, cloud sandbox, self-hosted worker, or model runtime disconnects.
 - A reviewer can compare fan-out attempts when the compute graph branches, using tests, diff, preview, logs, screenshots, cost, and risk summary.
 - A local run can be resumed in cloud with transcript, task, workspace diff, and artifacts intact.
-- Cloud executor can run a command/test and return logs/artifacts.
+- Cloud executor and self-hosted worker can run a command/test and return policy-approved logs/artifacts.
 - The trace can explain every continuation/escalation/fallback decision.
 - No secret values appear in manifests, prompts, or audit logs.
 - Every handoff has a content-addressed checkpoint and audit trail.
@@ -1738,21 +1867,22 @@ Kill criteria:
 3. SDK can wrap ComputeSDK-shaped sandboxes without changing the sandbox-call structure.
 4. SDK can create semantic checkpoints.
 5. SDK can create filesystem checkpoints from git diff/worktree state.
-6. SDK can continue runs across local, cloud, private, browser, mobile, and customer-owned runtime targets.
-7. SDK can fork parallel runs into isolated branch/workspace contexts when fan-out is useful.
-8. Hosted run broker can own a run after any individual runtime disconnects.
-9. Review layer can compare branched attempts by tests, diff, preview, logs, screenshots, cost, and risk summary.
-10. GitHub integration can open or update a PR from a selected run.
-11. Slack or web integration can show run status, request approvals, and surface artifacts.
-12. SDK can package a signed handoff envelope.
-13. Cloud executor can restore from a handoff envelope.
-14. Cloud executor can run commands and expose artifacts.
-15. SDK can pull results back to the local workspace, PR, dashboard, or domain-specific action receipt.
-16. Model continuation middleware can select among provider models using policy and capability constraints.
-17. Model continuation middleware can escalate from local to cloud based on verifier/confidence/context/tool triggers.
-18. Policy engine can block cloud handoff for sensitive data unless confidential requirements are satisfied.
-19. Audit ledger records checkpoint, continuation, resume, policy, model escalation, and secret-release events.
-20. Secret broker injects secrets into runtime, never into prompt or manifest.
+6. SDK can continue runs across local, cloud, self-hosted worker, private, browser, mobile, and customer-owned runtime targets.
+7. SDK can target outbound-only self-hosted workers without requiring inbound network access.
+8. SDK can fork parallel runs into isolated branch/workspace contexts when fan-out is useful.
+9. Hosted run broker can own a run after any individual runtime disconnects.
+10. Review layer can compare branched attempts by tests, diff, preview, logs, screenshots, cost, and risk summary.
+11. GitHub integration can open or update a PR from a selected run.
+12. Slack or web integration can show run status, request approvals, and surface artifacts.
+13. SDK can package a signed handoff envelope.
+14. Cloud executor can restore from a handoff envelope.
+15. Cloud executor and self-hosted worker can run commands and expose artifacts.
+16. SDK can pull results back to the local workspace, PR, dashboard, or domain-specific action receipt.
+17. Model continuation middleware can select among provider models using policy and capability constraints.
+18. Model continuation middleware can escalate from local to cloud based on verifier/confidence/context/tool triggers.
+19. Policy engine can block cloud handoff for sensitive data unless confidential requirements are satisfied.
+20. Audit ledger records checkpoint, continuation, resume, policy, model escalation, worker-boundary, and secret-release events.
+21. Secret broker injects secrets into runtime, never into prompt or manifest.
 
 ### Non-functional requirements
 
@@ -1904,6 +2034,7 @@ Rules:
 - Local supervisor.
 - Hosted run broker for durable run ownership.
 - Docker cloud executor.
+- Single-machine self-hosted worker.
 - Vercel Sandbox provider for fast cloud workspaces.
 - Git/workspace checkpointing.
 - Local/cloud/private continuation planner.
@@ -1915,6 +2046,7 @@ Rules:
 ### Phase 2: Agent integrations
 
 - Agent provider adapters for Claude Code, Codex, Cursor-style agents, and custom harnesses.
+- Worker fleet API and Kubernetes/Helm deployment path.
 - GitHub app for PR creation, checks, comments, and run links.
 - Slack app for starting, approving, monitoring, and reviewing runs.
 - Web dashboard for run history, artifacts, costs, and policy events.
@@ -1949,6 +2081,7 @@ Rules:
 - Team secret stores.
 - Network egress controls.
 - VPC and BYO compute deployments.
+- Self-hosted control plane deployment.
 - Compliance reports for agentic software work.
 
 ## 16. Open questions
@@ -1966,7 +2099,7 @@ Rules:
 Open questions should not block the next artifact. Use these defaults until evidence says otherwise:
 
 - First buyer: platform engineering lead at a 20 to 500 engineer company already using coding agents.
-- First runtime path: local repo to managed cloud sandbox, then private/customer runtime simulation.
+- First runtime path: local repo to managed cloud sandbox, then outbound-only self-hosted worker, then private/customer runtime simulation.
 - First provider posture: bring-your-own-provider plus one managed default.
 - First policy mode: local-first with explicit consent for cloud and fail-closed for secrets.
 - First confidential claim: mock attestation and honest labeling only. Do not claim production TEE privacy until measured runtime and key release are real.
@@ -1982,6 +2115,7 @@ Reason: the durable shift is that AI work no longer lives in one process, model,
 The fastest credible route is still coding agents, because the pain is visible and urgent. But the wedge should demonstrate hybrid continuation, not agent tournaments:
 
 - local IDE to cloud sandbox for durability and heavier compute
+- managed cloud to self-hosted worker for internal network/cache/build access
 - cloud sandbox to private runtime for secrets or sensitive data
 - model runtime changes without app rewrite
 - tool/runtime state preserved across boundaries
@@ -2003,6 +2137,7 @@ That is the company-shaped product. Coding agents are the first wedge. HandoffKi
 [^pcc-google]: Apple Security Research, "Expanding Private Cloud Compute". https://security.apple.com/blog/expanding-pcc/
 [^cursor-cloud]: Cursor Docs, "Cloud Agents". https://cursor.com/docs/cloud-agent
 [^cursor-cli]: Cursor Changelog, "CLI Agent Modes and Cloud Handoff". https://cursor.com/changelog/cli-jan-16-2026
+[^cursor-self-hosted]: Cursor Blog, "Run cloud agents in your own infrastructure". https://cursor.com/blog/self-hosted-cloud-agents
 [^vercel-conductor-sandbox]: Vercel Blog, "How Conductor moved parallel coding agents from the laptop to the cloud with Vercel Sandbox". https://vercel.com/blog/how-conductor-moved-parallel-coding-agents-from-the-laptop-to-the-cloud-with-vercel-sandbox
 [^openai-sandbox]: OpenAI API Docs, "Sandbox Agents". https://developers.openai.com/api/docs/guides/agents/sandboxes
 [^langgraph]: LangChain Docs, "LangGraph Persistence". https://docs.langchain.com/oss/python/langgraph/persistence
