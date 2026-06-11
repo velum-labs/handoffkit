@@ -1,0 +1,20 @@
+{
+  "name": "@warrant/runner",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Warrant runner: outbound-only execution of vendor agent harnesses inside governed sessions with deny-by-default egress.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@warrant/protocol": "workspace:*",
+    "@warrant/sdk": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  }
+}

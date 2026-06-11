@@ -1,22 +1,47 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 const requiredFiles = [
   "README.md",
   "SECURITY.md",
   ".npmrc",
   "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
   ".github/workflows/ci.yml",
   ".github/dependabot.yml",
   ".github/CODEOWNERS",
   "spec/2026-06-11-local-first-handoff-platform-spec.md",
   "spec/2026-06-11-governed-agent-execution-plane-spec.md",
   "tsconfig.json",
-  "src/cli/index.ts",
-  "src/protocol/types.ts",
-  "src/protocol/receipt.ts",
-  "src/plane/plane.ts",
-  "src/runner/runner.ts",
-  "src/test/e2e.test.ts"
+  "tsconfig.base.json",
+  "Dockerfile",
+  "docker-compose.yml",
+  // package entry points
+  "packages/protocol/src/index.ts",
+  "packages/protocol/src/types.ts",
+  "packages/protocol/src/api.ts",
+  "packages/protocol/src/receipt.ts",
+  "packages/workspace/src/index.ts",
+  "packages/sdk/src/index.ts",
+  "packages/plane/src/plane.ts",
+  "packages/plane/ui/index.html",
+  "packages/plane/ui/app.css",
+  "packages/plane/ui/app.js",
+  "packages/runner/src/runner.ts",
+  "packages/handoff/src/handoff.ts",
+  "packages/testkit/src/index.ts",
+  "packages/cli/src/index.ts",
+  "examples/demos/src/run.ts",
+  // test suites
+  "packages/protocol/src/test/protocol.test.ts",
+  "packages/workspace/src/test/workspace.test.ts",
+  "packages/plane/src/test/policy.test.ts",
+  "packages/plane/src/test/api.test.ts",
+  "packages/handoff/src/test/plan.test.ts",
+  "packages/cli/src/test/e2e.test.ts",
+  "packages/cli/src/test/handoff.test.ts",
+  "packages/cli/src/test/cli.test.ts",
+  "examples/demos/src/test/demos.test.ts"
 ];
 
 const fail = (message) => {
@@ -67,10 +92,33 @@ if (!currentSpec.includes("Supersedes:")) {
   fail("current spec must declare what it supersedes");
 }
 
-// The MVP kernel has zero runtime dependencies by design: the protocol
-// must remain verifiable with nothing but Node built-ins.
+// The kernel has zero third-party runtime dependencies by design: the
+// protocol must remain verifiable with nothing but Node built-ins. Every
+// workspace package may depend only on sibling workspace packages.
 if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
-  fail("runtime dependencies are not allowed; the kernel uses Node built-ins only");
+  fail("root runtime dependencies are not allowed; the kernel uses Node built-ins only");
+}
+const workspaceDirs = [
+  ...readdirSync("packages").map((dir) => join("packages", dir)),
+  ...readdirSync("examples").map((dir) => join("examples", dir))
+];
+for (const dir of workspaceDirs) {
+  const manifestPath = join(dir, "package.json");
+  if (!existsSync(manifestPath)) continue;
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (manifest.private !== true) fail(`${manifestPath} must remain private`);
+  for (const [section, deps] of [
+    ["dependencies", manifest.dependencies ?? {}],
+    ["devDependencies", manifest.devDependencies ?? {}]
+  ]) {
+    for (const [name, version] of Object.entries(deps)) {
+      if (!name.startsWith("@warrant/") || version !== "workspace:*") {
+        fail(
+          `${manifestPath} ${section} entry "${name}": only @warrant/* workspace:* dependencies are allowed`
+        );
+      }
+    }
+  }
 }
 
 if (process.exitCode) process.exit(process.exitCode);

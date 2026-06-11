@@ -1,0 +1,33 @@
+{
+  "name": "@warrant/cli",
+  "private": true,
+  "version": "0.1.0",
+  "description": "warrant — the governed execution and provenance plane for AI agents.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bin": {
+    "warrant": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./render": {
+      "types": "./dist/render.d.ts",
+      "default": "./dist/render.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@warrant/handoff": "workspace:*",
+    "@warrant/plane": "workspace:*",
+    "@warrant/protocol": "workspace:*",
+    "@warrant/runner": "workspace:*",
+    "@warrant/sdk": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  },
+  "devDependencies": {
+    "@warrant/testkit": "workspace:*"
+  }
+}

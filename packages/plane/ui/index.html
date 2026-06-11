@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Warrant — Control Panel</title>
+    <link rel="stylesheet" href="/ui/app.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E%E2%9A%96%EF%B8%8F%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">⚖︎</span>
+        <span class="brand-name">warrant</span>
+        <span class="brand-sub">control panel</span>
+      </div>
+      <nav class="nav" id="nav" hidden>
+        <a href="#/runs" data-nav="runs">Runs</a>
+        <a href="#/runners" data-nav="runners">Runners</a>
+        <a href="#/policy" data-nav="policy">Policy</a>
+      </nav>
+      <div class="top-actions" id="top-actions" hidden>
+        <button class="btn btn-ghost" id="export-btn" title="Download the audit log as JSONL">Export audit JSONL</button>
+        <button class="btn btn-ghost" id="logout-btn">Sign out</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section id="login" class="login" hidden>
+        <div class="login-card">
+          <h1>Sign in to the plane</h1>
+          <p>
+            Paste the admin token from <code>warrant ui</code> or
+            <code>.warrant/config.json</code>. The token stays in this
+            browser; every request is authenticated against the plane.
+          </p>
+          <form id="login-form">
+            <input
+              id="token-input"
+              type="password"
+              placeholder="admin token"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button class="btn btn-primary" type="submit">Connect</button>
+          </form>
+          <p class="login-error" id="login-error" hidden></p>
+        </div>
+      </section>
+
+      <section id="view" hidden></section>
+    </main>
+
+    <footer class="footer">
+      <span>The governed execution and provenance plane for AI agents.</span>
+      <span id="plane-info"></span>
+    </footer>
+
+    <script src="/ui/app.js"></script>
+  </body>
+</html>
