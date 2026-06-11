@@ -1,0 +1,10 @@
+{
+  "name": "handoffkit",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The coordination layer for hybrid distributed AI compute.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "check": "echo 'design-stage repo: no implementation yet'"
+  }
+}
