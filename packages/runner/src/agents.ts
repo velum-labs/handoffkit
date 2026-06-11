@@ -36,6 +36,13 @@ export function buildAgentCommand(
         cmd: process.execPath,
         args: [ctx.mockScriptPath, prompt]
       };
+    case "command":
+      // The task itself is the harness: one governed shell command. Used by
+      // app-owned loops (AI SDK adapter) and the compute adapter.
+      return {
+        cmd: "sh",
+        args: ["-c", prompt]
+      };
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported agent kind: ${String(exhausted)}`);

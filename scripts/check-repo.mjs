@@ -29,6 +29,8 @@ const requiredFiles = [
   "packages/plane/ui/app.js",
   "packages/runner/src/runner.ts",
   "packages/handoff/src/handoff.ts",
+  "packages/adapter-ai-sdk/src/remote-tools.ts",
+  "packages/adapter-compute/src/sandbox.ts",
   "packages/testkit/src/index.ts",
   "packages/cli/src/index.ts",
   "examples/demos/src/run.ts",
@@ -38,6 +40,8 @@ const requiredFiles = [
   "packages/plane/src/test/policy.test.ts",
   "packages/plane/src/test/api.test.ts",
   "packages/handoff/src/test/plan.test.ts",
+  "packages/adapter-ai-sdk/src/test/remote-tools.test.ts",
+  "packages/adapter-compute/src/test/sandbox.test.ts",
   "packages/cli/src/test/e2e.test.ts",
   "packages/cli/src/test/handoff.test.ts",
   "packages/cli/src/test/cli.test.ts",
@@ -92,11 +96,24 @@ if (!currentSpec.includes("Supersedes:")) {
   fail("current spec must declare what it supersedes");
 }
 
-// The kernel has zero third-party runtime dependencies by design: the
-// protocol must remain verifiable with nothing but Node built-ins. Every
-// workspace package may depend only on sibling workspace packages.
+// Dependency policy: third-party dependencies are allowed, but only trusted,
+// exact-pinned versions reviewed onto this allowlist, and only in adapter and
+// example packages. The trust-critical kernel — protocol, workspace, sdk,
+// plane, runner, handoff, cli — stays on Node built-ins so receipts remain
+// verifiable without trusting anyone's dependency tree. The lockfile is
+// installed frozen in CI with scripts ignored, store integrity verified, and
+// a minimum release age enforced (see .npmrc).
+const TRUSTED_THIRD_PARTY = new Map([
+  ["ai", "6.0.200"],
+  ["zod", "4.4.3"]
+]);
+const THIRD_PARTY_ALLOWED_IN = new Set([
+  "packages/adapter-ai-sdk",
+  "examples/demos"
+]);
+
 if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
-  fail("root runtime dependencies are not allowed; the kernel uses Node built-ins only");
+  fail("root runtime dependencies are not allowed");
 }
 const workspaceDirs = [
   ...readdirSync("packages").map((dir) => join("packages", dir)),
@@ -112,9 +129,25 @@ for (const dir of workspaceDirs) {
     ["devDependencies", manifest.devDependencies ?? {}]
   ]) {
     for (const [name, version] of Object.entries(deps)) {
-      if (!name.startsWith("@warrant/") || version !== "workspace:*") {
+      if (name.startsWith("@warrant/")) {
+        if (version !== "workspace:*") {
+          fail(`${manifestPath} ${section} "${name}": internal packages must use workspace:*`);
+        }
+        continue;
+      }
+      if (!THIRD_PARTY_ALLOWED_IN.has(dir.replaceAll("\\", "/"))) {
         fail(
-          `${manifestPath} ${section} entry "${name}": only @warrant/* workspace:* dependencies are allowed`
+          `${manifestPath} ${section} "${name}": third-party dependencies are not allowed in this package (kernel packages use Node built-ins only)`
+        );
+      }
+      const trusted = TRUSTED_THIRD_PARTY.get(name);
+      if (trusted === undefined) {
+        fail(
+          `${manifestPath} ${section} "${name}": not on the trusted dependency allowlist in scripts/check-repo.mjs`
+        );
+      } else if (version !== trusted) {
+        fail(
+          `${manifestPath} ${section} "${name}": version "${version}" must be the exact trusted pin "${trusted}"`
         );
       }
     }

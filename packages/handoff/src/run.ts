@@ -98,6 +98,37 @@ export class HandoffRun {
     }
   }
 
+  /**
+   * The session's combined stdout/stderr, fetched by the content hash
+   * recorded in the event chain. Empty when the session produced no output.
+   */
+  async sessionLog(): Promise<string> {
+    const events = await this.events();
+    for (let i = events.length - 1; i >= 0; i--) {
+      const entry = events[i];
+      if (!entry) continue;
+      const event = entry.event;
+      if (event.type === "artifact.created" && event.kind === "log") {
+        const blob = await this.client.getBlob(event.hash);
+        return blob.toString("utf8");
+      }
+    }
+    return "";
+  }
+
+  /** Exit code of the harness command, from the command.executed event. */
+  async commandExitCode(): Promise<number | undefined> {
+    const events = await this.events();
+    for (let i = events.length - 1; i >= 0; i--) {
+      const entry = events[i];
+      if (!entry) continue;
+      if (entry.event.type === "command.executed") {
+        return entry.event.exitCode;
+      }
+    }
+    return undefined;
+  }
+
   /** Grant required consent as the given actor (defaults to the context actor). */
   async approve(actor?: ActorRef): Promise<RunStatus> {
     const result = await this.client.approve(this.runId, actor ?? this.actor);

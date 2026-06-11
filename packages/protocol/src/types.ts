@@ -37,7 +37,12 @@ export type CheckpointTier = "semantic" | "workspace";
 
 export type AttestationTier = "mock" | "standard" | "zdr" | "cpu-tee" | "cpu-gpu-tee";
 
-export type AgentKind = "claude-code" | "codex" | "mock";
+/**
+ * "command" is the harness for app-owned loops and the compute adapter:
+ * a single shell command executed inside a governed session. "mock" is the
+ * built-in test harness; the rest are vendor CLIs wrapped as-is.
+ */
+export type AgentKind = "claude-code" | "codex" | "mock" | "command";
 
 export type AgentSpec = {
   kind: AgentKind;

@@ -82,6 +82,10 @@ export function startPlaneServer(
       sendJson(res, 400, { error: message });
     });
   });
+  // Disable the keep-alive inactivity timeout: closing idle sockets races
+  // with clients reusing them, which surfaces as spurious transport errors.
+  // server.close() still closes idle connections on shutdown.
+  server.keepAliveTimeout = 0;
   return new Promise((resolve) => {
     server.listen(port, host, () => {
       const address = server.address();

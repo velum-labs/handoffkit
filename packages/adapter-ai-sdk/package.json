@@ -1,0 +1,27 @@
+{
+  "name": "@warrant/adapter-ai-sdk",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI SDK adapter for app-owned loops: tool calls execute in governed runner sessions and return with receipts. No durability claim attaches to the caller's loop.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@warrant/handoff": "workspace:*",
+    "@warrant/protocol": "workspace:*",
+    "@warrant/sdk": "workspace:*",
+    "ai": "6.0.200",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@warrant/testkit": "workspace:*"
+  }
+}

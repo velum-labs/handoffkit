@@ -13,6 +13,8 @@ import { demo as offlineVerify } from "./demos/05-offline-verify.js";
 import { demo as handoffDemo } from "./demos/06-handoff.js";
 import { demo as parallelFanout } from "./demos/07-parallel-fanout.js";
 import { demo as controlPanel } from "./demos/08-control-panel.js";
+import { demo as aiSdkLoop } from "./demos/09-ai-sdk-loop.js";
+import { demo as computeSandbox } from "./demos/10-compute-sandbox.js";
 import { bold, dim } from "./narrate.js";
 import type { Demo } from "./registry.js";
 
@@ -24,7 +26,9 @@ const SERIES: Demo[] = [
   offlineVerify,
   handoffDemo,
   parallelFanout,
-  controlPanel
+  controlPanel,
+  aiSdkLoop,
+  computeSandbox
 ];
 
 function list(): void {

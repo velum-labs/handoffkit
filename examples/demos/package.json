@@ -6,6 +6,8 @@
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
+    "@warrant/adapter-ai-sdk": "workspace:*",
+    "@warrant/adapter-compute": "workspace:*",
     "@warrant/cli": "workspace:*",
     "@warrant/handoff": "workspace:*",
     "@warrant/plane": "workspace:*",
@@ -13,6 +15,8 @@
     "@warrant/runner": "workspace:*",
     "@warrant/sdk": "workspace:*",
     "@warrant/testkit": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@warrant/workspace": "workspace:*",
+    "ai": "6.0.200",
+    "zod": "4.4.3"
   }
 }
