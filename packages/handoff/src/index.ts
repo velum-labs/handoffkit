@@ -13,9 +13,12 @@ export { Handoff, handoff } from "./handoff.js";
 export type {
   ContinueOptions,
   HandoffConfig,
+  HandoffSummary,
   HandoffTraceEvent,
   ParallelOptions
 } from "./handoff.js";
+export { wrapTools } from "./tools.js";
+export type { ToolCallObservation, ToolLike } from "./tools.js";
 export { HandoffRun } from "./run.js";
 export type { WaitOptions, WaitOutcome } from "./run.js";
 export { targets } from "./targets.js";

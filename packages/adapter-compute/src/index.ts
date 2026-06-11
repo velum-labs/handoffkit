@@ -16,10 +16,11 @@
  * - `filesystem.writeFile` stages input files locally for the next command;
  *   it is not a remote mutation (nothing exists remotely between commands).
  */
-export { governedCompute, GovernedSandbox } from "./sandbox.js";
+export { governedCompute, GovernedSandbox, withCompute } from "./sandbox.js";
 export type {
   CommandResult,
   GovernedCompute,
   GovernedComputeConfig,
+  SandboxBinding,
   SandboxRunRecord
 } from "./sandbox.js";

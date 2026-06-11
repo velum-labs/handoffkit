@@ -185,6 +185,11 @@ export function renderTrace(events: HandoffTraceEvent[]): string {
           `  ${event.ts}  results.pulled          ${event.runId} (${event.mode})`
         );
         break;
+      case "tool.called":
+        lines.push(
+          `  ${event.ts}  tool.called             ${event.toolName} [${event.ok ? "ok" : "error"}] input ${event.inputHash.slice(0, 12)}${event.outputHash ? ` → ${event.outputHash.slice(0, 12)}` : ""} (${event.durationMs}ms)`
+        );
+        break;
       default: {
         const exhausted: never = event;
         throw new Error(`unreachable trace event: ${String(exhausted)}`);

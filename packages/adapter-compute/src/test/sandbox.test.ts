@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
 import { after, before, test } from "node:test";
 
+import { handoff, localFirst } from "@warrant/handoff";
 import { makeRepo, startStack } from "@warrant/testkit";
 import type { Stack } from "@warrant/testkit";
 
-import { governedCompute } from "../sandbox.js";
+import { governedCompute, withCompute } from "../sandbox.js";
 import type { GovernedSandbox } from "../sandbox.js";
 
 const POOL = "eng-prod";
@@ -76,6 +77,35 @@ test("failing commands report their exit code and keep their receipt", async () 
 test("paths cannot escape the sandbox workspace", async () => {
   await assert.rejects(() => sandbox.filesystem.writeFile("../escape.txt", "nope"));
   await assert.rejects(() => sandbox.filesystem.readFile("/etc/hostname"));
+});
+
+test("withCompute attaches the compute surface to an existing context with one shared trace", async () => {
+  const sharedRepo = makeRepo({ files: { "README.md": "# golden compute\n" } });
+  try {
+    const h = withCompute(
+      handoff({
+        workspace: sharedRepo,
+        plane: { url: stack.planeUrl, adminToken: stack.adminToken },
+        policy: localFirst({ allowPools: [POOL] })
+      }),
+      { pool: POOL }
+    );
+    const box = await h.compute.sandbox.create();
+    const result = await box.runCommand("echo golden > golden.txt && cat golden.txt");
+    assert.equal(result.status, "completed");
+    assert.equal(result.output.trim(), "golden");
+    assert.equal(await box.filesystem.readFile("golden.txt"), "golden\n");
+
+    // The sandbox command and the context share one trace and one summary.
+    const types = h.trace().map((e) => e.type);
+    assert.ok(types.includes("envelope.created"));
+    assert.ok(types.includes("results.pulled"));
+    const summary = await h.summary();
+    assert.equal(summary.runs.length, 1);
+    assert.equal(summary.runs[0]?.status, "completed");
+  } finally {
+    rmSync(sharedRepo, { recursive: true, force: true });
+  }
 });
 
 test("destroyed sandboxes refuse further operations", async () => {

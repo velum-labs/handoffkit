@@ -73,6 +73,8 @@ export type {
   SemanticState,
   Signature,
   TaskSpec,
+  ToolCallRecord,
+  ToolJournal,
   WorkspaceManifest
 } from "./types.js";
 export type {

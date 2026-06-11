@@ -4,6 +4,8 @@
  * warrant.event.v1, warrant.manifest.v1, warrant.policy.v1).
  */
 
+import type { JsonValue } from "./jcs.js";
+
 export type RunStatus =
   | "created"
   | "claimed"
@@ -266,8 +268,31 @@ export type Receipt = {
 export type SemanticState = {
   /** Blob hash of the captured transcript, if one was attached. */
   transcriptHash?: string;
+  /** Blob hash of the tool-call journal (warrant.tooljournal.v1), if any. */
+  toolJournalHash?: string;
   /** Short human-readable summary of where the work stands. */
   note?: string;
+};
+
+/** One recorded tool invocation from an app-owned loop. */
+export type ToolCallRecord = {
+  seq: number;
+  ts: string;
+  toolName: string;
+  input: JsonValue;
+  output?: JsonValue;
+  error?: string;
+  durationMs: number;
+};
+
+/**
+ * Tool-call history captured at semantic boundaries (warrant.tooljournal.v1).
+ * Content-addressed and referenced from a checkpoint's semantic state, so a
+ * continuation carries what the loop's tools saw and did.
+ */
+export type ToolJournal = {
+  version: "warrant.tooljournal.v1";
+  entries: ToolCallRecord[];
 };
 
 export type Checkpoint = {

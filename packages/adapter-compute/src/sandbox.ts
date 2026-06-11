@@ -60,6 +60,13 @@ function git(cwd: string, args: string[]): string {
   return result.stdout;
 }
 
+/** Wiring for a sandbox: a continuation context plus its execution pool. */
+export type SandboxBinding = {
+  context: Handoff;
+  pool: string;
+  timeoutMs?: number;
+};
+
 export class GovernedSandbox {
   readonly sandboxId: string;
   readonly filesystem: {
@@ -68,25 +75,18 @@ export class GovernedSandbox {
     exists(path: string): Promise<boolean>;
   };
   private readonly context: Handoff;
-  private readonly config: GovernedComputeConfig;
+  private readonly pool: string;
+  private readonly timeoutMs: number;
   private readonly workspaceDir: string;
   private readonly records: SandboxRunRecord[] = [];
   private destroyed = false;
 
-  constructor(config: GovernedComputeConfig) {
+  constructor(binding: SandboxBinding) {
     this.sandboxId = `sbx_${randomUUID()}`;
-    this.config = config;
-    this.workspaceDir = resolve(config.workspace);
-    this.context = handoff({
-      workspace: this.workspaceDir,
-      plane: config.plane,
-      agent: agents.command(),
-      allowUntracked: config.allowUntracked ?? ["**"],
-      ...(config.actor ? { actor: config.actor } : {}),
-      ...(config.policy ? { policy: config.policy } : {}),
-      ...(config.secrets ? { secrets: config.secrets } : {}),
-      ...(config.allowHosts ? { allowHosts: config.allowHosts } : {})
-    });
+    this.context = binding.context;
+    this.pool = binding.pool;
+    this.timeoutMs = binding.timeoutMs ?? 5 * 60 * 1000;
+    this.workspaceDir = binding.context.workspacePath;
     this.filesystem = {
       writeFile: async (path, content) => {
         this.assertLive();
@@ -144,14 +144,12 @@ export class GovernedSandbox {
     this.assertLive();
     this.commitIfDirty(`sandbox ${this.sandboxId}: stage state`);
 
-    const run = await this.context.continueIn(targets.pool(this.config.pool), {
+    const run = await this.context.continueIn(targets.pool(this.pool), {
       task: command,
       agent: agents.command(),
       reason: `sandbox ${this.sandboxId} command`
     });
-    const outcome = await run.wait({
-      timeoutMs: this.config.timeoutMs ?? 5 * 60 * 1000
-    });
+    const outcome = await run.wait({ timeoutMs: this.timeoutMs });
     if (outcome.status === "awaiting_approval") {
       throw new Error(
         `run ${run.runId} is blocked on consent (${outcome.consentRequirements.join("; ")}); ` +
@@ -206,7 +204,55 @@ export class GovernedSandbox {
 export function governedCompute(config: GovernedComputeConfig): GovernedCompute {
   return {
     sandbox: {
-      create: () => Promise.resolve(new GovernedSandbox(config))
+      create: () => {
+        const context = handoff({
+          workspace: resolve(config.workspace),
+          plane: config.plane,
+          agent: agents.command(),
+          allowUntracked: config.allowUntracked ?? ["**"],
+          ...(config.actor ? { actor: config.actor } : {}),
+          ...(config.policy ? { policy: config.policy } : {}),
+          ...(config.secrets ? { secrets: config.secrets } : {}),
+          ...(config.allowHosts ? { allowHosts: config.allowHosts } : {})
+        });
+        return Promise.resolve(
+          new GovernedSandbox({
+            context,
+            pool: config.pool,
+            ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {})
+          })
+        );
+      }
     }
   };
+}
+
+/**
+ * Attach the compute surface to an existing continuation context — the
+ * golden-shape composition. Sandboxes created here share the context's
+ * workspace, policy, and trace, so tool calls, continuations, and sandbox
+ * commands all land in one explainable history:
+ *
+ *   const h = withCompute(handoff({ workspace, plane, policy }), { pool });
+ *   const sandbox = await h.compute.sandbox.create();
+ */
+export function withCompute<H extends Handoff>(
+  h: H,
+  options: { pool: string; timeoutMs?: number }
+): H & { compute: GovernedCompute } {
+  const compute: GovernedCompute = {
+    sandbox: {
+      create: () =>
+        Promise.resolve(
+          new GovernedSandbox({
+            context: h,
+            pool: options.pool,
+            ...(options.timeoutMs !== undefined
+              ? { timeoutMs: options.timeoutMs }
+              : {})
+          })
+        )
+    }
+  };
+  return Object.assign(h, { compute });
 }

@@ -16,7 +16,10 @@ import type {
   DisclosureReport,
   HandoffEnvelope,
   RunRequestInput,
-  RunStatus
+  RunStatus,
+  SemanticState,
+  ToolCallRecord,
+  ToolJournal
 } from "@warrant/protocol";
 import { PlaneClient } from "@warrant/sdk";
 import { captureWorkspace } from "@warrant/workspace";
@@ -30,6 +33,8 @@ import { reviewRuns, reviewStrategies } from "./review.js";
 import type { ReviewResult, ReviewStrategy } from "./review.js";
 import { HandoffRun } from "./run.js";
 import type { RuntimeTarget } from "./targets.js";
+import { wrapTools } from "./tools.js";
+import type { ToolLike } from "./tools.js";
 
 export type HandoffConfig = {
   /** Path to the local git workspace this work starts in. */
@@ -72,7 +77,18 @@ export type HandoffTraceEvent =
   | { type: "envelope.created"; ts: string; envelopeId: string; envelopeHash: string; target: string }
   | { type: "run.requested"; ts: string; runId: string; status: RunStatus; task: string }
   | { type: "run.terminal"; ts: string; runId: string; status: RunStatus }
-  | { type: "results.pulled"; ts: string; runId: string; mode: PullResult["mode"] };
+  | { type: "results.pulled"; ts: string; runId: string; mode: PullResult["mode"] }
+  | { type: "tool.called"; ts: string; toolName: string; inputHash: string; outputHash?: string; ok: boolean; durationMs: number };
+
+/** Where the work stands: derivable, recomputed, never source of truth. */
+export type HandoffSummary = {
+  workspace: string;
+  checkpoints: number;
+  toolCalls: number;
+  continuations: { planned: number; denied: number };
+  runs: { runId: string; task: string; target: string; status: RunStatus }[];
+  pulls: number;
+};
 
 function defaultActor(): ActorRef {
   return { kind: "human", id: process.env.USER ?? "developer" };
@@ -98,6 +114,8 @@ export class Handoff {
   private readonly allowUntracked: string[];
   private readonly budget: BudgetSpec;
   private readonly traceEvents: HandoffTraceEvent[] = [];
+  private readonly toolJournal: ToolCallRecord[] = [];
+  private readonly requestedRuns: { runId: string; task: string; target: string }[] = [];
   private lastEnvelopeValue?: HandoffEnvelope;
 
   constructor(config: HandoffConfig) {
@@ -115,9 +133,105 @@ export class Handoff {
     this.budget = config.budget ?? {};
   }
 
-  /** Local trace: every planning, envelope, run, and pull decision. */
+  /** The local workspace this context is bound to. */
+  get workspacePath(): string {
+    return this.workspaceDir;
+  }
+
+  /** Local trace: every planning, envelope, run, pull, and tool decision. */
   trace(): HandoffTraceEvent[] {
     return [...this.traceEvents];
+  }
+
+  /**
+   * Wrap an AI SDK-shaped toolset (any tools with `execute`) so every call
+   * is journaled. The journal travels as content-addressed semantic state
+   * in the next checkpoint, so a continuation carries what the loop's tools
+   * saw and did. Tools still execute locally, in the caller's process —
+   * this is capture, not orchestration. For governed *remote* execution,
+   * use @warrant/adapter-ai-sdk's remoteTools instead.
+   */
+  tools<T extends Record<string, ToolLike>>(toolset: T): T {
+    return wrapTools(
+      toolset,
+      () => this.toolJournal.length,
+      ({ record, inputHash, outputHash, ok }) => {
+        this.toolJournal.push(record);
+        this.record({
+          type: "tool.called",
+          ts: record.ts,
+          toolName: record.toolName,
+          inputHash,
+          ...(outputHash !== undefined ? { outputHash } : {}),
+          ok,
+          durationMs: record.durationMs
+        });
+      }
+    );
+  }
+
+  /**
+   * Deterministic check: would the continuation policy permit moving this
+   * work to the target? Pure — evaluates nothing but policy, records
+   * nothing, moves nothing. The v1 planner has no model-based triggers;
+   * "needs" means "is allowed and available under policy".
+   */
+  needs(target: RuntimeTarget, options: Partial<ContinueOptions> = {}): boolean {
+    return (
+      planContinuation(this.policy, {
+        target,
+        secrets: options.secrets ?? this.secrets,
+        budget: options.budget ?? this.budget,
+        parallelism: 1
+      }).decision === "continue"
+    );
+  }
+
+  /** Recomputed view over the trace plus live run statuses from the plane. */
+  async summary(): Promise<HandoffSummary> {
+    const runs: HandoffSummary["runs"] = [];
+    for (const requested of this.requestedRuns) {
+      const view = await this.client.getRun(requested.runId);
+      runs.push({ ...requested, status: view.status });
+    }
+    let checkpoints = 0;
+    let toolCalls = 0;
+    let planned = 0;
+    let denied = 0;
+    let pulls = 0;
+    for (const event of this.traceEvents) {
+      switch (event.type) {
+        case "checkpoint.created":
+          checkpoints++;
+          break;
+        case "tool.called":
+          toolCalls++;
+          break;
+        case "continuation.planned":
+          planned++;
+          if (event.decision === "deny") denied++;
+          break;
+        case "results.pulled":
+          pulls++;
+          break;
+        case "envelope.created":
+        case "run.requested":
+        case "run.terminal":
+          break;
+        default: {
+          const exhausted: never = event;
+          throw new Error(`unreachable trace event: ${String(exhausted)}`);
+        }
+      }
+    }
+    return {
+      workspace: this.workspaceDir,
+      checkpoints,
+      toolCalls,
+      continuations: { planned, denied },
+      runs,
+      pulls
+    };
   }
 
   /** The most recent envelope this context produced. */
@@ -143,20 +257,39 @@ export class Handoff {
     }
   }
 
+  /** Snapshot the tool journal as a content-addressed blob payload. */
+  private journalSnapshot():
+    | { blob: Buffer; hash: string }
+    | undefined {
+    if (this.toolJournal.length === 0) return undefined;
+    const journal: ToolJournal = {
+      version: "warrant.tooljournal.v1",
+      entries: [...this.toolJournal]
+    };
+    const blob = Buffer.from(canonicalize(journal), "utf8");
+    return { blob, hash: sha256Hex(blob) };
+  }
+
   private buildCheckpoint(
     captured: CapturedWorkspace,
     message?: string,
-    transcriptHash?: string
+    transcriptHash?: string,
+    toolJournalHash?: string
   ): Checkpoint {
+    const semantic: SemanticState = {
+      ...(transcriptHash ? { transcriptHash } : {}),
+      ...(toolJournalHash ? { toolJournalHash } : {}),
+      ...(message ? { note: message } : {})
+    };
+    const hasSemantic =
+      transcriptHash !== undefined || toolJournalHash !== undefined;
     return {
       version: "warrant.checkpoint.v1",
       checkpointId: `chk_${randomUUID()}`,
       createdAt: new Date().toISOString(),
       tier: "workspace",
       ...(message ? { message } : {}),
-      ...(transcriptHash
-        ? { semantic: { transcriptHash, ...(message ? { note: message } : {}) } }
-        : {}),
+      ...(hasSemantic ? { semantic } : {}),
       workspace: captured.manifest
     };
   }
@@ -179,7 +312,14 @@ export class Handoff {
       transcriptHash = sha256Hex(blob);
       await this.client.putBlob(blob);
     }
-    const checkpoint = this.buildCheckpoint(captured, message, transcriptHash);
+    const journal = this.journalSnapshot();
+    if (journal) await this.client.putBlob(journal.blob);
+    const checkpoint = this.buildCheckpoint(
+      captured,
+      message,
+      transcriptHash,
+      journal?.hash
+    );
     this.record({
       type: "checkpoint.created",
       ts: checkpoint.createdAt,
@@ -286,7 +426,12 @@ export class Handoff {
     }
     const checkpoint =
       options.checkpoint ??
-      this.buildCheckpoint(captured, options.reason, transcriptHash);
+      this.buildCheckpoint(
+        captured,
+        options.reason,
+        transcriptHash,
+        this.journalSnapshot()?.hash
+      );
     const envelope = this.buildEnvelope(target, checkpoint, options);
     const envelopeHash = hashCanonical(envelope);
     const report = await this.client.dryRun(
@@ -341,6 +486,11 @@ export class Handoff {
     const created = await this.client.requestRun(
       this.buildRunRequest(envelope, envelopeHash)
     );
+    this.requestedRuns.push({
+      runId: created.runId,
+      task: options.task,
+      target: target.id
+    });
     this.record({
       type: "run.requested",
       ts: new Date().toISOString(),

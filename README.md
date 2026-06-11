@@ -95,6 +95,7 @@ pnpm demo all       # run the whole series (skips interactive demos)
 | 08 | Control panel | Boots a seeded plane + runner and leaves the UI up for you to explore (interactive). |
 | 09 | AI SDK loop | An ordinary `generateText` loop whose tool calls execute in governed sessions and return with verified receipts. |
 | 10 | Compute sandbox | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
+| 11 | Golden interface | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
 
 ## The handoff SDK
 
@@ -129,6 +130,38 @@ console.log(h.trace());                              // every planning, envelope
 ```
 
 Continuation is not a separate trust domain: the envelope is content-addressed, the signed run contract pins the envelope hash, the checkpoint appears in the hash-chained event log, and the result is an ordinary offline-verifiable receipt.
+
+### The golden interface
+
+The predecessor spec's golden shape, implemented to the extent the current spec permits — and honest about the one piece it omits:
+
+```ts
+import { generateText } from "ai";
+import { agents, handoff, localFirst, targets } from "@warrant/handoff";
+import { withCompute } from "@warrant/adapter-compute";
+
+const h = withCompute(
+  handoff({ workspace: ".", plane, agent: agents.claudeCode(), policy: localFirst({ allowPools: ["eng-prod"] }) }),
+  { pool: "eng-prod" }
+);
+
+const result = await generateText({
+  model: yourModel,                 // your model, your loop
+  prompt: "plan the refactor",
+  tools: h.tools({ search, read }) // your tools, journaled as semantic state
+});
+
+if (h.needs(targets.pool("eng-prod"))) {
+  await h.continueIn(targets.pool("eng-prod"), { task: "apply the plan and run tests" });
+}
+
+await h.compute.sandbox.create();   // ComputeSDK-shaped surface, same context
+console.log(await h.summary());     // recomputed story: tools, checkpoints, runs, pulls
+```
+
+- `h.tools(...)` wraps any AI SDK-shaped toolset: calls execute locally and are journaled (`warrant.tooljournal.v1`); the journal travels as content-addressed semantic state in the next checkpoint, pinned via the envelope inside the signed contract.
+- `h.needs(target)` is a pure, deterministic policy check — the v1 planner has no model-based triggers, so "needs" honestly means "allowed and available under policy".
+- `h.model` is deliberately absent: the current spec cedes model routing to gateways and rejects mid-generation handoff as a UX illusion. Bring your own model; Warrant governs the boundaries around it.
 
 ## App-owned loops: AI SDK and compute adapters
 
