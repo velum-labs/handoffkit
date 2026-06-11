@@ -1,15 +1,26 @@
 {
-  "name": "handoffkit",
+  "name": "warrant",
   "private": true,
-  "version": "0.0.0",
-  "description": "The coordination layer for hybrid distributed AI compute.",
+  "version": "0.1.0",
+  "description": "The governed execution and provenance plane for AI agents.",
   "license": "UNLICENSED",
+  "type": "module",
   "packageManager": "pnpm@10.33.4",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=10.33.4"
   },
+  "bin": {
+    "warrant": "./dist/cli/index.js"
+  },
   "scripts": {
-    "check": "node scripts/check-repo.mjs"
+    "check": "node scripts/check-repo.mjs",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test \"dist/test/*.test.js\"",
+    "verify": "pnpm check && pnpm build && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
   }
 }

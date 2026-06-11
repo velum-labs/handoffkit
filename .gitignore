@@ -5,3 +5,5 @@ coverage/
 .env
 .env.*
 .DS_Store
+.warrant/
+.warrant-runner/
