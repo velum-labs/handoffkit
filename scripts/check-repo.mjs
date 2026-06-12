@@ -54,6 +54,8 @@ const requiredFiles = [
   "packages/runner/src/backend.ts",
   "packages/session-hermetic/src/index.ts",
   "packages/session-vercel-sandbox/src/index.ts",
+  "packages/session-harness/src/index.ts",
+  "packages/session-harness/src/auth.ts",
   "packages/testkit/src/index.ts",
   "packages/cli/src/index.ts",
   "packages/example-utils/src/index.ts",
@@ -96,6 +98,7 @@ const requiredFiles = [
   "packages/adapter-ai-sdk/src/test/managed-server.test.ts",
   "packages/adapter-compute/src/test/sandbox.test.ts",
   "packages/session-hermetic/src/test/hermetic.test.ts",
+  "packages/session-harness/src/test/harness.test.ts",
   "packages/cli/src/test/e2e.test.ts",
   "packages/cli/src/test/handoff.test.ts",
   "packages/cli/src/test/cli.test.ts",
@@ -167,8 +170,14 @@ if (!currentSpec.includes("Supersedes:")) {
 // here. Bumping a dependency means updating this allowlist, which is the
 // review checkpoint.
 const TRUSTED_THIRD_PARTY = new Map([
+  // The @ai-sdk/harness* packages are experimental canary releases (the AI
+  // SDK 7 harness abstraction); they are pinned exactly like every other
+  // dependency and bumped only as reviewed allowlist changes.
+  ["@ai-sdk/harness", "1.0.0-canary.6"],
+  ["@ai-sdk/harness-claude-code", "1.0.0-canary.2"],
   ["@ai-sdk/openai-compatible", "2.0.48"],
   ["@ai-sdk/provider", "3.0.10"],
+  ["@ai-sdk/sandbox-vercel", "1.0.0-canary.6"],
   ["@types/node", "22.19.20"],
   ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
@@ -178,6 +187,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["ms", "2.1.3"],
   ["pino", "10.3.1"],
   ["typescript", "5.9.3"],
+  ["ws", "8.21.0"],
   ["zod", "4.4.3"]
 ]);
 

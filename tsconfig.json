@@ -29,6 +29,9 @@
       "path": "packages/session-vercel-sandbox"
     },
     {
+      "path": "packages/session-harness"
+    },
+    {
       "path": "packages/handoff"
     },
     {

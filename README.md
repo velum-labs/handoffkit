@@ -20,6 +20,7 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | [`@warrant/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. Pluggable session-isolation backends. |
 | [`@warrant/session-hermetic`](packages/session-hermetic) | Hermetic session backend: a simulated bash interpreter ([just-bash](https://github.com/vercel-labs/just-bash)) with a virtual filesystem and interpreter-enforced egress. No real process or socket to escape with. |
 | [`@warrant/session-vercel-sandbox`](packages/session-vercel-sandbox) | Vercel Sandbox session backend: each session runs in a Firecracker microVM with VM-level isolation and domain egress policy. Experimental, integration-gated. |
+| [`@warrant/session-harness`](packages/session-harness) | AI SDK harness driver for the `vercel-sandbox` tier: runs claude-code through `@ai-sdk/harness` (`HarnessAgent`), which bootstraps the agent runtime inside the microVM and streams structured events the receipt captures as a JSONL transcript. Experimental, integration-gated. |
 | [`@warrant/sdk`](packages/sdk) | Thin client over the plane API plus offline receipt verification. |
 | [`@warrant/handoff`](packages/handoff) | The continuation SDK: `handoff(...)`, `checkpoint`, `continueIn`, `parallel`, `review`, `pull` — typed descriptors, fail-closed planning, full provenance. |
 | [`@warrant/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops: `remoteTools(...)` returns AI SDK-compatible tools whose calls execute as signed contracts in governed sessions and return with receipts. |
@@ -301,6 +302,7 @@ How the runner isolates the agent session is pluggable, requested per run (`--is
 | `process` | built-in | child process, scrubbed env, egress proxy (process-level — a binary can ignore proxy vars; every attempt is still recorded) | all | default |
 | `hermetic` | `@warrant/session-hermetic` | simulated bash interpreter + virtual filesystem; egress enforced by the interpreter (no socket exists for denied hosts) | `command` only (no real OS) | implemented, tested |
 | `vercel-sandbox` | `@warrant/session-vercel-sandbox` | Firecracker microVM, VM-level isolation, domain egress policy | all but the test mock | experimental, integration-gated |
+| `vercel-sandbox` | `@warrant/session-harness` | same microVM tier, with claude-code driven through the AI SDK harness bridge (structured event transcript, in-sandbox runtime bootstrap); everything else delegates to the plain backend | all but the test mock | experimental, integration-gated |
 
 ```sh
 warrant run --agent command --isolation hermetic "awk -F, 'NR>1{s+=$2}END{print s}' orders.csv > total.txt"
@@ -317,6 +319,26 @@ new Runner({ planeUrl, pool, enrollToken, backends: [hermeticBackend(), vercelSa
 ```
 
 This is the execution substrate the spec places *below* Warrant ("E2B, Modal, Daytona, Vercel Sandbox, local Docker, and customer VPCs sit below"): Warrant owns the contract, policy, secret release, and receipt; the backend owns only how the session is isolated.
+
+### AI SDK harness driver: claude-code without a pre-baked CLI
+
+AI SDK 7 introduced an experimental [harness abstraction](https://vercel.com/changelog/program-agent-harnesses-with-ai-sdk) (`HarnessAgent` + adapters like [`@ai-sdk/harness-claude-code`](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/claude-code)): the adapter bootstraps the agent runtime *inside* a sandbox from pinned, lockfile-frozen bridge dependencies and streams structured events (tool calls, file changes, finish reasons) back to the host over a sandbox-exposed WebSocket. `@warrant/session-harness` wraps that as an alternative backend for the `vercel-sandbox` tier:
+
+```ts
+import { aiSdkHarnessBackend } from "@warrant/session-harness";
+
+new Runner({ planeUrl, pool, enrollToken, backends: [aiSdkHarnessBackend()] });
+```
+
+What changes versus the plain `vercel-sandbox` backend — and what deliberately does not:
+
+- The microVM needs no pre-installed vendor CLI: the adapter's bootstrap recipe installs the Claude Code runtime inside the sandbox on first use.
+- The run's log artifact becomes the harness's structured event stream as JSONL (every tool call and file-change notice the harness reported), not a merged stdout blob. Boundary evidence stays runner-owned: `file.changed` events still come from the git diff after mirror-back, never from harness telemetry.
+- Credentials still flow only through the secret broker. The backend maps the session env onto the adapter's *explicit* auth settings and provably suppresses its host-environment fallback, so a runner operator's own `ANTHROPIC_API_KEY` can never leak into a run; a contract with no released credential fails closed.
+- Egress policy is still the contract's, applied at the VM boundary. The bridge bootstrap and the model API are subject to it, so a deny-by-default run must allowlist the npm registry and `api.anthropic.com` (or the AI Gateway host) explicitly.
+- Non-claude-code executions (the `command` harness, custom argv/shell) are delegated unchanged to `vercelSandboxBackend()`, so this backend never narrows what the tier could already run.
+
+The `@ai-sdk/harness*` packages are canary releases; they are exact-pinned on the dependency allowlist like everything else, and the backend is integration-gated the same way `@warrant/session-vercel-sandbox` is (it constructs without credentials; the real path needs `VERCEL_TOKEN` plus a contract-released model credential). The package's test suite drives the real `HarnessAgent` orchestration end-to-end against an in-process harness adapter and a local-filesystem sandbox provider — contract to verified receipt, no cloud dependencies.
 
 ## Hardening and operations
 

@@ -1,0 +1,30 @@
+{
+  "name": "@warrant/session-harness",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI SDK harness session backend for Warrant runners: drives vendor agent harnesses (Claude Code) through @ai-sdk/harness inside a Vercel Sandbox microVM, capturing the structured harness event stream as governed-session evidence.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@ai-sdk/harness": "1.0.0-canary.6",
+    "@ai-sdk/harness-claude-code": "1.0.0-canary.2",
+    "@ai-sdk/sandbox-vercel": "1.0.0-canary.6",
+    "@warrant/protocol": "workspace:*",
+    "@warrant/runner": "workspace:*",
+    "@warrant/session-vercel-sandbox": "workspace:*",
+    "@warrant/workspace": "workspace:*",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@warrant/plane": "workspace:*",
+    "@warrant/sdk": "workspace:*",
+    "@warrant/testkit": "workspace:*"
+  }
+}

@@ -1,3 +1,14 @@
 packages:
   - "packages/*"
   - "examples/*"
+
+# @ai-sdk/harness-claude-code declares @anthropic-ai/claude-agent-sdk as a
+# peer, but never executes it on the host: the adapter ships a bridge bundle
+# whose pinned dependencies (including the agent SDK) are installed *inside*
+# the sandbox by its bootstrap recipe, with a frozen lockfile. Installing the
+# SDK on the runner host would add an unused dependency tree (plus its own
+# peer cascade) to the trust surface for nothing, so the missing peer is
+# ignored explicitly here instead.
+peerDependencyRules:
+  ignoreMissing:
+    - "@anthropic-ai/claude-agent-sdk"
