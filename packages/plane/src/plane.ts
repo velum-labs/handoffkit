@@ -8,18 +8,14 @@ import {
   hashCanonical,
   keyIdFromPublicPem,
   PROTOCOL_VERSIONS,
-  signContract,
-  signData,
-  signReceipt,
-  verifyChain,
-  verifyData,
-  verifyReceiptSignature
+  verifyChain
 } from "@warrant/protocol";
 import type {
   ActorRef,
   ChainedEvent,
   ClaimResult,
   DisclosureReport,
+  ExecutionSpec,
   Policy,
   PolicyDecision,
   Receipt,
@@ -32,11 +28,16 @@ import type {
 
 import { hashToken, principalCan, toPrincipal } from "./auth.js";
 import type { Capability, Principal } from "./auth.js";
+import { ClaimTokenService } from "./claim-token-service.js";
+import { ContractService } from "./contract-service.js";
+import { badRequest, conflict, notFound, unauthorized } from "./domain-errors.js";
 import type { IdpVerifier } from "./idp.js";
 import { createLogger, Metrics } from "./logging.js";
 import type { Logger } from "./logging.js";
 import { evaluatePolicy } from "./policy.js";
+import { ReceiptService } from "./receipt-service.js";
 import { RetentionSweeper } from "./retention.js";
+import { assertRunTransition } from "./run-lifecycle.js";
 import { SecretStore } from "./secrets.js";
 import { SqliteStore } from "./sqlite-store.js";
 import type {
@@ -105,14 +106,22 @@ export type { ClaimResult, DisclosureReport, PolicyDecision };
 
 export type IssuedPrincipal = { principalId: string; name: string; role: PrincipalRole; token: string };
 
-type ClaimTokenPayload = {
-  runId: string;
-  runnerId: string;
-  nonce: string;
-  exp: string;
-};
-
 type VerifiedClaim = { runnerId: string; nonce: string; expMs: number };
+
+function executionFromRequest(request: RunRequest): ExecutionSpec {
+  if (request.execution) return request.execution;
+  if (request.agentKind === "command") {
+    return { kind: "shell", script: request.prompt };
+  }
+  return {
+    kind: "agent",
+    agent: {
+      kind: request.agentKind as RunContract["agent"]["kind"],
+      ...(request.agentVersion ? { version: request.agentVersion } : {})
+    },
+    prompt: request.prompt
+  };
+}
 
 /** Throw unless `pem` parses as an ed25519 public key. */
 function assertEd25519PublicKey(pem: string): void {
@@ -135,6 +144,9 @@ export class Plane {
   private readonly config: PlaneConfig;
   private readonly store: PlaneStore;
   private readonly policyHash: string;
+  private readonly receipts: ReceiptService;
+  private readonly claimTokens: ClaimTokenService;
+  private readonly contracts: ContractService;
   private readonly logger: Logger;
   private readonly idp?: IdpVerifier;
   readonly metrics: Metrics;
@@ -152,6 +164,23 @@ export class Plane {
       this.store = new SqliteStore(dbPath);
     }
     this.policyHash = hashCanonical(config.policy);
+    this.receipts = new ReceiptService({
+      planePrivateKeyPem: config.planePrivateKeyPem,
+      planePublicKeyPem: config.planePublicKeyPem
+    });
+    this.claimTokens = new ClaimTokenService({
+      planePrivateKeyPem: config.planePrivateKeyPem,
+      planePublicKeyPem: config.planePublicKeyPem,
+      claimTokenTtlMs: this.tuning.claimTokenTtlMs
+    });
+    this.contracts = new ContractService({
+      planePrivateKeyPem: config.planePrivateKeyPem,
+      planePublicKeyPem: config.planePublicKeyPem,
+      policyHash: this.policyHash,
+      contractTtlMs: this.tuning.contractTtlMs,
+      buildSecretClaims: (secretNames, pool) =>
+        this.buildSecretClaims(secretNames, pool)
+    });
     this.logger = config.logger ?? createLogger();
     this.metrics = config.metrics ?? new Metrics();
     if (config.idp) this.idp = config.idp;
@@ -234,7 +263,7 @@ export class Plane {
 
   issuePrincipal(name: string, role: PrincipalRole): IssuedPrincipal {
     if (this.store.getPrincipalByName(name)) {
-      throw new Error(`principal "${name}" already exists`);
+      throw conflict(`principal "${name}" already exists`);
     }
     const token = this.newToken();
     const record: PrincipalRecord = {
@@ -252,7 +281,7 @@ export class Plane {
   rotatePrincipal(name: string): { token: string } {
     const existing = this.store.getPrincipalByName(name);
     if (!existing || existing.revokedAt) {
-      throw new Error(`principal "${name}" not found`);
+      throw notFound(`principal "${name}" not found`);
     }
     const token = this.newToken();
     this.store.savePrincipal({ ...existing, tokenHash: hashToken(token) });
@@ -315,7 +344,7 @@ export class Plane {
     }
     if (!byPrincipal && !bySingleUse) {
       this.metrics.inc("enroll.rejected");
-      throw new Error("invalid enroll token");
+      throw badRequest("invalid enroll token");
     }
     // Validate the runner's public key parses as an ed25519 SPKI key before
     // storing it; a malformed key would otherwise only fail later at receipt
@@ -364,7 +393,7 @@ export class Plane {
 
   private authRunner(runnerToken: string): RunnerRecord {
     const runner = this.store.getRunnerByTokenHash(hashToken(runnerToken));
-    if (!runner) throw new Error("invalid runner token");
+    if (!runner) throw unauthorized("invalid runner token");
     return runner;
   }
 
@@ -410,6 +439,7 @@ export class Plane {
       network: request.network,
       budget: request.budget,
       disclosure: request.disclosure,
+      execution: executionFromRequest({ ...request, runId: "dry-run" }),
       ...(request.isolation ? { isolation: request.isolation } : {}),
       ...(request.continuation ? { continuation: request.continuation } : {}),
       policyDecision: decision
@@ -471,7 +501,7 @@ export class Plane {
   ): RunRecord {
     const record = this.mustGetRun(runId);
     if (record.status !== "awaiting_approval") {
-      throw new Error(`run ${runId} is not awaiting approval`);
+      throw conflict(`run ${runId} is not awaiting approval`);
     }
     const approval: ApprovalRecord = {
       actor,
@@ -482,6 +512,7 @@ export class Plane {
     };
     record.approvals.push(approval);
     record.contract = this.issueContract(record.request, [actor]);
+    assertRunTransition(record.status, "created");
     record.status = "created";
     record.updatedAt = new Date().toISOString();
     this.store.saveRun(record);
@@ -506,10 +537,11 @@ export class Plane {
   cancel(runId: string, actor: ActorRef): RunRecord {
     const record = this.mustGetRun(runId);
     if (record.status !== "created" && record.status !== "awaiting_approval") {
-      throw new Error(
+      throw badRequest(
         `run ${runId} is ${record.status}; only unclaimed runs can be cancelled`
       );
     }
+    assertRunTransition(record.status, "cancelled");
     record.status = "cancelled";
     record.updatedAt = new Date().toISOString();
     this.store.saveRun(record);
@@ -521,47 +553,14 @@ export class Plane {
   }
 
   private issueContract(request: RunRequest, approvedBy: ActorRef[]): RunContract {
-    const now = Date.now();
-    const unsigned: RunContract = {
-      version: PROTOCOL_VERSIONS.contract,
-      runId: request.runId,
-      issuedAt: new Date(now).toISOString(),
-      issuer: {
-        keyId: keyIdFromPublicPem(this.config.planePublicKeyPem),
-        role: "plane"
-      },
-      requestedBy: request.requestedBy,
-      ...(approvedBy.length > 0 ? { approvedBy } : {}),
-      agent: {
-        kind: request.agentKind as RunContract["agent"]["kind"],
-        ...(request.agentVersion ? { version: request.agentVersion } : {})
-      },
-      task: { prompt: request.prompt },
-      runner: { pool: request.pool },
-      workspace: request.workspace,
-      policyHash: this.policyHash,
-      secrets: this.buildSecretClaims(request.secretNames, request.pool),
-      network: request.network,
-      budget: request.budget,
-      disclosure: request.disclosure,
-      ...(request.isolation ? { isolation: request.isolation } : {}),
-      ...(request.continuation ? { continuation: request.continuation } : {}),
-      expiresAt: new Date(now + this.tuning.contractTtlMs).toISOString(),
-      signatures: []
-    };
-    return signContract(
-      unsigned,
-      this.config.planePrivateKeyPem,
-      this.config.planePublicKeyPem,
-      "plane"
-    );
+    return this.contracts.issue(request, approvedBy);
   }
 
   private appendPlaneEvents(
     record: RunRecord,
     events: ChainedEvent["event"][]
   ): void {
-    if (!record.contract) throw new Error("cannot append events before contract");
+    if (!record.contract) throw badRequest("cannot append events before contract");
     const genesis = contractHash(record.contract);
     const chain = this.store.getEvents(record.id);
     const appended: ChainedEvent[] = [];
@@ -574,7 +573,7 @@ export class Plane {
   claim(input: { runnerToken: string; pool: string }): ClaimResult | undefined {
     const runner = this.authRunner(input.runnerToken);
     if (runner.pool !== input.pool) {
-      throw new Error("runner is not enrolled in the requested pool");
+      throw unauthorized("runner is not enrolled in the requested pool");
     }
     const candidate = this.store.claimNextRun(
       input.pool,
@@ -599,19 +598,11 @@ export class Plane {
 
     // The claim token is intentionally a plane-internal credential (base64url
     // JSON + ed25519 detached signature), never verified by third parties, so
-    // a full JWS envelope would add surface without adding interoperability
-    // anyone uses. parseClaimToken below is the single, validated decoder.
-    const payload: ClaimTokenPayload = {
+    // a full JWS envelope would add surface without adding interoperability.
+    const claimToken = this.claimTokens.issue({
       runId: candidate.id,
-      runnerId: runner.runnerId,
-      nonce: randomBytes(16).toString("base64url"),
-      exp: new Date(Date.now() + this.tuning.claimTokenTtlMs).toISOString()
-    };
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString(
-      "base64url"
-    );
-    const sig = signData(this.config.planePrivateKeyPem, encoded);
-    const claimToken = `${encoded}.${Buffer.from(sig, "base64").toString("base64url")}`;
+      runnerId: runner.runnerId
+    });
 
     const secrets =
       candidate.contract.secrets.length > 0
@@ -635,39 +626,8 @@ export class Plane {
    * every payload field is present and well-formed, and checks expiry.
    * Throws on any defect; both public verifiers below build on this.
    */
-  private parseClaimToken(token: string): ClaimTokenPayload & { expMs: number } {
-    const [encoded, sigB64url] = token.split(".");
-    if (!encoded || !sigB64url) throw new Error("malformed claim token");
-    const sig = Buffer.from(sigB64url, "base64url").toString("base64");
-    if (!verifyData(this.config.planePublicKeyPem, encoded, sig)) {
-      throw new Error("claim token signature invalid");
-    }
-    let payload: Partial<ClaimTokenPayload>;
-    try {
-      payload = JSON.parse(
-        Buffer.from(encoded, "base64url").toString("utf8")
-      ) as Partial<ClaimTokenPayload>;
-    } catch {
-      throw new Error("claim token payload is not valid JSON");
-    }
-    if (
-      typeof payload.runId !== "string" ||
-      typeof payload.runnerId !== "string" ||
-      typeof payload.nonce !== "string" ||
-      typeof payload.exp !== "string"
-    ) {
-      throw new Error("claim token payload is missing required fields");
-    }
-    const expMs = new Date(payload.exp).getTime();
-    if (!Number.isFinite(expMs)) throw new Error("claim token expiry is invalid");
-    if (expMs < Date.now()) throw new Error("claim token expired");
-    return {
-      runId: payload.runId,
-      runnerId: payload.runnerId,
-      nonce: payload.nonce,
-      exp: payload.exp,
-      expMs
-    };
+  private parseClaimToken(token: string): ReturnType<ClaimTokenService["parse"]> {
+    return this.claimTokens.parse(token);
   }
 
   /**
@@ -689,10 +649,10 @@ export class Plane {
 
   private verifyClaimToken(token: string, runId: string): VerifiedClaim {
     const payload = this.parseClaimToken(token);
-    if (payload.runId !== runId) throw new Error("claim token run mismatch");
+    if (payload.runId !== runId) throw unauthorized("claim token run mismatch");
     const record = this.mustGetRun(runId);
     if (record.claimedBy !== payload.runnerId) {
-      throw new Error("claim token runner mismatch");
+      throw unauthorized("claim token runner mismatch");
     }
     return { runnerId: payload.runnerId, nonce: payload.nonce, expMs: payload.expMs };
   }
@@ -704,17 +664,18 @@ export class Plane {
   ): void {
     this.verifyClaimToken(claimToken, runId);
     const record = this.mustGetRun(runId);
-    if (!record.contract) throw new Error("run has no contract");
+    if (!record.contract) throw badRequest("run has no contract");
     const existing = this.store.getEvents(runId);
     const combined = [...existing, ...events];
     const verification = verifyChain(combined, contractHash(record.contract));
     if (!verification.ok) {
-      throw new Error(
+      throw badRequest(
         `event chain rejected at seq ${verification.brokenAtSeq}: ${verification.reason}`
       );
     }
     this.store.appendEvents(runId, events);
     if (record.status === "claimed") {
+      assertRunTransition(record.status, "running");
       record.status = "running";
       record.updatedAt = new Date().toISOString();
       this.store.saveRun(record);
@@ -726,32 +687,25 @@ export class Plane {
     // Durable replay protection: the nonce ledger survives restarts and is
     // atomic, unlike the previous in-memory Set.
     if (!this.store.recordClaimNonce(verified.nonce, verified.expMs + this.tuning.nonceTtlMs)) {
-      throw new Error("claim token already used for completion");
+      throw conflict("claim token already used for completion");
     }
     const record = this.mustGetRun(runId);
-    if (!record.contract) throw new Error("run has no contract");
+    if (!record.contract) throw badRequest("run has no contract");
 
     const runner = this.store.getRunnerById(verified.runnerId);
-    if (!runner) throw new Error("unknown runner");
+    if (!runner) throw notFound("unknown runner");
 
-    const expectedHash = contractHash(record.contract);
-    if (receipt.contractHash !== expectedHash) {
-      throw new Error("receipt contract hash mismatch");
-    }
-    // Cryptographically verify the runner's signature against the public key
-    // it enrolled with, before the plane countersigns.
-    if (!verifyReceiptSignature(receipt, "runner", runner.publicKeyPem)) {
-      throw new Error("receipt runner signature is invalid");
-    }
-
-    const countersigned = signReceipt(
+    this.receipts.verifyRunnerReceipt({
+      contract: record.contract,
       receipt,
-      this.config.planePrivateKeyPem,
-      this.config.planePublicKeyPem,
-      "plane"
-    );
+      events: this.store.getEvents(runId),
+      runnerPublicKeyPem: runner.publicKeyPem
+    });
+
+    const countersigned = this.receipts.countersign(receipt);
 
     this.store.saveReceipt(runId, countersigned);
+    assertRunTransition(record.status, receipt.status);
     record.status = receipt.status;
     record.updatedAt = new Date().toISOString();
     this.store.saveRun(record);
@@ -821,7 +775,7 @@ export class Plane {
     token: string
   ): Promise<{ idpSubject: string; idpIssuer: string }> {
     if (!this.idp) {
-      return Promise.reject(new Error("no IdP is configured for approvals"));
+      return Promise.reject(badRequest("no IdP is configured for approvals"));
     }
     return this.idp
       .verify(token)
@@ -830,7 +784,7 @@ export class Plane {
 
   private mustGetRun(runId: string): RunRecord {
     const record = this.store.getRun(runId);
-    if (!record) throw new Error(`unknown run ${runId}`);
+    if (!record) throw notFound(`unknown run ${runId}`);
     return record;
   }
 }

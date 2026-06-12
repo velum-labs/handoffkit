@@ -15,15 +15,17 @@
  * the other backends do not depend on it.
  */
 import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join, relative } from "node:path";
 
-import { hashCanonical } from "@warrant/protocol";
 import type { NetworkPolicy as WarrantNetworkPolicy } from "@warrant/protocol";
 import type {
+  BackendExecutionKind,
   SessionBackend,
   SessionBackendResult,
   SessionExecution
 } from "@warrant/runner";
+import { executionHash } from "@warrant/runner";
+import { parseWorkspaceRelativePath, resolveInsideWorkspace } from "@warrant/workspace";
 import { Sandbox } from "@vercel/sandbox";
 import type { NetworkPolicy as VercelNetworkPolicy } from "@vercel/sandbox";
 
@@ -86,10 +88,13 @@ export class VercelSandboxBackend implements SessionBackend {
     this.options = options;
   }
 
-  supports(agentKind: SessionExecution["contract"]["agent"]["kind"]): boolean {
+  supports(
+    _kind: BackendExecutionKind,
+    contract: SessionExecution["contract"]
+  ): boolean {
     // The microVM has a real OS, so it can host real vendor CLIs and the
     // command harness. (The node-based mock is for the in-process tests.)
-    return agentKind !== "mock";
+    return contract.agent.kind !== "mock";
   }
 
   private credentials(): { token: string; teamId?: string; projectId?: string } {
@@ -111,7 +116,7 @@ export class VercelSandboxBackend implements SessionBackend {
   }
 
   async execute(input: SessionExecution): Promise<SessionBackendResult> {
-    const { contract, repoDir, secrets, command, timeoutMin, emit } = input;
+    const { contract, repoDir, secrets, execution, emit } = input;
     const creds = this.credentials();
     const workdir = this.options.workdir ?? DEFAULT_WORKDIR;
     const runtime = this.options.runtime ?? DEFAULT_RUNTIME;
@@ -119,7 +124,7 @@ export class VercelSandboxBackend implements SessionBackend {
     const sandbox = await Sandbox.create({
       ...creds,
       runtime,
-      timeout: timeoutMin * 60 * 1000,
+      timeout: execution.timeoutMs,
       networkPolicy: toVercelNetwork(contract.network)
     });
 
@@ -136,18 +141,29 @@ export class VercelSandboxBackend implements SessionBackend {
 
       // Secrets are injected as single-quoted exports: shellQuote renders
       // values inert to expansion, so $, backticks, and quotes pass through.
-      const envPrefix = secrets
-        .map((s) => `export ${s.name}=${shellQuote(s.value)}; `)
+      const env = { ...execution.env };
+      for (const secret of secrets) env[secret.name] = secret.value;
+      for (const [key, value] of Object.entries(env)) {
+        if (!value.startsWith("__WARRANT_SECRET__:")) continue;
+        const secretName = value.slice("__WARRANT_SECRET__:".length);
+        const secret = secrets.find((item) => item.name === secretName);
+        if (secret) env[key] = secret.value;
+      }
+      const envPrefix = Object.entries(env)
+        .map(([name, value]) => `export ${name}=${shellQuote(value)}; `)
         .join("");
-      const script = scriptFor(input);
+      const script =
+        execution.kind === "shell"
+          ? execution.script
+          : `${shellQuote(execution.cmd)} ${execution.args.map(shellQuote).join(" ")}`;
       const result = await sandbox.runCommand("sh", [
         "-c",
-        `cd ${workdir} && ${envPrefix}${script}`
+        `cd ${shellQuote(workdir)} && ${envPrefix}${script}`
       ]);
 
       emit({
         type: "command.executed",
-        argvHash: hashCanonical([command.cmd, ...command.args]),
+        argvHash: executionHash(execution),
         exitCode: result.exitCode
       });
 
@@ -163,14 +179,6 @@ export class VercelSandboxBackend implements SessionBackend {
       await sandbox.stop().catch(() => undefined);
     }
   }
-}
-
-function scriptFor(input: SessionExecution): string {
-  const { cmd, args } = input.command;
-  if ((cmd === "sh" || cmd === "bash") && args[0] === "-c" && args[1] !== undefined) {
-    return args[1];
-  }
-  return input.contract.task.prompt;
 }
 
 /** Mirror the sandbox working tree back onto the local workspace. */
@@ -196,7 +204,8 @@ async function mirrorBack(
         continue;
       }
       const rel = remote.slice(workdir.length + 1);
-      const target = join(repoDir, rel.split("/").join(sep));
+      const safeRel = parseWorkspaceRelativePath(rel);
+      const target = resolveInsideWorkspace(repoDir, safeRel);
       const buffer = await sandbox.fs.readFile(remote);
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, buffer);

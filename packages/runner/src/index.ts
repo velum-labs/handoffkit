@@ -15,5 +15,17 @@ export type {
 } from "./backend.js";
 export { buildAgentCommand } from "./agents.js";
 export type { AgentCommand, AgentContext } from "./agents.js";
+export {
+  DEFAULT_TIMEOUT_MS,
+  defaultExecutionForContract,
+  executionHash,
+  prepareExecution,
+  requireShellExecution
+} from "./execution.js";
+export type {
+  BackendExecutionKind,
+  PreparedExecution,
+  PrepareExecutionInput
+} from "./execution.js";
 export { startEgressProxy } from "./egress.js";
 export type { EgressEvent, EgressProxy } from "./egress.js";

@@ -145,6 +145,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["ai", "6.0.200"],
   ["jose", "6.2.3"],
   ["just-bash", "3.0.1"],
+  ["minimatch", "10.2.5"],
   ["ms", "2.1.3"],
   ["pino", "10.3.1"],
   ["typescript", "5.9.3"],

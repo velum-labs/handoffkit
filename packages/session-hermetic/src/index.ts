@@ -10,13 +10,14 @@
  * ignore. The trade-off, stated honestly: only the "command" harness runs
  * here — there is no real OS, so vendor CLIs and the node-based mock do not.
  */
-import { hashCanonical } from "@warrant/protocol";
 import type { NetworkPolicy } from "@warrant/protocol";
 import type {
+  BackendExecutionKind,
   SessionBackend,
   SessionBackendResult,
   SessionExecution
 } from "@warrant/runner";
+import { executionHash, requireShellExecution } from "@warrant/runner";
 import { Bash, ReadWriteFs } from "just-bash";
 
 type NetworkConfig =
@@ -46,28 +47,26 @@ const HERMETIC_CWD = "/";
 /** Conventional timeout exit code (what coreutils `timeout` reports). */
 const TIMEOUT_EXIT_CODE = 124;
 
-/** Extract the shell script from a `command` harness invocation. */
-function scriptFor(input: SessionExecution): string {
-  const { cmd, args } = input.command;
-  if ((cmd === "sh" || cmd === "bash") && args[0] === "-c" && args[1] !== undefined) {
-    return args[1];
-  }
-  return input.contract.task.prompt;
-}
-
 export class HermeticSessionBackend implements SessionBackend {
   readonly isolation = "hermetic" as const;
 
-  supports(agentKind: SessionExecution["contract"]["agent"]["kind"]): boolean {
-    // No real OS: only the single-shell-command harness runs hermetically.
-    return agentKind === "command";
+  supports(kind: BackendExecutionKind): boolean {
+    // No real OS: only shell scripts can run in the interpreter.
+    return kind === "shell";
   }
 
   async execute(input: SessionExecution): Promise<SessionBackendResult> {
-    const { contract, repoDir, secrets, command, timeoutMin, emit } = input;
+    const { contract, repoDir, secrets, execution, emit } = input;
+    const shell = requireShellExecution(execution);
 
-    const env: Record<string, string> = {};
+    const env: Record<string, string> = { ...shell.env };
     for (const secret of secrets) env[secret.name] = secret.value;
+    for (const [key, value] of Object.entries(env)) {
+      if (!value.startsWith("__WARRANT_SECRET__:")) continue;
+      const secretName = value.slice("__WARRANT_SECRET__:".length);
+      const secret = secrets.find((item) => item.name === secretName);
+      if (secret) env[key] = secret.value;
+    }
 
     const network = toJustBashNetwork(contract.network);
     const bash = new Bash({
@@ -80,12 +79,12 @@ export class HermeticSessionBackend implements SessionBackend {
     });
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMin * 60 * 1000);
+    const timer = setTimeout(() => controller.abort(), shell.timeoutMs);
     let exitCode: number;
     let stdout = "";
     let stderr = "";
     try {
-      const result = await bash.exec(scriptFor(input), { signal: controller.signal });
+      const result = await bash.exec(shell.script, { signal: controller.signal });
       exitCode = result.exitCode;
       stdout = result.stdout;
       stderr = result.stderr;
@@ -100,7 +99,7 @@ export class HermeticSessionBackend implements SessionBackend {
 
     emit({
       type: "command.executed",
-      argvHash: hashCanonical([command.cmd, ...command.args]),
+      argvHash: executionHash(shell),
       exitCode
     });
 

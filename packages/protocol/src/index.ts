@@ -10,15 +10,64 @@
  * - warrant.checkpoint.v1 resumable state at a semantic boundary
  * - warrant.envelope.v1   portable continuation (handoff) description
  *
- * Zero runtime dependencies: everything here runs on Node built-ins only.
+ * Everything here is stable protocol surface: packages should consume these
+ * interfaces instead of recreating local string lists or proof logic.
  */
 
 export {
+  AGENT_KINDS,
+  ARTIFACT_KINDS,
+  ATTESTATION_TIERS,
+  ACTOR_KINDS,
+  CANCELLABLE_RUN_STATUSES,
+  CHECKPOINT_TIERS,
+  DISCLOSURE_MODES,
+  FAILURE_CLASSES,
+  HEX_HASH_PATTERN,
+  isAgentKind,
+  isAwaitingApprovalStatus,
+  isCancellableStatus,
+  isCheckpointTier,
+  isDisclosureMode,
+  isReceiptAvailableStatus,
+  isReceiptStatus,
+  isRunStatus,
+  isSessionIsolation,
   isTerminalStatus,
   KEY_ID_HEX_LENGTH,
   PROTOCOL_VERSIONS,
+  RECEIPT_STATUSES,
+  RUN_STATUSES,
+  SESSION_ISOLATIONS,
+  SIGNERS,
   TERMINAL_RUN_STATUSES
 } from "./constants.js";
+export {
+  parseAgentKind,
+  parseDisclosureMode,
+  parseHashHex,
+  parseHostAllowlistEntry,
+  parseManifestFile,
+  parsePoolName,
+  parseRunId,
+  parseSecretName,
+  parseSessionIsolation,
+  parseWorkspaceManifest,
+  parseWorkspaceManifestPath,
+  POOL_NAME_PATTERN,
+  RUN_ID_PATTERN,
+  SECRET_NAME_PATTERN,
+  WORKSPACE_RELATIVE_PATH_PATTERN
+} from "./validators.js";
+export {
+  DEFAULT_EXECUTION_LOG_POLICY
+} from "./execution.js";
+export type {
+  ExecutionEnv,
+  ExecutionLogPolicy,
+  ExecutionResult,
+  ExecutionSpec
+} from "./execution.js";
 export { canonicalize } from "./jcs.js";
 export type { JsonValue } from "./jcs.js";
 export { hashCanonical, sha256Hex } from "./hash.js";
@@ -37,8 +86,23 @@ export {
 export type { KeyResolver } from "./contract.js";
 export { appendEvent, verifyChain } from "./chain.js";
 export type { ChainVerification } from "./chain.js";
-export { signReceipt, verifyReceiptBundle, verifyReceiptSignature } from "./receipt.js";
-export type { BundleVerification } from "./receipt.js";
+export {
+  signReceipt,
+  verifyReceiptBundle,
+  verifyReceiptSignature,
+  verifyRunnerReceipt
+} from "./receipt.js";
+export type {
+  BundleVerification,
+  RunnerReceiptVerificationInput
+} from "./receipt.js";
+export {
+  buildReceiptStory,
+  summarizeChainedEvent,
+  summarizeDisclosureReport,
+  summarizeRunEvent
+} from "./receipt-story.js";
+export type { EventSummary, ReceiptStory } from "./receipt-story.js";
 export { PolicyDeniedError } from "./types.js";
 export type {
   ActorRef,

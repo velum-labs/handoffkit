@@ -11,8 +11,11 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "dependencies": {
-    "@warrant/protocol": "workspace:*"
+    "@warrant/protocol": "workspace:*",
+    "minimatch": "10.2.5"
   }
 }

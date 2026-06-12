@@ -2,8 +2,8 @@ import type { RunContract, RunEvent, SessionIsolation } from "@warrant/protocol"
 import { collectOutput } from "@warrant/workspace";
 import type { WorkspaceOutput } from "@warrant/workspace";
 
-import { buildAgentCommand } from "./agents.js";
 import type { SessionBackend } from "./backend.js";
+import { prepareExecution } from "./execution.js";
 import { ProcessSessionBackend } from "./process-backend.js";
 
 export type SessionResult = {
@@ -12,9 +12,6 @@ export type SessionResult = {
   output: WorkspaceOutput;
   isolation: SessionIsolation;
 };
-
-/** Session wall-clock ceiling when the contract sets no maxDurationMin. */
-const DEFAULT_TIMEOUT_MIN = 10;
 
 /**
  * Run the agent harness inside a governed session. The runner owns the
@@ -41,23 +38,18 @@ export async function runSession(input: {
       `runner has no backend for isolation "${requested}"`
     );
   }
-  if (backend.supports && !backend.supports(contract.agent.kind)) {
+  const execution = prepareExecution({ contract, mockScriptPath });
+  if (backend.supports && !backend.supports(execution.kind, contract)) {
     throw new CapabilityMismatchError(
-      `backend "${requested}" cannot run agent "${contract.agent.kind}"`
+      `backend "${requested}" cannot run ${execution.kind} execution for agent "${contract.agent.kind}"`
     );
   }
-
-  const command = buildAgentCommand(contract.agent.kind, contract.task.prompt, {
-    mockScriptPath
-  });
-  const timeoutMin = contract.budget.maxDurationMin ?? DEFAULT_TIMEOUT_MIN;
 
   const result = await backend.execute({
     contract,
     repoDir,
     secrets,
-    command,
-    timeoutMin,
+    execution,
     emit
   });
 

@@ -1,6 +1,6 @@
 import type { RunContract, RunEvent, SessionIsolation } from "@warrant/protocol";
 
-import type { AgentCommand } from "./agents.js";
+import type { BackendExecutionKind, PreparedExecution } from "./execution.js";
 
 /** Everything a backend needs to execute one governed session. */
 export type SessionExecution = {
@@ -8,9 +8,8 @@ export type SessionExecution = {
   /** Materialized workspace on the runner host. */
   repoDir: string;
   secrets: { name: string; value: string }[];
-  /** The harness command line built by the agent adapter. */
-  command: AgentCommand;
-  timeoutMin: number;
+  /** The backend-ready invocation prepared once by the runner. */
+  execution: PreparedExecution;
   emit: (event: RunEvent) => void;
 };
 
@@ -28,7 +27,7 @@ export type SessionBackendResult = {
  */
 export type SessionBackend = {
   readonly isolation: SessionIsolation;
-  /** Agent kinds this backend can execute. Undefined means all. */
-  supports?(agentKind: RunContract["agent"]["kind"]): boolean;
+  /** Execution kinds this backend can execute. Undefined means all. */
+  supports?(kind: BackendExecutionKind, contract: RunContract): boolean;
   execute(input: SessionExecution): Promise<SessionBackendResult>;
 };

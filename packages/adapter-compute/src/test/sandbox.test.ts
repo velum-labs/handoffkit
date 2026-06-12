@@ -41,7 +41,9 @@ after(async () => {
 test("staged files are visible to commands; outputs persist across commands", async () => {
   await sandbox.filesystem.writeFile("task.md", "build the report\nwith two lines\n");
 
-  const first = await sandbox.runCommand("cat task.md | wc -l > lines.txt && cat lines.txt");
+  const first = await sandbox.runCommand(
+    "cat task.md | wc -l | tr -d ' ' > lines.txt && cat lines.txt"
+  );
   assert.equal(first.status, "completed");
   assert.equal(first.exitCode, 0);
   assert.equal(first.output.trim(), "2");

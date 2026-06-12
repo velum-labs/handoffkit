@@ -22,6 +22,11 @@ export type {
 } from "./handoff.js";
 export { HandoffRun } from "./run.js";
 export type { WaitOptions, WaitOutcome } from "./run.js";
+export { executeGovernedCommand } from "./run-executor.js";
+export type {
+  GovernedCommandOptions,
+  GovernedCommandResult
+} from "./run-executor.js";
 export { targets } from "./targets.js";
 export type { RuntimeTarget } from "./targets.js";
 export { agents, toAgentSpec } from "./agents.js";

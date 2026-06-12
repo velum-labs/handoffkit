@@ -7,8 +7,10 @@ import { agents, handoff, targets } from "@warrant/handoff";
 import type { AgentDescriptor } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
 import {
+  AGENT_KINDS,
   isTerminalStatus,
   PolicyDeniedError,
+  SESSION_ISOLATIONS,
   verifyReceiptBundle
 } from "@warrant/protocol";
 import type {
@@ -75,8 +77,6 @@ usage:
 global:
   --dir DIR    warrant home (default: ./.warrant)
 `;
-
-const AGENT_KINDS: AgentKind[] = ["claude-code", "codex", "mock", "command"];
 
 function fail(message: string): never {
   console.error(`error: ${message}`);
@@ -163,12 +163,10 @@ function parseRunArgs(argv: string[]): { values: RunFlags; prompt: string } {
   return { values, prompt: positionals.join(" ").trim() };
 }
 
-const ISOLATIONS: SessionIsolation[] = ["process", "hermetic", "vercel-sandbox"];
-
 function isolationFlag(value: string | undefined): SessionIsolation | undefined {
   if (value === undefined) return undefined;
-  if (!ISOLATIONS.includes(value as SessionIsolation)) {
-    fail(`--isolation must be one of ${ISOLATIONS.join(" | ")}`);
+  if (!SESSION_ISOLATIONS.includes(value as SessionIsolation)) {
+    fail(`--isolation must be one of ${SESSION_ISOLATIONS.join(" | ")}`);
   }
   return value as SessionIsolation;
 }

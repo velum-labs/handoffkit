@@ -9,6 +9,33 @@ export { startPlaneServer } from "./server.js";
 export type { PlaneServerOptions } from "./server.js";
 export { defaultPolicy, evaluatePolicy } from "./policy.js";
 export type { PolicyDecision, PolicyRequest } from "./policy.js";
+export {
+  badRequest,
+  capabilityMismatch,
+  conflict,
+  forbidden,
+  isPlaneDomainError,
+  notFound,
+  PlaneDomainError,
+  unauthorized
+} from "./domain-errors.js";
+export type { PlaneErrorCode } from "./domain-errors.js";
+export { assertRunTransition, canTransitionRunStatus } from "./run-lifecycle.js";
+export type { RunTransition } from "./run-lifecycle.js";
+export { ClaimTokenService } from "./claim-token-service.js";
+export type {
+  ClaimTokenPayload,
+  ClaimTokenServiceOptions,
+  VerifiedClaimToken
+} from "./claim-token-service.js";
+export { ContractService } from "./contract-service.js";
+export type { ContractServiceOptions } from "./contract-service.js";
+export { PrincipalService } from "./principal-service.js";
+export { ReceiptService } from "./receipt-service.js";
+export type { ReceiptServiceConfig } from "./receipt-service.js";
+export { RunnerRegistry } from "./runner-registry.js";
+export { RunService } from "./run-service.js";
+export type { CreateRunInput } from "./run-service.js";
 export { SqliteStore } from "./sqlite-store.js";
 export type {
   EnrollTokenRecord,

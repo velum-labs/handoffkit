@@ -16,6 +16,7 @@
     "@vercel/sandbox": "2.2.0",
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",
+    "@warrant/workspace": "workspace:*",
     "ms": "2.1.3"
   }
 }

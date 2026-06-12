@@ -14,6 +14,7 @@ import type {
   SecretClaim,
   SessionIsolation
 } from "./types.js";
+import type { ExecutionSpec } from "./execution.js";
 
 /** A run request as accepted by `POST /v1/runs`. */
 export type RunRequest = {
@@ -28,6 +29,8 @@ export type RunRequest = {
   network: RunContract["network"];
   budget: RunContract["budget"];
   disclosure: DisclosureMode;
+  /** Durable machine intent. Defaults from agent/prompt for legacy callers. */
+  execution?: ExecutionSpec;
   /** Requested session isolation. Defaults to "process". */
   isolation?: SessionIsolation;
   /** Present when the run continues prior work from a handoff envelope. */
@@ -59,6 +62,7 @@ export type DisclosureReport = {
   network: { defaultDeny: boolean; allowHosts: string[] };
   budget: { maxSpendUsd?: number; maxDurationMin?: number };
   disclosure: string;
+  execution?: ExecutionSpec;
   isolation?: SessionIsolation;
   continuation?: ContinuationRef;
   policyDecision: PolicyDecision;

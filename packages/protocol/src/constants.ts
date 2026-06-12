@@ -3,7 +3,32 @@
  * of inlining string literals across packages. The literal-typed `as const`
  * values still satisfy the corresponding `version: "..."` fields.
  */
-import type { RunStatus } from "./types.js";
+export {
+  AGENT_KINDS,
+  ARTIFACT_KINDS,
+  ATTESTATION_TIERS,
+  ACTOR_KINDS,
+  CANCELLABLE_RUN_STATUSES,
+  CHECKPOINT_TIERS,
+  DISCLOSURE_MODES,
+  FAILURE_CLASSES,
+  HEX_HASH_PATTERN,
+  isAgentKind,
+  isAwaitingApprovalStatus,
+  isCancellableStatus,
+  isCheckpointTier,
+  isDisclosureMode,
+  isReceiptAvailableStatus,
+  isReceiptStatus,
+  isRunStatus,
+  isSessionIsolation,
+  isTerminalStatus,
+  RECEIPT_STATUSES,
+  RUN_STATUSES,
+  SESSION_ISOLATIONS,
+  SIGNERS,
+  TERMINAL_RUN_STATUSES
+} from "./vocabulary.js";
 
 export const PROTOCOL_VERSIONS = {
   contract: "warrant.contract.v1",
@@ -17,17 +42,6 @@ export const PROTOCOL_VERSIONS = {
   toolJournal: "warrant.tooljournal.v1",
   sealed: "warrant.sealed.v1"
 } as const;
-
-/** Run states from which no further transition occurs. */
-export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = [
-  "completed",
-  "failed",
-  "cancelled"
-];
-
-export function isTerminalStatus(status: RunStatus): boolean {
-  return TERMINAL_RUN_STATUSES.includes(status);
-}
 
 /**
  * Length (in hex characters) of the public-key fingerprint embedded in a

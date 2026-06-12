@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, resolve } from "node:path";
 
-import { agents, Handoff, handoff, targets } from "@warrant/handoff";
+import {
+  agents,
+  executeGovernedCommand,
+  Handoff,
+  handoff,
+  targets
+} from "@warrant/handoff";
 import type { ContinuationPolicy } from "@warrant/handoff";
-import { verifyReceiptBundle } from "@warrant/protocol";
 import type { ActorRef, RunStatus } from "@warrant/protocol";
 import { PlaneClient } from "@warrant/sdk";
-import { gitText } from "@warrant/workspace";
+import { gitText, resolveInsideWorkspace } from "@warrant/workspace";
 
 export type GovernedComputeConfig = {
   /** Local git workspace that backs the sandbox. The adapter commits to it. */
@@ -119,11 +124,7 @@ export class GovernedSandbox {
   }
 
   private resolveInside(path: string): string {
-    const target = resolve(this.workspaceDir, path);
-    if (target !== this.workspaceDir && !target.startsWith(this.workspaceDir + sep)) {
-      throw new Error(`path escapes the sandbox workspace: ${path}`);
-    }
-    return target;
+    return resolveInsideWorkspace(this.workspaceDir, path);
   }
 
   /**
@@ -151,40 +152,30 @@ export class GovernedSandbox {
     this.assertLive();
     this.commitIfDirty(`sandbox ${this.sandboxId}: stage state`);
 
-    const run = await this.context.continueIn(targets.pool(this.pool), {
-      task: command,
-      agent: agents.command(),
-      reason: `sandbox ${this.sandboxId} command`
+    const result = await executeGovernedCommand(this.context, {
+      command,
+      target: targets.pool(this.pool),
+      reason: `sandbox ${this.sandboxId} command`,
+      timeoutMs: this.timeoutMs,
+      pullResults: true
     });
-    const outcome = await run.wait({ timeoutMs: this.timeoutMs });
-    if (outcome.status === "awaiting_approval") {
-      throw new Error(
-        `run ${run.runId} is blocked on consent (${outcome.consentRequirements.join("; ")}); ` +
-          `approve it with: warrant approve ${run.runId}`
-      );
-    }
-
-    const [output, exitCode, bundle] = await Promise.all([
-      run.sessionLog(),
-      run.commandExitCode(),
-      run.receipt()
-    ]);
-    const verification = verifyReceiptBundle(bundle);
-    if (outcome.status === "completed") {
-      await run.pull();
-    }
 
     this.records.push({
       sandboxId: this.sandboxId,
       command,
-      runId: run.runId,
-      status: outcome.status,
-      ...(exitCode !== undefined ? { exitCode } : {}),
-      contractHash: bundle.receipt.contractHash,
-      receiptVerified: verification.ok
+      runId: result.run.runId,
+      status: result.status,
+      ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
+      contractHash: result.receiptBundle.receipt.contractHash,
+      receiptVerified: result.verification.ok
     });
 
-    return { runId: run.runId, status: outcome.status, exitCode, output };
+    return {
+      runId: result.run.runId,
+      status: result.status,
+      exitCode: result.exitCode,
+      output: result.output
+    };
   }
 
   /** One record per executed command, each backed by a signed receipt. */

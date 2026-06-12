@@ -18,13 +18,11 @@ import type {
   Checkpoint,
   CheckpointTier,
   DisclosureReport,
+  ExecutionSpec,
   HandoffEnvelope,
   RunRequestInput,
   RunStatus,
-  SemanticState,
-  SessionIsolation,
-  ToolCallRecord,
-  ToolJournal
+  SessionIsolation
 } from "@warrant/protocol";
 import { PlaneClient } from "@warrant/sdk";
 import { captureWorkspace } from "@warrant/workspace";
@@ -32,6 +30,7 @@ import type { CapturedWorkspace, PullResult } from "@warrant/workspace";
 
 import { agents, toAgentSpec } from "./agents.js";
 import type { AgentDescriptor } from "./agents.js";
+import { HandoffCheckpointManager } from "./checkpoint-manager.js";
 import {
   BLOB_UPLOAD_CONCURRENCY,
   DEFAULT_ACTOR_ID,
@@ -47,6 +46,8 @@ import { reviewRuns, reviewStrategies } from "./review.js";
 import type { ReviewResult, ReviewStrategy } from "./review.js";
 import { HandoffRun } from "./run.js";
 import type { RuntimeTarget } from "./targets.js";
+import { HandoffTraceLog } from "./trace-log.js";
+import { HandoffToolJournal } from "./tool-journal.js";
 import { wrapTools } from "./tools.js";
 import type { ToolLike } from "./tools.js";
 
@@ -73,6 +74,8 @@ export type HandoffConfig = {
 export type ContinueOptions = {
   task: string;
   agent?: AgentDescriptor;
+  /** Durable machine intent. Defaults from the selected agent and task. */
+  execution?: ExecutionSpec;
   reason?: string;
   secrets?: string[];
   allowHosts?: string[];
@@ -163,6 +166,12 @@ function defaultActor(): ActorRef {
   return { kind: "human", id: process.env.USER ?? DEFAULT_ACTOR_ID };
 }
 
+function executionFor(agent: AgentDescriptor, task: string): ExecutionSpec {
+  const spec = toAgentSpec(agent);
+  if (spec.kind === "command") return { kind: "shell", script: task };
+  return { kind: "agent", agent: spec, prompt: task };
+}
+
 /**
  * The continuation context. One object that can checkpoint local work,
  * plan a continuation under policy, hand the work to a governed runner
@@ -182,10 +191,10 @@ export class Handoff {
   private readonly allowHosts: string[];
   private readonly allowUntracked: string[];
   private readonly budget: BudgetSpec;
-  private readonly traceEvents: HandoffTraceEvent[] = [];
-  private readonly toolJournal: ToolCallRecord[] = [];
+  private readonly traceLog = new HandoffTraceLog();
+  private readonly toolJournal = new HandoffToolJournal();
   private readonly requestedRuns: { runId: string; task: string; target: string }[] = [];
-  private readonly checkpointHistory: Checkpoint[] = [];
+  private readonly checkpointsState = new HandoffCheckpointManager();
   private lastEnvelopeValue?: HandoffEnvelope;
   private userRequestedContinuation = false;
   private modelEscalationCount = 0;
@@ -222,7 +231,7 @@ export class Handoff {
 
   /** Local trace: every planning, envelope, run, pull, and tool decision. */
   trace(): HandoffTraceEvent[] {
-    return [...this.traceEvents];
+    return this.traceLog.snapshot();
   }
 
   /**
@@ -238,7 +247,7 @@ export class Handoff {
       toolset,
       () => this.toolJournal.length,
       ({ record, inputHash, outputHash, ok }) => {
-        this.toolJournal.push(record);
+        this.toolJournal.append(record);
         this.record({
           type: "tool.called",
           ts: record.ts,
@@ -256,12 +265,8 @@ export class Handoff {
   private triggerState(): TriggerState {
     return {
       userRequested: this.userRequestedContinuation,
-      toolFailures: this.toolJournal.filter((entry) => entry.error !== undefined)
-        .length,
-      totalToolDurationMs: this.toolJournal.reduce(
-        (total, entry) => total + entry.durationMs,
-        0
-      ),
+      toolFailures: this.toolJournal.failureCount(),
+      totalToolDurationMs: this.toolJournal.totalDurationMs(),
       modelEscalations: this.modelEscalationCount
     };
   }
@@ -350,7 +355,7 @@ export class Handoff {
     let localRoutes = 0;
     let cloudRoutes = 0;
     let escalations = 0;
-    for (const event of this.traceEvents) {
+    for (const event of this.traceLog.snapshot()) {
       switch (event.type) {
         case "checkpoint.created":
           checkpoints++;
@@ -396,7 +401,7 @@ export class Handoff {
 
   /** Every checkpoint this context created, oldest first (lineage intact). */
   checkpoints(): Checkpoint[] {
-    return [...this.checkpointHistory];
+    return this.checkpointsState.snapshot();
   }
 
   /**
@@ -457,7 +462,7 @@ export class Handoff {
   }
 
   private record(event: HandoffTraceEvent): void {
-    this.traceEvents.push(event);
+    this.traceLog.append(event);
   }
 
   private capture(): CapturedWorkspace {
@@ -496,42 +501,7 @@ export class Handoff {
   private journalSnapshot():
     | { blob: Buffer; hash: string }
     | undefined {
-    if (this.toolJournal.length === 0) return undefined;
-    const journal: ToolJournal = {
-      version: PROTOCOL_VERSIONS.toolJournal,
-      entries: [...this.toolJournal]
-    };
-    const blob = Buffer.from(canonicalize(journal), "utf8");
-    return { blob, hash: sha256Hex(blob) };
-  }
-
-  private buildCheckpoint(
-    captured: CapturedWorkspace,
-    message?: string,
-    transcriptHash?: string,
-    toolJournalHash?: string
-  ): Checkpoint {
-    const semantic: SemanticState = {
-      ...(transcriptHash ? { transcriptHash } : {}),
-      ...(toolJournalHash ? { toolJournalHash } : {}),
-      ...(message ? { note: message } : {})
-    };
-    const hasSemantic =
-      transcriptHash !== undefined || toolJournalHash !== undefined;
-    const parent = this.checkpointHistory.at(-1)?.checkpointId;
-    return {
-      version: PROTOCOL_VERSIONS.checkpoint,
-      checkpointId: `chk_${randomUUID()}`,
-      createdAt: new Date().toISOString(),
-      // Every checkpoint this context produces captures the workspace (that
-      // is what makes the continuation resumable), so the tier is always
-      // "workspace"; semantic state rides along in `semantic` when present.
-      tier: "workspace",
-      ...(message ? { message } : {}),
-      ...(hasSemantic ? { semantic } : {}),
-      workspace: captured.manifest,
-      ...(parent ? { parent } : {})
-    };
+    return this.toolJournal.snapshot();
   }
 
   /**
@@ -554,13 +524,12 @@ export class Handoff {
     }
     const journal = this.journalSnapshot();
     if (journal) await this.client.putBlob(journal.blob);
-    const checkpoint = this.buildCheckpoint(
+    const checkpoint = this.checkpointsState.create({
       captured,
-      message,
-      transcriptHash,
-      journal?.hash
-    );
-    this.checkpointHistory.push(checkpoint);
+      ...(message ? { message } : {}),
+      ...(transcriptHash ? { transcriptHash } : {}),
+      ...(journal?.hash ? { toolJournalHash: journal.hash } : {})
+    });
     this.record({
       type: "checkpoint.created",
       ts: checkpoint.createdAt,
@@ -612,6 +581,7 @@ export class Handoff {
       checkpoint,
       agent: toAgentSpec(agent),
       task: { prompt: options.task },
+      execution: options.execution ?? executionFor(agent, options.task),
       ...(options.reason ? { reason: options.reason } : {}),
       secrets: (options.secrets ?? this.secrets).map((name) => ({
         name,
@@ -645,6 +615,7 @@ export class Handoff {
       network: envelope.network,
       budget: envelope.budget,
       disclosure: envelope.disclosure,
+      ...(envelope.execution ? { execution: envelope.execution } : {}),
       ...(envelope.isolation ? { isolation: envelope.isolation } : {}),
       continuation: {
         envelopeHash,
@@ -671,14 +642,16 @@ export class Handoff {
     if (options.transcript !== undefined) {
       transcriptHash = sha256Hex(Buffer.from(options.transcript, "utf8"));
     }
+    const journal = this.journalSnapshot();
     const checkpoint =
       options.checkpoint ??
-      this.buildCheckpoint(
+      this.checkpointsState.create({
         captured,
-        options.reason,
-        transcriptHash,
-        this.journalSnapshot()?.hash
-      );
+        ...(options.reason ? { message: options.reason } : {}),
+        ...(transcriptHash ? { transcriptHash } : {}),
+        ...(journal?.hash ? { toolJournalHash: journal.hash } : {}),
+        remember: false
+      });
     const envelope = this.buildEnvelope(target, checkpoint, options);
     const envelopeHash = hashCanonical(envelope);
     const report = await this.client.dryRun(

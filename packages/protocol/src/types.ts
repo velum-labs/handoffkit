@@ -5,6 +5,7 @@
  */
 
 import type { JsonValue } from "./jcs.js";
+import type { ExecutionSpec } from "./execution.js";
 
 export type RunStatus =
   | "created"
@@ -143,6 +144,8 @@ export type RunContract = {
   network: NetworkPolicy;
   budget: BudgetSpec;
   disclosure: DisclosureMode;
+  /** Durable machine intent. If absent, legacy contracts derive execution from agent/task. */
+  execution?: ExecutionSpec;
   /** Requested session isolation. Defaults to "process". */
   isolation?: SessionIsolation;
   /** Present when this run continues prior work from a handoff envelope. */
@@ -351,6 +354,8 @@ export type HandoffEnvelope = {
   network: NetworkPolicy;
   budget: BudgetSpec;
   disclosure: DisclosureMode;
+  /** Durable machine intent for this continuation. */
+  execution?: ExecutionSpec;
   /** Requested session isolation for the continuation. */
   isolation?: SessionIsolation;
 };

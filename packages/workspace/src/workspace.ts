@@ -11,8 +11,14 @@ import { dirname, join } from "node:path";
 
 import { sha256Hex } from "@warrant/protocol";
 import type { ManifestFile, WorkspaceManifest } from "@warrant/protocol";
+import { minimatch } from "minimatch";
 
 import { gitBinary, gitText } from "./git.js";
+import {
+  parseWorkspaceRelativePath,
+  parseWorkspaceRoot,
+  resolveInsideWorkspace
+} from "./paths.js";
 
 /** Default branch prefix and committer for divergence-safe pulls. */
 export const PULL_BRANCH_PREFIX = "warrant/";
@@ -36,29 +42,9 @@ function git(cwd: string, args: string[], allowFail = false): string {
   return gitText(cwd, args, { allowFail });
 }
 
-/**
- * Minimal glob matcher (`**` crosses directories, `*` within a segment, `?`
- * one char), kept deliberately small: it only matches the deny-pattern and
- * untracked-allowlist globs in this package, where a full minimatch
- * dependency would be disproportionate. Behavior is covered by tests.
- */
 export function matchesPattern(path: string, pattern: string): boolean {
   const target = pattern.includes("/") ? path : path.split("/").pop() ?? path;
-  const regex = pattern
-    .split("**")
-    .map((part) =>
-      part
-        .split("*")
-        .map((piece) =>
-          piece
-            .split("?")
-            .map((p) => p.replace(/[.+^${}()|[\]\\]/g, "\\$&"))
-            .join("[^/]")
-        )
-        .join("[^/]*")
-    )
-    .join(".*");
-  return new RegExp(`^${regex}$`).test(target);
+  return minimatch(target, pattern, { dot: true });
 }
 
 export type CapturedWorkspace = {
@@ -77,6 +63,7 @@ export function captureWorkspace(
   repoDir: string,
   options: CaptureOptions = {}
 ): CapturedWorkspace {
+  const root = parseWorkspaceRoot(repoDir);
   const denyPatterns = options.denyPatterns ?? DEFAULT_DENY_PATTERNS;
   const allowUntracked = options.allowUntracked ?? [];
 
@@ -104,16 +91,17 @@ export function captureWorkspace(
   const deniedPaths: string[] = [];
   const untracked: { file: ManifestFile; content: Buffer }[] = [];
   for (const path of untrackedPaths) {
+    const rel = parseWorkspaceRelativePath(path);
     if (denyPatterns.some((pattern) => matchesPattern(path, pattern))) {
-      deniedPaths.push(path);
+      deniedPaths.push(rel);
       continue;
     }
     if (!allowUntracked.some((pattern) => matchesPattern(path, pattern))) {
       continue;
     }
-    const content = readFileSync(join(repoDir, path));
+    const content = readFileSync(resolveInsideWorkspace(root, rel));
     untracked.push({
-      file: { path, hash: sha256Hex(content), bytes: content.length },
+      file: { path: rel, hash: sha256Hex(content), bytes: content.length },
       content
     });
   }
@@ -154,11 +142,12 @@ export async function materializeWorkspace(
   }
 
   for (const file of manifest.untrackedFiles) {
+    const rel = parseWorkspaceRelativePath(file.path);
     const content = await fetchBlob(file.hash);
     if (sha256Hex(content) !== file.hash) {
       throw new Error(`blob hash mismatch for ${file.path}`);
     }
-    const target = join(repoDir, file.path);
+    const target = resolveInsideWorkspace(repoDir, rel);
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, content);
   }
@@ -179,12 +168,13 @@ export function collectOutput(repoDir: string, baseRef: string): WorkspaceOutput
     .split("\n")
     .filter((line) => line.length > 0);
   const changedFiles = changed.map((path) => {
-    const full = join(repoDir, path);
+    const rel = parseWorkspaceRelativePath(path);
+    const full = resolveInsideWorkspace(repoDir, rel);
     try {
       statSync(full);
-      return { path, contentHash: sha256Hex(readFileSync(full)) };
+      return { path: rel, contentHash: sha256Hex(readFileSync(full)) };
     } catch {
-      return { path, contentHash: DELETED_FILE_HASH };
+      return { path: rel, contentHash: DELETED_FILE_HASH };
     }
   });
   return { diff, changedFiles };

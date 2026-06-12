@@ -12,6 +12,7 @@ import { PolicyDeniedError } from "@warrant/protocol";
 import type { ChainedEvent, Receipt } from "@warrant/protocol";
 
 import type { Capability, Principal } from "./auth.js";
+import { isPlaneDomainError } from "./domain-errors.js";
 import { Plane } from "./plane.js";
 import { DEFAULT_RATE_LIMIT, RateLimiter } from "./ratelimit.js";
 import type { RateLimitConfig } from "./ratelimit.js";
@@ -196,16 +197,18 @@ export function startPlaneServer(
         sendJson(res, error.status, { error: error.message });
         return;
       }
-      // Plain Error instances thrown by plane methods are domain rejections
-      // whose messages are written to be client-safe ("invalid enroll
-      // token", "claim token expired", ...), so they map to 400. Anything
-      // else is a genuine server bug: log it and return an opaque 500.
-      if (error instanceof Error) {
+      if (isPlaneDomainError(error)) {
         plane.log.warn({ requestId, err: error.message }, "request rejected");
-        sendJson(res, 400, { error: error.message });
+        sendJson(res, error.status, { error: error.message, code: error.code });
         return;
       }
-      plane.log.error({ requestId, err: String(error) }, "request failed");
+      plane.log.error(
+        {
+          requestId,
+          err: error instanceof Error ? error.message : String(error)
+        },
+        "request failed"
+      );
       sendJson(res, 500, { error: "internal server error" });
     });
   });

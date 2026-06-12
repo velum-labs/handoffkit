@@ -105,6 +105,7 @@ export class ManagedModelServer implements LanguageModelV3 {
   private lastUsedMs = 0;
   private idleTimer: ReturnType<typeof setInterval> | undefined;
   private outputTail = "";
+  private stopping = false;
 
   constructor(options: ManagedModelServerOptions) {
     this.options = options;
@@ -180,7 +181,7 @@ export class ManagedModelServer implements LanguageModelV3 {
         log?.end();
         // A process that dies while we believe it is running is a crash:
         // reset so the next call respawns instead of hitting a dead URL.
-        if (this.state === "running" && this.child === child) {
+        if (this.state === "running" && this.child === child && !this.stopping) {
           this.clearRunning();
           this.options.onEvent?.({ type: "crashed", exitCode: code });
         }
@@ -285,14 +286,15 @@ export class ManagedModelServer implements LanguageModelV3 {
   }
 
   private async stopProcess(reason: "idle" | "explicit"): Promise<void> {
-    if (this.state === "stopped") return;
-    // Mark stopped first so the exit handler does not report a crash.
-    const child = this.child;
-    this.clearRunning();
-    this.child = child;
-    await this.killChild();
-    this.child = undefined;
-    this.options.onEvent?.({ type: "stopped", reason });
+    if (this.state === "stopped" || this.stopping) return;
+    this.stopping = true;
+    try {
+      await this.killChild();
+      this.clearRunning();
+      this.options.onEvent?.({ type: "stopped", reason });
+    } finally {
+      this.stopping = false;
+    }
   }
 
   // ---- leases ----

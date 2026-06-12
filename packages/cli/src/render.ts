@@ -3,20 +3,22 @@ import type {
   ReceiptBundle,
   RunSummary
 } from "@warrant/protocol";
+import { buildReceiptStory } from "@warrant/protocol";
 import type { HandoffTraceEvent } from "@warrant/handoff";
 
 /** One screen, five questions. This is the product. */
 export function renderReceipt(bundle: ReceiptBundle): string {
   const { contract, receipt } = bundle;
+  const story = buildReceiptStory(bundle);
   const lines: string[] = [];
   const changed = bundle.events.filter((e) => e.event.type === "file.changed");
   const approvers = contract.approvedBy?.map((a) => a.id).join(", ");
 
-  lines.push(`warrant receipt ${receipt.runId} [${receipt.status}]`);
+  lines.push(`warrant receipt ${story.runId} [${story.status}]`);
   lines.push("");
   lines.push("1. What moved?");
   lines.push(
-    `   in:  workspace @ ${contract.workspace.baseRef.slice(0, 12)} (manifest ${receipt.workspaceIn.manifestHash.slice(0, 12)})`
+    `   in:  workspace @ ${story.workspace.baseRef.slice(0, 12)} (manifest ${story.workspace.manifestHash.slice(0, 12)})`
   );
   if (contract.continuation) {
     lines.push(
@@ -42,28 +44,24 @@ export function renderReceipt(bundle: ReceiptBundle): string {
       ? `   approved by: ${approvers}`
       : "   policy: auto-allowed (no consent rule matched)"
   );
-  lines.push(`   policy snapshot: ${contract.policyHash.slice(0, 12)}`);
+  lines.push(`   policy snapshot: ${story.policyHash.slice(0, 12)}`);
   lines.push("");
   lines.push("4. Which runtime, model, tools, data, and secrets saw it?");
   lines.push(
-    `   runner: ${receipt.runner.runnerId} (pool ${receipt.runner.pool}, attestation: ${receipt.runner.attestationTier}, isolation: ${receipt.runner.isolation ?? "process"})`
+    `   runner: ${receipt.runner.runnerId} (pool ${receipt.runner.pool}, attestation: ${receipt.runner.attestationTier}, isolation: ${story.isolation})`
   );
-  lines.push(
-    `   agent: ${contract.agent.kind}${contract.agent.version ? `@${contract.agent.version}` : ""}`
-  );
+  lines.push(`   agent: ${story.agent}${contract.agent.version ? `@${contract.agent.version}` : ""}`);
   lines.push(
     `   secrets released: ${
-      receipt.secretsReleased.length > 0
-        ? receipt.secretsReleased.map((s) => `${s.name} (${s.scope})`).join(", ")
+      story.secrets.length > 0
+        ? story.secrets.join(", ")
         : "none"
     }`
   );
   lines.push(
     `   network: ${
-      receipt.networkAccessed.length > 0
-        ? receipt.networkAccessed
-            .map((n) => `${n.host} [${n.decision}]`)
-            .join(", ")
+      story.network.length > 0
+        ? story.network.join(", ")
         : "no egress attempted"
     }`
   );
@@ -77,9 +75,9 @@ export function renderReceipt(bundle: ReceiptBundle): string {
   lines.push("");
   lines.push("5. How can you resume, inspect, revoke, or reproduce it?");
   lines.push(`   contract: ${receipt.contractHash.slice(0, 16)} (signed, expires ${contract.expiresAt})`);
-  lines.push(`   events: ${receipt.eventCount} hash-chained, head ${receipt.eventsHead.slice(0, 12)}`);
+  lines.push(`   events: ${story.eventCount} hash-chained, head ${story.eventsHead.slice(0, 12)}`);
   lines.push(`   pull results: warrant pull ${receipt.runId}`);
-  lines.push(`   verify offline: warrant verify <bundle.json>`);
+  lines.push(`   verify offline: ${story.verificationCommand}`);
   return lines.join("\n");
 }
 

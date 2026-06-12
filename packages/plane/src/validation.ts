@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+import {
+  AGENT_KINDS,
+  CHECKPOINT_TIERS,
+  DISCLOSURE_MODES,
+  parseHostAllowlistEntry,
+  parsePoolName,
+  parseSecretName,
+  parseWorkspaceManifestPath,
+  SESSION_ISOLATIONS
+} from "@warrant/protocol";
+
 /**
  * Boundary validation for request bodies. Signed objects (chained events,
  * receipts) are validated cryptographically by the plane, not re-described
@@ -18,7 +29,7 @@ const actorSchema = z.object({
 });
 
 const manifestFileSchema = z.object({
-  path: z.string().min(1).max(4096),
+  path: z.string().min(1).max(4096).transform(parseWorkspaceManifestPath),
   hash: z.string().regex(/^[0-9a-f]{64}$/),
   bytes: z.number().int().nonnegative()
 });
@@ -30,12 +41,14 @@ const workspaceSchema = z.object({
   dirtyDiffHash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   untrackedFiles: z.array(manifestFileSchema).max(100000),
   deniedPatterns: z.array(z.string().max(512)).max(10000),
-  deniedPaths: z.array(z.string().max(4096)).max(100000)
+  deniedPaths: z
+    .array(z.string().max(4096).transform(parseWorkspaceManifestPath))
+    .max(100000)
 });
 
 const networkSchema = z.object({
   defaultDeny: z.boolean(),
-  allowHosts: z.array(z.string().min(1).max(253)).max(1000)
+  allowHosts: z.array(z.string().min(1).max(253).transform(parseHostAllowlistEntry)).max(1000)
 });
 
 const budgetSchema = z.object({
@@ -46,8 +59,73 @@ const budgetSchema = z.object({
 const continuationSchema = z.object({
   envelopeHash: z.string().regex(/^[0-9a-f]{64}$/),
   checkpointId: z.string().min(1).max(256),
-  tier: z.enum(["semantic", "workspace"])
+  tier: z.enum(CHECKPOINT_TIERS)
 });
+
+const executionEnvSchema = z
+  .object({
+    inherit: z.array(z.string().min(1).max(128)).max(256).optional(),
+    secrets: z
+      .array(
+        z.object({
+          env: z.string().min(1).max(256).transform(parseSecretName),
+          secretName: z.string().min(1).max(256).transform(parseSecretName)
+        })
+      )
+      .max(256)
+      .optional(),
+    vars: z.record(z.string().min(1).max(256), z.string().max(100000)).optional(),
+    egressProxy: z.boolean().optional()
+  })
+  .strict();
+
+const executionLogSchema = z
+  .object({
+    stdout: z.literal("capture"),
+    stderr: z.enum(["merge", "capture"]),
+    maxBytes: z.number().int().positive().optional()
+  })
+  .strict();
+
+const executionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("shell"),
+      script: z.string().min(1).max(1_000_000),
+      shell: z.enum(["sh", "bash"]).optional(),
+      cwd: z.string().min(1).max(4096).transform(parseWorkspaceManifestPath).optional(),
+      timeoutMs: z.number().int().positive().optional(),
+      env: executionEnvSchema.optional(),
+      log: executionLogSchema.optional()
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("argv"),
+      command: z.string().min(1).max(4096),
+      args: z.array(z.string().max(100000)).max(10000),
+      cwd: z.string().min(1).max(4096).transform(parseWorkspaceManifestPath).optional(),
+      timeoutMs: z.number().int().positive().optional(),
+      env: executionEnvSchema.optional(),
+      log: executionLogSchema.optional()
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("agent"),
+      agent: z
+        .object({
+          kind: z.enum(AGENT_KINDS),
+          version: z.string().max(128).optional()
+        })
+        .strict(),
+      prompt: z.string().min(1).max(1_000_000),
+      timeoutMs: z.number().int().positive().optional(),
+      env: executionEnvSchema.optional(),
+      log: executionLogSchema.optional()
+    })
+    .strict()
+]);
 
 export const runRequestSchema = z.object({
   requestedBy: actorSchema,
@@ -56,19 +134,14 @@ export const runRequestSchema = z.object({
   agentKind: z.string().min(1).max(64),
   agentVersion: z.string().max(128).optional(),
   prompt: z.string().min(1).max(1_000_000),
-  pool: z.string().min(1).max(128),
-  secretNames: z.array(z.string().min(1).max(256)).max(256),
+  pool: z.string().min(1).max(128).transform(parsePoolName),
+  secretNames: z.array(z.string().min(1).max(256).transform(parseSecretName)).max(256),
   workspace: workspaceSchema,
   network: networkSchema,
   budget: budgetSchema,
-  disclosure: z.enum([
-    "none",
-    "metadata-only",
-    "redacted",
-    "minimal-context",
-    "full"
-  ]),
-  isolation: z.enum(["process", "hermetic", "vercel-sandbox"]).optional(),
+  disclosure: z.enum(DISCLOSURE_MODES),
+  execution: executionSchema.optional(),
+  isolation: z.enum(SESSION_ISOLATIONS).optional(),
   continuation: continuationSchema.optional()
 });
 
@@ -80,12 +153,12 @@ export const createRunBodySchema = z.object({
 export const enrollBodySchema = z.object({
   enrollToken: z.string().min(1).max(4096),
   publicKeyPem: z.string().min(1).max(8192),
-  pool: z.string().min(1).max(128)
+  pool: z.string().min(1).max(128).transform(parsePoolName)
 });
 
 export const claimBodySchema = z.object({
   runnerToken: z.string().min(1).max(4096),
-  pool: z.string().min(1).max(128)
+  pool: z.string().min(1).max(128).transform(parsePoolName)
 });
 
 export const approveBodySchema = z.object({

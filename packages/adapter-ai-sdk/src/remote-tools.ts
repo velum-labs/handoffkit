@@ -1,9 +1,14 @@
 import { jsonSchema, tool } from "ai";
 import type { Tool } from "ai";
 
-import { agents, Handoff, handoff, targets } from "@warrant/handoff";
+import {
+  agents,
+  executeGovernedCommand,
+  Handoff,
+  handoff,
+  targets
+} from "@warrant/handoff";
 import type { ContinuationPolicy } from "@warrant/handoff";
-import { verifyReceiptBundle } from "@warrant/protocol";
 import type { ActorRef, RunStatus } from "@warrant/protocol";
 import { PlaneClient } from "@warrant/sdk";
 
@@ -105,46 +110,33 @@ export function remoteTools(config: RemoteToolsConfig): RemoteTools {
       additionalProperties: false
     }),
     execute: async ({ command }): Promise<ShellToolOutput> => {
-      const run = await context.continueIn(target, {
-        task: command,
-        agent: agents.command(),
-        reason: "app-owned loop tool call"
+      const result = await executeGovernedCommand(context, {
+        command,
+        target,
+        reason: "app-owned loop tool call",
+        timeoutMs,
+        pullResults
       });
-      const outcome = await run.wait({ timeoutMs });
-      if (outcome.status === "awaiting_approval") {
-        throw new Error(
-          `run ${run.runId} is blocked on consent (${outcome.consentRequirements.join("; ")}); ` +
-            `approve it with: warrant approve ${run.runId}`
-        );
-      }
-
-      const [output, exitCode, bundle] = await Promise.all([
-        run.sessionLog(),
-        run.commandExitCode(),
-        run.receipt()
-      ]);
-      const verification = verifyReceiptBundle(bundle);
 
       const record: RemoteToolCallRecord = {
         toolName: "shell",
         command,
-        runId: run.runId,
-        status: outcome.status,
-        ...(exitCode !== undefined ? { exitCode } : {}),
-        contractHash: bundle.receipt.contractHash,
-        receiptVerified: verification.ok
+        runId: result.run.runId,
+        status: result.status,
+        ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
+        contractHash: result.receiptBundle.receipt.contractHash,
+        receiptVerified: result.verification.ok
       };
-      if (pullResults && outcome.status === "completed") {
-        const pulled = await run.pull();
-        record.pullMode = pulled.mode;
+      if (result.pullResult) {
+        record.pullMode = result.pullResult.mode;
       }
       records.push(record);
 
       return {
-        runId: run.runId,
-        status: outcome.status,
-        exitCode,
-        output
+        runId: result.run.runId,
+        status: result.status,
+        exitCode: result.exitCode,
+        output: result.output
       };
     }
   });

@@ -18,6 +18,13 @@ export {
 } from "./workspace.js";
 export { GIT_MAX_BUFFER_BYTES, gitBinary, gitText } from "./git.js";
 export type { GitOptions } from "./git.js";
+export {
+  parseWorkspaceRelativePath,
+  parseWorkspaceRoot,
+  resolveInsideWorkspace,
+  workspaceRelativeFromAbsolute
+} from "./paths.js";
+export type { WorkspaceRelativePath, WorkspaceRoot } from "./paths.js";
 export type {
   BlobFetcher,
   CaptureOptions,

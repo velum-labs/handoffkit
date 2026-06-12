@@ -13,6 +13,7 @@ import {
   matchesPattern,
   pullRun
 } from "../workspace.js";
+import { resolveInsideWorkspace } from "../paths.js";
 
 function git(cwd: string, args: string[]): string {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -38,6 +39,20 @@ test("glob matching", () => {
   assert.equal(matchesPattern("keys/server.pem", "*.pem"), true);
   assert.equal(matchesPattern("notes.md", "*.pem"), false);
   assert.equal(matchesPattern("a/b/c.txt", "a/**"), true);
+});
+
+test("workspace path helpers reject traversal and absolute paths", () => {
+  const repo = makeRepo();
+  try {
+    assert.throws(() => resolveInsideWorkspace(repo, "../outside.txt"));
+    assert.throws(() => resolveInsideWorkspace(repo, "/tmp/outside.txt"));
+    assert.equal(
+      readFileSync(resolveInsideWorkspace(repo, "README.md"), "utf8"),
+      "# fixture\n"
+    );
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test("capture denies secrets, includes allowlisted untracked, records denials", () => {
@@ -100,6 +115,38 @@ test("materialize reproduces the captured workspace; output diff round-trips", a
     assert.ok(output.diff.length > 0);
     const paths = output.changedFiles.map((f) => f.path).sort();
     assert.deepEqual(paths, ["agent-output.txt", "notes.md", "src.txt"]);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test("materialize rejects manifest paths that escape the workspace", async () => {
+  const repo = makeRepo();
+  const sessionDir = mkdtempSync(join(tmpdir(), "warrant-test-session-"));
+  try {
+    const captured = captureWorkspace(repo);
+    const manifest = {
+      ...captured.manifest,
+      untrackedFiles: [
+        {
+          path: "../escape.txt",
+          hash: sha256Hex(Buffer.from("escape", "utf8")),
+          bytes: 6
+        }
+      ]
+    };
+    const blobs = new Map<string, Buffer>();
+    blobs.set(sha256Hex(captured.bundle), captured.bundle);
+    blobs.set(sha256Hex(Buffer.from("escape", "utf8")), Buffer.from("escape", "utf8"));
+
+    await assert.rejects(
+      materializeWorkspace(sessionDir, manifest, (hash) => {
+        const blob = blobs.get(hash);
+        if (!blob) throw new Error(`missing blob ${hash}`);
+        return Promise.resolve(blob);
+      })
+    );
   } finally {
     rmSync(repo, { recursive: true, force: true });
     rmSync(sessionDir, { recursive: true, force: true });
