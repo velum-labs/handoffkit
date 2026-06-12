@@ -14,6 +14,7 @@
     { "path": "../../packages/protocol" },
     { "path": "../../packages/runner" },
     { "path": "../../packages/sdk" },
+    { "path": "../../packages/session-hermetic" },
     { "path": "../../packages/testkit" },
     { "path": "../../packages/workspace" }
   ]

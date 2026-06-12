@@ -46,7 +46,7 @@ export function renderReceipt(bundle: ReceiptBundle): string {
   lines.push("");
   lines.push("4. Which runtime, model, tools, data, and secrets saw it?");
   lines.push(
-    `   runner: ${receipt.runner.runnerId} (pool ${receipt.runner.pool}, attestation: ${receipt.runner.attestationTier})`
+    `   runner: ${receipt.runner.runnerId} (pool ${receipt.runner.pool}, attestation: ${receipt.runner.attestationTier}, isolation: ${receipt.runner.isolation ?? "process"})`
   );
   lines.push(
     `   agent: ${contract.agent.kind}${contract.agent.version ? `@${contract.agent.version}` : ""}`

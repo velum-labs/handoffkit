@@ -71,6 +71,7 @@ export type {
   SecretReleaseRecord,
   SecretScopeRule,
   SemanticState,
+  SessionIsolation,
   Signature,
   TaskSpec,
   ToolCallRecord,

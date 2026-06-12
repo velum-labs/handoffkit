@@ -17,6 +17,7 @@ import { demo as aiSdkLoop } from "./demos/09-ai-sdk-loop.js";
 import { demo as computeSandbox } from "./demos/10-compute-sandbox.js";
 import { demo as goldenInterface } from "./demos/11-golden-interface.js";
 import { demo as modelEscalation } from "./demos/12-model-escalation.js";
+import { demo as hermeticSession } from "./demos/13-hermetic-session.js";
 import { bold, dim } from "./narrate.js";
 import type { Demo } from "./registry.js";
 
@@ -32,7 +33,8 @@ const SERIES: Demo[] = [
   aiSdkLoop,
   computeSandbox,
   goldenInterface,
-  modelEscalation
+  modelEscalation,
+  hermeticSession
 ];
 
 function list(): void {

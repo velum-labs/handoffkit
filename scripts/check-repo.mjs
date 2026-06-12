@@ -34,6 +34,9 @@ const requiredFiles = [
   "packages/adapter-ai-sdk/src/remote-tools.ts",
   "packages/adapter-ai-sdk/src/model.ts",
   "packages/adapter-compute/src/sandbox.ts",
+  "packages/runner/src/backend.ts",
+  "packages/session-hermetic/src/index.ts",
+  "packages/session-vercel-sandbox/src/index.ts",
   "packages/testkit/src/index.ts",
   "packages/cli/src/index.ts",
   "examples/demos/src/run.ts",
@@ -45,6 +48,7 @@ const requiredFiles = [
   "packages/handoff/src/test/plan.test.ts",
   "packages/adapter-ai-sdk/src/test/remote-tools.test.ts",
   "packages/adapter-compute/src/test/sandbox.test.ts",
+  "packages/session-hermetic/src/test/hermetic.test.ts",
   "packages/cli/src/test/e2e.test.ts",
   "packages/cli/src/test/handoff.test.ts",
   "packages/cli/src/test/cli.test.ts",
@@ -109,11 +113,16 @@ if (!currentSpec.includes("Supersedes:")) {
 const TRUSTED_THIRD_PARTY = new Map([
   ["@ai-sdk/openai-compatible", "2.0.48"],
   ["@ai-sdk/provider", "3.0.10"],
+  ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
+  ["just-bash", "3.0.1"],
+  ["ms", "2.1.3"],
   ["zod", "4.4.3"]
 ]);
 const THIRD_PARTY_ALLOWED_IN = new Set([
   "packages/adapter-ai-sdk",
+  "packages/session-hermetic",
+  "packages/session-vercel-sandbox",
   "examples/demos"
 ]);
 

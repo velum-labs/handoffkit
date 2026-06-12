@@ -17,7 +17,9 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | [`@warrant/protocol`](packages/protocol) | The open data contracts (`warrant.contract.v1`, `receipt.v1`, `event.v1`, `manifest.v1`, `policy.v1`, `checkpoint.v1`, `envelope.v1`), the wire API types, and the primitives to sign, hash-chain, and verify them offline. |
 | [`@warrant/workspace`](packages/workspace) | Git workspace capture (with provable secret-pattern denial), session materialization, output collection, and divergence-safe pull. |
 | [`@warrant/plane`](packages/plane) | Control plane: contracts, policy evaluation, approvals, receipt countersignature, secret broker, audit export — and the control panel UI it serves at `/ui/`. |
-| [`@warrant/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. |
+| [`@warrant/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. Pluggable session-isolation backends. |
+| [`@warrant/session-hermetic`](packages/session-hermetic) | Hermetic session backend: a simulated bash interpreter ([just-bash](https://github.com/vercel-labs/just-bash)) with a virtual filesystem and interpreter-enforced egress. No real process or socket to escape with. |
+| [`@warrant/session-vercel-sandbox`](packages/session-vercel-sandbox) | Vercel Sandbox session backend: each session runs in a Firecracker microVM with VM-level isolation and domain egress policy. Experimental, integration-gated. |
 | [`@warrant/sdk`](packages/sdk) | Thin client over the plane API plus offline receipt verification. |
 | [`@warrant/handoff`](packages/handoff) | The continuation SDK: `handoff(...)`, `checkpoint`, `continueIn`, `parallel`, `review`, `pull` — typed descriptors, fail-closed planning, full provenance. |
 | [`@warrant/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops: `remoteTools(...)` returns AI SDK-compatible tools whose calls execute as signed contracts in governed sessions and return with receipts. |
@@ -105,6 +107,7 @@ pnpm demo all       # run the whole series (skips interactive demos)
 | 10 | Compute sandbox | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
 | 11 | Golden interface | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
 | 12 | Model escalation | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
+| 13 | Hermetic session | The `command` harness runs inside a bash interpreter with a virtual filesystem and interpreter-enforced egress; the receipt records `isolation: hermetic`. |
 
 ## Using real models
 
@@ -232,6 +235,32 @@ sandbox.runs();                                      // evidence for every comma
 ```
 
 Each command runs in a fresh governed session materialized from the current workspace; continuity flows through the workspace's git history, and the receipts — not a long-lived remote process — are what persists.
+
+## Session isolation
+
+How the runner isolates the agent session is pluggable, requested per run (`--isolation`, or `session:` in the handoff SDK), and recorded honestly in every receipt (`runner.isolation`):
+
+| Tier | Backend | Isolation | Harnesses | Status |
+| --- | --- | --- | --- | --- |
+| `process` | built-in | child process, scrubbed env, egress proxy (process-level — a binary can ignore proxy vars; every attempt is still recorded) | all | default |
+| `hermetic` | `@warrant/session-hermetic` | simulated bash interpreter + virtual filesystem; egress enforced by the interpreter (no socket exists for denied hosts) | `command` only (no real OS) | implemented, tested |
+| `vercel-sandbox` | `@warrant/session-vercel-sandbox` | Firecracker microVM, VM-level isolation, domain egress policy | all but the test mock | experimental, integration-gated |
+
+```sh
+warrant run --agent command --isolation hermetic "awk -F, 'NR>1{s+=$2}END{print s}' orders.csv > total.txt"
+```
+
+The two stronger backends are injected into the runner so the trust-critical kernel stays dependency-free:
+
+```ts
+import { Runner } from "@warrant/runner";
+import { hermeticBackend } from "@warrant/session-hermetic";
+import { vercelSandboxBackend } from "@warrant/session-vercel-sandbox";
+
+new Runner({ planeUrl, pool, enrollToken, backends: [hermeticBackend(), vercelSandboxBackend()] });
+```
+
+This is the execution substrate the spec places *below* Warrant ("E2B, Modal, Daytona, Vercel Sandbox, local Docker, and customer VPCs sit below"): Warrant owns the contract, policy, secret release, and receipt; the backend owns only how the session is isolated.
 
 ## Dependency policy
 

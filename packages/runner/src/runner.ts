@@ -17,10 +17,12 @@ import type {
   ClaimResult,
   Receipt,
   RunEvent,
-  RunnerIdentity
+  RunnerIdentity,
+  SessionIsolation
 } from "@warrant/protocol";
 import { PlaneClient } from "@warrant/sdk";
 import { materializeWorkspace } from "@warrant/workspace";
+import type { SessionBackend } from "./backend.js";
 import { runSession } from "./session.js";
 
 export type RunnerOptions = {
@@ -32,6 +34,12 @@ export type RunnerOptions = {
   mockScriptPath?: string;
   /** How long to keep retrying enrollment while the plane is unreachable. */
   enrollRetryMs?: number;
+  /**
+   * Session isolation backends beyond the built-in "process" backend
+   * (e.g. hermetic interpreter or microVM). Injected so the runner kernel
+   * stays dependency-free.
+   */
+  backends?: SessionBackend[];
 };
 
 type StoredIdentity = {
@@ -191,7 +199,8 @@ export class Runner {
         repoDir,
         secrets: claim.secrets,
         mockScriptPath: this.options.mockScriptPath ?? DEFAULT_MOCK_SCRIPT,
-        emit: (event) => void emitLocal(event)
+        emit: (event) => void emitLocal(event),
+        backends: this.options.backends ?? []
       });
 
       const artifactHashes: string[] = [];
@@ -238,6 +247,7 @@ export class Runner {
         manifestHash,
         diffHash,
         artifactHashes,
+        isolation: session.isolation,
         status: session.exitCode === 0 ? "completed" : "failed"
       });
       await this.client.complete(runId, claimToken, receipt);
@@ -254,6 +264,7 @@ export class Runner {
     manifestHash: string;
     diffHash: string;
     artifactHashes: string[];
+    isolation: SessionIsolation;
     status: "completed" | "failed";
   }): Receipt {
     const identity = this.identity;
@@ -300,7 +311,8 @@ export class Runner {
       runnerId: identity.runnerId,
       keyId: keyIdFromPublicPem(this.publicKeyPem),
       pool: identity.pool,
-      attestationTier: "mock"
+      attestationTier: "mock",
+      isolation: input.isolation
     };
 
     const first = chain[0];

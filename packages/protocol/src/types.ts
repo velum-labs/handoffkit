@@ -40,6 +40,21 @@ export type CheckpointTier = "semantic" | "workspace";
 export type AttestationTier = "mock" | "standard" | "zdr" | "cpu-tee" | "cpu-gpu-tee";
 
 /**
+ * How the runner isolates the agent session, recorded honestly in receipts:
+ *
+ * - "process": a child process with a scrubbed environment and an egress
+ *   proxy. Enforcement is process-level — a malicious binary can ignore
+ *   proxy variables — but every attempt is recorded.
+ * - "hermetic": a simulated bash interpreter (just-bash) with a virtual
+ *   filesystem rooted in the workspace and interpreter-enforced network
+ *   allowlists. There are no real processes or sockets to escape with;
+ *   only the "command" harness can run here.
+ * - "vercel-sandbox": a Firecracker microVM (Vercel Sandbox) with
+ *   VM-level isolation and domain-based egress policy.
+ */
+export type SessionIsolation = "process" | "hermetic" | "vercel-sandbox";
+
+/**
  * "command" is the harness for app-owned loops and the compute adapter:
  * a single shell command executed inside a governed session. "mock" is the
  * built-in test harness; the rest are vendor CLIs wrapped as-is.
@@ -128,6 +143,8 @@ export type RunContract = {
   network: NetworkPolicy;
   budget: BudgetSpec;
   disclosure: DisclosureMode;
+  /** Requested session isolation. Defaults to "process". */
+  isolation?: SessionIsolation;
   /** Present when this run continues prior work from a handoff envelope. */
   continuation?: ContinuationRef;
   expiresAt: string;
@@ -210,6 +227,8 @@ export type RunnerIdentity = {
   keyId: string;
   pool: string;
   attestationTier: AttestationTier;
+  /** How the session was actually isolated. Absent in older receipts means "process". */
+  isolation?: SessionIsolation;
 };
 
 export type SecretReleaseRecord = {
@@ -332,6 +351,8 @@ export type HandoffEnvelope = {
   network: NetworkPolicy;
   budget: BudgetSpec;
   disclosure: DisclosureMode;
+  /** Requested session isolation for the continuation. */
+  isolation?: SessionIsolation;
 };
 
 /** Reference embedded in a run contract when the run continues prior work. */

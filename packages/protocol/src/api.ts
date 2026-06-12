@@ -11,7 +11,8 @@ import type {
   DisclosureMode,
   RunContract,
   RunStatus,
-  SecretClaim
+  SecretClaim,
+  SessionIsolation
 } from "./types.js";
 
 /** A run request as accepted by `POST /v1/runs`. */
@@ -27,6 +28,8 @@ export type RunRequest = {
   network: RunContract["network"];
   budget: RunContract["budget"];
   disclosure: DisclosureMode;
+  /** Requested session isolation. Defaults to "process". */
+  isolation?: SessionIsolation;
   /** Present when the run continues prior work from a handoff envelope. */
   continuation?: ContinuationRef;
 };
@@ -56,6 +59,7 @@ export type DisclosureReport = {
   network: { defaultDeny: boolean; allowHosts: string[] };
   budget: { maxSpendUsd?: number; maxDurationMin?: number };
   disclosure: string;
+  isolation?: SessionIsolation;
   continuation?: ContinuationRef;
   policyDecision: PolicyDecision;
 };

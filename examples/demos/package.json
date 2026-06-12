@@ -16,6 +16,7 @@
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",
     "@warrant/sdk": "workspace:*",
+    "@warrant/session-hermetic": "workspace:*",
     "@warrant/testkit": "workspace:*",
     "@warrant/workspace": "workspace:*",
     "ai": "6.0.200",

@@ -20,6 +20,7 @@ import type {
   RunRequestInput,
   RunStatus,
   SemanticState,
+  SessionIsolation,
   ToolCallRecord,
   ToolJournal
 } from "@warrant/protocol";
@@ -74,6 +75,8 @@ export type ContinueOptions = {
   budget?: BudgetSpec;
   /** How results land at pull time. Defaults to divergence-safe auto. */
   isolate?: IsolationStrategy;
+  /** Requested session isolation on the runner. Defaults to "process". */
+  session?: SessionIsolation;
 };
 
 export type ParallelOptions = Omit<ContinueOptions, "task">;
@@ -554,7 +557,8 @@ export class Handoff {
         allowHosts: options.allowHosts ?? this.allowHosts
       },
       budget: options.budget ?? this.budget,
-      disclosure: this.policy.disclosure
+      disclosure: this.policy.disclosure,
+      ...(options.session ? { isolation: options.session } : {})
     };
   }
 
@@ -576,6 +580,7 @@ export class Handoff {
       network: envelope.network,
       budget: envelope.budget,
       disclosure: envelope.disclosure,
+      ...(envelope.isolation ? { isolation: envelope.isolation } : {}),
       continuation: {
         envelopeHash,
         checkpointId: envelope.checkpoint.checkpointId,

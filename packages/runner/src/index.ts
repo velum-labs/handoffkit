@@ -5,8 +5,14 @@
  */
 export { Runner } from "./runner.js";
 export type { RunnerOptions } from "./runner.js";
-export { runSession } from "./session.js";
+export { CapabilityMismatchError, runSession } from "./session.js";
 export type { SessionResult } from "./session.js";
+export { ProcessSessionBackend } from "./process-backend.js";
+export type {
+  SessionBackend,
+  SessionBackendResult,
+  SessionExecution
+} from "./backend.js";
 export { buildAgentCommand } from "./agents.js";
 export type { AgentCommand, AgentContext } from "./agents.js";
 export { startEgressProxy } from "./egress.js";

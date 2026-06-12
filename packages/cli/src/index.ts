@@ -7,7 +7,12 @@ import { agents, handoff, targets } from "@warrant/handoff";
 import type { AgentDescriptor } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
 import { PolicyDeniedError, verifyReceiptBundle } from "@warrant/protocol";
-import type { AgentKind, ReceiptBundle, RunRequestInput } from "@warrant/protocol";
+import type {
+  AgentKind,
+  ReceiptBundle,
+  RunRequestInput,
+  SessionIsolation
+} from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
 import { PlaneClient } from "@warrant/sdk";
 import { captureWorkspace, pullRun } from "@warrant/workspace";
@@ -35,6 +40,7 @@ usage:
       --allow-host H      allow egress to host (repeatable)
       --allow-untracked G include untracked files matching glob (repeatable)
       --repo DIR          workspace repository (default: .)
+      --isolation TIER    session isolation: process | hermetic | vercel-sandbox
       --dry-run           show what would move; move nothing
       --no-watch          do not wait for completion
   warrant continue --agent KIND [opts] "task"    hand local work to a governed runner
@@ -120,6 +126,7 @@ type RunFlags = {
   "no-watch"?: boolean;
   transcript?: string;
   reason?: string;
+  isolation?: string;
 };
 
 function parseRunArgs(argv: string[]): { values: RunFlags; prompt: string } {
@@ -135,11 +142,22 @@ function parseRunArgs(argv: string[]): { values: RunFlags; prompt: string } {
       "dry-run": { type: "boolean", default: false },
       "no-watch": { type: "boolean", default: false },
       transcript: { type: "string" },
-      reason: { type: "string" }
+      reason: { type: "string" },
+      isolation: { type: "string" }
     },
     allowPositionals: true
   });
   return { values, prompt: positionals.join(" ").trim() };
+}
+
+const ISOLATIONS: SessionIsolation[] = ["process", "hermetic", "vercel-sandbox"];
+
+function isolationFlag(value: string | undefined): SessionIsolation | undefined {
+  if (value === undefined) return undefined;
+  if (!ISOLATIONS.includes(value as SessionIsolation)) {
+    fail(`--isolation must be one of ${ISOLATIONS.join(" | ")}`);
+  }
+  return value as SessionIsolation;
 }
 
 async function cmdRun(dir: string, argv: string[]): Promise<void> {
@@ -167,7 +185,10 @@ async function cmdRun(dir: string, argv: string[]): Promise<void> {
       allowHosts: values["allow-host"] ?? []
     },
     budget: {},
-    disclosure: "minimal-context"
+    disclosure: "minimal-context",
+    ...(isolationFlag(values.isolation)
+      ? { isolation: isolationFlag(values.isolation) }
+      : {})
   };
 
   if (values["dry-run"]) {
@@ -219,7 +240,10 @@ async function cmdContinue(dir: string, argv: string[]): Promise<void> {
   const continueOptions = {
     task: prompt,
     ...(values.reason ? { reason: values.reason } : {}),
-    ...(transcript !== undefined ? { transcript } : {})
+    ...(transcript !== undefined ? { transcript } : {}),
+    ...(isolationFlag(values.isolation)
+      ? { session: isolationFlag(values.isolation) }
+      : {})
   };
 
   if (values["dry-run"]) {

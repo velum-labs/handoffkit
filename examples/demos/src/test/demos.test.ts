@@ -20,7 +20,7 @@ function demo(args: string[]): { status: number; stdout: string; stderr: string 
 test("the series lists every demo", () => {
   const result = demo([]);
   assert.equal(result.status, 0, result.stderr);
-  for (const id of ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]) {
+  for (const id of ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13"]) {
     assert.match(result.stdout, new RegExp(`\\b${id}\\b`), `demo ${id} must be listed`);
   }
 });
@@ -79,4 +79,13 @@ test("demo 12 (model escalation) escalates deterministically and continues", () 
   assert.match(result.stdout, /ESCALATED/);
   assert.match(result.stdout, /after escalation → true/);
   assert.match(result.stdout, /1 escalation\(s\)/);
+});
+
+test("demo 13 (hermetic session) runs in the interpreter and blocks egress", () => {
+  const result = demo(["13"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /isolation: hermetic/);
+  // Denied egress surfaces as either the interpreter's "curl: command not
+  // found" (no allowlisted host) or the script's own BLOCKED fallback.
+  assert.match(result.stdout, /command not found|BLOCKED/);
 });

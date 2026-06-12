@@ -174,6 +174,7 @@ export class Plane {
       network: request.network,
       budget: request.budget,
       disclosure: request.disclosure,
+      ...(request.isolation ? { isolation: request.isolation } : {}),
       ...(request.continuation ? { continuation: request.continuation } : {}),
       policyDecision: decision
     };
@@ -296,6 +297,7 @@ export class Plane {
       network: request.network,
       budget: request.budget,
       disclosure: request.disclosure,
+      ...(request.isolation ? { isolation: request.isolation } : {}),
       ...(request.continuation ? { continuation: request.continuation } : {}),
       expiresAt: new Date(now + CONTRACT_TTL_MS).toISOString(),
       signatures: []

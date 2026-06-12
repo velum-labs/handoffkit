@@ -12,6 +12,7 @@ import { Plane, SecretStore, defaultPolicy, startPlaneServer } from "@warrant/pl
 import { generateEd25519KeyPair } from "@warrant/protocol";
 import type { Policy } from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
+import type { SessionBackend } from "@warrant/runner";
 import { PlaneClient } from "@warrant/sdk";
 
 export function git(cwd: string, args: string[]): string {
@@ -52,6 +53,8 @@ export type StackOptions = {
   pool?: string;
   /** Start the runner's background polling loop. Defaults to false. */
   startRunner?: boolean;
+  /** Extra session backends for the bundled runner (e.g. hermetic). */
+  backends?: SessionBackend[];
   port?: number;
   host?: string;
 };
@@ -112,7 +115,8 @@ export async function startStack(options: StackOptions = {}): Promise<Stack> {
     planeUrl,
     pool,
     dataDir: runnerDir,
-    enrollToken: ENROLL_TOKEN
+    enrollToken: ENROLL_TOKEN,
+    ...(options.backends ? { backends: options.backends } : {})
   });
   await runner.ensureEnrolled();
   let runnerLoop: Promise<void> | undefined;

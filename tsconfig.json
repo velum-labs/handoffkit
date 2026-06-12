@@ -8,6 +8,8 @@
     { "path": "packages/sdk" },
     { "path": "packages/plane" },
     { "path": "packages/runner" },
+    { "path": "packages/session-hermetic" },
+    { "path": "packages/session-vercel-sandbox" },
     { "path": "packages/handoff" },
     { "path": "packages/testkit" },
     { "path": "packages/cli" },
