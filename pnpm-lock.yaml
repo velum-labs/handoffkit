@@ -65,6 +65,9 @@ importers:
 
   packages/adapter-ai-sdk:
     dependencies:
+      '@ai-sdk/openai-compatible':
+        specifier: 2.0.48
+        version: 2.0.48(zod@4.4.3)
       '@ai-sdk/provider':
         specifier: 3.0.10
         version: 3.0.10

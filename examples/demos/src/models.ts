@@ -4,10 +4,14 @@
  * API keys; set these environment variables to run them against real
  * models through any OpenAI-compatible endpoint:
  *
- *   Local (e.g. Ollama, LM Studio):
+ *   Local (e.g. Ollama, LM Studio, mlx_lm.server on Apple Silicon):
  *     WARRANT_DEMO_LOCAL_URL     e.g. http://localhost:11434/v1
  *     WARRANT_DEMO_LOCAL_MODEL   e.g. qwen3:8b
- *     WARRANT_DEMO_LOCAL_API_KEY optional (Ollama ignores it)
+ *     WARRANT_DEMO_LOCAL_API_KEY optional (Ollama and MLX ignore it)
+ *
+ * For a local MLX server whose lifecycle (Python env, process, scale to
+ * zero) is owned by Warrant instead of run by hand, see mlxServer() in
+ * @warrant/adapter-ai-sdk.
  *
  *   Cloud (e.g. OpenAI, a gateway, OpenRouter):
  *     WARRANT_DEMO_CLOUD_URL     default https://api.openai.com/v1

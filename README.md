@@ -136,6 +136,26 @@ warrant run --agent claude-code --secret ANTHROPIC_API_KEY \
   --allow-host api.anthropic.com "fix the flaky auth test and run the suite"
 ```
 
+### Managed MLX: Warrant owns the model server
+
+On Apple Silicon, `mlxServer(...)` from `@warrant/adapter-ai-sdk` owns the whole local-model stack rather than pointing at a server you run by hand. It provisions a dedicated directory (default `~/.warrant/mlx`) containing a private Python venv with [mlx-lm](https://pypi.org/project/mlx-lm/) at an exact pin, an env manifest, and a contained Hugging Face model cache — then boots `mlx_lm server` from that env's own interpreter on the first model call, and scales it to zero after an idle period. The next call transparently restarts it.
+
+```ts
+import { handoffModel, mlxServer } from "@warrant/adapter-ai-sdk";
+
+const local = mlxServer({
+  model: "mlx-community/Qwen3-4B-4bit",
+  idleShutdownMs: 5 * 60 * 1000 // scale to zero after 5 idle minutes
+});
+
+const model = handoffModel({ local, cloud: openai("gpt-5.5") });
+// First call: provisions the env (once), spawns the server, waits for
+// health. Idle: the process is stopped. Crash or wrong platform: the
+// call escalates to cloud, honestly recorded in the routing trace.
+```
+
+The footprint is one inspectable directory: `local.env.info()` reports the manifest and disk usage, `local.env.verify()` checks the env is intact, and `local.env.destroy()` removes everything — venv, weights, logs. The mlx-lm pin (`MLX_LM_PIN`) follows the same trusted-pin policy as the npm allowlist: exact version, bumped only as a reviewed change. The generic layer (`managedModelServer(...)`) accepts any `prepare()` hook, so the same lazy-start/scale-to-zero lifecycle can manage other OpenAI-compatible servers.
+
 ## The handoff SDK
 
 ```ts

@@ -17,3 +17,24 @@ export type {
 } from "./remote-tools.js";
 export { HandoffModel, handoffModel, withModel } from "./model.js";
 export type { EscalationReason, HandoffModelConfig } from "./model.js";
+export {
+  defaultMlxDir,
+  MLX_LM_PIN,
+  MlxCapabilityError,
+  MlxEnv
+} from "./mlx-env.js";
+export type { MlxEnvManifest, MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
+export {
+  DEFAULT_IDLE_SHUTDOWN_MS,
+  DEFAULT_SHUTDOWN_GRACE_MS,
+  DEFAULT_STARTUP_TIMEOUT_MS,
+  ManagedModelServer,
+  managedModelServer,
+  mlxServer
+} from "./managed-server.js";
+export type {
+  ManagedModelServerOptions,
+  ManagedServerEvent,
+  ManagedServerStatus,
+  MlxServerOptions
+} from "./managed-server.js";
