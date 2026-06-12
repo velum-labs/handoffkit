@@ -1,9 +1,8 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { createWriteStream, mkdirSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type {
@@ -14,11 +13,7 @@ import type {
   LanguageModelV3StreamResult
 } from "@ai-sdk/provider";
 
-import {
-  MLX_LM_STRUCTURED_PIN,
-  MlxEnv,
-  OUTLINES_CORE_PIN
-} from "./mlx-env.js";
+import { MLX_LM_STRUCTURED_PIN, MlxEnv } from "./mlx-env.js";
 import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
 
 /**
@@ -387,15 +382,6 @@ export function managedModelServer(
   return new ManagedModelServer(options);
 }
 
-export type MlxStructuredOptions = {
-  /**
-   * Source of the mlx-lm-structured package: a local directory
-   * (pip-installable) or a pinned spec. Defaults to this repository's
-   * python/mlx-lm-structured, which works for in-repo usage.
-   */
-  overlaySpec?: string;
-};
-
 export type MlxServerOptions = {
   /** Hugging Face repo id the server loads (e.g. mlx-community/...). */
   model: string;
@@ -406,47 +392,27 @@ export type MlxServerOptions = {
   /**
    * Enable structured decoding (`response_format`, `guided_json`,
    * `guided_regex`, `guided_choice`): the env installs the velum-labs
-   * mlx-lm fork (which carries optional server hooks) together with the
-   * mlx-lm-structured package. With this set the AI SDK's JSON output modes
-   * (generateObject, responseFormat) are actually enforced by the server.
+   * mlx-lm fork with its [structured] extra, which is self-contained
+   * (see the fork's STRUCTURED.md). With this set the AI SDK's JSON output
+   * modes (generateObject, responseFormat) are actually enforced by the
+   * server.
    */
-  structured?: boolean | MlxStructuredOptions;
+  structured?: boolean;
 } & Omit<ManagedModelServerOptions, "prepare" | "modelId" | "createModel"> &
   Pick<Partial<ManagedModelServerOptions>, "createModel">;
 
-/** The in-repo location of the package (works when running from the repo). */
-function defaultOverlaySpec(): string {
-  const path = fileURLToPath(
-    new URL("../../../python/mlx-lm-structured", import.meta.url)
-  );
-  if (!existsSync(path)) {
-    throw new Error(
-      "cannot resolve the mlx-lm-structured package: " +
-        `${path} does not exist. Pass structured.overlaySpec (a local ` +
-        "package directory or a pinned spec) explicitly."
-    );
-  }
-  return path;
-}
-
 /**
- * Env options for structured decoding: the mlx-lm fork (with the optional
- * server hooks) as the main spec, plus the constraint package whose presence
- * activates them. The stock `mlx_lm server` entry point is unchanged.
+ * Env options for structured decoding: the self-contained mlx-lm fork as
+ * the main spec. The stock `mlx_lm server` entry point is unchanged; the
+ * hooks activate because the [structured] extra's dependencies import.
  */
-function structuredEnvOptions(
-  structured: boolean | MlxStructuredOptions
-): Pick<
+function structuredEnvOptions(): Pick<
   MlxEnvOptions,
-  "packageSpec" | "extraPackageSpecs" | "extraImportNames"
+  "packageSpec" | "extraImportNames"
 > {
-  const overlaySpec =
-    (typeof structured === "object" ? structured.overlaySpec : undefined) ??
-    defaultOverlaySpec();
   return {
     packageSpec: MLX_LM_STRUCTURED_PIN,
-    extraPackageSpecs: [`outlines-core==${OUTLINES_CORE_PIN}`, overlaySpec],
-    extraImportNames: ["mlx_lm_structured"]
+    extraImportNames: ["mlx_lm.structured.integration"]
   };
 }
 
@@ -473,7 +439,7 @@ export function mlxServer(
     // Structured mode supplies defaults; explicit env options win (e.g. a
     // custom packageSpec pointing at another fork revision).
     env = new MlxEnv({
-      ...(structured ? structuredEnvOptions(structured) : {}),
+      ...(structured ? structuredEnvOptions() : {}),
       ...(envOption ?? {})
     });
   }
