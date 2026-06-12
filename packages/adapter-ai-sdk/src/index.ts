@@ -22,7 +22,9 @@ export {
   MLX_LM_PIN,
   MlxCapabilityError,
   MlxEnv,
-  PYTHON_PIN
+  OUTLINES_CORE_PIN,
+  PYTHON_PIN,
+  STRUCTURED_SERVER_MODULE
 } from "./mlx-env.js";
 export type { MlxEnvManifest, MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
 export {
@@ -37,5 +39,6 @@ export type {
   ManagedModelServerOptions,
   ManagedServerEvent,
   ManagedServerStatus,
-  MlxServerOptions
+  MlxServerOptions,
+  MlxStructuredOptions
 } from "./managed-server.js";

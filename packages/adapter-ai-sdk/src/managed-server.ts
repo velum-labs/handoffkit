@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type {
@@ -13,7 +14,11 @@ import type {
   LanguageModelV3StreamResult
 } from "@ai-sdk/provider";
 
-import { MlxEnv } from "./mlx-env.js";
+import {
+  MlxEnv,
+  OUTLINES_CORE_PIN,
+  STRUCTURED_SERVER_MODULE
+} from "./mlx-env.js";
 import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
 
 /**
@@ -382,6 +387,15 @@ export function managedModelServer(
   return new ManagedModelServer(options);
 }
 
+export type MlxStructuredOptions = {
+  /**
+   * Source of the structured decoding overlay package: a local directory
+   * (pip-installable) or a pinned PyPI spec. Defaults to this repository's
+   * python/mlx-lm-structured, which works for in-repo usage.
+   */
+  overlaySpec?: string;
+};
+
 export type MlxServerOptions = {
   /** Hugging Face repo id the server loads (e.g. mlx-community/...). */
   model: string;
@@ -389,8 +403,48 @@ export type MlxServerOptions = {
   env?: MlxEnvOptions | MlxEnv;
   /** Extra mlx_lm server flags (e.g. --max-tokens). */
   extraArgs?: string[];
+  /**
+   * Enable structured decoding (`response_format`, `guided_json`,
+   * `guided_regex`, `guided_choice`): the env additionally installs the
+   * mlx-lm-structured overlay and the server is spawned through its entry
+   * point. With this set the AI SDK's JSON output modes (generateObject,
+   * responseFormat) are actually enforced by the server.
+   */
+  structured?: boolean | MlxStructuredOptions;
 } & Omit<ManagedModelServerOptions, "prepare" | "modelId" | "createModel"> &
   Pick<Partial<ManagedModelServerOptions>, "createModel">;
+
+/** The in-repo location of the overlay (works when running from the repo). */
+function defaultOverlaySpec(): string {
+  const path = fileURLToPath(
+    new URL("../../../python/mlx-lm-structured", import.meta.url)
+  );
+  if (!existsSync(path)) {
+    throw new Error(
+      "cannot resolve the mlx-lm-structured overlay package: " +
+        `${path} does not exist. Pass structured.overlaySpec (a local ` +
+        "package directory or a pinned PyPI spec) explicitly."
+    );
+  }
+  return path;
+}
+
+/** Env options that add the structured decoding overlay to the owned env. */
+function structuredEnvOptions(
+  structured: boolean | MlxStructuredOptions
+): Pick<
+  MlxEnvOptions,
+  "extraPackageSpecs" | "extraImportNames" | "serverModule"
+> {
+  const overlaySpec =
+    (typeof structured === "object" ? structured.overlaySpec : undefined) ??
+    defaultOverlaySpec();
+  return {
+    extraPackageSpecs: [`outlines-core==${OUTLINES_CORE_PIN}`, overlaySpec],
+    extraImportNames: ["mlx_lm_structured"],
+    serverModule: STRUCTURED_SERVER_MODULE
+  };
+}
 
 /**
  * The MLX preset: a managed server whose Python environment is owned by
@@ -400,9 +454,23 @@ export type MlxServerOptions = {
 export function mlxServer(
   options: MlxServerOptions
 ): ManagedModelServer & { env: MlxEnv } {
-  const env =
-    options.env instanceof MlxEnv ? options.env : new MlxEnv(options.env);
-  const { model, env: _env, extraArgs, ...serverOptions } = options;
+  const { model, env: envOption, extraArgs, structured, ...serverOptions } =
+    options;
+  let env: MlxEnv;
+  if (envOption instanceof MlxEnv) {
+    if (structured) {
+      throw new Error(
+        "structured cannot be combined with a pre-built MlxEnv: configure " +
+          "extraPackageSpecs/extraImportNames/serverModule on the env instead"
+      );
+    }
+    env = envOption;
+  } else {
+    env = new MlxEnv({
+      ...(envOption ?? {}),
+      ...(structured ? structuredEnvOptions(structured) : {})
+    });
+  }
   const server = new ManagedModelServer({
     ...serverOptions,
     modelId: model,
