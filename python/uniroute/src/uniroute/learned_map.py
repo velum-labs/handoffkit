@@ -61,6 +61,31 @@ def _init_theta(centroids: np.ndarray, train_embeddings: np.ndarray) -> np.ndarr
     return np.concatenate([weights, bias[:, None]], axis=1)
 
 
+def loss_and_grad(
+    theta: np.ndarray,
+    features: np.ndarray,
+    errors: np.ndarray,
+    psi_t: np.ndarray,
+) -> tuple[float, np.ndarray]:
+    """Mean log loss of gamma = softmax(features theta^T) psi_t, and d/d theta.
+
+    Exposed as a module function so the analytic gradient can be verified
+    against finite differences in the test suite.
+    """
+    n_prompts = features.shape[0]
+    phi = _softmax(features @ theta.T)  # (n, K)
+    gamma = np.clip(phi @ psi_t, _EPS, 1.0 - _EPS)  # (n, M)
+    loss = -(errors * np.log(gamma) + (1.0 - errors) * np.log(1.0 - gamma)).mean()
+
+    d_gamma = (gamma - errors) / (gamma * (1.0 - gamma))  # dL/dgamma * (n*M)
+    d_phi = d_gamma @ psi_t.T  # (n, K)
+    # Softmax Jacobian: dL/dz_k = phi_k * (g_k - sum_j phi_j g_j).
+    inner = (phi * d_phi).sum(axis=1, keepdims=True)
+    d_logits = phi * (d_phi - inner)
+    grad = (d_logits.T @ features) / (n_prompts * errors.shape[1])
+    return float(loss), grad
+
+
 @dataclass(frozen=True)
 class TrainingTrace:
     """Log-loss trajectory of the gradient descent, for tests and demos."""
@@ -156,22 +181,9 @@ class UniRouteLearnedMap:
         v_t = np.zeros_like(theta)
         beta1, beta2, adam_eps = 0.9, 0.999, 1e-8
         losses: list[float] = []
-        n_prompts = features.shape[0]
         for step in range(1, self.epochs + 1):
-            logits = features @ theta.T
-            phi = _softmax(logits)  # (n, K)
-            gamma = np.clip(phi @ psi_t, _EPS, 1.0 - _EPS)  # (n, M)
-            loss = -(
-                train_errors * np.log(gamma) + (1.0 - train_errors) * np.log(1.0 - gamma)
-            ).mean()
-            losses.append(float(loss))
-
-            d_gamma = (gamma - train_errors) / (gamma * (1.0 - gamma))  # dL/dgamma * n*M
-            d_phi = d_gamma @ psi_t.T  # (n, K)
-            # Softmax Jacobian: dL/dz_k = phi_k * (g_k - sum_j phi_j g_j).
-            inner = (phi * d_phi).sum(axis=1, keepdims=True)
-            d_logits = phi * (d_phi - inner)
-            grad = (d_logits.T @ features) / (n_prompts * train_errors.shape[1])
+            loss, grad = loss_and_grad(theta, features, train_errors, psi_t)
+            losses.append(loss)
 
             m_t = beta1 * m_t + (1.0 - beta1) * grad
             v_t = beta2 * v_t + (1.0 - beta2) * grad * grad
