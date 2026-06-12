@@ -8,3 +8,6 @@ coverage/
 .DS_Store
 .warrant/
 .warrant-runner/
+__pycache__/
+*.egg-info/
+.pytest_cache/
