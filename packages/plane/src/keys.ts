@@ -19,19 +19,19 @@ import { generateEd25519KeyPair } from "@warrant/protocol";
  */
 export type MasterKey = { readonly material: Buffer };
 
-// TODO(hardcoded): master-key env var name is fixed; not overridable for multi-tenant or test harnesses.
-const MASTER_KEY_ENV = "WARRANT_MASTER_KEY";
+/** Default env var carrying the master key; override via resolveMasterKey. */
+export const DEFAULT_MASTER_KEY_ENV = "WARRANT_MASTER_KEY";
 
+/**
+ * Decode master-key material. Canonical form is 64 hex chars (32 bytes) —
+ * what generateMasterKeyHex produces and what we recommend. A non-hex value
+ * is treated as raw UTF-8 bytes (a passphrase). We deliberately do NOT
+ * second-guess with base64 decoding, which is what made the order
+ * ambiguous: hex or passphrase, nothing in between.
+ */
 function decodeMaterial(raw: string): Buffer {
   const trimmed = raw.trim();
   if (/^[0-9a-f]{64}$/i.test(trimmed)) return Buffer.from(trimmed, "hex");
-  // TODO(brittle): ambiguous decode order (hex → base64 → utf8) can misinterpret keys; prefer one canonical encoding.
-  try {
-    const b = Buffer.from(trimmed, "base64");
-    if (b.length >= 16) return b;
-  } catch {
-    // fall through
-  }
   return Buffer.from(trimmed, "utf8");
 }
 
@@ -51,9 +51,9 @@ export function masterKeyFromMaterial(raw: string): MasterKey {
  */
 export function resolveMasterKey(
   keyFilePath: string,
-  options: { createIfMissing?: boolean } = {}
+  options: { createIfMissing?: boolean; envVar?: string } = {}
 ): MasterKey {
-  const fromEnv = process.env[MASTER_KEY_ENV];
+  const fromEnv = process.env[options.envVar ?? DEFAULT_MASTER_KEY_ENV];
   if (fromEnv && fromEnv.length > 0) {
     return { material: decodeMaterial(fromEnv) };
   }
@@ -63,11 +63,11 @@ export function resolveMasterKey(
   if (options.createIfMissing) {
     mkdirSync(dirname(keyFilePath), { recursive: true });
     const hex = generateMasterKeyHex();
-    writeFileSync(keyFilePath, hex, { mode: 0o600 }); // TODO(hardcoded): key file mode 0o600 is not configurable.
+    writeFileSync(keyFilePath, hex, { mode: KEY_FILE_MODE });
     return { material: Buffer.from(hex, "hex") };
   }
   throw new Error(
-    `no master key: set ${MASTER_KEY_ENV} or provide a key file at ${keyFilePath}`
+    `no master key: set ${options.envVar ?? DEFAULT_MASTER_KEY_ENV} or provide a key file at ${keyFilePath}`
   );
 }
 
@@ -79,13 +79,21 @@ export type SealedBlob = {
   data: string;
 };
 
+// AES-256-GCM sealing parameters. These bind to AES-256 (32-byte key,
+// 12-byte GCM IV) and a 16-byte scrypt salt. scrypt uses Node's defaults
+// (N=16384, r=8, p=1), which are appropriate for sealing small, infrequent
+// payloads (the org key and the secret file). scryptSync is acceptable here
+// precisely because these payloads are small and sealed/opened rarely.
+const SALT_BYTES = 16;
+const IV_BYTES = 12;
+const KEY_BYTES = 32;
+const KEY_FILE_MODE = 0o600;
+
 /** AES-256-GCM with a per-blob scrypt-derived key. */
 export function seal(master: MasterKey, plaintext: Buffer): SealedBlob {
-  // TODO(hardcoded): scrypt N/r/p defaults, salt (16B), IV (12B), and key length (32) are not tunable or documented here.
-  const salt = randomBytes(16);
-  // TODO(brittle): scryptSync blocks the event loop on every seal/open; use async scrypt or worker thread for large payloads.
-  const key = scryptSync(master.material, salt, 32);
-  const iv = randomBytes(12);
+  const salt = randomBytes(SALT_BYTES);
+  const key = scryptSync(master.material, salt, KEY_BYTES);
+  const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const data = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   return {
@@ -97,8 +105,23 @@ export function seal(master: MasterKey, plaintext: Buffer): SealedBlob {
   };
 }
 
+function assertSealedBlob(value: unknown): asserts value is SealedBlob {
+  const blob = value as Partial<SealedBlob> | null;
+  if (
+    !blob ||
+    blob.version !== "warrant.sealed.v1" ||
+    typeof blob.salt !== "string" ||
+    typeof blob.iv !== "string" ||
+    typeof blob.tag !== "string" ||
+    typeof blob.data !== "string"
+  ) {
+    throw new Error("sealed blob is malformed or not a warrant.sealed.v1 envelope");
+  }
+}
+
 export function open(master: MasterKey, blob: SealedBlob): Buffer {
-  const key = scryptSync(master.material, Buffer.from(blob.salt, "base64"), 32);
+  assertSealedBlob(blob);
+  const key = scryptSync(master.material, Buffer.from(blob.salt, "base64"), KEY_BYTES);
   const decipher = createDecipheriv(
     "aes-256-gcm",
     key,
@@ -121,9 +144,9 @@ export function sealToFile(
 }
 
 export function openFromFile(master: MasterKey, path: string): Buffer {
-  // TODO(brittle): SealedBlob JSON is parsed without schema validation; corrupt/tampered files fail opaquely at decrypt.
-  const blob = JSON.parse(readFileSync(path, "utf8")) as SealedBlob;
-  return open(master, blob);
+  const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+  assertSealedBlob(parsed);
+  return open(master, parsed);
 }
 
 export type OrgKeyPair = { publicKeyPem: string; privateKeyPem: string };

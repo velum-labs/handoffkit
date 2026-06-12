@@ -16,6 +16,7 @@
     "@warrant/plane": "workspace:*",
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",
-    "@warrant/sdk": "workspace:*"
+    "@warrant/sdk": "workspace:*",
+    "@warrant/workspace": "workspace:*"
   }
 }

@@ -3,7 +3,6 @@
  * shared by the integration tests and the demo series. Everything runs
  * locally with the built-in mock agent: no vendor CLIs, no API keys.
  */
-import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -21,15 +20,11 @@ import type { Policy } from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
 import type { SessionBackend } from "@warrant/runner";
 import { PlaneClient } from "@warrant/sdk";
+import { gitText } from "@warrant/workspace";
 
-// TODO(brittle): third copy of inline git() helper
-// TODO(lib): suggest workspace git centralization
+/** Re-exported shared git helper so fixtures and tests share one implementation. */
 export function git(cwd: string, args: string[]): string {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
-  }
-  return result.stdout;
+  return gitText(cwd, args);
 }
 
 export type RepoFixtureOptions = {

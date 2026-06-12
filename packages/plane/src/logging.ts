@@ -2,14 +2,18 @@ import { pino } from "pino";
 import type { Logger } from "pino";
 
 /**
- * Structured plane logger. Level via LOG_LEVEL; defaults to "silent" so the
- * library never pollutes a host's stdout unless logging is explicitly
- * requested (operators set LOG_LEVEL=info in deployment).
+ * Structured plane logger. Level via the `level` argument or LOG_LEVEL,
+ * defaulting to "silent" so the library never pollutes a host's stdout
+ * unless logging is explicitly requested (operators set LOG_LEVEL=info, or
+ * inject a configured logger via PlaneConfig.logger).
  */
-export function createLogger(name = "warrant-plane"): Logger {
+export function createLogger(
+  name = "warrant-plane",
+  level: string = process.env.LOG_LEVEL ?? "silent"
+): Logger {
   return pino({
-    name, // TODO(hardcoded): default logger name and LOG_LEVEL env default ("silent") are not configurable via PlaneConfig.
-    level: process.env.LOG_LEVEL ?? "silent",
+    name,
+    level,
     // The plane handles secrets and tokens; redact common carriers defensively.
     redact: {
       paths: [
@@ -27,7 +31,12 @@ export function createLogger(name = "warrant-plane"): Logger {
 }
 
 /** Counters the plane increments for operational visibility. */
-// TODO(lib): suggest prom-client — in-memory counters lack histograms, labels, and a standard /metrics scrape format.
+/**
+ * Lightweight in-process counters exposed at /v1/metrics as JSON. This is a
+ * deliberately minimal surface (counts, not histograms/labels): a deployment
+ * that needs a Prometheus scrape format wraps these counters in its own
+ * exporter rather than the plane taking on that dependency.
+ */
 export class Metrics {
   private readonly counters = new Map<string, number>();
 

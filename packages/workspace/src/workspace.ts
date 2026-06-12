@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
@@ -8,10 +8,20 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { mkdtempSync } from "node:fs";
 
 import { sha256Hex } from "@warrant/protocol";
 import type { ManifestFile, WorkspaceManifest } from "@warrant/protocol";
+
+import { gitBinary, gitText } from "./git.js";
+
+/** Default branch prefix and committer for divergence-safe pulls. */
+export const PULL_BRANCH_PREFIX = "warrant/";
+export const DEFAULT_PULL_COMMITTER = {
+  name: "warrant",
+  email: "warrant@localhost"
+};
+/** Sentinel content hash recorded for files deleted by a run. */
+export const DELETED_FILE_HASH = "0".repeat(64);
 
 export const DEFAULT_DENY_PATTERNS = [
   ".env",
@@ -22,37 +32,16 @@ export const DEFAULT_DENY_PATTERNS = [
   "id_ed25519*"
 ];
 
-// TODO(lib): suggest simple-git or isomorphic-git — raw spawnSync git
-// TODO(brittle): raw spawnSync git, no version/path checks
 function git(cwd: string, args: string[], allowFail = false): string {
-  const result = spawnSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    // TODO(hardcoded): git maxBuffer 256MB
-    maxBuffer: 256 * 1024 * 1024
-  });
-  if (result.status !== 0 && !allowFail) {
-    throw new Error(
-      `git ${args.join(" ")} failed: ${result.stderr || result.stdout}`
-    );
-  }
-  return result.stdout;
+  return gitText(cwd, args, { allowFail });
 }
 
-function gitBinary(cwd: string, args: string[]): Buffer {
-  const result = spawnSync("git", args, {
-    cwd,
-    maxBuffer: 256 * 1024 * 1024
-  });
-  if (result.status !== 0) {
-    throw new Error(`git ${args.join(" ")} failed: ${result.stderr.toString()}`);
-  }
-  return result.stdout;
-}
-
-/** Minimal glob: `**` crosses directories, `*` within a segment, `?` one char. */
-// TODO(lib): suggest minimatch/micromatch — glob
-// TODO(brittle): custom minimal glob
+/**
+ * Minimal glob matcher (`**` crosses directories, `*` within a segment, `?`
+ * one char), kept deliberately small: it only matches the deny-pattern and
+ * untracked-allowlist globs in this package, where a full minimatch
+ * dependency would be disproportionate. Behavior is covered by tests.
+ */
 export function matchesPattern(path: string, pattern: string): boolean {
   const target = pattern.includes("/") ? path : path.split("/").pop() ?? path;
   const regex = pattern
@@ -182,9 +171,6 @@ export type WorkspaceOutput = {
   changedFiles: { path: string; contentHash: string }[];
 };
 
-// TODO(hardcoded): DELETED_HASH
-const DELETED_HASH = "0".repeat(64);
-
 /** Collect the session's output as a binary diff against the base ref. */
 export function collectOutput(repoDir: string, baseRef: string): WorkspaceOutput {
   git(repoDir, ["add", "-A"]);
@@ -198,7 +184,7 @@ export function collectOutput(repoDir: string, baseRef: string): WorkspaceOutput
       statSync(full);
       return { path, contentHash: sha256Hex(readFileSync(full)) };
     } catch {
-      return { path, contentHash: DELETED_HASH };
+      return { path, contentHash: DELETED_FILE_HASH };
     }
   });
   return { diff, changedFiles };
@@ -212,6 +198,10 @@ export type PullResult =
 export type PullOptions = {
   /** Always land results on a dedicated branch; never touch the checkout. */
   forceBranch?: boolean;
+  /** Branch name prefix for branch-mode pulls. Defaults to "warrant/". */
+  branchPrefix?: string;
+  /** Committer identity for the branch-mode commit. */
+  committer?: { name: string; email: string };
 };
 
 /**
@@ -243,19 +233,18 @@ export function pullRun(
   }
 
   const shortId = runId.replace(/^run_/, "").slice(0, 12);
-  // TODO(hardcoded): branch prefix warrant/
-  const branch = `warrant/${shortId}`;
+  const branch = `${options.branchPrefix ?? PULL_BRANCH_PREFIX}${shortId}`;
+  const committer = options.committer ?? DEFAULT_PULL_COMMITTER;
   const worktree = mkdtempSync(join(tmpdir(), "warrant-worktree-"));
   try {
     git(repoDir, ["worktree", "add", "--detach", worktree, baseRef]);
     git(worktree, ["apply", "--binary", "--whitespace=nowarn", diffPath]);
     git(worktree, ["add", "-A"]);
-    // TODO(hardcoded): pull git identity
     git(worktree, [
       "-c",
-      "user.name=warrant",
+      `user.name=${committer.name}`,
       "-c",
-      "user.email=warrant@localhost",
+      `user.email=${committer.email}`,
       "commit",
       "--quiet",
       "-m",

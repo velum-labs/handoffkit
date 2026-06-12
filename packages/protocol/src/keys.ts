@@ -6,6 +6,7 @@ import {
   verify as cryptoVerify
 } from "node:crypto";
 
+import { KEY_ID_HEX_LENGTH } from "./constants.js";
 import { sha256Hex } from "./hash.js";
 
 export type KeyPairPem = {
@@ -23,10 +24,14 @@ export function generateEd25519KeyPair(): KeyPairPem {
   };
 }
 
-/** Stable identifier for a public key: sha256 of its PEM, truncated. */
+/**
+ * Stable identifier for a public key: the algorithm tag plus a truncated
+ * SHA-256 fingerprint of its PEM. The fingerprint length is a deliberate,
+ * shared constant (KEY_ID_HEX_LENGTH) — 64 bits is ample to identify an
+ * enrolled key while keeping ids short.
+ */
 export function keyIdFromPublicPem(publicKeyPem: string): string {
-  // TODO(hardcoded): keyId truncates SHA-256 to 16 hex chars, not configurable
-  return `ed25519:${sha256Hex(publicKeyPem.trim()).slice(0, 16)}`;
+  return `ed25519:${sha256Hex(publicKeyPem.trim()).slice(0, KEY_ID_HEX_LENGTH)}`;
 }
 
 export function signData(privateKeyPem: string, data: string | Buffer): string {

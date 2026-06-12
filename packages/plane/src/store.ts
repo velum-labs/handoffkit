@@ -42,6 +42,17 @@ export type RunnerRecord = {
 /** A principal authorized to call the plane, identified by a hashed key. */
 export type PrincipalRole = "admin" | "requester" | "approver" | "enroller";
 
+export const PRINCIPAL_ROLES: readonly PrincipalRole[] = [
+  "admin",
+  "requester",
+  "approver",
+  "enroller"
+];
+
+export function isPrincipalRole(value: string): value is PrincipalRole {
+  return (PRINCIPAL_ROLES as readonly string[]).includes(value);
+}
+
 export type PrincipalRecord = {
   principalId: string;
   name: string;
@@ -74,7 +85,10 @@ export type RunSummaryRow = {
  * deliberately narrow so a Postgres adapter can be added for multi-node
  * deployments without touching the plane logic.
  */
-// TODO(brittle): claimNextRun and rate limiting assume single-writer semantics; multi-node needs a shared store + distributed limiter.
+// Note: claimNextRun and the in-memory rate limiter assume single-writer
+// (single-node) semantics, which the SQLite-backed default provides. A
+// multi-node deployment implements this interface over a shared database and
+// pairs it with a distributed limiter; that is the documented HA seam.
 export interface PlaneStore {
   /** Release any underlying handles. */
   close(): void;

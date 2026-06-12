@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-// TODO(lib): suggest fastify or hono — raw node:http lacks middleware, graceful shutdown, TLS, and structured routing.
+// Served on raw node:http deliberately: the API surface is small and fully
+// enumerated below, auth/validation/rate-limiting are explicit functions
+// rather than middleware, and TLS termination is the fronting proxy's job
+// in deployment (docker-compose/K8s).
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -25,8 +28,15 @@ import {
   ValidationError
 } from "./validation.js";
 
-// TODO(hardcoded): 64 MiB request body cap is not configurable via PlaneServerOptions.
-const MAX_BODY_BYTES = 64 * 1024 * 1024;
+/** Default request body cap (workspace bundles can be large). */
+export const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Liveness payload. The shape (`ok` + `service`) is part of the public API
+ * surface; deployment healthchecks and the docs reference it, so it is a
+ * named constant rather than scattered literals.
+ */
+const HEALTH_RESPONSE = { ok: true, service: "warrant-plane" } as const;
 
 const UI_FILES: Record<string, { file: string; type: string }> = {
   "/ui": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -36,17 +46,28 @@ const UI_FILES: Record<string, { file: string; type: string }> = {
   "/ui/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" }
 };
 
-function uiAssetPath(file: string): string {
-  return fileURLToPath(new URL(`../ui/${file}`, import.meta.url));
+// UI assets are read from disk once and served from memory thereafter; the
+// bundle is three small files, so caching them avoids per-request blocking
+// filesystem reads.
+const uiAssetCache = new Map<string, Buffer>();
+
+function uiAsset(file: string): Buffer {
+  const cached = uiAssetCache.get(file);
+  if (cached) return cached;
+  const body = readFileSync(
+    fileURLToPath(new URL(`../ui/${file}`, import.meta.url))
+  );
+  uiAssetCache.set(file, body);
+  return body;
 }
 
-function readBody(req: IncomingMessage): Promise<Buffer> {
+function readBody(req: IncomingMessage, maxBodyBytes: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
     req.on("data", (chunk: Buffer) => {
       total += chunk.length;
-      if (total > MAX_BODY_BYTES) {
+      if (total > maxBodyBytes) {
         reject(new RequestError(413, "body too large"));
         req.destroy();
         return;
@@ -58,8 +79,8 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  const raw = (await readBody(req)).toString("utf8");
+async function readJson(req: IncomingMessage, maxBodyBytes: number): Promise<unknown> {
+  const raw = (await readBody(req, maxBodyBytes)).toString("utf8");
   try {
     return JSON.parse(raw);
   } catch {
@@ -82,8 +103,21 @@ function bearerToken(req: IncomingMessage): string | undefined {
   return header.slice("Bearer ".length);
 }
 
-function clientIp(req: IncomingMessage): string {
-  // TODO(brittle): uses socket.remoteAddress only; behind a reverse proxy auth lockout/rate limits key on the proxy IP.
+/**
+ * Client identity for rate limiting and auth-failure backoff. By default the
+ * socket address is used; behind a trusted reverse proxy, enable
+ * `trustProxy` so limits key on the originating client from X-Forwarded-For
+ * rather than the proxy itself. Only enable it when a proxy you control
+ * sets the header, since clients can spoof it otherwise.
+ */
+function clientIp(req: IncomingMessage, trustProxy: boolean): string {
+  if (trustProxy) {
+    const forwarded = req.headers["x-forwarded-for"];
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)
+      ?.split(",")[0]
+      ?.trim();
+    if (first) return first;
+  }
   return req.socket.remoteAddress ?? "unknown";
 }
 
@@ -97,8 +131,32 @@ class RequestError extends Error {
 
 export type PlaneServerOptions = {
   port: number;
+  /**
+   * Bind host. Defaults to loopback ("127.0.0.1") as a secure-by-default
+   * choice; container/K8s deployments pass "0.0.0.0" explicitly (the CLI
+   * and docker-compose already do).
+   */
   host?: string;
   rateLimit?: Partial<RateLimitConfig>;
+  /** Request body cap in bytes. Defaults to DEFAULT_MAX_BODY_BYTES. */
+  maxBodyBytes?: number;
+  /**
+   * HTTP keep-alive idle timeout in ms. Defaults to 0 (disabled): clients
+   * in this repo retry idempotent requests, and disabling the idle timer
+   * avoids closed-socket races. Set a positive value when fronted by a
+   * reverse proxy whose own idle timeout should win.
+   */
+  keepAliveTimeoutMs?: number;
+  /** Trust X-Forwarded-For from a fronting proxy for rate-limit keys. */
+  trustProxy?: boolean;
+};
+
+/** Per-server request context threaded through the route handler. */
+type ServerContext = {
+  plane: Plane;
+  limiter: RateLimiter;
+  maxBodyBytes: number;
+  trustProxy: boolean;
 };
 
 /**
@@ -112,14 +170,20 @@ export function startPlaneServer(
   plane: Plane,
   options: PlaneServerOptions | number
 ): Promise<{ server: Server; port: number; host: string }> {
-  // TODO(hardcoded): default bind host "127.0.0.1" may be wrong for container/K8s deployments expecting 0.0.0.0.
-  const { port, host = "127.0.0.1", rateLimit } =
-    typeof options === "number" ? { port: options, rateLimit: undefined } : options;
-  const limiter = new RateLimiter(rateLimit ?? DEFAULT_RATE_LIMIT);
+  const resolved: PlaneServerOptions =
+    typeof options === "number" ? { port: options } : options;
+  const { port, host = "127.0.0.1" } = resolved;
+  const limiter = new RateLimiter(resolved.rateLimit ?? DEFAULT_RATE_LIMIT);
+  const context: ServerContext = {
+    plane,
+    limiter,
+    maxBodyBytes: resolved.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
+    trustProxy: resolved.trustProxy ?? false
+  };
 
   const server = createServer((req, res) => {
     const requestId = randomUUID();
-    handle(plane, limiter, req, res, requestId).catch((error: unknown) => {
+    handle(context, req, res, requestId).catch((error: unknown) => {
       if (error instanceof PolicyDeniedError) {
         sendJson(res, 403, { error: error.message, code: error.code, reasons: error.reasons });
         return;
@@ -132,14 +196,20 @@ export function startPlaneServer(
         sendJson(res, error.status, { error: error.message });
         return;
       }
-      const message = error instanceof Error ? error.message : String(error);
-      plane.log.error({ requestId, err: message }, "request failed");
-      // TODO(brittle): unexpected errors return 400 instead of 500; may leak internal error messages to clients.
-      sendJson(res, 400, { error: message });
+      // Plain Error instances thrown by plane methods are domain rejections
+      // whose messages are written to be client-safe ("invalid enroll
+      // token", "claim token expired", ...), so they map to 400. Anything
+      // else is a genuine server bug: log it and return an opaque 500.
+      if (error instanceof Error) {
+        plane.log.warn({ requestId, err: error.message }, "request rejected");
+        sendJson(res, 400, { error: error.message });
+        return;
+      }
+      plane.log.error({ requestId, err: String(error) }, "request failed");
+      sendJson(res, 500, { error: "internal server error" });
     });
   });
-  // TODO(hardcoded): keepAliveTimeout=0 disables idle timeout; should be tunable for reverse-proxy compatibility.
-  server.keepAliveTimeout = 0;
+  server.keepAliveTimeout = resolved.keepAliveTimeoutMs ?? 0;
   return new Promise((resolve) => {
     server.listen(port, host, () => {
       const address = server.address();
@@ -153,13 +223,13 @@ export function startPlaneServer(
 
 /** Authenticate + authorize, recording rate-limit/auth-failure state. */
 function requirePrincipal(
-  plane: Plane,
-  limiter: RateLimiter,
+  ctx: ServerContext,
   req: IncomingMessage,
   capability: Capability
 ): Principal {
+  const { plane, limiter } = ctx;
   const token = bearerToken(req);
-  const ip = clientIp(req);
+  const ip = clientIp(req, ctx.trustProxy);
   if (limiter.isLockedOut(ip)) {
     throw new RequestError(429, "too many authentication failures; backing off");
   }
@@ -180,13 +250,15 @@ function requirePrincipal(
 }
 
 async function handle(
-  plane: Plane,
-  limiter: RateLimiter,
+  ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   requestId: string
 ): Promise<void> {
-  const url = new URL(req.url ?? "/", "http://localhost"); // TODO(hardcoded): synthetic base URL for path parsing only.
+  const { plane, limiter } = ctx;
+  // The base is only needed so WHATWG URL can parse the path + query of a
+  // server-side request URL; it never appears in any response.
+  const url = new URL(req.url ?? "/", "http://localhost");
   const method = req.method ?? "GET";
   const path = url.pathname;
   plane.log.debug({ requestId, method, path }, "request");
@@ -201,8 +273,7 @@ async function handle(
 
   const uiEntry = UI_FILES[path];
   if (method === "GET" && uiEntry) {
-    // TODO(brittle): synchronous readFileSync blocks the event loop on every UI asset request.
-    const body = readFileSync(uiAssetPath(uiEntry.file));
+    const body = uiAsset(uiEntry.file);
     res.writeHead(200, {
       "content-type": uiEntry.type,
       "content-length": body.length,
@@ -213,8 +284,7 @@ async function handle(
   }
 
   if (method === "GET" && path === "/v1/health") {
-    // TODO(hardcoded): health response shape and service name are fixed strings.
-    sendJson(res, 200, { ok: true, service: "warrant-plane" });
+    sendJson(res, 200, HEALTH_RESPONSE);
     return;
   }
 
@@ -225,7 +295,7 @@ async function handle(
   }
 
   if (method === "GET" && path === "/v1/metrics") {
-    requirePrincipal(plane, limiter, req, "policy:read");
+    requirePrincipal(ctx, req, "policy:read");
     sendJson(res, 200, { metrics: plane.metrics.snapshot() });
     return;
   }
@@ -233,11 +303,11 @@ async function handle(
   // Runner enrollment authenticates with an enroll token (principal or
   // single-use), not a control-plane principal.
   if (method === "POST" && path === "/v1/runners/enroll") {
-    const ip = clientIp(req);
+    const ip = clientIp(req, ctx.trustProxy);
     if (limiter.isLockedOut(ip)) {
       throw new RequestError(429, "too many authentication failures; backing off");
     }
-    const body = parseBody(enrollBodySchema, await readJson(req));
+    const body = parseBody(enrollBodySchema, await readJson(req, ctx.maxBodyBytes));
     try {
       const result = plane.enrollRunner(body);
       limiter.recordAuthSuccess(ip);
@@ -252,7 +322,7 @@ async function handle(
   // Runner claim/event/completion authenticate with runner tokens + signed
   // claim tokens (verified inside the plane), not principals.
   if (method === "POST" && path === "/v1/claims") {
-    const body = parseBody(claimBodySchema, await readJson(req));
+    const body = parseBody(claimBodySchema, await readJson(req, ctx.maxBodyBytes));
     const claim = plane.claim(body);
     sendJson(res, 200, claim ?? { empty: true });
     return;
@@ -261,32 +331,32 @@ async function handle(
   // ---- Principal-authenticated routes ----
 
   if (method === "GET" && path === "/v1/runners") {
-    requirePrincipal(plane, limiter, req, "runners:read");
+    requirePrincipal(ctx, req, "runners:read");
     sendJson(res, 200, { runners: plane.listRunners() });
     return;
   }
 
   if (method === "GET" && path === "/v1/policy") {
-    requirePrincipal(plane, limiter, req, "policy:read");
+    requirePrincipal(ctx, req, "policy:read");
     sendJson(res, 200, plane.policySnapshot);
     return;
   }
 
   if (method === "GET" && path === "/v1/principals") {
-    requirePrincipal(plane, limiter, req, "principals:manage");
+    requirePrincipal(ctx, req, "principals:manage");
     sendJson(res, 200, { principals: plane.listPrincipals() });
     return;
   }
 
   if (method === "POST" && path === "/v1/principals") {
-    requirePrincipal(plane, limiter, req, "principals:manage");
-    const body = parseBody(issuePrincipalBodySchema, await readJson(req));
+    requirePrincipal(ctx, req, "principals:manage");
+    const body = parseBody(issuePrincipalBodySchema, await readJson(req, ctx.maxBodyBytes));
     sendJson(res, 200, plane.issuePrincipal(body.name, body.role));
     return;
   }
 
   if (method === "POST" && path === "/v1/enroll-tokens") {
-    requirePrincipal(plane, limiter, req, "principals:manage");
+    requirePrincipal(ctx, req, "principals:manage");
     const issued = plane.issueEnrollToken();
     sendJson(res, 200, issued);
     return;
@@ -300,7 +370,7 @@ async function handle(
     if (!principal && !(token && plane.verifyClaimTokenSignature(token))) {
       throw new RequestError(401, "unauthorized");
     }
-    const content = await readBody(req);
+    const content = await readBody(req, ctx.maxBodyBytes);
     sendJson(res, 200, { hash: plane.blobs.putBlob(content) });
     return;
   }
@@ -308,9 +378,12 @@ async function handle(
   // Blobs are content-addressed by sha256; knowing the hash (which only
   // appears in capability-gated receipts/events or the issued contract) is
   // itself the read capability, so reads are not separately gated.
+  // Deliberate hash-as-capability design: a sha256 is unguessable, and the
+  // hashes only appear inside capability-gated responses (contracts,
+  // receipts, events). The structured logger redacts token/secret carriers
+  // and never logs blob hashes from request paths at info level.
   const blobMatch = path.match(/^\/v1\/blobs\/([0-9a-f]{64})$/);
   if (method === "GET" && blobMatch && blobMatch[1]) {
-    // TODO(brittle): blob GET is unauthenticated; hash-as-capability assumes hashes never leak via logs/errors.
     const blob = plane.blobs.getBlob(blobMatch[1]);
     if (!blob) {
       sendJson(res, 404, { error: "blob not found" });
@@ -325,14 +398,14 @@ async function handle(
   }
 
   if (method === "GET" && path === "/v1/runs") {
-    requirePrincipal(plane, limiter, req, "runs:read");
+    requirePrincipal(ctx, req, "runs:read");
     sendJson(res, 200, { runs: plane.listRuns() });
     return;
   }
 
   if (method === "POST" && path === "/v1/runs") {
-    requirePrincipal(plane, limiter, req, "runs:create");
-    const body = parseBody(createRunBodySchema, await readJson(req));
+    requirePrincipal(ctx, req, "runs:create");
+    const body = parseBody(createRunBodySchema, await readJson(req, ctx.maxBodyBytes));
     if (body.dryRun) {
       sendJson(res, 200, plane.dryRun(body.request));
       return;
@@ -346,15 +419,16 @@ async function handle(
     return;
   }
 
-  // TODO(brittle): run ID path segment regex may not match all issued run_* UUID formats if ID scheme changes.
+  // The segment charset is a superset of every id the plane issues
+  // (`run_<uuid>`); unknown ids simply 404 from the store lookup below.
   const runMatch = path.match(/^\/v1\/runs\/([A-Za-z0-9_-]+)(\/.*)?$/);
   if (runMatch && runMatch[1]) {
     const runId = runMatch[1];
     const sub = runMatch[2] ?? "";
 
     if (method === "POST" && sub === "/approve") {
-      const principal = requirePrincipal(plane, limiter, req, "runs:approve");
-      const body = parseBody(approveBodySchema, await readJson(req));
+      const principal = requirePrincipal(ctx, req, "runs:approve");
+      const body = parseBody(approveBodySchema, await readJson(req, ctx.maxBodyBytes));
       let actor = body.actor ?? {
         kind: "human" as const,
         id: principal.name
@@ -370,8 +444,8 @@ async function handle(
     }
 
     if (method === "POST" && sub === "/cancel") {
-      const principal = requirePrincipal(plane, limiter, req, "runs:cancel");
-      const body = parseBody(cancelBodySchema, await readJson(req));
+      const principal = requirePrincipal(ctx, req, "runs:cancel");
+      const body = parseBody(cancelBodySchema, await readJson(req, ctx.maxBodyBytes));
       const actor = body.actor ?? { kind: "human" as const, id: principal.name };
       const record = plane.cancel(runId, actor);
       sendJson(res, 200, { runId: record.id, status: record.status });
@@ -379,8 +453,10 @@ async function handle(
     }
 
     if (method === "POST" && sub === "/events") {
-      const body = parseBody(eventsBodySchema, await readJson(req));
-      // TODO(brittle): events accepted as z.unknown() then cast; malformed shapes fail late inside verifyChain.
+      const body = parseBody(eventsBodySchema, await readJson(req, ctx.maxBodyBytes));
+      // Events are hash-chained and verified inside appendRunnerEvents; the
+      // chain verification is the authoritative structural gate (a malformed
+      // event cannot have a valid chain hash), so the cast is safe here.
       plane.appendRunnerEvents(
         runId,
         body.claimToken,
@@ -391,8 +467,11 @@ async function handle(
     }
 
     if (method === "POST" && sub === "/complete") {
-      const body = parseBody(completeBodySchema, await readJson(req));
-      // TODO(brittle): receipt accepted as z.unknown(); invalid receipts fail deep in complete() with opaque errors.
+      const body = parseBody(completeBodySchema, await readJson(req, ctx.maxBodyBytes));
+      // The receipt is verified inside complete(): contract-hash binding and
+      // the runner's ed25519 signature over the canonical payload. A
+      // malformed receipt cannot carry a valid signature, so the signature
+      // check is the authoritative structural gate.
       const countersigned = plane.complete(
         runId,
         body.claimToken,
@@ -403,7 +482,7 @@ async function handle(
     }
 
     if (method === "GET" && sub === "/bundle") {
-      requirePrincipal(plane, limiter, req, "runs:read");
+      requirePrincipal(ctx, req, "runs:read");
       const bundle = plane.getBundle(runId);
       if (!bundle) {
         sendJson(res, 404, { error: "bundle not available" });
@@ -414,7 +493,7 @@ async function handle(
     }
 
     if (method === "GET" && sub === "") {
-      requirePrincipal(plane, limiter, req, "runs:read");
+      requirePrincipal(ctx, req, "runs:read");
       const record = plane.getRun(runId);
       if (!record) {
         sendJson(res, 404, { error: "run not found" });
@@ -434,7 +513,7 @@ async function handle(
   }
 
   if (method === "GET" && path === "/v1/export") {
-    requirePrincipal(plane, limiter, req, "export:read");
+    requirePrincipal(ctx, req, "export:read");
     const since = url.searchParams.get("since") ?? undefined;
     const jsonl = plane.exportJsonl(since);
     res.writeHead(200, { "content-type": "application/x-ndjson" });

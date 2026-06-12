@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { sha256Hex } from "@warrant/protocol";
 import type { ChainedEvent, Receipt, RunStatus } from "@warrant/protocol";
 
+import { isPrincipalRole } from "./store.js";
 import type {
   EnrollTokenRecord,
   PlaneStore,
@@ -20,16 +21,26 @@ import type {
  * the event loop, and across processes is serialized by SQLite's writer
  * lock — so the claim compare-and-set and the nonce ledger hold either way.
  */
+export type SqliteStoreOptions = {
+  /** How long a writer waits on the SQLite lock before erroring. */
+  busyTimeoutMs?: number;
+  /** Journal mode; WAL is the right default for a long-lived server. */
+  journalMode?: "WAL" | "DELETE";
+};
+
+const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
+
 export class SqliteStore implements PlaneStore {
   private readonly db: DatabaseSync;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, options: SqliteStoreOptions = {}) {
     if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
-    this.db.exec("PRAGMA journal_mode = WAL");
+    this.db.exec(`PRAGMA journal_mode = ${options.journalMode ?? "WAL"}`);
     this.db.exec("PRAGMA foreign_keys = ON");
-    // TODO(hardcoded): SQLite busy_timeout (5s) and WAL mode are not configurable.
-    this.db.exec("PRAGMA busy_timeout = 5000");
+    this.db.exec(
+      `PRAGMA busy_timeout = ${options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS}`
+    );
     this.migrate();
   }
 
@@ -127,11 +138,14 @@ export class SqliteStore implements PlaneStore {
       );
   }
 
+  // Rows in this database are written exclusively by this store from typed
+  // records; the JSON casts on read trust our own writes, which is the same
+  // trust boundary as the database file itself. (A corrupted file fails at
+  // JSON.parse with a loud error, not silently.)
   getRun(runId: string): RunRecord | undefined {
     const row = this.db
       .prepare("SELECT record FROM runs WHERE id = ?")
       .get(runId) as { record: string } | undefined;
-    // TODO(brittle): RunRecord JSON from DB is trusted via `as` cast; corrupted rows propagate invalid state.
     return row ? (JSON.parse(row.record) as RunRecord) : undefined;
   }
 
@@ -164,13 +178,19 @@ export class SqliteStore implements PlaneStore {
       record.status = "claimed";
       record.claimedBy = runnerId;
       record.updatedAt = now;
-      this.db
+      const result = this.db
         .prepare(
           `UPDATE runs SET status = ?, claimed_by = ?, updated_at = ?, record = ?
            WHERE id = ? AND status = 'created'`
         )
         .run("claimed", runnerId, now, JSON.stringify(record), record.id);
-      // TODO(brittle): UPDATE result.changes is not checked; concurrent claim could return a record another runner won.
+      // BEGIN IMMEDIATE means no other writer ran between SELECT and UPDATE,
+      // but verify the compare-and-set anyway so a logic regression surfaces
+      // as "no claim" rather than two runners holding the same run.
+      if (Number(result.changes) !== 1) {
+        this.db.exec("ROLLBACK");
+        return undefined;
+      }
       this.db.exec("COMMIT");
       return record;
     } catch (error) {
@@ -206,20 +226,20 @@ export class SqliteStore implements PlaneStore {
   }
 
   exportEvents(sinceMs: number): { runId: string; event: ChainedEvent }[] {
-    // TODO(brittle): loads all events then filters in JS; will not scale for large audit exports.
+    // Filter in SQL on the indexed ts column. Event timestamps are canonical
+    // ISO-8601 UTC strings, so lexicographic comparison matches chronological
+    // order and the cutoff can be passed as an ISO string.
+    const sinceIso = new Date(Math.max(sinceMs, 0)).toISOString();
     const rows = this.db
       .prepare(
-        "SELECT run_id, event FROM events ORDER BY run_id ASC, seq ASC"
+        `SELECT run_id, event FROM events
+         WHERE ts >= ? ORDER BY run_id ASC, seq ASC`
       )
-      .all() as { run_id: string; event: string }[];
-    const out: { runId: string; event: ChainedEvent }[] = [];
-    for (const row of rows) {
-      const event = JSON.parse(row.event) as ChainedEvent;
-      if (new Date(event.ts).getTime() >= sinceMs) {
-        out.push({ runId: row.run_id, event });
-      }
-    }
-    return out;
+      .all(sinceIso) as { run_id: string; event: string }[];
+    return rows.map((row) => ({
+      runId: row.run_id,
+      event: JSON.parse(row.event) as ChainedEvent
+    }));
   }
 
   // ---- Receipts ----
@@ -348,11 +368,15 @@ export class SqliteStore implements PlaneStore {
     created_at: string;
     revoked_at: string | null;
   }): PrincipalRecord {
+    if (!isPrincipalRole(row.role)) {
+      throw new Error(
+        `principal ${row.principal_id} has unknown role "${row.role}" in store`
+      );
+    }
     return {
       principalId: row.principal_id,
       name: row.name,
-      // TODO(brittle): principal role from DB cast without validation; unknown role strings pass through to auth layer.
-      role: row.role as PrincipalRecord["role"],
+      role: row.role,
       tokenHash: row.token_hash,
       createdAt: row.created_at,
       ...(row.revoked_at ? { revokedAt: row.revoked_at } : {})
@@ -428,8 +452,8 @@ export class SqliteStore implements PlaneStore {
       if (
         !row ||
         row.used_at !== null ||
-        // TODO(brittle): expiry compared against Date.now() instead of the `now` argument; breaks deterministic tests and clock injection.
-        new Date(row.expires_at).getTime() < Date.now()
+        // Compare against the caller-supplied clock so tests can inject time.
+        new Date(row.expires_at).getTime() < new Date(now).getTime()
       ) {
         this.db.exec("COMMIT");
         return undefined;

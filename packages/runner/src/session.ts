@@ -13,7 +13,7 @@ export type SessionResult = {
   isolation: SessionIsolation;
 };
 
-// TODO(hardcoded): DEFAULT_TIMEOUT_MIN = 10
+/** Session wall-clock ceiling when the contract sets no maxDurationMin. */
 const DEFAULT_TIMEOUT_MIN = 10;
 
 /**

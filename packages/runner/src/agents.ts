@@ -23,7 +23,8 @@ export function buildAgentCommand(
   switch (kind) {
     case "claude-code":
       return {
-        // TODO(hardcoded): vendor CLI names/flags
+        // The vendor CLI invocation, wrapped as-is. These names and flags
+        // are the vendor's contract, not Warrant's to abstract away.
         cmd: "claude",
         args: ["-p", prompt, "--permission-mode", "acceptEdits"]
       };

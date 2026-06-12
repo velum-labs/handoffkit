@@ -13,6 +13,12 @@
  * Zero runtime dependencies: everything here runs on Node built-ins only.
  */
 
+export {
+  isTerminalStatus,
+  KEY_ID_HEX_LENGTH,
+  PROTOCOL_VERSIONS,
+  TERMINAL_RUN_STATUSES
+} from "./constants.js";
 export { canonicalize } from "./jcs.js";
 export type { JsonValue } from "./jcs.js";
 export { hashCanonical, sha256Hex } from "./hash.js";
@@ -31,7 +37,7 @@ export {
 export type { KeyResolver } from "./contract.js";
 export { appendEvent, verifyChain } from "./chain.js";
 export type { ChainVerification } from "./chain.js";
-export { signReceipt, verifyReceiptBundle } from "./receipt.js";
+export { signReceipt, verifyReceiptBundle, verifyReceiptSignature } from "./receipt.js";
 export type { BundleVerification } from "./receipt.js";
 export { PolicyDeniedError } from "./types.js";
 export type {

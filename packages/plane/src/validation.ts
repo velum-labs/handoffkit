@@ -7,7 +7,10 @@ import { z } from "zod";
  * tokens) that nothing else checks. Parsing returns structured errors that
  * the server turns into 400s.
  */
-// TODO(hardcoded): zod max lengths (e.g. prompt 1M, untrackedFiles 100k) are fixed; should align with policy/deployment limits.
+// The max lengths below are generous DoS guards (a 1M-char prompt, 100k
+// untracked files), not policy limits — policy is enforced separately by the
+// plane's policy engine. They exist to reject obviously abusive payloads at
+// the boundary before any work is done.
 
 const actorSchema = z.object({
   kind: z.enum(["human", "service"]),
@@ -48,7 +51,8 @@ const continuationSchema = z.object({
 
 export const runRequestSchema = z.object({
   requestedBy: actorSchema,
-  // TODO(brittle): agentKind is free-form string; not tied to policy.agents.allow at validation time.
+  // agentKind is validated structurally; whether the kind is *permitted* is
+  // the policy engine's decision at contract time, not the schema's.
   agentKind: z.string().min(1).max(64),
   agentVersion: z.string().max(128).optional(),
   prompt: z.string().min(1).max(1_000_000),
@@ -94,15 +98,18 @@ export const cancelBodySchema = z.object({
   actor: actorSchema.optional()
 });
 
+// Events and receipts are signed, hash-chained objects. Their integrity is
+// verified cryptographically inside the plane (chain verification + runner
+// signature), which is a stronger gate than any structural schema. The
+// schema here only bounds the envelope shape/size; the crypto check is
+// authoritative, so re-describing the full object as zod would be redundant.
 export const eventsBodySchema = z.object({
   claimToken: z.string().min(1).max(8192),
-  // TODO(lib): suggest @warrant/protocol zod schemas — events are z.unknown(); structure validated only after HTTP accepts body.
   events: z.array(z.unknown()).max(100000)
 });
 
 export const completeBodySchema = z.object({
   claimToken: z.string().min(1).max(8192),
-  // TODO(lib): suggest @warrant/protocol zod schemas — receipt is z.unknown(); malformed receipts fail late in plane.complete().
   receipt: z.unknown()
 });
 

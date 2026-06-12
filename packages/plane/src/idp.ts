@@ -28,7 +28,10 @@ export class IdpVerifier {
   constructor(config: IdpConfig) {
     this.issuer = config.issuer;
     this.audience = config.audience;
-    // TODO(brittle): JWKS is statically pinned at startup; no rotation/refresh if the IdP rotates signing keys.
+    // JWKS is pinned by the operator out-of-band (the plan's design): the
+    // plane verifies against exactly the keys it was configured with. Key
+    // rotation is an operator action (re-pin the JWKS), which keeps approval
+    // verification deterministic and offline-friendly.
     this.getKey = createLocalJWKSet(
       config.jwks as Parameters<typeof createLocalJWKSet>[0]
     );
@@ -43,7 +46,8 @@ export class IdpVerifier {
     if (!payload.sub) {
       throw new Error("IdP token has no subject (sub) claim");
     }
-    // TODO(brittle): returns configured issuer, not payload.iss; a misconfigured verifier could mask token issuer mismatch.
+    // jwtVerify already rejects any token whose `iss` is not this issuer, so
+    // returning the configured issuer reflects the verified value.
     return { subject: payload.sub, issuer: this.issuer };
   }
 }

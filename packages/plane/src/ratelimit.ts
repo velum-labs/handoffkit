@@ -16,7 +16,7 @@ export type RateLimitConfig = {
   authFailureLimit: number;
 };
 
-// TODO(hardcoded): default rate (50/s), burst (100), and auth lockout window/limit are fixed constants.
+/** Tunable defaults; override per deployment via PlaneServerOptions.rateLimit. */
 export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
   ratePerSec: 50,
   burst: 100,
@@ -24,10 +24,19 @@ export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
   authFailureLimit: 20
 };
 
+/** Evict idle bucket/failure entries once the map grows past this size. */
+const EVICTION_THRESHOLD = 10_000;
+
 type Bucket = { tokens: number; updatedMs: number };
 type FailureState = { count: number; windowStartMs: number; lockedUntilMs: number };
 
-// TODO(lib): suggest rate-limiter-flexible — in-memory buckets do not survive restarts or share state across plane replicas.
+/**
+ * In-memory token-bucket limiter. Correct for a single-node plane; a
+ * multi-node deployment would back this with the shared store (the limiter
+ * is injected, not global, so that swap is local). Idle entries are evicted
+ * once the maps grow large, so a long-lived process does not accumulate
+ * unbounded keys.
+ */
 export class RateLimiter {
   private readonly buckets = new Map<string, Bucket>();
   private readonly failures = new Map<string, FailureState>();
@@ -39,10 +48,29 @@ export class RateLimiter {
     this.now = now;
   }
 
+  /** Drop entries that have fully refilled / expired and are idle. */
+  private evictIdle(nowMs: number): void {
+    if (this.buckets.size > EVICTION_THRESHOLD) {
+      for (const [key, bucket] of this.buckets) {
+        const elapsedSec = (nowMs - bucket.updatedMs) / 1000;
+        if (bucket.tokens + elapsedSec * this.config.ratePerSec >= this.config.burst) {
+          this.buckets.delete(key);
+        }
+      }
+    }
+    if (this.failures.size > EVICTION_THRESHOLD) {
+      for (const [key, state] of this.failures) {
+        if (nowMs >= state.lockedUntilMs && nowMs - state.windowStartMs > this.config.authFailureWindowMs) {
+          this.failures.delete(key);
+        }
+      }
+    }
+  }
+
   /** Consume one token for `key`; returns false when the bucket is empty. */
-  // TODO(brittle): stale bucket/failure entries are never evicted; long-lived processes accumulate unbounded Map keys.
   allow(key: string): boolean {
     const nowMs = this.now();
+    this.evictIdle(nowMs);
     const bucket = this.buckets.get(key) ?? {
       tokens: this.config.burst,
       updatedMs: nowMs

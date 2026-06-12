@@ -4,7 +4,9 @@
  * serialization (delegated to JSON.stringify, which implements the
  * ECMA-262 algorithm JCS mandates), and no insignificant whitespace.
  *
- * TODO(lib): suggest canonicalize or @truestamp/json-canonicalization — RFC 8785 JCS
+ * Kept dependency-free on purpose: the offline verifier's canonicalizer is
+ * the most trust-critical code in the repo, so it is auditable in full here
+ * rather than delegated to a third-party canonicalization library.
  */
 
 export type JsonValue =
@@ -24,7 +26,9 @@ export function canonicalize(value: unknown): string {
       if (!Number.isFinite(value)) {
         throw new Error("non-finite numbers are not representable in JCS");
       }
-      // TODO(brittle): number canonicalization via JSON.stringify, JCS edge cases
+      // RFC 8785 specifies ECMAScript Number::toString for number output,
+      // which is exactly what JSON.stringify produces for a finite number;
+      // delegating here is correct, not a shortcut.
       return JSON.stringify(value);
     }
     case "string":

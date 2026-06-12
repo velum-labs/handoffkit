@@ -9,6 +9,12 @@ import type {
 } from "./backend.js";
 import { startEgressProxy } from "./egress.js";
 
+/** Minimal PATH/HOME used only when the host process has none set. */
+const FALLBACK_PATH = "/usr/bin:/bin";
+const FALLBACK_HOME = "/tmp";
+/** Exit code reported when the harness binary cannot be spawned. */
+const SPAWN_ERROR_EXIT_CODE = 127;
+
 /**
  * The built-in backend: the harness runs as a child process with a
  * scrubbed environment, injected secrets, and deny-by-default egress
@@ -32,9 +38,8 @@ export class ProcessSessionBackend implements SessionBackend {
     );
 
     const env: Record<string, string> = {
-      // TODO(hardcoded): fallback PATH/HOME
-      PATH: process.env.PATH ?? "/usr/bin:/bin",
-      HOME: process.env.HOME ?? "/tmp",
+      PATH: process.env.PATH ?? FALLBACK_PATH,
+      HOME: process.env.HOME ?? FALLBACK_HOME,
       HTTP_PROXY: `http://127.0.0.1:${proxy.port}`,
       HTTPS_PROXY: `http://127.0.0.1:${proxy.port}`,
       http_proxy: `http://127.0.0.1:${proxy.port}`,
@@ -57,8 +62,8 @@ export class ProcessSessionBackend implements SessionBackend {
       child.on("error", (error) => {
         chunks.push(Buffer.from(`spawn error: ${error.message}\n`, "utf8"));
         clearTimeout(timer);
-        // TODO(hardcoded): spawn error exit 127
-        resolve(127);
+        // 127 is the conventional shell exit code for "command not found".
+        resolve(SPAWN_ERROR_EXIT_CODE);
       });
       child.on("close", (code) => {
         clearTimeout(timer);

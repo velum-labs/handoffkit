@@ -100,8 +100,13 @@ export function evaluatePolicy(
   return { decision: "allow", reason: "policy allows this run", consentRequirements: [] };
 }
 
+/**
+ * Opinionated starter policy for `warrant init` and the in-process test/demo
+ * stacks. Production deployments edit `policy.json` (or supply their own
+ * Policy); these defaults are intentionally permissive-but-bounded for a
+ * single-node dev/demo setup, not a recommended production posture.
+ */
 export function defaultPolicy(): Policy {
-  // TODO(hardcoded): default pools, agent kinds, budget ceilings, and retention days are opinionated dev defaults.
   return {
     version: "warrant.policy.v1",
     runners: { allowPools: ["default"] },

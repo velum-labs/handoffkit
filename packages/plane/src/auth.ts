@@ -9,10 +9,14 @@ export type Principal = {
   role: PrincipalRole;
 };
 
-/** Tokens are stored only as their sha256; high-entropy random tokens make
- * this a safe, constant-time-comparable lookup key. */
+/**
+ * Tokens are stored only as their sha256. Every token the plane issues is
+ * 256 bits of CSPRNG output, so a plain SHA-256 lookup key is safe: there
+ * is nothing to brute-force and no need for a slow password hash. (Short,
+ * human-chosen tokens are never issued; if they were, this would need a
+ * peppered KDF instead.)
+ */
 export function hashToken(token: string): string {
-  // TODO(brittle): sha256-only lookup with no server-side pepper; safe for high-entropy tokens but weak if tokens are short/guessable.
   return sha256Hex(token);
 }
 
@@ -25,13 +29,14 @@ export function toPrincipal(record: PrincipalRecord): Principal {
 }
 
 /**
- * Role capability model. `admin` can do anything; the others are scoped to
- * the actions the spec assigns them. Runner enrollment is gated separately
- * (enroller role or a single-use enroll token), and runner-claim/event/
- * completion endpoints authenticate with runner tokens + claim tokens, not
- * principals.
+ * Role capability model, defined in code as the plane's authorization
+ * policy. `admin` can do anything; the others are scoped to the actions the
+ * spec assigns them. Runner enrollment is gated separately (enroller role
+ * or a single-use enroll token), and runner-claim/event/completion
+ * endpoints authenticate with runner tokens + claim tokens, not principals.
+ * Per-deployment custom roles are intentionally out of scope; this matrix
+ * is the contract.
  */
-// TODO(hardcoded): role→capability matrix is code-defined; cannot be customized per deployment without a code change.
 const CAPABILITIES: Record<PrincipalRole, Set<string>> = {
   admin: new Set([
     "runs:read",

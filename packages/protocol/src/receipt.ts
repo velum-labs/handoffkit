@@ -31,7 +31,7 @@ export function signReceipt(
   return { ...receipt, signatures: [...receipt.signatures, signature] };
 }
 
-function verifyReceiptSignature(
+export function verifyReceiptSignature(
   receipt: Receipt,
   signer: Signature["signer"],
   publicKeyPem: string
@@ -47,6 +47,15 @@ export type BundleVerification = {
   ok: boolean;
   problems: string[];
 };
+
+/** Element-wise equality for two already-sorted string arrays. */
+function stringArraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
 
 function terminalEventMatches(event: RunEvent, status: Receipt["status"]): boolean {
   switch (status) {
@@ -129,8 +138,7 @@ export function verifyReceiptBundle(bundle: ReceiptBundle): BundleVerification {
     .map((e) => (e.event.type === "secret.released" ? e.event.name : ""))
     .sort();
   const releasedInReceipt = receipt.secretsReleased.map((r) => r.name).sort();
-  // TODO(brittle): secret list equality via JSON.stringify
-  if (JSON.stringify(releasedInEvents) !== JSON.stringify(releasedInReceipt)) {
+  if (!stringArraysEqual(releasedInEvents, releasedInReceipt)) {
     problems.push("secretsReleased does not match secret.released events");
   }
 

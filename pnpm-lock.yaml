@@ -233,6 +233,9 @@ importers:
       '@warrant/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../workspace
 
   packages/workspace:
     dependencies:

@@ -29,6 +29,10 @@ export class PlaneClientError extends Error {
   }
 }
 
+/** Default transport-retry policy for idempotent requests. */
+export const DEFAULT_RETRY_ATTEMPTS = 3;
+export const RETRY_BACKOFF_STEP_MS = 100;
+
 /**
  * Retry idempotent requests on transport-level failures: a keep-alive
  * socket the server closed while idle surfaces as a TypeError from fetch,
@@ -39,8 +43,7 @@ export class PlaneClientError extends Error {
 async function fetchIdempotent(
   url: string,
   init: RequestInit & { idempotent?: boolean },
-  // TODO(hardcoded): retry attempts=3
-  attempts = 3
+  attempts = DEFAULT_RETRY_ATTEMPTS
 ): Promise<Response> {
   const retryable = init.idempotent ?? init.method === "GET";
   for (let attempt = 1; ; attempt++) {
@@ -50,9 +53,22 @@ async function fetchIdempotent(
       if (!(error instanceof TypeError) || !retryable || attempt >= attempts) {
         throw error;
       }
-      // TODO(hardcoded): linear backoff 100*attempt ms
-      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+      // Linear backoff: brief, since this only covers idle-socket races.
+      await new Promise((resolve) =>
+        setTimeout(resolve, RETRY_BACKOFF_STEP_MS * attempt)
+      );
     }
+  }
+}
+
+/** Parse a response body as JSON, tolerating empty or non-JSON bodies. */
+async function parseJsonResponse(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text.length === 0) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text };
   }
 }
 
@@ -81,8 +97,7 @@ export class PlaneClient {
       headers,
       body: body === undefined ? undefined : JSON.stringify(body)
     });
-    // TODO(brittle): assumes every response body is JSON
-    const payload: unknown = await response.json();
+    const payload = await parseJsonResponse(response);
     if (!response.ok) throw new PlaneClientError(response.status, payload);
     return payload as T;
   }

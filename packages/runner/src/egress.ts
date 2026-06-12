@@ -21,9 +21,41 @@ export type EgressProxy = {
  * Honest limitation (documented in the spec): this is process-level
  * enforcement. A malicious binary can ignore proxy variables; container or
  * microVM network namespaces close that gap and are the roadmap isolation
- * modes. Every allowed and blocked attempt is still recorded.
+ * modes (the hermetic and Vercel Sandbox backends already do). Every allowed
+ * and blocked attempt is still recorded.
+ *
+ * The proxy is intentionally implemented on Node's http primitives rather
+ * than a third-party proxy library: it is a security enforcement point, so
+ * its full behavior lives here, auditable, and does no more than allowlist
+ * checks plus pass-through.
  */
-// TODO(lib): suggest http-proxy / proxy-chain — egress proxy
+/**
+ * Parse a CONNECT authority (`host:port`) into host and port, handling
+ * bracketed IPv6 literals (`[2001:db8::1]:443`). Defaults to port 443.
+ */
+export function parseConnectAuthority(authority: string): {
+  host: string;
+  port: number;
+} {
+  const trimmed = authority.trim();
+  if (trimmed.startsWith("[")) {
+    const close = trimmed.indexOf("]");
+    if (close !== -1) {
+      const host = trimmed.slice(1, close);
+      const rest = trimmed.slice(close + 1);
+      const port = rest.startsWith(":") ? Number(rest.slice(1)) : 443;
+      return { host, port: Number.isFinite(port) ? port : 443 };
+    }
+  }
+  const lastColon = trimmed.lastIndexOf(":");
+  if (lastColon === -1) return { host: trimmed, port: 443 };
+  const port = Number(trimmed.slice(lastColon + 1) || "443");
+  return {
+    host: trimmed.slice(0, lastColon),
+    port: Number.isFinite(port) ? port : 443
+  };
+}
+
 export function startEgressProxy(
   allowHosts: string[],
   defaultDeny: boolean,
@@ -33,7 +65,6 @@ export function startEgressProxy(
   const isAllowed = (host: string): boolean =>
     !defaultDeny || allowed.has(host);
 
-  // TODO(brittle): hand-rolled HTTP proxy
   const server: Server = createServer((req, res) => {
     let host = "";
     try {
@@ -72,9 +103,7 @@ export function startEgressProxy(
   });
 
   server.on("connect", (req, socket) => {
-    // TODO(brittle): CONNECT host:port.split breaks IPv6
-    const [host, portRaw] = (req.url ?? "").split(":");
-    const port = Number(portRaw || "443");
+    const { host, port } = parseConnectAuthority(req.url ?? "");
     if (!host || !isAllowed(host)) {
       onEvent({ host: host ?? "unknown", decision: "blocked" });
       socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");

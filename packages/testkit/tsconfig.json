@@ -9,6 +9,7 @@
     { "path": "../plane" },
     { "path": "../protocol" },
     { "path": "../runner" },
-    { "path": "../sdk" }
+    { "path": "../sdk" },
+    { "path": "../workspace" }
   ]
 }

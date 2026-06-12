@@ -9,10 +9,15 @@ export {
   captureWorkspace,
   collectOutput,
   DEFAULT_DENY_PATTERNS,
+  DEFAULT_PULL_COMMITTER,
+  DELETED_FILE_HASH,
   materializeWorkspace,
   matchesPattern,
+  PULL_BRANCH_PREFIX,
   pullRun
 } from "./workspace.js";
+export { GIT_MAX_BUFFER_BYTES, gitBinary, gitText } from "./git.js";
+export type { GitOptions } from "./git.js";
 export type {
   BlobFetcher,
   CaptureOptions,

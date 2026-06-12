@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import { open, seal } from "./keys.js";
 import type { MasterKey, SealedBlob } from "./keys.js";
@@ -18,6 +18,10 @@ type SecretEntry = {
 export class SecretStore {
   private readonly path: string;
   private readonly master: MasterKey;
+  // Decrypt-once cache invalidated by file mtime, so a concurrent writer's
+  // update is still picked up. Single-process optimization; cross-process
+  // coordination is the store's job, not the secret file's.
+  private cache?: { mtimeMs: number; values: Record<string, SecretEntry> };
 
   constructor(path: string, master: MasterKey) {
     this.path = path;
@@ -25,16 +29,20 @@ export class SecretStore {
   }
 
   private load(): Record<string, SecretEntry> {
-    // TODO(brittle): every get/set/release decrypts and parses the entire secrets file; no in-process cache or file locking.
     if (!existsSync(this.path)) return {};
+    const mtimeMs = statSync(this.path).mtimeMs;
+    if (this.cache && this.cache.mtimeMs === mtimeMs) return this.cache.values;
     const blob = JSON.parse(readFileSync(this.path, "utf8")) as SealedBlob;
     const plaintext = open(this.master, blob).toString("utf8");
-    return JSON.parse(plaintext) as Record<string, SecretEntry>;
+    const values = JSON.parse(plaintext) as Record<string, SecretEntry>;
+    this.cache = { mtimeMs, values };
+    return values;
   }
 
   private save(values: Record<string, SecretEntry>): void {
     const blob = seal(this.master, Buffer.from(JSON.stringify(values), "utf8"));
     writeFileSync(this.path, JSON.stringify(blob), { mode: 0o600 });
+    this.cache = { mtimeMs: statSync(this.path).mtimeMs, values };
   }
 
   set(name: string, value: string): void {

@@ -11,6 +11,10 @@
 import { appendFileSync } from "node:fs";
 import { request } from "node:http";
 
+// A host that is never on any test/demo allowlist, so the probe deterministically
+// exercises deny-by-default egress. Override with MOCK_PROBE_HOST if needed.
+const PROBE_HOST = process.env.MOCK_PROBE_HOST ?? "denied.example.com";
+
 const prompt = process.argv[2] ?? "";
 
 appendFileSync(
@@ -27,10 +31,9 @@ function tryNetwork(): Promise<void> {
       {
         hostname: proxyUrl.hostname,
         port: Number(proxyUrl.port),
-        // TODO(hardcoded): probe host denied.example.com
-        path: "http://denied.example.com/probe",
+        path: `http://${PROBE_HOST}/probe`,
         method: "GET",
-        headers: { host: "denied.example.com" }
+        headers: { host: PROBE_HOST }
       },
       (res) => {
         console.log(`network probe status: ${res.statusCode}`);

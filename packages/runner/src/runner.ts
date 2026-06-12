@@ -25,6 +25,15 @@ import { materializeWorkspace } from "@warrant/workspace";
 import type { SessionBackend } from "./backend.js";
 import { runSession } from "./session.js";
 
+/** Default time budget for enrollment retries while the plane is unreachable. */
+const DEFAULT_ENROLL_RETRY_MS = 60_000;
+/** Wait between enrollment retry attempts. */
+const ENROLL_RETRY_INTERVAL_MS = 2_000;
+/** Default idle poll interval between claim attempts. */
+const DEFAULT_POLL_INTERVAL_MS = 1_000;
+/** Attestation tier reported by this software runner: honestly "mock". */
+const RUNNER_ATTESTATION_TIER = "mock" as const;
+
 export type RunnerOptions = {
   planeUrl: string;
   pool: string;
@@ -112,8 +121,8 @@ export class Runner {
   private async enrollWithRetry(
     publicKeyPem: string
   ): Promise<{ runnerId: string; runnerToken: string }> {
-    // TODO(hardcoded): enrollRetryMs 60s
-    const deadline = Date.now() + (this.options.enrollRetryMs ?? 60_000);
+    const deadline =
+      Date.now() + (this.options.enrollRetryMs ?? DEFAULT_ENROLL_RETRY_MS);
     const enrollToken = this.options.enrollToken;
     if (!enrollToken) throw new Error("no enroll token was provided");
     for (;;) {
@@ -129,8 +138,9 @@ export class Runner {
         console.error(
           `plane not reachable at ${this.options.planeUrl}; retrying enrollment...`
         );
-        // TODO(hardcoded): retry sleep 2s
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) =>
+          setTimeout(resolve, ENROLL_RETRY_INTERVAL_MS)
+        );
       }
     }
   }
@@ -149,8 +159,7 @@ export class Runner {
 
   async start(): Promise<void> {
     this.stopped = false;
-    // TODO(hardcoded): poll 1s
-    const interval = this.options.pollIntervalMs ?? 1000;
+    const interval = this.options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     while (!this.stopped) {
       try {
         const ran = await this.runOnce();
@@ -284,20 +293,19 @@ export class Runner {
           : { name: "", scope: "", ts: "" }
       );
 
-    const networkSeen = new Map<string, "allowed" | "blocked">();
+    // Dedupe distinct (host, decision) pairs without string-packing the key,
+    // so hosts containing ":" (IPv6 literals) are handled correctly.
+    const networkSeen = new Map<string, Set<"allowed" | "blocked">>();
     for (const entry of chain) {
       if (entry.event.type === "network.connected") {
-        networkSeen.set(
-          `${entry.event.host}:${entry.event.decision}`,
-          entry.event.decision
-        );
+        const decisions = networkSeen.get(entry.event.host) ?? new Set();
+        decisions.add(entry.event.decision);
+        networkSeen.set(entry.event.host, decisions);
       }
     }
-    // TODO(brittle): network receipt dedup via host:decision split on :
-    const networkAccessed = [...networkSeen.entries()].map(([key, decision]) => ({
-      host: key.slice(0, key.lastIndexOf(":")),
-      decision
-    }));
+    const networkAccessed = [...networkSeen.entries()].flatMap(([host, decisions]) =>
+      [...decisions].map((decision) => ({ host, decision }))
+    );
 
     const boundaryDisclosures = chain
       .filter((e) => e.event.type === "boundary.crossed")
@@ -315,8 +323,9 @@ export class Runner {
       runnerId: identity.runnerId,
       keyId: keyIdFromPublicPem(this.publicKeyPem),
       pool: identity.pool,
-      // TODO(hardcoded): attestationTier "mock"
-      attestationTier: "mock",
+      // Honest labeling: a software runner offers no hardware attestation,
+      // so the tier is "mock" until a TEE-backed runner reports otherwise.
+      attestationTier: RUNNER_ATTESTATION_TIER,
       isolation: input.isolation
     };
 

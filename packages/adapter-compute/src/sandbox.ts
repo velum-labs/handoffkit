@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 
@@ -8,6 +7,7 @@ import type { ContinuationPolicy } from "@warrant/handoff";
 import { verifyReceiptBundle } from "@warrant/protocol";
 import type { ActorRef, RunStatus } from "@warrant/protocol";
 import { PlaneClient } from "@warrant/sdk";
+import { gitText } from "@warrant/workspace";
 
 export type GovernedComputeConfig = {
   /** Local git workspace that backs the sandbox. The adapter commits to it. */
@@ -52,21 +52,24 @@ export type GovernedCompute = {
   };
 };
 
-// TODO(brittle): duplicate inline git() helper
-// TODO(lib): suggest @warrant/workspace — git helpers
 function git(cwd: string, args: string[]): string {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
-  }
-  return result.stdout;
+  return gitText(cwd, args);
 }
+
+/** Default per-command wait ceiling for sandbox commands. */
+export const DEFAULT_SANDBOX_TIMEOUT_MS = 5 * 60 * 1000;
+/** Identity used for the sandbox's staging commits. */
+export const SANDBOX_COMMITTER = {
+  name: "warrant-sandbox",
+  email: "sandbox@warrant.local"
+};
 
 /** Wiring for a sandbox: a continuation context plus its execution pool. */
 export type SandboxBinding = {
   context: Handoff;
   pool: string;
   timeoutMs?: number;
+  committer?: { name: string; email: string };
 };
 
 export class GovernedSandbox {
@@ -79,6 +82,7 @@ export class GovernedSandbox {
   private readonly context: Handoff;
   private readonly pool: string;
   private readonly timeoutMs: number;
+  private readonly committer: { name: string; email: string };
   private readonly workspaceDir: string;
   private readonly records: SandboxRunRecord[] = [];
   private destroyed = false;
@@ -87,8 +91,8 @@ export class GovernedSandbox {
     this.sandboxId = `sbx_${randomUUID()}`;
     this.context = binding.context;
     this.pool = binding.pool;
-    // TODO(hardcoded): default timeout 5 min
-    this.timeoutMs = binding.timeoutMs ?? 5 * 60 * 1000;
+    this.timeoutMs = binding.timeoutMs ?? DEFAULT_SANDBOX_TIMEOUT_MS;
+    this.committer = binding.committer ?? SANDBOX_COMMITTER;
     this.workspaceDir = binding.context.workspacePath;
     this.filesystem = {
       writeFile: async (path, content) => {
@@ -130,12 +134,11 @@ export class GovernedSandbox {
     git(this.workspaceDir, ["add", "-A"]);
     const dirty = git(this.workspaceDir, ["status", "--porcelain"]).trim();
     if (dirty.length === 0) return;
-    // TODO(hardcoded): git identity warrant-sandbox
     git(this.workspaceDir, [
       "-c",
-      "user.name=warrant-sandbox",
+      `user.name=${this.committer.name}`,
       "-c",
-      "user.email=sandbox@warrant.local",
+      `user.email=${this.committer.email}`,
       "commit",
       "--quiet",
       "-m",

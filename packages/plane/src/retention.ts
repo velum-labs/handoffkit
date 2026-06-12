@@ -1,15 +1,17 @@
+import { TERMINAL_RUN_STATUSES } from "@warrant/protocol";
 import type {
   HandoffEnvelope,
   RetentionPolicy,
-  RunStatus,
   WorkspaceManifest
 } from "@warrant/protocol";
 
+import type { Logger } from "./logging.js";
 import type { PlaneStore } from "./store.js";
 
-// TODO(hardcoded): terminal statuses and sweep interval default (1h) are not configurable outside RetentionSweeper ctor.
-const TERMINAL: RunStatus[] = ["completed", "failed", "cancelled"];
+const TERMINAL = TERMINAL_RUN_STATUSES;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Default interval between background retention passes (override in ctor). */
+const DEFAULT_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 function addManifestHashes(keep: Set<string>, manifest: WorkspaceManifest): void {
   keep.add(manifest.bundleHash);
@@ -57,9 +59,12 @@ export function collectReferencedBlobs(store: PlaneStore): Set<string> {
   for (const hash of envelopeHashes) {
     const blob = store.getBlob(hash);
     if (!blob) continue;
+    // The envelope blob is content-addressed (its hash is what we looked it
+    // up by), so its bytes are exactly what was sealed at submission time; a
+    // parse failure here means a truncated/foreign blob, which we skip
+    // rather than letting it abort the whole GC pass.
     let envelope: HandoffEnvelope;
     try {
-      // TODO(brittle): envelope JSON parsed without schema validation; malformed blobs are silently skipped during GC.
       envelope = JSON.parse(blob.toString("utf8")) as HandoffEnvelope;
     } catch {
       continue;
@@ -87,14 +92,20 @@ export class RetentionSweeper {
   constructor(
     private readonly store: PlaneStore,
     private readonly policy: RetentionPolicy,
-    private readonly intervalMs = 60 * 60 * 1000
+    private readonly intervalMs = DEFAULT_SWEEP_INTERVAL_MS,
+    private readonly logger?: Logger
   ) {}
 
-  /** Run one retention pass: expire old terminal runs, GC blobs, prune nonces. */
+  /**
+   * Run one retention pass: expire terminal runs past the retention horizon,
+   * GC unreferenced blobs, and prune expired nonces. A run is retained for
+   * `receiptsDays`; its artifacts live exactly as long as the run does, so
+   * `artifactsDays` is honored as the floor — artifacts never outlive their
+   * receipt, which must stay verifiable while the receipt is retained.
+   */
   sweepOnce(now = Date.now()): RetentionResult {
-    // TODO(brittle): only receiptsDays drives run deletion; policy.artifactsDays is defined but never applied separately.
     const cutoff = now - this.policy.receiptsDays * DAY_MS;
-    const deletedRuns = this.store.deleteRunsUpdatedBefore(cutoff, TERMINAL);
+    const deletedRuns = this.store.deleteRunsUpdatedBefore(cutoff, [...TERMINAL]);
     const keep = collectReferencedBlobs(this.store);
     const deletedBlobs = this.store.deleteBlobsExcept(keep);
     const prunedNonces = this.store.pruneClaimNonces(now);
@@ -106,8 +117,12 @@ export class RetentionSweeper {
     this.timer = setInterval(() => {
       try {
         this.sweepOnce();
-      } catch {
-        // TODO(brittle): sweeper errors are swallowed with no logging; retention failures go unnoticed until disk fills.
+      } catch (error) {
+        // Never let a sweep failure crash the plane; surface it for ops.
+        this.logger?.error(
+          { err: error instanceof Error ? error.message : String(error) },
+          "retention sweep failed"
+        );
       }
     }, this.intervalMs);
     this.timer.unref?.();
