@@ -11,6 +11,10 @@ import {
 import type { MasterKey } from "@warrant/plane";
 import type { Policy } from "@warrant/protocol";
 
+/** Defaults for `warrant init`; flags (--port/--host) override them. */
+export const DEFAULT_PLANE_PORT = 7172;
+export const DEFAULT_PLANE_HOST = "127.0.0.1";
+
 export type CliConfig = {
   version: "warrant.config.v2";
   planeUrl: string;
@@ -56,12 +60,11 @@ export function initHome(dir: string, options: InitOptions = {}): WarrantHome {
   if (existsSync(configPath)) {
     throw new Error(`already initialized: ${configPath} exists`);
   }
-  // TODO(hardcoded): default port 7172, host 127.0.0.1
-  const port = options.port ?? 7172;
-  const host = options.host ?? "127.0.0.1";
+  const port = options.port ?? DEFAULT_PLANE_PORT;
+  const host = options.host ?? DEFAULT_PLANE_HOST;
   const config: CliConfig = {
     version: "warrant.config.v2",
-    planeUrl: options.planeUrl ?? `http://127.0.0.1:${port}`,
+    planeUrl: options.planeUrl ?? `http://${DEFAULT_PLANE_HOST}:${port}`,
     port,
     host,
     adminToken: randomBytes(32).toString("base64url"),

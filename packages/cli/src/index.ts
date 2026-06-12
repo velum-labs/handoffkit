@@ -6,7 +6,11 @@ import { parseArgs } from "node:util";
 import { agents, handoff, targets } from "@warrant/handoff";
 import type { AgentDescriptor } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
-import { PolicyDeniedError, verifyReceiptBundle } from "@warrant/protocol";
+import {
+  isTerminalStatus,
+  PolicyDeniedError,
+  verifyReceiptBundle
+} from "@warrant/protocol";
 import type {
   AgentKind,
   ReceiptBundle,
@@ -25,7 +29,15 @@ import {
   renderTrace
 } from "./render.js";
 
-// TODO(lib): suggest commander or oclif — hand-rolled CLI
+// Built on node:util parseArgs rather than a CLI framework: the command
+// surface is small and fully enumerated in USAGE, and the parsing below is
+// plain data — a framework would add a dependency without removing code.
+
+/** Poll interval while watching a run from the terminal. */
+const WATCH_POLL_MS = 500;
+/** How long `warrant continue` waits for the run before returning. */
+const CONTINUE_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+
 const USAGE = `warrant — the governed execution and provenance plane for AI agents
 
 usage:
@@ -103,7 +115,7 @@ async function waitForTerminal(
       last = view.status;
       onStatus(view.status);
     }
-    if (["completed", "failed", "cancelled"].includes(view.status)) {
+    if (isTerminalStatus(view.status)) {
       return view.status;
     }
     if (view.status === "awaiting_approval") {
@@ -112,8 +124,7 @@ async function waitForTerminal(
       );
       return view.status;
     }
-    // TODO(hardcoded): status poll 500ms
-    await new Promise((resolveSleep) => setTimeout(resolveSleep, 500));
+    await new Promise((resolveSleep) => setTimeout(resolveSleep, WATCH_POLL_MS));
   }
 }
 
@@ -260,8 +271,7 @@ async function cmdContinue(dir: string, argv: string[]): Promise<void> {
   );
 
   if (values["no-watch"]) return;
-  // TODO(hardcoded): continue wait 10 min
-  const outcome = await run.wait({ timeoutMs: 10 * 60 * 1000 });
+  const outcome = await run.wait({ timeoutMs: CONTINUE_WAIT_TIMEOUT_MS });
   if (outcome.status === "awaiting_approval") {
     console.log(
       `awaiting approval (${outcome.consentRequirements.join("; ")}) — run: warrant approve ${run.runId}`

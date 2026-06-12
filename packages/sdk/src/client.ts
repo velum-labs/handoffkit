@@ -199,7 +199,21 @@ export class PlaneClient {
   }
 
   getBundle(runId: string): Promise<ReceiptBundle> {
-    return this.json("GET", `/v1/runs/${runId}/bundle`);
+    return this.json("GET", this.runBundlePath(runId));
+  }
+
+  private runBundlePath(runId: string): string {
+    return `/v1/runs/${runId}/bundle`;
+  }
+
+  /** Canonical download URL for a run's signed receipt bundle. */
+  runBundleUrl(runId: string): string {
+    return `${this.baseUrl}${this.runBundlePath(runId)}`;
+  }
+
+  /** Canonical control-panel deep link for a run. */
+  runUiUrl(runId: string): string {
+    return `${this.baseUrl}/ui/#/runs/${runId}`;
   }
 
   async exportJsonl(since?: string): Promise<string> {

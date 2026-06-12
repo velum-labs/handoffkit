@@ -15,6 +15,10 @@ type SeedConfig = {
   adminToken: string;
 };
 
+/** How patiently the seeder waits for the compose plane to come up. */
+const PLANE_HEALTH_POLL_MS = 1_000;
+const PLANE_WAIT_TIMEOUT_MS = 120_000;
+
 async function waitForPlane(planeUrl: string, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -30,8 +34,7 @@ async function waitForPlane(planeUrl: string, timeoutMs: number): Promise<void> 
     if (Date.now() >= deadline) {
       throw new Error(`plane at ${planeUrl} did not become healthy in ${timeoutMs}ms`);
     }
-    // TODO(hardcoded): poll 1s
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, PLANE_HEALTH_POLL_MS));
   }
 }
 
@@ -48,8 +51,7 @@ async function main(): Promise<void> {
   ) as SeedConfig;
 
   console.log(`waiting for plane at ${config.planeUrl}...`);
-  // TODO(hardcoded): plane wait 120s
-  await waitForPlane(config.planeUrl, 120_000);
+  await waitForPlane(config.planeUrl, PLANE_WAIT_TIMEOUT_MS);
 
   console.log("seeding showcase runs...");
   const seeded = await seedShowcase({

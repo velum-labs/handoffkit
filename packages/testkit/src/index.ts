@@ -76,7 +76,10 @@ export type Stack = {
   stop(): Promise<void>;
 };
 
-// TODO(hardcoded): testkit-admin-token / testkit-enroll-token
+// Fixed, well-known credentials for ephemeral in-process test stacks. The
+// stack binds to loopback on a random port and is torn down with the test,
+// so deterministic tokens are a feature here (assertable, greppable), not
+// a security concern — production tokens are minted by `warrant init`.
 const ADMIN_TOKEN = "testkit-admin-token";
 const ENROLL_TOKEN = "testkit-enroll-token";
 

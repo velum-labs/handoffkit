@@ -2,12 +2,15 @@
 # One image serves every role: control plane (+ control panel UI), runner,
 # CLI, and the demo seeder. See docker-compose.yml for the full deployment.
 
-# TODO(hardcoded): pinned node:22-bookworm-slim
+# The Node major is pinned on purpose (supply-chain policy: known-good
+# versions everywhere). Bump it together with .github/workflows/ci.yml and
+# the engines field when moving majors.
 FROM node:22-bookworm-slim AS build
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git \
   && rm -rf /var/lib/apt/lists/*
-# TODO(hardcoded): pnpm@10.33.4
+# Must match the packageManager pin in package.json (check-repo enforces
+# that the pin exists; keep the two in lockstep when bumping pnpm).
 RUN corepack enable && corepack prepare pnpm@10.33.4 --activate
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json tsconfig.json ./
@@ -19,7 +22,7 @@ RUN pnpm build
 # workspace links and the trusted runtime deps (jose/pino/zod) intact.
 RUN CI=true pnpm install --prod --frozen-lockfile
 
-# TODO(hardcoded): pinned node:22-bookworm-slim
+# Same pinned base as the build stage, for the same supply-chain reason.
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git \

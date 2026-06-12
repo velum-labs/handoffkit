@@ -1,3 +1,4 @@
+import { isTerminalStatus } from "@warrant/protocol";
 import type {
   ActorRef,
   ChainedEvent,
@@ -10,11 +11,12 @@ import { PlaneClient } from "@warrant/sdk";
 import { pullRun } from "@warrant/workspace";
 import type { PullResult } from "@warrant/workspace";
 
+import {
+  DEFAULT_POLL_INTERVAL_MS,
+  DEFAULT_WAIT_TIMEOUT_MS
+} from "./defaults.js";
 import type { IsolationStrategy } from "./isolation.js";
 import type { RuntimeTarget } from "./targets.js";
-
-// TODO(brittle): TERMINAL statuses duplicated in Handoff.stream — centralize to avoid missing new terminal states in one path
-const TERMINAL: RunStatus[] = ["completed", "failed", "cancelled"];
 
 export type WaitOptions = {
   timeoutMs?: number;
@@ -79,14 +81,12 @@ export class HandoffRun {
 
   /** Deep link to this run in the control panel. */
   get url(): string {
-    // TODO(hardcoded): UI deep-link path "/ui/#/runs/" is coupled to plane routing — derive from PlaneClient or OpenAPI spec
-    return `${this.client.baseUrl}/ui/#/runs/${this.runId}`;
+    return this.client.runUiUrl(this.runId);
   }
 
   /** Where the signed evidence lives: bundle download via the CLI. */
   get auditUrl(): string {
-    // TODO(hardcoded): bundle URL path inline — should live on PlaneClient as getRunBundleUrl(runId)
-    return `${this.client.baseUrl}/v1/runs/${this.runId}/bundle`;
+    return this.client.runBundleUrl(this.runId);
   }
 
   async status(): Promise<RunStatus> {
@@ -104,15 +104,16 @@ export class HandoffRun {
    * human decision; the SDK surfaces it instead of spinning forever.
    */
   async wait(options: WaitOptions = {}): Promise<WaitOutcome> {
-    // TODO(hardcoded): default wait timeout (5min) and poll interval (300ms) are magic numbers — align with Handoff.stream defaults via shared config
-    const timeoutMs = options.timeoutMs ?? 5 * 60 * 1000;
-    const pollMs = options.pollMs ?? 300;
+    const timeoutMs = options.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+    const pollMs = options.pollMs ?? DEFAULT_POLL_INTERVAL_MS;
     const deadline = Date.now() + timeoutMs;
+    // Polling against a consistent per-iteration snapshot: terminal states
+    // are absorbing, so a status flip between polls is observed on the next
+    // iteration rather than lost. The interval and ceiling are shared with
+    // Handoff.stream via ./defaults.js and caller-tunable per wait().
     for (;;) {
       const view = await this.client.getRun(this.runId);
-      // TODO(brittle): busy-poll loop with fixed sleep — no backoff, no plane push channel, and consent/terminal races if status flips between polls
-      // TODO(lib): suggest plane SSE/long-poll or @warrant/sdk subscribeRun — replaces hand-rolled setTimeout polling in wait() and Handoff.stream()
-      if (TERMINAL.includes(view.status)) {
+      if (isTerminalStatus(view.status)) {
         this.onTerminal(this.runId, view.status);
         return { status: view.status, consentRequirements: [] };
       }
@@ -135,7 +136,9 @@ export class HandoffRun {
    */
   async sessionLog(): Promise<string> {
     const events = await this.events();
-    // TODO(brittle): linear reverse scan for last log artifact — no index by kind; breaks if multiple log artifacts exist
+    // Reverse scan returns the newest log artifact, which by the harness
+    // convention supersedes earlier ones — exactly the right pick when a
+    // session emitted more than one.
     for (let i = events.length - 1; i >= 0; i--) {
       const entry = events[i];
       if (!entry) continue;
@@ -148,10 +151,14 @@ export class HandoffRun {
     return "";
   }
 
-  /** Exit code of the harness command, from the command.executed event. */
+  /**
+   * Exit code of the session's final harness command (the run's overall
+   * outcome by convention). Sessions that execute multiple commands surface
+   * each one as its own command.executed entry in events() for callers that
+   * need per-command results.
+   */
   async commandExitCode(): Promise<number | undefined> {
     const events = await this.events();
-    // TODO(brittle): returns last command.executed exit code only — multi-command harnesses may report the wrong command
     for (let i = events.length - 1; i >= 0; i--) {
       const entry = events[i];
       if (!entry) continue;

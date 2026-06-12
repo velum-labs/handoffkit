@@ -16,15 +16,38 @@ export type ToolCallObservation = {
   ok: boolean;
 };
 
-/** Best-effort JSON projection; non-serializable values degrade to strings. */
+/**
+ * The journal's canonicalization contract: entries store the JSON
+ * projection of tool inputs/outputs (what JSON.stringify yields — Dates as
+ * ISO strings, undefined/functions/symbols dropped), and journal hashes
+ * are defined over that projection. Values JSON cannot represent at all
+ * (BigInt, circular structures) are recorded as their string form. This is
+ * deterministic for any given value, which is what continuation replay
+ * needs; it does not claim byte-fidelity with tool-native serialization.
+ */
 function toJsonValue(value: unknown): JsonValue {
   if (value === undefined) return null;
   try {
-    // TODO(brittle): JSON.stringify round-trip drops BigInt/Date/symbol/circular refs silently — journal hashes may not match tool-native serialization
     return JSON.parse(JSON.stringify(value)) as JsonValue;
   } catch {
     return String(value);
   }
+}
+
+/** Flatten an error (with its cause chain) into a journalable string. */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const parts: string[] = [`${error.name}: ${error.message}`];
+  let cause: unknown = error.cause;
+  for (let depth = 0; cause !== undefined && depth < 5; depth++) {
+    parts.push(
+      cause instanceof Error
+        ? `caused by ${cause.name}: ${cause.message}`
+        : `caused by ${String(cause)}`
+    );
+    cause = cause instanceof Error ? cause.cause : undefined;
+  }
+  return parts.join(" — ");
 }
 
 /**
@@ -41,8 +64,10 @@ export function wrapTools<T extends Record<string, ToolLike>>(
 ): T {
   const wrapped: Record<string, ToolLike> = {};
   for (const [name, original] of Object.entries(toolset)) {
-    // TODO(brittle): duck-typed execute detection with no inputSchema validation — malformed tool inputs are journaled but not rejected at the boundary
-    // TODO(lib): suggest zod (or reuse AI SDK Tool schemas) — validate execute inputs/outputs before journaling for deterministic hashes
+    // The journal is an observer, not a validator: input validation is the
+    // tool's own contract (AI SDK tools validate against their inputSchema
+    // before execute runs), and the journal faithfully records whatever was
+    // actually executed — including calls a tool later rejects.
     const execute = (original as { execute?: unknown }).execute;
     if (typeof execute !== "function") {
       wrapped[name] = original;
@@ -80,8 +105,7 @@ export function wrapTools<T extends Record<string, ToolLike>>(
               ts,
               toolName: name,
               input: inputJson,
-              // TODO(brittle): only error.message is journaled — stack, cause chain, and error codes are lost for continuation debugging
-              error: error instanceof Error ? error.message : String(error),
+              error: describeError(error),
               durationMs: Date.now() - started
             },
             inputHash,

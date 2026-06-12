@@ -37,6 +37,15 @@ export function toJustBashNetwork(policy: NetworkPolicy): NetworkConfig {
   return { allowedUrlPrefixes };
 }
 
+/**
+ * The interpreter's virtual filesystem is rooted at the workspace, so "/"
+ * IS the workspace from the script's point of view — it cannot name any
+ * path outside it.
+ */
+const HERMETIC_CWD = "/";
+/** Conventional timeout exit code (what coreutils `timeout` reports). */
+const TIMEOUT_EXIT_CODE = 124;
+
 /** Extract the shell script from a `command` harness invocation. */
 function scriptFor(input: SessionExecution): string {
   const { cmd, args } = input.command;
@@ -65,8 +74,7 @@ export class HermeticSessionBackend implements SessionBackend {
       // Writes land on the real workspace so the runner's git-based output
       // collection captures the diff, exactly like the process backend.
       fs: new ReadWriteFs({ root: repoDir }),
-      // TODO(hardcoded): hermetic cwd /
-      cwd: "/",
+      cwd: HERMETIC_CWD,
       env,
       ...(network ? { network } : {})
     });
@@ -82,8 +90,7 @@ export class HermeticSessionBackend implements SessionBackend {
       stdout = result.stdout;
       stderr = result.stderr;
     } catch (error) {
-      // TODO(hardcoded): abort exit code 124
-      exitCode = 124;
+      exitCode = TIMEOUT_EXIT_CODE;
       stderr = `hermetic session aborted: ${
         error instanceof Error ? error.message : String(error)
       }\n`;

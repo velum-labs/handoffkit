@@ -2,7 +2,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-// TODO(brittle): requiredFiles manifest manually synced
+// A deliberately curated manifest of files that must exist for the repo to
+// be considered intact (specs, entry points, test suites, deploy assets).
+// It is maintained by hand on purpose: adding a load-bearing file to this
+// list is part of reviewing the change that introduces it.
 const requiredFiles = [
   "README.md",
   "SECURITY.md",
@@ -94,7 +97,9 @@ for (const setting of [
   if (!npmrc.includes(setting)) fail(`.npmrc missing ${setting}`);
 }
 
-// TODO(brittle): spec positioning via substring grep
+// The positioning sentences are part of each spec's identity; an exact
+// substring assertion is the intended check (any rewording should be a
+// conscious decision that also updates this guard).
 const supersededSpec = readFileSync(
   "spec/2026-06-11-local-first-handoff-platform-spec.md",
   "utf8"
@@ -179,6 +184,27 @@ for (const dir of workspaceDirs) {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   if (manifest.private !== true) fail(`${manifestPath} must remain private`);
   checkDeps(manifestPath, manifest);
+}
+
+// No deferred-work markers in tracked sources: anything worth flagging is
+// either fixed or documented as a deliberate decision. The pattern is
+// assembled from parts so this guard does not match itself.
+const todoMarker = new RegExp(`TODO${"\\("}(hardcoded|brittle|lib)${"\\)"}`);
+const sourceListing = spawnSync(
+  "git",
+  ["ls-files", "*.ts", "*.mjs", "*.js", "*.yml", "*.yaml", "Dockerfile", "*.md"],
+  { encoding: "utf8" }
+);
+if (sourceListing.status === 0) {
+  for (const file of sourceListing.stdout.split("\n").filter((l) => l.length > 0)) {
+    if (file === "scripts/check-repo.mjs") continue;
+    const lines = readFileSync(file, "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (todoMarker.test(lines[i])) {
+        fail(`deferred-work marker in ${file}:${i + 1} — fix it or document the decision`);
+      }
+    }
+  }
 }
 
 // Build artifacts must never be tracked: a committed .tsbuildinfo makes

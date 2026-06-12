@@ -15,7 +15,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { verifyReceiptBundle } from "@warrant/protocol";
+import { isTerminalStatus, verifyReceiptBundle } from "@warrant/protocol";
 import { captureWorkspace } from "@warrant/workspace";
 import { git, makeRepo, startStack } from "@warrant/testkit";
 
@@ -128,15 +128,19 @@ async function main(): Promise<void> {
       budget: {},
       disclosure: "minimal-context"
     });
-    // Drain the queue (the capture loop above left created runs unclaimed)
-    // until our receipt run reaches a terminal state.
-    // TODO(brittle): queue drain heuristic
+    // Drain the queue until our receipt run is terminal. The loop is exact,
+    // not heuristic: it stops on the run's terminal status, or when the
+    // queue is empty (runOnce returned nothing — the run can no longer make
+    // progress), whichever comes first. The bound only caps total work and
+    // exceeds the maximum possible queue depth (every run created above
+    // plus headroom), so it can never cut the drain short.
     let drained = 0;
-    for (let i = 0; i < FILE_COUNT + ITERATIONS + 20; i++) {
+    const maxQueueDepth = FILE_COUNT + ITERATIONS + 20;
+    for (let i = 0; i < maxQueueDepth; i++) {
       const processed = await stack.runOnce();
       if (processed) drained++;
       const view = await stack.client.getRun(run.runId);
-      if (["completed", "failed", "cancelled"].includes(view.status)) break;
+      if (isTerminalStatus(view.status)) break;
       if (!processed) break;
     }
     const finalStatus = (await stack.client.getRun(run.runId)).status;

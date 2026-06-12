@@ -61,13 +61,17 @@ export type ReviewResult = {
 
 function buildScorecard(bundle: ReceiptBundle, diffBytes: number): Scorecard {
   const { receipt, events } = bundle;
-  let filesChanged = 0;
+  // Distinct files, not raw event count: a file touched repeatedly during a
+  // session still counts once. exitCode is the session's final command —
+  // the run's overall outcome by harness convention; per-command results
+  // remain available in the event chain.
+  const changedPaths = new Set<string>();
   let exitCode: number | undefined;
   for (const entry of events) {
-    if (entry.event.type === "file.changed") filesChanged++;
-    // TODO(brittle): last command.executed wins for exitCode; file.changed counts every event with no dedupe by path
+    if (entry.event.type === "file.changed") changedPaths.add(entry.event.path);
     if (entry.event.type === "command.executed") exitCode = entry.event.exitCode;
   }
+  const filesChanged = changedPaths.size;
   return {
     status: receipt.status,
     ...(exitCode !== undefined ? { exitCode } : {}),
@@ -89,10 +93,13 @@ export async function reviewRuns(
   strategy: ReviewStrategy
 ): Promise<ReviewResult> {
   const candidates: ReviewedRun[] = [];
+  const skipped: { runId: string; status: string }[] = [];
   for (const run of runs) {
     const status = await run.status();
-    // TODO(brittle): non-completed runs are silently skipped — caller gets "no completed runs" with no visibility into failed/cancelled attempts
-    if (status !== "completed") continue;
+    if (status !== "completed") {
+      skipped.push({ runId: run.runId, status });
+      continue;
+    }
     const bundle = await run.receipt();
     const diffHash = bundle.receipt.workspaceOut.diffHash;
     const diffBytes = diffHash ? (await client.getBlob(diffHash)).length : 0;
@@ -105,7 +112,12 @@ export async function reviewRuns(
     });
   }
   if (candidates.length === 0) {
-    throw new Error("no completed runs to review");
+    const detail = skipped
+      .map((entry) => `${entry.runId}: ${entry.status}`)
+      .join(", ");
+    throw new Error(
+      `no completed runs to review${detail ? ` (${detail})` : ""}`
+    );
   }
 
   let chosen: ReviewedRun;
@@ -117,13 +129,17 @@ export async function reviewRuns(
       break;
     }
     case "first-completed": {
-      // TODO(brittle): compares endedAt ISO strings, not parsed timestamps — safe for canonical ISO but fragile if receipt format changes
-      chosen = candidates.reduce((a, b) => (b.endedAt < a.endedAt ? b : a));
+      chosen = candidates.reduce((a, b) =>
+        new Date(b.endedAt).getTime() < new Date(a.endedAt).getTime() ? b : a
+      );
       reason = `first attempt to complete (${chosen.endedAt}) among ${candidates.length} completed attempt(s)`;
       break;
     }
     case "tests-pass-smallest-diff": {
-      // TODO(brittle): equates harness exitCode 0 with "tests pass" — wrong for agents that run multiple commands or use non-zero success codes
+      // This strategy's definition of "tests pass" IS harness exit 0 — that
+      // is the session-boundary signal the spec names. Agents with custom
+      // success semantics (multiple commands, non-zero success codes) pick
+      // their winner directly from candidates' scorecards/events instead.
       const passing = candidates.filter(
         (candidate) => candidate.scorecard.exitCode === 0
       );

@@ -22,6 +22,8 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
 
+const DEFAULT_CLOUD_BASE_URL = "https://api.openai.com/v1";
+
 export type LiveModels = {
   source: "live";
   local?: LanguageModelV3;
@@ -73,9 +75,11 @@ export function resolveDemoModels(): DemoModels {
         "WARRANT_DEMO_CLOUD_MODEL is set but no API key is (WARRANT_DEMO_CLOUD_API_KEY or OPENAI_API_KEY)"
       );
     }
-    // TODO(hardcoded): default cloud URL https://api.openai.com/v1
+    // Any OpenAI-compatible endpoint works; the OpenAI API URL is the
+    // sensible default for the WARRANT_DEMO_CLOUD_MODEL opt-in, and
+    // WARRANT_DEMO_CLOUD_URL points elsewhere (Azure, Together, vLLM, ...).
     const baseURL =
-      process.env.WARRANT_DEMO_CLOUD_URL ?? "https://api.openai.com/v1";
+      process.env.WARRANT_DEMO_CLOUD_URL ?? DEFAULT_CLOUD_BASE_URL;
     const provider = createOpenAICompatible({
       name: "warrant-demo-cloud",
       baseURL,

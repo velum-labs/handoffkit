@@ -51,6 +51,9 @@ export type RemoteToolSet = {
   shell: Tool<ShellToolInput, ShellToolOutput>;
 };
 
+/** Default per-call wait ceiling for governed tool runs. */
+export const DEFAULT_REMOTE_TOOL_TIMEOUT_MS = 5 * 60 * 1000;
+
 export type RemoteTools = {
   /** AI SDK-compatible tools; pass directly to generateText/streamText. */
   tools: RemoteToolSet;
@@ -82,8 +85,7 @@ export function remoteTools(config: RemoteToolsConfig): RemoteTools {
   });
   const target = targets.pool(config.pool);
   const pullResults = config.pullResults ?? true;
-  // TODO(hardcoded): default timeoutMs 5 min
-  const timeoutMs = config.timeoutMs ?? 5 * 60 * 1000;
+  const timeoutMs = config.timeoutMs ?? DEFAULT_REMOTE_TOOL_TIMEOUT_MS;
   const records: RemoteToolCallRecord[] = [];
 
   const shell = tool({

@@ -38,8 +38,23 @@ export type VercelSandboxOptions = {
   projectId?: string;
 };
 
-// TODO(hardcoded): IGNORED_DIRS
+// Not mirrored into the sandbox: VCS metadata stays local (output is
+// collected as a git diff on the runner side) and dependency trees are
+// reinstalled inside the VM when the task needs them.
 const IGNORED_DIRS = new Set([".git", "node_modules"]);
+
+/** Defaults for the microVM; both are overridable via VercelSandboxOptions. */
+const DEFAULT_WORKDIR = "/warrant/workspace";
+const DEFAULT_RUNTIME = "node22";
+
+/**
+ * Quote a value for POSIX sh: single quotes, with embedded single quotes
+ * rendered as '\''. Unlike double quotes, nothing inside single quotes is
+ * expanded, so secret values containing $, backticks, or quotes are inert.
+ */
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
+}
 
 function listFiles(root: string, dir = root, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -98,9 +113,8 @@ export class VercelSandboxBackend implements SessionBackend {
   async execute(input: SessionExecution): Promise<SessionBackendResult> {
     const { contract, repoDir, secrets, command, timeoutMin, emit } = input;
     const creds = this.credentials();
-    // TODO(hardcoded): default runtime node22, workdir
-    const workdir = this.options.workdir ?? "/warrant/workspace";
-    const runtime = this.options.runtime ?? "node22";
+    const workdir = this.options.workdir ?? DEFAULT_WORKDIR;
+    const runtime = this.options.runtime ?? DEFAULT_RUNTIME;
 
     const sandbox = await Sandbox.create({
       ...creds,
@@ -120,9 +134,10 @@ export class VercelSandboxBackend implements SessionBackend {
         );
       }
 
-      // TODO(brittle): secrets via shell export concat
+      // Secrets are injected as single-quoted exports: shellQuote renders
+      // values inert to expansion, so $, backticks, and quotes pass through.
       const envPrefix = secrets
-        .map((s) => `export ${s.name}=${JSON.stringify(s.value)}; `)
+        .map((s) => `export ${s.name}=${shellQuote(s.value)}; `)
         .join("");
       const script = scriptFor(input);
       const result = await sandbox.runCommand("sh", [
@@ -159,8 +174,12 @@ function scriptFor(input: SessionExecution): string {
 }
 
 /** Mirror the sandbox working tree back onto the local workspace. */
-// TODO(brittle): manual recursive FS mirror
-// TODO(lib): suggest sandbox SDK bulk sync or archiver — mirror back
+/**
+ * Mirror the sandbox workdir back onto the local checkout so the runner's
+ * standard git-based output collection sees the changes. A per-file walk is
+ * the operation the sandbox FS API supports (there is no bulk download),
+ * and the file count is bounded by the workspace that was staged in.
+ */
 async function mirrorBack(
   sandbox: Sandbox,
   workdir: string,

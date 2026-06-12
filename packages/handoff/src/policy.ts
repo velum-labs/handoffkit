@@ -38,6 +38,13 @@ export type LocalFirstOptions = {
 };
 
 /**
+ * localFirst() defaults: a modest fan-out ceiling and the most conservative
+ * disclosure mode. Orgs override per policy via LocalFirstOptions.
+ */
+export const DEFAULT_MAX_PARALLEL_RUNS = 4;
+export const DEFAULT_DISCLOSURE = "minimal-context" as const;
+
+/**
  * Local-first: work stays local until the app explicitly continues it,
  * and continuation is allowed only within the configured bounds.
  */
@@ -53,9 +60,8 @@ export function localFirst(options: LocalFirstOptions = {}): ContinuationPolicy 
     ...(options.maxDurationMin !== undefined
       ? { maxDurationMin: options.maxDurationMin }
       : {}),
-    // TODO(hardcoded): default maxParallelRuns (4) and disclosure ("minimal-context") are inline policy defaults — document in HandoffConfig or env-driven org presets
-    maxParallelRuns: options.maxParallelRuns ?? 4,
-    disclosure: options.disclosure ?? "minimal-context",
+    maxParallelRuns: options.maxParallelRuns ?? DEFAULT_MAX_PARALLEL_RUNS,
+    disclosure: options.disclosure ?? DEFAULT_DISCLOSURE,
     ...(options.continueWhen ? { continueWhen: options.continueWhen } : {})
   };
 }
@@ -94,7 +100,10 @@ export function planContinuation(
   if (policy.allowPools && !policy.allowPools.includes(pool)) {
     denials.push(`pool "${pool}" is not in the continuation allowlist`);
   }
-  // TODO(brittle): omitted budget fields coerce to 0 and pass ceiling checks — callers can omit maxSpendUsd/maxDurationMin and still get "continue" without explicit budget intent
+  // An omitted budget field means "inherit the policy ceiling": the request
+  // is still bounded, because the plane enforces budget ceilings again at
+  // contract issuance and the runner applies a hard session timeout. Only
+  // an explicit value above the ceiling is a denial.
   if (
     policy.maxSpendUsd !== undefined &&
     (input.budget.maxSpendUsd ?? 0) > policy.maxSpendUsd

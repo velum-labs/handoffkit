@@ -2,6 +2,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { agents, handoff, localFirst, targets } from "@warrant/handoff";
+import { isTerminalStatus } from "@warrant/protocol";
 import { PlaneClient } from "@warrant/sdk";
 import { makeRepo } from "@warrant/testkit";
 import { captureWorkspace } from "@warrant/workspace";
@@ -18,6 +19,10 @@ export type SeedResult = {
   runIds: string[];
 };
 
+/** Seeder polling cadence and per-run terminal wait. */
+const SEED_POLL_MS = 300;
+const SEED_TERMINAL_WAIT_MS = 60_000;
+
 async function waitTerminal(
   client: PlaneClient,
   runId: string,
@@ -26,10 +31,9 @@ async function waitTerminal(
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const view = await client.getRun(runId);
-    if (["completed", "failed", "cancelled"].includes(view.status)) return;
+    if (isTerminalStatus(view.status)) return;
     if (Date.now() >= deadline) return;
-    // TODO(hardcoded): poll 300ms
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, SEED_POLL_MS));
   }
 }
 
@@ -104,17 +108,22 @@ export async function seedShowcase(options: SeedOptions): Promise<SeedResult> {
     });
     try {
       await client.cancel(doomed.runId, { kind: "human", id: "sam@example.com" });
-    } catch {
-      // TODO(brittle): cancel race swallowed silently
-      // A racing runner may have claimed it first; the run is then governed
-      // to completion, which is also a fine thing to show.
+    } catch (error) {
+      // Expected race, deliberately tolerated: a polling runner may claim
+      // the run before the cancel lands, in which case it is governed to
+      // completion — also a fine state for the showcase. Log it so the
+      // seeder's output explains why a "cancelled" seed shows as completed.
+      console.log(
+        `seed: cancel of ${doomed.runId} lost the race (${
+          error instanceof Error ? error.message : String(error)
+        }); leaving it to complete`
+      );
     }
     runIds.push(doomed.runId);
 
     if (wait) {
       for (const runId of runIds) {
-        // TODO(hardcoded): terminal wait 60s
-        await waitTerminal(client, runId, 60_000);
+        await waitTerminal(client, runId, SEED_TERMINAL_WAIT_MS);
       }
     }
     return { runIds };

@@ -37,19 +37,36 @@ export type HandoffModelConfig = {
   sticky?: boolean;
   /** Observer for every routing decision (withModel wires this to h.trace). */
   onDecision?: (decision: ModelDecision) => void;
+  /**
+   * Override the overflow classifier. Providers do not standardize
+   * context-overflow errors, so the default is a message heuristic; supply
+   * a provider-specific predicate when you know the exact error shape.
+   */
+  isContextOverflow?: (error: unknown) => boolean;
 };
 
-// TODO(brittle): regex overflow classifier
+// Providers report context overflow as free-text error messages with no
+// standard code, so a message heuristic is the only provider-agnostic
+// default. Either reason escalates to cloud; the classification only
+// affects the recorded reason. Override via config.isContextOverflow.
 const OVERFLOW_PATTERN = /context|token|length|too.?(long|large)/i;
 
-function classify(error: unknown): EscalationReason {
+function classify(
+  error: unknown,
+  isOverflow?: (error: unknown) => boolean
+): EscalationReason {
+  if (isOverflow) return isOverflow(error) ? "context-overflow" : "local-error";
   const message = error instanceof Error ? error.message : String(error);
   return OVERFLOW_PATTERN.test(message) ? "context-overflow" : "local-error";
 }
 
+/**
+ * Deterministic proxy for prompt size: the byte length of the serialized
+ * prompt. The threshold gate needs a cheap, stable measure that correlates
+ * with token count, not an exact tokenizer (which would be model-specific).
+ */
 function promptBytes(options: LanguageModelV3CallOptions): number {
   try {
-    // TODO(brittle): prompt size via JSON.stringify
     return Buffer.byteLength(JSON.stringify(options.prompt), "utf8");
   } catch {
     return 0;
@@ -147,7 +164,7 @@ export class HandoffModel implements LanguageModelV3 {
       this.note("local", false, decision.reason);
       return result;
     } catch (error) {
-      const why = classify(error);
+      const why = classify(error, this.config.isContextOverflow);
       this.markEscalated();
       const reason = `local model failed (${why}): ${
         error instanceof Error ? error.message : String(error)
@@ -171,7 +188,7 @@ export class HandoffModel implements LanguageModelV3 {
       this.note("local", false, decision.reason);
       return result;
     } catch (error) {
-      const why = classify(error);
+      const why = classify(error, this.config.isContextOverflow);
       this.markEscalated();
       const reason = `local model failed to start streaming (${why}): ${
         error instanceof Error ? error.message : String(error)
