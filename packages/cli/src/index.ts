@@ -4,7 +4,6 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { agents, handoff, targets } from "@warrant/handoff";
-import type { AgentDescriptor } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
 import {
   AGENT_KINDS,
@@ -15,6 +14,7 @@ import {
 } from "@warrant/protocol";
 import type {
   AgentKind,
+  AgentSpec,
   ReceiptBundle,
   RunRequestInput,
   SessionIsolation
@@ -83,7 +83,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function agentDescriptorFor(kind: string): AgentDescriptor {
+function agentSpecFor(kind: string): AgentSpec {
   switch (kind as AgentKind) {
     case "claude-code":
       return agents.claudeCode();
@@ -242,7 +242,7 @@ async function cmdContinue(dir: string, argv: string[]): Promise<void> {
     workspace: repoDir,
     plane: { url: home.config.planeUrl, adminToken: home.config.adminToken },
     actor: { kind: "human", id: home.config.requestedBy },
-    agent: agentDescriptorFor(values.agent),
+    agent: agentSpecFor(values.agent),
     secrets: values.secret ?? [],
     allowHosts: values["allow-host"] ?? [],
     allowUntracked: values["allow-untracked"] ?? []

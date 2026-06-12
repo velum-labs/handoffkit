@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { agents, toAgentSpec } from "../agents.js";
+import { agents } from "../agents.js";
 import { localFirst, planContinuation } from "../policy.js";
 import { targets } from "../targets.js";
 
@@ -15,12 +15,12 @@ test("typed descriptors carry no magic strings", () => {
   });
   assert.throws(() => targets.pool(""));
 
-  assert.deepEqual(toAgentSpec(agents.mock()), { kind: "mock" });
-  assert.deepEqual(toAgentSpec(agents.claudeCode({ version: ">=2.1" })), {
+  assert.deepEqual(agents.mock(), { kind: "mock" });
+  assert.deepEqual(agents.claudeCode({ version: ">=2.1" }), {
     kind: "claude-code",
     version: ">=2.1"
   });
-  assert.deepEqual(toAgentSpec(agents.codex()), { kind: "codex" });
+  assert.deepEqual(agents.codex(), { kind: "codex" });
 });
 
 test("planner allows within policy and explains why", () => {

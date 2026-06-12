@@ -150,58 +150,68 @@ export class HandoffModel implements LanguageModelV3 {
     if (this.config.sticky ?? true) this.escalatedSticky = true;
   }
 
-  async doGenerate(
-    options: LanguageModelV3CallOptions
-  ): Promise<LanguageModelV3GenerateResult> {
+  /**
+   * The one dispatch shared by doGenerate and doStream: route per `decide`,
+   * try local, classify a local failure, escalate to cloud, and report
+   * every decision. The two entry points differ only in which provider
+   * method runs and how a local failure is phrased.
+   */
+  private async dispatch<T>(
+    options: LanguageModelV3CallOptions,
+    call: (model: LanguageModelV3) => PromiseLike<T>,
+    localFailurePhrase: string
+  ): Promise<T> {
     const decision = this.decide(options);
     if (decision.route === "cloud") {
       if (decision.escalated) this.markEscalated();
       this.note("cloud", decision.escalated, decision.reason);
-      return this.config.cloud.doGenerate(options);
+      return call(this.config.cloud);
     }
     try {
-      const result = await this.config.local.doGenerate(options);
+      const result = await call(this.config.local);
       this.note("local", false, decision.reason);
       return result;
     } catch (error) {
       const why = classify(error, this.config.isContextOverflow);
       this.markEscalated();
-      const reason = `local model failed (${why}): ${
+      const reason = `${localFailurePhrase} (${why}): ${
         error instanceof Error ? error.message : String(error)
       }`;
       this.note("cloud", true, reason);
-      return this.config.cloud.doGenerate(options);
+      return call(this.config.cloud);
     }
+  }
+
+  async doGenerate(
+    options: LanguageModelV3CallOptions
+  ): Promise<LanguageModelV3GenerateResult> {
+    return this.dispatch(options, (model) => model.doGenerate(options), "local model failed");
   }
 
   async doStream(
     options: LanguageModelV3CallOptions
   ): Promise<LanguageModelV3StreamResult> {
-    const decision = this.decide(options);
-    if (decision.route === "cloud") {
-      if (decision.escalated) this.markEscalated();
-      this.note("cloud", decision.escalated, decision.reason);
-      return this.config.cloud.doStream(options);
-    }
-    try {
-      const result = await this.config.local.doStream(options);
-      this.note("local", false, decision.reason);
-      return result;
-    } catch (error) {
-      const why = classify(error, this.config.isContextOverflow);
-      this.markEscalated();
-      const reason = `local model failed to start streaming (${why}): ${
-        error instanceof Error ? error.message : String(error)
-      }`;
-      this.note("cloud", true, reason);
-      return this.config.cloud.doStream(options);
-    }
+    return this.dispatch(
+      options,
+      (model) => model.doStream(options),
+      "local model failed to start streaming"
+    );
   }
 }
 
 /** Create an escalating local-first model. */
 export function handoffModel(config: HandoffModelConfig): HandoffModel {
   return new HandoffModel(config);
+}
+
+/**
+ * Attach a model to a continuation context as `h.model`. The single
+ * golden-shape attach used by both `withModel` and `withRoutedModel`;
+ * decision-to-trace mapping stays with each adapter, the composition does
+ * not.
+ */
+export function attachModel<H extends Handoff, M>(h: H, model: M): H & { model: M } {
+  return Object.assign(h, { model });
 }
 
 /**
@@ -214,9 +224,11 @@ export function withModel<H extends Handoff>(
   h: H,
   config: Omit<HandoffModelConfig, "onDecision">
 ): H & { model: HandoffModel } {
-  const model = handoffModel({
-    ...config,
-    onDecision: (decision) => h.noteModelDecision(decision)
-  });
-  return Object.assign(h, { model });
+  return attachModel(
+    h,
+    handoffModel({
+      ...config,
+      onDecision: (decision) => h.noteModelDecision(decision)
+    })
+  );
 }

@@ -13,6 +13,7 @@ import {
 } from "@warrant/protocol";
 import type {
   ActorRef,
+  AgentSpec,
   ArtifactKind,
   BudgetSpec,
   ChainedEvent,
@@ -29,8 +30,7 @@ import { PlaneClient } from "@warrant/sdk";
 import { captureWorkspace } from "@warrant/workspace";
 import type { CapturedWorkspace, PullResult } from "@warrant/workspace";
 
-import { agents, toAgentSpec } from "./agents.js";
-import type { AgentDescriptor } from "./agents.js";
+import { agents } from "./agents.js";
 import { HandoffCheckpointManager } from "./checkpoint-manager.js";
 import {
   BLOB_UPLOAD_CONCURRENCY,
@@ -60,7 +60,7 @@ export type HandoffConfig = {
   /** Who is asking. Defaults to the OS user. */
   actor?: ActorRef;
   /** Default agent for continuations. Defaults to the mock harness. */
-  agent?: AgentDescriptor;
+  agent?: AgentSpec;
   /** Client-side continuation policy. Defaults to `localFirst()`. */
   policy?: ContinuationPolicy;
   /** Secret names continuations may request by default. */
@@ -74,7 +74,7 @@ export type HandoffConfig = {
 
 export type ContinueOptions = {
   task: string;
-  agent?: AgentDescriptor;
+  agent?: AgentSpec;
   /** Durable machine intent. Defaults from the selected agent and task. */
   execution?: ExecutionSpec;
   reason?: string;
@@ -167,10 +167,6 @@ function defaultActor(): ActorRef {
   return { kind: "human", id: process.env.USER ?? DEFAULT_ACTOR_ID };
 }
 
-function executionFor(agent: AgentDescriptor, task: string): ExecutionSpec {
-  return defaultExecutionSpec(toAgentSpec(agent), task);
-}
-
 /**
  * The continuation context. One object that can checkpoint local work,
  * plan a continuation under policy, hand the work to a governed runner
@@ -184,7 +180,7 @@ export class Handoff {
   private readonly client: PlaneClient;
   private readonly workspaceDir: string;
   private readonly actor: ActorRef;
-  private readonly agent: AgentDescriptor;
+  private readonly agent: AgentSpec;
   private readonly policy: ContinuationPolicy;
   private readonly secrets: string[];
   private readonly allowHosts: string[];
@@ -578,9 +574,9 @@ export class Handoff {
       // (release is the plane's policy decision, never the SDK's). Orgs
       // that pre-approve hosts express that in plane policy, not here.
       checkpoint,
-      agent: toAgentSpec(agent),
+      agent,
       task: { prompt: options.task },
-      execution: options.execution ?? executionFor(agent, options.task),
+      execution: options.execution ?? defaultExecutionSpec(agent, options.task),
       ...(options.reason ? { reason: options.reason } : {}),
       secrets: (options.secrets ?? this.secrets).map((name) => ({
         name,
