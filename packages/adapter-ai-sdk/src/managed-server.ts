@@ -13,7 +13,7 @@ import type {
   LanguageModelV3StreamResult
 } from "@ai-sdk/provider";
 
-import { MlxEnv } from "./mlx-env.js";
+import { MLX_LM_STRUCTURED_PIN, MlxEnv } from "./mlx-env.js";
 import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
 
 /**
@@ -389,8 +389,32 @@ export type MlxServerOptions = {
   env?: MlxEnvOptions | MlxEnv;
   /** Extra mlx_lm server flags (e.g. --max-tokens). */
   extraArgs?: string[];
+  /**
+   * Enable structured decoding (`response_format`, `guided_json`,
+   * `guided_regex`, `guided_choice`): the env installs the velum-labs
+   * mlx-lm fork with its [structured] extra, which is self-contained
+   * (see the fork's STRUCTURED.md). With this set the AI SDK's JSON output
+   * modes (generateObject, responseFormat) are actually enforced by the
+   * server.
+   */
+  structured?: boolean;
 } & Omit<ManagedModelServerOptions, "prepare" | "modelId" | "createModel"> &
   Pick<Partial<ManagedModelServerOptions>, "createModel">;
+
+/**
+ * Env options for structured decoding: the self-contained mlx-lm fork as
+ * the main spec. The stock `mlx_lm server` entry point is unchanged; the
+ * hooks activate because the [structured] extra's dependencies import.
+ */
+function structuredEnvOptions(): Pick<
+  MlxEnvOptions,
+  "packageSpec" | "extraImportNames"
+> {
+  return {
+    packageSpec: MLX_LM_STRUCTURED_PIN,
+    extraImportNames: ["mlx_lm.structured.integration"]
+  };
+}
 
 /**
  * The MLX preset: a managed server whose Python environment is owned by
@@ -400,9 +424,25 @@ export type MlxServerOptions = {
 export function mlxServer(
   options: MlxServerOptions
 ): ManagedModelServer & { env: MlxEnv } {
-  const env =
-    options.env instanceof MlxEnv ? options.env : new MlxEnv(options.env);
-  const { model, env: _env, extraArgs, ...serverOptions } = options;
+  const { model, env: envOption, extraArgs, structured, ...serverOptions } =
+    options;
+  let env: MlxEnv;
+  if (envOption instanceof MlxEnv) {
+    if (structured) {
+      throw new Error(
+        "structured cannot be combined with a pre-built MlxEnv: configure " +
+          "extraPackageSpecs/extraImportNames/serverModule on the env instead"
+      );
+    }
+    env = envOption;
+  } else {
+    // Structured mode supplies defaults; explicit env options win (e.g. a
+    // custom packageSpec pointing at another fork revision).
+    env = new MlxEnv({
+      ...(structured ? structuredEnvOptions() : {}),
+      ...(envOption ?? {})
+    });
+  }
   const server = new ManagedModelServer({
     ...serverOptions,
     modelId: model,

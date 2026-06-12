@@ -42,6 +42,17 @@ import { delimiter, dirname, join } from "node:path";
 /** Exact-pinned mlx-lm version this provisioner installs. */
 export const MLX_LM_PIN = "0.31.3";
 
+/**
+ * The velum-labs/mlx-lm fork installed in structured mode: upstream v0.31.3
+ * plus the self-contained mlx_lm.structured package (see the fork's
+ * STRUCTURED.md). The [structured] extra pulls the fork's exact-pinned
+ * outlines-core. The ref is the patch-series branch for that upstream tag;
+ * prefer narrowing it to a commit SHA once the branch is settled, since a
+ * moving ref weakens the manifest's exactness.
+ */
+export const MLX_LM_STRUCTURED_PIN =
+  "mlx-lm[structured] @ git+https://github.com/velum-labs/mlx-lm@structured-0.31.3";
+
 /** Python version requested from uv (which can download it if absent). */
 export const PYTHON_PIN = "3.12";
 
@@ -57,6 +68,10 @@ export type MlxEnvManifest = {
   version: "warrant.mlxenv.v1";
   /** What was installed (e.g. "mlx-lm==0.31.3"). */
   packageSpec: string;
+  /** Additional specs installed after the main one (e.g. the structured
+   * decoding overlay). Absent in manifests written before this field
+   * existed, which reads as []. */
+  extraPackageSpecs?: string[];
   /** Module whose import proves the install is usable. */
   importName: string;
   /** What built the env: "uv <version>" or "venv+pip via <interpreter>". */
@@ -91,8 +106,21 @@ export type MlxEnvOptions = {
   dir?: string;
   /** Requirement to install. Defaults to the MLX_LM_PIN pin. */
   packageSpec?: string;
+  /**
+   * Additional requirements installed after the main spec — pinned PyPI
+   * specs or local package directories (e.g. the structured decoding
+   * overlay). Part of the manifest: changing them re-provisions.
+   */
+  extraPackageSpecs?: string[];
   /** Import that must succeed after install. Defaults to "mlx_lm". */
   importName?: string;
+  /** Additional imports that must succeed (one per extra package). */
+  extraImportNames?: string[];
+  /**
+   * Python module spawned by prepare(). Defaults to the stock
+   * `mlx_lm server`; the structured overlay uses STRUCTURED_SERVER_MODULE.
+   */
+  serverModule?: string;
   /**
    * Explicit base interpreter. Setting this forces the stdlib venv+pip
    * toolchain with exactly that interpreter (an escape hatch from uv).
@@ -112,10 +140,15 @@ export type MlxEnvOptions = {
    */
   requirePlatform?: boolean;
   /**
-   * Override the install step (default: install <packageSpec> into the
-   * venv with the resolved toolchain). Tests inject an offline installer.
+   * Override the install step (default: install <packageSpec> plus any
+   * <extraPackageSpecs> into the venv with the resolved toolchain). Tests
+   * inject an offline installer.
    */
-  install?: (venvPython: string, packageSpec: string) => void;
+  install?: (
+    venvPython: string,
+    packageSpec: string,
+    extraPackageSpecs: string[]
+  ) => void;
 };
 
 /** How the venv gets built and populated. */
@@ -158,20 +191,30 @@ function directorySizeBytes(dir: string): number {
 export class MlxEnv {
   readonly dir: string;
   private readonly packageSpec: string;
+  private readonly extraPackageSpecs: string[];
   private readonly importName: string;
+  private readonly extraImportNames: string[];
+  private readonly serverModule: string | undefined;
   private readonly requirePlatform: boolean;
   private readonly explicitPython: string | undefined;
   private readonly uvOption: string | false | undefined;
   private readonly pythonVersion: string;
   private readonly installHook:
-    | ((venvPython: string, packageSpec: string) => void)
+    | ((
+        venvPython: string,
+        packageSpec: string,
+        extraPackageSpecs: string[]
+      ) => void)
     | undefined;
   private provisionPromise: Promise<MlxEnvManifest> | undefined;
 
   constructor(options: MlxEnvOptions = {}) {
     this.dir = options.dir ?? defaultMlxDir();
     this.packageSpec = options.packageSpec ?? `mlx-lm==${MLX_LM_PIN}`;
+    this.extraPackageSpecs = options.extraPackageSpecs ?? [];
     this.importName = options.importName ?? "mlx_lm";
+    this.extraImportNames = options.extraImportNames ?? [];
+    this.serverModule = options.serverModule;
     this.requirePlatform = options.requirePlatform ?? true;
     this.explicitPython = options.python;
     this.uvOption = options.uv;
@@ -219,6 +262,15 @@ export class MlxEnv {
         parsed.version !== "warrant.mlxenv.v1" ||
         typeof parsed.packageSpec !== "string" ||
         typeof parsed.interpreterPath !== "string"
+      ) {
+        return undefined;
+      }
+      if (
+        parsed.extraPackageSpecs !== undefined &&
+        !(
+          Array.isArray(parsed.extraPackageSpecs) &&
+          parsed.extraPackageSpecs.every((spec) => typeof spec === "string")
+        )
       ) {
         return undefined;
       }
@@ -294,18 +346,28 @@ export class MlxEnv {
     return candidate;
   }
 
-  /** Does the venv interpreter exist and import the managed package? */
+  /** Does the venv interpreter exist and import the managed packages? */
   private importWorks(): boolean {
     if (!existsSync(this.venvPython)) return false;
-    return run(this.venvPython, ["-c", `import ${this.importName}`]).status === 0;
+    const imports = [this.importName, ...this.extraImportNames].join(", ");
+    return run(this.venvPython, ["-c", `import ${imports}`]).status === 0;
   }
 
-  /** Manifest matches the current pin and the env actually works. */
+  private extrasMatch(manifest: MlxEnvManifest): boolean {
+    const recorded = manifest.extraPackageSpecs ?? [];
+    return (
+      recorded.length === this.extraPackageSpecs.length &&
+      recorded.every((spec, i) => spec === this.extraPackageSpecs[i])
+    );
+  }
+
+  /** Manifest matches the current pins and the env actually works. */
   verify(): boolean {
     const manifest = this.readManifest();
     return (
       manifest !== undefined &&
       manifest.packageSpec === this.packageSpec &&
+      this.extrasMatch(manifest) &&
       manifest.importName === this.importName &&
       this.importWorks()
     );
@@ -365,14 +427,15 @@ export class MlxEnv {
     this.createVenv(toolchain);
 
     if (this.installHook) {
-      this.installHook(this.venvPython, this.packageSpec);
+      this.installHook(this.venvPython, this.packageSpec, this.extraPackageSpecs);
     } else {
-      this.installPackage(toolchain);
+      this.installPackages(toolchain);
     }
 
     if (!this.importWorks()) {
+      const imports = [this.importName, ...this.extraImportNames].join(", ");
       throw new Error(
-        `provisioned env cannot import "${this.importName}"; the install is broken`
+        `provisioned env cannot import "${imports}"; the install is broken`
       );
     }
 
@@ -383,6 +446,7 @@ export class MlxEnv {
     const manifest: MlxEnvManifest = {
       version: "warrant.mlxenv.v1",
       packageSpec: this.packageSpec,
+      extraPackageSpecs: this.extraPackageSpecs,
       importName: this.importName,
       toolchain:
         toolchain.kind === "uv"
@@ -420,12 +484,13 @@ export class MlxEnv {
     }
   }
 
-  private installPackage(toolchain: Toolchain): void {
+  private installPackages(toolchain: Toolchain): void {
+    const specs = [this.packageSpec, ...this.extraPackageSpecs];
     const result =
       toolchain.kind === "uv"
         ? run(
             toolchain.bin,
-            ["pip", "install", "--python", this.venvPython, this.packageSpec],
+            ["pip", "install", "--python", this.venvPython, ...specs],
             this.uvEnv
           )
         : run(this.venvPython, [
@@ -434,11 +499,11 @@ export class MlxEnv {
             "install",
             "--no-input",
             "--disable-pip-version-check",
-            this.packageSpec
+            ...specs
           ]);
     if (result.status !== 0) {
       throw new Error(
-        `installing ${this.packageSpec} failed: ${result.stderr.trim().slice(-2000)}`
+        `installing ${specs.join(", ")} failed: ${result.stderr.trim().slice(-2000)}`
       );
     }
   }
@@ -450,12 +515,16 @@ export class MlxEnv {
    */
   async prepare(model: string, port: number, extraArgs: string[] = []): Promise<SpawnSpec> {
     await this.ensureProvisioned();
+    // The stock entry point is the `server` subcommand of the mlx_lm
+    // module; an override (e.g. the structured overlay) is a module that is
+    // itself the server and takes the same flags.
+    const moduleArgs = this.serverModule
+      ? ["-m", this.serverModule]
+      : ["-m", "mlx_lm", "server"];
     return {
       cmd: this.venvPython,
       args: [
-        "-m",
-        "mlx_lm",
-        "server",
+        ...moduleArgs,
         "--model",
         model,
         "--host",
