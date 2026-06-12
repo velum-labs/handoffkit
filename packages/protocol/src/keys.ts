@@ -25,6 +25,7 @@ export function generateEd25519KeyPair(): KeyPairPem {
 
 /** Stable identifier for a public key: sha256 of its PEM, truncated. */
 export function keyIdFromPublicPem(publicKeyPem: string): string {
+  // TODO(hardcoded): keyId truncates SHA-256 to 16 hex chars, not configurable
   return `ed25519:${sha256Hex(publicKeyPem.trim()).slice(0, 16)}`;
 }
 

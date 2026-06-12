@@ -16,6 +16,7 @@ services:
     build: .
     init: true
     environment:
+      # TODO(hardcoded): dev WARRANT_MASTER_KEY
       WARRANT_MASTER_KEY: "${WARRANT_MASTER_KEY:-dev-master-key-change-me-in-production-00000000}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
     command:
@@ -25,10 +26,12 @@ services:
         test -f /data/warrant/config.json || warrant init --host 0.0.0.0 --plane-url http://plane:7172
         exec warrant plane start
     ports:
+      # TODO(hardcoded): port 7172
       - "7172:7172"
     volumes:
       # Persists config, master key, the SQLite database, and blobs.
       - warrant-home:/data/warrant
+    # TODO(hardcoded): healthcheck
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7172/v1/ready"]
       interval: 2s

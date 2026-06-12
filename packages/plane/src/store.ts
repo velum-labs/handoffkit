@@ -74,6 +74,7 @@ export type RunSummaryRow = {
  * deliberately narrow so a Postgres adapter can be added for multi-node
  * deployments without touching the plane logic.
  */
+// TODO(brittle): claimNextRun and rate limiting assume single-writer semantics; multi-node needs a shared store + distributed limiter.
 export interface PlaneStore {
   /** Release any underlying handles. */
   close(): void;

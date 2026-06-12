@@ -129,6 +129,7 @@ export function verifyReceiptBundle(bundle: ReceiptBundle): BundleVerification {
     .map((e) => (e.event.type === "secret.released" ? e.event.name : ""))
     .sort();
   const releasedInReceipt = receipt.secretsReleased.map((r) => r.name).sort();
+  // TODO(brittle): secret list equality via JSON.stringify
   if (JSON.stringify(releasedInEvents) !== JSON.stringify(releasedInReceipt)) {
     problems.push("secretsReleased does not match secret.released events");
   }

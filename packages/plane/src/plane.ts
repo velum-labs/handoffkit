@@ -80,6 +80,7 @@ type ClaimTokenPayload = {
 
 type VerifiedClaim = { runnerId: string; nonce: string; expMs: number };
 
+// TODO(hardcoded): claim/contract/nonce TTLs are fixed constants; expose via PlaneConfig or policy.
 const CLAIM_TOKEN_TTL_MS = 10 * 60 * 1000;
 const CONTRACT_TTL_MS = 60 * 60 * 1000;
 const NONCE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -98,6 +99,7 @@ export class Plane {
     if (config.store) {
       this.store = config.store;
     } else {
+      // TODO(hardcoded): SQLite filename "plane.db" is not configurable.
       const dbPath = join(config.dataDir, "plane.db");
       mkdirSync(dirname(dbPath), { recursive: true });
       this.store = new SqliteStore(dbPath);
@@ -113,6 +115,7 @@ export class Plane {
 
   /** Ensure the bootstrap admin and enroller principals match the config. */
   private seedBootstrapPrincipals(): void {
+    // TODO(hardcoded): bootstrap principal names ("admin", "bootstrap-enroller") are fixed.
     this.upsertPrincipal("admin", "admin", this.config.adminToken);
     this.upsertPrincipal("bootstrap-enroller", "enroller", this.config.enrollToken);
   }
@@ -177,6 +180,7 @@ export class Plane {
     if (this.store.getPrincipalByName(name)) {
       throw new Error(`principal "${name}" already exists`);
     }
+    // TODO(hardcoded): token size (32 bytes) and ID prefix "prn_" are not configurable.
     const token = randomBytes(32).toString("base64url");
     const record: PrincipalRecord = {
       principalId: `prn_${randomUUID()}`,
@@ -222,6 +226,7 @@ export class Plane {
   issueEnrollToken(options: { pool?: string; ttlMs?: number } = {}): { token: string; expiresAt: string } {
     const token = randomBytes(32).toString("base64url");
     const now = Date.now();
+    // TODO(hardcoded): default enroll-token TTL (1h) should live in config alongside other TTLs.
     const expiresAt = new Date(now + (options.ttlMs ?? 60 * 60 * 1000)).toISOString();
     this.store.saveEnrollToken({
       tokenHash: hashToken(token),
@@ -256,6 +261,7 @@ export class Plane {
       this.metrics.inc("enroll.rejected");
       throw new Error("invalid enroll token");
     }
+    // TODO(brittle): publicKeyPem is stored without format/curve validation at enrollment.
     const runnerId = `rnr_${randomUUID()}`;
     const runnerToken = randomBytes(32).toString("base64url");
     const record: RunnerRecord = {
@@ -308,11 +314,13 @@ export class Plane {
       const rule = this.config.policy.secrets.releasable.find(
         (r) => r.name === name
       );
+      // TODO(hardcoded): fallback secret scope format `pool:${pool}` is inline; should match policy scope conventions.
       return { name, scope: rule ? rule.scope : `pool:${pool}` };
     });
   }
 
   private evaluateRequest(request: Omit<RunRequest, "runId">): PolicyDecision {
+    // TODO(brittle): agentKind is cast to policy union without runtime check; invalid kinds slip through until policy eval.
     return evaluatePolicy(this.config.policy, {
       agentKind: request.agentKind as Policy["agents"]["allow"][number],
       pool: request.pool,
@@ -453,6 +461,7 @@ export class Plane {
   private issueContract(request: RunRequest, approvedBy: ActorRef[]): RunContract {
     const now = Date.now();
     const unsigned: RunContract = {
+      // TODO(hardcoded): contract schema version string is inline; should reference a shared protocol constant.
       version: "warrant.contract.v1",
       runId: request.runId,
       issuedAt: new Date(now).toISOString(),
@@ -527,6 +536,7 @@ export class Plane {
     ]);
     this.metrics.inc("runs.claimed");
 
+    // TODO(lib): suggest jose — ad-hoc base64url JSON + detached sig is not a standard JWS/JWT; harder to verify interoperably.
     const payload: ClaimTokenPayload = {
       runId: candidate.id,
       runnerId: runner.runnerId,
@@ -562,11 +572,13 @@ export class Plane {
    * holds an active, plane-issued claim token.
    */
   verifyClaimTokenSignature(token: string): boolean {
+    // TODO(brittle): signature-only check; no runId/runnerId/nonce binding — sufficient for blob upload gate but easy to misuse.
     const [encoded, sigB64url] = token.split(".");
     if (!encoded || !sigB64url) return false;
     const sig = Buffer.from(sigB64url, "base64url").toString("base64");
     if (!verifyData(this.config.planePublicKeyPem, encoded, sig)) return false;
     try {
+      // TODO(brittle): ClaimTokenPayload parsed via `as` cast with no field validation (missing exp/runId silently passes partial checks).
       const payload = JSON.parse(
         Buffer.from(encoded, "base64url").toString("utf8")
       ) as ClaimTokenPayload;
@@ -583,6 +595,7 @@ export class Plane {
     if (!verifyData(this.config.planePublicKeyPem, encoded, sig)) {
       throw new Error("claim token signature invalid");
     }
+    // TODO(brittle): same ad-hoc token parse as verifyClaimTokenSignature; duplicate logic risks divergence.
     const payload = JSON.parse(
       Buffer.from(encoded, "base64url").toString("utf8")
     ) as ClaimTokenPayload;
@@ -639,6 +652,7 @@ export class Plane {
     }
     const runnerSig = receipt.signatures.find((s) => s.signer === "runner");
     if (!runnerSig) throw new Error("receipt is missing the runner signature");
+    // TODO(brittle): runner signature presence is checked but cryptographic verification against runner.publicKeyPem is not done here.
 
     const countersigned = signReceipt(
       receipt,
@@ -672,6 +686,7 @@ export class Plane {
     const runner = this.store.getRunnerById(record.claimedBy);
     if (!runner) return undefined;
     return {
+      // TODO(hardcoded): bundle version string is inline; should reference a shared protocol constant.
       version: "warrant.bundle.v1",
       contract: record.contract,
       receipt,
@@ -695,6 +710,7 @@ export class Plane {
   ready(): boolean {
     try {
       this.store.countBlobs();
+      // TODO(brittle): readiness only checks PEM string length, not that the key parses or matches the public key.
       return this.config.planePrivateKeyPem.length > 0;
     } catch {
       return false;

@@ -17,6 +17,7 @@ export const targets = {
     return {
       kind: "runtime-target",
       id: `pool:${name}`,
+      // TODO(hardcoded): locality is always "customer-runner" — future managed/cloud pools cannot be expressed without extending RuntimeTarget
       locality: "customer-runner",
       pool: name
     };

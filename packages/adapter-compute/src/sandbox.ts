@@ -52,6 +52,8 @@ export type GovernedCompute = {
   };
 };
 
+// TODO(brittle): duplicate inline git() helper
+// TODO(lib): suggest @warrant/workspace — git helpers
 function git(cwd: string, args: string[]): string {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   if (result.status !== 0) {
@@ -85,6 +87,7 @@ export class GovernedSandbox {
     this.sandboxId = `sbx_${randomUUID()}`;
     this.context = binding.context;
     this.pool = binding.pool;
+    // TODO(hardcoded): default timeout 5 min
     this.timeoutMs = binding.timeoutMs ?? 5 * 60 * 1000;
     this.workspaceDir = binding.context.workspacePath;
     this.filesystem = {
@@ -127,6 +130,7 @@ export class GovernedSandbox {
     git(this.workspaceDir, ["add", "-A"]);
     const dirty = git(this.workspaceDir, ["status", "--porcelain"]).trim();
     if (dirty.length === 0) return;
+    // TODO(hardcoded): git identity warrant-sandbox
     git(this.workspaceDir, [
       "-c",
       "user.name=warrant-sandbox",

@@ -16,6 +16,7 @@ export type RateLimitConfig = {
   authFailureLimit: number;
 };
 
+// TODO(hardcoded): default rate (50/s), burst (100), and auth lockout window/limit are fixed constants.
 export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
   ratePerSec: 50,
   burst: 100,
@@ -26,6 +27,7 @@ export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
 type Bucket = { tokens: number; updatedMs: number };
 type FailureState = { count: number; windowStartMs: number; lockedUntilMs: number };
 
+// TODO(lib): suggest rate-limiter-flexible — in-memory buckets do not survive restarts or share state across plane replicas.
 export class RateLimiter {
   private readonly buckets = new Map<string, Bucket>();
   private readonly failures = new Map<string, FailureState>();
@@ -38,6 +40,7 @@ export class RateLimiter {
   }
 
   /** Consume one token for `key`; returns false when the bucket is empty. */
+  // TODO(brittle): stale bucket/failure entries are never evicted; long-lived processes accumulate unbounded Map keys.
   allow(key: string): boolean {
     const nowMs = this.now();
     const bucket = this.buckets.get(key) ?? {

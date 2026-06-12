@@ -28,6 +28,7 @@ export class SqliteStore implements PlaneStore {
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA foreign_keys = ON");
+    // TODO(hardcoded): SQLite busy_timeout (5s) and WAL mode are not configurable.
     this.db.exec("PRAGMA busy_timeout = 5000");
     this.migrate();
   }
@@ -130,6 +131,7 @@ export class SqliteStore implements PlaneStore {
     const row = this.db
       .prepare("SELECT record FROM runs WHERE id = ?")
       .get(runId) as { record: string } | undefined;
+    // TODO(brittle): RunRecord JSON from DB is trusted via `as` cast; corrupted rows propagate invalid state.
     return row ? (JSON.parse(row.record) as RunRecord) : undefined;
   }
 
@@ -168,6 +170,7 @@ export class SqliteStore implements PlaneStore {
            WHERE id = ? AND status = 'created'`
         )
         .run("claimed", runnerId, now, JSON.stringify(record), record.id);
+      // TODO(brittle): UPDATE result.changes is not checked; concurrent claim could return a record another runner won.
       this.db.exec("COMMIT");
       return record;
     } catch (error) {
@@ -203,6 +206,7 @@ export class SqliteStore implements PlaneStore {
   }
 
   exportEvents(sinceMs: number): { runId: string; event: ChainedEvent }[] {
+    // TODO(brittle): loads all events then filters in JS; will not scale for large audit exports.
     const rows = this.db
       .prepare(
         "SELECT run_id, event FROM events ORDER BY run_id ASC, seq ASC"
@@ -347,6 +351,7 @@ export class SqliteStore implements PlaneStore {
     return {
       principalId: row.principal_id,
       name: row.name,
+      // TODO(brittle): principal role from DB cast without validation; unknown role strings pass through to auth layer.
       role: row.role as PrincipalRecord["role"],
       tokenHash: row.token_hash,
       createdAt: row.created_at,
@@ -423,6 +428,7 @@ export class SqliteStore implements PlaneStore {
       if (
         !row ||
         row.used_at !== null ||
+        // TODO(brittle): expiry compared against Date.now() instead of the `now` argument; breaks deterministic tests and clock injection.
         new Date(row.expires_at).getTime() < Date.now()
       ) {
         this.db.exec("COMMIT");

@@ -7,6 +7,7 @@ import type {
 
 import type { PlaneStore } from "./store.js";
 
+// TODO(hardcoded): terminal statuses and sweep interval default (1h) are not configurable outside RetentionSweeper ctor.
 const TERMINAL: RunStatus[] = ["completed", "failed", "cancelled"];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -58,6 +59,7 @@ export function collectReferencedBlobs(store: PlaneStore): Set<string> {
     if (!blob) continue;
     let envelope: HandoffEnvelope;
     try {
+      // TODO(brittle): envelope JSON parsed without schema validation; malformed blobs are silently skipped during GC.
       envelope = JSON.parse(blob.toString("utf8")) as HandoffEnvelope;
     } catch {
       continue;
@@ -90,6 +92,7 @@ export class RetentionSweeper {
 
   /** Run one retention pass: expire old terminal runs, GC blobs, prune nonces. */
   sweepOnce(now = Date.now()): RetentionResult {
+    // TODO(brittle): only receiptsDays drives run deletion; policy.artifactsDays is defined but never applied separately.
     const cutoff = now - this.policy.receiptsDays * DAY_MS;
     const deletedRuns = this.store.deleteRunsUpdatedBefore(cutoff, TERMINAL);
     const keep = collectReferencedBlobs(this.store);
@@ -104,7 +107,7 @@ export class RetentionSweeper {
       try {
         this.sweepOnce();
       } catch {
-        // Sweeper failures must never crash the plane; next tick retries.
+        // TODO(brittle): sweeper errors are swallowed with no logging; retention failures go unnoticed until disk fills.
       }
     }, this.intervalMs);
     this.timer.unref?.();

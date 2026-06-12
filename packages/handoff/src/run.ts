@@ -13,6 +13,7 @@ import type { PullResult } from "@warrant/workspace";
 import type { IsolationStrategy } from "./isolation.js";
 import type { RuntimeTarget } from "./targets.js";
 
+// TODO(brittle): TERMINAL statuses duplicated in Handoff.stream — centralize to avoid missing new terminal states in one path
 const TERMINAL: RunStatus[] = ["completed", "failed", "cancelled"];
 
 export type WaitOptions = {
@@ -78,11 +79,13 @@ export class HandoffRun {
 
   /** Deep link to this run in the control panel. */
   get url(): string {
+    // TODO(hardcoded): UI deep-link path "/ui/#/runs/" is coupled to plane routing — derive from PlaneClient or OpenAPI spec
     return `${this.client.baseUrl}/ui/#/runs/${this.runId}`;
   }
 
   /** Where the signed evidence lives: bundle download via the CLI. */
   get auditUrl(): string {
+    // TODO(hardcoded): bundle URL path inline — should live on PlaneClient as getRunBundleUrl(runId)
     return `${this.client.baseUrl}/v1/runs/${this.runId}/bundle`;
   }
 
@@ -101,11 +104,14 @@ export class HandoffRun {
    * human decision; the SDK surfaces it instead of spinning forever.
    */
   async wait(options: WaitOptions = {}): Promise<WaitOutcome> {
+    // TODO(hardcoded): default wait timeout (5min) and poll interval (300ms) are magic numbers — align with Handoff.stream defaults via shared config
     const timeoutMs = options.timeoutMs ?? 5 * 60 * 1000;
     const pollMs = options.pollMs ?? 300;
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const view = await this.client.getRun(this.runId);
+      // TODO(brittle): busy-poll loop with fixed sleep — no backoff, no plane push channel, and consent/terminal races if status flips between polls
+      // TODO(lib): suggest plane SSE/long-poll or @warrant/sdk subscribeRun — replaces hand-rolled setTimeout polling in wait() and Handoff.stream()
       if (TERMINAL.includes(view.status)) {
         this.onTerminal(this.runId, view.status);
         return { status: view.status, consentRequirements: [] };
@@ -129,6 +135,7 @@ export class HandoffRun {
    */
   async sessionLog(): Promise<string> {
     const events = await this.events();
+    // TODO(brittle): linear reverse scan for last log artifact — no index by kind; breaks if multiple log artifacts exist
     for (let i = events.length - 1; i >= 0; i--) {
       const entry = events[i];
       if (!entry) continue;
@@ -144,6 +151,7 @@ export class HandoffRun {
   /** Exit code of the harness command, from the command.executed event. */
   async commandExitCode(): Promise<number | undefined> {
     const events = await this.events();
+    // TODO(brittle): returns last command.executed exit code only — multi-command harnesses may report the wrong command
     for (let i = events.length - 1; i >= 0; i--) {
       const entry = events[i];
       if (!entry) continue;

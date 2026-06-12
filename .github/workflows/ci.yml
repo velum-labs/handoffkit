@@ -17,6 +17,7 @@ jobs:
   check:
     name: check, build, test, demos
     runs-on: ubuntu-latest
+    # TODO(hardcoded): job timeouts
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -27,12 +28,14 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
+          # TODO(hardcoded): Node 22
           node-version: 22
 
       - name: Enable Corepack
         run: corepack enable
 
       - name: Pin pnpm
+        # TODO(hardcoded): pnpm pin
         run: corepack prepare pnpm@10.33.4 --activate
 
       - name: Install
@@ -75,10 +78,12 @@ jobs:
       - name: Wait for seeded showcase runs
         run: |
           docker compose up seed
+          # TODO(brittle): smoke tests grep/awk CLI output
           docker compose logs seed | grep -q "done." || (docker compose logs && exit 1)
 
       - name: Smoke-test the API and control panel
         run: |
+          # TODO(brittle): smoke tests grep/awk CLI output
           curl -fsS http://localhost:7172/v1/health
           curl -fsS http://localhost:7172/v1/ready | grep -q '"ready":true'
           curl -fsS http://localhost:7172/ui/ | grep -q "Warrant — Control Panel"

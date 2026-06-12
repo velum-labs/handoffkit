@@ -22,10 +22,13 @@ export const DEFAULT_DENY_PATTERNS = [
   "id_ed25519*"
 ];
 
+// TODO(lib): suggest simple-git or isomorphic-git — raw spawnSync git
+// TODO(brittle): raw spawnSync git, no version/path checks
 function git(cwd: string, args: string[], allowFail = false): string {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
+    // TODO(hardcoded): git maxBuffer 256MB
     maxBuffer: 256 * 1024 * 1024
   });
   if (result.status !== 0 && !allowFail) {
@@ -48,6 +51,8 @@ function gitBinary(cwd: string, args: string[]): Buffer {
 }
 
 /** Minimal glob: `**` crosses directories, `*` within a segment, `?` one char. */
+// TODO(lib): suggest minimatch/micromatch — glob
+// TODO(brittle): custom minimal glob
 export function matchesPattern(path: string, pattern: string): boolean {
   const target = pattern.includes("/") ? path : path.split("/").pop() ?? path;
   const regex = pattern
@@ -177,6 +182,7 @@ export type WorkspaceOutput = {
   changedFiles: { path: string; contentHash: string }[];
 };
 
+// TODO(hardcoded): DELETED_HASH
 const DELETED_HASH = "0".repeat(64);
 
 /** Collect the session's output as a binary diff against the base ref. */
@@ -237,12 +243,14 @@ export function pullRun(
   }
 
   const shortId = runId.replace(/^run_/, "").slice(0, 12);
+  // TODO(hardcoded): branch prefix warrant/
   const branch = `warrant/${shortId}`;
   const worktree = mkdtempSync(join(tmpdir(), "warrant-worktree-"));
   try {
     git(repoDir, ["worktree", "add", "--detach", worktree, baseRef]);
     git(worktree, ["apply", "--binary", "--whitespace=nowarn", diffPath]);
     git(worktree, ["add", "-A"]);
+    // TODO(hardcoded): pull git identity
     git(worktree, [
       "-c",
       "user.name=warrant",

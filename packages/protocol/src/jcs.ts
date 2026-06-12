@@ -3,6 +3,8 @@
  * protocol objects: members sorted by UTF-16 code units, ES number
  * serialization (delegated to JSON.stringify, which implements the
  * ECMA-262 algorithm JCS mandates), and no insignificant whitespace.
+ *
+ * TODO(lib): suggest canonicalize or @truestamp/json-canonicalization — RFC 8785 JCS
  */
 
 export type JsonValue =
@@ -22,6 +24,7 @@ export function canonicalize(value: unknown): string {
       if (!Number.isFinite(value)) {
         throw new Error("non-finite numbers are not representable in JCS");
       }
+      // TODO(brittle): number canonicalization via JSON.stringify, JCS edge cases
       return JSON.stringify(value);
     }
     case "string":

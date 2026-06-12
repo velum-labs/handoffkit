@@ -112,6 +112,7 @@ export class Runner {
   private async enrollWithRetry(
     publicKeyPem: string
   ): Promise<{ runnerId: string; runnerToken: string }> {
+    // TODO(hardcoded): enrollRetryMs 60s
     const deadline = Date.now() + (this.options.enrollRetryMs ?? 60_000);
     const enrollToken = this.options.enrollToken;
     if (!enrollToken) throw new Error("no enroll token was provided");
@@ -128,6 +129,7 @@ export class Runner {
         console.error(
           `plane not reachable at ${this.options.planeUrl}; retrying enrollment...`
         );
+        // TODO(hardcoded): retry sleep 2s
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
@@ -147,6 +149,7 @@ export class Runner {
 
   async start(): Promise<void> {
     this.stopped = false;
+    // TODO(hardcoded): poll 1s
     const interval = this.options.pollIntervalMs ?? 1000;
     while (!this.stopped) {
       try {
@@ -290,6 +293,7 @@ export class Runner {
         );
       }
     }
+    // TODO(brittle): network receipt dedup via host:decision split on :
     const networkAccessed = [...networkSeen.entries()].map(([key, decision]) => ({
       host: key.slice(0, key.lastIndexOf(":")),
       decision
@@ -311,6 +315,7 @@ export class Runner {
       runnerId: identity.runnerId,
       keyId: keyIdFromPublicPem(this.publicKeyPem),
       pool: identity.pool,
+      // TODO(hardcoded): attestationTier "mock"
       attestationTier: "mock",
       isolation: input.isolation
     };

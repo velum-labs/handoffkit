@@ -39,6 +39,7 @@ export class PlaneClientError extends Error {
 async function fetchIdempotent(
   url: string,
   init: RequestInit & { idempotent?: boolean },
+  // TODO(hardcoded): retry attempts=3
   attempts = 3
 ): Promise<Response> {
   const retryable = init.idempotent ?? init.method === "GET";
@@ -49,6 +50,7 @@ async function fetchIdempotent(
       if (!(error instanceof TypeError) || !retryable || attempt >= attempts) {
         throw error;
       }
+      // TODO(hardcoded): linear backoff 100*attempt ms
       await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
     }
   }
@@ -79,6 +81,7 @@ export class PlaneClient {
       headers,
       body: body === undefined ? undefined : JSON.stringify(body)
     });
+    // TODO(brittle): assumes every response body is JSON
     const payload: unknown = await response.json();
     if (!response.ok) throw new PlaneClientError(response.status, payload);
     return payload as T;

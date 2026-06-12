@@ -65,6 +65,7 @@ export class HermeticSessionBackend implements SessionBackend {
       // Writes land on the real workspace so the runner's git-based output
       // collection captures the diff, exactly like the process backend.
       fs: new ReadWriteFs({ root: repoDir }),
+      // TODO(hardcoded): hermetic cwd /
       cwd: "/",
       env,
       ...(network ? { network } : {})
@@ -81,6 +82,7 @@ export class HermeticSessionBackend implements SessionBackend {
       stdout = result.stdout;
       stderr = result.stderr;
     } catch (error) {
+      // TODO(hardcoded): abort exit code 124
       exitCode = 124;
       stderr = `hermetic session aborted: ${
         error instanceof Error ? error.message : String(error)

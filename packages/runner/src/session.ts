@@ -13,6 +13,7 @@ export type SessionResult = {
   isolation: SessionIsolation;
 };
 
+// TODO(hardcoded): DEFAULT_TIMEOUT_MIN = 10
 const DEFAULT_TIMEOUT_MIN = 10;
 
 /**

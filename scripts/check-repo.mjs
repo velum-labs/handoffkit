@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+// TODO(brittle): requiredFiles manifest manually synced
 const requiredFiles = [
   "README.md",
   "SECURITY.md",
@@ -93,6 +94,7 @@ for (const setting of [
   if (!npmrc.includes(setting)) fail(`.npmrc missing ${setting}`);
 }
 
+// TODO(brittle): spec positioning via substring grep
 const supersededSpec = readFileSync(
   "spec/2026-06-11-local-first-handoff-platform-spec.md",
   "utf8"

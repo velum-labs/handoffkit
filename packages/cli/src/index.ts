@@ -25,6 +25,7 @@ import {
   renderTrace
 } from "./render.js";
 
+// TODO(lib): suggest commander or oclif — hand-rolled CLI
 const USAGE = `warrant — the governed execution and provenance plane for AI agents
 
 usage:
@@ -111,6 +112,7 @@ async function waitForTerminal(
       );
       return view.status;
     }
+    // TODO(hardcoded): status poll 500ms
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 500));
   }
 }
@@ -258,6 +260,7 @@ async function cmdContinue(dir: string, argv: string[]): Promise<void> {
   );
 
   if (values["no-watch"]) return;
+  // TODO(hardcoded): continue wait 10 min
   const outcome = await run.wait({ timeoutMs: 10 * 60 * 1000 });
   if (outcome.status === "awaiting_approval") {
     console.log(

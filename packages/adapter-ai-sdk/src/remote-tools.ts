@@ -82,6 +82,7 @@ export function remoteTools(config: RemoteToolsConfig): RemoteTools {
   });
   const target = targets.pool(config.pool);
   const pullResults = config.pullResults ?? true;
+  // TODO(hardcoded): default timeoutMs 5 min
   const timeoutMs = config.timeoutMs ?? 5 * 60 * 1000;
   const records: RemoteToolCallRecord[] = [];
 

@@ -32,6 +32,7 @@ export class ProcessSessionBackend implements SessionBackend {
     );
 
     const env: Record<string, string> = {
+      // TODO(hardcoded): fallback PATH/HOME
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: process.env.HOME ?? "/tmp",
       HTTP_PROXY: `http://127.0.0.1:${proxy.port}`,
@@ -56,6 +57,7 @@ export class ProcessSessionBackend implements SessionBackend {
       child.on("error", (error) => {
         chunks.push(Buffer.from(`spawn error: ${error.message}\n`, "utf8"));
         clearTimeout(timer);
+        // TODO(hardcoded): spawn error exit 127
         resolve(127);
       });
       child.on("close", (code) => {

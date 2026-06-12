@@ -12,6 +12,7 @@ export type Principal = {
 /** Tokens are stored only as their sha256; high-entropy random tokens make
  * this a safe, constant-time-comparable lookup key. */
 export function hashToken(token: string): string {
+  // TODO(brittle): sha256-only lookup with no server-side pepper; safe for high-entropy tokens but weak if tokens are short/guessable.
   return sha256Hex(token);
 }
 
@@ -30,6 +31,7 @@ export function toPrincipal(record: PrincipalRecord): Principal {
  * completion endpoints authenticate with runner tokens + claim tokens, not
  * principals.
  */
+// TODO(hardcoded): role→capability matrix is code-defined; cannot be customized per deployment without a code change.
 const CAPABILITIES: Record<PrincipalRole, Set<string>> = {
   admin: new Set([
     "runs:read",

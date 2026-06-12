@@ -22,6 +22,8 @@ import { Runner } from "@warrant/runner";
 import type { SessionBackend } from "@warrant/runner";
 import { PlaneClient } from "@warrant/sdk";
 
+// TODO(brittle): third copy of inline git() helper
+// TODO(lib): suggest workspace git centralization
 export function git(cwd: string, args: string[]): string {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   if (result.status !== 0) {
@@ -79,6 +81,7 @@ export type Stack = {
   stop(): Promise<void>;
 };
 
+// TODO(hardcoded): testkit-admin-token / testkit-enroll-token
 const ADMIN_TOKEN = "testkit-admin-token";
 const ENROLL_TOKEN = "testkit-enroll-token";
 

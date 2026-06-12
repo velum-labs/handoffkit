@@ -7,6 +7,7 @@ import { z } from "zod";
  * tokens) that nothing else checks. Parsing returns structured errors that
  * the server turns into 400s.
  */
+// TODO(hardcoded): zod max lengths (e.g. prompt 1M, untrackedFiles 100k) are fixed; should align with policy/deployment limits.
 
 const actorSchema = z.object({
   kind: z.enum(["human", "service"]),
@@ -47,6 +48,7 @@ const continuationSchema = z.object({
 
 export const runRequestSchema = z.object({
   requestedBy: actorSchema,
+  // TODO(brittle): agentKind is free-form string; not tied to policy.agents.allow at validation time.
   agentKind: z.string().min(1).max(64),
   agentVersion: z.string().max(128).optional(),
   prompt: z.string().min(1).max(1_000_000),
@@ -94,11 +96,13 @@ export const cancelBodySchema = z.object({
 
 export const eventsBodySchema = z.object({
   claimToken: z.string().min(1).max(8192),
+  // TODO(lib): suggest @warrant/protocol zod schemas — events are z.unknown(); structure validated only after HTTP accepts body.
   events: z.array(z.unknown()).max(100000)
 });
 
 export const completeBodySchema = z.object({
   claimToken: z.string().min(1).max(8192),
+  // TODO(lib): suggest @warrant/protocol zod schemas — receipt is z.unknown(); malformed receipts fail late in plane.complete().
   receipt: z.unknown()
 });
 

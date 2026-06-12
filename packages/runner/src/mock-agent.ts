@@ -27,6 +27,7 @@ function tryNetwork(): Promise<void> {
       {
         hostname: proxyUrl.hostname,
         port: Number(proxyUrl.port),
+        // TODO(hardcoded): probe host denied.example.com
         path: "http://denied.example.com/probe",
         method: "GET",
         headers: { host: "denied.example.com" }

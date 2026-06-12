@@ -65,6 +65,7 @@ function buildScorecard(bundle: ReceiptBundle, diffBytes: number): Scorecard {
   let exitCode: number | undefined;
   for (const entry of events) {
     if (entry.event.type === "file.changed") filesChanged++;
+    // TODO(brittle): last command.executed wins for exitCode; file.changed counts every event with no dedupe by path
     if (entry.event.type === "command.executed") exitCode = entry.event.exitCode;
   }
   return {
@@ -90,6 +91,7 @@ export async function reviewRuns(
   const candidates: ReviewedRun[] = [];
   for (const run of runs) {
     const status = await run.status();
+    // TODO(brittle): non-completed runs are silently skipped — caller gets "no completed runs" with no visibility into failed/cancelled attempts
     if (status !== "completed") continue;
     const bundle = await run.receipt();
     const diffHash = bundle.receipt.workspaceOut.diffHash;
@@ -115,11 +117,13 @@ export async function reviewRuns(
       break;
     }
     case "first-completed": {
+      // TODO(brittle): compares endedAt ISO strings, not parsed timestamps — safe for canonical ISO but fragile if receipt format changes
       chosen = candidates.reduce((a, b) => (b.endedAt < a.endedAt ? b : a));
       reason = `first attempt to complete (${chosen.endedAt}) among ${candidates.length} completed attempt(s)`;
       break;
     }
     case "tests-pass-smallest-diff": {
+      // TODO(brittle): equates harness exitCode 0 with "tests pass" — wrong for agents that run multiple commands or use non-zero success codes
       const passing = candidates.filter(
         (candidate) => candidate.scorecard.exitCode === 0
       );

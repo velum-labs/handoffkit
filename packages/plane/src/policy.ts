@@ -101,6 +101,7 @@ export function evaluatePolicy(
 }
 
 export function defaultPolicy(): Policy {
+  // TODO(hardcoded): default pools, agent kinds, budget ceilings, and retention days are opinionated dev defaults.
   return {
     version: "warrant.policy.v1",
     runners: { allowPools: ["default"] },

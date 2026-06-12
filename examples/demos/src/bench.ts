@@ -130,6 +130,7 @@ async function main(): Promise<void> {
     });
     // Drain the queue (the capture loop above left created runs unclaimed)
     // until our receipt run reaches a terminal state.
+    // TODO(brittle): queue drain heuristic
     let drained = 0;
     for (let i = 0; i < FILE_COUNT + ITERATIONS + 20; i++) {
       const processed = await stack.runOnce();

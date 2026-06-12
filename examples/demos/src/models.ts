@@ -73,6 +73,7 @@ export function resolveDemoModels(): DemoModels {
         "WARRANT_DEMO_CLOUD_MODEL is set but no API key is (WARRANT_DEMO_CLOUD_API_KEY or OPENAI_API_KEY)"
       );
     }
+    // TODO(hardcoded): default cloud URL https://api.openai.com/v1
     const baseURL =
       process.env.WARRANT_DEMO_CLOUD_URL ?? "https://api.openai.com/v1";
     const provider = createOpenAICompatible({

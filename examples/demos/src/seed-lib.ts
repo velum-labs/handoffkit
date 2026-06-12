@@ -28,6 +28,7 @@ async function waitTerminal(
     const view = await client.getRun(runId);
     if (["completed", "failed", "cancelled"].includes(view.status)) return;
     if (Date.now() >= deadline) return;
+    // TODO(hardcoded): poll 300ms
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
@@ -104,6 +105,7 @@ export async function seedShowcase(options: SeedOptions): Promise<SeedResult> {
     try {
       await client.cancel(doomed.runId, { kind: "human", id: "sam@example.com" });
     } catch {
+      // TODO(brittle): cancel race swallowed silently
       // A racing runner may have claimed it first; the run is then governed
       // to completion, which is also a fine thing to show.
     }
@@ -111,6 +113,7 @@ export async function seedShowcase(options: SeedOptions): Promise<SeedResult> {
 
     if (wait) {
       for (const runId of runIds) {
+        // TODO(hardcoded): terminal wait 60s
         await waitTerminal(client, runId, 60_000);
       }
     }

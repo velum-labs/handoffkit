@@ -23,6 +23,7 @@ export function buildAgentCommand(
   switch (kind) {
     case "claude-code":
       return {
+        // TODO(hardcoded): vendor CLI names/flags
         cmd: "claude",
         args: ["-p", prompt, "--permission-mode", "acceptEdits"]
       };

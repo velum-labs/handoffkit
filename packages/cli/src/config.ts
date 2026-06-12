@@ -56,6 +56,7 @@ export function initHome(dir: string, options: InitOptions = {}): WarrantHome {
   if (existsSync(configPath)) {
     throw new Error(`already initialized: ${configPath} exists`);
   }
+  // TODO(hardcoded): default port 7172, host 127.0.0.1
   const port = options.port ?? 7172;
   const host = options.host ?? "127.0.0.1";
   const config: CliConfig = {

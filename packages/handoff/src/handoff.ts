@@ -82,6 +82,7 @@ export type ContinueOptions = {
 export type ParallelOptions = Omit<ContinueOptions, "task">;
 
 /** Module-level defaults set by defineHandoffConfig. */
+// TODO(brittle): module-level mutable defaults are not thread-safe and can leak across parallel tests — prefer explicit dependency injection or AsyncLocalStorage-scoped config
 let handoffDefaults: Partial<HandoffConfig> = {};
 
 /**
@@ -139,6 +140,7 @@ export type HandoffStreamEvent =
   | { type: "run.terminal"; runId: string; status: RunStatus };
 
 function defaultActor(): ActorRef {
+  // TODO(hardcoded): actor id falls back to literal "developer" when USER is unset — expose as HandoffConfig default or read from warrant actor discovery
   return { kind: "human", id: process.env.USER ?? "developer" };
 }
 
@@ -182,6 +184,7 @@ export class Handoff {
         : new PlaneClient(config.plane.url, config.plane.adminToken);
     this.workspaceDir = resolve(config.workspace);
     this.actor = config.actor ?? defaultActor();
+    // TODO(hardcoded): default agent is mock() when unset — production callers may accidentally submit to the harness without noticing
     this.agent = config.agent ?? agents.mock();
     this.policy = config.policy ?? localFirst();
     this.secrets = config.secrets ?? [];
@@ -288,6 +291,7 @@ export class Handoff {
         target,
         secrets: options.secrets ?? this.secrets,
         budget: options.budget ?? this.budget,
+        // TODO(hardcoded): needs() always plans with parallelism 1 even when parallel() fan-out is intended — should accept parallelism in options or derive from context
         parallelism: 1
       }).decision === "continue";
     if (!allowed) return false;
@@ -299,6 +303,7 @@ export class Handoff {
   /** Recomputed view over the trace plus live run statuses from the plane. */
   async summary(): Promise<HandoffSummary> {
     const runs: HandoffSummary["runs"] = [];
+    // TODO(brittle): summary() fetches each run sequentially with no error isolation — one failed getRun rejects the whole summary
     for (const requested of this.requestedRuns) {
       const view = await this.client.getRun(requested.runId);
       runs.push({ ...requested, status: view.status });
@@ -370,6 +375,7 @@ export class Handoff {
     runs: HandoffRun[],
     options: { pollMs?: number; timeoutMs?: number } = {}
   ): AsyncGenerator<HandoffStreamEvent, void, void> {
+    // TODO(hardcoded): default poll interval (300ms) and stream timeout (10min) are inline magic numbers — hoist to HandoffConfig or shared polling defaults
     const pollMs = options.pollMs ?? 300;
     const deadline = Date.now() + (options.timeoutMs ?? 10 * 60 * 1000);
     const lastStatus = new Map<string, RunStatus>();
@@ -400,12 +406,14 @@ export class Handoff {
           lastStatus.set(run.runId, view.status);
           yield { type: "run.status", runId: run.runId, status: view.status };
         }
+        // TODO(brittle): terminal status list duplicated from HandoffRun.wait — extract shared TERMINAL constant to avoid drift
         if (["completed", "failed", "cancelled"].includes(view.status)) {
           terminal.add(run.runId);
           yield { type: "run.terminal", runId: run.runId, status: view.status };
         }
       }
       if (terminal.size < runs.length) {
+        // TODO(lib): suggest plane push/SSE or long-poll subscription — fixed-interval polling duplicates HandoffRun.wait and wastes requests under load
         await new Promise((resolve) => setTimeout(resolve, pollMs));
       }
     }
@@ -427,6 +435,7 @@ export class Handoff {
   }
 
   private async uploadCapture(captured: CapturedWorkspace): Promise<void> {
+    // TODO(brittle): blobs uploaded sequentially with no concurrency limit or partial-failure cleanup — large untracked sets are slow and can leave orphan blobs
     await this.client.putBlob(captured.bundle);
     if (captured.dirtyDiff) await this.client.putBlob(captured.dirtyDiff);
     for (const file of captured.untracked) {
@@ -440,6 +449,7 @@ export class Handoff {
     | undefined {
     if (this.toolJournal.length === 0) return undefined;
     const journal: ToolJournal = {
+      // TODO(hardcoded): protocol version string inline — import from @warrant/protocol constants if/when centralized
       version: "warrant.tooljournal.v1",
       entries: [...this.toolJournal]
     };
@@ -463,6 +473,7 @@ export class Handoff {
     const parent = this.checkpointHistory.at(-1)?.checkpointId;
     return {
       version: "warrant.checkpoint.v1",
+      // TODO(hardcoded): checkpoint id prefix "chk_" and tier "workspace" are fixed — make tier configurable when semantic-only checkpoints land
       checkpointId: `chk_${randomUUID()}`,
       createdAt: new Date().toISOString(),
       tier: "workspace",
@@ -544,6 +555,7 @@ export class Handoff {
       createdAt: new Date().toISOString(),
       source: { kind: "local", actor: this.actor, host: hostname() },
       target: { kind: "runner-pool", pool: target.pool },
+      // TODO(hardcoded): network.defaultDeny and secret scope "requested" are always on — expose as HandoffConfig defaults for orgs that pre-approve egress/secrets
       checkpoint,
       agent: toAgentSpec(agent),
       task: { prompt: options.task },
@@ -719,6 +731,7 @@ export class Handoff {
     options: ParallelOptions = {}
   ): Promise<HandoffRun[]> {
     if (tasks.length === 0) throw new Error("parallel requires at least one task");
+    // TODO(brittle): parallel() plans once using tasks[0] for trigger/budget context — per-task secrets or budgets are not validated individually
     const decision = this.plan(
       target,
       { ...options, task: tasks[0] ?? "" },

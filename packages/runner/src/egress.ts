@@ -23,6 +23,7 @@ export type EgressProxy = {
  * microVM network namespaces close that gap and are the roadmap isolation
  * modes. Every allowed and blocked attempt is still recorded.
  */
+// TODO(lib): suggest http-proxy / proxy-chain — egress proxy
 export function startEgressProxy(
   allowHosts: string[],
   defaultDeny: boolean,
@@ -32,6 +33,7 @@ export function startEgressProxy(
   const isAllowed = (host: string): boolean =>
     !defaultDeny || allowed.has(host);
 
+  // TODO(brittle): hand-rolled HTTP proxy
   const server: Server = createServer((req, res) => {
     let host = "";
     try {
@@ -70,6 +72,7 @@ export function startEgressProxy(
   });
 
   server.on("connect", (req, socket) => {
+    // TODO(brittle): CONNECT host:port.split breaks IPv6
     const [host, portRaw] = (req.url ?? "").split(":");
     const port = Number(portRaw || "443");
     if (!host || !isAllowed(host)) {

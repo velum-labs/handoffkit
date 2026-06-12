@@ -25,6 +25,7 @@ export class SecretStore {
   }
 
   private load(): Record<string, SecretEntry> {
+    // TODO(brittle): every get/set/release decrypts and parses the entire secrets file; no in-process cache or file locking.
     if (!existsSync(this.path)) return {};
     const blob = JSON.parse(readFileSync(this.path, "utf8")) as SealedBlob;
     const plaintext = open(this.master, blob).toString("utf8");

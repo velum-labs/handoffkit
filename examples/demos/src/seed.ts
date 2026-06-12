@@ -30,6 +30,7 @@ async function waitForPlane(planeUrl: string, timeoutMs: number): Promise<void> 
     if (Date.now() >= deadline) {
       throw new Error(`plane at ${planeUrl} did not become healthy in ${timeoutMs}ms`);
     }
+    // TODO(hardcoded): poll 1s
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
@@ -47,6 +48,7 @@ async function main(): Promise<void> {
   ) as SeedConfig;
 
   console.log(`waiting for plane at ${config.planeUrl}...`);
+  // TODO(hardcoded): plane wait 120s
   await waitForPlane(config.planeUrl, 120_000);
 
   console.log("seeding showcase runs...");

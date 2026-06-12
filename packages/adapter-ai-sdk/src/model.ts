@@ -39,6 +39,7 @@ export type HandoffModelConfig = {
   onDecision?: (decision: ModelDecision) => void;
 };
 
+// TODO(brittle): regex overflow classifier
 const OVERFLOW_PATTERN = /context|token|length|too.?(long|large)/i;
 
 function classify(error: unknown): EscalationReason {
@@ -48,6 +49,7 @@ function classify(error: unknown): EscalationReason {
 
 function promptBytes(options: LanguageModelV3CallOptions): number {
   try {
+    // TODO(brittle): prompt size via JSON.stringify
     return Buffer.byteLength(JSON.stringify(options.prompt), "utf8");
   } catch {
     return 0;

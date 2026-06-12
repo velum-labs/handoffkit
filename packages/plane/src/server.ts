@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+// TODO(lib): suggest fastify or hono — raw node:http lacks middleware, graceful shutdown, TLS, and structured routing.
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,7 @@ import {
   ValidationError
 } from "./validation.js";
 
+// TODO(hardcoded): 64 MiB request body cap is not configurable via PlaneServerOptions.
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
 
 const UI_FILES: Record<string, { file: string; type: string }> = {
@@ -81,6 +83,7 @@ function bearerToken(req: IncomingMessage): string | undefined {
 }
 
 function clientIp(req: IncomingMessage): string {
+  // TODO(brittle): uses socket.remoteAddress only; behind a reverse proxy auth lockout/rate limits key on the proxy IP.
   return req.socket.remoteAddress ?? "unknown";
 }
 
@@ -109,6 +112,7 @@ export function startPlaneServer(
   plane: Plane,
   options: PlaneServerOptions | number
 ): Promise<{ server: Server; port: number; host: string }> {
+  // TODO(hardcoded): default bind host "127.0.0.1" may be wrong for container/K8s deployments expecting 0.0.0.0.
   const { port, host = "127.0.0.1", rateLimit } =
     typeof options === "number" ? { port: options, rateLimit: undefined } : options;
   const limiter = new RateLimiter(rateLimit ?? DEFAULT_RATE_LIMIT);
@@ -130,9 +134,11 @@ export function startPlaneServer(
       }
       const message = error instanceof Error ? error.message : String(error);
       plane.log.error({ requestId, err: message }, "request failed");
+      // TODO(brittle): unexpected errors return 400 instead of 500; may leak internal error messages to clients.
       sendJson(res, 400, { error: message });
     });
   });
+  // TODO(hardcoded): keepAliveTimeout=0 disables idle timeout; should be tunable for reverse-proxy compatibility.
   server.keepAliveTimeout = 0;
   return new Promise((resolve) => {
     server.listen(port, host, () => {
@@ -180,7 +186,7 @@ async function handle(
   res: ServerResponse,
   requestId: string
 ): Promise<void> {
-  const url = new URL(req.url ?? "/", "http://localhost");
+  const url = new URL(req.url ?? "/", "http://localhost"); // TODO(hardcoded): synthetic base URL for path parsing only.
   const method = req.method ?? "GET";
   const path = url.pathname;
   plane.log.debug({ requestId, method, path }, "request");
@@ -195,6 +201,7 @@ async function handle(
 
   const uiEntry = UI_FILES[path];
   if (method === "GET" && uiEntry) {
+    // TODO(brittle): synchronous readFileSync blocks the event loop on every UI asset request.
     const body = readFileSync(uiAssetPath(uiEntry.file));
     res.writeHead(200, {
       "content-type": uiEntry.type,
@@ -206,6 +213,7 @@ async function handle(
   }
 
   if (method === "GET" && path === "/v1/health") {
+    // TODO(hardcoded): health response shape and service name are fixed strings.
     sendJson(res, 200, { ok: true, service: "warrant-plane" });
     return;
   }
@@ -302,6 +310,7 @@ async function handle(
   // itself the read capability, so reads are not separately gated.
   const blobMatch = path.match(/^\/v1\/blobs\/([0-9a-f]{64})$/);
   if (method === "GET" && blobMatch && blobMatch[1]) {
+    // TODO(brittle): blob GET is unauthenticated; hash-as-capability assumes hashes never leak via logs/errors.
     const blob = plane.blobs.getBlob(blobMatch[1]);
     if (!blob) {
       sendJson(res, 404, { error: "blob not found" });
@@ -337,6 +346,7 @@ async function handle(
     return;
   }
 
+  // TODO(brittle): run ID path segment regex may not match all issued run_* UUID formats if ID scheme changes.
   const runMatch = path.match(/^\/v1\/runs\/([A-Za-z0-9_-]+)(\/.*)?$/);
   if (runMatch && runMatch[1]) {
     const runId = runMatch[1];
@@ -370,6 +380,7 @@ async function handle(
 
     if (method === "POST" && sub === "/events") {
       const body = parseBody(eventsBodySchema, await readJson(req));
+      // TODO(brittle): events accepted as z.unknown() then cast; malformed shapes fail late inside verifyChain.
       plane.appendRunnerEvents(
         runId,
         body.claimToken,
@@ -381,6 +392,7 @@ async function handle(
 
     if (method === "POST" && sub === "/complete") {
       const body = parseBody(completeBodySchema, await readJson(req));
+      // TODO(brittle): receipt accepted as z.unknown(); invalid receipts fail deep in complete() with opaque errors.
       const countersigned = plane.complete(
         runId,
         body.claimToken,

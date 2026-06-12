@@ -20,6 +20,7 @@ export type ToolCallObservation = {
 function toJsonValue(value: unknown): JsonValue {
   if (value === undefined) return null;
   try {
+    // TODO(brittle): JSON.stringify round-trip drops BigInt/Date/symbol/circular refs silently — journal hashes may not match tool-native serialization
     return JSON.parse(JSON.stringify(value)) as JsonValue;
   } catch {
     return String(value);
@@ -40,6 +41,8 @@ export function wrapTools<T extends Record<string, ToolLike>>(
 ): T {
   const wrapped: Record<string, ToolLike> = {};
   for (const [name, original] of Object.entries(toolset)) {
+    // TODO(brittle): duck-typed execute detection with no inputSchema validation — malformed tool inputs are journaled but not rejected at the boundary
+    // TODO(lib): suggest zod (or reuse AI SDK Tool schemas) — validate execute inputs/outputs before journaling for deterministic hashes
     const execute = (original as { execute?: unknown }).execute;
     if (typeof execute !== "function") {
       wrapped[name] = original;
@@ -77,6 +80,7 @@ export function wrapTools<T extends Record<string, ToolLike>>(
               ts,
               toolName: name,
               input: inputJson,
+              // TODO(brittle): only error.message is journaled — stack, cause chain, and error codes are lost for continuation debugging
               error: error instanceof Error ? error.message : String(error),
               durationMs: Date.now() - started
             },

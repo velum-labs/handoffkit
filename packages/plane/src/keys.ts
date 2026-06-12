@@ -19,12 +19,13 @@ import { generateEd25519KeyPair } from "@warrant/protocol";
  */
 export type MasterKey = { readonly material: Buffer };
 
+// TODO(hardcoded): master-key env var name is fixed; not overridable for multi-tenant or test harnesses.
 const MASTER_KEY_ENV = "WARRANT_MASTER_KEY";
 
 function decodeMaterial(raw: string): Buffer {
   const trimmed = raw.trim();
   if (/^[0-9a-f]{64}$/i.test(trimmed)) return Buffer.from(trimmed, "hex");
-  // Accept base64/base64url too; fall back to raw UTF-8 bytes.
+  // TODO(brittle): ambiguous decode order (hex → base64 → utf8) can misinterpret keys; prefer one canonical encoding.
   try {
     const b = Buffer.from(trimmed, "base64");
     if (b.length >= 16) return b;
@@ -62,7 +63,7 @@ export function resolveMasterKey(
   if (options.createIfMissing) {
     mkdirSync(dirname(keyFilePath), { recursive: true });
     const hex = generateMasterKeyHex();
-    writeFileSync(keyFilePath, hex, { mode: 0o600 });
+    writeFileSync(keyFilePath, hex, { mode: 0o600 }); // TODO(hardcoded): key file mode 0o600 is not configurable.
     return { material: Buffer.from(hex, "hex") };
   }
   throw new Error(
@@ -80,7 +81,9 @@ export type SealedBlob = {
 
 /** AES-256-GCM with a per-blob scrypt-derived key. */
 export function seal(master: MasterKey, plaintext: Buffer): SealedBlob {
+  // TODO(hardcoded): scrypt N/r/p defaults, salt (16B), IV (12B), and key length (32) are not tunable or documented here.
   const salt = randomBytes(16);
+  // TODO(brittle): scryptSync blocks the event loop on every seal/open; use async scrypt or worker thread for large payloads.
   const key = scryptSync(master.material, salt, 32);
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -118,6 +121,7 @@ export function sealToFile(
 }
 
 export function openFromFile(master: MasterKey, path: string): Buffer {
+  // TODO(brittle): SealedBlob JSON is parsed without schema validation; corrupt/tampered files fail opaquely at decrypt.
   const blob = JSON.parse(readFileSync(path, "utf8")) as SealedBlob;
   return open(master, blob);
 }

@@ -53,6 +53,7 @@ export function localFirst(options: LocalFirstOptions = {}): ContinuationPolicy 
     ...(options.maxDurationMin !== undefined
       ? { maxDurationMin: options.maxDurationMin }
       : {}),
+    // TODO(hardcoded): default maxParallelRuns (4) and disclosure ("minimal-context") are inline policy defaults — document in HandoffConfig or env-driven org presets
     maxParallelRuns: options.maxParallelRuns ?? 4,
     disclosure: options.disclosure ?? "minimal-context",
     ...(options.continueWhen ? { continueWhen: options.continueWhen } : {})
@@ -93,6 +94,7 @@ export function planContinuation(
   if (policy.allowPools && !policy.allowPools.includes(pool)) {
     denials.push(`pool "${pool}" is not in the continuation allowlist`);
   }
+  // TODO(brittle): omitted budget fields coerce to 0 and pass ceiling checks — callers can omit maxSpendUsd/maxDurationMin and still get "continue" without explicit budget intent
   if (
     policy.maxSpendUsd !== undefined &&
     (input.budget.maxSpendUsd ?? 0) > policy.maxSpendUsd

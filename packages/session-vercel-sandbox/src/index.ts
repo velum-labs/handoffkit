@@ -38,6 +38,7 @@ export type VercelSandboxOptions = {
   projectId?: string;
 };
 
+// TODO(hardcoded): IGNORED_DIRS
 const IGNORED_DIRS = new Set([".git", "node_modules"]);
 
 function listFiles(root: string, dir = root, out: string[] = []): string[] {
@@ -97,6 +98,7 @@ export class VercelSandboxBackend implements SessionBackend {
   async execute(input: SessionExecution): Promise<SessionBackendResult> {
     const { contract, repoDir, secrets, command, timeoutMin, emit } = input;
     const creds = this.credentials();
+    // TODO(hardcoded): default runtime node22, workdir
     const workdir = this.options.workdir ?? "/warrant/workspace";
     const runtime = this.options.runtime ?? "node22";
 
@@ -118,6 +120,7 @@ export class VercelSandboxBackend implements SessionBackend {
         );
       }
 
+      // TODO(brittle): secrets via shell export concat
       const envPrefix = secrets
         .map((s) => `export ${s.name}=${JSON.stringify(s.value)}; `)
         .join("");
@@ -156,6 +159,8 @@ function scriptFor(input: SessionExecution): string {
 }
 
 /** Mirror the sandbox working tree back onto the local workspace. */
+// TODO(brittle): manual recursive FS mirror
+// TODO(lib): suggest sandbox SDK bulk sync or archiver — mirror back
 async function mirrorBack(
   sandbox: Sandbox,
   workdir: string,

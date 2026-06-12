@@ -5,6 +5,7 @@ import { banner, bold, detail, finale, ok, step } from "../narrate.js";
 import type { Demo } from "../registry.js";
 import { seedShowcase } from "../seed-lib.js";
 
+// TODO(hardcoded): fixed demo port 7172
 const PORT = 7172;
 const POOL = "eng-prod";
 

@@ -28,6 +28,7 @@ export class IdpVerifier {
   constructor(config: IdpConfig) {
     this.issuer = config.issuer;
     this.audience = config.audience;
+    // TODO(brittle): JWKS is statically pinned at startup; no rotation/refresh if the IdP rotates signing keys.
     this.getKey = createLocalJWKSet(
       config.jwks as Parameters<typeof createLocalJWKSet>[0]
     );
@@ -42,6 +43,7 @@ export class IdpVerifier {
     if (!payload.sub) {
       throw new Error("IdP token has no subject (sub) claim");
     }
+    // TODO(brittle): returns configured issuer, not payload.iss; a misconfigured verifier could mask token issuer mismatch.
     return { subject: payload.sub, issuer: this.issuer };
   }
 }

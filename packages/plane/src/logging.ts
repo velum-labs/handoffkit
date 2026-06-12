@@ -8,7 +8,7 @@ import type { Logger } from "pino";
  */
 export function createLogger(name = "warrant-plane"): Logger {
   return pino({
-    name,
+    name, // TODO(hardcoded): default logger name and LOG_LEVEL env default ("silent") are not configurable via PlaneConfig.
     level: process.env.LOG_LEVEL ?? "silent",
     // The plane handles secrets and tokens; redact common carriers defensively.
     redact: {
@@ -27,6 +27,7 @@ export function createLogger(name = "warrant-plane"): Logger {
 }
 
 /** Counters the plane increments for operational visibility. */
+// TODO(lib): suggest prom-client — in-memory counters lack histograms, labels, and a standard /metrics scrape format.
 export class Metrics {
   private readonly counters = new Map<string, number>();
 
