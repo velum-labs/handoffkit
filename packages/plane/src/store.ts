@@ -42,12 +42,12 @@ export type RunnerRecord = {
 /** A principal authorized to call the plane, identified by a hashed key. */
 export type PrincipalRole = "admin" | "requester" | "approver" | "enroller";
 
-export const PRINCIPAL_ROLES: readonly PrincipalRole[] = [
+export const PRINCIPAL_ROLES = [
   "admin",
   "requester",
   "approver",
   "enroller"
-];
+] as const satisfies readonly PrincipalRole[];
 
 export function isPrincipalRole(value: string): value is PrincipalRole {
   return (PRINCIPAL_ROLES as readonly string[]).includes(value);

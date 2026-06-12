@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import {
   canonicalize,
+  defaultExecutionSpec,
   hashCanonical,
   isTerminalStatus,
   PolicyDeniedError,
@@ -167,9 +168,7 @@ function defaultActor(): ActorRef {
 }
 
 function executionFor(agent: AgentDescriptor, task: string): ExecutionSpec {
-  const spec = toAgentSpec(agent);
-  if (spec.kind === "command") return { kind: "shell", script: task };
-  return { kind: "agent", agent: spec, prompt: task };
+  return defaultExecutionSpec(toAgentSpec(agent), task);
 }
 
 /**

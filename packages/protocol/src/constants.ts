@@ -24,6 +24,7 @@ export {
   isSessionIsolation,
   isTerminalStatus,
   RECEIPT_STATUSES,
+  RUN_EVENT_TYPES,
   RUN_STATUSES,
   SESSION_ISOLATIONS,
   SIGNERS,

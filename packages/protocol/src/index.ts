@@ -37,6 +37,7 @@ export {
   KEY_ID_HEX_LENGTH,
   PROTOCOL_VERSIONS,
   RECEIPT_STATUSES,
+  RUN_EVENT_TYPES,
   RUN_STATUSES,
   SESSION_ISOLATIONS,
   SIGNERS,
@@ -59,13 +60,10 @@ export {
   SECRET_NAME_PATTERN,
   WORKSPACE_RELATIVE_PATH_PATTERN
 } from "./validators.js";
-export {
-  DEFAULT_EXECUTION_LOG_POLICY
-} from "./execution.js";
+export { defaultExecutionSpec, executionFromRunRequest } from "./execution.js";
 export type {
   ExecutionEnv,
   ExecutionLogPolicy,
-  ExecutionResult,
   ExecutionSpec
 } from "./execution.js";
 export { canonicalize } from "./jcs.js";

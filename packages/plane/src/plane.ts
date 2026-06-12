@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import {
   appendEvent,
   contractHash,
+  executionFromRunRequest,
   hashCanonical,
   keyIdFromPublicPem,
   PROTOCOL_VERSIONS,
@@ -107,21 +108,6 @@ export type { ClaimResult, DisclosureReport, PolicyDecision };
 export type IssuedPrincipal = { principalId: string; name: string; role: PrincipalRole; token: string };
 
 type VerifiedClaim = { runnerId: string; nonce: string; expMs: number };
-
-function executionFromRequest(request: RunRequest): ExecutionSpec {
-  if (request.execution) return request.execution;
-  if (request.agentKind === "command") {
-    return { kind: "shell", script: request.prompt };
-  }
-  return {
-    kind: "agent",
-    agent: {
-      kind: request.agentKind as RunContract["agent"]["kind"],
-      ...(request.agentVersion ? { version: request.agentVersion } : {})
-    },
-    prompt: request.prompt
-  };
-}
 
 /** Throw unless `pem` parses as an ed25519 public key. */
 function assertEd25519PublicKey(pem: string): void {
@@ -439,7 +425,7 @@ export class Plane {
       network: request.network,
       budget: request.budget,
       disclosure: request.disclosure,
-      execution: executionFromRequest({ ...request, runId: "dry-run" }),
+      execution: executionFromRunRequest(request),
       ...(request.isolation ? { isolation: request.isolation } : {}),
       ...(request.continuation ? { continuation: request.continuation } : {}),
       policyDecision: decision

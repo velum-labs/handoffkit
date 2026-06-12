@@ -1,15 +1,20 @@
 import { z } from "zod";
 
 import {
+  ACTOR_KINDS,
   AGENT_KINDS,
   CHECKPOINT_TIERS,
   DISCLOSURE_MODES,
+  HEX_HASH_PATTERN,
   parseHostAllowlistEntry,
   parsePoolName,
   parseSecretName,
   parseWorkspaceManifestPath,
+  PROTOCOL_VERSIONS,
   SESSION_ISOLATIONS
 } from "@warrant/protocol";
+
+import { PRINCIPAL_ROLES } from "./store.js";
 
 /**
  * Boundary validation for request bodies. Signed objects (chained events,
@@ -24,21 +29,21 @@ import {
 // the boundary before any work is done.
 
 const actorSchema = z.object({
-  kind: z.enum(["human", "service"]),
+  kind: z.enum(ACTOR_KINDS),
   id: z.string().min(1).max(256)
 });
 
 const manifestFileSchema = z.object({
   path: z.string().min(1).max(4096).transform(parseWorkspaceManifestPath),
-  hash: z.string().regex(/^[0-9a-f]{64}$/),
+  hash: z.string().regex(HEX_HASH_PATTERN),
   bytes: z.number().int().nonnegative()
 });
 
 const workspaceSchema = z.object({
-  version: z.literal("warrant.manifest.v1"),
+  version: z.literal(PROTOCOL_VERSIONS.manifest),
   baseRef: z.string().min(1).max(256),
-  bundleHash: z.string().regex(/^[0-9a-f]{64}$/),
-  dirtyDiffHash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  bundleHash: z.string().regex(HEX_HASH_PATTERN),
+  dirtyDiffHash: z.string().regex(HEX_HASH_PATTERN).optional(),
   untrackedFiles: z.array(manifestFileSchema).max(100000),
   deniedPatterns: z.array(z.string().max(512)).max(10000),
   deniedPaths: z
@@ -57,7 +62,7 @@ const budgetSchema = z.object({
 });
 
 const continuationSchema = z.object({
-  envelopeHash: z.string().regex(/^[0-9a-f]{64}$/),
+  envelopeHash: z.string().regex(HEX_HASH_PATTERN),
   checkpointId: z.string().min(1).max(256),
   tier: z.enum(CHECKPOINT_TIERS)
 });
@@ -188,7 +193,7 @@ export const completeBodySchema = z.object({
 
 export const issuePrincipalBodySchema = z.object({
   name: z.string().min(1).max(128),
-  role: z.enum(["admin", "requester", "approver", "enroller"])
+  role: z.enum(PRINCIPAL_ROLES)
 });
 
 export class ValidationError extends Error {

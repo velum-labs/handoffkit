@@ -6,6 +6,7 @@ import type {
   CheckpointTier,
   DisclosureMode,
   FailureClass,
+  RunEvent,
   RunStatus,
   SessionIsolation,
   Signature
@@ -104,6 +105,37 @@ export const SIGNERS = [
   "plane",
   "runner"
 ] as const satisfies readonly Signature["signer"][];
+
+/**
+ * Every event type a run can record. The `Record` satisfies-check makes the
+ * map provably complete: adding a `RunEvent` variant fails compilation here
+ * until the vocabulary (and therefore every renderer parity test) learns
+ * it. Renderers that cannot import this module (the dependency-free control
+ * panel) are held to the same set by a parity test instead.
+ */
+const RUN_EVENT_TYPE_MAP = {
+  "run.created": true,
+  "run.claimed": true,
+  "workspace.materialized": true,
+  "policy.evaluated": true,
+  "consent.requested": true,
+  "consent.granted": true,
+  "secret.released": true,
+  "command.executed": true,
+  "file.changed": true,
+  "network.connected": true,
+  "model.called": true,
+  "boundary.crossed": true,
+  "artifact.created": true,
+  "checkpoint.created": true,
+  "run.completed": true,
+  "run.failed": true,
+  "run.cancelled": true
+} as const satisfies Record<RunEvent["type"], true>;
+
+export const RUN_EVENT_TYPES = Object.keys(
+  RUN_EVENT_TYPE_MAP
+) as readonly RunEvent["type"][];
 
 export const HEX_HASH_PATTERN = /^[0-9a-f]{64}$/;
 

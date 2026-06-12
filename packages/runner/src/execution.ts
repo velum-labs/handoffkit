@@ -1,4 +1,9 @@
-import { hashCanonical, type ExecutionSpec, type RunContract } from "@warrant/protocol";
+import {
+  defaultExecutionSpec,
+  hashCanonical,
+  type ExecutionSpec,
+  type RunContract
+} from "@warrant/protocol";
 
 import { buildAgentCommand, type AgentContext } from "./agents.js";
 
@@ -106,14 +111,7 @@ function logMaxBytesFor(spec: ExecutionSpec): number | undefined {
 }
 
 export function defaultExecutionForContract(contract: RunContract): ExecutionSpec {
-  if (contract.agent.kind === "command") {
-    return { kind: "shell", script: contract.task.prompt };
-  }
-  return {
-    kind: "agent",
-    agent: contract.agent,
-    prompt: contract.task.prompt
-  };
+  return defaultExecutionSpec(contract.agent, contract.task.prompt);
 }
 
 function prepareAgentExecution(
