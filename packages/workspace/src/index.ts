@@ -8,28 +8,13 @@
 export {
   captureWorkspace,
   collectOutput,
-  DEFAULT_DENY_PATTERNS,
-  DEFAULT_PULL_COMMITTER,
-  DELETED_FILE_HASH,
   materializeWorkspace,
-  matchesPattern,
-  PULL_BRANCH_PREFIX,
   pullRun
 } from "./workspace.js";
-export { GIT_MAX_BUFFER_BYTES, gitBinary, gitText } from "./git.js";
-export type { GitOptions } from "./git.js";
-export {
-  parseWorkspaceRelativePath,
-  parseWorkspaceRoot,
-  resolveInsideWorkspace,
-  workspaceRelativeFromAbsolute
-} from "./paths.js";
-export type { WorkspaceRelativePath, WorkspaceRoot } from "./paths.js";
+export { gitText } from "./git.js";
+export { parseWorkspaceRelativePath, resolveInsideWorkspace } from "./paths.js";
 export type {
-  BlobFetcher,
-  CaptureOptions,
   CapturedWorkspace,
-  PullOptions,
   PullResult,
   WorkspaceOutput
 } from "./workspace.js";

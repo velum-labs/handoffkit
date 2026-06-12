@@ -30,8 +30,8 @@ export class PlaneClientError extends Error {
 }
 
 /** Default transport-retry policy for idempotent requests. */
-export const DEFAULT_RETRY_ATTEMPTS = 3;
-export const RETRY_BACKOFF_STEP_MS = 100;
+const DEFAULT_RETRY_ATTEMPTS = 3;
+const RETRY_BACKOFF_STEP_MS = 100;
 
 /**
  * Retry idempotent requests on transport-level failures: a keep-alive

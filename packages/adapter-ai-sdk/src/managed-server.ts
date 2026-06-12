@@ -32,9 +32,9 @@ import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
  */
 
 /** Defaults; every one is overridable per server. */
-export const DEFAULT_STARTUP_TIMEOUT_MS = 120_000;
-export const DEFAULT_IDLE_SHUTDOWN_MS = 5 * 60 * 1000;
-export const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
+const DEFAULT_STARTUP_TIMEOUT_MS = 120_000;
+const DEFAULT_IDLE_SHUTDOWN_MS = 5 * 60 * 1000;
+const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
 const HEALTH_POLL_MS = 250;
 /** Last bytes of server output kept for diagnostics. */
 const OUTPUT_TAIL_BYTES = 64 * 1024;

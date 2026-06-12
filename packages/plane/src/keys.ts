@@ -2,8 +2,7 @@ import {
   createCipheriv,
   createDecipheriv,
   randomBytes,
-  scryptSync,
-  timingSafeEqual
+  scryptSync
 } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -200,10 +199,3 @@ export class FileKeyProvider implements KeyProvider {
   }
 }
 
-/** Constant-time token comparison to avoid leaking match position via timing. */
-export function constantTimeEquals(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}

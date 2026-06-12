@@ -4,7 +4,7 @@ import { test } from "node:test";
 import type { RunContract } from "@warrant/protocol";
 
 import {
-  defaultExecutionForContract,
+  executionSpecFor,
   executionHash,
   prepareExecution,
   requireShellExecution
@@ -42,7 +42,7 @@ function contractFixture(overrides: Partial<RunContract> = {}): RunContract {
 
 test("command contracts default to explicit shell execution", () => {
   const contract = contractFixture();
-  assert.deepEqual(defaultExecutionForContract(contract), {
+  assert.deepEqual(executionSpecFor(contract), {
     kind: "shell",
     script: "echo hi"
   });

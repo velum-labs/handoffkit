@@ -20,8 +20,6 @@ export {
   unauthorized
 } from "./domain-errors.js";
 export type { PlaneErrorCode } from "./domain-errors.js";
-export { assertRunTransition, canTransitionRunStatus } from "./run-lifecycle.js";
-export type { RunTransition } from "./run-lifecycle.js";
 export { ClaimTokenService } from "./claim-token-service.js";
 export type {
   ClaimTokenPayload,
@@ -44,7 +42,6 @@ export type {
 } from "./store.js";
 export { SecretStore } from "./secrets.js";
 export {
-  constantTimeEquals,
   FileKeyProvider,
   generateMasterKeyHex,
   masterKeyFromMaterial,

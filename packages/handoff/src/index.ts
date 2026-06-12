@@ -36,23 +36,17 @@ export type {
 export { targets } from "./targets.js";
 export type { RuntimeTarget } from "./targets.js";
 export { agents } from "./agents.js";
-export { localFirst, planContinuation } from "./policy.js";
-export type {
-  ContinuationPolicy,
-  LocalFirstOptions,
-  PlanInput,
-  PlanningDecision
-} from "./policy.js";
-export { evaluateTriggers, triggers } from "./triggers.js";
-export type { FiredTrigger, Trigger, TriggerState } from "./triggers.js";
+export { localFirst } from "./policy.js";
+export type { ContinuationPolicy, LocalFirstOptions } from "./policy.js";
+export { triggers } from "./triggers.js";
+export type { FiredTrigger, Trigger } from "./triggers.js";
 export { branch } from "./isolation.js";
 export type { IsolationStrategy } from "./isolation.js";
-export { reviewRuns, reviewStrategies } from "./review.js";
+export { reviewStrategies } from "./review.js";
 export type {
   ReviewedRun,
   ReviewResult,
   ReviewStrategy,
   Scorecard
 } from "./review.js";
-export { wrapTools } from "./tools.js";
 export type { ToolCallObservation, ToolLike } from "./tools.js";

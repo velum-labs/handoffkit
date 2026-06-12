@@ -66,10 +66,7 @@ export type StackOptions = {
 export type Stack = {
   planeUrl: string;
   adminToken: string;
-  enrollToken: string;
-  plane: Plane;
   client: PlaneClient;
-  runner: Runner;
   pool: string;
   /** Process one pending run on the bundled runner, if any. */
   runOnce(): Promise<string | undefined>;
@@ -133,10 +130,7 @@ export async function startStack(options: StackOptions = {}): Promise<Stack> {
   return {
     planeUrl,
     adminToken: ADMIN_TOKEN,
-    enrollToken: ENROLL_TOKEN,
-    plane,
     client: new PlaneClient(planeUrl, ADMIN_TOKEN),
-    runner,
     pool,
     runOnce: () => runner.runOnce(),
     stop: async () => {

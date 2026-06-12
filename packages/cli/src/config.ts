@@ -12,8 +12,8 @@ import type { MasterKey } from "@warrant/plane";
 import type { Policy } from "@warrant/protocol";
 
 /** Defaults for `warrant init`; flags (--port/--host) override them. */
-export const DEFAULT_PLANE_PORT = 7172;
-export const DEFAULT_PLANE_HOST = "127.0.0.1";
+const DEFAULT_PLANE_PORT = 7172;
+const DEFAULT_PLANE_HOST = "127.0.0.1";
 
 export type CliConfig = {
   version: "warrant.config.v2";

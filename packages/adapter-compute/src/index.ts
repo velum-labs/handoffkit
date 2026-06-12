@@ -21,6 +21,5 @@ export type {
   CommandResult,
   GovernedCompute,
   GovernedComputeConfig,
-  SandboxBinding,
   SandboxRunRecord
 } from "./sandbox.js";

@@ -4,30 +4,16 @@
  * values still satisfy the corresponding `version: "..."` fields.
  */
 export {
-  AGENT_KINDS,
-  ARTIFACT_KINDS,
-  ATTESTATION_TIERS,
   ACTOR_KINDS,
-  CANCELLABLE_RUN_STATUSES,
+  AGENT_KINDS,
   CHECKPOINT_TIERS,
   DISCLOSURE_MODES,
-  FAILURE_CLASSES,
   HEX_HASH_PATTERN,
   isAgentKind,
-  isAwaitingApprovalStatus,
-  isCancellableStatus,
-  isCheckpointTier,
-  isDisclosureMode,
-  isReceiptAvailableStatus,
-  isReceiptStatus,
-  isRunStatus,
-  isSessionIsolation,
   isTerminalStatus,
-  RECEIPT_STATUSES,
   RUN_EVENT_TYPES,
   RUN_STATUSES,
   SESSION_ISOLATIONS,
-  SIGNERS,
   TERMINAL_RUN_STATUSES
 } from "./vocabulary.js";
 

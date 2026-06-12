@@ -74,7 +74,7 @@ export function resolveSessionEnv(
 
 /** The execution intent of a contract, whether explicit or defaulted. */
 export function executionSpecFor(contract: RunContract): ExecutionSpec {
-  return contract.execution ?? defaultExecutionForContract(contract);
+  return contract.execution ?? defaultExecutionSpec(contract.agent, contract.task.prompt);
 }
 
 function timeoutMsFor(contract: RunContract, spec: ExecutionSpec): number {
@@ -108,10 +108,6 @@ function envFor(spec: ExecutionSpec): {
 
 function logMaxBytesFor(spec: ExecutionSpec): number | undefined {
   return spec.log?.maxBytes;
-}
-
-export function defaultExecutionForContract(contract: RunContract): ExecutionSpec {
-  return defaultExecutionSpec(contract.agent, contract.task.prompt);
 }
 
 function prepareAgentExecution(
