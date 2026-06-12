@@ -13,6 +13,7 @@
     { "path": "packages/handoff" },
     { "path": "packages/testkit" },
     { "path": "packages/cli" },
-    { "path": "examples/demos" }
+    { "path": "examples/demos" },
+    { "path": "examples/mlx" }
   ]
 }

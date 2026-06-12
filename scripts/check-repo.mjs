@@ -46,6 +46,7 @@ const requiredFiles = [
   "packages/testkit/src/index.ts",
   "packages/cli/src/index.ts",
   "examples/demos/src/run.ts",
+  "examples/mlx/src/run.ts",
   // test suites
   "packages/protocol/src/test/protocol.test.ts",
   "packages/workspace/src/test/workspace.test.ts",
@@ -69,7 +70,8 @@ const requiredFiles = [
   "packages/cli/src/test/e2e.test.ts",
   "packages/cli/src/test/handoff.test.ts",
   "packages/cli/src/test/cli.test.ts",
-  "examples/demos/src/test/demos.test.ts"
+  "examples/demos/src/test/demos.test.ts",
+  "examples/mlx/src/test/run.test.ts"
 ];
 
 const fail = (message) => {

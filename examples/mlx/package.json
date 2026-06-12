@@ -1,0 +1,12 @@
+{
+  "name": "@warrant/mlx-example",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Apple-Silicon smoke test: Warrant-owned MLX server with a generateText call.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/adapter-ai-sdk": "workspace:*",
+    "ai": "6.0.200"
+  }
+}

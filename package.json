@@ -16,6 +16,7 @@
     "clean": "tsc -b tsconfig.json --clean",
     "test": "node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\"",
     "demo": "node examples/demos/dist/run.js",
+    "mlx": "node examples/mlx/dist/run.js",
     "bench": "node examples/demos/dist/bench.js",
     "verify": "pnpm check && pnpm build && pnpm test"
   },
