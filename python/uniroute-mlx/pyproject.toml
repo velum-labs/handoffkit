@@ -1,0 +1,24 @@
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "uniroute-mlx"
+version = "0.1.0"
+description = "UniRoute routing for locally served models (mlx-lm and any OpenAI-compatible endpoint)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "UNLICENSED" }
+dependencies = ["uniroute", "numpy>=1.26"]
+
+[project.scripts]
+uniroute-mlx = "uniroute_mlx.cli:main"
+
+[tool.uv.sources]
+uniroute = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

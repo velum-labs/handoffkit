@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "mlx-lm-structured",
     "uniroute",
+    "uniroute-mlx",
 ]
 
 [manifest.dependency-groups]
@@ -1189,6 +1190,30 @@ dev = [
 
 [package.metadata]
 requires-dist = [{ name = "numpy", specifier = ">=1.26" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
+
+[[package]]
+name = "uniroute-mlx"
+version = "0.1.0"
+source = { editable = "python/uniroute-mlx" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "uniroute" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "uniroute", editable = "python/uniroute" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]

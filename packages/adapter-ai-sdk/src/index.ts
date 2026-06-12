@@ -17,6 +17,8 @@ export type {
 } from "./remote-tools.js";
 export { HandoffModel, handoffModel, withModel } from "./model.js";
 export type { EscalationReason, HandoffModelConfig } from "./model.js";
+export { loadRouterCard, RoutedModel, routedModel, withRoutedModel } from "./routed-model.js";
+export type { RouteDecision, RoutedModelConfig, RouterCard } from "./routed-model.js";
 export {
   defaultMlxDir,
   MLX_LM_PIN,

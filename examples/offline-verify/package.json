@@ -1,0 +1,14 @@
+{
+  "name": "@warrant/example-offline-verify",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: receipt tamper evidence.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/protocol": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  }
+}

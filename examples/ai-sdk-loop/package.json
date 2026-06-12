@@ -1,0 +1,14 @@
+{
+  "name": "@warrant/example-ai-sdk-loop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: AI SDK loop with governed remote tools.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/adapter-ai-sdk": "workspace:*",
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "ai": "6.0.200"
+  }
+}

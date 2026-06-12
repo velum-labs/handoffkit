@@ -41,6 +41,11 @@ uv run pytest python/uniroute/tests
 Or from this directory: `uv run pytest` / `uv run python -m uniroute.demo`.
 The package also installs with plain pip (`pip install -e .`) if you prefer.
 
+To route *running* models (mlx-lm or any OpenAI-compatible endpoint), see the
+sibling [`uniroute-mlx`](../uniroute-mlx) package: it evaluates candidates over a
+validation set, fits a router with this package, and exports a portable router
+card consumed by the repository's TypeScript `routedModel`.
+
 The demo routes over LLMs that the router never saw during training and prints, per
 method, the area under the deferral curve (up to 50% and 100% of the maximum cost)
 and the quality-neutral cost (QNC) — the minimum relative cost at which the router

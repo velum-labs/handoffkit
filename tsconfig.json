@@ -1,19 +1,92 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/adapter-ai-sdk" },
-    { "path": "packages/adapter-compute" },
-    { "path": "packages/protocol" },
-    { "path": "packages/workspace" },
-    { "path": "packages/sdk" },
-    { "path": "packages/plane" },
-    { "path": "packages/runner" },
-    { "path": "packages/session-hermetic" },
-    { "path": "packages/session-vercel-sandbox" },
-    { "path": "packages/handoff" },
-    { "path": "packages/testkit" },
-    { "path": "packages/cli" },
-    { "path": "examples/demos" },
-    { "path": "examples/mlx" }
+    {
+      "path": "packages/adapter-ai-sdk"
+    },
+    {
+      "path": "packages/adapter-compute"
+    },
+    {
+      "path": "packages/protocol"
+    },
+    {
+      "path": "packages/workspace"
+    },
+    {
+      "path": "packages/sdk"
+    },
+    {
+      "path": "packages/plane"
+    },
+    {
+      "path": "packages/runner"
+    },
+    {
+      "path": "packages/session-hermetic"
+    },
+    {
+      "path": "packages/session-vercel-sandbox"
+    },
+    {
+      "path": "packages/handoff"
+    },
+    {
+      "path": "packages/testkit"
+    },
+    {
+      "path": "packages/cli"
+    },
+    {
+      "path": "packages/example-utils"
+    },
+    {
+      "path": "examples/bench"
+    },
+    {
+      "path": "examples/seed"
+    },
+    {
+      "path": "examples/governed-run"
+    },
+    {
+      "path": "examples/dry-run"
+    },
+    {
+      "path": "examples/consent-secrets"
+    },
+    {
+      "path": "examples/egress-policy"
+    },
+    {
+      "path": "examples/offline-verify"
+    },
+    {
+      "path": "examples/handoff"
+    },
+    {
+      "path": "examples/parallel-fanout"
+    },
+    {
+      "path": "examples/control-panel"
+    },
+    {
+      "path": "examples/ai-sdk-loop"
+    },
+    {
+      "path": "examples/compute-sandbox"
+    },
+    {
+      "path": "examples/golden-interface"
+    },
+    {
+      "path": "examples/model-escalation"
+    },
+    {
+      "path": "examples/hermetic-session"
+    },
+    {
+      "path": "examples/mlx"
+    }
   ]
 }

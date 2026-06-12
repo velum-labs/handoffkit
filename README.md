@@ -26,8 +26,9 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | [`@warrant/adapter-compute`](packages/adapter-compute) | ComputeSDK-shaped compute surface: `sandbox.create()`, `runCommand`, `filesystem` — every command a governed run with a receipt. |
 | [`@warrant/cli`](packages/cli) | The `warrant` CLI: the primary product surface. |
 | [`@warrant/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
-| [`examples/demos`](examples/demos) | The runnable demo series (below). |
+| [`examples/*`](examples) | Standalone example projects for the runnable demos (below). |
 | [`uniroute`](python/uniroute) | Python (uv workspace member): UniRoute universal model routing, arXiv:2502.08773. |
+| [`uniroute-mlx`](python/uniroute-mlx) | Python (uv workspace member): evaluate and fit UniRoute routers over OpenAI-compatible endpoints (mlx-lm, Ollama, cloud), exporting portable router cards consumed by `routedModel`. |
 
 ## Python workspace
 
@@ -94,31 +95,31 @@ docker compose exec plane warrant runs    # or drive it from the CLI
 
 `warrant plane start` serves a dependency-free control panel at `/ui/`: live run list, hash-chained event timelines, one-screen receipts (the five questions), consent approvals, run cancellation, runner inventory, the content-addressed policy snapshot, bundle download, and audit JSONL export. Sign in with the admin token from `warrant ui`.
 
-## Demo series
+## Standalone examples
 
-Every demo is self-contained (in-process plane + runner + built-in mock agent; no vendor CLIs or API keys) and narrates what it proves:
+Each demo is now its own workspace project under `examples/`. They remain self-contained (in-process plane + runner + built-in mock agent; no vendor CLIs or API keys) and narrate what they prove:
 
 ```sh
-pnpm demo           # list
-pnpm demo 01        # run one
-pnpm demo all       # run the whole series (skips interactive demos)
+pnpm demo           # list standalone examples
+pnpm demo 01        # run one example project
+pnpm demo all       # run every non-interactive example
 ```
 
 | # | Demo | What it proves |
 | --- | --- | --- |
-| 01 | Governed run | Signed contract → governed session → receipt answering the five questions, verified offline. |
-| 02 | Dry run | The complete disclosure report — including provably denied `.env`/key captures — with nothing moved. |
-| 03 | Consent + secrets | A secret-releasing run blocks on human approval; the value is injected at runtime and appears nowhere in any artifact. |
-| 04 | Egress policy | Fail-closed network policy at contract time, deny-by-default enforcement and evidence at the session boundary. |
-| 05 | Offline verification | Tampered event chains and forged receipts are detected with no trust in the plane. |
-| 06 | Handoff | `h.continueIn(targets.pool("eng-prod"), …)`: checkpoint, envelope, governed run, trace, receipt, divergence-safe pull. |
-| 07 | Parallel fan-out | One checkpoint forked into isolated attempts, reviewed with typed deterministic strategies; every attempt keeps its receipt. |
-| 08 | Control panel | Boots a seeded plane + runner and leaves the UI up for you to explore (interactive). |
-| 09 | AI SDK loop | An ordinary `generateText` loop whose tool calls execute in governed sessions and return with verified receipts. |
-| 10 | Compute sandbox | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
-| 11 | Golden interface | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
-| 12 | Model escalation | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
-| 13 | Hermetic session | The `command` harness runs inside a bash interpreter with a virtual filesystem and interpreter-enforced egress; the receipt records `isolation: hermetic`. |
+| 01 | [Governed run](examples/governed-run) | Signed contract → governed session → receipt answering the five questions, verified offline. |
+| 02 | [Dry run](examples/dry-run) | The complete disclosure report — including provably denied `.env`/key captures — with nothing moved. |
+| 03 | [Consent + secrets](examples/consent-secrets) | A secret-releasing run blocks on human approval; the value is injected at runtime and appears nowhere in any artifact. |
+| 04 | [Egress policy](examples/egress-policy) | Fail-closed network policy at contract time, deny-by-default enforcement and evidence at the session boundary. |
+| 05 | [Offline verification](examples/offline-verify) | Tampered event chains and forged receipts are detected with no trust in the plane. |
+| 06 | [Handoff](examples/handoff) | `h.continueIn(targets.pool("eng-prod"), …)`: checkpoint, envelope, governed run, trace, receipt, divergence-safe pull. |
+| 07 | [Parallel fan-out](examples/parallel-fanout) | One checkpoint forked into isolated attempts, reviewed with typed deterministic strategies; every attempt keeps its receipt. |
+| 08 | [Control panel](examples/control-panel) | Boots a seeded plane + runner and leaves the UI up for you to explore (interactive). |
+| 09 | [AI SDK loop](examples/ai-sdk-loop) | An ordinary `generateText` loop whose tool calls execute in governed sessions and return with verified receipts. |
+| 10 | [Compute sandbox](examples/compute-sandbox) | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
+| 11 | [Golden interface](examples/golden-interface) | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
+| 12 | [Model escalation](examples/model-escalation) | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
+| 13 | [Hermetic session](examples/hermetic-session) | The `command` harness runs inside a bash interpreter with a virtual filesystem and interpreter-enforced egress; the receipt records `isolation: hermetic`. |
 
 ## Using real models
 
@@ -170,6 +171,28 @@ const model = handoffModel({ local, cloud: openai("gpt-5.5") });
 The footprint is one inspectable directory: `local.env.info()` reports the manifest and disk usage, `local.env.verify()` checks the env is intact, and `local.env.destroy()` removes everything — venv, weights, logs, uv caches. The mlx-lm pin (`MLX_LM_PIN`) and the Python version requested from uv (`PYTHON_PIN`) follow the same trusted-pin policy as the npm allowlist: exact versions, bumped only as reviewed changes. The generic layer (`managedModelServer(...)`) accepts any `prepare()` hook, so the same lazy-start/scale-to-zero lifecycle can manage other OpenAI-compatible servers.
 
 Passing `structured: true` to `mlxServer(...)` additionally installs the in-repo [mlx-lm-structured](python/mlx-lm-structured/README.md) overlay (plus [outlines-core](https://pypi.org/project/outlines-core/) at an exact pin) into the owned env and boots the server through its entry point. The stock mlx-lm server silently ignores `response_format`; with the overlay, JSON schema / regex / choice constraints are enforced by masking logits with a compiled FSM, so the AI SDK's structured output modes (`generateObject`, `responseFormat: json`) produce schema-valid output from the local model.
+
+### UniRoute: learned routing over a model pool
+
+Beyond the two-model `handoffModel` escalation, `routedModel(...)` routes each call across a *pool* of candidates by predicted correctness (UniRoute, [arXiv:2502.08773](https://arxiv.org/abs/2502.08773)). The router is fitted offline by the Python [`uniroute`](python/uniroute)/[`uniroute-mlx`](python/uniroute-mlx) workspace packages and frozen into a portable router card (`uniroute.router.v1` JSON); onboarding a new model is one validation pass, never a retrain.
+
+```ts
+import { loadRouterCard, mlxServer, routedModel } from "@warrant/adapter-ai-sdk";
+
+const card = loadRouterCard(JSON.parse(await readFile("router-card.json", "utf8")));
+const model = routedModel({
+  card,
+  candidates: {
+    "mlx-community/Qwen3-1.7B-4bit": mlxServer({ model: "mlx-community/Qwen3-1.7B-4bit" }),
+    "mlx-community/Qwen3-8B-4bit": mlxServer({ model: "mlx-community/Qwen3-8B-4bit" }),
+    "gpt-5.5": openai("gpt-5.5")
+  },
+  embed: embedWithTheCardsEmbedder // must match card.embedder.model
+});
+// Each call: embed → cluster → argmin(predicted error + λ·cost) → one model
+// runs. A failed call falls back to the next-best candidate, honestly
+// reported via onDecision (withRoutedModel wires this into h.trace()).
+```
 
 ## The handoff SDK
 
@@ -350,12 +373,12 @@ If the platform cannot answer those questions from a signed receipt, on one scre
 pnpm verify          # repo checks + build + the full test suite
 pnpm test            # unit + integration: protocol, policy, workspace, plane API/UI,
                      # plane hardening (atomic claim, replay, auth/roles, rate limit,
-                     # sealing, retention), planner, handoff e2e, CLI e2e, demos
-pnpm demo all        # the demo series doubles as an executable acceptance suite
+                     # sealing, retention), planner, handoff e2e, CLI e2e, examples
+pnpm demo all        # the standalone examples double as an executable acceptance suite
 pnpm bench           # asserts the spec section 8.4 performance budgets
 ```
 
-CI runs the suite, the demo series, the performance benchmark, and a Docker Compose smoke test (build, boot, seed, hit the API, readiness, metrics, and control panel).
+CI runs the suite, the standalone examples, the performance benchmark, and a Docker Compose smoke test (build, boot, seed, hit the API, readiness, metrics, and control panel).
 
 ## Current artifacts
 

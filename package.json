@@ -14,10 +14,10 @@
     "check": "node scripts/check-repo.mjs",
     "build": "tsc -b tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean",
-    "test": "node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\"",
-    "demo": "node examples/demos/dist/run.js",
+    "test": "node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\" \"test/*.test.js\"",
+    "demo": "node scripts/demo.mjs",
     "mlx": "node examples/mlx/dist/run.js",
-    "bench": "node examples/demos/dist/bench.js",
+    "bench": "node examples/bench/dist/run.js",
     "verify": "pnpm check && pnpm build && pnpm test"
   },
   "devDependencies": {

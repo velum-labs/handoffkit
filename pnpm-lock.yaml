@@ -15,38 +15,167 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
-  examples/demos:
+  examples/ai-sdk-loop:
     dependencies:
-      '@ai-sdk/openai-compatible':
-        specifier: 2.0.48
-        version: 2.0.48(zod@4.4.3)
-      '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
       '@warrant/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../../packages/adapter-ai-sdk
-      '@warrant/adapter-compute':
+      '@warrant/example-utils':
         specifier: workspace:*
-        version: link:../../packages/adapter-compute
-      '@warrant/cli':
+        version: link:../../packages/example-utils
+      '@warrant/testkit':
         specifier: workspace:*
-        version: link:../../packages/cli
-      '@warrant/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@warrant/plane':
-        specifier: workspace:*
-        version: link:../../packages/plane
+        version: link:../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  examples/bench:
+    dependencies:
       '@warrant/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@warrant/runner':
+      '@warrant/testkit':
         specifier: workspace:*
-        version: link:../../packages/runner
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
+  examples/compute-sandbox:
+    dependencies:
+      '@warrant/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+
+  examples/consent-secrets:
+    dependencies:
+      '@warrant/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
+  examples/control-panel:
+    dependencies:
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/seed-example':
+        specifier: workspace:*
+        version: link:../seed
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
+  examples/dry-run:
+    dependencies:
+      '@warrant/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
+  examples/egress-policy:
+    dependencies:
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
       '@warrant/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
+  examples/golden-interface:
+    dependencies:
+      '@warrant/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  examples/governed-run:
+    dependencies:
+      '@warrant/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
+  examples/handoff:
+    dependencies:
+      '@warrant/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+
+  examples/hermetic-session:
+    dependencies:
+      '@warrant/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
       '@warrant/session-hermetic':
         specifier: workspace:*
         version: link:../../packages/session-hermetic
@@ -56,12 +185,6 @@ importers:
       '@warrant/workspace':
         specifier: workspace:*
         version: link:../../packages/workspace
-      ai:
-        specifier: 6.0.200
-        version: 6.0.200(zod@4.4.3)
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
 
   examples/mlx:
     dependencies:
@@ -71,6 +194,72 @@ importers:
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
+
+  examples/model-escalation:
+    dependencies:
+      '@ai-sdk/provider':
+        specifier: 3.0.10
+        version: 3.0.10
+      '@warrant/adapter-ai-sdk':
+        specifier: workspace:*
+        version: link:../../packages/adapter-ai-sdk
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  examples/offline-verify:
+    dependencies:
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
+  examples/parallel-fanout:
+    dependencies:
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+
+  examples/seed:
+    dependencies:
+      '@warrant/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@warrant/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
 
   packages/adapter-ai-sdk:
     dependencies:
@@ -143,6 +332,15 @@ importers:
       '@warrant/testkit':
         specifier: workspace:*
         version: link:../testkit
+
+  packages/example-utils:
+    dependencies:
+      '@ai-sdk/openai-compatible':
+        specifier: 2.0.48
+        version: 2.0.48(zod@4.4.3)
+      '@ai-sdk/provider':
+        specifier: 3.0.10
+        version: 3.0.10
 
   packages/handoff:
     dependencies:

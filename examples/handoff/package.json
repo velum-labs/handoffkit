@@ -1,0 +1,14 @@
+{
+  "name": "@warrant/example-handoff",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: continuation handoff to a governed runner.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/cli": "workspace:*",
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/handoff": "workspace:*",
+    "@warrant/testkit": "workspace:*"
+  }
+}

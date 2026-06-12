@@ -65,7 +65,7 @@ services:
         condition: service_healthy
       runner:
         condition: service_started
-    command: node /app/examples/demos/dist/seed.js --dir /data/warrant
+    command: node /app/examples/seed/dist/run.js --dir /data/warrant
     volumes:
       - warrant-home:/data/warrant
 

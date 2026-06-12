@@ -1,0 +1,14 @@
+{
+  "name": "@warrant/example-control-panel",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: seeded control panel for interactive exploration.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/seed-example": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  }
+}
