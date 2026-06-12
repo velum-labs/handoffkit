@@ -80,10 +80,13 @@ jobs:
         run: uv sync --all-packages
 
       - name: Test
-        run: uv run pytest python/uniroute/tests -q
+        run: uv run pytest python -q
 
       - name: Demo smoke
         run: uv run uniroute-demo --trials 1
+
+      - name: Router CLI smoke
+        run: uv run uniroute-mlx --help
 
   docker:
     name: docker compose smoke

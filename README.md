@@ -28,6 +28,7 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | [`@warrant/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
 | [`examples/*`](examples) | Standalone example projects for the runnable demos (below). |
 | [`uniroute`](python/uniroute) | Python (uv workspace member): UniRoute universal model routing, arXiv:2502.08773. |
+| [`uniroute-mlx`](python/uniroute-mlx) | Python (uv workspace member): evaluate and fit UniRoute routers over OpenAI-compatible endpoints (mlx-lm, Ollama, cloud), exporting portable router cards consumed by `routedModel`. |
 
 ## Python workspace
 
@@ -168,6 +169,28 @@ const model = handoffModel({ local, cloud: openai("gpt-5.5") });
 ```
 
 The footprint is one inspectable directory: `local.env.info()` reports the manifest and disk usage, `local.env.verify()` checks the env is intact, and `local.env.destroy()` removes everything — venv, weights, logs, uv caches. The mlx-lm pin (`MLX_LM_PIN`) and the Python version requested from uv (`PYTHON_PIN`) follow the same trusted-pin policy as the npm allowlist: exact versions, bumped only as reviewed changes. The generic layer (`managedModelServer(...)`) accepts any `prepare()` hook, so the same lazy-start/scale-to-zero lifecycle can manage other OpenAI-compatible servers.
+
+### UniRoute: learned routing over a model pool
+
+Beyond the two-model `handoffModel` escalation, `routedModel(...)` routes each call across a *pool* of candidates by predicted correctness (UniRoute, [arXiv:2502.08773](https://arxiv.org/abs/2502.08773)). The router is fitted offline by the Python [`uniroute`](python/uniroute)/[`uniroute-mlx`](python/uniroute-mlx) workspace packages and frozen into a portable router card (`uniroute.router.v1` JSON); onboarding a new model is one validation pass, never a retrain.
+
+```ts
+import { loadRouterCard, mlxServer, routedModel } from "@warrant/adapter-ai-sdk";
+
+const card = loadRouterCard(JSON.parse(await readFile("router-card.json", "utf8")));
+const model = routedModel({
+  card,
+  candidates: {
+    "mlx-community/Qwen3-1.7B-4bit": mlxServer({ model: "mlx-community/Qwen3-1.7B-4bit" }),
+    "mlx-community/Qwen3-8B-4bit": mlxServer({ model: "mlx-community/Qwen3-8B-4bit" }),
+    "gpt-5.5": openai("gpt-5.5")
+  },
+  embed: embedWithTheCardsEmbedder // must match card.embedder.model
+});
+// Each call: embed → cluster → argmin(predicted error + λ·cost) → one model
+// runs. A failed call falls back to the next-best candidate, honestly
+// reported via onDecision (withRoutedModel wires this into h.trace()).
+```
 
 ## The handoff SDK
 
