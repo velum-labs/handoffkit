@@ -16,30 +16,23 @@ from .evaluate import (
     select_n_clusters,
     zero_router_curve,
 )
-from .kmeans import KMeansResult, assign, kmeans
-from .learned_map import TrainingTrace, UniRouteLearnedMap
+from .kmeans import assign, kmeans
+from .learned_map import UniRouteLearnedMap
 from .routers import (
     KNNRouter,
-    RoutingDecision,
     UniRouteKMeans,
     ZeroRouter,
-    ZeroRouterPlan,
     cluster_error_embedding,
     route,
 )
-from .synthetic import SyntheticBenchmark, make_benchmark
+from .synthetic import make_benchmark
 
 __all__ = [
     "DeferralCurve",
-    "KMeansResult",
     "KNNRouter",
-    "RoutingDecision",
-    "SyntheticBenchmark",
-    "TrainingTrace",
     "UniRouteKMeans",
     "UniRouteLearnedMap",
     "ZeroRouter",
-    "ZeroRouterPlan",
     "area_under_curve",
     "assign",
     "cluster_error_embedding",

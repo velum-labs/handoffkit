@@ -18,14 +18,11 @@ import numpy as np
 
 from .evaluate import (
     area_under_curve,
-    deferral_curve,
     quality_neutral_cost,
     select_n_clusters,
-    zero_router_curve,
 )
-from .learned_map import UniRouteLearnedMap
-from .routers import KNNRouter, UniRouteKMeans, ZeroRouter
 from .synthetic import make_benchmark
+from .trials import synthetic_trial_curves
 
 
 @dataclass
@@ -66,13 +63,6 @@ def run_trial(seed: int, n_clusters_grid: list[int], results: dict[str, MethodRe
     max_cost = float(costs.max())
     test_errors = bench.test_errors_test_pool
 
-    def score(name: str, curve) -> None:
-        results[name].add(
-            area_under_curve(curve, max_cost, up_to=0.5),
-            area_under_curve(curve, max_cost, up_to=1.0),
-            quality_neutral_cost(curve, test_errors, costs),
-        )
-
     # Hyper-parameter K via the Appendix F.1 procedure (training pool only).
     chosen_k = select_n_clusters(
         n_clusters_grid,
@@ -84,40 +74,12 @@ def run_trial(seed: int, n_clusters_grid: list[int], results: dict[str, MethodRe
         seed=seed,
     )
 
-    # ZeroRouter (Appendix D): prompt-independent mixture on the frontier.
-    zero = ZeroRouter().fit(costs, bench.val_errors_test_pool)
-    score("ZeroRouter", zero_router_curve(zero, test_errors, costs))
-
-    # K-NN router (eq. 5) over the validation set.
-    knn = KNNRouter(n_neighbors=min(10, bench.val_embeddings.shape[0])).fit(
-        bench.val_embeddings, bench.val_errors_test_pool
-    )
-    score("K-NN", deferral_curve(knn.gamma(bench.test_embeddings), test_errors, costs))
-
-    # UniRoute (K-means), S 5.1: unsupervised map, unseen LLMs via Psi.
-    km = UniRouteKMeans(chosen_k, seed=seed).fit(bench.train_embeddings)
-    psi_km = km.embed_llms(bench.val_embeddings, bench.val_errors_test_pool)
-    score(
-        "UniRoute (K-means)",
-        deferral_curve(km.gamma(bench.test_embeddings, psi_km), test_errors, costs),
-    )
-
-    # UniRoute (LearnedMap), S 5.2: supervised map trained on the TRAINING
-    # pool's labels; the test pool still enters only through Psi.
-    lm = UniRouteLearnedMap(chosen_k, seed=seed).fit(
-        bench.train_embeddings, bench.train_errors_train_pool
-    )
-    psi_lm = lm.embed_llms(bench.val_embeddings, bench.val_errors_test_pool)
-    score(
-        "UniRoute (LearnedMap)",
-        deferral_curve(lm.gamma(bench.test_embeddings, psi_lm), test_errors, costs),
-    )
-
-    # Clairvoyant oracle: routes on the true per-prompt error probabilities.
-    score(
-        "Oracle (clairvoyant)",
-        deferral_curve(bench.test_true_error_rates, test_errors, costs),
-    )
+    for name, curve in synthetic_trial_curves(bench, chosen_k, seed).items():
+        results[name].add(
+            area_under_curve(curve, max_cost, up_to=0.5),
+            area_under_curve(curve, max_cost, up_to=1.0),
+            quality_neutral_cost(curve, test_errors, costs),
+        )
     return chosen_k
 
 
