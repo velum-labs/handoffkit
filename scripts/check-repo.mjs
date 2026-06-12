@@ -21,6 +21,12 @@ const requiredFiles = [
   "tsconfig.base.json",
   "Dockerfile",
   "docker-compose.yml",
+  // uv workspace (the Python monorepo side)
+  "pyproject.toml",
+  "uv.lock",
+  "python/uniroute/pyproject.toml",
+  "python/uniroute/src/uniroute/__init__.py",
+  "python/uniroute/tests/test_end_to_end.py",
   // package entry points
   "packages/protocol/src/index.ts",
   "packages/protocol/src/types.ts",

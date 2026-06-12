@@ -60,6 +60,31 @@ jobs:
       - name: Audit dependencies
         run: pnpm audit --audit-level high
 
+  python:
+    name: uv workspace (python/*)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Lockfile is current
+        run: uv lock --check
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: Test
+        run: uv run pytest python/uniroute/tests -q
+
+      - name: Demo smoke
+        run: uv run uniroute-demo --trials 1
+
   docker:
     name: docker compose smoke
     runs-on: ubuntu-latest

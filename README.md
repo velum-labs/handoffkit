@@ -27,6 +27,17 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | [`@warrant/cli`](packages/cli) | The `warrant` CLI: the primary product surface. |
 | [`@warrant/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
 | [`examples/demos`](examples/demos) | The runnable demo series (below). |
+| [`uniroute`](python/uniroute) | Python (uv workspace member): UniRoute universal model routing, arXiv:2502.08773. |
+
+## Python workspace
+
+Alongside the pnpm workspace, the repository is a [uv](https://docs.astral.sh/uv/) monorepo for its Python side: the root `pyproject.toml` declares a virtual workspace whose members live under `python/*` and share the committed `uv.lock`.
+
+```sh
+uv sync --all-packages                 # one .venv for every Python package
+uv run pytest python/uniroute/tests   # test a member
+uv run uniroute-demo                   # run a member's entry point
+```
 
 ## Quickstart
 

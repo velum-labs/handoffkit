@@ -1,0 +1,16 @@
+# The uv workspace root for the Python side of this repository.
+#
+# The repo is primarily a pnpm/TypeScript monorepo (see package.json); this
+# file makes it *also* a uv monorepo. The root is virtual -- the repository
+# itself is not a Python package -- and every package under python/ is a
+# workspace member sharing the single committed uv.lock.
+#
+#   uv sync --all-packages       # create .venv with every member + dev tools
+#   uv run --package uniroute python -m uniroute.demo
+#   uv run pytest python/uniroute/tests
+[tool.uv.workspace]
+members = ["python/*"]
+
+# Dev tooling shared by all members; synced by default with `uv sync`.
+[dependency-groups]
+dev = ["pytest>=8"]

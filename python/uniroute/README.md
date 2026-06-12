@@ -28,12 +28,18 @@ included, so the only dependency is NumPy.
 
 ## Quickstart
 
+This package is a member of the repository's [uv](https://docs.astral.sh/uv/)
+workspace (rooted at the repo-level `pyproject.toml`, sharing one `uv.lock`).
+From the repository root:
+
 ```sh
-cd python/uniroute
-pip install -e ".[test]"      # or: pip install -r requirements.txt
-python -m uniroute.demo       # Figure-2-style table on synthetic data
-pytest                        # the test suite
+uv sync --all-packages        # one .venv for the whole Python workspace
+uv run uniroute-demo          # Figure-2-style table on synthetic data
+uv run pytest python/uniroute/tests
 ```
+
+Or from this directory: `uv run pytest` / `uv run python -m uniroute.demo`.
+The package also installs with plain pip (`pip install -e .`) if you prefer.
 
 The demo routes over LLMs that the router never saw during training and prints, per
 method, the area under the deferral curve (up to 50% and 100% of the maximum cost)
