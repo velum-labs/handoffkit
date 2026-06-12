@@ -1,0 +1,13 @@
+{
+  "name": "@warrant/example-parallel-fanout",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: parallel continuation fan-out and review.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/handoff": "workspace:*",
+    "@warrant/testkit": "workspace:*"
+  }
+}

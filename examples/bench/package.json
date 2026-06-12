@@ -1,0 +1,13 @@
+{
+  "name": "@warrant/bench-example",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Executable performance-budget benchmark for Warrant examples.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/protocol": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  }
+}

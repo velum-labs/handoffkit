@@ -1,0 +1,16 @@
+{
+  "name": "@warrant/example-model-escalation",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: deterministic local-to-cloud model escalation.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@ai-sdk/provider": "3.0.10",
+    "@warrant/adapter-ai-sdk": "workspace:*",
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/handoff": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "ai": "6.0.200"
+  }
+}

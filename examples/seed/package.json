@@ -1,0 +1,24 @@
+{
+  "name": "@warrant/seed-example",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Docker and control-panel seeder for showcase Warrant runs.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@warrant/handoff": "workspace:*",
+    "@warrant/protocol": "workspace:*",
+    "@warrant/sdk": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  }
+}

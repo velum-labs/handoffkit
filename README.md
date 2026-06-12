@@ -26,7 +26,7 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | [`@warrant/adapter-compute`](packages/adapter-compute) | ComputeSDK-shaped compute surface: `sandbox.create()`, `runCommand`, `filesystem` — every command a governed run with a receipt. |
 | [`@warrant/cli`](packages/cli) | The `warrant` CLI: the primary product surface. |
 | [`@warrant/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
-| [`examples/demos`](examples/demos) | The runnable demo series (below). |
+| [`examples/*`](examples) | Standalone example projects for the runnable demos (below). |
 | [`uniroute`](python/uniroute) | Python (uv workspace member): UniRoute universal model routing, arXiv:2502.08773. |
 
 ## Python workspace
@@ -94,31 +94,31 @@ docker compose exec plane warrant runs    # or drive it from the CLI
 
 `warrant plane start` serves a dependency-free control panel at `/ui/`: live run list, hash-chained event timelines, one-screen receipts (the five questions), consent approvals, run cancellation, runner inventory, the content-addressed policy snapshot, bundle download, and audit JSONL export. Sign in with the admin token from `warrant ui`.
 
-## Demo series
+## Standalone examples
 
-Every demo is self-contained (in-process plane + runner + built-in mock agent; no vendor CLIs or API keys) and narrates what it proves:
+Each demo is now its own workspace project under `examples/`. They remain self-contained (in-process plane + runner + built-in mock agent; no vendor CLIs or API keys) and narrate what they prove:
 
 ```sh
-pnpm demo           # list
-pnpm demo 01        # run one
-pnpm demo all       # run the whole series (skips interactive demos)
+pnpm demo           # list standalone examples
+pnpm demo 01        # run one example project
+pnpm demo all       # run every non-interactive example
 ```
 
 | # | Demo | What it proves |
 | --- | --- | --- |
-| 01 | Governed run | Signed contract → governed session → receipt answering the five questions, verified offline. |
-| 02 | Dry run | The complete disclosure report — including provably denied `.env`/key captures — with nothing moved. |
-| 03 | Consent + secrets | A secret-releasing run blocks on human approval; the value is injected at runtime and appears nowhere in any artifact. |
-| 04 | Egress policy | Fail-closed network policy at contract time, deny-by-default enforcement and evidence at the session boundary. |
-| 05 | Offline verification | Tampered event chains and forged receipts are detected with no trust in the plane. |
-| 06 | Handoff | `h.continueIn(targets.pool("eng-prod"), …)`: checkpoint, envelope, governed run, trace, receipt, divergence-safe pull. |
-| 07 | Parallel fan-out | One checkpoint forked into isolated attempts, reviewed with typed deterministic strategies; every attempt keeps its receipt. |
-| 08 | Control panel | Boots a seeded plane + runner and leaves the UI up for you to explore (interactive). |
-| 09 | AI SDK loop | An ordinary `generateText` loop whose tool calls execute in governed sessions and return with verified receipts. |
-| 10 | Compute sandbox | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
-| 11 | Golden interface | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
-| 12 | Model escalation | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
-| 13 | Hermetic session | The `command` harness runs inside a bash interpreter with a virtual filesystem and interpreter-enforced egress; the receipt records `isolation: hermetic`. |
+| 01 | [Governed run](examples/governed-run) | Signed contract → governed session → receipt answering the five questions, verified offline. |
+| 02 | [Dry run](examples/dry-run) | The complete disclosure report — including provably denied `.env`/key captures — with nothing moved. |
+| 03 | [Consent + secrets](examples/consent-secrets) | A secret-releasing run blocks on human approval; the value is injected at runtime and appears nowhere in any artifact. |
+| 04 | [Egress policy](examples/egress-policy) | Fail-closed network policy at contract time, deny-by-default enforcement and evidence at the session boundary. |
+| 05 | [Offline verification](examples/offline-verify) | Tampered event chains and forged receipts are detected with no trust in the plane. |
+| 06 | [Handoff](examples/handoff) | `h.continueIn(targets.pool("eng-prod"), …)`: checkpoint, envelope, governed run, trace, receipt, divergence-safe pull. |
+| 07 | [Parallel fan-out](examples/parallel-fanout) | One checkpoint forked into isolated attempts, reviewed with typed deterministic strategies; every attempt keeps its receipt. |
+| 08 | [Control panel](examples/control-panel) | Boots a seeded plane + runner and leaves the UI up for you to explore (interactive). |
+| 09 | [AI SDK loop](examples/ai-sdk-loop) | An ordinary `generateText` loop whose tool calls execute in governed sessions and return with verified receipts. |
+| 10 | [Compute sandbox](examples/compute-sandbox) | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
+| 11 | [Golden interface](examples/golden-interface) | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
+| 12 | [Model escalation](examples/model-escalation) | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
+| 13 | [Hermetic session](examples/hermetic-session) | The `command` harness runs inside a bash interpreter with a virtual filesystem and interpreter-enforced egress; the receipt records `isolation: hermetic`. |
 
 ## Using real models
 
@@ -348,12 +348,12 @@ If the platform cannot answer those questions from a signed receipt, on one scre
 pnpm verify          # repo checks + build + the full test suite
 pnpm test            # unit + integration: protocol, policy, workspace, plane API/UI,
                      # plane hardening (atomic claim, replay, auth/roles, rate limit,
-                     # sealing, retention), planner, handoff e2e, CLI e2e, demos
-pnpm demo all        # the demo series doubles as an executable acceptance suite
+                     # sealing, retention), planner, handoff e2e, CLI e2e, examples
+pnpm demo all        # the standalone examples double as an executable acceptance suite
 pnpm bench           # asserts the spec section 8.4 performance budgets
 ```
 
-CI runs the suite, the demo series, the performance benchmark, and a Docker Compose smoke test (build, boot, seed, hit the API, readiness, metrics, and control panel).
+CI runs the suite, the standalone examples, the performance benchmark, and a Docker Compose smoke test (build, boot, seed, hit the API, readiness, metrics, and control panel).
 
 ## Current artifacts
 

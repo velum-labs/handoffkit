@@ -1,0 +1,15 @@
+{
+  "name": "@warrant/example-governed-run",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: governed run and offline-verifiable receipt.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/cli": "workspace:*",
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/protocol": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  }
+}

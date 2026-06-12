@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/cli"
+    },
+    {
+      "path": "../../packages/example-utils"
+    },
+    {
+      "path": "../../packages/session-hermetic"
+    },
+    {
+      "path": "../../packages/testkit"
+    },
+    {
+      "path": "../../packages/workspace"
+    }
+  ]
+}

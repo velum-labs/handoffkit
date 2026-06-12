@@ -1,0 +1,14 @@
+{
+  "name": "@warrant/example-consent-secrets",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: consent-gated secret release.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@warrant/cli": "workspace:*",
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/adapter-ai-sdk"
+    },
+    {
+      "path": "../../packages/example-utils"
+    },
+    {
+      "path": "../../packages/handoff"
+    },
+    {
+      "path": "../../packages/testkit"
+    }
+  ]
+}

@@ -51,7 +51,7 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Demo series
+      - name: Standalone examples
         run: pnpm demo all
 
       - name: Performance budgets (spec section 8.4)
