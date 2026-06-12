@@ -1,28 +1,20 @@
-import { rmSync } from "node:fs";
-
 import { governedCompute } from "@warrant/adapter-compute";
-import { makeRepo, startStack } from "@warrant/testkit";
+import { withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, finale, ok, step } from "@warrant/example-utils";
-
-const DEMO_ID = "10";
-const DEMO_TITLE = "ComputeSDK-shaped sandbox over governed sessions";
-const DEMO_SUMMARY =
-  "The sandbox shape developers already write — create, runCommand, filesystem — where every command is a signed contract with a receipt, and continuity flows through the workspace.";
+import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
 
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("10");
 
   step("boot a plane + runner (pool: eng-prod), command harness allowed");
-  const stack = await startStack({
+  await withStackAndRepo({
     pool: "eng-prod",
     startRunner: true,
     policy: (policy) => {
       policy.agents.allow = ["command"];
-    }
-  });
-  const repo = makeRepo({ files: { "README.md": "# scratch workspace\n" } });
-  try {
+    },
+    files: { "README.md": "# scratch workspace\n" }
+  }, async ({ stack, repo }) => {
     step("compute.sandbox.create() — the familiar shape");
     const compute = governedCompute({
       workspace: repo,
@@ -62,10 +54,7 @@ async function main(): Promise<void> {
     finale(
       "ComputeSDK shape on top, Warrant underneath: same code style, plus contracts and receipts"
     );
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

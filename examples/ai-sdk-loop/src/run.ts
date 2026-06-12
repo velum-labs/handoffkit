@@ -1,44 +1,31 @@
-import { rmSync } from "node:fs";
-
 import { generateText, stepCountIs } from "ai";
 import type { LanguageModel } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
 
 import { remoteTools } from "@warrant/adapter-ai-sdk";
-import { makeRepo, startStack } from "@warrant/testkit";
+import { withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, finale, ok, resolveDemoModels, step } from "@warrant/example-utils";
-
-const usage = {
-  inputTokens: {
-    total: 12,
-    noCache: 12,
-    cacheRead: undefined,
-    cacheWrite: undefined
-  },
-  outputTokens: { total: 6, text: 6, reasoning: undefined }
-};
-
-const DEMO_ID = "09";
-const DEMO_TITLE = "AI SDK app-owned loop with governed remote tools";
-const DEMO_SUMMARY =
-  "Your generateText loop, your model — Warrant governs the tool boundary: every tool call is a signed contract executed on a runner, returned with a verifiable receipt. Honestly labeled: no durability claim attaches to the loop itself.";
+import {
+  demoBanner,
+  detail,
+  finale,
+  mockToolThenTextModel,
+  ok,
+  resolveDemoModels,
+  step
+} from "@warrant/example-utils";
 
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("09");
 
   step("boot a plane + runner; the org policy allows only the command harness");
-  const stack = await startStack({
+  await withStackAndRepo({
     pool: "eng-prod",
     startRunner: true,
     policy: (policy) => {
       policy.agents.allow = ["command"];
-    }
-  });
-  const repo = makeRepo({
+    },
     files: { "data.csv": "region,revenue\nemea,120\namer,340\napac,95\n" }
-  });
-  try {
+  }, async ({ stack, repo }) => {
     step("wrap AI SDK tools: rt = remoteTools({ workspace, plane, pool })");
     const rt = remoteTools({
       workspace: repo,
@@ -52,40 +39,14 @@ async function main(): Promise<void> {
     const resolved = resolveDemoModels();
     detail(resolved.description);
     const command = "tail -n +2 data.csv | wc -l > rows.txt && cat rows.txt";
-    let model: LanguageModel;
-    if (resolved.source === "live") {
-      model = resolved.loop;
-    } else {
-      let calls = 0;
-      model = new MockLanguageModelV3({
-        doGenerate: async () => {
-          calls++;
-          if (calls === 1) {
-            return {
-              content: [
-                {
-                  type: "tool-call" as const,
-                  toolCallId: "call-1",
-                  toolName: "shell",
-                  input: JSON.stringify({ command })
-                }
-              ],
-              finishReason: { unified: "tool-calls" as const, raw: "tool-calls" },
-              usage,
-              warnings: []
-            };
-          }
-          return {
-            content: [
-              { type: "text" as const, text: "There are 3 data rows in data.csv." }
-            ],
-            finishReason: { unified: "stop" as const, raw: "stop" },
-            usage,
-            warnings: []
-          };
-        }
-      });
-    }
+    const model: LanguageModel =
+      resolved.source === "live"
+        ? resolved.loop
+        : mockToolThenTextModel({
+            toolName: "shell",
+            input: { command },
+            text: "There are 3 data rows in data.csv."
+          });
 
     step("run a completely ordinary AI SDK loop: generateText({ model, tools: rt.tools, … })");
     const result = await generateText({
@@ -117,10 +78,7 @@ async function main(): Promise<void> {
     finale(
       "AI SDK adapter: replace tools with rt.tools and every tool call gains a contract and a receipt"
     );
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

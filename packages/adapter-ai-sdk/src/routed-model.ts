@@ -8,6 +8,8 @@ import { z } from "zod";
 
 import type { Handoff } from "@warrant/handoff";
 
+import { attachModel } from "./model.js";
+
 /**
  * UniRoute routing over a pool of models (arXiv:2502.08773).
  *
@@ -291,16 +293,18 @@ export function withRoutedModel<H extends Handoff>(
 ): H & { model: RoutedModel } {
   const { localModels, ...rest } = config;
   const local = new Set(localModels ?? []);
-  const model = routedModel({
-    ...rest,
-    onDecision: (decision) => {
-      h.noteModelDecision({
-        model: decision.model,
-        route: local.has(decision.model) ? "local" : "cloud",
-        escalated: decision.fallback,
-        reason: decision.reason
-      });
-    }
-  });
-  return Object.assign(h, { model });
+  return attachModel(
+    h,
+    routedModel({
+      ...rest,
+      onDecision: (decision) => {
+        h.noteModelDecision({
+          model: decision.model,
+          route: local.has(decision.model) ? "local" : "cloud",
+          escalated: decision.fallback,
+          reason: decision.reason
+        });
+      }
+    })
+  );
 }

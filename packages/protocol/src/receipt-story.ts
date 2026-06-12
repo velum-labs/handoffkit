@@ -1,10 +1,8 @@
 import type {
-  ChainedEvent,
   ReceiptBundle,
   RunEvent,
   SessionIsolation
 } from "./types.js";
-import type { DisclosureReport } from "./api.js";
 
 export type EventSummary = {
   tone: "plain" | "info" | "ok" | "warn" | "err";
@@ -139,10 +137,6 @@ export function summarizeRunEvent(event: RunEvent): EventSummary {
   }
 }
 
-export function summarizeChainedEvent(entry: ChainedEvent): EventSummary {
-  return summarizeRunEvent(entry.event);
-}
-
 export function buildReceiptStory(bundle: ReceiptBundle): ReceiptStory {
   const { contract, receipt } = bundle;
   return {
@@ -164,14 +158,4 @@ export function buildReceiptStory(bundle: ReceiptBundle): ReceiptStory {
     eventsHead: receipt.eventsHead,
     verificationCommand: "warrant verify <bundle.json>"
   };
-}
-
-export function summarizeDisclosureReport(report: DisclosureReport): string[] {
-  return [
-    `agent: ${report.agent.kind}`,
-    `pool: ${report.pool}`,
-    `workspace: ${short(report.workspace.bundleHash)}`,
-    `network: ${report.network.allowHosts.join(", ") || "none"}`,
-    `policy: ${report.policyDecision.decision}`
-  ];
 }

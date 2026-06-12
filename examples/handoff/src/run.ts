@@ -1,28 +1,19 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { renderReceipt, renderTrace } from "@warrant/cli/render";
 import { agents, handoff, localFirst, targets } from "@warrant/handoff";
-import { git, makeRepo, startStack } from "@warrant/testkit";
+import { git, withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, finale, ok, step } from "@warrant/example-utils";
-
-const DEMO_ID = "06";
-const DEMO_TITLE = "handoff — continue local work on a governed runner";
-const DEMO_SUMMARY =
-  "The continuation SDK: checkpoint local state, hand it to a runner pool under policy, and pull the results (and the proof) back. One gesture, full provenance.";
+import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
 
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("06");
 
-  const stack = await startStack({ pool: "eng-prod" });
-  const repo = makeRepo({
-    files: {
+  await withStackAndRepo({ pool: "eng-prod", files: {
       "README.md": "# search-service\n",
       "src/ranker.ts": "export const rank = (xs: number[]) => xs.sort();\n"
-    }
-  });
-  try {
+    } }, async ({ stack, repo }) => {
     step("work starts locally: half-finished edits, laptop about to go offline");
     writeFileSync(
       join(repo, "src/ranker.ts"),
@@ -79,10 +70,7 @@ async function main(): Promise<void> {
     detail(renderReceipt(await run.receipt()));
 
     finale("continuation is a demo of the primitives: contract + envelope + receipt");
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

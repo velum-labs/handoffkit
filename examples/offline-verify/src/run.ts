@@ -1,21 +1,13 @@
-import { rmSync } from "node:fs";
-
 import { verifyReceiptBundle } from "@warrant/protocol";
 import type { ReceiptBundle } from "@warrant/protocol";
-import { makeRepo, startStack } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, expectedFailure, finale, ok, step } from "@warrant/example-utils";
-
-const DEMO_ID = "05";
-const DEMO_TITLE = "offline verification and tamper evidence";
-const DEMO_SUMMARY =
-  "Receipts verify against nothing but published schemas and keys. Rewriting history — or quietly dropping a secret release — breaks the math.";
+import { demoBanner, detail, expectedFailure, finale, ok, step } from "@warrant/example-utils";
 
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("05");
 
-  const stack = await startStack({
+  await withStackAndRepo({
     pool: "eng-prod",
     policy: (policy) => {
       policy.secrets.releasable = [
@@ -23,22 +15,17 @@ async function main(): Promise<void> {
       ];
     },
     secrets: { MOCK_SECRET: "verify-demo-secret" }
-  });
-  const repo = makeRepo();
-  try {
-    const captured = captureWorkspace(repo);
-    await stack.client.putBlob(captured.bundle);
-    const created = await stack.client.requestRun({
-      requestedBy: { kind: "human", id: "dana@example.com" },
-      agentKind: "mock",
-      prompt: "produce something worth auditing",
-      pool: "eng-prod",
-      secretNames: ["MOCK_SECRET"],
-      workspace: captured.manifest,
-      network: { defaultDeny: true, allowHosts: [] },
-      budget: {},
-      disclosure: "minimal-context"
-    });
+  }, async ({ stack, repo }) => {
+    const captured = await uploadWorkspace(stack.client, repo);
+    const created = await stack.client.requestRun(
+      mockRunRequest({
+        requestedBy: { kind: "human", id: "dana@example.com" },
+        prompt: "produce something worth auditing",
+        pool: "eng-prod",
+        secretNames: ["MOCK_SECRET"],
+        workspace: captured.manifest
+      })
+    );
     await stack.runOnce();
     const bundle = await stack.client.getBundle(created.runId);
 
@@ -69,10 +56,7 @@ async function main(): Promise<void> {
     for (const problem of attack2.problems) detail(`- ${problem}`);
 
     finale("trust comes from verification, not from the plane, the runner, or us");
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

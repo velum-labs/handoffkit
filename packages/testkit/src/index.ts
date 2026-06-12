@@ -16,11 +16,12 @@ import {
   startPlaneServer
 } from "@warrant/plane";
 import { generateEd25519KeyPair } from "@warrant/protocol";
-import type { Policy } from "@warrant/protocol";
+import type { Policy, RunRequestInput, WorkspaceManifest } from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
 import type { SessionBackend } from "@warrant/runner";
 import { PlaneClient } from "@warrant/sdk";
-import { gitText } from "@warrant/workspace";
+import { captureWorkspace, gitText } from "@warrant/workspace";
+import type { CapturedWorkspace } from "@warrant/workspace";
 
 /** Re-exported shared git helper so fixtures and tests share one implementation. */
 export function git(cwd: string, args: string[]): string {
@@ -66,15 +67,64 @@ export type StackOptions = {
 export type Stack = {
   planeUrl: string;
   adminToken: string;
-  enrollToken: string;
-  plane: Plane;
   client: PlaneClient;
-  runner: Runner;
   pool: string;
   /** Process one pending run on the bundled runner, if any. */
   runOnce(): Promise<string | undefined>;
   stop(): Promise<void>;
 };
+
+/**
+ * Capture a repository and upload its blobs to the plane — the standard
+ * preamble of every demo/test that requests a run against real workspace
+ * state.
+ */
+export async function uploadWorkspace(
+  client: PlaneClient,
+  repo: string
+): Promise<CapturedWorkspace> {
+  const captured = captureWorkspace(repo);
+  await client.putBlob(captured.bundle);
+  if (captured.dirtyDiff) await client.putBlob(captured.dirtyDiff);
+  return captured;
+}
+
+/**
+ * The standard mock-agent run request the demos and tests share: human
+ * requester, deny-by-default network, empty budget, minimal-context
+ * disclosure. Pass overrides for whatever the scenario actually varies.
+ */
+export function mockRunRequest(
+  input: { prompt: string; pool: string; workspace: WorkspaceManifest } & Partial<RunRequestInput>
+): RunRequestInput {
+  return {
+    requestedBy: { kind: "human", id: "demo@example.com" },
+    agentKind: "mock",
+    secretNames: [],
+    network: { defaultDeny: true, allowHosts: [] },
+    budget: {},
+    disclosure: "minimal-context",
+    ...input
+  };
+}
+
+/**
+ * Boot a stack and a repo fixture, run `fn`, and always tear both down —
+ * the lifecycle every non-interactive demo shares.
+ */
+export async function withStackAndRepo(
+  options: StackOptions & RepoFixtureOptions,
+  fn: (ctx: { stack: Stack; repo: string }) => Promise<void>
+): Promise<void> {
+  const stack = await startStack(options);
+  const repo = makeRepo(options.files ? { files: options.files } : {});
+  try {
+    await fn({ stack, repo });
+  } finally {
+    await stack.stop();
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
 
 // Fixed, well-known credentials for ephemeral in-process test stacks. The
 // stack binds to loopback on a random port and is torn down with the test,
@@ -133,10 +183,7 @@ export async function startStack(options: StackOptions = {}): Promise<Stack> {
   return {
     planeUrl,
     adminToken: ADMIN_TOKEN,
-    enrollToken: ENROLL_TOKEN,
-    plane,
     client: new PlaneClient(planeUrl, ADMIN_TOKEN),
-    runner,
     pool,
     runOnce: () => runner.runOnce(),
     stop: async () => {

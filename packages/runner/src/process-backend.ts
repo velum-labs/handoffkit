@@ -7,7 +7,7 @@ import type {
   SessionExecution
 } from "./backend.js";
 import { startEgressProxy } from "./egress.js";
-import { executionHash } from "./execution.js";
+import { executionHash, resolveSessionEnv } from "./execution.js";
 
 /** Minimal PATH/HOME used only when the host process has none set. */
 const FALLBACK_PATH = "/usr/bin:/bin";
@@ -49,18 +49,7 @@ export class ProcessSessionBackend implements SessionBackend {
       env.http_proxy = `http://127.0.0.1:${proxy.port}`;
       env.https_proxy = `http://127.0.0.1:${proxy.port}`;
     }
-    for (const secret of secrets) {
-      env[secret.name] = secret.value;
-    }
-    for (const [key, value] of Object.entries(execution.env)) {
-      if (value.startsWith("__WARRANT_SECRET__:")) {
-        const secretName = value.slice("__WARRANT_SECRET__:".length);
-        const secret = secrets.find((item) => item.name === secretName);
-        if (secret) env[key] = secret.value;
-      } else {
-        env[key] = value;
-      }
-    }
+    Object.assign(env, resolveSessionEnv(execution.env, secrets));
 
     const { cmd, args } =
       execution.kind === "argv"

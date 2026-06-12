@@ -1,46 +1,29 @@
-import { rmSync } from "node:fs";
-
 import { renderReceipt } from "@warrant/cli/render";
 import { verifyReceiptBundle } from "@warrant/protocol";
-import { makeRepo, startStack } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, finale, ok, step } from "@warrant/example-utils";
-
-const DEMO_ID = "01";
-const DEMO_TITLE = "governed run";
-const DEMO_SUMMARY =
-  "Run an agent harness on a runner you control, under a signed contract, and get a receipt that answers the five questions.";
+import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
 
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("01");
 
   step("boot a control plane and enroll an outbound-only runner (pool: eng-prod)");
-  const stack = await startStack({ pool: "eng-prod" });
-  const repo = makeRepo({
-    files: {
+  await withStackAndRepo({ pool: "eng-prod", files: {
       "README.md": "# payments-service\n",
       "src/auth.ts": "export const verify = (token: string) => token.length > 0;\n"
-    }
-  });
-  try {
+    } }, async ({ stack, repo }) => {
     step("capture the workspace: git bundle + dirty diff, content-addressed");
-    const captured = captureWorkspace(repo);
-    await stack.client.putBlob(captured.bundle);
-    if (captured.dirtyDiff) await stack.client.putBlob(captured.dirtyDiff);
+    const captured = await uploadWorkspace(stack.client, repo);
 
     step('request a governed run: warrant run --agent mock "fix the flaky auth test"');
-    const created = await stack.client.requestRun({
-      requestedBy: { kind: "human", id: "dana@example.com" },
-      agentKind: "mock",
-      prompt: "fix the flaky auth test and run the suite",
-      pool: "eng-prod",
-      secretNames: [],
-      workspace: captured.manifest,
-      network: { defaultDeny: true, allowHosts: [] },
-      budget: {},
-      disclosure: "minimal-context"
-    });
+    const created = await stack.client.requestRun(
+      mockRunRequest({
+        requestedBy: { kind: "human", id: "dana@example.com" },
+        prompt: "fix the flaky auth test and run the suite",
+        pool: "eng-prod",
+        workspace: captured.manifest
+      })
+    );
     ok(`contract issued and signed by the plane — run ${created.runId} [${created.status}]`);
 
     step("the runner claims the contract, materializes the workspace, and executes");
@@ -55,10 +38,7 @@ async function main(): Promise<void> {
     const verification = verifyReceiptBundle(bundle);
     if (!verification.ok) throw new Error(verification.problems.join("; "));
     finale("governed run complete; receipt verified offline without trusting the plane");
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

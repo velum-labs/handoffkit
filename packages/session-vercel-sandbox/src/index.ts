@@ -13,8 +13,13 @@
  * a Vercel environment). Without them, `vercelSandboxBackend()` still
  * constructs; `execute` throws a clear capability error. The kernel and
  * the other backends do not depend on it.
+ *
+ * This module also owns the sandbox-shaped helpers (file listing, shell
+ * quoting, mirror-back writes, credential resolution) shared with
+ * `@warrant/session-harness`, which drives the same microVM tier through
+ * the AI SDK harness bridge.
  */
-import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
 import type { NetworkPolicy as WarrantNetworkPolicy } from "@warrant/protocol";
@@ -24,7 +29,7 @@ import type {
   SessionBackendResult,
   SessionExecution
 } from "@warrant/runner";
-import { executionHash } from "@warrant/runner";
+import { CapabilityMismatchError, executionHash, resolveSessionEnv } from "@warrant/runner";
 import { parseWorkspaceRelativePath, resolveInsideWorkspace } from "@warrant/workspace";
 import { Sandbox } from "@vercel/sandbox";
 import type { NetworkPolicy as VercelNetworkPolicy } from "@vercel/sandbox";
@@ -40,10 +45,14 @@ export type VercelSandboxOptions = {
   projectId?: string;
 };
 
-// Not mirrored into the sandbox: VCS metadata stays local (output is
-// collected as a git diff on the runner side) and dependency trees are
-// reinstalled inside the VM when the task needs them.
-const IGNORED_DIRS = new Set([".git", "node_modules"]);
+/**
+ * Directory names never staged into a sandbox and never mirrored back:
+ * VCS metadata stays local (output is collected as a git diff on the
+ * runner side) and dependency trees are reinstalled inside the VM when
+ * the task needs them. Backends with runtime-specific state directories
+ * extend this set at the call site.
+ */
+export const SANDBOX_IGNORED_DIRS: ReadonlySet<string> = new Set([".git", "node_modules"]);
 
 /** Defaults for the microVM; both are overridable via VercelSandboxOptions. */
 const DEFAULT_WORKDIR = "/warrant/workspace";
@@ -54,20 +63,72 @@ const DEFAULT_RUNTIME = "node22";
  * rendered as '\''. Unlike double quotes, nothing inside single quotes is
  * expanded, so secret values containing $, backticks, or quotes are inert.
  */
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", String.raw`'\''`)}'`;
 }
 
-function listFiles(root: string, dir = root, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (IGNORED_DIRS.has(entry.name)) continue;
-      listFiles(root, join(dir, entry.name), out);
-    } else if (entry.isFile()) {
-      out.push(relative(root, join(dir, entry.name)));
+/**
+ * List a workspace's files as relative paths, skipping the shared ignored
+ * directories plus any backend-specific extras. The one walker used to
+ * stage workspaces into sandboxes.
+ */
+export function listWorkspaceFiles(
+  root: string,
+  extraIgnores: Iterable<string> = []
+): string[] {
+  const ignored = new Set([...SANDBOX_IGNORED_DIRS, ...extraIgnores]);
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (ignored.has(entry.name)) continue;
+      if (entry.isDirectory()) {
+        walk(join(dir, entry.name));
+      } else if (entry.isFile()) {
+        out.push(relative(root, join(dir, entry.name)));
+      }
     }
-  }
+  };
+  walk(root);
   return out;
+}
+
+/**
+ * Write one mirrored-back sandbox file into the local checkout, with the
+ * path validated against escape before anything touches the filesystem.
+ * Shared by every sandbox-shaped backend so mirror-back path safety lives
+ * in exactly one place.
+ */
+export function writeMirroredFile(
+  repoDir: string,
+  rel: string,
+  content: Uint8Array
+): void {
+  const safeRel = parseWorkspaceRelativePath(rel);
+  const target = resolveInsideWorkspace(repoDir, safeRel);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, content);
+}
+
+/**
+ * Resolve Vercel credentials from explicit options or the ambient
+ * environment, failing closed (capability error) when no token exists.
+ */
+export function vercelCredentialsFromEnv(
+  options: { token?: string; teamId?: string; projectId?: string } = {}
+): { token: string; teamId?: string; projectId?: string } {
+  const token = options.token ?? process.env.VERCEL_TOKEN;
+  if (!token) {
+    throw new CapabilityMismatchError(
+      "vercel sandbox requires VERCEL_TOKEN (or an explicit token)"
+    );
+  }
+  const teamId = options.teamId ?? process.env.VERCEL_TEAM_ID;
+  const projectId = options.projectId ?? process.env.VERCEL_PROJECT_ID;
+  return {
+    token,
+    ...(teamId !== undefined ? { teamId } : {}),
+    ...(projectId !== undefined ? { projectId } : {})
+  };
 }
 
 /** Map a Warrant network policy to a Vercel Sandbox network policy. */
@@ -97,27 +158,9 @@ export class VercelSandboxBackend implements SessionBackend {
     return contract.agent.kind !== "mock";
   }
 
-  private credentials(): { token: string; teamId?: string; projectId?: string } {
-    const token = this.options.token ?? process.env.VERCEL_TOKEN;
-    if (!token) {
-      throw new CapabilityError(
-        "vercel-sandbox backend requires VERCEL_TOKEN (or an explicit token)"
-      );
-    }
-    return {
-      token,
-      ...(this.options.teamId ?? process.env.VERCEL_TEAM_ID
-        ? { teamId: this.options.teamId ?? process.env.VERCEL_TEAM_ID }
-        : {}),
-      ...(this.options.projectId ?? process.env.VERCEL_PROJECT_ID
-        ? { projectId: this.options.projectId ?? process.env.VERCEL_PROJECT_ID }
-        : {})
-    };
-  }
-
   async execute(input: SessionExecution): Promise<SessionBackendResult> {
     const { contract, repoDir, secrets, execution, emit } = input;
-    const creds = this.credentials();
+    const creds = vercelCredentialsFromEnv(this.options);
     const workdir = this.options.workdir ?? DEFAULT_WORKDIR;
     const runtime = this.options.runtime ?? DEFAULT_RUNTIME;
 
@@ -129,7 +172,7 @@ export class VercelSandboxBackend implements SessionBackend {
     });
 
     try {
-      const inputFiles = listFiles(repoDir);
+      const inputFiles = listWorkspaceFiles(repoDir);
       if (inputFiles.length > 0) {
         await sandbox.writeFiles(
           inputFiles.map((rel) => ({
@@ -141,14 +184,7 @@ export class VercelSandboxBackend implements SessionBackend {
 
       // Secrets are injected as single-quoted exports: shellQuote renders
       // values inert to expansion, so $, backticks, and quotes pass through.
-      const env = { ...execution.env };
-      for (const secret of secrets) env[secret.name] = secret.value;
-      for (const [key, value] of Object.entries(env)) {
-        if (!value.startsWith("__WARRANT_SECRET__:")) continue;
-        const secretName = value.slice("__WARRANT_SECRET__:".length);
-        const secret = secrets.find((item) => item.name === secretName);
-        if (secret) env[key] = secret.value;
-      }
+      const env = resolveSessionEnv(execution.env, secrets);
       const envPrefix = Object.entries(env)
         .map(([name, value]) => `export ${name}=${shellQuote(value)}; `)
         .join("");
@@ -181,7 +217,6 @@ export class VercelSandboxBackend implements SessionBackend {
   }
 }
 
-/** Mirror the sandbox working tree back onto the local workspace. */
 /**
  * Mirror the sandbox workdir back onto the local checkout so the runner's
  * standard git-based output collection sees the changes. A per-file walk is
@@ -196,7 +231,7 @@ async function mirrorBack(
   const walk = async (dir: string): Promise<void> => {
     const names = await sandbox.fs.readdir(dir);
     for (const name of names) {
-      if (IGNORED_DIRS.has(name)) continue;
+      if (SANDBOX_IGNORED_DIRS.has(name)) continue;
       const remote = `${dir}/${name}`;
       const info = await sandbox.fs.stat(remote);
       if (info.isDirectory()) {
@@ -204,23 +239,11 @@ async function mirrorBack(
         continue;
       }
       const rel = remote.slice(workdir.length + 1);
-      const safeRel = parseWorkspaceRelativePath(rel);
-      const target = resolveInsideWorkspace(repoDir, safeRel);
       const buffer = await sandbox.fs.readFile(remote);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, buffer);
+      writeMirroredFile(repoDir, rel, buffer);
     }
   };
   await walk(workdir);
-}
-
-/** Requested capability (credentials, runtime) is unavailable. */
-export class CapabilityError extends Error {
-  readonly code = "capability_mismatch" as const;
-  constructor(message: string) {
-    super(message);
-    this.name = "CapabilityError";
-  }
 }
 
 /** Create a Vercel Sandbox session backend for a Warrant runner. */

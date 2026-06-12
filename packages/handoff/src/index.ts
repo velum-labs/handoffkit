@@ -22,32 +22,31 @@ export type {
 } from "./handoff.js";
 export { HandoffRun } from "./run.js";
 export type { WaitOptions, WaitOutcome } from "./run.js";
-export { executeGovernedCommand } from "./run-executor.js";
+export {
+  createCommandContext,
+  executeGovernedCommand,
+  toGovernedRunRecord
+} from "./run-executor.js";
 export type {
+  CommandHarnessConfig,
   GovernedCommandOptions,
-  GovernedCommandResult
+  GovernedCommandResult,
+  GovernedRunRecord
 } from "./run-executor.js";
 export { targets } from "./targets.js";
 export type { RuntimeTarget } from "./targets.js";
-export { agents, toAgentSpec } from "./agents.js";
-export type { AgentDescriptor } from "./agents.js";
-export { localFirst, planContinuation } from "./policy.js";
-export type {
-  ContinuationPolicy,
-  LocalFirstOptions,
-  PlanInput,
-  PlanningDecision
-} from "./policy.js";
-export { evaluateTriggers, triggers } from "./triggers.js";
-export type { FiredTrigger, Trigger, TriggerState } from "./triggers.js";
-export { autoIsolation, branch } from "./isolation.js";
+export { agents } from "./agents.js";
+export { localFirst } from "./policy.js";
+export type { ContinuationPolicy, LocalFirstOptions } from "./policy.js";
+export { triggers } from "./triggers.js";
+export type { FiredTrigger, Trigger } from "./triggers.js";
+export { branch } from "./isolation.js";
 export type { IsolationStrategy } from "./isolation.js";
-export { reviewRuns, reviewStrategies } from "./review.js";
+export { reviewStrategies } from "./review.js";
 export type {
   ReviewedRun,
   ReviewResult,
   ReviewStrategy,
   Scorecard
 } from "./review.js";
-export { wrapTools } from "./tools.js";
 export type { ToolCallObservation, ToolLike } from "./tools.js";

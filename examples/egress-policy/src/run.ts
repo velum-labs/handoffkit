@@ -1,35 +1,20 @@
-import { rmSync } from "node:fs";
-
 import { PlaneClientError } from "@warrant/sdk";
-import { makeRepo, startStack } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, expectedFailure, finale, ok, step } from "@warrant/example-utils";
-
-const DEMO_ID = "04";
-const DEMO_TITLE = "deny-by-default egress";
-const DEMO_SUMMARY =
-  "Network policy is decided at contract time and enforced at the session boundary; every attempted connection is recorded in the receipt.";
+import { demoBanner, detail, expectedFailure, finale, ok, step } from "@warrant/example-utils";
 
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("04");
 
-  const stack = await startStack({ pool: "eng-prod" });
-  const repo = makeRepo();
-  try {
-    const captured = captureWorkspace(repo);
-    await stack.client.putBlob(captured.bundle);
+  await withStackAndRepo({ pool: "eng-prod" }, async ({ stack, repo }) => {
+    const captured = await uploadWorkspace(stack.client, repo);
 
-    const baseRequest = {
-      requestedBy: { kind: "human" as const, id: "dana@example.com" },
-      agentKind: "mock",
+    const baseRequest = mockRunRequest({
+      requestedBy: { kind: "human", id: "dana@example.com" },
       prompt: "probe the network from inside the session",
       pool: "eng-prod",
-      secretNames: [],
-      workspace: captured.manifest,
-      budget: {},
-      disclosure: "minimal-context" as const
-    };
+      workspace: captured.manifest
+    });
 
     step("ask for egress to a host the org policy does not allow");
     try {
@@ -61,10 +46,7 @@ async function main(): Promise<void> {
     ok("the probe was blocked by the session egress proxy and recorded as evidence");
     ok("the receipt proves both what was allowed and what was attempted");
     finale("egress is governed twice: fail-closed policy up front, enforcement + evidence at runtime");
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

@@ -7,54 +7,33 @@ All routing over the TEST LLM pool uses only (i) unlabelled training prompts,
 import numpy as np
 
 from uniroute import (
-    KNNRouter,
     UniRouteKMeans,
-    UniRouteLearnedMap,
-    ZeroRouter,
     area_under_curve,
     deferral_curve,
     select_n_clusters,
-    zero_router_curve,
 )
 from uniroute.synthetic import make_benchmark
+from uniroute.trials import synthetic_trial_curves
 
 N_TRIALS = 4
+
+# Short keys per paper method name, as the assertions below read them.
+METHOD_KEYS = {
+    "ZeroRouter": "zero",
+    "K-NN": "knn",
+    "UniRoute (K-means)": "kmeans",
+    "UniRoute (LearnedMap)": "learned",
+    "Oracle (clairvoyant)": "oracle",
+}
 
 
 def trial_areas(seed: int) -> dict[str, float]:
     bench = make_benchmark(n_prompts=3000, n_topics=6, n_llms=12, seed=seed)
-    costs = bench.test_pool_costs
-    max_cost = float(costs.max())
-    errors = bench.test_errors_test_pool
-
-    zero = ZeroRouter().fit(costs, bench.val_errors_test_pool)
-    zero_area = area_under_curve(zero_router_curve(zero, errors, costs), max_cost)
-
-    knn = KNNRouter(n_neighbors=10).fit(bench.val_embeddings, bench.val_errors_test_pool)
-    knn_curve = deferral_curve(knn.gamma(bench.test_embeddings), errors, costs)
-    knn_area = area_under_curve(knn_curve, max_cost)
-
-    km = UniRouteKMeans(8, seed=seed).fit(bench.train_embeddings)
-    psi = km.embed_llms(bench.val_embeddings, bench.val_errors_test_pool)
-    km_curve = deferral_curve(km.gamma(bench.test_embeddings, psi), errors, costs)
-    km_area = area_under_curve(km_curve, max_cost)
-
-    lm = UniRouteLearnedMap(8, seed=seed, epochs=150).fit(
-        bench.train_embeddings, bench.train_errors_train_pool
-    )
-    psi_lm = lm.embed_llms(bench.val_embeddings, bench.val_errors_test_pool)
-    lm_curve = deferral_curve(lm.gamma(bench.test_embeddings, psi_lm), errors, costs)
-    lm_area = area_under_curve(lm_curve, max_cost)
-
-    oracle_curve = deferral_curve(bench.test_true_error_rates, errors, costs)
-    oracle_area = area_under_curve(oracle_curve, max_cost)
-
+    max_cost = float(bench.test_pool_costs.max())
+    curves = synthetic_trial_curves(bench, 8, seed, epochs=150)
     return {
-        "zero": zero_area,
-        "knn": knn_area,
-        "kmeans": km_area,
-        "learned": lm_area,
-        "oracle": oracle_area,
+        METHOD_KEYS[name]: area_under_curve(curve, max_cost)
+        for name, curve in curves.items()
     }
 
 

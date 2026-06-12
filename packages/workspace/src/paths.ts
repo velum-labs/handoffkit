@@ -23,16 +23,6 @@ export function parseWorkspaceRelativePath(path: string): WorkspaceRelativePath 
   return parseWorkspaceManifestPath(normalizeSlashes(path)) as WorkspaceRelativePath;
 }
 
-export function workspaceRelativeFromAbsolute(
-  root: WorkspaceRoot | string,
-  absolutePath: string
-): WorkspaceRelativePath {
-  const rootPath = parseWorkspaceRoot(root);
-  const resolved = resolve(absolutePath);
-  const rel = normalizeSlashes(relative(rootPath, resolved));
-  return parseWorkspaceRelativePath(rel);
-}
-
 export function resolveInsideWorkspace(
   root: WorkspaceRoot | string,
   relativePath: WorkspaceRelativePath | string

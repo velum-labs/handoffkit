@@ -48,16 +48,37 @@ export type ExecutionSpec =
       log?: ExecutionLogPolicy;
     };
 
-export type ExecutionResult = {
-  exitCode: number;
-  timedOut: boolean;
-  stdout?: Buffer;
-  stderr?: Buffer;
-  log: Buffer;
-  executionHash: string;
-};
+/**
+ * The default execution intent for an agent and task when a request or
+ * contract carries no explicit `execution`: the "command" harness runs the
+ * task as one governed shell command; every other harness receives the
+ * task as its prompt. This is the single defaulting rule shared by the
+ * plane (contract issue + dry run), the handoff SDK, and the runner.
+ */
+export function defaultExecutionSpec(agent: AgentSpec, prompt: string): ExecutionSpec {
+  if (agent.kind === "command") return { kind: "shell", script: prompt };
+  return { kind: "agent", agent, prompt };
+}
 
-export const DEFAULT_EXECUTION_LOG_POLICY: ExecutionLogPolicy = {
-  stdout: "capture",
-  stderr: "merge"
-};
+/**
+ * Resolve the execution intent of a run request: the explicit `execution`
+ * when present, otherwise the shared default. The `agentKind` cast is the
+ * one sanctioned place a request's free-form agent string becomes an
+ * `AgentSpec`: the schema deliberately leaves it unconstrained so the
+ * policy engine (not parsing) decides permissibility.
+ */
+export function executionFromRunRequest(request: {
+  agentKind: string;
+  agentVersion?: string;
+  prompt: string;
+  execution?: ExecutionSpec;
+}): ExecutionSpec {
+  if (request.execution) return request.execution;
+  return defaultExecutionSpec(
+    {
+      kind: request.agentKind as AgentSpec["kind"],
+      ...(request.agentVersion ? { version: request.agentVersion } : {})
+    },
+    request.prompt
+  );
+}

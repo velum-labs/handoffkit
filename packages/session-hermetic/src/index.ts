@@ -17,7 +17,7 @@ import type {
   SessionBackendResult,
   SessionExecution
 } from "@warrant/runner";
-import { executionHash, requireShellExecution } from "@warrant/runner";
+import { executionHash, requireShellExecution, resolveSessionEnv } from "@warrant/runner";
 import { Bash, ReadWriteFs } from "just-bash";
 
 type NetworkConfig =
@@ -59,14 +59,7 @@ export class HermeticSessionBackend implements SessionBackend {
     const { contract, repoDir, secrets, execution, emit } = input;
     const shell = requireShellExecution(execution);
 
-    const env: Record<string, string> = { ...shell.env };
-    for (const secret of secrets) env[secret.name] = secret.value;
-    for (const [key, value] of Object.entries(env)) {
-      if (!value.startsWith("__WARRANT_SECRET__:")) continue;
-      const secretName = value.slice("__WARRANT_SECRET__:".length);
-      const secret = secrets.find((item) => item.name === secretName);
-      if (secret) env[key] = secret.value;
-    }
+    const env = resolveSessionEnv(shell.env, secrets);
 
     const network = toJustBashNetwork(contract.network);
     const bash = new Bash({

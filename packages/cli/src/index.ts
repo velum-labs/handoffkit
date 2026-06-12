@@ -4,7 +4,6 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { agents, handoff, targets } from "@warrant/handoff";
-import type { AgentDescriptor } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
 import {
   AGENT_KINDS,
@@ -15,6 +14,7 @@ import {
 } from "@warrant/protocol";
 import type {
   AgentKind,
+  AgentSpec,
   ReceiptBundle,
   RunRequestInput,
   SessionIsolation
@@ -83,7 +83,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function agentDescriptorFor(kind: string): AgentDescriptor {
+function agentSpecFor(kind: string): AgentSpec {
   switch (kind as AgentKind) {
     case "claude-code":
       return agents.claudeCode();
@@ -177,13 +177,14 @@ async function cmdRun(dir: string, argv: string[]): Promise<void> {
   if (!prompt) fail("a task prompt is required");
 
   const home = loadHome(dir);
-  const client = new PlaneClient(home.config.planeUrl, home.config.adminToken);
+  const client = clientFor(dir);
   const repoDir = resolve(values.repo ?? ".");
 
   const captured = captureWorkspace(repoDir, {
     allowUntracked: values["allow-untracked"] ?? []
   });
 
+  const isolation = isolationFlag(values.isolation);
   const request: RunRequestInput = {
     requestedBy: { kind: "human", id: home.config.requestedBy },
     agentKind: values.agent,
@@ -197,9 +198,7 @@ async function cmdRun(dir: string, argv: string[]): Promise<void> {
     },
     budget: {},
     disclosure: "minimal-context",
-    ...(isolationFlag(values.isolation)
-      ? { isolation: isolationFlag(values.isolation) }
-      : {})
+    ...(isolation ? { isolation } : {})
   };
 
   if (values["dry-run"]) {
@@ -242,19 +241,18 @@ async function cmdContinue(dir: string, argv: string[]): Promise<void> {
     workspace: repoDir,
     plane: { url: home.config.planeUrl, adminToken: home.config.adminToken },
     actor: { kind: "human", id: home.config.requestedBy },
-    agent: agentDescriptorFor(values.agent),
+    agent: agentSpecFor(values.agent),
     secrets: values.secret ?? [],
     allowHosts: values["allow-host"] ?? [],
     allowUntracked: values["allow-untracked"] ?? []
   });
 
+  const isolation = isolationFlag(values.isolation);
   const continueOptions = {
     task: prompt,
     ...(values.reason ? { reason: values.reason } : {}),
     ...(transcript !== undefined ? { transcript } : {}),
-    ...(isolationFlag(values.isolation)
-      ? { session: isolationFlag(values.isolation) }
-      : {})
+    ...(isolation ? { session: isolation } : {})
   };
 
   if (values["dry-run"]) {

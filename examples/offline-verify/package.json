@@ -8,7 +8,6 @@
   "dependencies": {
     "@warrant/example-utils": "workspace:*",
     "@warrant/protocol": "workspace:*",
-    "@warrant/testkit": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@warrant/testkit": "workspace:*"
   }
 }

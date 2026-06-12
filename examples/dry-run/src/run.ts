@@ -1,33 +1,25 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { renderDisclosure } from "@warrant/cli/render";
-import { makeRepo, startStack } from "@warrant/testkit";
+import { mockRunRequest, withStackAndRepo } from "@warrant/testkit";
 import { captureWorkspace } from "@warrant/workspace";
 
-import { banner, detail, finale, ok, step } from "@warrant/example-utils";
-
-const DEMO_ID = "02";
-const DEMO_TITLE = "dry run — what would move?";
-const DEMO_SUMMARY =
-  "dryRun is a security feature: the complete disclosure report, with nothing uploaded, issued, or executed.";
+import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
 
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("02");
 
-  const stack = await startStack({
+  await withStackAndRepo({
     pool: "eng-prod",
     policy: (policy) => {
       policy.secrets.releasable = [
         { name: "NPM_TOKEN", scope: "read-only", pools: ["eng-prod"] }
       ];
     },
-    secrets: { NPM_TOKEN: "npm_live_do_not_leak" }
-  });
-  const repo = makeRepo({
+    secrets: { NPM_TOKEN: "npm_live_do_not_leak" },
     files: { "README.md": "# billing\n", "src/invoice.ts": "export {};\n" }
-  });
-  try {
+  }, async ({ stack, repo }) => {
     step("leave secrets lying around the workspace, as real repos do");
     writeFileSync(join(repo, ".env"), "STRIPE_KEY=sk_live_oops\n");
     writeFileSync(join(repo, "deploy.key"), "-----BEGIN PRIVATE KEY-----\n");
@@ -39,27 +31,23 @@ async function main(): Promise<void> {
     ok(`denied capture (provable absence): ${captured.manifest.deniedPaths.join(", ")}`);
 
     step("ask the plane what a run would disclose — without creating one");
-    const report = await stack.client.dryRun({
-      requestedBy: { kind: "human", id: "dana@example.com" },
-      agentKind: "mock",
-      prompt: "migrate the billing tests",
-      pool: "eng-prod",
-      secretNames: ["NPM_TOKEN"],
-      workspace: captured.manifest,
-      network: { defaultDeny: true, allowHosts: [] },
-      budget: { maxSpendUsd: 5 },
-      disclosure: "minimal-context"
-    });
+    const report = await stack.client.dryRun(
+      mockRunRequest({
+        requestedBy: { kind: "human", id: "dana@example.com" },
+        prompt: "migrate the billing tests",
+        pool: "eng-prod",
+        secretNames: ["NPM_TOKEN"],
+        workspace: captured.manifest,
+        budget: { maxSpendUsd: 5 }
+      })
+    );
     detail(renderDisclosure(report));
 
     const { runs } = await stack.client.listRuns();
     if (runs.length !== 0) throw new Error("dry run must not create a run");
     ok("the plane holds zero runs: nothing moved, nothing executed");
     finale("a security reviewer can answer “what would move?” before anything does");
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

@@ -62,23 +62,9 @@ const requiredFiles = [
   "packages/example-utils/src/narrate.ts",
   "packages/example-utils/src/models.ts",
   "scripts/demo.mjs",
-  "examples/bench/src/run.ts",
+  "examples/manifest.json",
+  "packages/example-utils/src/manifest.ts",
   "examples/seed/src/index.ts",
-  "examples/seed/src/run.ts",
-  "examples/governed-run/src/run.ts",
-  "examples/dry-run/src/run.ts",
-  "examples/consent-secrets/src/run.ts",
-  "examples/egress-policy/src/run.ts",
-  "examples/offline-verify/src/run.ts",
-  "examples/handoff/src/run.ts",
-  "examples/parallel-fanout/src/run.ts",
-  "examples/control-panel/src/run.ts",
-  "examples/ai-sdk-loop/src/run.ts",
-  "examples/compute-sandbox/src/run.ts",
-  "examples/golden-interface/src/run.ts",
-  "examples/model-escalation/src/run.ts",
-  "examples/hermetic-session/src/run.ts",
-  "examples/mlx/src/run.ts",
   // test suites
   "packages/protocol/src/test/protocol.test.ts",
   "packages/workspace/src/test/workspace.test.ts",
@@ -110,6 +96,14 @@ const fail = (message) => {
   console.error(`check failed: ${message}`);
   process.exitCode = 1;
 };
+
+// Every example the manifest declares (demos and infra projects alike) must
+// have its entry point; the manifest is the single source the demo
+// dispatcher, the acceptance suite, and this check all read.
+const manifest = JSON.parse(readFileSync("examples/manifest.json", "utf8"));
+for (const entry of [...manifest.demos, ...manifest.infra]) {
+  requiredFiles.push(`examples/${entry.directory}/src/run.ts`);
+}
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) fail(`missing ${file}`);

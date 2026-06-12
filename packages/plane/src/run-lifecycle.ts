@@ -2,7 +2,7 @@ import type { RunStatus } from "@warrant/protocol";
 
 import { conflict } from "./domain-errors.js";
 
-export type RunTransition =
+type RunTransition =
   | { from: "created"; to: "claimed" | "cancelled" }
   | { from: "awaiting_approval"; to: "created" | "cancelled" }
   | { from: "claimed"; to: "running" | "completed" | "failed" | "cancelled" }
@@ -20,7 +20,7 @@ const ALLOWED_TRANSITIONS = new Map<RunStatus, readonly RunStatus[]>([
   ["cancelled", []]
 ]);
 
-export function canTransitionRunStatus(from: RunStatus, to: RunStatus): boolean {
+function canTransitionRunStatus(from: RunStatus, to: RunStatus): boolean {
   return ALLOWED_TRANSITIONS.get(from)?.includes(to) ?? false;
 }
 

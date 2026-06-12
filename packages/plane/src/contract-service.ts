@@ -1,9 +1,9 @@
 import {
+  executionFromRunRequest,
   keyIdFromPublicPem,
   PROTOCOL_VERSIONS,
   signContract,
   type ActorRef,
-  type ExecutionSpec,
   type RunContract
 } from "@warrant/protocol";
 
@@ -16,19 +16,6 @@ export type ContractServiceOptions = {
   contractTtlMs: number;
   buildSecretClaims: (secretNames: string[], pool: string) => RunContract["secrets"];
 };
-
-function executionFromRequest(request: RunRequest): ExecutionSpec {
-  if (request.execution) return request.execution;
-  if (request.agentKind === "command") return { kind: "shell", script: request.prompt };
-  return {
-    kind: "agent",
-    agent: {
-      kind: request.agentKind as RunContract["agent"]["kind"],
-      ...(request.agentVersion ? { version: request.agentVersion } : {})
-    },
-    prompt: request.prompt
-  };
-}
 
 export class ContractService {
   constructor(private readonly options: ContractServiceOptions) {}
@@ -57,7 +44,7 @@ export class ContractService {
       network: request.network,
       budget: request.budget,
       disclosure: request.disclosure,
-      execution: executionFromRequest(request),
+      execution: executionFromRunRequest(request),
       ...(request.isolation ? { isolation: request.isolation } : {}),
       ...(request.continuation ? { continuation: request.continuation } : {}),
       expiresAt: new Date(now + this.options.contractTtlMs).toISOString(),

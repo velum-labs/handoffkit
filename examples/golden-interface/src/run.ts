@@ -1,47 +1,34 @@
-import { rmSync } from "node:fs";
-
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 import type { LanguageModel } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
 
 import { withCompute } from "@warrant/adapter-compute";
 import { agents, handoff, localFirst, targets } from "@warrant/handoff";
 import type { ToolJournal } from "@warrant/protocol";
-import { makeRepo, startStack } from "@warrant/testkit";
+import { withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, finale, ok, resolveDemoModels, step } from "@warrant/example-utils";
+import {
+  demoBanner,
+  detail,
+  finale,
+  mockToolThenTextModel,
+  ok,
+  resolveDemoModels,
+  step
+} from "@warrant/example-utils";
 
 const POOL = "eng-prod";
 
-const usage = {
-  inputTokens: {
-    total: 9,
-    noCache: 9,
-    cacheRead: undefined,
-    cacheWrite: undefined
-  },
-  outputTokens: { total: 5, text: 5, reasoning: undefined }
-};
-
-const DEMO_ID = "11";
-const DEMO_TITLE = "the golden interface";
-const DEMO_SUMMARY =
-  "The predecessor spec's golden shape, built on Warrant primitives: h.tools wraps your AI SDK tools (journaled semantic state), h.needs gates the boundary, h.continueIn moves the work, h.compute is the sandbox surface, h.summary explains it all.";
-
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("11");
 
-  const stack = await startStack({
+  await withStackAndRepo({
     pool: POOL,
     startRunner: true,
     policy: (policy) => {
       policy.agents.allow = ["mock", "command"];
-    }
-  });
-  const repo = makeRepo({
+    },
     files: { "rollout.md": "# rollout plan\nstatus: drafting\n" }
-  });
-  try {
+  }, async ({ stack, repo }) => {
     step("one context: h = withCompute(handoff({ workspace, plane, policy: localFirst() }), { pool })");
     const h = withCompute(
       handoff({
@@ -69,40 +56,14 @@ async function main(): Promise<void> {
 
     const resolved = resolveDemoModels();
     detail(resolved.description);
-    let model: LanguageModel;
-    if (resolved.source === "live") {
-      model = resolved.loop;
-    } else {
-      let calls = 0;
-      model = new MockLanguageModelV3({
-        doGenerate: async () => {
-          calls++;
-          if (calls === 1) {
-            return {
-              content: [
-                {
-                  type: "tool-call" as const,
-                  toolCallId: "call-1",
-                  toolName: "lookupOwner",
-                  input: JSON.stringify({ service: "checkout" })
-                }
-              ],
-              finishReason: { unified: "tool-calls" as const, raw: "tool-calls" },
-              usage,
-              warnings: []
-            };
-          }
-          return {
-            content: [
-              { type: "text" as const, text: "checkout is owned by platform-team" }
-            ],
-            finishReason: { unified: "stop" as const, raw: "stop" },
-            usage,
-            warnings: []
-          };
-        }
-      });
-    }
+    const model: LanguageModel =
+      resolved.source === "live"
+        ? resolved.loop
+        : mockToolThenTextModel({
+            toolName: "lookupOwner",
+            input: { service: "checkout" },
+            text: "checkout is owned by platform-team"
+          });
 
     const result = await generateText({
       model,
@@ -156,10 +117,7 @@ async function main(): Promise<void> {
     }
 
     finale("golden shape, honest substrate: every gesture is a contract, an envelope, or a receipt");
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

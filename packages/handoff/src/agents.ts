@@ -1,37 +1,28 @@
 import type { AgentKind, AgentSpec } from "@warrant/protocol";
 
 /**
- * Typed agent descriptors, mirroring the AI SDK provider pattern:
+ * Typed agent constructors, mirroring the AI SDK provider pattern:
  * `agents.claudeCode()` instead of `"claude-code"`. Strings remain
- * acceptable as CLI aliases; the SDK contract is typed.
+ * acceptable as CLI aliases; the SDK contract is the protocol's
+ * `AgentSpec` — there is no separate descriptor shape to convert.
  */
-export type AgentDescriptor = {
-  kind: "agent-descriptor";
-  agent: AgentKind;
-  version?: string;
-};
-
-function descriptor(agent: AgentKind, version?: string): AgentDescriptor {
-  return { kind: "agent-descriptor", agent, ...(version ? { version } : {}) };
+function spec(kind: AgentKind, version?: string): AgentSpec {
+  return { kind, ...(version ? { version } : {}) };
 }
 
 export const agents = {
-  claudeCode(options: { version?: string } = {}): AgentDescriptor {
-    return descriptor("claude-code", options.version);
+  claudeCode(options: { version?: string } = {}): AgentSpec {
+    return spec("claude-code", options.version);
   },
-  codex(options: { version?: string } = {}): AgentDescriptor {
-    return descriptor("codex", options.version);
+  codex(options: { version?: string } = {}): AgentSpec {
+    return spec("codex", options.version);
   },
   /** Built-in mock harness: runs without vendor CLIs or API keys. */
-  mock(): AgentDescriptor {
-    return descriptor("mock");
+  mock(): AgentSpec {
+    return spec("mock");
   },
   /** One governed shell command; the task prompt is the command. */
-  command(): AgentDescriptor {
-    return descriptor("command");
+  command(): AgentSpec {
+    return spec("command");
   }
 };
-
-export function toAgentSpec(agent: AgentDescriptor): AgentSpec {
-  return { kind: agent.agent, ...(agent.version ? { version: agent.version } : {}) };
-}

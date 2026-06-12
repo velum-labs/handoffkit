@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 
-import { MlxCapabilityError, MlxEnv } from "../mlx-env.js";
+import { mlxServer } from "../managed-server.js";
+import {
+  MLX_LM_STRUCTURED_PIN,
+  MlxCapabilityError,
+  MlxEnv
+} from "../mlx-env.js";
 
 /**
  * Exercises real environment ownership without MLX or macOS: the package
@@ -37,16 +48,37 @@ after(() => {
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
 });
 
-/** Write the stub module into the venv's site-packages. */
-function stubInstaller(counter: { installs: number }) {
-  return (venvPython: string): void => {
+/**
+ * Write stub modules into the venv's site-packages. Dotted names create
+ * package directories (e.g. "mlx_lm.structured.integration" becomes
+ * mlx_lm/structured/integration.py with __init__.py files along the way).
+ */
+function stubInstaller(
+  counter: { installs: number; specs?: string[][] },
+  moduleNames: string[] = ["warrant_stub"]
+) {
+  return (
+    venvPython: string,
+    packageSpec: string,
+    extraPackageSpecs: string[]
+  ): void => {
     counter.installs++;
+    counter.specs?.push([packageSpec, ...extraPackageSpecs]);
     const purelib = spawnSync(
       venvPython,
       ["-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
       { encoding: "utf8" }
     ).stdout.trim();
-    writeFileSync(join(purelib, "warrant_stub.py"), "VALUE = 1\n");
+    for (const name of moduleNames) {
+      const parts = name.split(".");
+      let dir = purelib;
+      for (const pkg of parts.slice(0, -1)) {
+        dir = join(dir, pkg);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "__init__.py"), "");
+      }
+      writeFileSync(join(dir, `${parts[parts.length - 1]}.py`), "VALUE = 1\n");
+    }
   };
 }
 
@@ -132,6 +164,111 @@ test("prepare() spawns from the owned env with contained caches", { skip }, asyn
   assert.ok(spec.logFile?.startsWith(dir), "server logs live in the owned dir");
 });
 
+test("extra package specs are installed, recorded, and verified", { skip }, async () => {
+  const dir = tempDir();
+  const counter = { installs: 0, specs: [] as string[][] };
+  const env = new MlxEnv({
+    dir,
+    packageSpec: "warrant-stub==1.0.0",
+    extraPackageSpecs: ["outlines-core==0.0.0", "/path/to/overlay"],
+    importName: "warrant_stub",
+    extraImportNames: ["warrant_overlay_stub"],
+    requirePlatform: false,
+    uv: false,
+    install: stubInstaller(counter, ["warrant_stub", "warrant_overlay_stub"])
+  });
+
+  const manifest = await env.ensureProvisioned();
+  assert.deepEqual(counter.specs, [
+    ["warrant-stub==1.0.0", "outlines-core==0.0.0", "/path/to/overlay"]
+  ]);
+  assert.deepEqual(manifest.extraPackageSpecs, [
+    "outlines-core==0.0.0",
+    "/path/to/overlay"
+  ]);
+  assert.equal(env.verify(), true);
+
+  // Changing the extras invalidates the env: the next ensureProvisioned
+  // rebuilds it.
+  const changed = new MlxEnv({
+    dir,
+    packageSpec: "warrant-stub==1.0.0",
+    extraPackageSpecs: ["outlines-core==9.9.9", "/path/to/overlay"],
+    importName: "warrant_stub",
+    extraImportNames: ["warrant_overlay_stub"],
+    requirePlatform: false,
+    uv: false,
+    install: stubInstaller(counter, ["warrant_stub", "warrant_overlay_stub"])
+  });
+  assert.equal(changed.verify(), false, "extras drift fails verification");
+  await changed.ensureProvisioned();
+  assert.equal(counter.installs, 2, "extras drift re-provisioned");
+  assert.equal(changed.verify(), true);
+});
+
+test("a missing extra import fails verification", { skip }, async () => {
+  const dir = tempDir();
+  const env = new MlxEnv({
+    dir,
+    packageSpec: "warrant-stub==1.0.0",
+    extraPackageSpecs: ["/path/to/overlay"],
+    importName: "warrant_stub",
+    extraImportNames: ["warrant_overlay_stub"],
+    requirePlatform: false,
+    uv: false,
+    // Installs only the primary stub: the overlay import must fail.
+    install: stubInstaller({ installs: 0 }, ["warrant_stub"])
+  });
+  await assert.rejects(
+    () => env.ensureProvisioned(),
+    /cannot import "warrant_stub, warrant_overlay_stub"/
+  );
+  assert.equal(env.verify(), false);
+});
+
+test("a manifest without extras does not satisfy options with extras", { skip }, async () => {
+  const dir = tempDir();
+  const plain = new MlxEnv({
+    dir,
+    packageSpec: "warrant-stub==1.0.0",
+    importName: "warrant_stub",
+    requirePlatform: false,
+    uv: false,
+    install: stubInstaller({ installs: 0 })
+  });
+  await plain.ensureProvisioned();
+  assert.equal(plain.verify(), true);
+
+  const withExtras = new MlxEnv({
+    dir,
+    packageSpec: "warrant-stub==1.0.0",
+    extraPackageSpecs: ["/path/to/overlay"],
+    importName: "warrant_stub",
+    requirePlatform: false,
+    uv: false,
+    install: stubInstaller({ installs: 0 })
+  });
+  assert.equal(withExtras.verify(), false);
+});
+
+test("prepare() spawns an overridden server module when configured", { skip }, async () => {
+  const dir = tempDir();
+  const env = new MlxEnv({
+    dir,
+    packageSpec: "warrant-stub==1.0.0",
+    importName: "warrant_stub",
+    serverModule: "my_custom.server",
+    requirePlatform: false,
+    uv: false,
+    install: stubInstaller({ installs: 0 })
+  });
+
+  const spec = await env.prepare("mlx-community/test-model", 12345);
+  assert.deepEqual(spec.args.slice(0, 2), ["-m", "my_custom.server"]);
+  assert.ok(!spec.args.includes("server"), "no stray stock subcommand");
+  assert.ok(spec.args.includes("mlx-community/test-model"));
+});
+
 test("destroy() removes the entire owned footprint", { skip }, async () => {
   const dir = tempDir();
   const env = new MlxEnv({
@@ -148,6 +285,96 @@ test("destroy() removes the entire owned footprint", { skip }, async () => {
   env.destroy();
   assert.equal(existsSync(dir), false, "env, manifest, caches, and logs are gone");
   assert.equal(env.verify(), false);
+});
+
+test("mlxServer with structured provisions the self-contained fork", { skip }, async () => {
+  const dir = tempDir();
+  const counter = { installs: 0, specs: [] as string[][] };
+  const server = mlxServer({
+    model: "mlx-community/test-model",
+    structured: true,
+    env: {
+      dir,
+      requirePlatform: false,
+      uv: false,
+      install: stubInstaller(counter, ["mlx_lm", "mlx_lm.structured.integration"])
+    }
+  });
+
+  // Drive the env directly (starting the real server needs a model).
+  const spec = await server.env.prepare("mlx-community/test-model", 12345);
+  assert.equal(counter.installs, 1);
+  assert.deepEqual(
+    counter.specs[0],
+    [MLX_LM_STRUCTURED_PIN],
+    "the fork with its [structured] extra is the only spec"
+  );
+  // The fork keeps the stock entry point; the hooks activate because the
+  // structured extra's dependencies import, not via a different module.
+  assert.deepEqual(spec.args.slice(0, 3), ["-m", "mlx_lm", "server"]);
+  assert.equal(server.env.verify(), true);
+});
+
+test("structured verification requires the structured subpackage import", { skip }, async () => {
+  const env = mlxServer({
+    model: "mlx-community/test-model",
+    structured: true,
+    env: {
+      dir: tempDir(),
+      requirePlatform: false,
+      uv: false,
+      // Installs mlx_lm without the structured subpackage: must fail.
+      install: stubInstaller({ installs: 0 }, ["mlx_lm"])
+    }
+  }).env;
+  await assert.rejects(
+    () => env.ensureProvisioned(),
+    /cannot import "mlx_lm, mlx_lm\.structured\.integration"/
+  );
+});
+
+test("explicit env options win over structured defaults", { skip }, async () => {
+  const counter = { installs: 0, specs: [] as string[][] };
+  const server = mlxServer({
+    model: "mlx-community/test-model",
+    structured: true,
+    env: {
+      dir: tempDir(),
+      packageSpec: "mlx-lm[structured] @ git+https://example.invalid/fork@my-rev",
+      requirePlatform: false,
+      uv: false,
+      install: stubInstaller(counter, ["mlx_lm", "mlx_lm.structured.integration"])
+    }
+  });
+  await server.env.prepare("mlx-community/test-model", 12345);
+  assert.equal(
+    counter.specs[0]?.[0],
+    "mlx-lm[structured] @ git+https://example.invalid/fork@my-rev"
+  );
+});
+
+test("mlxServer without structured keeps the stock entry point", { skip }, async () => {
+  const server = mlxServer({
+    model: "mlx-community/test-model",
+    env: {
+      dir: tempDir(),
+      packageSpec: "warrant-stub==1.0.0",
+      importName: "warrant_stub",
+      requirePlatform: false,
+      uv: false,
+      install: stubInstaller({ installs: 0 })
+    }
+  });
+  const spec = await server.env.prepare("mlx-community/test-model", 12345);
+  assert.deepEqual(spec.args.slice(0, 3), ["-m", "mlx_lm", "server"]);
+});
+
+test("structured cannot be combined with a pre-built MlxEnv", () => {
+  const env = new MlxEnv({ dir: tempDir(), requirePlatform: false });
+  assert.throws(
+    () => mlxServer({ model: "m", env, structured: true }),
+    /configure extraPackageSpecs/
+  );
 });
 
 test("a missing interpreter is a clear capability error", { skip }, async () => {

@@ -14,8 +14,3 @@ export type IsolationStrategy = {
 export function branch(): IsolationStrategy {
   return { kind: "isolation-strategy", id: "branch" };
 }
-
-/** Apply in place when safe; branch on divergence (the default). */
-export function autoIsolation(): IsolationStrategy {
-  return { kind: "isolation-strategy", id: "auto" };
-}

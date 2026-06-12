@@ -1,4 +1,9 @@
-import { hashCanonical, type ExecutionSpec, type RunContract } from "@warrant/protocol";
+import {
+  defaultExecutionSpec,
+  hashCanonical,
+  type ExecutionSpec,
+  type RunContract
+} from "@warrant/protocol";
 
 import { buildAgentCommand, type AgentContext } from "./agents.js";
 
@@ -34,6 +39,44 @@ export type PrepareExecutionInput = {
 /** Session wall-clock ceiling when neither execution nor contract sets a timeout. */
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
+/**
+ * Marker the runner writes into the prepared env for `env.secrets` mappings;
+ * backends resolve it against the released secrets via `resolveSessionEnv`.
+ * The value never reaches the session: it is replaced (or dropped) before
+ * any process, interpreter, or sandbox sees the environment.
+ */
+const SECRET_PLACEHOLDER_PREFIX = "__WARRANT_SECRET__:";
+
+/**
+ * Resolve a prepared execution env into the concrete session environment:
+ * released secrets are injected by name, `env.secrets` placeholders are
+ * substituted, and a placeholder whose secret was not released is omitted
+ * entirely (never leaked as a literal marker). Every backend uses this one
+ * resolution so the semantics cannot drift between isolation tiers.
+ */
+export function resolveSessionEnv(
+  env: Record<string, string>,
+  secrets: { name: string; value: string }[]
+): Record<string, string> {
+  const resolved: Record<string, string> = {};
+  for (const secret of secrets) resolved[secret.name] = secret.value;
+  for (const [key, value] of Object.entries(env)) {
+    if (value.startsWith(SECRET_PLACEHOLDER_PREFIX)) {
+      const secretName = value.slice(SECRET_PLACEHOLDER_PREFIX.length);
+      const secret = secrets.find((item) => item.name === secretName);
+      if (secret) resolved[key] = secret.value;
+    } else {
+      resolved[key] = value;
+    }
+  }
+  return resolved;
+}
+
+/** The execution intent of a contract, whether explicit or defaulted. */
+export function executionSpecFor(contract: RunContract): ExecutionSpec {
+  return contract.execution ?? defaultExecutionSpec(contract.agent, contract.task.prompt);
+}
+
 function timeoutMsFor(contract: RunContract, spec: ExecutionSpec): number {
   if (spec.timeoutMs !== undefined) return spec.timeoutMs;
   if (contract.budget.maxDurationMin !== undefined) {
@@ -58,24 +101,13 @@ function envFor(spec: ExecutionSpec): {
   }
   Object.assign(env, policy?.vars ?? {});
   for (const secret of policy?.secrets ?? []) {
-    env[secret.env] = `__WARRANT_SECRET__:${secret.secretName}`;
+    env[secret.env] = `${SECRET_PLACEHOLDER_PREFIX}${secret.secretName}`;
   }
   return { env, egressProxy: policy?.egressProxy ?? true };
 }
 
 function logMaxBytesFor(spec: ExecutionSpec): number | undefined {
   return spec.log?.maxBytes;
-}
-
-export function defaultExecutionForContract(contract: RunContract): ExecutionSpec {
-  if (contract.agent.kind === "command") {
-    return { kind: "shell", script: contract.task.prompt };
-  }
-  return {
-    kind: "agent",
-    agent: contract.agent,
-    prompt: contract.task.prompt
-  };
 }
 
 function prepareAgentExecution(
@@ -99,7 +131,7 @@ function prepareAgentExecution(
 
 export function prepareExecution(input: PrepareExecutionInput): PreparedExecution {
   const { contract, mockScriptPath } = input;
-  const spec = contract.execution ?? defaultExecutionForContract(contract);
+  const spec = executionSpecFor(contract);
   switch (spec.kind) {
     case "agent":
       return prepareAgentExecution(spec, { mockScriptPath }, contract);

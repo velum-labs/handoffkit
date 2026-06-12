@@ -8,10 +8,9 @@ function paint(code: string, text: string): string {
 
 export const bold = (text: string): string => paint("1", text);
 export const dim = (text: string): string => paint("2", text);
-export const cyan = (text: string): string => paint("36", text);
-export const green = (text: string): string => paint("32", text);
-export const red = (text: string): string => paint("31", text);
-export const yellow = (text: string): string => paint("33", text);
+const cyan = (text: string): string => paint("36", text);
+const green = (text: string): string => paint("32", text);
+const yellow = (text: string): string => paint("33", text);
 
 export function banner(id: string, title: string, summary: string): void {
   console.log("");

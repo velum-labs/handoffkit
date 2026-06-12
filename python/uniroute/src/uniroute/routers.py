@@ -91,16 +91,6 @@ def cluster_error_embedding(
     return psi
 
 
-@dataclass(frozen=True)
-class RoutingDecision:
-    """One routed prompt, for inspection and demos."""
-
-    prompt_index: int
-    llm_index: int
-    predicted_error: float
-    cost: float
-
-
 class UniRouteKMeans:
     """UniRoute with an unsupervised cluster assignment map (S 5.1).
 
@@ -159,22 +149,6 @@ class UniRouteKMeans:
         self, embeddings: np.ndarray, psi: np.ndarray, costs: np.ndarray, lam: float
     ) -> np.ndarray:
         return route(self.gamma(embeddings, psi), costs, lam)
-
-    def explain(
-        self, embeddings: np.ndarray, psi: np.ndarray, costs: np.ndarray, lam: float
-    ) -> list[RoutingDecision]:
-        gamma = self.gamma(embeddings, psi)
-        choices = route(gamma, costs, lam)
-        costs = np.asarray(costs, dtype=np.float64)
-        return [
-            RoutingDecision(
-                prompt_index=i,
-                llm_index=int(m),
-                predicted_error=float(gamma[i, m]),
-                cost=float(costs[m]),
-            )
-            for i, m in enumerate(choices)
-        ]
 
 
 class KNNRouter:

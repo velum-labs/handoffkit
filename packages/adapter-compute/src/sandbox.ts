@@ -3,36 +3,24 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import {
-  agents,
+  createCommandContext,
   executeGovernedCommand,
   Handoff,
-  handoff,
-  targets
+  targets,
+  toGovernedRunRecord
 } from "@warrant/handoff";
-import type { ContinuationPolicy } from "@warrant/handoff";
-import type { ActorRef, RunStatus } from "@warrant/protocol";
-import { PlaneClient } from "@warrant/sdk";
+import type { CommandHarnessConfig, GovernedRunRecord } from "@warrant/handoff";
+import type { RunStatus } from "@warrant/protocol";
 import { gitText, resolveInsideWorkspace } from "@warrant/workspace";
 
-export type GovernedComputeConfig = {
-  /** Local git workspace that backs the sandbox. The adapter commits to it. */
-  workspace: string;
-  plane: PlaneClient | { url: string; adminToken: string };
-  /** Runner pool that executes commands. */
-  pool: string;
-  actor?: ActorRef;
-  policy?: ContinuationPolicy;
-  secrets?: string[];
-  allowHosts?: string[];
-  /**
-   * Untracked-file capture allowlist. Defaults to everything ("**"), because
-   * a sandbox is expected to see the files staged into it; secret-pattern
-   * denials still apply and are recorded in the manifest.
-   */
-  allowUntracked?: string[];
-  /** Per-command wait ceiling. Defaults to 5 minutes. */
-  timeoutMs?: number;
-};
+/**
+ * The shared command-harness configuration, with one compute-specific
+ * default applied at sandbox creation: untracked-file capture allows
+ * everything ("**"), because a sandbox is expected to see the files staged
+ * into it; secret-pattern denials still apply and are recorded in the
+ * manifest.
+ */
+export type GovernedComputeConfig = CommandHarnessConfig;
 
 export type CommandResult = {
   runId: string;
@@ -41,14 +29,8 @@ export type CommandResult = {
   output: string;
 };
 
-export type SandboxRunRecord = {
+export type SandboxRunRecord = GovernedRunRecord & {
   sandboxId: string;
-  command: string;
-  runId: string;
-  status: RunStatus;
-  exitCode?: number;
-  contractHash: string;
-  receiptVerified: boolean;
 };
 
 export type GovernedCompute = {
@@ -62,9 +44,9 @@ function git(cwd: string, args: string[]): string {
 }
 
 /** Default per-command wait ceiling for sandbox commands. */
-export const DEFAULT_SANDBOX_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_SANDBOX_TIMEOUT_MS = 5 * 60 * 1000;
 /** Identity used for the sandbox's staging commits. */
-export const SANDBOX_COMMITTER = {
+const SANDBOX_COMMITTER = {
   name: "warrant-sandbox",
   email: "sandbox@warrant.local"
 };
@@ -162,12 +144,7 @@ export class GovernedSandbox {
 
     this.records.push({
       sandboxId: this.sandboxId,
-      command,
-      runId: result.run.runId,
-      status: result.status,
-      ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
-      contractHash: result.receiptBundle.receipt.contractHash,
-      receiptVerified: result.verification.ok
+      ...toGovernedRunRecord(command, result)
     });
 
     return {
@@ -203,15 +180,10 @@ export function governedCompute(config: GovernedComputeConfig): GovernedCompute 
   return {
     sandbox: {
       create: () => {
-        const context = handoff({
+        const context = createCommandContext({
+          ...config,
           workspace: resolve(config.workspace),
-          plane: config.plane,
-          agent: agents.command(),
-          allowUntracked: config.allowUntracked ?? ["**"],
-          ...(config.actor ? { actor: config.actor } : {}),
-          ...(config.policy ? { policy: config.policy } : {}),
-          ...(config.secrets ? { secrets: config.secrets } : {}),
-          ...(config.allowHosts ? { allowHosts: config.allowHosts } : {})
+          allowUntracked: config.allowUntracked ?? ["**"]
         });
         return Promise.resolve(
           new GovernedSandbox({
