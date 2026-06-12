@@ -8,7 +8,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { Plane, SecretStore, defaultPolicy, startPlaneServer } from "@warrant/plane";
+import {
+  defaultPolicy,
+  generateMasterKeyHex,
+  masterKeyFromMaterial,
+  Plane,
+  SecretStore,
+  startPlaneServer
+} from "@warrant/plane";
 import { generateEd25519KeyPair } from "@warrant/protocol";
 import type { Policy } from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
@@ -87,10 +94,8 @@ export async function startStack(options: StackOptions = {}): Promise<Stack> {
   }
   options.policy?.(policy);
 
-  const secretStore = new SecretStore(
-    join(planeDir, "secrets.enc"),
-    SecretStore.generateKeyHex()
-  );
+  const master = masterKeyFromMaterial(generateMasterKeyHex());
+  const secretStore = new SecretStore(join(planeDir, "secrets.enc"), master);
   for (const [name, value] of Object.entries(options.secrets ?? {})) {
     secretStore.set(name, value);
   }

@@ -13,6 +13,9 @@
   },
   "files": ["dist", "ui"],
   "dependencies": {
-    "@warrant/protocol": "workspace:*"
+    "@warrant/protocol": "workspace:*",
+    "jose": "6.2.3",
+    "pino": "10.3.1",
+    "zod": "4.4.3"
   }
 }

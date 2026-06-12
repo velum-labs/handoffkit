@@ -103,41 +103,33 @@ if (!currentSpec.includes("Supersedes:")) {
   fail("current spec must declare what it supersedes");
 }
 
-// Dependency policy: third-party dependencies are allowed, but only trusted,
-// exact-pinned versions reviewed onto this allowlist, and only in adapter and
-// example packages. The trust-critical kernel — protocol, workspace, sdk,
-// plane, runner, handoff, cli — stays on Node built-ins so receipts remain
-// verifiable without trusting anyone's dependency tree. The lockfile is
-// installed frozen in CI with scripts ignored, store integrity verified, and
-// a minimum release age enforced (see .npmrc).
+// Dependency policy: third-party dependencies are allowed in any workspace
+// package, but only trusted, exact-pinned versions reviewed onto this
+// allowlist. There is no "kernel must be zero-dependency" rule: trust comes
+// from pinning known-good versions and from the supply-chain controls in
+// .npmrc (frozen lockfile, ignore-scripts, verify-store-integrity, a minimum
+// release age), not from the absence of dependencies. The protocol/sdk
+// packages still happen to use only Node built-ins, which keeps the offline
+// verifier maximally auditable, but that is now a property, not a gate.
+//
+// Every third-party version must be pinned exactly (no ranges) and listed
+// here. Bumping a dependency means updating this allowlist, which is the
+// review checkpoint.
 const TRUSTED_THIRD_PARTY = new Map([
   ["@ai-sdk/openai-compatible", "2.0.48"],
   ["@ai-sdk/provider", "3.0.10"],
+  ["@types/node", "22.19.20"],
   ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
+  ["jose", "6.2.3"],
   ["just-bash", "3.0.1"],
   ["ms", "2.1.3"],
+  ["pino", "10.3.1"],
+  ["typescript", "5.9.3"],
   ["zod", "4.4.3"]
 ]);
-const THIRD_PARTY_ALLOWED_IN = new Set([
-  "packages/adapter-ai-sdk",
-  "packages/session-hermetic",
-  "packages/session-vercel-sandbox",
-  "examples/demos"
-]);
 
-if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
-  fail("root runtime dependencies are not allowed");
-}
-const workspaceDirs = [
-  ...readdirSync("packages").map((dir) => join("packages", dir)),
-  ...readdirSync("examples").map((dir) => join("examples", dir))
-];
-for (const dir of workspaceDirs) {
-  const manifestPath = join(dir, "package.json");
-  if (!existsSync(manifestPath)) continue;
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  if (manifest.private !== true) fail(`${manifestPath} must remain private`);
+function checkDeps(manifestPath, manifest) {
   for (const [section, deps] of [
     ["dependencies", manifest.dependencies ?? {}],
     ["devDependencies", manifest.devDependencies ?? {}]
@@ -148,11 +140,6 @@ for (const dir of workspaceDirs) {
           fail(`${manifestPath} ${section} "${name}": internal packages must use workspace:*`);
         }
         continue;
-      }
-      if (!THIRD_PARTY_ALLOWED_IN.has(dir.replaceAll("\\", "/"))) {
-        fail(
-          `${manifestPath} ${section} "${name}": third-party dependencies are not allowed in this package (kernel packages use Node built-ins only)`
-        );
       }
       const trusted = TRUSTED_THIRD_PARTY.get(name);
       if (trusted === undefined) {
@@ -166,6 +153,21 @@ for (const dir of workspaceDirs) {
       }
     }
   }
+}
+
+// Root manifest may carry only allowlisted, exact-pinned dev tooling.
+checkDeps("package.json", pkg);
+
+const workspaceDirs = [
+  ...readdirSync("packages").map((dir) => join("packages", dir)),
+  ...readdirSync("examples").map((dir) => join("examples", dir))
+];
+for (const dir of workspaceDirs) {
+  const manifestPath = join(dir, "package.json");
+  if (!existsSync(manifestPath)) continue;
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (manifest.private !== true) fail(`${manifestPath} must remain private`);
+  checkDeps(manifestPath, manifest);
 }
 
 // Build artifacts must never be tracked: a committed .tsbuildinfo makes

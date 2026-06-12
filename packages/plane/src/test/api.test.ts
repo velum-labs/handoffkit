@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import { generateEd25519KeyPair } from "@warrant/protocol";
 import type { RunRequestInput, RunSummary, WorkspaceManifest } from "@warrant/protocol";
 
+import { generateMasterKeyHex, masterKeyFromMaterial } from "../keys.js";
 import { Plane } from "../plane.js";
 import { defaultPolicy } from "../policy.js";
 import { SecretStore } from "../secrets.js";
@@ -79,7 +80,7 @@ before(async () => {
     enrollToken: "api-test-enroll",
     secretStore: new SecretStore(
       join(dataDir, "secrets.enc"),
-      SecretStore.generateKeyHex()
+      masterKeyFromMaterial(generateMasterKeyHex())
     )
   });
   const started = await startPlaneServer(plane, { port: 0 });

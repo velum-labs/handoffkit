@@ -16,10 +16,11 @@
     "clean": "tsc -b tsconfig.json --clean",
     "test": "node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\"",
     "demo": "node examples/demos/dist/run.js",
+    "bench": "node packages/plane/dist/bench.js",
     "verify": "pnpm check && pnpm build && pnpm test"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.0"
+    "@types/node": "22.19.20",
+    "typescript": "5.9.3"
   }
 }

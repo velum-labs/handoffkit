@@ -1,74 +1,63 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes
-} from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-type EncryptedFile = {
-  version: "warrant.secrets.v1";
-  iv: string;
-  tag: string;
-  data: string;
+import { open, seal } from "./keys.js";
+import type { MasterKey, SealedBlob } from "./keys.js";
+
+type SecretEntry = {
+  value: string;
+  updatedAt: string;
 };
 
 /**
- * Org secret store: a single AES-256-GCM encrypted JSON file.
- * Values exist in plaintext only in memory and in the broker-to-runner
- * release channel; they never appear in contracts, events, or receipts.
+ * Org secret store: a single AES-256-GCM file sealed with the plane master
+ * key (scrypt-derived per write). Values exist in plaintext only in memory
+ * and in the broker-to-runner release channel; they never appear in
+ * contracts, events, or receipts, and the encryption key is not derivable
+ * from config.json alone.
  */
 export class SecretStore {
   private readonly path: string;
-  private readonly key: Buffer;
+  private readonly master: MasterKey;
 
-  constructor(path: string, keyHex: string) {
-    if (!/^[0-9a-f]{64}$/.test(keyHex)) {
-      throw new Error("secret store key must be 32 bytes of hex");
-    }
+  constructor(path: string, master: MasterKey) {
     this.path = path;
-    this.key = Buffer.from(keyHex, "hex");
+    this.master = master;
   }
 
-  static generateKeyHex(): string {
-    return randomBytes(32).toString("hex");
-  }
-
-  private load(): Record<string, string> {
+  private load(): Record<string, SecretEntry> {
     if (!existsSync(this.path)) return {};
-    const file = JSON.parse(readFileSync(this.path, "utf8")) as EncryptedFile;
-    const decipher = createDecipheriv(
-      "aes-256-gcm",
-      this.key,
-      Buffer.from(file.iv, "base64")
-    );
-    decipher.setAuthTag(Buffer.from(file.tag, "base64"));
-    const plaintext = Buffer.concat([
-      decipher.update(Buffer.from(file.data, "base64")),
-      decipher.final()
-    ]);
-    return JSON.parse(plaintext.toString("utf8")) as Record<string, string>;
+    const blob = JSON.parse(readFileSync(this.path, "utf8")) as SealedBlob;
+    const plaintext = open(this.master, blob).toString("utf8");
+    return JSON.parse(plaintext) as Record<string, SecretEntry>;
   }
 
-  private save(values: Record<string, string>): void {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", this.key, iv);
-    const data = Buffer.concat([
-      cipher.update(Buffer.from(JSON.stringify(values), "utf8")),
-      cipher.final()
-    ]);
-    const file: EncryptedFile = {
-      version: "warrant.secrets.v1",
-      iv: iv.toString("base64"),
-      tag: cipher.getAuthTag().toString("base64"),
-      data: data.toString("base64")
-    };
-    writeFileSync(this.path, JSON.stringify(file), { mode: 0o600 });
+  private save(values: Record<string, SecretEntry>): void {
+    const blob = seal(this.master, Buffer.from(JSON.stringify(values), "utf8"));
+    writeFileSync(this.path, JSON.stringify(blob), { mode: 0o600 });
   }
 
   set(name: string, value: string): void {
     const values = this.load();
-    values[name] = value;
+    values[name] = { value, updatedAt: new Date().toISOString() };
     this.save(values);
+  }
+
+  /** Rotate a secret's value, preserving its name; errors if absent. */
+  rotate(name: string, value: string): void {
+    const values = this.load();
+    if (values[name] === undefined) {
+      throw new Error(`secret "${name}" is not in the store`);
+    }
+    values[name] = { value, updatedAt: new Date().toISOString() };
+    this.save(values);
+  }
+
+  remove(name: string): boolean {
+    const values = this.load();
+    if (values[name] === undefined) return false;
+    delete values[name];
+    this.save(values);
+    return true;
   }
 
   names(): string[] {
@@ -78,11 +67,11 @@ export class SecretStore {
   release(names: string[]): { name: string; value: string }[] {
     const values = this.load();
     return names.map((name) => {
-      const value = values[name];
-      if (value === undefined) {
+      const entry = values[name];
+      if (entry === undefined) {
         throw new Error(`secret "${name}" is not in the store`);
       }
-      return { name, value };
+      return { name, value: entry.value };
     });
   }
 }

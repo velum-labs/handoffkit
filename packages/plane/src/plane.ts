@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import {
@@ -5,7 +7,6 @@ import {
   contractHash,
   hashCanonical,
   keyIdFromPublicPem,
-  sha256Hex,
   signContract,
   signData,
   signReceipt,
@@ -26,22 +27,49 @@ import type {
   RunSummary,
   SecretClaim
 } from "@warrant/protocol";
+
+import { hashToken, principalCan, toPrincipal } from "./auth.js";
+import type { Capability, Principal } from "./auth.js";
+import type { IdpVerifier } from "./idp.js";
+import { createLogger, Metrics } from "./logging.js";
+import type { Logger } from "./logging.js";
 import { evaluatePolicy } from "./policy.js";
-import { FsStore } from "./store.js";
-import type { RunRecord, RunRequest, RunnerRecord } from "./store.js";
+import { RetentionSweeper } from "./retention.js";
 import { SecretStore } from "./secrets.js";
+import { SqliteStore } from "./sqlite-store.js";
+import type {
+  ApprovalRecord,
+  PlaneStore,
+  PrincipalRecord,
+  PrincipalRole,
+  RunRecord,
+  RunRequest,
+  RunnerRecord
+} from "./store.js";
 
 export type PlaneConfig = {
   dataDir: string;
   policy: Policy;
   planePrivateKeyPem: string;
   planePublicKeyPem: string;
+  /** Bootstrap admin principal token. */
   adminToken: string;
+  /** Bootstrap reusable enroller credential (also accepts single-use tokens). */
   enrollToken: string;
   secretStore: SecretStore;
+  /** Inject a store (tests); defaults to SQLite at <dataDir>/plane.db. */
+  store?: PlaneStore;
+  /** Verifier for IdP-issued approval assertions, when configured. */
+  idp?: IdpVerifier;
+  logger?: Logger;
+  metrics?: Metrics;
+  /** Start the background retention sweeper. Defaults to false. */
+  startRetention?: boolean;
 };
 
 export type { ClaimResult, DisclosureReport, PolicyDecision };
+
+export type IssuedPrincipal = { principalId: string; name: string; role: PrincipalRole; token: string };
 
 type ClaimTokenPayload = {
   runId: string;
@@ -50,22 +78,63 @@ type ClaimTokenPayload = {
   exp: string;
 };
 
+type VerifiedClaim = { runnerId: string; nonce: string; expMs: number };
+
 const CLAIM_TOKEN_TTL_MS = 10 * 60 * 1000;
 const CONTRACT_TTL_MS = 60 * 60 * 1000;
+const NONCE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export class Plane {
   private readonly config: PlaneConfig;
-  private readonly store: FsStore;
+  private readonly store: PlaneStore;
   private readonly policyHash: string;
-  private readonly usedClaimNonces = new Set<string>();
+  private readonly logger: Logger;
+  private readonly idp?: IdpVerifier;
+  readonly metrics: Metrics;
+  private readonly sweeper: RetentionSweeper;
 
   constructor(config: PlaneConfig) {
     this.config = config;
-    this.store = new FsStore(config.dataDir);
+    if (config.store) {
+      this.store = config.store;
+    } else {
+      const dbPath = join(config.dataDir, "plane.db");
+      mkdirSync(dirname(dbPath), { recursive: true });
+      this.store = new SqliteStore(dbPath);
+    }
     this.policyHash = hashCanonical(config.policy);
+    this.logger = config.logger ?? createLogger();
+    this.metrics = config.metrics ?? new Metrics();
+    if (config.idp) this.idp = config.idp;
+    this.seedBootstrapPrincipals();
+    this.sweeper = new RetentionSweeper(this.store, config.policy.retention);
+    if (config.startRetention) this.sweeper.start();
   }
 
-  get blobs(): FsStore {
+  /** Ensure the bootstrap admin and enroller principals match the config. */
+  private seedBootstrapPrincipals(): void {
+    this.upsertPrincipal("admin", "admin", this.config.adminToken);
+    this.upsertPrincipal("bootstrap-enroller", "enroller", this.config.enrollToken);
+  }
+
+  private upsertPrincipal(name: string, role: PrincipalRole, token: string): void {
+    const existing = this.store.getPrincipalByName(name);
+    const record: PrincipalRecord = {
+      principalId: existing?.principalId ?? `prn_${randomUUID()}`,
+      name,
+      role,
+      tokenHash: hashToken(token),
+      createdAt: existing?.createdAt ?? new Date().toISOString()
+    };
+    this.store.savePrincipal(record);
+  }
+
+  close(): void {
+    this.sweeper.stop();
+    this.store.close();
+  }
+
+  get blobs(): PlaneStore {
     return this.store;
   }
 
@@ -73,16 +142,118 @@ export class Plane {
     return { policy: this.config.policy, policyHash: this.policyHash };
   }
 
-  checkAdminToken(token: string | undefined): boolean {
-    return token !== undefined && token === this.config.adminToken;
+  get log(): Logger {
+    return this.logger;
   }
+
+  /** Run one retention pass synchronously (also used by tests). */
+  sweepRetention(): ReturnType<RetentionSweeper["sweepOnce"]> {
+    return this.sweeper.sweepOnce();
+  }
+
+  // ---- Authentication and principals ----
+
+  /** Resolve a bearer token to a principal, or undefined if invalid/revoked. */
+  authenticate(token: string | undefined): Principal | undefined {
+    if (!token) return undefined;
+    const record = this.store.getPrincipalByTokenHash(hashToken(token));
+    if (!record || record.revokedAt) return undefined;
+    return toPrincipal(record);
+  }
+
+  authorize(token: string | undefined, capability: Capability): Principal | undefined {
+    const principal = this.authenticate(token);
+    if (!principal || !principalCan(principal.role, capability)) return undefined;
+    return principal;
+  }
+
+  /** Backward-compatible admin check used by older callers. */
+  checkAdminToken(token: string | undefined): boolean {
+    const principal = this.authenticate(token);
+    return principal?.role === "admin";
+  }
+
+  issuePrincipal(name: string, role: PrincipalRole): IssuedPrincipal {
+    if (this.store.getPrincipalByName(name)) {
+      throw new Error(`principal "${name}" already exists`);
+    }
+    const token = randomBytes(32).toString("base64url");
+    const record: PrincipalRecord = {
+      principalId: `prn_${randomUUID()}`,
+      name,
+      role,
+      tokenHash: hashToken(token),
+      createdAt: new Date().toISOString()
+    };
+    this.store.savePrincipal(record);
+    this.metrics.inc("principals.issued");
+    return { principalId: record.principalId, name, role, token };
+  }
+
+  rotatePrincipal(name: string): { token: string } {
+    const existing = this.store.getPrincipalByName(name);
+    if (!existing || existing.revokedAt) {
+      throw new Error(`principal "${name}" not found`);
+    }
+    const token = randomBytes(32).toString("base64url");
+    this.store.savePrincipal({ ...existing, tokenHash: hashToken(token) });
+    this.metrics.inc("principals.rotated");
+    return { token };
+  }
+
+  revokePrincipal(name: string): boolean {
+    const existing = this.store.getPrincipalByName(name);
+    if (!existing) return false;
+    const ok = this.store.revokePrincipal(existing.principalId, new Date().toISOString());
+    if (ok) this.metrics.inc("principals.revoked");
+    return ok;
+  }
+
+  listPrincipals(): { name: string; role: PrincipalRole; createdAt: string; revoked: boolean }[] {
+    return this.store.listPrincipals().map((p) => ({
+      name: p.name,
+      role: p.role,
+      createdAt: p.createdAt,
+      revoked: p.revokedAt !== undefined
+    }));
+  }
+
+  /** Mint a single-use, expiring runner enrollment token. */
+  issueEnrollToken(options: { pool?: string; ttlMs?: number } = {}): { token: string; expiresAt: string } {
+    const token = randomBytes(32).toString("base64url");
+    const now = Date.now();
+    const expiresAt = new Date(now + (options.ttlMs ?? 60 * 60 * 1000)).toISOString();
+    this.store.saveEnrollToken({
+      tokenHash: hashToken(token),
+      ...(options.pool ? { pool: options.pool } : {}),
+      createdAt: new Date(now).toISOString(),
+      expiresAt
+    });
+    return { token, expiresAt };
+  }
+
+  // ---- Runners ----
 
   enrollRunner(input: {
     enrollToken: string;
     publicKeyPem: string;
     pool: string;
   }): { runnerId: string; runnerToken: string } {
-    if (input.enrollToken !== this.config.enrollToken) {
+    const principal = this.authenticate(input.enrollToken);
+    const byPrincipal =
+      principal !== undefined &&
+      (principal.role === "enroller" || principal.role === "admin");
+    let bySingleUse = false;
+    if (!byPrincipal) {
+      const consumed = this.store.consumeEnrollToken(
+        hashToken(input.enrollToken),
+        new Date().toISOString()
+      );
+      bySingleUse =
+        consumed !== undefined && (!consumed.pool || consumed.pool === input.pool);
+    }
+    if (!byPrincipal && !bySingleUse) {
+      this.metrics.inc("enroll.rejected");
       throw new Error("invalid enroll token");
     }
     const runnerId = `rnr_${randomUUID()}`;
@@ -91,15 +262,16 @@ export class Plane {
       runnerId,
       pool: input.pool,
       publicKeyPem: input.publicKeyPem,
-      tokenHash: sha256Hex(runnerToken),
+      tokenHash: hashToken(runnerToken),
       enrolledAt: new Date().toISOString()
     };
-    this.store.saveRunners([...this.store.getRunners(), record]);
+    this.store.saveRunner(record);
+    this.metrics.inc("enroll.accepted");
     return { runnerId, runnerToken };
   }
 
   listRunners(): RunnerSummary[] {
-    return this.store.getRunners().map((runner) => ({
+    return this.store.listRunners().map((runner) => ({
       runnerId: runner.runnerId,
       pool: runner.pool,
       keyId: keyIdFromPublicPem(runner.publicKeyPem),
@@ -108,31 +280,25 @@ export class Plane {
   }
 
   listRuns(): RunSummary[] {
-    return this.store
-      .listRunIds()
-      .map((id) => this.store.getRun(id))
-      .filter((record): record is RunRecord => record !== undefined)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map((record) => ({
-        runId: record.id,
-        status: record.status,
-        agentKind: record.request.agentKind,
-        pool: record.request.pool,
-        prompt: record.request.prompt,
-        requestedBy: record.request.requestedBy,
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt,
-        consentRequirements: record.consentRequirements,
-        hasReceipt: this.store.getReceipt(record.id) !== undefined,
-        ...(record.request.continuation
-          ? { continuation: record.request.continuation }
-          : {})
-      }));
+    return this.store.listRuns().map((record) => ({
+      runId: record.id,
+      status: record.status,
+      agentKind: record.request.agentKind,
+      pool: record.request.pool,
+      prompt: record.request.prompt,
+      requestedBy: record.request.requestedBy,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      consentRequirements: record.consentRequirements,
+      hasReceipt: this.store.getReceipt(record.id) !== undefined,
+      ...(record.request.continuation
+        ? { continuation: record.request.continuation }
+        : {})
+    }));
   }
 
   private authRunner(runnerToken: string): RunnerRecord {
-    const hash = sha256Hex(runnerToken);
-    const runner = this.store.getRunners().find((r) => r.tokenHash === hash);
+    const runner = this.store.getRunnerByTokenHash(hashToken(runnerToken));
     if (!runner) throw new Error("invalid runner token");
     return runner;
   }
@@ -198,6 +364,7 @@ export class Plane {
 
     if (decision.decision === "allow") {
       record.contract = this.issueContract(fullRequest, []);
+      this.store.saveRun(record);
       this.appendPlaneEvents(record, [
         { type: "run.created" as const },
         ...this.continuationEvents(fullRequest),
@@ -207,8 +374,10 @@ export class Plane {
           reason: decision.reason
         }
       ]);
+    } else {
+      this.store.saveRun(record);
     }
-    this.store.saveRun(record);
+    this.metrics.inc("runs.requested");
     return record;
   }
 
@@ -225,15 +394,27 @@ export class Plane {
     ];
   }
 
-  approve(runId: string, actor: ActorRef): RunRecord {
+  approve(
+    runId: string,
+    actor: ActorRef,
+    verified?: { idpSubject: string; idpIssuer: string }
+  ): RunRecord {
     const record = this.mustGetRun(runId);
     if (record.status !== "awaiting_approval") {
       throw new Error(`run ${runId} is not awaiting approval`);
     }
-    record.approvals.push({ actor, ts: new Date().toISOString() });
+    const approval: ApprovalRecord = {
+      actor,
+      ts: new Date().toISOString(),
+      ...(verified
+        ? { idpSubject: verified.idpSubject, idpIssuer: verified.idpIssuer }
+        : {})
+    };
+    record.approvals.push(approval);
     record.contract = this.issueContract(record.request, [actor]);
     record.status = "created";
     record.updatedAt = new Date().toISOString();
+    this.store.saveRun(record);
     this.appendPlaneEvents(record, [
       { type: "run.created" as const },
       ...this.continuationEvents(record.request),
@@ -248,15 +429,10 @@ export class Plane {
       })),
       { type: "consent.granted" as const, actor }
     ]);
-    this.store.saveRun(record);
+    this.metrics.inc("runs.approved");
     return record;
   }
 
-  /**
-   * Cancel a run that has not been claimed yet. Claimed or running work
-   * belongs to the runner session boundary; v1 does not signal runners,
-   * and pretending otherwise would make the receipt dishonest.
-   */
   cancel(runId: string, actor: ActorRef): RunRecord {
     const record = this.mustGetRun(runId);
     if (record.status !== "created" && record.status !== "awaiting_approval") {
@@ -264,12 +440,13 @@ export class Plane {
         `run ${runId} is ${record.status}; only unclaimed runs can be cancelled`
       );
     }
-    if (record.contract) {
-      this.appendPlaneEvents(record, [{ type: "run.cancelled", actor }]);
-    }
     record.status = "cancelled";
     record.updatedAt = new Date().toISOString();
     this.store.saveRun(record);
+    if (record.contract) {
+      this.appendPlaneEvents(record, [{ type: "run.cancelled", actor }]);
+    }
+    this.metrics.inc("runs.cancelled");
     return record;
   }
 
@@ -329,17 +506,13 @@ export class Plane {
     if (runner.pool !== input.pool) {
       throw new Error("runner is not enrolled in the requested pool");
     }
-    const candidate = this.store
-      .listRunIds()
-      .map((id) => this.store.getRun(id))
-      .filter((r): r is RunRecord => r !== undefined)
-      .filter((r) => r.status === "created" && r.request.pool === input.pool)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+    const candidate = this.store.claimNextRun(
+      input.pool,
+      runner.runnerId,
+      new Date().toISOString()
+    );
     if (!candidate || !candidate.contract) return undefined;
 
-    candidate.status = "claimed";
-    candidate.claimedBy = runner.runnerId;
-    candidate.updatedAt = new Date().toISOString();
     this.appendPlaneEvents(candidate, [
       {
         type: "run.claimed",
@@ -352,7 +525,7 @@ export class Plane {
         scope: claim.scope
       }))
     ]);
-    this.store.saveRun(candidate);
+    this.metrics.inc("runs.claimed");
 
     const payload: ClaimTokenPayload = {
       runId: candidate.id,
@@ -372,6 +545,7 @@ export class Plane {
             candidate.contract.secrets.map((c) => c.name)
           )
         : [];
+    if (secrets.length > 0) this.metrics.inc("secrets.released", secrets.length);
 
     return {
       runId: candidate.id,
@@ -382,7 +556,27 @@ export class Plane {
     };
   }
 
-  verifyClaimToken(token: string, runId: string): string {
+  /**
+   * Verify a claim token's plane signature and expiry only (not its run
+   * binding). Used to authorize artifact blob uploads from a runner that
+   * holds an active, plane-issued claim token.
+   */
+  verifyClaimTokenSignature(token: string): boolean {
+    const [encoded, sigB64url] = token.split(".");
+    if (!encoded || !sigB64url) return false;
+    const sig = Buffer.from(sigB64url, "base64url").toString("base64");
+    if (!verifyData(this.config.planePublicKeyPem, encoded, sig)) return false;
+    try {
+      const payload = JSON.parse(
+        Buffer.from(encoded, "base64url").toString("utf8")
+      ) as ClaimTokenPayload;
+      return new Date(payload.exp).getTime() >= Date.now();
+    } catch {
+      return false;
+    }
+  }
+
+  private verifyClaimToken(token: string, runId: string): VerifiedClaim {
     const [encoded, sigB64url] = token.split(".");
     if (!encoded || !sigB64url) throw new Error("malformed claim token");
     const sig = Buffer.from(sigB64url, "base64url").toString("base64");
@@ -393,14 +587,13 @@ export class Plane {
       Buffer.from(encoded, "base64url").toString("utf8")
     ) as ClaimTokenPayload;
     if (payload.runId !== runId) throw new Error("claim token run mismatch");
-    if (new Date(payload.exp).getTime() < Date.now()) {
-      throw new Error("claim token expired");
-    }
+    const expMs = new Date(payload.exp).getTime();
+    if (expMs < Date.now()) throw new Error("claim token expired");
     const record = this.mustGetRun(runId);
     if (record.claimedBy !== payload.runnerId) {
       throw new Error("claim token runner mismatch");
     }
-    return payload.runnerId;
+    return { runnerId: payload.runnerId, nonce: payload.nonce, expMs };
   }
 
   appendRunnerEvents(
@@ -428,16 +621,16 @@ export class Plane {
   }
 
   complete(runId: string, claimToken: string, receipt: Receipt): Receipt {
-    const runnerId = this.verifyClaimToken(claimToken, runId);
-    if (this.usedClaimNonces.has(claimToken)) {
+    const verified = this.verifyClaimToken(claimToken, runId);
+    // Durable replay protection: the nonce ledger survives restarts and is
+    // atomic, unlike the previous in-memory Set.
+    if (!this.store.recordClaimNonce(verified.nonce, verified.expMs + NONCE_TTL_MS)) {
       throw new Error("claim token already used for completion");
     }
     const record = this.mustGetRun(runId);
     if (!record.contract) throw new Error("run has no contract");
 
-    const runner = this.store
-      .getRunners()
-      .find((r) => r.runnerId === runnerId);
+    const runner = this.store.getRunnerById(verified.runnerId);
     if (!runner) throw new Error("unknown runner");
 
     const expectedHash = contractHash(record.contract);
@@ -455,10 +648,10 @@ export class Plane {
     );
 
     this.store.saveReceipt(runId, countersigned);
-    this.usedClaimNonces.add(claimToken);
     record.status = receipt.status;
     record.updatedAt = new Date().toISOString();
     this.store.saveRun(record);
+    this.metrics.inc(`runs.completed.${receipt.status}`);
     return countersigned;
   }
 
@@ -476,9 +669,7 @@ export class Plane {
     if (!record || !record.contract || !receipt || !record.claimedBy) {
       return undefined;
     }
-    const runner = this.store
-      .getRunners()
-      .find((r) => r.runnerId === record.claimedBy);
+    const runner = this.store.getRunnerById(record.claimedBy);
     if (!runner) return undefined;
     return {
       version: "warrant.bundle.v1",
@@ -494,15 +685,31 @@ export class Plane {
 
   exportJsonl(sinceIso?: string): string {
     const since = sinceIso ? new Date(sinceIso).getTime() : 0;
-    const lines: string[] = [];
-    for (const runId of this.store.listRunIds().sort()) {
-      for (const event of this.store.getEvents(runId)) {
-        if (new Date(event.ts).getTime() >= since) {
-          lines.push(JSON.stringify({ runId, ...event }));
-        }
-      }
-    }
+    const lines = this.store
+      .exportEvents(since)
+      .map(({ runId, event }) => JSON.stringify({ runId, ...event }));
     return lines.join("\n") + (lines.length > 0 ? "\n" : "");
+  }
+
+  /** Readiness: store reachable and signing key present. */
+  ready(): boolean {
+    try {
+      this.store.countBlobs();
+      return this.config.planePrivateKeyPem.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  verifyIdpToken(
+    token: string
+  ): Promise<{ idpSubject: string; idpIssuer: string }> {
+    if (!this.idp) {
+      return Promise.reject(new Error("no IdP is configured for approvals"));
+    }
+    return this.idp
+      .verify(token)
+      .then((v) => ({ idpSubject: v.subject, idpIssuer: v.issuer }));
   }
 
   private mustGetRun(runId: string): RunRecord {

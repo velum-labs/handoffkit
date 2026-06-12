@@ -1,18 +1,7 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  writeFileSync
-} from "node:fs";
-import { join } from "node:path";
-import { randomBytes } from "node:crypto";
-
-import { sha256Hex } from "@warrant/protocol";
 import type {
   ActorRef,
   ChainedEvent,
+  ContinuationRef,
   Receipt,
   RunContract,
   RunRequest,
@@ -28,10 +17,18 @@ export type RunRecord = {
   updatedAt: string;
   request: RunRequest;
   consentRequirements: string[];
-  approvals: { actor: ActorRef; ts: string }[];
+  approvals: ApprovalRecord[];
   contract?: RunContract;
   claimedBy?: string;
   failureMessage?: string;
+};
+
+export type ApprovalRecord = {
+  actor: ActorRef;
+  ts: string;
+  /** Present when the approval was backed by a verified IdP assertion. */
+  idpSubject?: string;
+  idpIssuer?: string;
 };
 
 export type RunnerRecord = {
@@ -42,98 +39,104 @@ export type RunnerRecord = {
   enrolledAt: string;
 };
 
-function writeJsonAtomic(path: string, value: unknown): void {
-  const tmp = `${path}.${randomBytes(6).toString("hex")}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2));
-  renameSync(tmp, path);
+/** A principal authorized to call the plane, identified by a hashed key. */
+export type PrincipalRole = "admin" | "requester" | "approver" | "enroller";
+
+export type PrincipalRecord = {
+  principalId: string;
+  name: string;
+  role: PrincipalRole;
+  /** sha256 of the bearer token; the token itself is never stored. */
+  tokenHash: string;
+  createdAt: string;
+  /** Set when revoked; revoked principals never authenticate. */
+  revokedAt?: string;
+};
+
+/** A single-use, expiring runner enrollment token (hashed at rest). */
+export type EnrollTokenRecord = {
+  tokenHash: string;
+  pool?: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt?: string;
+};
+
+export type RunSummaryRow = {
+  record: RunRecord;
+  hasReceipt: boolean;
+};
+
+/**
+ * Durable, transactional storage for the control plane. The default
+ * implementation ([sqlite-store.ts](sqlite-store.ts)) is backed by
+ * node:sqlite with WAL and immediate-transaction claims; the interface is
+ * deliberately narrow so a Postgres adapter can be added for multi-node
+ * deployments without touching the plane logic.
+ */
+export interface PlaneStore {
+  /** Release any underlying handles. */
+  close(): void;
+
+  // Runs
+  saveRun(record: RunRecord): void;
+  getRun(runId: string): RunRecord | undefined;
+  listRuns(): RunRecord[];
+  /**
+   * Atomically claim the oldest `created` run in a pool: transition it to
+   * `claimed` for the runner and return the updated record, or undefined if
+   * none is available. Must be a single transaction (compare-and-set).
+   */
+  claimNextRun(
+    pool: string,
+    runnerId: string,
+    now: string
+  ): RunRecord | undefined;
+
+  // Events
+  appendEvents(runId: string, events: ChainedEvent[]): void;
+  getEvents(runId: string): ChainedEvent[];
+  /** All events across all runs at or after `sinceMs`, oldest first. */
+  exportEvents(sinceMs: number): { runId: string; event: ChainedEvent }[];
+
+  // Receipts
+  saveReceipt(runId: string, receipt: Receipt): void;
+  getReceipt(runId: string): Receipt | undefined;
+
+  // Blobs (content-addressed)
+  putBlob(content: Buffer): string;
+  getBlob(hash: string): Buffer | undefined;
+
+  // Runners
+  saveRunner(record: RunnerRecord): void;
+  getRunnerByTokenHash(tokenHash: string): RunnerRecord | undefined;
+  getRunnerById(runnerId: string): RunnerRecord | undefined;
+  listRunners(): RunnerRecord[];
+
+  // Principals
+  savePrincipal(record: PrincipalRecord): void;
+  getPrincipalByTokenHash(tokenHash: string): PrincipalRecord | undefined;
+  getPrincipalByName(name: string): PrincipalRecord | undefined;
+  listPrincipals(): PrincipalRecord[];
+  revokePrincipal(principalId: string, now: string): boolean;
+
+  // Enrollment tokens (single-use)
+  saveEnrollToken(record: EnrollTokenRecord): void;
+  /** Atomically consume an enroll token; returns it if valid and unused. */
+  consumeEnrollToken(tokenHash: string, now: string): EnrollTokenRecord | undefined;
+
+  // Claim-completion nonces (replay protection)
+  /** Record a nonce; returns false if it was already present (a replay). */
+  recordClaimNonce(nonce: string, expiresAtMs: number): boolean;
+  /** Delete claim nonces whose expiry is at or before `nowMs`. */
+  pruneClaimNonces(nowMs: number): number;
+
+  // Retention / GC
+  /** Delete terminal runs (and their events/receipts) updated before the cutoff. */
+  deleteRunsUpdatedBefore(cutoffMs: number, terminalStatuses: RunStatus[]): string[];
+  /** Delete every blob whose hash is not in `keep`; returns the count removed. */
+  deleteBlobsExcept(keep: Set<string>): number;
+  countBlobs(): number;
 }
 
-export class FsStore {
-  readonly root: string;
-
-  constructor(root: string) {
-    this.root = root;
-    for (const dir of ["runs", "blobs", "keys"]) {
-      mkdirSync(join(root, dir), { recursive: true });
-    }
-  }
-
-  private runDir(runId: string): string {
-    const dir = join(this.root, "runs", runId);
-    mkdirSync(dir, { recursive: true });
-    return dir;
-  }
-
-  saveRun(record: RunRecord): void {
-    writeJsonAtomic(join(this.runDir(record.id), "run.json"), record);
-  }
-
-  getRun(runId: string): RunRecord | undefined {
-    const path = join(this.root, "runs", runId, "run.json");
-    if (!existsSync(path)) return undefined;
-    return JSON.parse(readFileSync(path, "utf8")) as RunRecord;
-  }
-
-  listRunIds(): string[] {
-    return readdirSync(join(this.root, "runs"));
-  }
-
-  appendEvents(runId: string, events: ChainedEvent[]): void {
-    const path = join(this.runDir(runId), "events.jsonl");
-    const lines = events.map((e) => JSON.stringify(e)).join("\n");
-    writeFileSync(path, lines + "\n", { flag: "a" });
-  }
-
-  getEvents(runId: string): ChainedEvent[] {
-    const path = join(this.root, "runs", runId, "events.jsonl");
-    if (!existsSync(path)) return [];
-    return readFileSync(path, "utf8")
-      .split("\n")
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line) as ChainedEvent);
-  }
-
-  saveReceipt(runId: string, receipt: Receipt): void {
-    writeJsonAtomic(join(this.runDir(runId), "receipt.json"), receipt);
-  }
-
-  getReceipt(runId: string): Receipt | undefined {
-    const path = join(this.root, "runs", runId, "receipt.json");
-    if (!existsSync(path)) return undefined;
-    return JSON.parse(readFileSync(path, "utf8")) as Receipt;
-  }
-
-  putBlob(content: Buffer): string {
-    const hash = sha256Hex(content);
-    const path = join(this.root, "blobs", hash);
-    if (!existsSync(path)) writeFileSync(path, content);
-    return hash;
-  }
-
-  getBlob(hash: string): Buffer | undefined {
-    if (!/^[0-9a-f]{64}$/.test(hash)) return undefined;
-    const path = join(this.root, "blobs", hash);
-    if (!existsSync(path)) return undefined;
-    return readFileSync(path);
-  }
-
-  saveRunners(runners: RunnerRecord[]): void {
-    writeJsonAtomic(join(this.root, "runners.json"), runners);
-  }
-
-  getRunners(): RunnerRecord[] {
-    const path = join(this.root, "runners.json");
-    if (!existsSync(path)) return [];
-    return JSON.parse(readFileSync(path, "utf8")) as RunnerRecord[];
-  }
-
-  saveKeyFile(name: string, pem: string): void {
-    writeFileSync(join(this.root, "keys", name), pem, { mode: 0o600 });
-  }
-
-  getKeyFile(name: string): string | undefined {
-    const path = join(this.root, "keys", name);
-    if (!existsSync(path)) return undefined;
-    return readFileSync(path, "utf8");
-  }
-}
+export type ContinuationRefOrUndefined = ContinuationRef | undefined;

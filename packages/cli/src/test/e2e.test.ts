@@ -5,7 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
-import { defaultPolicy, Plane, SecretStore, startPlaneServer } from "@warrant/plane";
+import {
+  defaultPolicy,
+  generateMasterKeyHex,
+  masterKeyFromMaterial,
+  Plane,
+  SecretStore,
+  startPlaneServer
+} from "@warrant/plane";
 import { generateEd25519KeyPair, verifyReceiptBundle } from "@warrant/protocol";
 import type { ReceiptBundle, RunRequestInput } from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
@@ -54,7 +61,7 @@ before(async () => {
   const keys = generateEd25519KeyPair();
   const secretStore = new SecretStore(
     join(planeDir, "secrets.enc"),
-    SecretStore.generateKeyHex()
+    masterKeyFromMaterial(generateMasterKeyHex())
   );
   secretStore.set("MOCK_SECRET", SECRET_VALUE);
 

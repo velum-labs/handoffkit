@@ -51,14 +51,20 @@ test("init creates keys, config, and policy; refuses to re-init", () => {
   assert.match(result.stdout, /admin token \(for the control panel\)/);
   assert.ok(existsSync(join(home, "config.json")));
   assert.ok(existsSync(join(home, "policy.json")));
-  assert.ok(existsSync(join(home, "keys", "plane.key.pem")));
+  // The org private key is sealed at rest; a master key file is generated.
+  assert.ok(existsSync(join(home, "keys", "plane.key.enc")));
+  assert.ok(existsSync(join(home, "keys", "plane.pub.pem")));
+  assert.ok(existsSync(join(home, "master.key")));
 
   const config = JSON.parse(readFileSync(join(home, "config.json"), "utf8")) as {
     version: string;
     host: string;
+    secretsKeyHex?: string;
   };
-  assert.equal(config.version, "warrant.config.v1");
+  assert.equal(config.version, "warrant.config.v2");
   assert.equal(config.host, "127.0.0.1");
+  // No key material lives in config.json anymore.
+  assert.equal(config.secretsKeyHex, undefined);
 
   const again = warrant(["init"]);
   assert.equal(again.status, 1);

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
@@ -5,11 +6,26 @@ import { fileURLToPath } from "node:url";
 
 import { PolicyDeniedError } from "@warrant/protocol";
 import type { ChainedEvent, Receipt } from "@warrant/protocol";
+
+import type { Capability, Principal } from "./auth.js";
 import { Plane } from "./plane.js";
+import { DEFAULT_RATE_LIMIT, RateLimiter } from "./ratelimit.js";
+import type { RateLimitConfig } from "./ratelimit.js";
+import {
+  approveBodySchema,
+  cancelBodySchema,
+  claimBodySchema,
+  completeBodySchema,
+  createRunBodySchema,
+  enrollBodySchema,
+  eventsBodySchema,
+  issuePrincipalBodySchema,
+  parseBody,
+  ValidationError
+} from "./validation.js";
 
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
 
-/** Static control panel assets, served from the package's ui directory. */
 const UI_FILES: Record<string, { file: string; type: string }> = {
   "/ui": { file: "index.html", type: "text/html; charset=utf-8" },
   "/ui/": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -29,7 +45,7 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
     req.on("data", (chunk: Buffer) => {
       total += chunk.length;
       if (total > MAX_BODY_BYTES) {
-        reject(new Error("body too large"));
+        reject(new RequestError(413, "body too large"));
         req.destroy();
         return;
       }
@@ -38,6 +54,15 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
+}
+
+async function readJson(req: IncomingMessage): Promise<unknown> {
+  const raw = (await readBody(req)).toString("utf8");
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new RequestError(400, "request body is not valid JSON");
+  }
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -55,56 +80,112 @@ function bearerToken(req: IncomingMessage): string | undefined {
   return header.slice("Bearer ".length);
 }
 
+function clientIp(req: IncomingMessage): string {
+  return req.socket.remoteAddress ?? "unknown";
+}
+
+/** A request-handling error carrying an HTTP status. */
+class RequestError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = "RequestError";
+  }
+}
+
 export type PlaneServerOptions = {
   port: number;
-  /** Bind address. Defaults to loopback; use 0.0.0.0 for containers. */
   host?: string;
+  rateLimit?: Partial<RateLimitConfig>;
 };
 
 /**
- * Control-plane HTTP API plus the control panel UI. Runners connect
- * outbound to this server; no inbound connectivity to runners is ever
- * required.
+ * Control-plane HTTP API plus the control panel UI. Every mutating and
+ * data-returning route is authenticated against a principal and gated by
+ * capability; bodies are schema-validated; requests are rate-limited per
+ * principal/IP with auth-failure backoff; everything is logged with a
+ * request id.
  */
 export function startPlaneServer(
   plane: Plane,
   options: PlaneServerOptions | number
 ): Promise<{ server: Server; port: number; host: string }> {
-  const { port, host = "127.0.0.1" } =
-    typeof options === "number" ? { port: options } : options;
+  const { port, host = "127.0.0.1", rateLimit } =
+    typeof options === "number" ? { port: options, rateLimit: undefined } : options;
+  const limiter = new RateLimiter(rateLimit ?? DEFAULT_RATE_LIMIT);
+
   const server = createServer((req, res) => {
-    handle(plane, req, res).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
+    const requestId = randomUUID();
+    handle(plane, limiter, req, res, requestId).catch((error: unknown) => {
       if (error instanceof PolicyDeniedError) {
-        sendJson(res, 403, { error: message, code: error.code, reasons: error.reasons });
+        sendJson(res, 403, { error: error.message, code: error.code, reasons: error.reasons });
         return;
       }
+      if (error instanceof ValidationError) {
+        sendJson(res, 400, { error: error.message, issues: error.issues });
+        return;
+      }
+      if (error instanceof RequestError) {
+        sendJson(res, error.status, { error: error.message });
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      plane.log.error({ requestId, err: message }, "request failed");
       sendJson(res, 400, { error: message });
     });
   });
-  // Disable the keep-alive inactivity timeout: closing idle sockets races
-  // with clients reusing them, which surfaces as spurious transport errors.
-  // server.close() still closes idle connections on shutdown.
   server.keepAliveTimeout = 0;
   return new Promise((resolve) => {
     server.listen(port, host, () => {
       const address = server.address();
       const boundPort =
         typeof address === "object" && address !== null ? address.port : port;
+      plane.log.info({ host, port: boundPort }, "plane listening");
       resolve({ server, port: boundPort, host });
     });
   });
 }
 
+/** Authenticate + authorize, recording rate-limit/auth-failure state. */
+function requirePrincipal(
+  plane: Plane,
+  limiter: RateLimiter,
+  req: IncomingMessage,
+  capability: Capability
+): Principal {
+  const token = bearerToken(req);
+  const ip = clientIp(req);
+  if (limiter.isLockedOut(ip)) {
+    throw new RequestError(429, "too many authentication failures; backing off");
+  }
+  const principal = plane.authorize(token, capability);
+  if (!principal) {
+    limiter.recordAuthFailure(ip);
+    // Distinguish "no/invalid token" from "valid token, wrong role".
+    if (plane.authenticate(token)) {
+      throw new RequestError(403, "forbidden: principal lacks the required role");
+    }
+    throw new RequestError(401, "unauthorized");
+  }
+  limiter.recordAuthSuccess(ip);
+  if (!limiter.allow(principal.principalId)) {
+    throw new RequestError(429, "rate limit exceeded");
+  }
+  return principal;
+}
+
 async function handle(
   plane: Plane,
+  limiter: RateLimiter,
   req: IncomingMessage,
-  res: ServerResponse
+  res: ServerResponse,
+  requestId: string
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://localhost");
   const method = req.method ?? "GET";
   const path = url.pathname;
-  const token = bearerToken(req);
+  plane.log.debug({ requestId, method, path }, "request");
+
+  // ---- Public routes ----
 
   if (method === "GET" && path === "/") {
     res.writeHead(302, { location: "/ui/" });
@@ -129,44 +210,96 @@ async function handle(
     return;
   }
 
-  if (method === "POST" && path === "/v1/runners/enroll") {
-    const body = JSON.parse((await readBody(req)).toString("utf8")) as {
-      enrollToken: string;
-      publicKeyPem: string;
-      pool: string;
-    };
-    sendJson(res, 200, plane.enrollRunner(body));
+  if (method === "GET" && path === "/v1/ready") {
+    const ready = plane.ready();
+    sendJson(res, ready ? 200 : 503, { ready });
     return;
   }
 
-  if (method === "GET" && path === "/v1/runners") {
-    if (!plane.checkAdminToken(token)) {
-      sendJson(res, 401, { error: "unauthorized" });
-      return;
+  if (method === "GET" && path === "/v1/metrics") {
+    requirePrincipal(plane, limiter, req, "policy:read");
+    sendJson(res, 200, { metrics: plane.metrics.snapshot() });
+    return;
+  }
+
+  // Runner enrollment authenticates with an enroll token (principal or
+  // single-use), not a control-plane principal.
+  if (method === "POST" && path === "/v1/runners/enroll") {
+    const ip = clientIp(req);
+    if (limiter.isLockedOut(ip)) {
+      throw new RequestError(429, "too many authentication failures; backing off");
     }
+    const body = parseBody(enrollBodySchema, await readJson(req));
+    try {
+      const result = plane.enrollRunner(body);
+      limiter.recordAuthSuccess(ip);
+      sendJson(res, 200, result);
+    } catch (error) {
+      limiter.recordAuthFailure(ip);
+      throw error;
+    }
+    return;
+  }
+
+  // Runner claim/event/completion authenticate with runner tokens + signed
+  // claim tokens (verified inside the plane), not principals.
+  if (method === "POST" && path === "/v1/claims") {
+    const body = parseBody(claimBodySchema, await readJson(req));
+    const claim = plane.claim(body);
+    sendJson(res, 200, claim ?? { empty: true });
+    return;
+  }
+
+  // ---- Principal-authenticated routes ----
+
+  if (method === "GET" && path === "/v1/runners") {
+    requirePrincipal(plane, limiter, req, "runners:read");
     sendJson(res, 200, { runners: plane.listRunners() });
     return;
   }
 
   if (method === "GET" && path === "/v1/policy") {
-    if (!plane.checkAdminToken(token)) {
-      sendJson(res, 401, { error: "unauthorized" });
-      return;
-    }
+    requirePrincipal(plane, limiter, req, "policy:read");
     sendJson(res, 200, plane.policySnapshot);
     return;
   }
 
+  if (method === "GET" && path === "/v1/principals") {
+    requirePrincipal(plane, limiter, req, "principals:manage");
+    sendJson(res, 200, { principals: plane.listPrincipals() });
+    return;
+  }
+
+  if (method === "POST" && path === "/v1/principals") {
+    requirePrincipal(plane, limiter, req, "principals:manage");
+    const body = parseBody(issuePrincipalBodySchema, await readJson(req));
+    sendJson(res, 200, plane.issuePrincipal(body.name, body.role));
+    return;
+  }
+
+  if (method === "POST" && path === "/v1/enroll-tokens") {
+    requirePrincipal(plane, limiter, req, "principals:manage");
+    const issued = plane.issueEnrollToken();
+    sendJson(res, 200, issued);
+    return;
+  }
+
   if (method === "POST" && path === "/v1/blobs") {
-    if (!plane.checkAdminToken(token) && !token) {
-      sendJson(res, 401, { error: "unauthorized" });
-      return;
+    // Writers are either a blobs:write principal (CLI/SDK) or a runner
+    // holding a valid plane-signed claim token (artifact uploads).
+    const token = bearerToken(req);
+    const principal = plane.authorize(token, "blobs:write");
+    if (!principal && !(token && plane.verifyClaimTokenSignature(token))) {
+      throw new RequestError(401, "unauthorized");
     }
     const content = await readBody(req);
     sendJson(res, 200, { hash: plane.blobs.putBlob(content) });
     return;
   }
 
+  // Blobs are content-addressed by sha256; knowing the hash (which only
+  // appears in capability-gated receipts/events or the issued contract) is
+  // itself the read capability, so reads are not separately gated.
   const blobMatch = path.match(/^\/v1\/blobs\/([0-9a-f]{64})$/);
   if (method === "GET" && blobMatch && blobMatch[1]) {
     const blob = plane.blobs.getBlob(blobMatch[1]);
@@ -183,23 +316,14 @@ async function handle(
   }
 
   if (method === "GET" && path === "/v1/runs") {
-    if (!plane.checkAdminToken(token)) {
-      sendJson(res, 401, { error: "unauthorized" });
-      return;
-    }
+    requirePrincipal(plane, limiter, req, "runs:read");
     sendJson(res, 200, { runs: plane.listRuns() });
     return;
   }
 
   if (method === "POST" && path === "/v1/runs") {
-    if (!plane.checkAdminToken(token)) {
-      sendJson(res, 401, { error: "unauthorized" });
-      return;
-    }
-    const body = JSON.parse((await readBody(req)).toString("utf8")) as {
-      dryRun?: boolean;
-      request: Parameters<Plane["requestRun"]>[0];
-    };
+    requirePrincipal(plane, limiter, req, "runs:create");
+    const body = parseBody(createRunBodySchema, await readJson(req));
     if (body.dryRun) {
       sendJson(res, 200, plane.dryRun(body.request));
       return;
@@ -213,72 +337,61 @@ async function handle(
     return;
   }
 
-  if (method === "POST" && path === "/v1/claims") {
-    const body = JSON.parse((await readBody(req)).toString("utf8")) as {
-      runnerToken: string;
-      pool: string;
-    };
-    const claim = plane.claim(body);
-    sendJson(res, 200, claim ?? { empty: true });
-    return;
-  }
-
   const runMatch = path.match(/^\/v1\/runs\/([A-Za-z0-9_-]+)(\/.*)?$/);
   if (runMatch && runMatch[1]) {
     const runId = runMatch[1];
     const sub = runMatch[2] ?? "";
 
     if (method === "POST" && sub === "/approve") {
-      if (!plane.checkAdminToken(token)) {
-        sendJson(res, 401, { error: "unauthorized" });
-        return;
-      }
-      const body = JSON.parse((await readBody(req)).toString("utf8")) as {
-        actor: { kind: "human" | "service"; id: string };
+      const principal = requirePrincipal(plane, limiter, req, "runs:approve");
+      const body = parseBody(approveBodySchema, await readJson(req));
+      let actor = body.actor ?? {
+        kind: "human" as const,
+        id: principal.name
       };
-      const record = plane.approve(runId, body.actor);
+      let verified: { idpSubject: string; idpIssuer: string } | undefined;
+      if (body.idpToken) {
+        verified = await plane.verifyIdpToken(body.idpToken);
+        actor = { kind: "human", id: verified.idpSubject };
+      }
+      const record = plane.approve(runId, actor, verified);
       sendJson(res, 200, { runId: record.id, status: record.status });
       return;
     }
 
     if (method === "POST" && sub === "/cancel") {
-      if (!plane.checkAdminToken(token)) {
-        sendJson(res, 401, { error: "unauthorized" });
-        return;
-      }
-      const body = JSON.parse((await readBody(req)).toString("utf8")) as {
-        actor: { kind: "human" | "service"; id: string };
-      };
-      const record = plane.cancel(runId, body.actor);
+      const principal = requirePrincipal(plane, limiter, req, "runs:cancel");
+      const body = parseBody(cancelBodySchema, await readJson(req));
+      const actor = body.actor ?? { kind: "human" as const, id: principal.name };
+      const record = plane.cancel(runId, actor);
       sendJson(res, 200, { runId: record.id, status: record.status });
       return;
     }
 
     if (method === "POST" && sub === "/events") {
-      const body = JSON.parse((await readBody(req)).toString("utf8")) as {
-        claimToken: string;
-        events: ChainedEvent[];
-      };
-      plane.appendRunnerEvents(runId, body.claimToken, body.events);
+      const body = parseBody(eventsBodySchema, await readJson(req));
+      plane.appendRunnerEvents(
+        runId,
+        body.claimToken,
+        body.events as ChainedEvent[]
+      );
       sendJson(res, 200, { ok: true });
       return;
     }
 
     if (method === "POST" && sub === "/complete") {
-      const body = JSON.parse((await readBody(req)).toString("utf8")) as {
-        claimToken: string;
-        receipt: Receipt;
-      };
-      const countersigned = plane.complete(runId, body.claimToken, body.receipt);
+      const body = parseBody(completeBodySchema, await readJson(req));
+      const countersigned = plane.complete(
+        runId,
+        body.claimToken,
+        body.receipt as Receipt
+      );
       sendJson(res, 200, { receipt: countersigned });
       return;
     }
 
     if (method === "GET" && sub === "/bundle") {
-      if (!plane.checkAdminToken(token)) {
-        sendJson(res, 401, { error: "unauthorized" });
-        return;
-      }
+      requirePrincipal(plane, limiter, req, "runs:read");
       const bundle = plane.getBundle(runId);
       if (!bundle) {
         sendJson(res, 404, { error: "bundle not available" });
@@ -289,10 +402,7 @@ async function handle(
     }
 
     if (method === "GET" && sub === "") {
-      if (!plane.checkAdminToken(token)) {
-        sendJson(res, 401, { error: "unauthorized" });
-        return;
-      }
+      requirePrincipal(plane, limiter, req, "runs:read");
       const record = plane.getRun(runId);
       if (!record) {
         sendJson(res, 404, { error: "run not found" });
@@ -312,10 +422,7 @@ async function handle(
   }
 
   if (method === "GET" && path === "/v1/export") {
-    if (!plane.checkAdminToken(token)) {
-      sendJson(res, 401, { error: "unauthorized" });
-      return;
-    }
+    requirePrincipal(plane, limiter, req, "export:read");
     const since = url.searchParams.get("since") ?? undefined;
     const jsonl = plane.exportJsonl(since);
     res.writeHead(200, { "content-type": "application/x-ndjson" });
