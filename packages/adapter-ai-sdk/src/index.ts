@@ -22,11 +22,11 @@ export type { RouteDecision, RoutedModelConfig, RouterCard } from "./routed-mode
 export {
   defaultMlxDir,
   MLX_LM_PIN,
+  MLX_LM_STRUCTURED_PIN,
   MlxCapabilityError,
   MlxEnv,
   OUTLINES_CORE_PIN,
-  PYTHON_PIN,
-  STRUCTURED_SERVER_MODULE
+  PYTHON_PIN
 } from "./mlx-env.js";
 export type { MlxEnvManifest, MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
 export {

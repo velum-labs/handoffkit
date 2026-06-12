@@ -15,9 +15,9 @@ import type {
 } from "@ai-sdk/provider";
 
 import {
+  MLX_LM_STRUCTURED_PIN,
   MlxEnv,
-  OUTLINES_CORE_PIN,
-  STRUCTURED_SERVER_MODULE
+  OUTLINES_CORE_PIN
 } from "./mlx-env.js";
 import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
 
@@ -389,8 +389,8 @@ export function managedModelServer(
 
 export type MlxStructuredOptions = {
   /**
-   * Source of the structured decoding overlay package: a local directory
-   * (pip-installable) or a pinned PyPI spec. Defaults to this repository's
+   * Source of the mlx-lm-structured package: a local directory
+   * (pip-installable) or a pinned spec. Defaults to this repository's
    * python/mlx-lm-structured, which works for in-repo usage.
    */
   overlaySpec?: string;
@@ -405,44 +405,48 @@ export type MlxServerOptions = {
   extraArgs?: string[];
   /**
    * Enable structured decoding (`response_format`, `guided_json`,
-   * `guided_regex`, `guided_choice`): the env additionally installs the
-   * mlx-lm-structured overlay and the server is spawned through its entry
-   * point. With this set the AI SDK's JSON output modes (generateObject,
-   * responseFormat) are actually enforced by the server.
+   * `guided_regex`, `guided_choice`): the env installs the velum-labs
+   * mlx-lm fork (which carries optional server hooks) together with the
+   * mlx-lm-structured package. With this set the AI SDK's JSON output modes
+   * (generateObject, responseFormat) are actually enforced by the server.
    */
   structured?: boolean | MlxStructuredOptions;
 } & Omit<ManagedModelServerOptions, "prepare" | "modelId" | "createModel"> &
   Pick<Partial<ManagedModelServerOptions>, "createModel">;
 
-/** The in-repo location of the overlay (works when running from the repo). */
+/** The in-repo location of the package (works when running from the repo). */
 function defaultOverlaySpec(): string {
   const path = fileURLToPath(
     new URL("../../../python/mlx-lm-structured", import.meta.url)
   );
   if (!existsSync(path)) {
     throw new Error(
-      "cannot resolve the mlx-lm-structured overlay package: " +
+      "cannot resolve the mlx-lm-structured package: " +
         `${path} does not exist. Pass structured.overlaySpec (a local ` +
-        "package directory or a pinned PyPI spec) explicitly."
+        "package directory or a pinned spec) explicitly."
     );
   }
   return path;
 }
 
-/** Env options that add the structured decoding overlay to the owned env. */
+/**
+ * Env options for structured decoding: the mlx-lm fork (with the optional
+ * server hooks) as the main spec, plus the constraint package whose presence
+ * activates them. The stock `mlx_lm server` entry point is unchanged.
+ */
 function structuredEnvOptions(
   structured: boolean | MlxStructuredOptions
 ): Pick<
   MlxEnvOptions,
-  "extraPackageSpecs" | "extraImportNames" | "serverModule"
+  "packageSpec" | "extraPackageSpecs" | "extraImportNames"
 > {
   const overlaySpec =
     (typeof structured === "object" ? structured.overlaySpec : undefined) ??
     defaultOverlaySpec();
   return {
+    packageSpec: MLX_LM_STRUCTURED_PIN,
     extraPackageSpecs: [`outlines-core==${OUTLINES_CORE_PIN}`, overlaySpec],
-    extraImportNames: ["mlx_lm_structured"],
-    serverModule: STRUCTURED_SERVER_MODULE
+    extraImportNames: ["mlx_lm_structured"]
   };
 }
 
@@ -466,9 +470,11 @@ export function mlxServer(
     }
     env = envOption;
   } else {
+    // Structured mode supplies defaults; explicit env options win (e.g. a
+    // custom packageSpec pointing at another fork revision).
     env = new MlxEnv({
-      ...(envOption ?? {}),
-      ...(structured ? structuredEnvOptions(structured) : {})
+      ...(structured ? structuredEnvOptions(structured) : {}),
+      ...(envOption ?? {})
     });
   }
   const server = new ManagedModelServer({

@@ -4,19 +4,12 @@ build-backend = "uv_build"
 
 [project]
 name = "mlx-lm-structured"
-version = "0.1.0"
-description = "Constrained/structured decoding overlay for mlx_lm.server (OpenAI response_format + vLLM-style guided_* params) built on outlines-core"
+version = "0.2.0"
+description = "Constrained/structured decoding for the mlx-lm server (OpenAI response_format + vLLM-style guided_* params), built on outlines-core; enforced by the velum-labs/mlx-lm fork when installed alongside it"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "UNLICENSED" }
 dependencies = ["outlines-core==0.2.14"]
-
-[project.optional-dependencies]
-# The server overlay itself; only installable where mlx wheels exist.
-server = ["mlx-lm==0.31.3"]
-
-[project.scripts]
-mlx-lm-structured-server = "mlx_lm_structured.server:main"
 
 [dependency-groups]
 # numpy+numba drive the outlines-core numpy kernels used by the test suite so

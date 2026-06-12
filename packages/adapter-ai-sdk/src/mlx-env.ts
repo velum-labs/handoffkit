@@ -43,14 +43,21 @@ import { delimiter, dirname, join } from "node:path";
 export const MLX_LM_PIN = "0.31.3";
 
 /**
+ * The velum-labs/mlx-lm fork installed in structured mode: upstream v0.31.3
+ * plus optional structured-decoding hooks (a minimal patch series; see
+ * python/mlx-lm-structured/README.md). The ref is the patch-series branch
+ * for that upstream tag; prefer narrowing it to a commit SHA once the branch
+ * is settled, since a moving ref weakens the manifest's exactness.
+ */
+export const MLX_LM_STRUCTURED_PIN =
+  "mlx-lm @ git+https://github.com/velum-labs/mlx-lm@structured-0.31.3";
+
+/**
  * Exact-pinned outlines-core version installed alongside the structured
- * decoding overlay (the overlay's own dependency pin matches; this makes the
- * pin explicit in the provisioned env and in this repo's review surface).
+ * decoding package (whose own dependency pin matches; this makes the pin
+ * explicit in the provisioned env and in this repo's review surface).
  */
 export const OUTLINES_CORE_PIN = "0.2.14";
-
-/** Module spawned for structured decoding (see python/mlx-lm-structured). */
-export const STRUCTURED_SERVER_MODULE = "mlx_lm_structured.server";
 
 /** Python version requested from uv (which can download it if absent). */
 export const PYTHON_PIN = "3.12";

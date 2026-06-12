@@ -7,10 +7,10 @@ import { after, test } from "node:test";
 
 import { mlxServer } from "../managed-server.js";
 import {
+  MLX_LM_STRUCTURED_PIN,
   MlxCapabilityError,
   MlxEnv,
-  OUTLINES_CORE_PIN,
-  STRUCTURED_SERVER_MODULE
+  OUTLINES_CORE_PIN
 } from "../mlx-env.js";
 
 /**
@@ -271,7 +271,7 @@ test("destroy() removes the entire owned footprint", { skip }, async () => {
   assert.equal(env.verify(), false);
 });
 
-test("mlxServer with structured provisions the overlay and spawns its module", { skip }, async () => {
+test("mlxServer with structured provisions the fork plus the constraint package", { skip }, async () => {
   const dir = tempDir();
   const counter = { installs: 0, specs: [] as string[][] };
   const server = mlxServer({
@@ -279,11 +279,9 @@ test("mlxServer with structured provisions the overlay and spawns its module", {
     structured: true,
     env: {
       dir,
-      packageSpec: "warrant-stub==1.0.0",
-      importName: "warrant_stub",
       requirePlatform: false,
       uv: false,
-      install: stubInstaller(counter, ["warrant_stub", "mlx_lm_structured"])
+      install: stubInstaller(counter, ["mlx_lm", "mlx_lm_structured"])
     }
   });
 
@@ -291,15 +289,37 @@ test("mlxServer with structured provisions the overlay and spawns its module", {
   const spec = await server.env.prepare("mlx-community/test-model", 12345);
   assert.equal(counter.installs, 1);
   const [installed] = counter.specs;
-  assert.equal(installed?.[0], "warrant-stub==1.0.0");
+  assert.equal(installed?.[0], MLX_LM_STRUCTURED_PIN, "fork is the main spec");
   assert.equal(installed?.[1], `outlines-core==${OUTLINES_CORE_PIN}`);
   assert.match(
     installed?.[2] ?? "",
     /python[/\\]mlx-lm-structured$/,
-    "default overlay spec points at the in-repo package"
+    "default spec points at the in-repo package"
   );
-  assert.deepEqual(spec.args.slice(0, 2), ["-m", STRUCTURED_SERVER_MODULE]);
+  // The fork keeps the stock entry point; the hooks activate by presence of
+  // the constraint package, not by a different server module.
+  assert.deepEqual(spec.args.slice(0, 3), ["-m", "mlx_lm", "server"]);
   assert.equal(server.env.verify(), true);
+});
+
+test("explicit env options win over structured defaults", { skip }, async () => {
+  const counter = { installs: 0, specs: [] as string[][] };
+  const server = mlxServer({
+    model: "mlx-community/test-model",
+    structured: true,
+    env: {
+      dir: tempDir(),
+      packageSpec: "mlx-lm @ git+https://example.invalid/fork@my-rev",
+      requirePlatform: false,
+      uv: false,
+      install: stubInstaller(counter, ["mlx_lm", "mlx_lm_structured"])
+    }
+  });
+  await server.env.prepare("mlx-community/test-model", 12345);
+  assert.equal(
+    counter.specs[0]?.[0],
+    "mlx-lm @ git+https://example.invalid/fork@my-rev"
+  );
 });
 
 test("mlxServer without structured keeps the stock entry point", { skip }, async () => {

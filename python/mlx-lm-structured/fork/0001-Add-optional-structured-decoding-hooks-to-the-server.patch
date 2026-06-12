@@ -1,0 +1,169 @@
+From c7a57c9fffcd897b103ee88030f1764419fdcddd Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Fri, 12 Jun 2026 22:38:01 +0000
+Subject: [PATCH] Add optional structured decoding hooks to the server
+
+When the mlx-lm-structured package is installed, the server enforces
+OpenAI response_format and vLLM-style guided_json/guided_regex/
+guided_choice request parameters by appending an FSM-backed logits
+processor per request; malformed constraints return HTTP 400. Without
+the package the parameters are ignored (with a warning), matching
+upstream behavior.
+
+The constraint travels on LogitsProcessorArguments (picklable, so it
+reaches every distributed rank), and _make_logits_processors now
+receives the tokenizer and model key it needs to build the constraint
+vocabulary. In the batch path the processors are built inside the
+per-request try block so a failed constraint compile is reported to
+that request instead of unwinding the generation thread.
+
+The version gains a +structured local segment to make provisioned
+environments identifiable.
+---
+ mlx_lm/_version.py |  2 +-
+ mlx_lm/server.py   | 64 +++++++++++++++++++++++++++++++++++++++++++---
+ 2 files changed, 61 insertions(+), 5 deletions(-)
+
+diff --git a/mlx_lm/_version.py b/mlx_lm/_version.py
+index 0a3447b..af6cb79 100644
+--- a/mlx_lm/_version.py
++++ b/mlx_lm/_version.py
+@@ -1,3 +1,3 @@
+ # Copyright © 2023-2025 Apple Inc.
+ 
+-__version__ = "0.31.3"
++__version__ = "0.31.3+structured.1"
+diff --git a/mlx_lm/server.py b/mlx_lm/server.py
+index ce8d958..728a4be 100644
+--- a/mlx_lm/server.py
++++ b/mlx_lm/server.py
+@@ -45,6 +45,22 @@ from .models.cache import (
+ from .sample_utils import make_logits_processors, make_sampler
+ from .utils import _parse_size, load, sharded_load
+ 
++# Optional structured decoding support (https://github.com/velum-labs/handoffkit,
++# python/mlx-lm-structured). When the package is installed, OpenAI
++# `response_format` and vLLM-style `guided_json`/`guided_regex`/`guided_choice`
++# request parameters are enforced by masking logits with a compiled FSM; when
++# it is not, those parameters are ignored exactly like upstream mlx-lm.
++try:
++    from mlx_lm_structured.integration import (
++        make_constraint_processor,
++        parse_request_constraint,
++    )
++except ImportError:
++    make_constraint_processor = None
++    parse_request_constraint = None
++
++STRUCTURED_FIELDS = ("response_format", "guided_json", "guided_regex", "guided_choice")
++
+ 
+ def get_system_fingerprint():
+     gpu_arch = mx.device_info()["architecture"]
+@@ -176,6 +192,9 @@ class LogitsProcessorArguments:
+     presence_context_size: int
+     frequency_penalty: float
+     frequency_context_size: int
++    # Parsed structured-output constraint (a picklable spec produced by
++    # mlx_lm_structured.integration.parse_request_constraint), if any.
++    structured: Optional[Any] = None
+ 
+ 
+ @dataclass
+@@ -411,8 +430,8 @@ def _make_sampler(args, tokenizer):
+     )
+ 
+ 
+-def _make_logits_processors(args):
+-    return make_logits_processors(
++def _make_logits_processors(args, tokenizer, model_key):
++    processors = make_logits_processors(
+         args.logits.logit_bias,
+         args.logits.repetition_penalty,
+         args.logits.repetition_context_size,
+@@ -421,6 +440,17 @@ def _make_logits_processors(args):
+         args.logits.frequency_penalty,
+         args.logits.frequency_context_size,
+     )
++    if args.logits.structured is not None:
++        if make_constraint_processor is None:
++            raise ValueError(
++                "structured output requires the mlx-lm-structured package"
++            )
++        # The constraint processor goes last so penalties and logit bias
++        # cannot unmask forbidden tokens.
++        processors.append(
++            make_constraint_processor(args.logits.structured, tokenizer, model_key)
++        )
++    return processors
+ 
+ 
+ def _format_top_logprobs(logprobs, top_n, tokenizer) -> Tuple[Dict[str, Any]]:
+@@ -738,6 +768,13 @@ class ResponseGenerator:
+                         prompt, segments, segment_types, initial_state = self._tokenize(
+                             current_tokenizer, request, args
+                         )
++                        # Built here (rather than at the insert below) so a
++                        # failure — e.g. an FSM that cannot be compiled for a
++                        # structured constraint — is reported to this request
++                        # instead of unwinding the generation thread.
++                        logits_processors = _make_logits_processors(
++                            args, current_tokenizer, self.model_provider.model_key
++                        )
+                     except Exception as e:
+                         rqueue.put(e)
+                         continue
+@@ -779,7 +816,7 @@ class ResponseGenerator:
+                         caches=[cache],
+                         all_tokens=[prompt[:prompt_cache_count]],
+                         samplers=[_make_sampler(args, tokenizer)],
+-                        logits_processors=[_make_logits_processors(args)],
++                        logits_processors=[logits_processors],
+                         state_machines=[sm],
+                     )
+                     batch_results[uid] = {
+@@ -958,7 +995,9 @@ class ResponseGenerator:
+ 
+             # Make the sampler and logit processor
+             sampler = _make_sampler(args, tokenizer)
+-            logits_processors = _make_logits_processors(args)
++            logits_processors = _make_logits_processors(
++                args, tokenizer, self.model_provider.model_key
++            )
+ 
+             # Load the KV cache
+             self._log_cache_stats()
+@@ -1192,6 +1231,22 @@ class APIHandler(BaseHTTPRequestHandler):
+         self.chat_template_kwargs = self.body.get("chat_template_kwargs")
+         self.validate_model_parameters()
+ 
++        # Structured output constraint (response_format / guided_*)
++        self.structured_constraint = None
++        if parse_request_constraint is not None:
++            try:
++                self.structured_constraint = parse_request_constraint(self.body)
++            except ValueError as e:
++                self._set_completion_headers(400)
++                self.end_headers()
++                self.wfile.write(json.dumps({"error": str(e)}).encode())
++                return
++        elif any(self.body.get(field) is not None for field in STRUCTURED_FIELDS):
++            logging.warning(
++                "Structured output parameters were ignored: install "
++                "mlx-lm-structured to enforce them"
++            )
++
+         # Get stop sequences
+         stop_words = self.body.get("stop")
+         stop_words = stop_words or []
+@@ -1395,6 +1450,7 @@ class APIHandler(BaseHTTPRequestHandler):
+                 presence_context_size=self.presence_context_size,
+                 frequency_penalty=self.frequency_penalty,
+                 frequency_context_size=self.frequency_context_size,
++                structured=self.structured_constraint,
+             ),
+             stop_words=stop_words,
+             max_tokens=self.max_tokens,
+-- 
+2.43.0
+
