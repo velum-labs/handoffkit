@@ -30,9 +30,18 @@ export async function runSession(input: {
   const { contract, repoDir, secrets, mockScriptPath, emit, backends } = input;
 
   const requested = contract.isolation ?? "process";
+  const matching = backends.filter((b) => b.isolation === requested);
+  if (matching.length > 1) {
+    // Fail fast instead of silently letting the first registration shadow
+    // the rest: composite backends (e.g. the AI SDK harness driver, which
+    // embeds the plain vercel-sandbox backend as its fallback) are the one
+    // sanctioned way to combine behaviors within a tier.
+    throw new CapabilityMismatchError(
+      `runner has ${matching.length} backends for isolation "${requested}"; register exactly one per tier`
+    );
+  }
   const backend: SessionBackend | undefined =
-    backends.find((b) => b.isolation === requested) ??
-    (requested === "process" ? new ProcessSessionBackend() : undefined);
+    matching[0] ?? (requested === "process" ? new ProcessSessionBackend() : undefined);
   if (!backend) {
     throw new CapabilityMismatchError(
       `runner has no backend for isolation "${requested}"`

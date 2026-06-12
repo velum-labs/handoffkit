@@ -11,13 +11,8 @@
  * adapter treats "" as present-but-falsy, so it neither falls back to the
  * host environment nor exports the variable into the bridge.
  */
-import { CapabilityError } from "@warrant/session-vercel-sandbox";
-
-/** Mirrors ClaudeCodeAuthOptions from @ai-sdk/harness-claude-code. */
-export type ClaudeCodeAuth = {
-  anthropic?: { apiKey?: string; authToken?: string; baseUrl?: string };
-  gateway?: { apiKey?: string; baseUrl?: string };
-};
+import type { ClaudeCodeAuthOptions } from "@ai-sdk/harness-claude-code";
+import { CapabilityMismatchError } from "@warrant/runner";
 
 /**
  * The only environment variables this harness path can honor: the adapter
@@ -25,7 +20,7 @@ export type ClaudeCodeAuth = {
  * else in the contract's env policy fails closed instead of being silently
  * dropped.
  */
-export const SUPPORTED_AUTH_VARS = [
+const SUPPORTED_AUTH_VARS = [
   "AI_GATEWAY_API_KEY",
   "AI_GATEWAY_BASE_URL",
   "ANTHROPIC_API_KEY",
@@ -47,11 +42,13 @@ const DEFAULT_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh";
  * the agent runtime, and when no credential is present at all (the adapter
  * would otherwise fall back to the runner host's own credentials).
  */
-export function claudeCodeAuthFromEnv(env: Record<string, string>): ClaudeCodeAuth {
+export function claudeCodeAuthFromEnv(
+  env: Record<string, string>
+): ClaudeCodeAuthOptions {
   const supported = new Set<string>(SUPPORTED_AUTH_VARS);
   const unsupported = Object.keys(env).filter((name) => !supported.has(name));
   if (unsupported.length > 0) {
-    throw new CapabilityError(
+    throw new CapabilityMismatchError(
       `ai-sdk harness backend cannot deliver env vars [${unsupported.join(", ")}] ` +
         `to the agent runtime; supported: ${SUPPORTED_AUTH_VARS.join(", ")}`
     );
@@ -79,7 +76,7 @@ export function claudeCodeAuthFromEnv(env: Record<string, string>): ClaudeCodeAu
     };
   }
 
-  throw new CapabilityError(
+  throw new CapabilityMismatchError(
     "claude-code over the ai-sdk harness requires a credential released into the " +
       "session env (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or AI_GATEWAY_API_KEY); " +
       "refusing to fall back to the runner host environment"

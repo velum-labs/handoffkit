@@ -16,9 +16,8 @@ import type {
 } from "@ai-sdk/harness";
 import type { RunContract } from "@warrant/protocol";
 import { verifyReceiptBundle } from "@warrant/protocol";
-import { prepareExecution } from "@warrant/runner";
+import { CapabilityMismatchError, prepareExecution } from "@warrant/runner";
 import type { SessionBackend, SessionExecution } from "@warrant/runner";
-import { CapabilityError } from "@warrant/session-vercel-sandbox";
 import { makeRepo, startStack } from "@warrant/testkit";
 import type { Stack } from "@warrant/testkit";
 import { captureWorkspace } from "@warrant/workspace";
@@ -68,7 +67,7 @@ test("auth: no credential in the session env fails closed", () => {
   assert.throws(
     () => claudeCodeAuthFromEnv({}),
     (error: unknown) =>
-      error instanceof CapabilityError && /refusing to fall back/.test(error.message)
+      error instanceof CapabilityMismatchError && /refusing to fall back/.test(error.message)
   );
 });
 
@@ -76,7 +75,7 @@ test("auth: env vars the harness path cannot deliver fail closed", () => {
   assert.throws(
     () => claudeCodeAuthFromEnv({ ANTHROPIC_API_KEY: "k", CUSTOM_FLAG: "1" }),
     (error: unknown) =>
-      error instanceof CapabilityError && /CUSTOM_FLAG/.test(error.message)
+      error instanceof CapabilityMismatchError && /CUSTOM_FLAG/.test(error.message)
   );
 });
 

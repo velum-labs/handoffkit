@@ -11,7 +11,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@ai-sdk/harness": "1.0.0-canary.6",
     "@ai-sdk/harness-claude-code": "1.0.0-canary.2",
@@ -19,12 +21,12 @@
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",
     "@warrant/session-vercel-sandbox": "workspace:*",
-    "@warrant/workspace": "workspace:*",
     "ws": "8.21.0"
   },
   "devDependencies": {
     "@warrant/plane": "workspace:*",
     "@warrant/sdk": "workspace:*",
-    "@warrant/testkit": "workspace:*"
+    "@warrant/testkit": "workspace:*",
+    "@warrant/workspace": "workspace:*"
   }
 }

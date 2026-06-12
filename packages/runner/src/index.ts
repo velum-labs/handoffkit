@@ -19,8 +19,10 @@ export {
   DEFAULT_TIMEOUT_MS,
   defaultExecutionForContract,
   executionHash,
+  executionSpecFor,
   prepareExecution,
-  requireShellExecution
+  requireShellExecution,
+  resolveSessionEnv
 } from "./execution.js";
 export type {
   BackendExecutionKind,

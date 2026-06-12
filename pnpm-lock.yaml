@@ -409,9 +409,6 @@ importers:
       '@warrant/session-vercel-sandbox':
         specifier: workspace:*
         version: link:../session-vercel-sandbox
-      '@warrant/workspace':
-        specifier: workspace:*
-        version: link:../workspace
       ws:
         specifier: 8.21.0
         version: 8.21.0
@@ -425,6 +422,9 @@ importers:
       '@warrant/testkit':
         specifier: workspace:*
         version: link:../testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../workspace
 
   packages/session-hermetic:
     dependencies:
