@@ -1,0 +1,27 @@
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "mlx-lm-structured"
+version = "0.1.0"
+description = "Constrained/structured decoding overlay for mlx_lm.server (OpenAI response_format + vLLM-style guided_* params) built on outlines-core"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "UNLICENSED" }
+dependencies = ["outlines-core==0.2.14"]
+
+[project.optional-dependencies]
+# The server overlay itself; only installable where mlx wheels exist.
+server = ["mlx-lm==0.31.3"]
+
+[project.scripts]
+mlx-lm-structured-server = "mlx_lm_structured.server:main"
+
+[dependency-groups]
+# numpy+numba drive the outlines-core numpy kernels used by the test suite so
+# the package tests run on hosts without Apple Silicon / mlx.
+dev = ["pytest>=8", "numpy>=1.26", "numba>=0.60"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
