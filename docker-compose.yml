@@ -5,10 +5,19 @@
 #   open http://localhost:7172/ui/
 #   docker compose exec plane warrant ui        # control panel login token
 #   docker compose exec plane warrant runs      # ...or use the CLI directly
+#
+# WARRANT_MASTER_KEY seals the org signing key and the secret store at rest.
+# A dev default is provided so the demo runs out of the box; set a real
+# 32-byte key (e.g. `openssl rand -hex 32`) in production:
+#
+#   WARRANT_MASTER_KEY=$(openssl rand -hex 32) docker compose up
 services:
   plane:
     build: .
     init: true
+    environment:
+      WARRANT_MASTER_KEY: "${WARRANT_MASTER_KEY:-dev-master-key-change-me-in-production-00000000}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
     command:
       - sh
       - -c
@@ -18,9 +27,10 @@ services:
     ports:
       - "7172:7172"
     volumes:
+      # Persists config, master key, the SQLite database, and blobs.
       - warrant-home:/data/warrant
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7172/v1/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7172/v1/ready"]
       interval: 2s
       timeout: 2s
       retries: 30
@@ -31,6 +41,9 @@ services:
     depends_on:
       plane:
         condition: service_healthy
+    environment:
+      WARRANT_MASTER_KEY: "${WARRANT_MASTER_KEY:-dev-master-key-change-me-in-production-00000000}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
     command: warrant runner start --pool default --plane http://plane:7172 --data-dir /data/runner
     volumes:
       # The runner reads only the enroll token from the shared home; its own

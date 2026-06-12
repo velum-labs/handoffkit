@@ -13,8 +13,8 @@ COPY packages ./packages
 COPY examples ./examples
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
-# The kernel has zero third-party runtime dependencies; a prod-only install
-# drops the TypeScript toolchain while keeping the workspace links intact.
+# A prod-only install drops the TypeScript toolchain while keeping the
+# workspace links and the trusted runtime deps (jose/pino/zod) intact.
 RUN CI=true pnpm install --prod --frozen-lockfile
 
 FROM node:22-bookworm-slim AS runtime

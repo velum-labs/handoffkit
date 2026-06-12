@@ -8,7 +8,7 @@ The two core objects are the **run contract** (a signed authorization to execute
 
 ## Status
 
-The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and compute adapters, CLI, demo series, and Docker deployment are implemented. The trust-critical kernel runs on Node built-ins only; adapters may use trusted, exact-pinned third-party dependencies (see "Dependency policy" below). The validation gate in the spec (design-partner interviews) still governs go-to-market.
+The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and compute adapters, CLI, demo series, and Docker deployment are implemented. The control plane is hardened: durable transactional SQLite storage, atomic run claims, durable replay protection, role-based principal auth with rotation/revocation, IdP-backed approvals, request validation, rate limiting, master-key at-rest encryption, retention/GC, and structured logging + metrics (see "Hardening and operations" below). The protocol/verifier packages still use only Node built-ins, keeping the offline verifier maximally auditable; other packages use trusted, exact-pinned third-party dependencies (see "Dependency policy"). The validation gate in the spec (design-partner interviews) still governs go-to-market.
 
 ## Repository layout
 
@@ -16,7 +16,7 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | --- | --- |
 | [`@warrant/protocol`](packages/protocol) | The open data contracts (`warrant.contract.v1`, `receipt.v1`, `event.v1`, `manifest.v1`, `policy.v1`, `checkpoint.v1`, `envelope.v1`), the wire API types, and the primitives to sign, hash-chain, and verify them offline. |
 | [`@warrant/workspace`](packages/workspace) | Git workspace capture (with provable secret-pattern denial), session materialization, output collection, and divergence-safe pull. |
-| [`@warrant/plane`](packages/plane) | Control plane: contracts, policy evaluation, approvals, receipt countersignature, secret broker, audit export — and the control panel UI it serves at `/ui/`. |
+| [`@warrant/plane`](packages/plane) | Control plane: contracts, policy evaluation, role-based principal auth, IdP-backed approvals, receipt countersignature, secret broker, durable SQLite storage, rate limiting, retention/GC, metrics, audit export — and the control panel UI at `/ui/`. |
 | [`@warrant/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. Pluggable session-isolation backends. |
 | [`@warrant/session-hermetic`](packages/session-hermetic) | Hermetic session backend: a simulated bash interpreter ([just-bash](https://github.com/vercel-labs/just-bash)) with a virtual filesystem and interpreter-enforced egress. No real process or socket to escape with. |
 | [`@warrant/session-vercel-sandbox`](packages/session-vercel-sandbox) | Vercel Sandbox session backend: each session runs in a Firecracker microVM with VM-level isolation and domain egress policy. Experimental, integration-gated. |
@@ -262,9 +262,28 @@ new Runner({ planeUrl, pool, enrollToken, backends: [hermeticBackend(), vercelSa
 
 This is the execution substrate the spec places *below* Warrant ("E2B, Modal, Daytona, Vercel Sandbox, local Docker, and customer VPCs sit below"): Warrant owns the contract, policy, secret release, and receipt; the backend owns only how the session is isolated.
 
+## Hardening and operations
+
+The control plane is built for a single-node production deployment, with the security-critical paths hardened:
+
+- Durable, transactional storage (`node:sqlite`, WAL) behind a `PlaneStore` interface. Run claims are an atomic compare-and-set (no double-claim), and the claim-completion nonce ledger is a durable UNIQUE-constrained table, so replay protection survives restarts.
+- Role-based identity: principals with roles (`admin`/`requester`/`approver`/`enroller`), per-principal API keys that can be issued, rotated, and revoked, and capability-gated routes. Runner enrollment uses single-use expiring tokens (or a revocable bootstrap enroller credential).
+- IdP-backed approvals: an approval can carry an IdP-issued JWT, verified against configured JWKS, so consent is attributable to a real subject.
+- Boundary validation (`zod`) with structured 400s, plus per-principal/per-IP token-bucket rate limiting and auth-failure backoff.
+- At-rest encryption: the org signing key and the secret store are sealed (scrypt + AES-256-GCM) with a master key supplied via `WARRANT_MASTER_KEY` (or a generated 0600 key file). No key material lives in `config.json`.
+- Retention and GC: a sweeper enforces the `RetentionPolicy` and reference-counted blob GC; `pino` structured logging (set `LOG_LEVEL`), metrics counters, and `/v1/ready` + `/v1/metrics`.
+
+Operational notes:
+
+- Set `WARRANT_MASTER_KEY` (e.g. `openssl rand -hex 32`) in any real deployment; the same value must be present wherever the plane or a CLI loads the home (the runner shares it to read the home config). `docker compose` injects a labeled dev default you should override.
+- Performance budgets from spec section 8.4 are asserted by `pnpm bench` (corpus size via `WARRANT_BENCH_FILES`).
+- Manage principals and enrollment from the CLI/API: `POST /v1/principals`, `POST /v1/enroll-tokens`, `GET /v1/metrics`.
+
+What remains explicitly out of scope: true multi-node HA (the `PlaneStore` interface is the seam for a Postgres adapter), real TEE attestation (still labeled `mock`), and a full OIDC login UI (only IdP assertion verification is implemented).
+
 ## Dependency policy
 
-Third-party dependencies are allowed, but only trusted, exact-pinned versions on the explicit allowlist in `scripts/check-repo.mjs`, and only in adapter and example packages. The trust-critical kernel — protocol, workspace, sdk, plane, runner, handoff, cli — stays on Node built-ins so receipts remain verifiable without trusting anyone's dependency tree. Reinforced by `.npmrc`: `save-exact`, `ignore-scripts`, `verify-store-integrity`, frozen lockfile installs, and a 24-hour `minimum-release-age` against fresh-release supply-chain attacks. Bumping a dependency requires updating the allowlist pin — that review step is the point.
+Third-party dependencies are allowed in any package, but only trusted, exact-pinned versions on the explicit allowlist in `scripts/check-repo.mjs`. There is no zero-dependency rule; trust comes from pinning reviewed versions plus the `.npmrc` supply-chain controls (`save-exact`, `ignore-scripts`, `verify-store-integrity`, frozen lockfile installs, and a 24-hour `minimum-release-age` against fresh-release attacks), not from the absence of dependencies. The protocol/sdk/workspace packages still happen to use only Node built-ins, which keeps the offline verifier maximally auditable — a property, not a gate. Bumping a dependency means updating the allowlist pin, which is the review checkpoint.
 
 ## Thesis
 
@@ -294,11 +313,14 @@ If the platform cannot answer those questions from a signed receipt, on one scre
 
 ```sh
 pnpm verify          # repo checks + build + the full test suite
-pnpm test            # unit + integration: protocol, policy, workspace, plane API/UI, planner, handoff e2e, CLI e2e, demos
+pnpm test            # unit + integration: protocol, policy, workspace, plane API/UI,
+                     # plane hardening (atomic claim, replay, auth/roles, rate limit,
+                     # sealing, retention), planner, handoff e2e, CLI e2e, demos
 pnpm demo all        # the demo series doubles as an executable acceptance suite
+pnpm bench           # asserts the spec section 8.4 performance budgets
 ```
 
-CI runs the suite plus a Docker Compose smoke test (build, boot, seed, hit the API and control panel).
+CI runs the suite, the demo series, the performance benchmark, and a Docker Compose smoke test (build, boot, seed, hit the API, readiness, metrics, and control panel).
 
 ## Current artifacts
 
