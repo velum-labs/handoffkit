@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,26 +16,10 @@ import { generateEd25519KeyPair, verifyReceiptBundle } from "@warrant/protocol";
 import type { ReceiptBundle, RunRequestInput } from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
 import { PlaneClient, PlaneClientError } from "@warrant/sdk";
+import { git, makeRepo } from "@warrant/testkit";
 import { captureWorkspace, pullRun } from "@warrant/workspace";
 
 const SECRET_VALUE = "super-sensitive-value-1234";
-
-function git(cwd: string, args: string[]): string {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  assert.equal(result.status, 0, `git ${args.join(" ")}: ${result.stderr}`);
-  return result.stdout;
-}
-
-function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "warrant-e2e-repo-"));
-  git(dir, ["init", "--quiet", "--initial-branch=main"]);
-  git(dir, ["config", "user.email", "test@warrant.local"]);
-  git(dir, ["config", "user.name", "warrant-test"]);
-  writeFileSync(join(dir, "README.md"), "# e2e fixture\n");
-  git(dir, ["add", "-A"]);
-  git(dir, ["commit", "--quiet", "-m", "init"]);
-  return dir;
-}
 
 let planeDir: string;
 let runnerDir: string;
@@ -48,7 +31,7 @@ let runner: Runner;
 before(async () => {
   planeDir = mkdtempSync(join(tmpdir(), "warrant-e2e-plane-"));
   runnerDir = mkdtempSync(join(tmpdir(), "warrant-e2e-runner-"));
-  repoDir = makeRepo();
+  repoDir = makeRepo({ files: { "README.md": "# e2e fixture\n" } });
 
   const policy = defaultPolicy();
   policy.runners.allowPools = ["eng-prod"];

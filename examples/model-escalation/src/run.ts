@@ -1,59 +1,35 @@
-import { rmSync } from "node:fs";
-
 import { generateText } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
 
 import { withModel } from "@warrant/adapter-ai-sdk";
 import { handoff, localFirst, targets, triggers } from "@warrant/handoff";
-import { makeRepo, startStack } from "@warrant/testkit";
+import { withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, finale, ok, resolveDemoModels, step } from "@warrant/example-utils";
+import {
+  demoBanner,
+  detail,
+  finale,
+  mockTextModel,
+  ok,
+  resolveDemoModels,
+  step
+} from "@warrant/example-utils";
 
 const POOL = "eng-prod";
 
-const usage = {
-  inputTokens: {
-    total: 4,
-    noCache: 4,
-    cacheRead: undefined,
-    cacheWrite: undefined
-  },
-  outputTokens: { total: 4, text: 4, reasoning: undefined }
-};
-
-function mockModel(id: string, text: string): MockLanguageModelV3 {
-  return new MockLanguageModelV3({
-    modelId: id,
-    doGenerate: async () => ({
-      content: [{ type: "text" as const, text }],
-      finishReason: { unified: "stop" as const, raw: "stop" },
-      usage,
-      warnings: []
-    })
-  });
-}
-
-const DEMO_ID = "12";
-const DEMO_TITLE = "model escalation";
-const DEMO_SUMMARY =
-  "h.model starts on the local model and escalates to cloud under deterministic conditions — here, a prompt-size threshold standing in for 'context too large'. Every routing decision lands in the trace, and escalation makes continuation 'needed'.";
-
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("12");
 
-  const stack = await startStack({ pool: POOL, startRunner: true });
-  const repo = makeRepo({ files: { "notes.md": "# scratch\n" } });
-  try {
+  await withStackAndRepo({ pool: POOL, startRunner: true, files: { "notes.md": "# scratch\n" } }, async ({ stack, repo }) => {
     step("two models: a small local one and a cloud one (real when configured)");
     const resolved = resolveDemoModels();
     detail(resolved.description);
     const local: LanguageModelV3 =
       (resolved.source === "live" ? resolved.local : undefined) ??
-      mockModel("tiny-local-8b", "Quick local answer: the notes file is fine.");
+      mockTextModel("tiny-local-8b", "Quick local answer: the notes file is fine.");
     const cloud: LanguageModelV3 =
       (resolved.source === "live" ? resolved.cloud : undefined) ??
-      mockModel(
+      mockTextModel(
         "frontier-cloud",
         "Here is the migration plan, computed with the larger context."
       );
@@ -113,10 +89,7 @@ async function main(): Promise<void> {
       `summary: ${summary.modelRoutes.local} local route(s), ${summary.modelRoutes.cloud} cloud route(s), ${summary.modelRoutes.escalations} escalation(s)`
     );
     finale("escalation is honest: between calls, deterministic, and fully explained in the trace");
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {

@@ -65,9 +65,6 @@ importers:
       '@warrant/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
-      '@warrant/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
 
   examples/control-panel:
     dependencies:
@@ -80,9 +77,6 @@ importers:
       '@warrant/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
-      '@warrant/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
 
   examples/dry-run:
     dependencies:
@@ -110,9 +104,6 @@ importers:
       '@warrant/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
-      '@warrant/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
 
   examples/golden-interface:
     dependencies:
@@ -149,9 +140,6 @@ importers:
       '@warrant/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
-      '@warrant/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
 
   examples/handoff:
     dependencies:
@@ -182,9 +170,6 @@ importers:
       '@warrant/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
-      '@warrant/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
 
   examples/mlx:
     dependencies:
@@ -227,9 +212,6 @@ importers:
       '@warrant/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
-      '@warrant/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
 
   examples/parallel-fanout:
     dependencies:
@@ -341,6 +323,9 @@ importers:
       '@ai-sdk/provider':
         specifier: 3.0.10
         version: 3.0.10
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
 
   packages/handoff:
     dependencies:

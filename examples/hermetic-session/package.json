@@ -9,7 +9,6 @@
     "@warrant/cli": "workspace:*",
     "@warrant/example-utils": "workspace:*",
     "@warrant/session-hermetic": "workspace:*",
-    "@warrant/testkit": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@warrant/testkit": "workspace:*"
   }
 }

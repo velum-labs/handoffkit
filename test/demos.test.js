@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const RUN = "scripts/demo.mjs";
+
+const MANIFEST = JSON.parse(
+  readFileSync(new URL("../examples/manifest.json", import.meta.url), "utf8")
+);
 
 function demo(args) {
   const result = spawnSync(process.execPath, [RUN, ...args], {
@@ -16,11 +21,12 @@ function demo(args) {
   };
 }
 
-test("the demo dispatcher lists every standalone example", () => {
+test("the demo dispatcher lists every example in the manifest", () => {
   const result = demo([]);
   assert.equal(result.status, 0, result.stderr);
-  for (const id of ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13"]) {
-    assert.match(result.stdout, new RegExp(`\\b${id}\\b`), `demo ${id} must be listed`);
+  assert.ok(MANIFEST.demos.length >= 13, "manifest must keep the demo series");
+  for (const entry of MANIFEST.demos) {
+    assert.match(result.stdout, new RegExp(`\\b${entry.id}\\b`), `demo ${entry.id} must be listed`);
   }
 });
 

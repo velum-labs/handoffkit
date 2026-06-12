@@ -1,7 +1,8 @@
-import { makeRepo, startStack } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import { rmSync } from "node:fs";
 
-import { banner, bold, detail, finale, ok, step } from "@warrant/example-utils";
+import { makeRepo, mockRunRequest, startStack, uploadWorkspace } from "@warrant/testkit";
+
+import { bold, demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
 import { seedShowcase } from "@warrant/seed-example";
 
 // This demo intentionally binds the canonical Warrant port so the printed
@@ -9,13 +10,8 @@ import { seedShowcase } from "@warrant/seed-example";
 const PORT = Number(process.env.WARRANT_DEMO_PORT ?? 7172);
 const POOL = "eng-prod";
 
-const DEMO_ID = "08";
-const DEMO_TITLE = "control panel";
-const DEMO_SUMMARY =
-  "Boot a plane + runner, seed realistic runs (a continuation, a success, a failure, a cancellation, and one awaiting approval), and leave the control panel up for you to explore.";
-
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("08");
 
   step(`boot a plane on port ${PORT} with a polling runner (pool: ${POOL})`);
   const stack = await startStack({
@@ -41,19 +37,16 @@ async function main(): Promise<void> {
 
   step("plus one run blocked on consent, so you can approve it from the UI");
   const repo = makeRepo();
-  const captured = captureWorkspace(repo);
-  await stack.client.putBlob(captured.bundle);
-  const pending = await stack.client.requestRun({
-    requestedBy: { kind: "human", id: "dana@example.com" },
-    agentKind: "mock",
-    prompt: "deploy to staging with the scoped credential",
-    pool: POOL,
-    secretNames: ["MOCK_SECRET"],
-    workspace: captured.manifest,
-    network: { defaultDeny: true, allowHosts: [] },
-    budget: {},
-    disclosure: "minimal-context"
-  });
+  const captured = await uploadWorkspace(stack.client, repo);
+  const pending = await stack.client.requestRun(
+    mockRunRequest({
+      requestedBy: { kind: "human", id: "dana@example.com" },
+      prompt: "deploy to staging with the scoped credential",
+      pool: POOL,
+      secretNames: ["MOCK_SECRET"],
+      workspace: captured.manifest
+    })
+  );
   ok(`run ${pending.runId} is awaiting approval — approve it in the panel and watch it execute`);
 
   console.log("");
@@ -74,6 +67,7 @@ async function main(): Promise<void> {
     process.once("SIGTERM", () => resolve());
   });
   await stack.stop();
+  rmSync(repo, { recursive: true, force: true });
 }
 
 main().catch((error: unknown) => {

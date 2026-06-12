@@ -177,13 +177,14 @@ async function cmdRun(dir: string, argv: string[]): Promise<void> {
   if (!prompt) fail("a task prompt is required");
 
   const home = loadHome(dir);
-  const client = new PlaneClient(home.config.planeUrl, home.config.adminToken);
+  const client = clientFor(dir);
   const repoDir = resolve(values.repo ?? ".");
 
   const captured = captureWorkspace(repoDir, {
     allowUntracked: values["allow-untracked"] ?? []
   });
 
+  const isolation = isolationFlag(values.isolation);
   const request: RunRequestInput = {
     requestedBy: { kind: "human", id: home.config.requestedBy },
     agentKind: values.agent,
@@ -197,9 +198,7 @@ async function cmdRun(dir: string, argv: string[]): Promise<void> {
     },
     budget: {},
     disclosure: "minimal-context",
-    ...(isolationFlag(values.isolation)
-      ? { isolation: isolationFlag(values.isolation) }
-      : {})
+    ...(isolation ? { isolation } : {})
   };
 
   if (values["dry-run"]) {
@@ -248,13 +247,12 @@ async function cmdContinue(dir: string, argv: string[]): Promise<void> {
     allowUntracked: values["allow-untracked"] ?? []
   });
 
+  const isolation = isolationFlag(values.isolation);
   const continueOptions = {
     task: prompt,
     ...(values.reason ? { reason: values.reason } : {}),
     ...(transcript !== undefined ? { transcript } : {}),
-    ...(isolationFlag(values.isolation)
-      ? { session: isolationFlag(values.isolation) }
-      : {})
+    ...(isolation ? { session: isolation } : {})
   };
 
   if (values["dry-run"]) {

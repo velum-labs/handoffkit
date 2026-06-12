@@ -1,23 +1,12 @@
-import { rmSync } from "node:fs";
-
 import { agents, handoff, localFirst, reviewStrategies, targets } from "@warrant/handoff";
-import { makeRepo, startStack } from "@warrant/testkit";
+import { withStackAndRepo } from "@warrant/testkit";
 
-import { banner, detail, finale, ok, step } from "@warrant/example-utils";
-
-const DEMO_ID = "07";
-const DEMO_TITLE = "parallel fan-out and review";
-const DEMO_SUMMARY =
-  "Fork one checkpoint into isolated attempts, each with its own contract and receipt, then choose deterministically. Topology, not an agent tournament.";
+import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
 
 async function main(): Promise<void> {
-  banner(DEMO_ID, DEMO_TITLE, DEMO_SUMMARY);
+  demoBanner("07");
 
-  const stack = await startStack({ pool: "eng-prod" });
-  const repo = makeRepo({
-    files: { "README.md": "# migration target\n", "legacy.ts": "export var x = 1;\n" }
-  });
-  try {
+  await withStackAndRepo({ pool: "eng-prod", files: { "README.md": "# migration target\n", "legacy.ts": "export var x = 1;\n" } }, async ({ stack, repo }) => {
     const h = handoff({
       workspace: repo,
       plane: { url: stack.planeUrl, adminToken: stack.adminToken },
@@ -77,10 +66,7 @@ async function main(): Promise<void> {
       detail(`${run.runId}: ${bundle.receipt.status}, ${bundle.receipt.eventCount} events, contract ${bundle.receipt.contractHash.slice(0, 12)}`);
     }
     finale("fan-out is one continuation pattern inside the same governed plane");
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-  }
+  });
 }
 
 main().catch((error: unknown) => {
