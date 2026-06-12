@@ -27,6 +27,11 @@ const requiredFiles = [
   "python/uniroute/pyproject.toml",
   "python/uniroute/src/uniroute/__init__.py",
   "python/uniroute/tests/test_end_to_end.py",
+  "python/uniroute-mlx/pyproject.toml",
+  "python/uniroute-mlx/src/uniroute_mlx/card.py",
+  "python/uniroute-mlx/tests/test_cli_end_to_end.py",
+  "packages/adapter-ai-sdk/src/routed-model.ts",
+  "packages/adapter-ai-sdk/src/test/routed-model.test.ts",
   // package entry points
   "packages/protocol/src/index.ts",
   "packages/protocol/src/types.ts",
