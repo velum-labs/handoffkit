@@ -8,7 +8,7 @@ from mlx_lm_structured.compile import IndexCache
 from mlx_lm_structured.processor import StructuredLogitsProcessor
 from mlx_lm_structured.spec import ConstraintSpec
 
-from .conftest import EOS_ID, SECONDARY_EOS_ID, VOCAB_SIZE, TOKEN_STRINGS
+from vocab_fixture import EOS_ID, SECONDARY_EOS_ID, VOCAB_SIZE, TOKEN_STRINGS
 
 TOKEN_IDS = {s: i for i, s in enumerate(TOKEN_STRINGS)}
 MODEL_KEY = ("test-model", None, None)

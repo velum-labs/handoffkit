@@ -19,6 +19,7 @@ from mlx_lm_structured.seams import (
     make_init_wrapper,
     make_logits_processors_wrapper,
 )
+from vocab_fixture import TOKEN_STRINGS, VOCAB_SIZE
 
 MODEL_KEY = ("fake-model", None, None)
 
@@ -179,8 +180,6 @@ def test_logits_processors_wrapper_appends_structured_processor(tokenizer):
     assert isinstance(processors[-1], StructuredLogitsProcessor)
 
     # The processor actually masks: only 'a'/'ab' tokens may start the match.
-    from .conftest import TOKEN_STRINGS, VOCAB_SIZE
-
     token_ids = {s: i for i, s in enumerate(TOKEN_STRINGS)}
     logits = np.zeros((1, VOCAB_SIZE), dtype=np.float32)
     out = processors[-1](np.array([7, 7], dtype=np.int64), logits)

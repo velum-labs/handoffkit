@@ -8,7 +8,7 @@ from mlx_lm_structured.compile import (
 )
 from mlx_lm_structured.spec import ConstraintSpec, ConstraintSpecError
 
-from .conftest import EOS_ID, SECONDARY_EOS_ID
+from vocab_fixture import EOS_ID, SECONDARY_EOS_ID
 
 
 def test_spec_to_regex_json_schema():
