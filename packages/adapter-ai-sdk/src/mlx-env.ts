@@ -30,10 +30,20 @@ import { delimiter, dirname, join } from "node:path";
  *
  * The mlx-lm pin follows the same trusted-pin policy as the repo's npm
  * allowlist: exact version, bumped only as a reviewed code change.
+ *
+ * Toolchain: provisioning prefers `uv` when available (an explicit path,
+ * WARRANT_UV, or PATH discovery) — it is much faster and can supply its own
+ * managed CPython, removing even the system-python requirement. Without uv
+ * it falls back to stdlib `python3 -m venv` + pip, so uv is an upgrade,
+ * never a dependency. uv's caches and managed interpreters are contained
+ * inside the owned directory, so destroy() removes them too.
  */
 
 /** Exact-pinned mlx-lm version this provisioner installs. */
 export const MLX_LM_PIN = "0.31.3";
+
+/** Python version requested from uv (which can download it if absent). */
+export const PYTHON_PIN = "3.12";
 
 /** Minimum Python the venv may be built from. */
 const MIN_PYTHON = { major: 3, minor: 9 };
@@ -45,12 +55,12 @@ export function defaultMlxDir(): string {
 
 export type MlxEnvManifest = {
   version: "warrant.mlxenv.v1";
-  /** What pip installed (e.g. "mlx-lm==0.31.3"). */
+  /** What was installed (e.g. "mlx-lm==0.31.3"). */
   packageSpec: string;
   /** Module whose import proves the install is usable. */
   importName: string;
-  /** The system interpreter the venv was created from. */
-  basePython: string;
+  /** What built the env: "uv <version>" or "venv+pip via <interpreter>". */
+  toolchain: string;
   /** The venv interpreter every spawn uses. */
   interpreterPath: string;
   pythonVersion: string;
@@ -79,30 +89,51 @@ export class MlxCapabilityError extends Error {
 export type MlxEnvOptions = {
   /** Owned directory. Defaults to ~/.warrant/mlx. */
   dir?: string;
-  /** pip requirement to install. Defaults to the MLX_LM_PIN pin. */
+  /** Requirement to install. Defaults to the MLX_LM_PIN pin. */
   packageSpec?: string;
   /** Import that must succeed after install. Defaults to "mlx_lm". */
   importName?: string;
-  /** Explicit base interpreter; otherwise "python3" is resolved and checked. */
+  /**
+   * Explicit base interpreter. Setting this forces the stdlib venv+pip
+   * toolchain with exactly that interpreter (an escape hatch from uv).
+   */
   python?: string;
+  /**
+   * uv binary to provision with, or `false` to disable uv entirely.
+   * Default: WARRANT_UV if set, otherwise "uv" discovered on PATH,
+   * otherwise the stdlib venv+pip fallback.
+   */
+  uv?: string | false;
+  /** Python version requested from uv. Defaults to PYTHON_PIN. */
+  pythonVersion?: string;
   /**
    * Enforce the MLX platform gate (macOS on Apple Silicon). Defaults to
    * true; tests provisioning stub packages on other hosts disable it.
    */
   requirePlatform?: boolean;
   /**
-   * Override the install step (default: `pip install --no-input <spec>`
-   * with the venv's pip). Tests inject an offline installer.
+   * Override the install step (default: install <packageSpec> into the
+   * venv with the resolved toolchain). Tests inject an offline installer.
    */
   install?: (venvPython: string, packageSpec: string) => void;
 };
 
+/** How the venv gets built and populated. */
+type Toolchain =
+  | { kind: "uv"; bin: string; version: string }
+  | { kind: "venv-pip"; python: string };
+
 type RunResult = { status: number; stdout: string; stderr: string };
 
-function run(cmd: string, args: string[], env?: Record<string, string>): RunResult {
+/** Run a command; `extraEnv` overlays (never replaces) the process env. */
+function run(
+  cmd: string,
+  args: string[],
+  extraEnv?: Record<string, string>
+): RunResult {
   const result = spawnSync(cmd, args, {
     encoding: "utf8",
-    ...(env ? { env } : {})
+    ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {})
   });
   if (result.error) {
     return { status: 127, stdout: "", stderr: result.error.message };
@@ -130,6 +161,8 @@ export class MlxEnv {
   private readonly importName: string;
   private readonly requirePlatform: boolean;
   private readonly explicitPython: string | undefined;
+  private readonly uvOption: string | false | undefined;
+  private readonly pythonVersion: string;
   private readonly installHook:
     | ((venvPython: string, packageSpec: string) => void)
     | undefined;
@@ -141,6 +174,8 @@ export class MlxEnv {
     this.importName = options.importName ?? "mlx_lm";
     this.requirePlatform = options.requirePlatform ?? true;
     this.explicitPython = options.python;
+    this.uvOption = options.uv;
+    this.pythonVersion = options.pythonVersion ?? PYTHON_PIN;
     this.installHook = options.install;
   }
 
@@ -164,6 +199,14 @@ export class MlxEnv {
 
   get logsDir(): string {
     return join(this.dir, "logs");
+  }
+
+  /** uv's caches and managed interpreters, contained in the owned dir. */
+  private get uvEnv(): Record<string, string> {
+    return {
+      UV_CACHE_DIR: join(this.dir, "uv-cache"),
+      UV_PYTHON_INSTALL_DIR: join(this.dir, "uv-python")
+    };
   }
 
   private readManifest(): MlxEnvManifest | undefined {
@@ -195,16 +238,48 @@ export class MlxEnv {
     }
   }
 
-  /** Resolve and sanity-check the base interpreter used to build the venv. */
-  private resolveBasePython(): string {
-    const candidate = this.explicitPython ?? "python3";
+  /**
+   * Pick the provisioning toolchain. An explicit `python` option forces
+   * stdlib venv+pip with that interpreter; otherwise uv is preferred
+   * (explicit path, WARRANT_UV, or PATH discovery) with venv+pip as the
+   * no-extra-requirements fallback.
+   */
+  private resolveToolchain(): Toolchain {
+    if (this.explicitPython !== undefined) {
+      return { kind: "venv-pip", python: this.checkPython(this.explicitPython) };
+    }
+    if (this.uvOption !== false) {
+      const explicitUv = this.uvOption ?? process.env.WARRANT_UV;
+      const candidate = explicitUv ?? "uv";
+      const probe = run(candidate, ["--version"]);
+      if (probe.status === 0) {
+        return {
+          kind: "uv",
+          bin: candidate,
+          version: probe.stdout.trim().replace(/^uv\s+/, "")
+        };
+      }
+      // An explicitly requested uv that does not run is an error, not a
+      // silent fallback; PATH discovery falling through is expected.
+      if (explicitUv !== undefined) {
+        throw new MlxCapabilityError(
+          `requested uv ("${candidate}") is not runnable: ${probe.stderr.trim() || "not found"}`
+        );
+      }
+    }
+    return { kind: "venv-pip", python: this.checkPython("python3") };
+  }
+
+  /** Sanity-check a base interpreter for the stdlib venv+pip path. */
+  private checkPython(candidate: string): string {
     const probe = run(candidate, [
       "-c",
       "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"
     ]);
     if (probe.status !== 0) {
       throw new MlxCapabilityError(
-        `no usable Python interpreter ("${candidate}"): ${probe.stderr.trim() || "not found"}`
+        `no usable Python interpreter ("${candidate}"): ${probe.stderr.trim() || "not found"} ` +
+          "(install python3, or install uv and Warrant will manage Python itself)"
       );
     }
     const [major = 0, minor = 0] = probe.stdout.trim().split(".").map(Number);
@@ -276,7 +351,7 @@ export class MlxEnv {
 
   private async provision(): Promise<MlxEnvManifest> {
     this.assertPlatform();
-    const basePython = this.resolveBasePython();
+    const toolchain = this.resolveToolchain();
 
     mkdirSync(this.dir, { recursive: true });
     mkdirSync(this.hfCacheDir, { recursive: true });
@@ -287,29 +362,12 @@ export class MlxEnv {
     if (existsSync(this.venvDir)) {
       rmSync(this.venvDir, { recursive: true, force: true });
     }
-    const venv = run(basePython, ["-m", "venv", this.venvDir]);
-    if (venv.status !== 0) {
-      throw new MlxCapabilityError(
-        `failed to create venv with ${basePython} -m venv: ${venv.stderr.trim() || venv.stdout.trim()}`
-      );
-    }
+    this.createVenv(toolchain);
 
     if (this.installHook) {
       this.installHook(this.venvPython, this.packageSpec);
     } else {
-      const install = run(this.venvPython, [
-        "-m",
-        "pip",
-        "install",
-        "--no-input",
-        "--disable-pip-version-check",
-        this.packageSpec
-      ]);
-      if (install.status !== 0) {
-        throw new Error(
-          `pip install ${this.packageSpec} failed: ${install.stderr.trim().slice(-2000)}`
-        );
-      }
+      this.installPackage(toolchain);
     }
 
     if (!this.importWorks()) {
@@ -326,13 +384,63 @@ export class MlxEnv {
       version: "warrant.mlxenv.v1",
       packageSpec: this.packageSpec,
       importName: this.importName,
-      basePython,
+      toolchain:
+        toolchain.kind === "uv"
+          ? `uv ${toolchain.version}`
+          : `venv+pip via ${toolchain.python}`,
       interpreterPath: this.venvPython,
       pythonVersion: versionProbe.stdout.trim(),
       createdAt: new Date().toISOString()
     };
     writeFileSync(this.manifestPath, JSON.stringify(manifest, null, 2));
     return manifest;
+  }
+
+  private createVenv(toolchain: Toolchain): void {
+    if (toolchain.kind === "uv") {
+      // uv resolves the pinned Python from the system or downloads a
+      // managed CPython into the owned dir — no system-python requirement.
+      const result = run(
+        toolchain.bin,
+        ["venv", "--python", this.pythonVersion, this.venvDir],
+        this.uvEnv
+      );
+      if (result.status !== 0) {
+        throw new MlxCapabilityError(
+          `uv venv (python ${this.pythonVersion}) failed: ${result.stderr.trim() || result.stdout.trim()}`
+        );
+      }
+      return;
+    }
+    const result = run(toolchain.python, ["-m", "venv", this.venvDir]);
+    if (result.status !== 0) {
+      throw new MlxCapabilityError(
+        `failed to create venv with ${toolchain.python} -m venv: ${result.stderr.trim() || result.stdout.trim()}`
+      );
+    }
+  }
+
+  private installPackage(toolchain: Toolchain): void {
+    const result =
+      toolchain.kind === "uv"
+        ? run(
+            toolchain.bin,
+            ["pip", "install", "--python", this.venvPython, this.packageSpec],
+            this.uvEnv
+          )
+        : run(this.venvPython, [
+            "-m",
+            "pip",
+            "install",
+            "--no-input",
+            "--disable-pip-version-check",
+            this.packageSpec
+          ]);
+    if (result.status !== 0) {
+      throw new Error(
+        `installing ${this.packageSpec} failed: ${result.stderr.trim().slice(-2000)}`
+      );
+    }
   }
 
   /**

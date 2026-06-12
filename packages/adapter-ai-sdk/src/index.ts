@@ -21,7 +21,8 @@ export {
   defaultMlxDir,
   MLX_LM_PIN,
   MlxCapabilityError,
-  MlxEnv
+  MlxEnv,
+  PYTHON_PIN
 } from "./mlx-env.js";
 export type { MlxEnvManifest, MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
 export {

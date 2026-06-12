@@ -140,6 +140,8 @@ warrant run --agent claude-code --secret ANTHROPIC_API_KEY \
 
 On Apple Silicon, `mlxServer(...)` from `@warrant/adapter-ai-sdk` owns the whole local-model stack rather than pointing at a server you run by hand. It provisions a dedicated directory (default `~/.warrant/mlx`) containing a private Python venv with [mlx-lm](https://pypi.org/project/mlx-lm/) at an exact pin, an env manifest, and a contained Hugging Face model cache — then boots `mlx_lm server` from that env's own interpreter on the first model call, and scales it to zero after an idle period. The next call transparently restarts it.
 
+Provisioning prefers [uv](https://docs.astral.sh/uv/) when available (an explicit path, `WARRANT_UV`, or PATH discovery): installs are an order of magnitude faster, and uv supplies its own managed CPython at a pinned version — removing even the system-python requirement — with its caches and interpreters contained inside the owned directory. Without uv it falls back to stdlib `python3 -m venv` + pip, so uv is an upgrade, never a dependency. The manifest records which toolchain built the env.
+
 ```ts
 import { handoffModel, mlxServer } from "@warrant/adapter-ai-sdk";
 
@@ -154,7 +156,7 @@ const model = handoffModel({ local, cloud: openai("gpt-5.5") });
 // call escalates to cloud, honestly recorded in the routing trace.
 ```
 
-The footprint is one inspectable directory: `local.env.info()` reports the manifest and disk usage, `local.env.verify()` checks the env is intact, and `local.env.destroy()` removes everything — venv, weights, logs. The mlx-lm pin (`MLX_LM_PIN`) follows the same trusted-pin policy as the npm allowlist: exact version, bumped only as a reviewed change. The generic layer (`managedModelServer(...)`) accepts any `prepare()` hook, so the same lazy-start/scale-to-zero lifecycle can manage other OpenAI-compatible servers.
+The footprint is one inspectable directory: `local.env.info()` reports the manifest and disk usage, `local.env.verify()` checks the env is intact, and `local.env.destroy()` removes everything — venv, weights, logs, uv caches. The mlx-lm pin (`MLX_LM_PIN`) and the Python version requested from uv (`PYTHON_PIN`) follow the same trusted-pin policy as the npm allowlist: exact versions, bumped only as reviewed changes. The generic layer (`managedModelServer(...)`) accepts any `prepare()` hook, so the same lazy-start/scale-to-zero lifecycle can manage other OpenAI-compatible servers.
 
 ## The handoff SDK
 

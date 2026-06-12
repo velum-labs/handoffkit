@@ -23,6 +23,10 @@ const skip = pythonAvailable
   ? false
   : "python3 with venv support is not available on this host";
 
+const uvAvailable =
+  spawnSync("uv", ["--version"], { encoding: "utf8" }).status === 0;
+const skipUv = uvAvailable ? false : "uv is not available on this host";
+
 const tempDirs: string[] = [];
 function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "warrant-mlxenv-"));
@@ -54,6 +58,7 @@ test("provisions an owned venv, writes the manifest, and is idempotent", { skip 
     packageSpec: "warrant-stub==1.0.0",
     importName: "warrant_stub",
     requirePlatform: false,
+    uv: false,
     install: stubInstaller(counter)
   });
 
@@ -84,6 +89,7 @@ test("a pin change re-provisions the env in place", { skip }, async () => {
     packageSpec: "warrant-stub==1.0.0",
     importName: "warrant_stub",
     requirePlatform: false,
+    uv: false,
     install: stubInstaller(counter)
   });
   await v1.ensureProvisioned();
@@ -94,6 +100,7 @@ test("a pin change re-provisions the env in place", { skip }, async () => {
     packageSpec: "warrant-stub==2.0.0",
     importName: "warrant_stub",
     requirePlatform: false,
+    uv: false,
     install: stubInstaller(counter)
   });
   assert.equal(v2.verify(), false, "old manifest does not satisfy the new pin");
@@ -110,6 +117,7 @@ test("prepare() spawns from the owned env with contained caches", { skip }, asyn
     packageSpec: "warrant-stub==1.0.0",
     importName: "warrant_stub",
     requirePlatform: false,
+    uv: false,
     install: stubInstaller({ installs: 0 })
   });
 
@@ -131,6 +139,7 @@ test("destroy() removes the entire owned footprint", { skip }, async () => {
     packageSpec: "warrant-stub==1.0.0",
     importName: "warrant_stub",
     requirePlatform: false,
+    uv: false,
     install: stubInstaller({ installs: 0 })
   });
   await env.ensureProvisioned();
@@ -169,3 +178,36 @@ test(
     );
   }
 );
+
+test("provisions with uv when it is available", { skip: skipUv }, async () => {
+  const dir = tempDir();
+  const counter = { installs: 0 };
+  const env = new MlxEnv({
+    dir,
+    packageSpec: "warrant-stub==1.0.0",
+    importName: "warrant_stub",
+    requirePlatform: false,
+    install: stubInstaller(counter)
+  });
+
+  const manifest = await env.ensureProvisioned();
+  assert.match(manifest.toolchain, /^uv /, "uv was preferred over venv+pip");
+  assert.equal(counter.installs, 1);
+  assert.equal(env.verify(), true);
+  assert.ok(existsSync(env.venvPython), "uv-built venv interpreter exists");
+});
+
+test("an explicitly requested uv that cannot run is an error, not a fallback", async () => {
+  const env = new MlxEnv({
+    dir: tempDir(),
+    packageSpec: "warrant-stub==1.0.0",
+    importName: "warrant_stub",
+    requirePlatform: false,
+    uv: "/definitely/not/a/uv"
+  });
+  await assert.rejects(
+    () => env.ensureProvisioned(),
+    (error: unknown) =>
+      error instanceof MlxCapabilityError && /not runnable/.test(error.message)
+  );
+});
