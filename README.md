@@ -173,6 +173,25 @@ The footprint is one inspectable directory: `local.env.info()` reports the manif
 
 Passing `structured: true` to `mlxServer(...)` provisions the current reviewed commit from the `main` branch of the [velum-labs/mlx-lm fork](https://github.com/velum-labs/mlx-lm) with its `[structured]` extra instead of upstream mlx-lm. The fork is self-contained: upstream mlx-lm plus an `mlx_lm.structured` package built on [outlines-core](https://pypi.org/project/outlines-core/) (see the fork's `STRUCTURED.md`). The stock mlx-lm server silently ignores `response_format`; the fork enforces JSON schema / regex / choice constraints by masking logits with a compiled FSM, so the AI SDK's structured output modes (`generateObject`, `responseFormat: json`) produce schema-valid output from the local model.
 
+The MLX stress runner drives many concurrent requests through the same managed server and reports request throughput, token throughput, latency percentiles, and error samples. Build first, then run it on Apple Silicon:
+
+```bash
+pnpm build
+pnpm mlx:stress
+```
+
+Useful knobs:
+
+```bash
+WARRANT_MLX_STRESS_REQUESTS=256 \
+WARRANT_MLX_STRESS_CONCURRENCY=16 \
+WARRANT_MLX_STRESS_MODE=mixed \
+WARRANT_MLX_STRESS_MAX_TOKENS=64 \
+pnpm mlx:stress
+```
+
+`WARRANT_MLX_STRESS_MODE` can be `text`, `object`, or `mixed`; `object` and `mixed` use structured outputs.
+
 ### UniRoute: learned routing over a model pool
 
 Beyond the two-model `handoffModel` escalation, `routedModel(...)` routes each call across a *pool* of candidates by predicted correctness (UniRoute, [arXiv:2502.08773](https://arxiv.org/abs/2502.08773)). The router is fitted offline by the Python [`uniroute`](python/uniroute)/[`uniroute-mlx`](python/uniroute-mlx) workspace packages and frozen into a portable router card (`uniroute.router.v1` JSON); onboarding a new model is one validation pass, never a retrain.

@@ -17,6 +17,7 @@
     "test": "node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\" \"test/*.test.js\"",
     "demo": "node scripts/demo.mjs",
     "mlx": "node examples/mlx/dist/run.js",
+    "mlx:stress": "node examples/mlx/dist/stress.js",
     "bench": "node examples/bench/dist/run.js",
     "verify": "pnpm check && pnpm build && pnpm test"
   },

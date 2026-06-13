@@ -100,7 +100,7 @@
     },
     {
       "directory": "mlx",
-      "purpose": "Apple Silicon managed-MLX smoke (pnpm mlx)"
+      "purpose": "Apple Silicon managed-MLX smoke and stress tools (pnpm mlx, pnpm mlx:stress)"
     },
     {
       "directory": "seed",
