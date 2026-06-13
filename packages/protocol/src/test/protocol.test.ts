@@ -87,7 +87,7 @@ test("event chain appends and verifies; tampering breaks it", () => {
 });
 
 test("protocol vocabulary is canonical and guarded", () => {
-  assert.deepEqual(AGENT_KINDS, ["claude-code", "codex", "mock", "command"]);
+  assert.deepEqual(AGENT_KINDS, ["claude-code", "codex", "pi", "mock", "command"]);
   assert.deepEqual(SESSION_ISOLATIONS, [
     "process",
     "hermetic",

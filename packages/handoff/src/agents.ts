@@ -17,6 +17,14 @@ export const agents = {
   codex(options: { version?: string } = {}): AgentSpec {
     return spec("codex", options.version);
   },
+  /**
+   * Pi: a host-runtime coding harness driven through the AI SDK harness
+   * backend. Runs only on a session tier that registers the pi binding
+   * (the swarm's local-model workers); never spawned as a vendor CLI.
+   */
+  pi(options: { version?: string } = {}): AgentSpec {
+    return spec("pi", options.version);
+  },
   /** Built-in mock harness: runs without vendor CLIs or API keys. */
   mock(): AgentSpec {
     return spec("mock");

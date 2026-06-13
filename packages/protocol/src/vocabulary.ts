@@ -28,6 +28,7 @@ export const TERMINAL_RUN_STATUSES = [
 export const AGENT_KINDS = [
   "claude-code",
   "codex",
+  "pi",
   "mock",
   "command"
 ] as const satisfies readonly AgentKind[];

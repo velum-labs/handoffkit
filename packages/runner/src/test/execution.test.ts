@@ -73,6 +73,18 @@ test("agent executions prepare vendor argv without shell wrapping", () => {
   }
 });
 
+test("pi cannot be prepared as a spawned command (harness-only)", () => {
+  const contract = contractFixture({
+    agent: { kind: "pi" },
+    task: { prompt: "fix the bug" },
+    execution: { kind: "agent", agent: { kind: "pi" }, prompt: "fix the bug" }
+  });
+  assert.throws(
+    () => prepareExecution({ contract, mockScriptPath: "/tmp/mock-agent.js" }),
+    /pi runs only via the AI SDK harness backend/
+  );
+});
+
 test("executionHash records the prepared execution shape", () => {
   const shell = prepareExecution({
     contract: contractFixture({ execution: { kind: "shell", script: "echo hi" } }),

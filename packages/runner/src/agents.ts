@@ -33,6 +33,13 @@ export function buildAgentCommand(
         cmd: "codex",
         args: ["exec", "--skip-git-repo-check", prompt]
       };
+    case "pi":
+      // Pi is a host-runtime harness with no vendor CLI to wrap: it runs
+      // only through the AI SDK harness session backend. Refusing it here
+      // keeps a single way to run Pi instead of a second, unsupported one.
+      throw new Error(
+        "pi runs only via the AI SDK harness backend, not as a spawned command"
+      );
     case "mock":
       return {
         cmd: process.execPath,

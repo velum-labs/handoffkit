@@ -58,9 +58,11 @@ export type SessionIsolation = "process" | "hermetic" | "vercel-sandbox";
 /**
  * "command" is the harness for app-owned loops and the compute adapter:
  * a single shell command executed inside a governed session. "mock" is the
- * built-in test harness; the rest are vendor CLIs wrapped as-is.
+ * built-in test harness. "pi" is a host-runtime harness with no vendor CLI:
+ * it runs only through the AI SDK harness session backend, never as a
+ * spawned process. The rest are vendor CLIs wrapped as-is.
  */
-export type AgentKind = "claude-code" | "codex" | "mock" | "command";
+export type AgentKind = "claude-code" | "codex" | "pi" | "mock" | "command";
 
 export type AgentSpec = {
   kind: AgentKind;
