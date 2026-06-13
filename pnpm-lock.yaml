@@ -328,6 +328,9 @@ importers:
       '@warrant/handoff':
         specifier: workspace:*
         version: link:../handoff
+      '@warrant/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@warrant/plane':
         specifier: workspace:*
         version: link:../plane

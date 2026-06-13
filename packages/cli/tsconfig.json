@@ -7,6 +7,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../handoff" },
+    { "path": "../model-gateway" },
     { "path": "../plane" },
     { "path": "../protocol" },
     { "path": "../runner" },
