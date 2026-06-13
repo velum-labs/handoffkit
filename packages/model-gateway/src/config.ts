@@ -14,8 +14,8 @@ import { MlxBackend } from "./mlx-backend.js";
 export const DEFAULT_MLX_MODEL = "prism-ml/Ternary-Bonsai-4B-mlx-2bit";
 
 export type BackendConfig =
-  | { kind: "mlx"; model: string; structured: boolean }
-  | { kind: "openai"; baseUrl: string; apiKey?: string; defaultModel?: string };
+  | { kind: "mlx"; model: string; structured: boolean; embeddingModel?: string }
+  | { kind: "openai"; baseUrl: string; apiKey?: string; defaultModel?: string; embeddingModel?: string };
 
 export function resolveBackendConfig(
   env: Record<string, string | undefined> = process.env
@@ -26,7 +26,10 @@ export function resolveBackendConfig(
       kind: "openai",
       baseUrl: url,
       ...(env.WARRANT_LOCAL_MODEL_KEY !== undefined ? { apiKey: env.WARRANT_LOCAL_MODEL_KEY } : {}),
-      ...(env.WARRANT_LOCAL_MODEL !== undefined ? { defaultModel: env.WARRANT_LOCAL_MODEL } : {})
+      ...(env.WARRANT_LOCAL_MODEL !== undefined ? { defaultModel: env.WARRANT_LOCAL_MODEL } : {}),
+      ...(env.WARRANT_LOCAL_EMBEDDING_MODEL !== undefined
+        ? { embeddingModel: env.WARRANT_LOCAL_EMBEDDING_MODEL }
+        : {})
     };
   }
   return {
@@ -34,19 +37,27 @@ export function resolveBackendConfig(
     model: env.WARRANT_MLX_MODEL ?? DEFAULT_MLX_MODEL,
     // Structured decoding (the owned fork's reason for being) is on unless
     // explicitly disabled.
-    structured: env.WARRANT_MLX_STRUCTURED !== "0"
+    structured: env.WARRANT_MLX_STRUCTURED !== "0",
+    ...(env.WARRANT_MLX_EMBEDDING_MODEL !== undefined
+      ? { embeddingModel: env.WARRANT_MLX_EMBEDDING_MODEL }
+      : {})
   };
 }
 
 export function createBackend(config: BackendConfig): Backend {
   switch (config.kind) {
     case "mlx":
-      return new MlxBackend({ model: config.model, structured: config.structured });
+      return new MlxBackend({
+        model: config.model,
+        structured: config.structured,
+        ...(config.embeddingModel !== undefined ? { embeddingModel: config.embeddingModel } : {})
+      });
     case "openai":
       return new OpenAiBackend({
         baseUrl: config.baseUrl,
         ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
-        ...(config.defaultModel !== undefined ? { defaultModel: config.defaultModel } : {})
+        ...(config.defaultModel !== undefined ? { defaultModel: config.defaultModel } : {}),
+        ...(config.embeddingModel !== undefined ? { embeddingModel: config.embeddingModel } : {})
       });
     default: {
       const unreachable: never = config;

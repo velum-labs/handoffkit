@@ -18,6 +18,12 @@ export type MlxBackendOptions = {
   /** Hugging Face repo id the mlx server loads. */
   model: string;
   /**
+   * Optional embedding model id. When set, the server is started with
+   * `--embedding-model <id>`, enabling `/v1/embeddings`; the gateway sends this
+   * id (the fork's embeddings endpoint rejects the chat model id).
+   */
+  embeddingModel?: string;
+  /**
    * Provision the structured-decoding fork (`response_format`, `guided_json`,
    * …). Defaults to true: structured output is the reason we own the fork.
    */
@@ -33,21 +39,30 @@ export type MlxBackendOptions = {
 export class MlxBackend implements Backend {
   readonly #server: ReturnType<typeof mlxServer>;
   readonly #model: string;
+  readonly #embeddingModel: string | undefined;
   #inner: OpenAiBackend | undefined;
   #startPromise: Promise<void> | undefined;
 
   constructor(options: MlxBackendOptions) {
     this.#model = options.model;
+    this.#embeddingModel = options.embeddingModel;
     this.#server = mlxServer({
       model: options.model,
       idleShutdownMs: options.idleShutdownMs ?? 0,
       structured: options.structured ?? true,
+      ...(options.embeddingModel !== undefined
+        ? { extraArgs: ["--embedding-model", options.embeddingModel] }
+        : {}),
       ...(options.onEvent ? { onEvent: options.onEvent } : {})
     });
   }
 
   get defaultModel(): string {
     return this.#model;
+  }
+
+  get embeddingModel(): string | undefined {
+    return this.#embeddingModel;
   }
 
   /** The owned MLX footprint (verify/info/destroy). */
@@ -68,7 +83,8 @@ export class MlxBackend implements Backend {
         // OpenAI routes under /v1 (see mlx_lm.server).
         this.#inner = new OpenAiBackend({
           baseUrl: `${base}/v1`,
-          defaultModel: this.#model
+          defaultModel: this.#model,
+          ...(this.#embeddingModel !== undefined ? { embeddingModel: this.#embeddingModel } : {})
         });
       })().catch((error) => {
         this.#startPromise = undefined;

@@ -245,3 +245,21 @@ connectivity milestones.
 - M4 — Cursor (B): tunnel + IDE config command, documented limits.
 - M5 — `/v1/embeddings` fork extension, `routedModel`/uniroute backend wiring,
   provenance hooks, README + spec updates.
+
+### Status (2026-06-13)
+
+- M1–M4 implemented, tested, and merged into the branch.
+- The owned `velum-labs/mlx-lm` fork's `warrant-openai-compat` branch landed the
+  server-side pieces M5 needs: `/v1/embeddings` (OpenAI shape, `--embedding-model`
+  flag, lazy-loaded), OpenAI `tools` / `tool_choice` with schema-constrained
+  forced tool calls, `tool_calls` in non-streaming and streamed responses, and
+  `stream_options.include_usage` (see the fork's `SERVER.md`). `MLX_LM_STRUCTURED_PIN`
+  is bumped to that commit.
+- The gateway now exposes embeddings end to end: `MlxBackend` starts the server
+  with `--embedding-model` when configured (`WARRANT_MLX_EMBEDDING_MODEL`), and
+  the `/v1/embeddings` route injects the embedding model id (or `"default_model"`),
+  never the chat model id (which the fork rejects).
+- Remaining M5: wire `routedModel`/uniroute as a gateway backend (uses the
+  embeddings endpoint for the embed step), turn the provenance hook into receipt
+  emission, and run the live verification matrix on Apple Silicon (mlx is
+  Apple-Silicon-only, so it cannot run in the Linux CI).

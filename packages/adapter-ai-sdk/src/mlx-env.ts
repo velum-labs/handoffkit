@@ -45,11 +45,14 @@ export const MLX_LM_PIN = "0.31.3";
 /**
  * The velum-labs/mlx-lm fork installed in structured mode: upstream mlx-lm
  * plus the self-contained mlx_lm.structured package (see the fork's
- * STRUCTURED.md). Pinned to the current reviewed head of the fork's main
- * branch; refresh this SHA when we intentionally pick up fork fixes.
+ * STRUCTURED.md), and the OpenAI-compatibility work on the
+ * `warrant-openai-compat` branch (server-side `/v1/embeddings`, `tools` /
+ * `tool_choice` with schema-constrained forced tool calls, and streamed-usage
+ * support — see the fork's SERVER.md). Pinned to a reviewed commit; refresh
+ * this SHA when we intentionally pick up fork changes.
  */
 export const MLX_LM_STRUCTURED_PIN =
-  "mlx-lm[structured] @ git+https://github.com/velum-labs/mlx-lm@2ee2d570d365a1fcee9ba90a298f1bae865fccda";
+  "mlx-lm[structured] @ git+https://github.com/velum-labs/mlx-lm@7e0f8b041108a5be83dbd3694c97c568d66050f3";
 
 /** Python version requested from uv (which can download it if absent). */
 export const PYTHON_PIN = "3.12";

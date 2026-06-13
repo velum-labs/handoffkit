@@ -92,7 +92,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/embeddings") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
-      await pipeUpstream(res, await backend.embeddings(withDefaultModel(raw, backend.defaultModel)));
+      // The mlx fork's embeddings endpoint accepts only its configured
+      // embedding model id or the literal "default_model" — never the chat
+      // model — so inject one of those, not backend.defaultModel.
+      const body = withDefaultModel(raw, backend.embeddingModel ?? "default_model");
+      await pipeUpstream(res, await backend.embeddings(body));
       return;
     }
 

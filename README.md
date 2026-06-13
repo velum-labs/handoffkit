@@ -231,6 +231,8 @@ warrant local opencode "add a CHANGELOG entry"    # opencode via a custom provid
 warrant local serve                               # just run the gateway (all dialects)
 ```
 
+The default mlx backend uses the owned `mlx_lm.server` fork, which serves OpenAI tool-calling (schema-constrained), `/v1/embeddings` (set `WARRANT_MLX_EMBEDDING_MODEL`), and streamed-usage — everything the agentic harnesses need from a local model.
+
 Cursor is supported in plan/chat mode only: its coding agent (Composer, inline edit, apply, autocomplete) is locked to Cursor's own backend and cannot reach localhost, so `warrant local cursor` prints the Settings → Models values to paste and expects a public tunnel URL (`--public-url` or `WARRANT_PUBLIC_URL`).
 
 ## The handoff SDK

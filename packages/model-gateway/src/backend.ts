@@ -12,6 +12,12 @@
 export type Backend = {
   /** Model id sent to the backend when a request omits one. */
   readonly defaultModel: string | undefined;
+  /**
+   * Model id sent on `/v1/embeddings` when a request omits one. The mlx fork's
+   * embeddings endpoint accepts only its configured embedding model id or the
+   * literal `"default_model"`, so this must never be the chat model id.
+   */
+  readonly embeddingModel?: string | undefined;
   /** POST <base>/chat/completions — supports streaming (SSE) upstream. */
   chat(body: unknown, signal?: AbortSignal): Promise<Response>;
   /** GET <base>/models. */
@@ -35,6 +41,8 @@ export type OpenAiBackendOptions = {
   apiKey?: string;
   /** Model id used when a request omits `model`. */
   defaultModel?: string;
+  /** Embedding model id used when an embeddings request omits `model`. */
+  embeddingModel?: string;
 };
 
 /** Join a base URL (which may end in `/`) with a route path. */
@@ -49,11 +57,13 @@ export class OpenAiBackend implements Backend {
   readonly #baseUrl: string;
   readonly #apiKey: string;
   readonly defaultModel: string | undefined;
+  readonly embeddingModel: string | undefined;
 
   constructor(options: OpenAiBackendOptions) {
     this.#baseUrl = options.baseUrl;
     this.#apiKey = options.apiKey ?? "not-needed";
     this.defaultModel = options.defaultModel;
+    this.embeddingModel = options.embeddingModel;
   }
 
   #headers(): Record<string, string> {
