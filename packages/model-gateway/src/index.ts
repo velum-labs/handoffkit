@@ -22,4 +22,15 @@ export type { MlxBackendOptions } from "./mlx-backend.js";
 export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";
 export type { BackendConfig } from "./config.js";
 export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
+export {
+  anthropicModelsResponse,
+  anthropicToChat,
+  chatToAnthropicMessage,
+  countTokensEstimate,
+  handleAnthropicMessages,
+  handleCountTokens,
+  mapStopReason,
+  openAiSseToAnthropic
+} from "./adapters/anthropic.js";
+export type { AnthropicRequest } from "./adapters/anthropic.js";
 export type { GatewayDialect, ModelCallRecord, ProvenanceSink } from "./provenance.js";

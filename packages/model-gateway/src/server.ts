@@ -2,6 +2,12 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import {
+  anthropicModelsResponse,
+  handleAnthropicMessages,
+  handleCountTokens
+} from "./adapters/anthropic.js";
+import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import type { Backend } from "./backend.js";
 import type { GatewayDialect, ProvenanceSink } from "./provenance.js";
@@ -60,6 +66,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     if (method === "GET" && (path === "/v1/models" || path === "/models")) {
+      // Claude Code's discovery probe carries `anthropic-version` and expects
+      // the Anthropic-shaped model list; everyone else gets the OpenAI shape.
+      if (req.headers["anthropic-version"] !== undefined) {
+        await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel));
+        return;
+      }
       await pipeUpstream(res, await backend.models());
       return;
     }
@@ -82,10 +94,21 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    if (method === "POST" && (path === "/v1/messages" || path === "/v1/messages/count_tokens")) {
-      writeJson(res, 501, {
-        error: { message: "anthropic-messages adapter not yet implemented (M2)", type: "not_implemented" }
-      });
+    if (method === "POST" && path === "/v1/messages/count_tokens") {
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      await pipeUpstream(res, handleCountTokens(raw as AnthropicRequest));
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/messages") {
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      const body = raw as AnthropicRequest;
+      const started = Date.now();
+      const response = await handleAnthropicMessages(backend, body);
+      record(provenance, "anthropic-messages", body, backend.defaultModel, response.status, Date.now() - started);
+      await pipeUpstream(res, response);
       return;
     }
 

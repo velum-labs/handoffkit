@@ -159,15 +159,15 @@ test("streams server-sent events straight through", async () => {
   }
 });
 
-test("returns 501 for the not-yet-built Anthropic adapter", async () => {
+test("returns 501 for the not-yet-built Responses adapter", async () => {
   const gateway = await startGateway({
     backend: new OpenAiBackend({ baseUrl: "http://127.0.0.1:1/v1" })
   });
   try {
-    const response = await fetch(`${gateway.url()}/v1/messages`, {
+    const response = await fetch(`${gateway.url()}/v1/responses`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "x", messages: [] })
+      body: JSON.stringify({ model: "x", input: "hi" })
     });
     assert.equal(response.status, 501);
   } finally {
