@@ -59,7 +59,14 @@ export type ReviewResult = {
   reason: string;
 };
 
-function buildScorecard(bundle: ReceiptBundle, diffBytes: number): Scorecard {
+/**
+ * Build the deterministic, evidence-derived scorecard for one run from its
+ * receipt bundle and output diff size. Exposed so adapters that judge runs
+ * outside the fan-out review path (e.g. the swarm tools, where a cloud model
+ * judges each worker) consume the exact same deterministic evidence the
+ * review strategies do, rather than reconstructing it.
+ */
+export function scorecardFor(bundle: ReceiptBundle, diffBytes: number): Scorecard {
   const { receipt, events } = bundle;
   // Distinct files, not raw event count: a file touched repeatedly during a
   // session still counts once. exitCode is the session's final command —
@@ -106,7 +113,7 @@ export async function reviewRuns(
     candidates.push({
       run,
       bundle,
-      scorecard: buildScorecard(bundle, diffBytes),
+      scorecard: scorecardFor(bundle, diffBytes),
       diffBytes,
       endedAt: bundle.receipt.endedAt
     });
