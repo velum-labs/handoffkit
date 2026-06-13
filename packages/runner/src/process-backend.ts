@@ -8,6 +8,7 @@ import type {
 } from "./backend.js";
 import { startEgressProxy } from "./egress.js";
 import { executionHash, resolveSessionEnv } from "./execution.js";
+import type { BackendExecutionKind } from "./execution.js";
 
 /** Minimal PATH/HOME used only when the host process has none set. */
 const FALLBACK_PATH = "/usr/bin:/bin";
@@ -27,6 +28,15 @@ const SPAWN_ERROR_EXIT_CODE = 127;
  */
 export class ProcessSessionBackend implements SessionBackend {
   readonly isolation = "process" as const;
+
+  supports(_kind: BackendExecutionKind, contract: SessionExecution["contract"]): boolean {
+    // Pi is a host-runtime harness with no vendor CLI: it runs only through
+    // the AI SDK harness backend, never as a spawned process. Refusing it
+    // here is the single enforcement point for "pi never runs as a process",
+    // so a runner that lacks a pi harness backend fails closed instead of
+    // trying to spawn the placeholder command.
+    return contract.agent.kind !== "pi";
+  }
 
   async execute(input: SessionExecution): Promise<SessionBackendResult> {
     const { contract, repoDir, secrets, execution, emit } = input;

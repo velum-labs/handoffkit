@@ -9,6 +9,7 @@ import {
   prepareExecution,
   requireShellExecution
 } from "../execution.js";
+import { ProcessSessionBackend } from "../process-backend.js";
 
 function contractFixture(overrides: Partial<RunContract> = {}): RunContract {
   const contract: RunContract = {
@@ -73,16 +74,30 @@ test("agent executions prepare vendor argv without shell wrapping", () => {
   }
 });
 
-test("pi cannot be prepared as a spawned command (harness-only)", () => {
+test("pi prepares a non-spawnable placeholder argv (harness-only)", () => {
+  // The harness backend needs a prepared execution (env, timeout, hash) just
+  // like claude-code, and ignores the argv. Preparation must therefore
+  // succeed; the placeholder argv exists only to hash. The process backend
+  // (tested separately) is what refuses to spawn pi.
   const contract = contractFixture({
     agent: { kind: "pi" },
     task: { prompt: "fix the bug" },
     execution: { kind: "agent", agent: { kind: "pi" }, prompt: "fix the bug" }
   });
-  assert.throws(
-    () => prepareExecution({ contract, mockScriptPath: "/tmp/mock-agent.js" }),
-    /pi runs only via the AI SDK harness backend/
-  );
+  const execution = prepareExecution({ contract, mockScriptPath: "/tmp/mock-agent.js" });
+  assert.equal(execution.kind, "argv");
+  assert.match(executionHash(execution), /^[0-9a-f]{64}$/);
+});
+
+test("the process backend refuses to spawn pi", () => {
+  const backend = new ProcessSessionBackend();
+  const piContract = contractFixture({
+    agent: { kind: "pi" },
+    execution: { kind: "agent", agent: { kind: "pi" }, prompt: "fix the bug" }
+  });
+  const commandContract = contractFixture();
+  assert.equal(backend.supports?.("argv", piContract), false);
+  assert.equal(backend.supports?.("shell", commandContract), true);
 });
 
 test("executionHash records the prepared execution shape", () => {
