@@ -372,6 +372,12 @@ importers:
         specifier: workspace:*
         version: link:../workspace
 
+  packages/model-gateway:
+    dependencies:
+      '@warrant/adapter-ai-sdk':
+        specifier: workspace:*
+        version: link:../adapter-ai-sdk
+
   packages/plane:
     dependencies:
       '@warrant/protocol':
