@@ -382,6 +382,12 @@ importers:
       '@ai-sdk/harness-claude-code':
         specifier: 1.0.0-canary.2
         version: 1.0.0-canary.2
+      '@ai-sdk/harness-pi':
+        specifier: 1.0.0-canary.2
+        version: 1.0.0-canary.2(ws@8.21.0)
+      '@ai-sdk/sandbox-just-bash':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(just-bash@3.0.1)(ws@8.21.0)(zod@4.4.3)
       '@ai-sdk/sandbox-vercel':
         specifier: 1.0.0-canary.6
         version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
@@ -391,6 +397,9 @@ importers:
       '@warrant/runner':
         specifier: workspace:*
         version: link:../runner
+      '@warrant/session-hermetic':
+        specifier: workspace:*
+        version: link:../session-hermetic
       '@warrant/session-vercel-sandbox':
         specifier: workspace:*
         version: link:../session-vercel-sandbox
@@ -501,6 +510,12 @@ packages:
     peerDependencies:
       '@anthropic-ai/claude-agent-sdk': ^0.3.0
 
+  '@ai-sdk/harness-pi@1.0.0-canary.2':
+    resolution: {integrity: sha512-7jugZoh7TXUuZFBZAegKRKvjzBqp8MHQ6z+CXOLe4lI4hZ2loscqJAEOoMXT2KVj/EvCltwY2fpGxDV6slCk2w==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@earendil-works/pi-coding-agent': ^0.77.0
+
   '@ai-sdk/harness@1.0.0-canary.6':
     resolution: {integrity: sha512-Rue4hWhKdRyT77Mv6q2zauwrL4/ZIFFof+BpnN4cNK2dqOUQMiLHrdVDBULxXvgtett3D5P0PexCmjUyqJh0rg==}
     engines: {node: '>=22'}
@@ -535,6 +550,12 @@ packages:
   '@ai-sdk/provider@4.0.0-canary.18':
     resolution: {integrity: sha512-+XBwXEPkN+l/90bb7TaSK15jAq9ScsGrauJ/NLSGip0KX5Mf1pfEfqBWDuJMIYVRYHNdV1dDBy7JCoKUCQe/tA==}
     engines: {node: '>=22'}
+
+  '@ai-sdk/sandbox-just-bash@1.0.0-canary.6':
+    resolution: {integrity: sha512-cO+Py06hxRYUzbLzJBrfW2LrTv9i2SukcYr4EbXllRYvacABfKngNRjOe4P+sGQCpc6P2uV1YY4gyZpIFQugFQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      just-bash: ^2.14.0
 
   '@ai-sdk/sandbox-vercel@1.0.0-canary.6':
     resolution: {integrity: sha512-3Sb3NKB7d+PwURV7/x4HUo/w3tE6d0wkJkueNbtqOb781w42KDYyQjNjAl82hX3yKZQo2zW+B8beTCzGgjtmtQ==}
@@ -950,6 +971,9 @@ packages:
     resolution: {integrity: sha512-I8yFsfRzmzK0WV1pNNOA4A7y4RDfFxPRxb3t+e3ui14qSGOxGtiSP6GjeX+Y6CHb7HYaFj7ECUD7VE5kQMZWGQ==}
     engines: {node: '>=18', npm: '>=9'}
 
+  typebox@1.2.8:
+    resolution: {integrity: sha512-rlsKhsd7L3082m9nxhFIB4Gl8jizLd/6YlFAWaz96hdV8+VJRjwYaYmDlT0jlTRwkb48SxCSSirqUtrg/HilNw==}
+
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
@@ -1040,6 +1064,15 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@ai-sdk/harness-pi@1.0.0-canary.2(ws@8.21.0)':
+    dependencies:
+      '@ai-sdk/harness': 1.0.0-canary.6(ws@8.21.0)(zod@3.25.76)
+      '@ai-sdk/provider-utils': 5.0.0-canary.47(zod@3.25.76)
+      typebox: 1.2.8
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - ws
+
   '@ai-sdk/harness@1.0.0-canary.6(ws@8.21.0)(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 4.0.0-canary.18
@@ -1096,6 +1129,15 @@ snapshots:
   '@ai-sdk/provider@4.0.0-canary.18':
     dependencies:
       json-schema: 0.4.0
+
+  '@ai-sdk/sandbox-just-bash@1.0.0-canary.6(just-bash@3.0.1)(ws@8.21.0)(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/harness': 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
+      '@ai-sdk/provider-utils': 5.0.0-canary.47(zod@4.4.3)
+      just-bash: 3.0.1
+    transitivePeerDependencies:
+      - ws
+      - zod
 
   '@ai-sdk/sandbox-vercel@1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)':
     dependencies:
@@ -1583,6 +1625,8 @@ snapshots:
   turndown@7.2.4:
     dependencies:
       '@mixmark-io/domino': 2.2.0
+
+  typebox@1.2.8: {}
 
   typescript@5.9.3: {}
 

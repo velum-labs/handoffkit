@@ -8,6 +8,7 @@
   "references": [
     { "path": "../protocol" },
     { "path": "../runner" },
+    { "path": "../session-hermetic" },
     { "path": "../session-vercel-sandbox" },
     { "path": "../workspace" },
     { "path": "../plane" },

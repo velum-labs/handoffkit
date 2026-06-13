@@ -1,39 +1,27 @@
 /**
- * @warrant/session-harness — a session backend that drives the claude-code
- * harness through the AI SDK harness abstraction (`HarnessAgent` +
- * `@ai-sdk/harness-claude-code`) inside a Vercel Sandbox microVM, instead
- * of shelling out to a vendor CLI that would have to pre-exist in the VM.
+ * Generic AI SDK harness session backend: drives one vendor agent harness
+ * through the AI SDK harness abstraction (`HarnessAgent`) inside a sandbox,
+ * under the same governed-session contract as every other backend.
  *
- * What this buys a governed run, over the plain vercel-sandbox backend:
+ * What varies between harnesses — which adapter runs, which sandbox provider
+ * hosts it, which isolation tier the run is labeled with, and how credentials
+ * map into the adapter's explicit auth — is captured by a `HarnessBinding`.
+ * Everything that does *not* vary lives here once: workspace staging into the
+ * sandbox, the structured transcript artifact, git-based mirror-back, the
+ * boundary event, and delegation of non-matching runs to a fallback backend.
  *
- *  - The harness adapter bootstraps the Claude Code runtime inside the
- *    sandbox itself (pinned bridge dependencies, frozen lockfile), so the
- *    microVM needs no pre-baked vendor tooling.
- *  - The session log artifact is the harness's *structured* event stream
- *    (tool calls, tool results, file-change notices, finish reasons) as
- *    JSONL — not a merged stdout blob. Boundary evidence stays owned by
- *    the runner: file.changed events still come from the git diff after
- *    mirror-back, and egress policy is still applied at the VM boundary
- *    from the signed contract, exactly as before.
- *  - Credentials flow from the secret broker into the adapter's *explicit*
- *    auth settings (see auth.ts); the adapter's host-environment fallback
- *    is suppressed, so runner-host credentials can never leak into a run.
- *
- * Status: experimental and integration-gated, like the plain vercel-sandbox
- * backend. It compiles against the real canary packages; running the real
- * path needs Vercel credentials plus a contract-released Anthropic or AI
- * Gateway credential. Non-claude-code executions are delegated unchanged to
- * a fallback backend (by default `vercelSandboxBackend()`), so a runner can
- * install this backend as its single "vercel-sandbox" tier.
+ * Concrete bindings live alongside this file: `claudeCodeBinding` (Claude
+ * Code in a Vercel Sandbox microVM) and `piBinding` (Pi on a local just-bash
+ * sandbox driving a local model). A backend hosts exactly one binding plus a
+ * fallback for everything else in its tier — the single sanctioned way to
+ * combine behaviors within an isolation tier (see runner `runSession`).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import type { HarnessAgentAdapter, HarnessAgentSettings } from "@ai-sdk/harness/agent";
-import { createClaudeCode } from "@ai-sdk/harness-claude-code";
-import { createVercelSandbox } from "@ai-sdk/sandbox-vercel";
-import type { RunContract } from "@warrant/protocol";
+import type { AgentKind, RunContract, SessionIsolation } from "@warrant/protocol";
 import {
   CapabilityMismatchError,
   executionHash,
@@ -50,13 +38,9 @@ import {
   SANDBOX_IGNORED_DIRS,
   listWorkspaceFiles,
   shellQuote,
-  toVercelNetwork,
-  vercelCredentialsFromEnv,
-  vercelSandboxBackend,
   writeMirroredFile
 } from "@warrant/session-vercel-sandbox";
 
-import { claudeCodeAuthFromEnv } from "./auth.js";
 import { TranscriptRecorder } from "./transcript.js";
 
 /**
@@ -70,20 +54,20 @@ type SandboxFsSession = Parameters<
 >[0]["session"];
 
 /**
- * A harness adapter regardless of its builtin tool set, typed from the
- * agent module itself so the seam always matches what `HarnessAgent`
- * accepts. (`HarnessV1`'s default `ToolSet` parameter rejects concrete
- * adapters like `createClaudeCode()` because tool input schemas are not
- * assignable across the index signature; the AI SDK's own settings use
- * the same `any`-tools parameterization.)
+ * A harness adapter regardless of its builtin tool set, typed from the agent
+ * module itself so the seam always matches what `HarnessAgent` accepts.
+ * (`HarnessV1`'s default `ToolSet` parameter rejects concrete adapters like
+ * `createClaudeCode()`/`createPi()` because tool input schemas are not
+ * assignable across the index signature; the AI SDK's own settings use the
+ * same `any`-tools parameterization.)
  */
 export type HarnessAdapter = HarnessAgentAdapter<any>;
 
 /**
- * The sandbox provider type `HarnessAgent` expects, derived from its
- * settings rather than imported from `@ai-sdk/harness` directly: pnpm can
- * instantiate that package once per zod peer context, and deriving the
- * type keeps this seam pinned to the agent's own instance.
+ * The sandbox provider type `HarnessAgent` expects, derived from its settings
+ * rather than imported from `@ai-sdk/harness` directly: pnpm can instantiate
+ * that package once per zod peer context, and deriving the type keeps this
+ * seam pinned to the agent's own instance.
  */
 export type HarnessSandboxProvider = HarnessAgentSettings["sandbox"];
 
@@ -98,88 +82,63 @@ export type CreateSandboxProviderInput = {
   timeoutMs: number;
 };
 
-export type AiSdkHarnessBackendOptions = {
-  /** Sandbox runtime image for the harness bridge. Defaults to node24. */
-  runtime?: string;
-  /** Sandbox port the in-VM bridge listens on. Defaults to 4000. */
-  bridgePort?: number;
-  /** Vercel credentials; fall back to the ambient environment. */
-  token?: string;
-  teamId?: string;
-  projectId?: string;
-  /** Anthropic model id passed to the claude-code runtime. */
-  model?: string;
-  /** Cap on internal harness turns before yielding. */
-  maxTurns?: number;
-  /** Extended-thinking behavior of the underlying runtime. */
-  thinking?: "off" | "on" | "adaptive";
-  /** Max milliseconds to wait for the in-sandbox bridge to start. */
-  startupTimeoutMs?: number;
-  /**
-   * Backend that executes everything this one does not (shell/argv
-   * executions, other agent kinds). Defaults to `vercelSandboxBackend()`
-   * with the same credentials, so installing this backend never narrows
-   * what the "vercel-sandbox" tier could already run.
-   */
-  fallback?: SessionBackend;
-  /**
-   * Test/extension seam: supply the harness adapter. The default builds
-   * `createClaudeCode` with explicit auth from the session env (fail-closed,
-   * see auth.ts); overrides take on that responsibility themselves.
-   */
-  createHarness?: (input: CreateHarnessInput) => HarnessAdapter;
-  /**
-   * Test/extension seam: supply the sandbox provider. The default builds
-   * `createVercelSandbox` with the contract's network policy applied at VM
-   * creation; overrides take on that responsibility themselves.
-   */
-  createSandboxProvider?: (input: CreateSandboxProviderInput) => HarnessSandboxProvider;
+/**
+ * Everything a single harness contributes to the generic backend: which agent
+ * kind it serves, the isolation tier its runs are labeled with, how to build
+ * the adapter and the sandbox provider for a given session, and any
+ * session-state directories that are runtime plumbing rather than workspace
+ * output (excluded from both staging and mirror-back).
+ */
+export type HarnessBinding = {
+  readonly agentKind: AgentKind;
+  readonly isolation: SessionIsolation;
+  // The factories may be async: a binding whose adapter or sandbox wrapper
+  // eagerly pulls in a heavy, integration-gated host runtime (see the pi
+  // binding) loads it lazily here rather than at module import.
+  createHarness(input: CreateHarnessInput): HarnessAdapter | Promise<HarnessAdapter>;
+  createSandboxProvider(
+    input: CreateSandboxProviderInput
+  ): HarnessSandboxProvider | Promise<HarnessSandboxProvider>;
+  readonly extraIgnores?: readonly string[];
 };
-
-const DEFAULT_RUNTIME = "node24";
-const DEFAULT_BRIDGE_PORT = 4000;
-
-// On top of the shared sandbox ignore set, the harness's own session-state
-// directories are runtime plumbing, not workspace output.
-const HARNESS_EXTRA_IGNORES = [".claude", ".agent-runs"] as const;
-const IGNORED_SEGMENTS: ReadonlySet<string> = new Set([
-  ...SANDBOX_IGNORED_DIRS,
-  ...HARNESS_EXTRA_IGNORES
-]);
 
 function posixJoin(base: string, rel: string): string {
   return `${base}/${rel.split("\\").join("/")}`;
 }
 
-/** True when the contract asks for the claude-code agent harness. */
-export function isClaudeCodeAgentRun(contract: RunContract): boolean {
+/** True when the contract's execution is an agent run of the given kind. */
+export function isAgentRunFor(contract: RunContract, kind: AgentKind): boolean {
   const spec = executionSpecFor(contract);
-  return spec.kind === "agent" && spec.agent.kind === "claude-code";
+  return spec.kind === "agent" && spec.agent.kind === kind;
 }
 
 export class AiSdkHarnessBackend implements SessionBackend {
-  readonly isolation = "vercel-sandbox" as const;
-  private readonly options: AiSdkHarnessBackendOptions;
+  readonly isolation: SessionIsolation;
+  private readonly binding: HarnessBinding;
   private readonly fallback: SessionBackend;
+  private readonly ignoredSegments: ReadonlySet<string>;
 
-  constructor(options: AiSdkHarnessBackendOptions = {}) {
-    this.options = options;
-    this.fallback =
-      options.fallback ??
-      vercelSandboxBackend({
-        ...(options.token !== undefined ? { token: options.token } : {}),
-        ...(options.teamId !== undefined ? { teamId: options.teamId } : {}),
-        ...(options.projectId !== undefined ? { projectId: options.projectId } : {})
-      });
+  constructor(input: { binding: HarnessBinding; fallback: SessionBackend }) {
+    this.binding = input.binding;
+    this.fallback = input.fallback;
+    this.isolation = input.binding.isolation;
+    this.ignoredSegments = new Set([
+      ...SANDBOX_IGNORED_DIRS,
+      ...(input.binding.extraIgnores ?? [])
+    ]);
+  }
+
+  private isBindingRun(contract: RunContract): boolean {
+    return isAgentRunFor(contract, this.binding.agentKind);
   }
 
   supports(kind: BackendExecutionKind, contract: RunContract): boolean {
-    if (isClaudeCodeAgentRun(contract)) return true;
+    if (this.isBindingRun(contract)) return true;
     return this.fallback.supports ? this.fallback.supports(kind, contract) : true;
   }
 
   async execute(input: SessionExecution): Promise<SessionBackendResult> {
-    if (!isClaudeCodeAgentRun(input.contract)) {
+    if (!this.isBindingRun(input.contract)) {
       return this.fallback.execute(input);
     }
     return this.executeHarness(input);
@@ -193,14 +152,15 @@ export class AiSdkHarnessBackend implements SessionBackend {
     }
 
     const env = resolveSessionEnv(execution.env, secrets);
+    const extraIgnores = this.binding.extraIgnores ?? [];
 
-    const harness = (this.options.createHarness ?? this.defaultHarness)({ env, contract });
-    const provider = (this.options.createSandboxProvider ?? this.defaultSandboxProvider)({
+    const harness = await this.binding.createHarness({ env, contract });
+    const provider = await this.binding.createSandboxProvider({
       contract,
       timeoutMs: execution.timeoutMs
     });
 
-    // One signal covers session creation, the bridge startup, and the turn.
+    // One signal covers session creation, sandbox startup, and the turn.
     const abortSignal = AbortSignal.timeout(execution.timeoutMs);
 
     let staged: { session: SandboxFsSession; workDir: string } | undefined;
@@ -209,7 +169,7 @@ export class AiSdkHarnessBackend implements SessionBackend {
       sandbox: provider,
       onSandboxSession: async ({ session, sessionWorkDir }) => {
         staged = { session, workDir: sessionWorkDir };
-        for (const rel of listWorkspaceFiles(repoDir, HARNESS_EXTRA_IGNORES)) {
+        for (const rel of listWorkspaceFiles(repoDir, extraIgnores)) {
           await session.writeBinaryFile({
             path: posixJoin(sessionWorkDir, rel),
             content: readFileSync(join(repoDir, rel))
@@ -237,7 +197,7 @@ export class AiSdkHarnessBackend implements SessionBackend {
       }
 
       if (staged) {
-        await mirrorBack(staged.session, staged.workDir, repoDir);
+        await mirrorBack(staged.session, staged.workDir, repoDir, this.ignoredSegments);
       }
 
       const exitCode = transcript.exitCode();
@@ -251,53 +211,20 @@ export class AiSdkHarnessBackend implements SessionBackend {
       await session.destroy().catch(() => undefined);
     }
   }
-
-  private readonly defaultHarness = (input: CreateHarnessInput): HarnessAdapter => {
-    const auth = claudeCodeAuthFromEnv(input.env);
-    const adapter = createClaudeCode({
-      auth,
-      ...(this.options.model !== undefined ? { model: this.options.model } : {}),
-      ...(this.options.maxTurns !== undefined ? { maxTurns: this.options.maxTurns } : {}),
-      ...(this.options.thinking !== undefined ? { thinking: this.options.thinking } : {}),
-      ...(this.options.startupTimeoutMs !== undefined
-        ? { startupTimeoutMs: this.options.startupTimeoutMs }
-        : {})
-    });
-    // pnpm gives @ai-sdk/harness-claude-code its own @ai-sdk/harness
-    // instance (different zod peer context), so its HarnessV1 is nominally
-    // distinct from the agent's despite being byte-identical. Bridge that
-    // instance split in exactly this one place.
-    return adapter as unknown as HarnessAdapter;
-  };
-
-  private readonly defaultSandboxProvider = (
-    input: CreateSandboxProviderInput
-  ): HarnessSandboxProvider => {
-    return createVercelSandbox({
-      ...vercelCredentialsFromEnv(this.options),
-      runtime: this.options.runtime ?? DEFAULT_RUNTIME,
-      timeout: input.timeoutMs,
-      ports: [this.options.bridgePort ?? DEFAULT_BRIDGE_PORT],
-      // Deny-by-default egress from the signed contract, applied at the VM
-      // boundary. The bridge bootstrap and the model API are subject to it:
-      // a contract that wants this path live must allow the registry and
-      // api.anthropic.com (or the gateway host) explicitly.
-      networkPolicy: toVercelNetwork(input.contract.network)
-    });
-  };
 }
 
 /**
- * Mirror the session working tree back onto the local checkout so the
- * runner's standard git-based output collection sees the changes. The
- * sandbox FS surface has no directory listing, so the file list comes from
- * one `find` inside the VM; every path is validated before it is written
- * inside the local workspace.
+ * Mirror the session working tree back onto the local checkout so the runner's
+ * standard git-based output collection sees the changes. The sandbox FS
+ * surface has no directory listing, so the file list comes from one `find`
+ * inside the sandbox; every path is validated before it is written inside the
+ * local workspace.
  */
 async function mirrorBack(
   session: SandboxFsSession,
   workDir: string,
-  repoDir: string
+  repoDir: string,
+  ignoredSegments: ReadonlySet<string>
 ): Promise<void> {
   const listing = await session.run({
     command: `find ${shellQuote(workDir)} -type f`
@@ -311,16 +238,17 @@ async function mirrorBack(
     const remote = line.trim();
     if (!remote.startsWith(`${workDir}/`)) continue;
     const rel = remote.slice(workDir.length + 1);
-    if (rel.split("/").some((segment) => IGNORED_SEGMENTS.has(segment))) continue;
+    if (rel.split("/").some((segment) => ignoredSegments.has(segment))) continue;
     const content = await session.readBinaryFile({ path: remote });
     if (content === null) continue;
     writeMirroredFile(repoDir, rel, content);
   }
 }
 
-/** Create an AI SDK harness session backend for a Warrant runner. */
-export function aiSdkHarnessBackend(
-  options: AiSdkHarnessBackendOptions = {}
-): AiSdkHarnessBackend {
-  return new AiSdkHarnessBackend(options);
+/** Host a single harness binding plus a fallback backend for its tier. */
+export function harnessBackend(input: {
+  binding: HarnessBinding;
+  fallback: SessionBackend;
+}): AiSdkHarnessBackend {
+  return new AiSdkHarnessBackend(input);
 }

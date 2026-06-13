@@ -169,8 +169,10 @@ const TRUSTED_THIRD_PARTY = new Map([
   // dependency and bumped only as reviewed allowlist changes.
   ["@ai-sdk/harness", "1.0.0-canary.6"],
   ["@ai-sdk/harness-claude-code", "1.0.0-canary.2"],
+  ["@ai-sdk/harness-pi", "1.0.0-canary.2"],
   ["@ai-sdk/openai-compatible", "2.0.48"],
   ["@ai-sdk/provider", "3.0.10"],
+  ["@ai-sdk/sandbox-just-bash", "1.0.0-canary.6"],
   ["@ai-sdk/sandbox-vercel", "1.0.0-canary.6"],
   ["@types/node", "22.19.20"],
   ["@vercel/sandbox", "2.2.0"],

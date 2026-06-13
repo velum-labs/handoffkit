@@ -60,6 +60,8 @@ export type StackOptions = {
   startRunner?: boolean;
   /** Concurrent executions on the bundled runner. Defaults to 1. */
   concurrency?: number;
+  /** Idle poll interval for the bundled runner loop. Defaults to the runner's own default. */
+  pollIntervalMs?: number;
   /** Extra session backends for the bundled runner (e.g. hermetic). */
   backends?: SessionBackend[];
   port?: number;
@@ -174,9 +176,9 @@ export async function startStack(options: StackOptions = {}): Promise<Stack> {
     pool,
     dataDir: runnerDir,
     enrollToken: ENROLL_TOKEN,
-    // Tests poll an in-process loopback plane; the default 1s idle
-    // interval would dominate multi-run test wall time.
-    pollIntervalMs: 25,
+    ...(options.pollIntervalMs !== undefined
+      ? { pollIntervalMs: options.pollIntervalMs }
+      : {}),
     ...(options.concurrency !== undefined
       ? { concurrency: options.concurrency }
       : {}),

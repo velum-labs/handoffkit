@@ -57,7 +57,14 @@ async function runSleeps(
   options: StackOptions,
   count: number
 ): Promise<{ windows: { start: number; end: number }[] }> {
-  const stack: Stack = await startStack({ ...options, startRunner: true });
+  // A short idle poll keeps the test responsive; it does not race a manual
+  // runOnce because this test only requests runs and waits for the
+  // background loop to claim them.
+  const stack: Stack = await startStack({
+    pollIntervalMs: 25,
+    ...options,
+    startRunner: true
+  });
   const repo = makeRepo();
   try {
     const captured = await uploadWorkspace(stack.client, repo);
