@@ -17,9 +17,12 @@
   "dependencies": {
     "@ai-sdk/harness": "1.0.0-canary.6",
     "@ai-sdk/harness-claude-code": "1.0.0-canary.2",
+    "@ai-sdk/harness-pi": "1.0.0-canary.2",
+    "@ai-sdk/sandbox-just-bash": "1.0.0-canary.6",
     "@ai-sdk/sandbox-vercel": "1.0.0-canary.6",
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",
+    "@warrant/session-hermetic": "workspace:*",
     "@warrant/session-vercel-sandbox": "workspace:*",
     "ws": "8.21.0"
   },

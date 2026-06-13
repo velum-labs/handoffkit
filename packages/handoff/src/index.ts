@@ -42,7 +42,7 @@ export { triggers } from "./triggers.js";
 export type { FiredTrigger, Trigger } from "./triggers.js";
 export { branch } from "./isolation.js";
 export type { IsolationStrategy } from "./isolation.js";
-export { reviewStrategies } from "./review.js";
+export { reviewStrategies, scorecardFor } from "./review.js";
 export type {
   ReviewedRun,
   ReviewResult,

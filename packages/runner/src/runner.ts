@@ -49,6 +49,15 @@ export type RunnerOptions = {
    * stays dependency-free.
    */
   backends?: SessionBackend[];
+  /**
+   * How many claimed runs this runner executes at the same time.
+   * Defaults to 1, which preserves the strictly sequential claim loop.
+   * Each execution already owns all of its state (event chain, temp
+   * session dir), so concurrency is purely a claim-loop property — this
+   * is the single knob for one runner host; scale-out across hosts is
+   * more enrolled runners in the pool.
+   */
+  concurrency?: number;
 };
 
 type StoredIdentity = {
@@ -160,19 +169,48 @@ export class Runner {
   async start(): Promise<void> {
     this.stopped = false;
     const interval = this.options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    const concurrency = Math.max(1, Math.floor(this.options.concurrency ?? 1));
+    const inFlight = new Set<Promise<void>>();
+    const sleep = (): Promise<void> =>
+      new Promise((resolve) => setTimeout(resolve, interval));
+
     while (!this.stopped) {
+      if (inFlight.size >= concurrency) {
+        // At capacity: wait for any execution to settle before claiming
+        // again. The executions never reject (errors are caught below).
+        await Promise.race(inFlight);
+        continue;
+      }
       try {
-        const ran = await this.runOnce();
-        if (!ran) {
-          await new Promise((resolve) => setTimeout(resolve, interval));
+        const identity = await this.ensureEnrolled();
+        const claim = await this.client.claim({
+          runnerToken: identity.runnerToken,
+          pool: identity.pool
+        });
+        if ("empty" in claim) {
+          await sleep();
+          continue;
         }
+        const task: Promise<void> = this.execute(claim)
+          .catch((error) => {
+            console.error(
+              `runner error: ${error instanceof Error ? error.message : String(error)}`
+            );
+          })
+          .finally(() => {
+            inFlight.delete(task);
+          });
+        inFlight.add(task);
       } catch (error) {
         console.error(
           `runner error: ${error instanceof Error ? error.message : String(error)}`
         );
-        await new Promise((resolve) => setTimeout(resolve, interval));
+        await sleep();
       }
     }
+    // stop() interrupts claiming, not execution: drain what was claimed so
+    // every accepted run still ends in a posted receipt.
+    await Promise.all(inFlight);
   }
 
   stop(): void {

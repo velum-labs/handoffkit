@@ -33,6 +33,17 @@ export function buildAgentCommand(
         cmd: "codex",
         args: ["exec", "--skip-git-repo-check", prompt]
       };
+    case "pi":
+      // Pi is a host-runtime harness with no vendor CLI to wrap: it runs only
+      // through the AI SDK harness session backend, which ignores this argv
+      // (exactly as the harness path ignores the claude-code argv). The argv
+      // is a non-spawnable placeholder that exists only so the prepared
+      // execution has a stable shape to hash; the process backend refuses to
+      // spawn pi outright, so this command line is never executed.
+      return {
+        cmd: "pi",
+        args: ["--harness-only"]
+      };
     case "mock":
       return {
         cmd: process.execPath,

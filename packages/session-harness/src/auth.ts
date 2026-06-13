@@ -12,6 +12,7 @@
  * host environment nor exports the variable into the bridge.
  */
 import type { ClaudeCodeAuthOptions } from "@ai-sdk/harness-claude-code";
+import type { PiAuthOptions } from "@ai-sdk/harness-pi";
 import { CapabilityMismatchError } from "@warrant/runner";
 
 /**
@@ -81,4 +82,73 @@ export function claudeCodeAuthFromEnv(
       "session env (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or AI_GATEWAY_API_KEY); " +
       "refusing to fall back to the runner host environment"
   );
+}
+
+/**
+ * The provider env-var pairs the Pi adapter understands. Pi maps each
+ * `<PREFIX>_API_KEY` (with an optional `<PREFIX>_BASE_URL`) to a provider:
+ * OPENAI → openai, ANTHROPIC → anthropic, AI_GATEWAY → vercel-ai-gateway.
+ * For the swarm's local-model workers the meaningful pair is
+ * `OPENAI_BASE_URL` + `OPENAI_API_KEY` pointing at a local OpenAI-compatible
+ * endpoint (Ollama / mlx-lm), where the key is typically a dummy value.
+ *
+ * Pinned here so anything else in the contract's env policy fails closed
+ * rather than being silently dropped, exactly like the claude-code path.
+ */
+const PI_SUPPORTED_AUTH_VARS = [
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "AI_GATEWAY_API_KEY",
+  "AI_GATEWAY_BASE_URL",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_BASE_URL"
+] as const;
+
+/** A `<PREFIX>_API_KEY` is what actually selects a provider for Pi. */
+const PI_API_KEY_VARS = [
+  "OPENAI_API_KEY",
+  "AI_GATEWAY_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN"
+] as const;
+
+/**
+ * Build explicit Pi auth from the session env, fail-closed.
+ *
+ * Pi's default resolution reaches into the *host* process environment for an
+ * AI Gateway key or `VERCEL_OIDC_TOKEN`. On a Warrant runner that would
+ * bypass the secret broker, so this always passes an explicit `customEnv`
+ * built only from broker-released vars. It fails closed when the env carries
+ * a variable Pi cannot honor, and when no provider key is present at all
+ * (otherwise Pi would fall back to the host environment).
+ */
+export function piAuthFromEnv(env: Record<string, string>): PiAuthOptions {
+  const supported = new Set<string>(PI_SUPPORTED_AUTH_VARS);
+  const unsupported = Object.keys(env).filter((name) => !supported.has(name));
+  if (unsupported.length > 0) {
+    throw new CapabilityMismatchError(
+      `pi over the ai-sdk harness cannot deliver env vars [${unsupported.join(", ")}] ` +
+        `to the agent runtime; supported: ${PI_SUPPORTED_AUTH_VARS.join(", ")}`
+    );
+  }
+
+  const hasKey = PI_API_KEY_VARS.some((name) => env[name]);
+  if (!hasKey) {
+    throw new CapabilityMismatchError(
+      "pi over the ai-sdk harness requires a provider credential released into the " +
+        "session env (OPENAI_API_KEY with OPENAI_BASE_URL for a local endpoint, " +
+        "ANTHROPIC_API_KEY, or AI_GATEWAY_API_KEY); refusing to fall back to the " +
+        "runner host environment"
+    );
+  }
+
+  // Forward only the recognized, present pairs as resolved customEnv. Pi
+  // honors customEnv ahead of any ambient gateway credential, so the host
+  // environment is never consulted.
+  const customEnv: Record<string, string> = {};
+  for (const name of PI_SUPPORTED_AUTH_VARS) {
+    if (env[name]) customEnv[name] = env[name];
+  }
+  return { customEnv };
 }

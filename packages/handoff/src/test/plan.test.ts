@@ -21,6 +21,7 @@ test("typed descriptors carry no magic strings", () => {
     version: ">=2.1"
   });
   assert.deepEqual(agents.codex(), { kind: "codex" });
+  assert.deepEqual(agents.pi(), { kind: "pi" });
 });
 
 test("planner allows within policy and explains why", () => {

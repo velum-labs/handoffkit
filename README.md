@@ -20,10 +20,10 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | [`@warrant/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. Pluggable session-isolation backends. |
 | [`@warrant/session-hermetic`](packages/session-hermetic) | Hermetic session backend: a simulated bash interpreter ([just-bash](https://github.com/vercel-labs/just-bash)) with a virtual filesystem and interpreter-enforced egress. No real process or socket to escape with. |
 | [`@warrant/session-vercel-sandbox`](packages/session-vercel-sandbox) | Vercel Sandbox session backend: each session runs in a Firecracker microVM with VM-level isolation and domain egress policy. Experimental, integration-gated. |
-| [`@warrant/session-harness`](packages/session-harness) | AI SDK harness driver for the `vercel-sandbox` tier: runs claude-code through `@ai-sdk/harness` (`HarnessAgent`), which bootstraps the agent runtime inside the microVM and streams structured events the receipt captures as a JSONL transcript. Experimental, integration-gated. |
+| [`@warrant/session-harness`](packages/session-harness) | AI SDK harness driver, binding-based: `claudeCodeBinding` runs claude-code through `@ai-sdk/harness` (`HarnessAgent`) in a Vercel Sandbox microVM, and `piBinding` runs the host-runtime Pi harness on a local [just-bash](https://github.com/vercel-labs/just-bash) sandbox driving a local model (the cheap swarm worker). Structured events become a JSONL transcript. Experimental, integration-gated. |
 | [`@warrant/sdk`](packages/sdk) | Thin client over the plane API plus offline receipt verification. |
 | [`@warrant/handoff`](packages/handoff) | The continuation SDK: `handoff(...)`, `checkpoint`, `continueIn`, `parallel`, `review`, `pull` — typed descriptors, fail-closed planning, full provenance. |
-| [`@warrant/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops: `remoteTools(...)` returns AI SDK-compatible tools whose calls execute as signed contracts in governed sessions and return with receipts. |
+| [`@warrant/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops and orchestrators: `remoteTools(...)` runs a model's tool calls as governed contracts; `swarmTools(...)` gives a cloud orchestrator harness governed dispatch/status/pull/escalate over a local worker swarm. Both return AI SDK-compatible tools that execute in governed sessions and return with receipts. |
 | [`@warrant/adapter-compute`](packages/adapter-compute) | ComputeSDK-shaped compute surface: `sandbox.create()`, `runCommand`, `filesystem` — every command a governed run with a receipt. |
 | [`@warrant/cli`](packages/cli) | The `warrant` CLI: the primary product surface. |
 | [`@warrant/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
@@ -121,6 +121,7 @@ pnpm demo all       # run every non-interactive example
 | 11 | [Golden interface](examples/golden-interface) | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
 | 12 | [Model escalation](examples/model-escalation) | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
 | 13 | [Hermetic session](examples/hermetic-session) | The `command` harness runs inside a bash interpreter with a virtual filesystem and interpreter-enforced egress; the receipt records `isolation: hermetic`. |
+| 14 | [Cloud orchestrator, local swarm](examples/swarm) | A cloud orchestrator drives a governed swarm via `swarmTools`: dispatch fans a goal across cheap local workers (each a signed run), completed workers are judged from deterministic evidence and pulled, overlaps are caught from receipts and escalated to a cloud target. `cockpit.ts` wires the same tools into a `HarnessAgent` + `@ai-sdk/tui` terminal. |
 
 ## Using real models
 
@@ -322,8 +323,9 @@ How the runner isolates the agent session is pluggable, requested per run (`--is
 | --- | --- | --- | --- | --- |
 | `process` | built-in | child process, scrubbed env, egress proxy (process-level — a binary can ignore proxy vars; every attempt is still recorded) | all | default |
 | `hermetic` | `@warrant/session-hermetic` | simulated bash interpreter + virtual filesystem; egress enforced by the interpreter (no socket exists for denied hosts) | `command` only (no real OS) | implemented, tested |
+| `hermetic` | `@warrant/session-harness` (`piBinding`) | same just-bash tier, with the host-runtime Pi harness driving a local model; everything else delegates to `hermeticBackend()` | `pi` (plus the fallback's `command`) | experimental, integration-gated |
 | `vercel-sandbox` | `@warrant/session-vercel-sandbox` | Firecracker microVM, VM-level isolation, domain egress policy | all but the test mock | experimental, integration-gated |
-| `vercel-sandbox` | `@warrant/session-harness` | same microVM tier, with claude-code driven through the AI SDK harness bridge (structured event transcript, in-sandbox runtime bootstrap); everything else delegates to the plain backend | all but the test mock | experimental, integration-gated |
+| `vercel-sandbox` | `@warrant/session-harness` (`claudeCodeBinding`) | same microVM tier, with claude-code driven through the AI SDK harness bridge (structured event transcript, in-sandbox runtime bootstrap); everything else delegates to the plain backend | all but the test mock | experimental, integration-gated |
 
 ```sh
 warrant run --agent command --isolation hermetic "awk -F, 'NR>1{s+=$2}END{print s}' orders.csv > total.txt"
@@ -343,7 +345,7 @@ This is the execution substrate the spec places *below* Warrant ("E2B, Modal, Da
 
 ### AI SDK harness driver: claude-code without a pre-baked CLI
 
-AI SDK 7 introduced an experimental [harness abstraction](https://vercel.com/changelog/program-agent-harnesses-with-ai-sdk) (`HarnessAgent` + adapters like [`@ai-sdk/harness-claude-code`](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/claude-code)): the adapter bootstraps the agent runtime *inside* a sandbox from pinned, lockfile-frozen bridge dependencies and streams structured events (tool calls, file changes, finish reasons) back to the host over a sandbox-exposed WebSocket. `@warrant/session-harness` wraps that as an alternative backend for the `vercel-sandbox` tier:
+AI SDK 7 introduced an experimental [harness abstraction](https://vercel.com/changelog/program-agent-harnesses-with-ai-sdk) (`HarnessAgent` + adapters like [`@ai-sdk/harness-claude-code`](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/claude-code)): the adapter bootstraps the agent runtime *inside* a sandbox from pinned, lockfile-frozen bridge dependencies and streams structured events (tool calls, file changes, finish reasons) back to the host over a sandbox-exposed WebSocket. `@warrant/session-harness` wraps that, binding-based: a `HarnessBinding` names an agent kind, an isolation tier, an adapter factory, and a sandbox factory, and the generic backend owns staging, the transcript, mirror-back, and the boundary event once. `aiSdkHarnessBackend()` hosts the `claudeCodeBinding` for the `vercel-sandbox` tier:
 
 ```ts
 import { aiSdkHarnessBackend } from "@warrant/session-harness";
@@ -360,6 +362,26 @@ What changes versus the plain `vercel-sandbox` backend — and what deliberately
 - Non-claude-code executions (the `command` harness, custom argv/shell) are delegated unchanged to `vercelSandboxBackend()`, so this backend never narrows what the tier could already run.
 
 The `@ai-sdk/harness*` packages are canary releases; they are exact-pinned on the dependency allowlist like everything else, and the backend is integration-gated the same way `@warrant/session-vercel-sandbox` is (it constructs without credentials; the real path needs `VERCEL_TOKEN` plus a contract-released model credential). The package's test suite drives the real `HarnessAgent` orchestration end-to-end against an in-process harness adapter and a local-filesystem sandbox provider — contract to verified receipt, no cloud dependencies.
+
+### Cloud orchestrator, local swarm
+
+The second binding, `piBinding`, runs the host-runtime [Pi harness](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/pi) on a local [`@ai-sdk/sandbox-just-bash`](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses) sandbox — no microVM, no per-run image. Each Pi worker drives a cheap *local* model: the endpoint arrives as the broker-released secrets `OPENAI_BASE_URL` / `OPENAI_API_KEY`, mapped fail-closed into the adapter's explicit auth (`piAuthFromEnv`), never the host environment. `pi` is harness-only — the runner refuses to spawn it as a process — so there is exactly one way to run it.
+
+```ts
+import { piHarnessBackend } from "@warrant/session-harness";
+
+// concurrency lets one runner execute a worker fan-out in parallel
+new Runner({ planeUrl, pool, enrollToken, concurrency: 8, backends: [piHarnessBackend()] });
+```
+
+On top of that, `swarmTools()` gives a *cloud orchestrator harness* (Claude Code dynamic workflows, a Codex goal — anything run through `HarnessAgent`) the governed dispatch surface it lacks, as host-executed AI SDK tools:
+
+- `dispatch_workers` fans a goal out across the local swarm via `h.parallel()` — each worker a signed governed run. Policy-bounded: a fan-out past the `localFirst()` ceiling returns `budgetExceeded` (Codex's `budget_limited`, expressed with Warrant's policy) instead of throwing.
+- `worker_status` reports without blocking, so the harness interleaves its own work.
+- `pull_worker` waits, then judges from deterministic evidence. Overlap with already-pulled files is computed from receipt `file.changed` events — never asked of a model — and downgraded to escalation; a clean, disjoint, completed worker is pulled onto the workspace of record and returned with its `Scorecard`, a diff excerpt, and its verified receipt.
+- `escalate_task` re-runs a task on a capable cloud target via `h.continueIn()`, bounded by an escalation budget.
+
+The orchestration *loop* stays the vendor harness's own (its native decomposition, iteration, and durable progress); Warrant contributes only the boundary. The orchestrator's sandbox is never mirrored back — the sole path into the workspace of record is a governed-run pull, so every landed change carries a contract and a receipt. [`examples/swarm`](examples/swarm) shows both forms: a deterministic, key-free `run.ts` walkthrough (demo 14) and a live `@ai-sdk/tui` terminal cockpit (`cockpit.ts`) where `escalate_task` — the only tool that spends cloud money — pauses for a terminal `y/n`.
 
 ## Hardening and operations
 

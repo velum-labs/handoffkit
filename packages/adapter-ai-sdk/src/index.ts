@@ -15,6 +15,24 @@ export type {
   RemoteToolsConfig,
   RemoteToolsContextConfig
 } from "./remote-tools.js";
+export { swarmTools } from "./swarm-tools.js";
+export type {
+  DispatchInput,
+  DispatchOutput,
+  EscalateInput,
+  EscalateOutput,
+  PullInput,
+  PullOutput,
+  StatusInput,
+  StatusOutput,
+  SwarmPlane,
+  SwarmRunRecord,
+  SwarmTools,
+  SwarmToolsConfig,
+  SwarmToolsContextConfig,
+  SwarmToolSet,
+  WorkerTaskInput
+} from "./swarm-tools.js";
 export { handoffModel, withModel } from "./model.js";
 export type { EscalationReason, HandoffModelConfig } from "./model.js";
 export { loadRouterCard, routedModel, withRoutedModel } from "./routed-model.js";

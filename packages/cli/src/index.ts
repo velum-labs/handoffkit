@@ -89,6 +89,8 @@ function agentSpecFor(kind: string): AgentSpec {
       return agents.claudeCode();
     case "codex":
       return agents.codex();
+    case "pi":
+      return agents.pi();
     case "mock":
       return agents.mock();
     case "command":

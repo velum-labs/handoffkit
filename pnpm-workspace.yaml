@@ -9,6 +9,25 @@ packages:
 # SDK on the runner host would add an unused dependency tree (plus its own
 # peer cascade) to the trust surface for nothing, so the missing peer is
 # ignored explicitly here instead.
+#
+# @ai-sdk/harness-pi declares @earendil-works/pi-coding-agent (a ~12 MB host
+# coding-agent runtime) as a peer. Unlike claude-code it runs in the host
+# process, so the *real* Pi path does need it — but only that integration-
+# gated path does. The governed-plane code, the unit tests, and the fake-
+# harness e2e path never load it (the pi binding's default factories import
+# the wrapper lazily). Keeping it an ignored missing peer leaves it out of the
+# default trust surface; a runner that wants the live local-swarm path adds it
+# explicitly. Same rationale as claude-agent-sdk above.
+#
+# @ai-sdk/sandbox-just-bash pins its just-bash peer to ^2.14.0; this repo
+# already depends on just-bash 3.0.1 (the hermetic backend). The sandbox
+# wrapper is only reached on the integration-gated real Pi path, which is
+# verified against the installed just-bash separately, so the single repo
+# version is accepted here rather than carrying two major lines of the same
+# interpreter.
 peerDependencyRules:
   ignoreMissing:
     - "@anthropic-ai/claude-agent-sdk"
+    - "@earendil-works/pi-coding-agent"
+  allowedVersions:
+    "@ai-sdk/sandbox-just-bash>just-bash": "3.0.1"

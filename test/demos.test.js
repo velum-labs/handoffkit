@@ -92,3 +92,13 @@ test("demo 13 (hermetic session) runs in the interpreter and blocks egress", () 
   assert.match(result.stdout, /isolation: hermetic/);
   assert.match(result.stdout, /command not found|BLOCKED/);
 });
+
+test("demo 14 (swarm) dispatches governed workers, catches overlap, and escalates", () => {
+  const result = demo(["14"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /dispatched 2 governed worker/);
+  assert.match(result.stdout, /verdict: accepted/);
+  assert.match(result.stdout, /verdict: escalate/);
+  assert.match(result.stdout, /overlaps already-pulled/);
+  assert.match(result.stdout, /receipt verified: true/);
+});
