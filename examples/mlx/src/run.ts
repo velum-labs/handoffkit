@@ -9,7 +9,7 @@
  *   WARRANT_MLX_IDLE_SHUTDOWN_MS idle shutdown (default: 0 — stay up through the run)
  *   WARRANT_MLX_PROMPT           prompt override
  */
-import { generateText } from "ai";
+import { generateText, jsonSchema, Output } from "ai";
 
 import {
   defaultMlxDir,
@@ -111,7 +111,8 @@ async function main(): Promise<void> {
     model,
     ...(dir ? { env: { dir } } : {}),
     idleShutdownMs,
-    onEvent: onServerEvent
+    onEvent: onServerEvent,
+    structured: true
   });
 
   try {
@@ -131,6 +132,20 @@ async function main(): Promise<void> {
     }
     detail(`disk footprint: ${formatBytes(envInfo.diskBytes)}`);
     ok(`server status: ${local.status()}`);
+
+    step("generateText object output with the local MLX model");
+    const objectResult = await generateText({
+      model: local,
+      prompt: "What is the capital of France?",
+      output: Output.object({
+        schema: jsonSchema<{ capital: string }>({
+          type: "object",
+          properties: { capital: { type: "string" } },
+          required: ["capital"]
+        })
+      })
+    });
+    ok(`model answered with structured output: ${JSON.stringify(objectResult.output)}`);
 
     step("generateText with the local MLX model");
     detail(`prompt: ${prompt}`);

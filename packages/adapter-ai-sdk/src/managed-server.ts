@@ -61,17 +61,24 @@ export type ManagedModelServerOptions = {
   idleShutdownMs?: number;
   shutdownGraceMs?: number;
   onEvent?: (event: ManagedServerEvent) => void;
+  /** Whether the OpenAI-compatible endpoint enforces schema response formats. */
+  supportsStructuredOutputs?: boolean;
   /** Build the inner model once the server is up. */
   createModel?: (baseURL: string, modelId: string) => LanguageModelV3;
 };
 
-function defaultCreateModel(baseURL: string, modelId: string): LanguageModelV3 {
+function defaultCreateModel(
+  baseURL: string,
+  modelId: string,
+  supportsStructuredOutputs: boolean
+): LanguageModelV3 {
   return createOpenAICompatible({
     name: "warrant-managed-server",
     // The provider appends route paths (e.g. /chat/completions) directly,
     // so the OpenAI-compatible API prefix belongs on the base URL.
     baseURL: `${baseURL}/v1`,
-    apiKey: "not-needed"
+    apiKey: "not-needed",
+    supportsStructuredOutputs
   })(modelId);
 }
 
@@ -219,10 +226,13 @@ export class ManagedModelServer implements LanguageModelV3 {
       }
 
       this.currentBaseURL = baseURL;
-      this.inner = (this.options.createModel ?? defaultCreateModel)(
-        baseURL,
-        this.options.modelId
-      );
+      this.inner = this.options.createModel
+        ? this.options.createModel(baseURL, this.options.modelId)
+        : defaultCreateModel(
+            baseURL,
+            this.options.modelId,
+            this.options.supportsStructuredOutputs ?? false
+          );
       this.state = "running";
       this.lastUsedMs = Date.now();
       this.armIdleTimer();
@@ -446,7 +456,9 @@ export function mlxServer(
   const server = new ManagedModelServer({
     ...serverOptions,
     modelId: model,
-    prepare: (port) => env.prepare(model, port, extraArgs ?? [])
+    prepare: (port) => env.prepare(model, port, extraArgs ?? []),
+    supportsStructuredOutputs:
+      structured === true || serverOptions.supportsStructuredOutputs === true
   });
   return Object.assign(server, { env });
 }

@@ -43,15 +43,13 @@ import { delimiter, dirname, join } from "node:path";
 export const MLX_LM_PIN = "0.31.3";
 
 /**
- * The velum-labs/mlx-lm fork installed in structured mode: upstream v0.31.3
+ * The velum-labs/mlx-lm fork installed in structured mode: upstream mlx-lm
  * plus the self-contained mlx_lm.structured package (see the fork's
- * STRUCTURED.md). The [structured] extra pulls the fork's exact-pinned
- * outlines-core. Pinned to a commit SHA (the head of the fork's
- * structured-0.31.3 branch) so provisioned environments are exactly
- * reproducible; bump it like any other trusted pin when the branch moves.
+ * STRUCTURED.md). Pinned to the current reviewed head of the fork's main
+ * branch; refresh this SHA when we intentionally pick up fork fixes.
  */
 export const MLX_LM_STRUCTURED_PIN =
-  "mlx-lm[structured] @ git+https://github.com/velum-labs/mlx-lm@aa81de2360cb59887b50180eeb410a843d9c2845";
+  "mlx-lm[structured] @ git+https://github.com/velum-labs/mlx-lm@2ee2d570d365a1fcee9ba90a298f1bae865fccda";
 
 /** Python version requested from uv (which can download it if absent). */
 export const PYTHON_PIN = "3.12";
