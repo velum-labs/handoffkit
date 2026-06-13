@@ -9,6 +9,8 @@ import {
 } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
+import { handleResponses } from "./adapters/responses.js";
+import type { ResponsesRequest } from "./adapters/responses.js";
 import type { Backend } from "./backend.js";
 import type { GatewayDialect, ProvenanceSink } from "./provenance.js";
 
@@ -113,9 +115,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     if (method === "POST" && path === "/v1/responses") {
-      writeJson(res, 501, {
-        error: { message: "openai-responses adapter not yet implemented (M3)", type: "not_implemented" }
-      });
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      const body = raw as ResponsesRequest;
+      const started = Date.now();
+      const response = await handleResponses(backend, body);
+      record(provenance, "openai-responses", body, backend.defaultModel, response.status, Date.now() - started);
+      await pipeUpstream(res, response);
       return;
     }
 

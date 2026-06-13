@@ -33,4 +33,11 @@ export {
   openAiSseToAnthropic
 } from "./adapters/anthropic.js";
 export type { AnthropicRequest } from "./adapters/anthropic.js";
+export {
+  chatToResponses,
+  handleResponses,
+  openAiSseToResponses,
+  responsesToChat
+} from "./adapters/responses.js";
+export type { ResponsesRequest } from "./adapters/responses.js";
 export type { GatewayDialect, ModelCallRecord, ProvenanceSink } from "./provenance.js";

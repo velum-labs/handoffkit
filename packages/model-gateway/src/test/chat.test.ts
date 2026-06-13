@@ -159,17 +159,13 @@ test("streams server-sent events straight through", async () => {
   }
 });
 
-test("returns 501 for the not-yet-built Responses adapter", async () => {
+test("returns 404 for an unknown route", async () => {
   const gateway = await startGateway({
     backend: new OpenAiBackend({ baseUrl: "http://127.0.0.1:1/v1" })
   });
   try {
-    const response = await fetch(`${gateway.url()}/v1/responses`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "x", input: "hi" })
-    });
-    assert.equal(response.status, 501);
+    const response = await fetch(`${gateway.url()}/v1/unknown`, { method: "POST", body: "{}" });
+    assert.equal(response.status, 404);
   } finally {
     await gateway.close();
   }
