@@ -25,6 +25,7 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 | [`@warrant/handoff`](packages/handoff) | The continuation SDK: `handoff(...)`, `checkpoint`, `continueIn`, `parallel`, `review`, `pull` — typed descriptors, fail-closed planning, full provenance. |
 | [`@warrant/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops and orchestrators: `remoteTools(...)` runs a model's tool calls as governed contracts; `swarmTools(...)` gives a cloud orchestrator harness governed dispatch/status/pull/escalate over a local worker swarm. Both return AI SDK-compatible tools that execute in governed sessions and return with receipts. |
 | [`@warrant/adapter-compute`](packages/adapter-compute) | ComputeSDK-shaped compute surface: `sandbox.create()`, `runCommand`, `filesystem` — every command a governed run with a receipt. |
+| [`@warrant/model-gateway`](packages/model-gateway) | Native local-model gateway: fronts an OpenAI-compatible local model (the owned `mlx_lm.server` fork by default) and exposes the wire dialects each agent harness needs — OpenAI Chat Completions (opencode, Cursor plan mode), Anthropic Messages (Claude Code), and OpenAI Responses (Codex) — so a local model can transparently back them. |
 | [`@warrant/cli`](packages/cli) | The `warrant` CLI: the primary product surface. |
 | [`@warrant/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
 | [`examples/*`](examples) | Standalone example projects for the runnable demos (below). |
@@ -214,6 +215,23 @@ const model = routedModel({
 // runs. A failed call falls back to the next-best candidate, honestly
 // reported via onDecision (withRoutedModel wires this into h.trace()).
 ```
+
+## Local models behind agent harnesses
+
+`warrant local <tool>` backs a vendor agent — Claude Code, Codex, opencode, or Cursor — with a locally running model, without changing how you invoke the tool. It starts the [`@warrant/model-gateway`](packages/model-gateway), which fronts an OpenAI-compatible local model (the owned `mlx_lm.server` fork by default) and exposes the dialect each harness expects: OpenAI Chat Completions for opencode and the Cursor plan panel, the Anthropic Messages API for Claude Code, and the OpenAI Responses API for Codex. The launcher applies the tool's native config shim and then execs the real binary with your own arguments.
+
+```sh
+# Default backend is the owned mlx fork; or point at any OpenAI-compatible server:
+export WARRANT_LOCAL_MODEL_URL=http://localhost:11434/v1   # Ollama, vLLM, LM Studio, …
+export WARRANT_LOCAL_MODEL=qwen3:8b
+
+warrant local claude "fix the flaky auth test"   # Claude Code on the local model
+warrant local codex "summarize the repo"          # Codex via the Responses dialect
+warrant local opencode "add a CHANGELOG entry"    # opencode via a custom provider
+warrant local serve                               # just run the gateway (all dialects)
+```
+
+Cursor is supported in plan/chat mode only: its coding agent (Composer, inline edit, apply, autocomplete) is locked to Cursor's own backend and cannot reach localhost, so `warrant local cursor` prints the Settings → Models values to paste and expects a public tunnel URL (`--public-url` or `WARRANT_PUBLIC_URL`).
 
 ## The handoff SDK
 
