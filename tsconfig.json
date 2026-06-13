@@ -5,6 +5,9 @@
       "path": "packages/adapter-ai-sdk"
     },
     {
+      "path": "packages/model-gateway"
+    },
+    {
       "path": "packages/adapter-compute"
     },
     {

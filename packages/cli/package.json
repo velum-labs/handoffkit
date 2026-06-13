@@ -21,6 +21,7 @@
   "files": ["dist"],
   "dependencies": {
     "@warrant/handoff": "workspace:*",
+    "@warrant/model-gateway": "workspace:*",
     "@warrant/plane": "workspace:*",
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",

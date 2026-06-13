@@ -328,6 +328,9 @@ importers:
       '@warrant/handoff':
         specifier: workspace:*
         version: link:../handoff
+      '@warrant/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@warrant/plane':
         specifier: workspace:*
         version: link:../plane
@@ -371,6 +374,12 @@ importers:
       '@warrant/workspace':
         specifier: workspace:*
         version: link:../workspace
+
+  packages/model-gateway:
+    dependencies:
+      '@warrant/adapter-ai-sdk':
+        specifier: workspace:*
+        version: link:../adapter-ai-sdk
 
   packages/plane:
     dependencies:

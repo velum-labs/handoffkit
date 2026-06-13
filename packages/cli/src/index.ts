@@ -24,6 +24,8 @@ import { PlaneClient } from "@warrant/sdk";
 import { captureWorkspace, pullRun } from "@warrant/workspace";
 
 import { initHome, loadHome, secretStoreFor } from "./config.js";
+import { LOCAL_TOOLS, runLocal } from "./local.js";
+import type { LocalTool } from "./local.js";
 import {
   renderDisclosure,
   renderReceipt,
@@ -73,6 +75,11 @@ usage:
   warrant pull RUN_ID [--repo DIR]               divergence-safe pull of results
   warrant export [--since ISO]                   audit JSONL export
   warrant ui                                     control panel URL and login token
+  warrant local <tool> [args...]                 back a vendor agent with a local model
+      tools: claude | codex | opencode | cursor | serve
+      --public-url URL    public tunnel URL for Cursor (or WARRANT_PUBLIC_URL)
+      --auth-token TOKEN  require a bearer token on the gateway
+      (model backend via WARRANT_LOCAL_MODEL_URL / WARRANT_MLX_MODEL; mlx by default)
 
 global:
   --dir DIR    warrant home (default: ./.warrant)
@@ -520,6 +527,27 @@ async function main(): Promise<void> {
       console.log(`control panel: ${home.config.planeUrl}/ui/`);
       console.log(`login token:   ${home.config.adminToken}`);
       return;
+    }
+    case "local": {
+      if (sub === undefined || !(LOCAL_TOOLS as readonly string[]).includes(sub)) {
+        fail(`usage: warrant local <${LOCAL_TOOLS.join(" | ")}> [args...]`);
+      }
+      // Split warrant's own flags from the args forwarded to the tool, stopping
+      // at the first token so the tool's own flags pass through untouched.
+      const toolArgs: string[] = [];
+      const options: { publicUrl?: string; authToken?: string } = {};
+      for (let i = 0; i < rest.length; i++) {
+        const token = rest[i];
+        if (token === "--public-url") {
+          options.publicUrl = rest[++i];
+        } else if (token === "--auth-token") {
+          options.authToken = rest[++i];
+        } else {
+          toolArgs.push(token as string);
+        }
+      }
+      const code = await runLocal(sub as LocalTool, toolArgs, options);
+      process.exit(code);
     }
     case undefined:
     case "help":
