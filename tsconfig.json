@@ -89,6 +89,9 @@
       "path": "examples/hermetic-session"
     },
     {
+      "path": "examples/swarm"
+    },
+    {
       "path": "examples/mlx"
     }
   ]

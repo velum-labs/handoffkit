@@ -243,6 +243,39 @@ importers:
         specifier: workspace:*
         version: link:../../packages/workspace
 
+  examples/swarm:
+    dependencies:
+      '@ai-sdk/harness':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
+      '@ai-sdk/harness-claude-code':
+        specifier: 1.0.0-canary.2
+        version: 1.0.0-canary.2
+      '@ai-sdk/sandbox-vercel':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
+      '@ai-sdk/tui':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(zod@4.4.3)
+      '@warrant/adapter-ai-sdk':
+        specifier: workspace:*
+        version: link:../../packages/adapter-ai-sdk
+      '@warrant/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+      '@warrant/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@warrant/session-harness':
+        specifier: workspace:*
+        version: link:../../packages/session-harness
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
   packages/adapter-ai-sdk:
     dependencies:
       '@ai-sdk/openai-compatible':
@@ -562,6 +595,10 @@ packages:
     engines: {node: '>=22'}
     peerDependencies:
       '@vercel/sandbox': ^2.0.1
+
+  '@ai-sdk/tui@1.0.0-canary.6':
+    resolution: {integrity: sha512-Kw9Yu83Tbq5gpZvefJr6BKsO51z4GCcZ7QTSWAtpTD44pD+hYfOSu1OH8+VhalmdJShS3q6XENL3UExFgL01nA==}
+    engines: {node: '>=22'}
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
@@ -1146,6 +1183,12 @@ snapshots:
       '@vercel/sandbox': 2.2.0
     transitivePeerDependencies:
       - ws
+      - zod
+
+  '@ai-sdk/tui@1.0.0-canary.6(zod@4.4.3)':
+    dependencies:
+      ai: 7.0.0-canary.171(zod@4.4.3)
+    transitivePeerDependencies:
       - zod
 
   '@borewit/text-codec@0.2.2': {}

@@ -1,0 +1,20 @@
+{
+  "name": "@warrant/example-swarm",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: a cloud orchestrator harness driving a governed swarm of local Pi workers via swarmTools, with a terminal cockpit.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@ai-sdk/harness": "1.0.0-canary.6",
+    "@ai-sdk/harness-claude-code": "1.0.0-canary.2",
+    "@ai-sdk/sandbox-vercel": "1.0.0-canary.6",
+    "@ai-sdk/tui": "1.0.0-canary.6",
+    "@warrant/adapter-ai-sdk": "workspace:*",
+    "@warrant/example-utils": "workspace:*",
+    "@warrant/handoff": "workspace:*",
+    "@warrant/session-harness": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "ai": "6.0.200"
+  }
+}

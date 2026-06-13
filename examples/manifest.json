@@ -91,6 +91,13 @@
       "title": "hermetic session isolation",
       "summary": "Run the command harness inside a simulated bash interpreter (just-bash) with a virtual filesystem and interpreter-enforced egress. No real process, no real socket — nothing to escape with. The receipt records isolation: hermetic.",
       "interactive": false
+    },
+    {
+      "id": "14",
+      "directory": "swarm",
+      "title": "cloud orchestrator, local swarm",
+      "summary": "A cloud orchestrator drives a governed swarm via swarmTools: dispatch fans a goal out across cheap local workers, each a signed run; completed workers are judged from deterministic evidence and pulled, overlaps are caught from receipts and escalated to a cloud target. The orchestration loop is the harness's own; Warrant governs the boundary.",
+      "interactive": false
     }
   ],
   "infra": [
