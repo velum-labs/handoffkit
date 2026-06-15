@@ -78,7 +78,12 @@ class FusionEngine:
                 messages,
                 selected_sampling,
             )
-            return FusionResult(mode="single", content=candidate.content, candidates=[candidate])
+            return FusionResult(
+                mode="single",
+                content=candidate.content,
+                candidates=[candidate],
+                metrics=_candidate_metrics([candidate]),
+            )
 
         candidates = await self._generate_candidates(
             mode=selected_mode,
@@ -97,6 +102,7 @@ class FusionEngine:
             content=answer,
             candidates=ranked,
             analysis=analysis,
+            metrics=_candidate_metrics(ranked),
         )
 
     async def _generate_candidates(
@@ -206,6 +212,36 @@ def _candidate_signal(candidate: Candidate) -> int:
     lower = candidate.content.lower()
     signal_words = ("because", "therefore", "however", "evidence", "tradeoff", "verify")
     return sum(1 for word in signal_words if word in lower)
+
+
+def _candidate_metrics(candidates: Sequence[Candidate]) -> dict[str, object]:
+    latencies = [
+        latency
+        for candidate in candidates
+        if isinstance(latency := candidate.metadata.get("latency_s"), int | float)
+    ]
+    completion_tokens = 0
+    prompt_tokens = 0
+    for candidate in candidates:
+        usage = candidate.metadata.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        completion_tokens += _optional_int(usage.get("completion_tokens"))
+        prompt_tokens += _optional_int(usage.get("prompt_tokens"))
+    return {
+        "candidate_count": len(candidates),
+        "candidate_model_ids": [candidate.model_id for candidate in candidates],
+        "candidate_latency_s_max": max(latencies, default=0.0),
+        "candidate_latency_s_sum": sum(latencies),
+        "candidate_prompt_tokens": prompt_tokens,
+        "candidate_completion_tokens": completion_tokens,
+    }
+
+
+def _optional_int(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    return 0
 
 
 def _parse_analysis(content: str) -> FusionAnalysis:

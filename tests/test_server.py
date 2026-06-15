@@ -28,3 +28,27 @@ def test_chat_completions_single_mode() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["choices"][0]["message"]["content"] == "hello from fake"
+    assert body["fusionkit"]["candidate_count"] == 1
+
+
+def test_chat_completions_rejects_invalid_fusion_mode() -> None:
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
+        ],
+        default_model="fast",
+        default_mode="single",
+    )
+    app = create_app(config, clients={"fast": FakeModelClient("fast", ["hello from fake"])})
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "fusionkit/single",
+            "messages": [{"role": "user", "content": "hello"}],
+            "fusion": {"mode": "unknown"},
+        },
+    )
+
+    assert response.status_code == 422

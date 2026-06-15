@@ -12,6 +12,13 @@ from fusionkit_core.types import ChatMessage
 from pydantic import BaseModel, Field
 
 
+class FusionOptions(BaseModel):
+    mode: FusionMode | None = None
+    panel_models: list[str] | None = None
+    sample_count: int | None = Field(default=None, ge=1)
+    verify: bool = False
+
+
 class FusionRequest(BaseModel):
     model: str = "fusionkit/router"
     messages: list[ChatMessage]
@@ -19,7 +26,7 @@ class FusionRequest(BaseModel):
     top_p: float | None = None
     max_tokens: int | None = None
     stream: bool = False
-    fusion: dict[str, Any] = Field(default_factory=dict)
+    fusion: FusionOptions = Field(default_factory=FusionOptions)
 
 
 def create_app(
@@ -64,9 +71,9 @@ def create_app(
             normalize_messages(request.messages),
             mode=mode,
             sampling=sampling,
-            panel_models=request.fusion.get("panel_models"),
-            sample_count=request.fusion.get("sample_count"),
-            verify=bool(request.fusion.get("verify", False)),
+            panel_models=request.fusion.panel_models,
+            sample_count=request.fusion.sample_count,
+            verify=request.fusion.verify,
         )
         return _openai_chat_response(request.model, result.content, result.metrics)
 
@@ -74,11 +81,17 @@ def create_app(
 
 
 def _mode_from_request(request: FusionRequest) -> FusionMode:
-    if "mode" in request.fusion:
-        return request.fusion["mode"]
+    if request.fusion.mode is not None:
+        return request.fusion.mode
     suffix = request.model.rsplit("/", maxsplit=1)[-1]
-    if suffix in {"single", "self", "panel", "router"}:
-        return suffix  # type: ignore[return-value]
+    if suffix == "single":
+        return "single"
+    if suffix == "self":
+        return "self"
+    if suffix == "panel":
+        return "panel"
+    if suffix == "router":
+        return "router"
     return "router"
 
 

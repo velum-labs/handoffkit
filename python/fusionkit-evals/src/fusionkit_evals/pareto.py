@@ -4,7 +4,7 @@ import json
 from collections.abc import Iterable
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ParetoPoint(BaseModel):
@@ -13,7 +13,7 @@ class ParetoPoint(BaseModel):
     latency_s: float
     peak_memory_gb: float | None = None
     energy_j: float | None = None
-    metadata: dict[str, object] = {}
+    metadata: dict[str, object] = Field(default_factory=dict)
 
 
 def find_pareto_front(points: Iterable[ParetoPoint]) -> list[ParetoPoint]:
@@ -31,13 +31,44 @@ def load_points(path: str | Path) -> list[ParetoPoint]:
 
 
 def write_pareto_report(path: str | Path, points: Iterable[ParetoPoint]) -> None:
-    front = find_pareto_front(points)
+    point_list = list(points)
+    front = find_pareto_front(point_list)
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.suffix.lower() in {".md", ".markdown"}:
+        output_path.write_text(format_pareto_markdown(point_list, front), encoding="utf-8")
+        return
     output_path.write_text(
         json.dumps([point.model_dump(mode="json") for point in front], indent=2),
         encoding="utf-8",
     )
+
+
+def format_pareto_markdown(
+    points: Iterable[ParetoPoint],
+    front: Iterable[ParetoPoint] | None = None,
+) -> str:
+    point_list = list(points)
+    front_points = list(front) if front is not None else find_pareto_front(point_list)
+    front_ids = {point.id for point in front_points}
+    lines = [
+        "# Pareto Report",
+        "",
+        "| ID | Pareto | Quality | Latency (s) | Memory (GB) | Energy (J) |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+    ]
+    for point in sorted(point_list, key=lambda item: item.id):
+        lines.append(
+            "| "
+            f"{point.id} | "
+            f"{'yes' if point.id in front_ids else 'no'} | "
+            f"{point.quality:.4f} | "
+            f"{point.latency_s:.4f} | "
+            f"{_format_optional(point.peak_memory_gb)} | "
+            f"{_format_optional(point.energy_j)} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _dominates(left: ParetoPoint, right: ParetoPoint) -> bool:
@@ -56,3 +87,9 @@ def _dominates(left: ParetoPoint, right: ParetoPoint) -> bool:
         comparisons.append(left.energy_j <= right.energy_j)
         strict.append(left.energy_j < right.energy_j)
     return all(comparisons) and any(strict)
+
+
+def _format_optional(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.4f}"
