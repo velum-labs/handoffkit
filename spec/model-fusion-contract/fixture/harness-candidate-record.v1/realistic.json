@@ -1,0 +1,30 @@
+{
+  "schema": "harness-candidate-record.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:06:01Z",
+  "candidate_id": "harness_candidate_cursor_001",
+  "request_id": "harness_req_cursor_001",
+  "harness_kind": "cursor",
+  "model_call_id": "call_panel_fast_001",
+  "status": "succeeded",
+  "side_effects": "read_only",
+  "branch_name": "fixture/cursor-candidate-001",
+  "worktree_path": "/tmp/fusionkit-fixtures/cursor-candidate-001",
+  "artifacts": [
+    {
+      "artifact_id": "artifact_cursor_patch_001",
+      "kind": "patch",
+      "uri": "fixture://cursor/candidate.patch",
+      "hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      "redaction_status": "synthetic"
+    }
+  ],
+  "score": 0.83,
+  "metadata": {
+    "capability_gap": "tool_call_loop unsupported"
+  }
+}

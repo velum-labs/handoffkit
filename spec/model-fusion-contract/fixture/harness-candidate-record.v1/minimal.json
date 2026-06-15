@@ -1,0 +1,14 @@
+{
+  "schema": "harness-candidate-record.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:06:00Z",
+  "candidate_id": "harness_candidate_min_001",
+  "request_id": "harness_req_min_001",
+  "harness_kind": "generic",
+  "status": "succeeded",
+  "side_effects": "read_only"
+}

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/fusion-record.v1.schema.json",
+  "title": "fusion-record.v1",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "run_id",
+        "request_id",
+        "mode",
+        "status",
+        "candidate_ids",
+        "model_call_ids",
+        "started_at"
+      ],
+      "properties": {
+        "schema": {
+          "const": "fusion-record.v1"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "single",
+            "self",
+            "panel",
+            "router"
+          ]
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        },
+        "candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model_call_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "selected_candidate_id": {
+          "type": "string"
+        },
+        "synthesis_record_id": {
+          "type": "string"
+        },
+        "final_output": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "latency_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/artifactRef"
+          }
+        },
+        "error": {
+          "$ref": "common.schema.json#/$defs/error"
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

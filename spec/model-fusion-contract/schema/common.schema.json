@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/common.schema.json",
+  "title": "Model Fusion Contract Common Definitions",
+  "type": "object",
+  "$defs": {
+    "schemaName": {
+      "type": "string",
+      "enum": [
+        "model_endpoint.v1",
+        "model-call-record.v1",
+        "fusion-run-request.v1",
+        "fusion-record.v1",
+        "harness-run-request.v1",
+        "harness-run-result.v1",
+        "harness-candidate-record.v1",
+        "judge-synthesis-record.v1",
+        "cursor-run-request.v1",
+        "cursor-run-result.v1",
+        "benchmark-task-record.v1",
+        "artifact-ref.v1",
+        "tool-call-plan.v1",
+        "tool-execution-record.v1",
+        "ensemble-receipt.v1"
+      ]
+    },
+    "contractMetadata": {
+      "type": "object",
+      "required": [
+        "schema",
+        "schema_version",
+        "schema_bundle_hash",
+        "producer",
+        "producer_version",
+        "producer_git_sha",
+        "created_at"
+      ],
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/schemaName"
+        },
+        "schema_version": {
+          "type": "string",
+          "const": "v1"
+        },
+        "schema_bundle_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "producer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "producer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "producer_git_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "error_kind": {
+      "type": "string",
+      "enum": [
+        "none",
+        "provider_error",
+        "validation_error",
+        "timeout",
+        "rate_limited",
+        "tool_denied",
+        "secret_denied",
+        "capability_missing",
+        "internal_error"
+      ]
+    },
+    "owner": {
+      "type": "string",
+      "enum": [
+        "fusionkit",
+        "handoffkit",
+        "cursorkit",
+        "mlx-lm",
+        "benchmark",
+        "external"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "canceled",
+        "requires_action",
+        "skipped",
+        "unsupported"
+      ]
+    },
+    "side_effects": {
+      "type": "string",
+      "enum": [
+        "none",
+        "read_only",
+        "writes_workspace",
+        "network",
+        "tool_execution",
+        "unknown"
+      ]
+    },
+    "harness_kind": {
+      "type": "string",
+      "enum": [
+        "generic",
+        "cursor",
+        "claude_code",
+        "codex",
+        "openai_responses"
+      ]
+    },
+    "artifact_kind": {
+      "type": "string",
+      "enum": [
+        "patch",
+        "log",
+        "transcript",
+        "metrics",
+        "benchmark_task",
+        "worktree",
+        "receipt",
+        "other"
+      ]
+    },
+    "capability_status": {
+      "type": "string",
+      "enum": [
+        "supported",
+        "unsupported",
+        "degraded",
+        "unknown"
+      ]
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "sha256": {
+      "$ref": "#/$defs/hash"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "chatMessage": {
+      "type": "object",
+      "required": [
+        "role",
+        "content"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "system",
+            "user",
+            "assistant",
+            "tool"
+          ]
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "prompt_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completion_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/error_kind"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sampling": {
+      "type": "object",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "minimum": 0
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifactRef": {
+      "type": "object",
+      "required": [
+        "artifact_id",
+        "kind",
+        "hash"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "$ref": "#/$defs/artifact_kind"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "redaction_status": {
+          "type": "string",
+          "enum": [
+            "synthetic",
+            "redacted",
+            "raw"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilityMap": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/capability_status"
+      }
+    }
+  }
+}

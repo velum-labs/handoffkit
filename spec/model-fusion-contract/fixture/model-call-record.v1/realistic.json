@@ -1,0 +1,40 @@
+{
+  "schema": "model-call-record.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:01:01Z",
+  "call_id": "call_panel_fast_001",
+  "endpoint_id": "mlx-local-fast",
+  "provider_request_id": "provider-call-echo-001",
+  "model": "mlx-community/Qwen3.5-9B-MLX-4bit",
+  "request_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "response_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a synthetic fixture model."
+    },
+    {
+      "role": "user",
+      "content": "Compare two local model fusion strategies."
+    }
+  ],
+  "status": "succeeded",
+  "side_effects": "none",
+  "started_at": "2026-06-15T22:01:01Z",
+  "finished_at": "2026-06-15T22:01:03Z",
+  "latency_ms": 1842.5,
+  "usage": {
+    "prompt_tokens": 18,
+    "completion_tokens": 42,
+    "total_tokens": 60
+  },
+  "output_text": "Panel fusion compares independent model answers before synthesis.",
+  "metadata": {
+    "provider_call_id_echoed": true,
+    "fixture_kind": "provider-call-join"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": "cursor-run-result.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:09:01Z",
+  "cursor_run_id": "cursor_run_001",
+  "harness_request_id": "harness_req_cursor_001",
+  "mapped_harness_result_id": "harness_result_cursor_001",
+  "status": "succeeded",
+  "output_summary": "Synthetic Cursor run produced a redacted transcript and mapped harness result.",
+  "transcript_artifact": {
+    "artifact_id": "artifact_cursor_transcript_001",
+    "kind": "transcript",
+    "uri": "fixture://cursor/transcript-redacted.json",
+    "hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+    "redaction_status": "redacted"
+  },
+  "artifacts": [
+    {
+      "artifact_id": "artifact_cursor_patch_001",
+      "kind": "patch",
+      "uri": "fixture://cursor/candidate.patch",
+      "hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      "redaction_status": "synthetic"
+    }
+  ],
+  "capabilities": {
+    "workspace_read": "supported",
+    "apply_patch": "unsupported",
+    "tool_call_loop": "unsupported"
+  },
+  "raw_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "redacted_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}

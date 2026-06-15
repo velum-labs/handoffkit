@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/model-endpoint.v1.schema.json",
+  "title": "model_endpoint.v1",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "endpoint_id",
+        "owner",
+        "provider",
+        "model",
+        "api_compatibility",
+        "capabilities",
+        "status"
+      ],
+      "properties": {
+        "schema": {
+          "const": "model_endpoint.v1"
+        },
+        "endpoint_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "$ref": "common.schema.json#/$defs/owner"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "api_compatibility": {
+          "type": "string",
+          "enum": [
+            "openai-chat-completions",
+            "openai-responses",
+            "mlx-lm-server",
+            "custom"
+          ]
+        },
+        "capabilities": {
+          "$ref": "common.schema.json#/$defs/capabilityMap"
+        },
+        "max_context_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "estimated_memory_gb": {
+          "type": "number",
+          "minimum": 0
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

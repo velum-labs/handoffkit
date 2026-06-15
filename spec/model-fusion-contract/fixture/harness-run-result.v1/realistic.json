@@ -1,0 +1,37 @@
+{
+  "schema": "harness-run-result.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:05:01Z",
+  "result_id": "harness_result_cursor_001",
+  "request_id": "harness_req_cursor_001",
+  "harness_kind": "cursor",
+  "status": "succeeded",
+  "candidate_ids": [
+    "harness_candidate_cursor_001"
+  ],
+  "output_summary": "Cursor produced a redacted synthetic transcript and no workspace writes.",
+  "artifacts": [
+    {
+      "artifact_id": "artifact_cursor_transcript_001",
+      "kind": "transcript",
+      "uri": "fixture://cursor/transcript-redacted.json",
+      "hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "redaction_status": "redacted"
+    }
+  ],
+  "capabilities": {
+    "workspace_read": "supported",
+    "apply_patch": "unsupported",
+    "tool_call_loop": "unsupported"
+  },
+  "started_at": "2026-06-15T22:05:01Z",
+  "finished_at": "2026-06-15T22:05:12Z",
+  "errors": [],
+  "metadata": {
+    "mapped_from_cursor_result_id": "cursor_run_001"
+  }
+}

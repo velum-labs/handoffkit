@@ -1,0 +1,28 @@
+{
+  "schema": "harness-run-request.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:04:01Z",
+  "request_id": "harness_req_cursor_001",
+  "harness_kind": "cursor",
+  "source_repo": "cursorkit",
+  "base_git_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "prompt": "Validate a Cursor adapter fixture and map it to a generic harness result.",
+  "prompt_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+  "allowed_tools": [
+    "read_file",
+    "run_tests"
+  ],
+  "side_effects": "read_only",
+  "requested_capabilities": {
+    "workspace_read": "supported",
+    "apply_patch": "unsupported",
+    "tool_call_loop": "unsupported"
+  },
+  "metadata": {
+    "fixture_kind": "cursor-generic-mapping"
+  }
+}

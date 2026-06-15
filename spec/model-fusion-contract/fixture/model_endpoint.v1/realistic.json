@@ -1,0 +1,29 @@
+{
+  "schema": "model_endpoint.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:00:01Z",
+  "endpoint_id": "mlx-local-writer",
+  "owner": "fusionkit",
+  "provider": "mlx-lm",
+  "model": "mlx-community/Gemma-3-12B-IT-MLX-4bit",
+  "base_url": "http://127.0.0.1:8102",
+  "api_compatibility": "openai-chat-completions",
+  "capabilities": {
+    "chat_completions": "supported",
+    "streaming": "degraded",
+    "tool_calls": "unsupported",
+    "json_mode": "unknown"
+  },
+  "max_context_tokens": 8192,
+  "estimated_memory_gb": 9.5,
+  "tags": [
+    "local",
+    "writer",
+    "synthetic-fixture"
+  ],
+  "status": "succeeded"
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/model-call-record.v1.schema.json",
+  "title": "model-call-record.v1",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "call_id",
+        "endpoint_id",
+        "model",
+        "request_hash",
+        "status",
+        "messages",
+        "side_effects",
+        "started_at"
+      ],
+      "properties": {
+        "schema": {
+          "const": "model-call-record.v1"
+        },
+        "call_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider_request_id": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_hash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        },
+        "response_hash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/chatMessage"
+          },
+          "minItems": 1
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        },
+        "side_effects": {
+          "$ref": "common.schema.json#/$defs/side_effects"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "latency_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "usage": {
+          "$ref": "common.schema.json#/$defs/usage"
+        },
+        "output_text": {
+          "type": "string"
+        },
+        "error": {
+          "$ref": "common.schema.json#/$defs/error"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/artifact-ref.v1.schema.json",
+  "title": "artifact-ref.v1",
+  "description": "Minimal demo stub. Full artifact lifecycle rules land after MF-00.",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "artifact_id",
+        "kind",
+        "hash"
+      ],
+      "properties": {
+        "schema": {
+          "const": "artifact-ref.v1"
+        },
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "$ref": "common.schema.json#/$defs/artifact_kind"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "hash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        },
+        "redaction_status": {
+          "type": "string",
+          "enum": [
+            "synthetic",
+            "redacted",
+            "raw"
+          ]
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

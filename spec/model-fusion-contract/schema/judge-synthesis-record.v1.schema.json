@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/judge-synthesis-record.v1.schema.json",
+  "title": "judge-synthesis-record.v1",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "synthesis_id",
+        "input_candidate_ids",
+        "status",
+        "decision",
+        "final_output"
+      ],
+      "properties": {
+        "schema": {
+          "const": "judge-synthesis-record.v1"
+        },
+        "synthesis_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "judge_model_call_id": {
+          "type": "string"
+        },
+        "input_candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "synthesize",
+            "select_candidate",
+            "repair_required",
+            "failed"
+          ]
+        },
+        "selected_candidate_id": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "final_output": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

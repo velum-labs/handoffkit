@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/cursor-run-request.v1.schema.json",
+  "title": "cursor-run-request.v1",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "cursor_run_id",
+        "harness_request_id",
+        "workspace_path",
+        "prompt",
+        "prompt_hash",
+        "side_effects",
+        "requested_capabilities"
+      ],
+      "properties": {
+        "schema": {
+          "const": "cursor-run-request.v1"
+        },
+        "cursor_run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "harness_request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspace_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_hash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        },
+        "requested_model": {
+          "type": "string"
+        },
+        "allowed_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "side_effects": {
+          "$ref": "common.schema.json#/$defs/side_effects"
+        },
+        "requested_capabilities": {
+          "$ref": "common.schema.json#/$defs/capabilityMap"
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

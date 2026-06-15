@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/benchmark-task-record.v1.schema.json",
+  "title": "benchmark-task-record.v1",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "task_id",
+        "task_kind",
+        "source_repo",
+        "source_sha",
+        "prompt_hash",
+        "setup_hash",
+        "expected_evidence",
+        "scorer",
+        "holdout",
+        "contamination_notes",
+        "allowed_tools"
+      ],
+      "properties": {
+        "schema": {
+          "const": "benchmark-task-record.v1"
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "task_kind": {
+          "type": "string",
+          "enum": [
+            "model_fusion",
+            "harness_coding"
+          ]
+        },
+        "source_repo": {
+          "type": "string",
+          "enum": [
+            "fusionkit",
+            "handoffkit",
+            "cursorkit",
+            "mlx-lm"
+          ]
+        },
+        "source_sha": {
+          "$ref": "common.schema.json#/$defs/gitSha"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "prompt_hash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        },
+        "setup_hash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        },
+        "expected_evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "scorer": {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exact",
+                "contains",
+                "record_join",
+                "custom"
+              ]
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "holdout": {
+          "type": "boolean"
+        },
+        "contamination_notes": {
+          "type": "string"
+        },
+        "allowed_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

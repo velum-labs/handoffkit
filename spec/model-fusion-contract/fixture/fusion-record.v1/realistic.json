@@ -1,0 +1,40 @@
+{
+  "schema": "fusion-record.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:03:01Z",
+  "run_id": "fusion_run_panel_001",
+  "request_id": "fusion_req_panel_001",
+  "mode": "panel",
+  "status": "succeeded",
+  "candidate_ids": [
+    "candidate_fast_001",
+    "candidate_writer_001"
+  ],
+  "model_call_ids": [
+    "call_panel_fast_001",
+    "call_panel_writer_001"
+  ],
+  "selected_candidate_id": "candidate_writer_001",
+  "synthesis_record_id": "synthesis_panel_001",
+  "final_output": "Use language-neutral schemas first, then validate fixtures from each repo.",
+  "started_at": "2026-06-15T22:03:01Z",
+  "finished_at": "2026-06-15T22:03:07Z",
+  "latency_ms": 6120.0,
+  "metrics": {
+    "candidate_count": 2,
+    "judge_regret": 0.0
+  },
+  "artifacts": [
+    {
+      "artifact_id": "artifact_fusion_metrics_001",
+      "kind": "metrics",
+      "uri": "fixture://fusion_run_panel_001/metrics.json",
+      "hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "redaction_status": "synthetic"
+    }
+  ]
+}

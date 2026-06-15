@@ -1,0 +1,18 @@
+{
+  "schema": "model_endpoint.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:3c960cad6582bbb28e2cf6db65f72a814bf7cb23feb78c698b747d699d3cfd5d",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:00:00Z",
+  "endpoint_id": "mlx-local-fast",
+  "owner": "mlx-lm",
+  "provider": "mlx-lm",
+  "model": "mlx-community/Qwen3.5-9B-MLX-4bit",
+  "api_compatibility": "mlx-lm-server",
+  "capabilities": {
+    "chat_completions": "supported"
+  },
+  "status": "succeeded"
+}
