@@ -1,0 +1,26 @@
+endpoints:
+  - id: qwen-fast
+    model: mlx-community/Qwen3.5-9B-MLX-4bit
+    base_url: http://127.0.0.1:8101
+    api_key: not-needed
+    max_context: 32768
+    estimated_memory_gb: 6.0
+    tags: [fast, reasoning]
+  - id: gemma-writer
+    model: mlx-community/gemma-4-4b-it-4bit
+    base_url: http://127.0.0.1:8102
+    api_key: not-needed
+    max_context: 8192
+    estimated_memory_gb: 3.0
+    tags: [writer]
+default_model: qwen-fast
+judge_model: qwen-fast
+synthesizer_model: qwen-fast
+default_mode: router
+sample_count: 4
+self_temperatures: [0.2, 0.4, 0.6, 0.8]
+panel_models: [qwen-fast, gemma-writer]
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 1024

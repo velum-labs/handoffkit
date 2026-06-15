@@ -1,0 +1,14 @@
+[project]
+name = "fusionkit-core"
+version = "0.1.0"
+description = "Core local model fusion primitives."
+requires-python = ">=3.11"
+dependencies = [
+  "openai>=2.13.0",
+  "pydantic>=2.12.5",
+  "pyyaml>=6.0.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
