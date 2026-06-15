@@ -291,6 +291,8 @@ class FusionRunManager:
 
             sampling = _sampling_from_request(request)
             candidates = await self._generate_candidates(request, selected_mode, sampling)
+            if selected_mode != "single":
+                candidates = self.engine.ranker.rank(candidates)
             candidate_infos, model_call_ids, candidate_artifacts = self._record_candidates(
                 run_id,
                 summary.trace_id,
@@ -300,23 +302,23 @@ class FusionRunManager:
 
             analysis: FusionAnalysis | None = None
             answer: str
+            synthesis_record = None
             selected_candidate_id = (
                 candidate_infos[0].candidate_id if candidate_infos else None
             )
             if selected_mode == "single":
                 answer = candidates[0].content if candidates else ""
             else:
-                ranked = self.engine.ranker.rank(candidates)
-                selected_candidate_id = _candidate_id_for_source(candidate_infos, ranked[0].id)
+                selected_candidate_id = _candidate_id_for_source(candidate_infos, candidates[0].id)
                 self._append_state(summary, "judging")
-                analysis = await self.engine._analyze(_runtime_messages(request.messages), ranked)
                 self._append_state(summary, "synthesizing")
-                answer = await self.engine._synthesize(
+                synthesis = await self.engine._judge_synthesize(
                     _runtime_messages(request.messages),
-                    ranked,
-                    analysis,
+                    candidates,
                 )
-                candidates = ranked
+                answer = synthesis.final_output
+                analysis = synthesis.analysis
+                synthesis_record = synthesis.record
 
             verification_artifact: ContractArtifactRef | None = None
             if request.verify:
@@ -326,6 +328,18 @@ class FusionRunManager:
                     answer,
                     candidates,
                 )
+                if synthesis_record is not None:
+                    synthesis_record = synthesis_record.model_copy(
+                        update={
+                            "final_output": answer,
+                            "metrics": {
+                                **(synthesis_record.metrics or {}),
+                                "repair_attempted": True,
+                                "repair_rounds": 1,
+                                "repair_reason": "verify_requested",
+                            },
+                        }
+                    )
                 verification_artifact = self.artifacts.write_text(
                     run_id,
                     make_id("artifact_verification"),
@@ -349,6 +363,28 @@ class FusionRunManager:
             artifacts = [*candidate_artifacts, final_artifact]
             if verification_artifact is not None:
                 artifacts.append(verification_artifact)
+            if synthesis_record is not None:
+                synthesis_record = synthesis_record.model_copy(
+                    update={
+                        "metrics": {
+                            **(synthesis_record.metrics or {}),
+                            "final_output_artifact_id": final_artifact.artifact_id,
+                        }
+                    }
+                )
+                self.store.append_event(
+                    FusionRunEvent(
+                        event_seq=1,
+                        run_id=run_id,
+                        trace_id=summary.trace_id,
+                        state="synthesizing",
+                        status=status_for_run_state("synthesizing"),
+                        event_type="judge_synthesis_recorded",
+                        payload={
+                            "judge_synthesis_record": synthesis_record.model_dump(mode="json")
+                        },
+                    )
+                )
 
             fusion_record = FusionRecordV1.model_validate(
                 {
@@ -360,6 +396,9 @@ class FusionRunManager:
                     "candidate_ids": [candidate.candidate_id for candidate in candidate_infos],
                     "model_call_ids": model_call_ids,
                     "selected_candidate_id": selected_candidate_id,
+                    "synthesis_record_id": (
+                        synthesis_record.synthesis_id if synthesis_record is not None else None
+                    ),
                     "final_output": answer,
                     "started_at": summary.event_cursor and events[0].created_at,
                     "finished_at": datetime.now(UTC),

@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-import json
-import re
 from collections.abc import Mapping, Sequence
 
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
+from fusionkit_core.judge import JudgeSynthesisResult, JudgeSynthesizer
 from fusionkit_core.panel import PanelRunner
 from fusionkit_core.prompts import (
-    JUDGE_SYSTEM_PROMPT,
-    SYNTHESIZER_SYSTEM_PROMPT,
     VERIFIER_SYSTEM_PROMPT,
-    build_judge_prompt,
-    build_synthesis_prompt,
     build_verifier_prompt,
 )
 from fusionkit_core.router import HeuristicRouter
-from fusionkit_core.types import Candidate, ChatMessage, FusionAnalysis, FusionResult
+from fusionkit_core.types import Candidate, ChatMessage, FusionResult
 
 
 class CandidateRanker:
@@ -47,6 +42,7 @@ class FusionEngine:
         self.panel_runner = PanelRunner(self.clients)
         self.router = router or HeuristicRouter()
         self.ranker = CandidateRanker()
+        self.judge_synthesizer = JudgeSynthesizer()
 
     async def run(
         self,
@@ -93,16 +89,28 @@ class FusionEngine:
             sample_count=sample_count,
         )
         ranked = self.ranker.rank(candidates)
-        analysis = await self._analyze(messages, ranked)
-        answer = await self._synthesize(messages, ranked, analysis)
+        synthesis = await self._judge_synthesize(messages, ranked)
+        answer = synthesis.final_output
+        repair_metadata: dict[str, object] = {"repair_attempted": False, "repair_rounds": 0}
         if verify:
             answer = await self._verify(messages, answer, ranked)
+            repair_metadata = {
+                "repair_attempted": True,
+                "repair_rounds": 1,
+                "repair_reason": "verify_requested",
+            }
+            synthesis = _with_repair_metadata(synthesis, repair_metadata, answer)
         return FusionResult(
             mode=selected_mode,
             content=answer,
             candidates=ranked,
-            analysis=analysis,
-            metrics=_candidate_metrics(ranked),
+            analysis=synthesis.analysis,
+            metrics={
+                **_candidate_metrics(ranked),
+                "judge_synthesis_id": synthesis.record.synthesis_id,
+                "judge_synthesis_record": synthesis.record.model_dump(mode="json"),
+                **repair_metadata,
+            },
         )
 
     async def _generate_candidates(
@@ -128,42 +136,21 @@ class FusionEngine:
             return await self.panel_runner.generate_panel(models, messages, sampling)
         raise ValueError(f"Unsupported fusion generation mode: {mode}")
 
-    async def _analyze(
+    async def _judge_synthesize(
         self,
         messages: Sequence[ChatMessage],
         candidates: Sequence[Candidate],
-    ) -> FusionAnalysis:
+    ) -> JudgeSynthesisResult:
         judge = self._client(self.config.resolved_judge_model)
-        response = await judge.chat(
-            [
-                ChatMessage(role="system", content=JUDGE_SYSTEM_PROMPT),
-                ChatMessage(
-                    role="user",
-                    content=build_judge_prompt(_last_user_text(messages), candidates),
-                ),
-            ],
-            self.config.sampling.model_copy(update={"temperature": 0.0}),
-        )
-        return _parse_analysis(response.content)
-
-    async def _synthesize(
-        self,
-        messages: Sequence[ChatMessage],
-        candidates: Sequence[Candidate],
-        analysis: FusionAnalysis,
-    ) -> str:
         synthesizer = self._client(self.config.resolved_synthesizer_model)
-        response = await synthesizer.chat(
-            [
-                ChatMessage(role="system", content=SYNTHESIZER_SYSTEM_PROMPT),
-                ChatMessage(
-                    role="user",
-                    content=build_synthesis_prompt(_last_user_text(messages), candidates, analysis),
-                ),
-            ],
-            self.config.sampling,
+        return await self.judge_synthesizer.synthesize(
+            messages,
+            candidates,
+            judge_client=judge,
+            synthesizer_client=synthesizer,
+            judge_sampling=self.config.sampling.model_copy(update={"temperature": 0.0}),
+            synthesis_sampling=self.config.sampling,
         )
-        return response.content
 
     async def _verify(
         self,
@@ -244,19 +231,18 @@ def _optional_int(value: object) -> int:
     return 0
 
 
-def _parse_analysis(content: str) -> FusionAnalysis:
-    try:
-        return FusionAnalysis.model_validate_json(_extract_json(content))
-    except (ValueError, TypeError, json.JSONDecodeError):
-        return FusionAnalysis(
-            consensus=["Judge did not return valid structured JSON."],
-            likely_errors=[content[:500]],
-        )
-
-
-def _extract_json(content: str) -> str:
-    stripped = content.strip()
-    fenced = re.search(r"```(?:json)?\s*(.*?)```", stripped, flags=re.DOTALL)
-    if fenced:
-        return fenced.group(1).strip()
-    return stripped
+def _with_repair_metadata(
+    synthesis: JudgeSynthesisResult,
+    repair_metadata: dict[str, object],
+    answer: str,
+) -> JudgeSynthesisResult:
+    record = synthesis.record.model_copy(
+        update={
+            "final_output": answer,
+            "metrics": {
+                **(synthesis.record.metrics or {}),
+                **repair_metadata,
+            },
+        }
+    )
+    return synthesis.model_copy(update={"record": record, "final_output": answer})

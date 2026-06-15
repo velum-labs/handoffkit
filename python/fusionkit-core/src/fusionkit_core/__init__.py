@@ -23,6 +23,7 @@ from fusionkit_core.contracts import (
     status_for_run_state,
 )
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.judge import CandidateEvidence, JudgeSynthesisResult, JudgeSynthesizer
 from fusionkit_core.router import HeuristicRouter
 from fusionkit_core.run import (
     CandidateInspection,
@@ -46,6 +47,7 @@ __all__ = [
     "ArtifactRefV1",
     "BenchmarkTaskRecordV1",
     "Candidate",
+    "CandidateEvidence",
     "CandidateInspection",
     "ChatMessage",
     "ContractMetadata",
@@ -64,6 +66,8 @@ __all__ = [
     "HeuristicRouter",
     "IdempotencyRecord",
     "JudgeSynthesisRecordV1",
+    "JudgeSynthesizer",
+    "JudgeSynthesisResult",
     "LocalArtifactStore",
     "LocalModelClient",
     "ModelCallRecordV1",
