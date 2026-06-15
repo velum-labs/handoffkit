@@ -19,7 +19,7 @@ SYNTHESIZER_SYSTEM_PROMPT = """You synthesize candidate answers using a structur
 Prefer claims supported by multiple candidates or by clear evidence.
 Resolve contradictions explicitly and avoid inventing unsupported facts."""
 
-VERIFIER_SYSTEM_PROMPT = """You verify a fused answer against the original request and candidate evidence.
+VERIFIER_SYSTEM_PROMPT = """You verify a fused answer against the request and candidate evidence.
 Return a concise corrected answer if needed. If the answer is already sound, return it unchanged."""
 
 

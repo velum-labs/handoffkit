@@ -41,7 +41,8 @@ class PanelRunner:
     ) -> list[Candidate]:
         selected_temperatures = list(temperatures)[:sample_count]
         if len(selected_temperatures) < sample_count:
-            selected_temperatures.extend([base_sampling.temperature] * (sample_count - len(selected_temperatures)))
+            missing_count = sample_count - len(selected_temperatures)
+            selected_temperatures.extend([base_sampling.temperature] * missing_count)
 
         tasks = []
         for index, temperature in enumerate(selected_temperatures):

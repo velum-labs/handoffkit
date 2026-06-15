@@ -8,6 +8,7 @@ from pathlib import Path
 from fusionkit_core.config import FusionMode
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.types import ChatMessage
+
 from fusionkit_evals.schema import EvalResult, EvalSample
 from fusionkit_evals.scorers import contains_expected
 

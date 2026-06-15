@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, ModelEndpoint
 from fusionkit_server import create_app

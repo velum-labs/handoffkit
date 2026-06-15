@@ -131,7 +131,10 @@ class FusionEngine:
         response = await judge.chat(
             [
                 ChatMessage(role="system", content=JUDGE_SYSTEM_PROMPT),
-                ChatMessage(role="user", content=build_judge_prompt(_last_user_text(messages), candidates)),
+                ChatMessage(
+                    role="user",
+                    content=build_judge_prompt(_last_user_text(messages), candidates),
+                ),
             ],
             self.config.sampling.model_copy(update={"temperature": 0.0}),
         )

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import pytest
-
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
+from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.panel import PanelRunner
 from fusionkit_core.types import ChatMessage
@@ -60,7 +59,7 @@ async def test_fusion_engine_runs_router_to_panel() -> None:
     assert result.analysis.consensus == ["answers agree"]
 
 
-def _config(default_mode: str = "single") -> FusionConfig:
+def _config(default_mode: FusionMode = "single") -> FusionConfig:
     return FusionConfig(
         endpoints=[
             ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),

@@ -5,12 +5,11 @@ import uuid
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-
 from fusionkit_core.clients import ChatClient, LocalModelClient
-from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
+from fusionkit_core.config import FusionConfig, FusionMode
 from fusionkit_core.fusion import FusionEngine, normalize_messages
 from fusionkit_core.types import ChatMessage
+from pydantic import BaseModel, Field
 
 
 class FusionRequest(BaseModel):
@@ -39,7 +38,7 @@ def create_app(
         return {"status": "ok"}
 
     @app.get("/v1/models")
-    async def models() -> dict[str, list[dict[str, str]]]:
+    async def models() -> dict[str, Any]:
         data = [{"id": "fusionkit/router", "object": "model"}]
         data.extend({"id": endpoint.id, "object": "model"} for endpoint in config.endpoints)
         return {"object": "list", "data": data}

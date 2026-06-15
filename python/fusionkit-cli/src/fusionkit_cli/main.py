@@ -7,12 +7,10 @@ from typing import Annotated
 
 import typer
 import uvicorn
-
 from fusionkit_core.clients import LocalModelClient
 from fusionkit_core.config import FusionMode, load_config
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_evals.benchmark import load_jsonl_samples, write_jsonl_results
-from fusionkit_evals.benchmark import BenchmarkRunner
+from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
 from fusionkit_evals.pareto import load_points, write_pareto_report
 from fusionkit_server.app import create_app
 

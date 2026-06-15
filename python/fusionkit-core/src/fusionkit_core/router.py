@@ -47,7 +47,8 @@ class HeuristicRouter:
     )
 
     def route(self, messages: Sequence[ChatMessage]) -> RouterDecision:
-        user_text = " ".join(message.content for message in messages if message.role == "user").lower()
+        user_messages = (message.content for message in messages if message.role == "user")
+        user_text = " ".join(user_messages).lower()
         reasons: list[str] = []
         if any(keyword in user_text for keyword in self.hard_keywords):
             reasons.append("hard keyword")

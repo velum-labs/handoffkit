@@ -20,6 +20,7 @@ class ChatClient(Protocol):
         extra: Mapping[str, Any] | None = None,
     ) -> ModelResponse:
         """Generate a chat completion."""
+        ...
 
 
 class LocalModelClient:
