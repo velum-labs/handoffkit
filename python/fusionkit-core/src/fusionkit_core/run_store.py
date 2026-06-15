@@ -85,7 +85,7 @@ class FileSystemRunStore:
         final_output = summary.final_output
         final_output_artifact = None
         judge_synthesis_record = None
-        requires_action = None
+        pending_tool_actions: dict[str, ToolPausePlaceholder] = {}
 
         for event in events:
             if event.event_type == "candidate_recorded":
@@ -130,9 +130,12 @@ class FileSystemRunStore:
             elif event.event_type == "requires_action":
                 requires_action_payload = event.payload.get("requires_action")
                 if isinstance(requires_action_payload, dict):
-                    requires_action = ToolPausePlaceholder.model_validate(
+                    pause = ToolPausePlaceholder.model_validate(
                         requires_action_payload
                     )
+                    pending_tool_actions[pause.tool_call_id] = pause
+            elif event.event_type == "tool_execution_recorded" and event.tool_call_id is not None:
+                pending_tool_actions.pop(event.tool_call_id, None)
 
         return RunInspection(
             run_id=run_id,
@@ -146,7 +149,7 @@ class FileSystemRunStore:
             final_output=final_output,
             final_output_artifact=final_output_artifact,
             judge_synthesis_record=judge_synthesis_record,
-            requires_action=requires_action,
+            requires_action=_latest_pending_action(pending_tool_actions),
             terminal_error=summary.terminal_error,
         )
 
@@ -218,6 +221,14 @@ def _artifact_from_payload(payload: Any) -> ContractArtifactRef | None:
 
 def _optional_str(value: Any) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _latest_pending_action(
+    pending_tool_actions: dict[str, ToolPausePlaceholder],
+) -> ToolPausePlaceholder | None:
+    if not pending_tool_actions:
+        return None
+    return list(pending_tool_actions.values())[-1]
 
 
 def _dedupe_artifacts(artifacts: list[ContractArtifactRef]) -> list[ContractArtifactRef]:

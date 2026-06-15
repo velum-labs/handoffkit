@@ -13,6 +13,7 @@ from fusionkit_core.config import SamplingConfig
 from fusionkit_core.contracts import (
     ArtifactKind,
     ContractArtifactRef,
+    ContractError,
     ErrorKind,
     FusionMode,
     FusionRecordV1,
@@ -20,7 +21,11 @@ from fusionkit_core.contracts import (
     FusionRunState,
     ModelCallRecordV1,
     Owner,
+    Sha256,
+    SideEffects,
     Status,
+    ToolCallPlanV1,
+    ToolExecutionRecordV1,
     contract_metadata,
     status_for_run_state,
 )
@@ -28,6 +33,7 @@ from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.types import Candidate, ChatMessage, FusionAnalysis
 
 IdempotencyOutcome = Literal["created", "replayed", "conflict"]
+ToolExecutionMode = Literal["disabled", "external", "executor"]
 RunEventType = Literal[
     "run_queued",
     "state_changed",
@@ -35,6 +41,9 @@ RunEventType = Literal[
     "model_call_recorded",
     "artifact_recorded",
     "judge_synthesis_recorded",
+    "tool_call_planned",
+    "tool_execution_recorded",
+    "run_resumed",
     "fusion_recorded",
     "error_recorded",
     "requires_action",
@@ -54,10 +63,30 @@ class NativeRunError(RunBaseModel):
     message: str | None = None
 
 
+class ToolExecutionPolicy(RunBaseModel):
+    mode: ToolExecutionMode = "disabled"
+    allowed_side_effects: list[SideEffects] = Field(default_factory=lambda: ["read_only"])
+    environment: str | None = None
+    policy_id: str | None = None
+    dedupe_read_only: bool = True
+    executor_configured: bool = False
+
+
 class ToolPausePlaceholder(RunBaseModel):
     candidate_id: str
     tool_call_id: str
-    plan: dict[str, Any] | None = None
+    plan: ToolCallPlanV1 | None = None
+    policy_cache_key: str | None = None
+
+
+class ToolResultSubmission(RunBaseModel):
+    candidate_id: str
+    tool_call_id: str
+    tool_name: str
+    output_hash: Sha256 | None = None
+    output: str | None = None
+    status: Status = "succeeded"
+    error: ContractError | None = None
 
 
 class FusionRunEvent(RunBaseModel):
@@ -505,11 +534,186 @@ class FusionRunManager:
         tool_call_id: str | None = None,
         plan: Mapping[str, Any] | None = None,
     ) -> ToolPausePlaceholder:
+        tool_plan = None
+        if plan is not None and {"schema", "schema_version", "schema_bundle_hash"}.issubset(plan):
+            tool_plan = ToolCallPlanV1.model_validate(plan)
+        elif plan is not None:
+            tool_plan = self._tool_call_plan(
+                tool_name=str(plan.get("tool_name") or "external_tool"),
+                arguments=plan,
+                side_effects="read_only",
+                policy=ToolExecutionPolicy(mode="external"),
+                plan_id=str(plan.get("plan_id")) if plan.get("plan_id") is not None else None,
+            )
+        return self._pause_for_tool_action(
+            run_id,
+            candidate_id=candidate_id,
+            tool_call_id=tool_call_id,
+            plan=tool_plan,
+            policy_cache_key=None,
+        )
+
+    def request_tool_action(
+        self,
+        run_id: str,
+        *,
+        candidate_id: str,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        side_effects: SideEffects = "read_only",
+        policy: ToolExecutionPolicy | None = None,
+    ) -> ToolPausePlaceholder | NativeRunError:
+        resolved_policy = policy or ToolExecutionPolicy()
+        policy_error = _validate_tool_policy(side_effects, resolved_policy)
+        if policy_error is not None:
+            return policy_error
+        plan = self._tool_call_plan(
+            tool_name=tool_name,
+            arguments=arguments or {},
+            side_effects=side_effects,
+            policy=resolved_policy,
+        )
+        policy_cache_key = _policy_cache_key(
+            tool_name=tool_name,
+            arguments_hash=plan.arguments_hash,
+            side_effects=side_effects,
+            policy=resolved_policy,
+        )
+        summary = self.store.read_summary(run_id)
+        tool_call_id = make_id("tool_call")
+        self.store.append_event(
+            FusionRunEvent(
+                event_seq=1,
+                run_id=run_id,
+                trace_id=summary.trace_id,
+                state=summary.state,
+                status=summary.status,
+                event_type="tool_call_planned",
+                candidate_id=candidate_id,
+                tool_call_id=tool_call_id,
+                payload={
+                    "tool_call_plan": plan.model_dump(mode="json"),
+                    "policy_cache_key": policy_cache_key,
+                },
+            )
+        )
+        return self._pause_for_tool_action(
+            run_id,
+            candidate_id=candidate_id,
+            tool_call_id=tool_call_id,
+            plan=plan,
+            policy_cache_key=policy_cache_key,
+        )
+
+    def submit_tool_result(
+        self,
+        run_id: str,
+        submission: ToolResultSubmission,
+    ) -> RunInspection | NativeRunError:
+        summary = self.store.read_summary(run_id)
+        pending_actions = _pending_tool_actions_from_events(self.store.list_events(run_id))
+        if summary.state != "requires_action" or not pending_actions:
+            return NativeRunError(
+                error_kind="validation_error",
+                error_code="run_not_waiting_for_tool",
+                retryable=False,
+                owner="fusionkit",
+                terminal_reason="run_not_in_requires_action",
+            )
+        pending = pending_actions.get(submission.tool_call_id)
+        if pending is None:
+            return NativeRunError(
+                error_kind="validation_error",
+                error_code="tool_call_mismatch",
+                retryable=False,
+                owner="fusionkit",
+                terminal_reason="tool_result_for_wrong_tool_call",
+            )
+        if pending.candidate_id != submission.candidate_id:
+            return NativeRunError(
+                error_kind="validation_error",
+                error_code="tool_candidate_mismatch",
+                retryable=False,
+                owner="fusionkit",
+                terminal_reason="tool_result_for_wrong_candidate",
+            )
+        if pending.plan is not None and pending.plan.tool_name != submission.tool_name:
+            return NativeRunError(
+                error_kind="validation_error",
+                error_code="tool_name_mismatch",
+                retryable=False,
+                owner="fusionkit",
+                terminal_reason="tool_result_for_wrong_tool_name",
+            )
+        output_hash = submission.output_hash or hash_text(submission.output or "")
+        plan_id = pending.plan.plan_id if pending.plan is not None else submission.tool_call_id
+        execution_record = ToolExecutionRecordV1.model_validate(
+            {
+                **contract_metadata("tool-execution-record.v1"),
+                "execution_id": make_id("tool_execution"),
+                "plan_id": plan_id,
+                "status": submission.status,
+                "output_hash": output_hash,
+                "error": submission.error.model_dump(mode="json") if submission.error else None,
+            }
+        )
+        self.store.append_event(
+            FusionRunEvent(
+                event_seq=1,
+                run_id=run_id,
+                trace_id=summary.trace_id,
+                state="requires_action",
+                status=status_for_run_state("requires_action"),
+                event_type="tool_execution_recorded",
+                candidate_id=submission.candidate_id,
+                tool_call_id=submission.tool_call_id,
+                payload={"tool_execution_record": execution_record.model_dump(mode="json")},
+            )
+        )
+        remaining_pending = len(pending_actions) - 1
+        resumed_state: FusionRunState = "requires_action" if remaining_pending else "generating"
+        event = self.store.append_event(
+            FusionRunEvent(
+                event_seq=1,
+                run_id=run_id,
+                trace_id=summary.trace_id,
+                state=resumed_state,
+                status=status_for_run_state(resumed_state),
+                event_type="run_resumed",
+                candidate_id=submission.candidate_id,
+                tool_call_id=submission.tool_call_id,
+                payload={
+                    "resumed_candidate_id": submission.candidate_id,
+                    "remaining_pending_tool_calls": remaining_pending,
+                },
+            )
+        )
+        self.store.write_summary(
+            summary.model_copy(
+                update={
+                    "state": resumed_state,
+                    "status": status_for_run_state(resumed_state),
+                    "event_cursor": event.event_seq,
+                }
+            )
+        )
+        return self.store.inspect_run(run_id)
+
+    def _pause_for_tool_action(
+        self,
+        run_id: str,
+        *,
+        candidate_id: str,
+        tool_call_id: str | None,
+        plan: ToolCallPlanV1 | None,
+        policy_cache_key: str | None,
+    ) -> ToolPausePlaceholder:
         summary = self.store.read_summary(run_id)
         pause = ToolPausePlaceholder(
             candidate_id=candidate_id,
             tool_call_id=tool_call_id or make_id("tool_call"),
-            plan=dict(plan) if plan is not None else None,
+            plan=plan,
+            policy_cache_key=policy_cache_key,
         )
         event = self.store.append_event(
             FusionRunEvent(
@@ -534,6 +738,27 @@ class FusionRunManager:
             )
         )
         return pause
+
+    def _tool_call_plan(
+        self,
+        *,
+        tool_name: str,
+        arguments: Mapping[str, Any],
+        side_effects: SideEffects,
+        policy: ToolExecutionPolicy,
+        plan_id: str | None = None,
+    ) -> ToolCallPlanV1:
+        del policy
+        return ToolCallPlanV1.model_validate(
+            {
+                **contract_metadata("tool-call-plan.v1"),
+                "plan_id": plan_id or make_id("tool_plan"),
+                "tool_name": tool_name,
+                "arguments_hash": hash_json(arguments),
+                "side_effects": side_effects,
+                "status": "requires_action",
+            }
+        )
 
     async def _generate_candidates(
         self,
@@ -755,6 +980,88 @@ def _model_call_record(
     )
 
 
+def _pending_tool_actions_from_events(
+    events: Sequence[FusionRunEvent],
+) -> dict[str, ToolPausePlaceholder]:
+    pending: dict[str, ToolPausePlaceholder] = {}
+    for event in events:
+        if event.event_type == "requires_action":
+            payload = event.payload.get("requires_action")
+            if isinstance(payload, dict):
+                pause = ToolPausePlaceholder.model_validate(payload)
+                pending[pause.tool_call_id] = pause
+        elif event.event_type == "tool_execution_recorded" and event.tool_call_id is not None:
+            pending.pop(event.tool_call_id, None)
+    return pending
+
+
+def _validate_tool_policy(
+    side_effects: SideEffects,
+    policy: ToolExecutionPolicy,
+) -> NativeRunError | None:
+    if policy.mode == "disabled":
+        return NativeRunError(
+            error_kind="tool_denied",
+            error_code="tool_execution_disabled",
+            retryable=False,
+            owner="fusionkit",
+            terminal_reason="tool_policy_disabled",
+        )
+    if policy.mode == "executor" and not policy.executor_configured:
+        return NativeRunError(
+            error_kind="tool_denied",
+            error_code="executor_not_configured",
+            retryable=False,
+            owner="fusionkit",
+            terminal_reason="executor_mode_not_configured",
+        )
+    if policy.mode == "executor":
+        return NativeRunError(
+            error_kind="tool_denied",
+            error_code="executor_not_implemented",
+            retryable=False,
+            owner="fusionkit",
+            terminal_reason="executor_mode_not_implemented",
+        )
+    if side_effects not in policy.allowed_side_effects:
+        return NativeRunError(
+            error_kind="tool_denied",
+            error_code="tool_side_effect_not_allowed",
+            retryable=False,
+            owner="fusionkit",
+            terminal_reason="tool_side_effect_not_allowed_by_policy",
+        )
+    if side_effects != "read_only" and not (policy.policy_id and policy.environment):
+        return NativeRunError(
+            error_kind="tool_denied",
+            error_code="tool_side_effect_requires_policy_environment",
+            retryable=False,
+            owner="fusionkit",
+            terminal_reason="tool_side_effect_requires_policy_environment",
+        )
+    return None
+
+
+def _policy_cache_key(
+    *,
+    tool_name: str,
+    arguments_hash: str,
+    side_effects: SideEffects,
+    policy: ToolExecutionPolicy,
+) -> str | None:
+    if side_effects != "read_only" or not policy.dedupe_read_only:
+        return None
+    return hash_json(
+        {
+            "tool_name": tool_name,
+            "arguments_hash": arguments_hash,
+            "side_effects": side_effects,
+            "policy_id": policy.policy_id,
+            "environment": policy.environment,
+        }
+    )
+
+
 def _candidate_id_for_source(
     candidate_infos: Sequence[CandidateInspection],
     source_candidate_id: str,
@@ -793,6 +1100,9 @@ __all__ = [
     "RunInspection",
     "RunStateSummary",
     "ToolPausePlaceholder",
+    "ToolExecutionMode",
+    "ToolExecutionPolicy",
+    "ToolResultSubmission",
     "canonical_json",
     "hash_json",
     "make_id",

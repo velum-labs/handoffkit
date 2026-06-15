@@ -17,6 +17,9 @@ from fusionkit_core.run import (
     FusionRunManager,
     NativeRunError,
     RunInspection,
+    ToolExecutionMode,
+    ToolExecutionPolicy,
+    ToolResultSubmission,
     hash_json,
     make_id,
 )
@@ -25,11 +28,22 @@ from fusionkit_core.types import ChatMessage
 from pydantic import BaseModel, Field
 
 
+class FusionToolExecutionOptions(BaseModel):
+    mode: ToolExecutionMode = "disabled"
+    allowed_side_effects: list[str] = Field(default_factory=lambda: ["read_only"])
+    environment: str | None = None
+    policy_id: str | None = None
+    dedupe_read_only: bool = True
+
+
 class FusionOptions(BaseModel):
     mode: FusionMode | None = None
     panel_models: list[str] | None = None
     sample_count: int | None = Field(default=None, ge=1)
     verify: bool = False
+    tool_execution: FusionToolExecutionOptions = Field(
+        default_factory=FusionToolExecutionOptions
+    )
 
 
 class FusionRequest(BaseModel):
@@ -114,6 +128,19 @@ def create_app(
             return _run_not_found_response()
         return _json_response(native_runs.store.event_page(run_id, after).model_dump(mode="json"))
 
+    @app.post("/v1/fusion/runs/{run_id}/tool-results")
+    async def submit_tool_results(
+        run_id: str,
+        submission: ToolResultSubmission,
+    ) -> JSONResponse:
+        try:
+            result = native_runs.submit_tool_result(run_id, submission)
+        except FileNotFoundError:
+            return _run_not_found_response()
+        if isinstance(result, NativeRunError):
+            return _native_error_response(result, status_code=409)
+        return _json_response(result.model_dump(mode="json"))
+
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(request: FusionRequest) -> dict[str, Any] | JSONResponse:
         if request.stream:
@@ -194,7 +221,7 @@ def _fusion_request_to_run_request(
         "sample_count": request.fusion.sample_count,
         "verify": request.fusion.verify,
         "requested_models": request.fusion.panel_models,
-        "tool_policy": "disabled",
+        "tool_policy": _tool_policy_from_options(request.fusion.tool_execution),
     }
     payload["request_hash"] = hash_json(
         {
@@ -205,6 +232,26 @@ def _fusion_request_to_run_request(
         }
     )
     return FusionRunRequestV1.model_validate(payload)
+
+
+def _tool_policy_from_options(options: FusionToolExecutionOptions) -> str:
+    if options.mode == "external":
+        return "external_pause"
+    if options.mode == "executor":
+        return "allowed"
+    return "disabled"
+
+
+def _tool_execution_policy_from_options(options: FusionToolExecutionOptions) -> ToolExecutionPolicy:
+    return ToolExecutionPolicy.model_validate(
+        {
+            "mode": options.mode,
+            "allowed_side_effects": options.allowed_side_effects,
+            "environment": options.environment,
+            "policy_id": options.policy_id,
+            "dedupe_read_only": options.dedupe_read_only,
+        }
+    )
 
 
 def _chat_fusion_metadata(inspection: RunInspection) -> dict[str, Any]:
