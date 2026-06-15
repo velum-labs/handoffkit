@@ -1,3 +1,4 @@
+from fusionkit_core.artifacts import LocalArtifactStore, hash_bytes, hash_text
 from fusionkit_core.clients import FakeModelClient, LocalModelClient
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
 from fusionkit_core.contracts import (
@@ -23,35 +24,68 @@ from fusionkit_core.contracts import (
 )
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.router import HeuristicRouter
+from fusionkit_core.run import (
+    CandidateInspection,
+    CreateRunResult,
+    FusionRunEvent,
+    FusionRunManager,
+    IdempotencyRecord,
+    NativeRunError,
+    RunEventPage,
+    RunInspection,
+    RunStateSummary,
+    ToolPausePlaceholder,
+    canonical_json,
+    hash_json,
+    make_id,
+)
+from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.types import Candidate, ChatMessage, ModelResponse, Usage
 
 __all__ = [
     "ArtifactRefV1",
     "BenchmarkTaskRecordV1",
     "Candidate",
+    "CandidateInspection",
     "ChatMessage",
     "ContractMetadata",
     "ContractRecord",
+    "CreateRunResult",
     "FakeModelClient",
+    "FileSystemRunStore",
     "FusionConfig",
     "FusionEngine",
     "FusionMode",
+    "FusionRunEvent",
+    "FusionRunManager",
     "FusionRecordV1",
     "FusionRunRequestV1",
     "FusionRunState",
     "HeuristicRouter",
+    "IdempotencyRecord",
     "JudgeSynthesisRecordV1",
+    "LocalArtifactStore",
     "LocalModelClient",
     "ModelCallRecordV1",
     "ModelEndpoint",
     "ModelEndpointV1",
     "ModelResponse",
+    "NativeRunError",
+    "RunEventPage",
+    "RunInspection",
+    "RunStateSummary",
     "SamplingConfig",
+    "ToolPausePlaceholder",
     "ToolCallPlanV1",
     "ToolExecutionRecordV1",
     "Usage",
+    "canonical_json",
     "contract_metadata",
     "contract_model_for_schema",
+    "hash_bytes",
+    "hash_json",
+    "hash_text",
+    "make_id",
     "producer",
     "producer_git_sha",
     "producer_version",
