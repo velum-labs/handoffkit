@@ -555,7 +555,7 @@ class FusionRunManager:
             messages=messages,
             sampling=sampling,
             panel_models=request.requested_models,
-            sample_count=None,
+            sample_count=request.sample_count,
         )
 
     def _record_candidates(

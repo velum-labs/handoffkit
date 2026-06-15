@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint
 from fusionkit_server import create_app
 
 
-def test_chat_completions_single_mode() -> None:
+def test_chat_completions_single_mode(tmp_path) -> None:
     config = FusionConfig(
         endpoints=[
             ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
@@ -14,7 +14,11 @@ def test_chat_completions_single_mode() -> None:
         default_model="fast",
         default_mode="single",
     )
-    app = create_app(config, clients={"fast": FakeModelClient("fast", ["hello from fake"])})
+    app = create_app(
+        config,
+        clients={"fast": FakeModelClient("fast", ["hello from fake"])},
+        run_store_path=tmp_path / "runs",
+    )
     client = TestClient(app)
 
     response = client.post(
@@ -29,9 +33,49 @@ def test_chat_completions_single_mode() -> None:
     body = response.json()
     assert body["choices"][0]["message"]["content"] == "hello from fake"
     assert body["fusionkit"]["candidate_count"] == 1
+    assert body["fusionkit"]["run_id"]
+    assert body["fusionkit"]["trace_id"]
+    assert body["fusionkit"]["state"] == "completed"
+    assert "inspection" not in body["fusionkit"]
+    assert "artifacts" not in body["fusionkit"]
+
+    run_response = client.get(f"/v1/fusion/runs/{body['fusionkit']['run_id']}")
+    assert run_response.status_code == 200
+    assert run_response.json()["state"] == "completed"
 
 
-def test_chat_completions_rejects_invalid_fusion_mode() -> None:
+def test_models_endpoint_remains_openai_compatible(tmp_path) -> None:
+    app = create_app(_config(), run_store_path=tmp_path / "runs")
+    client = TestClient(app)
+
+    response = client.get("/v1/models")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "list"
+    assert {"id": "fusionkit/router", "object": "model"} in body["data"]
+
+
+def test_chat_completions_streaming_returns_openai_error(tmp_path) -> None:
+    app = create_app(_config(), run_store_path=tmp_path / "runs")
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "fusionkit/single",
+            "messages": [{"role": "user", "content": "hello"}],
+            "stream": True,
+        },
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"]["code"] == "unsupported_streaming"
+    assert not [path for path in (tmp_path / "runs").iterdir() if path.name != "_idempotency"]
+
+
+def test_chat_completions_rejects_invalid_fusion_mode(tmp_path) -> None:
     config = FusionConfig(
         endpoints=[
             ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
@@ -39,7 +83,11 @@ def test_chat_completions_rejects_invalid_fusion_mode() -> None:
         default_model="fast",
         default_mode="single",
     )
-    app = create_app(config, clients={"fast": FakeModelClient("fast", ["hello from fake"])})
+    app = create_app(
+        config,
+        clients={"fast": FakeModelClient("fast", ["hello from fake"])},
+        run_store_path=tmp_path / "runs",
+    )
     client = TestClient(app)
 
     response = client.post(
@@ -52,3 +100,36 @@ def test_chat_completions_rejects_invalid_fusion_mode() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_chat_completions_preserves_self_fusion_sample_count(tmp_path) -> None:
+    config = _config(default_mode="self")
+    app = create_app(
+        config,
+        clients={"fast": FakeModelClient("fast")},
+        run_store_path=tmp_path / "runs",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "fusionkit/self",
+            "messages": [{"role": "user", "content": "hello"}],
+            "fusion": {"mode": "self", "sample_count": 2},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["fusionkit"]["candidate_count"] == 2
+
+
+def _config(default_mode: FusionMode = "single") -> FusionConfig:
+    return FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
+        ],
+        default_model="fast",
+        default_mode=default_mode,
+    )

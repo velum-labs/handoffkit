@@ -5,14 +5,21 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, Query
 from fastapi.responses import JSONResponse
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import ChatClient, LocalModelClient
 from fusionkit_core.config import FusionConfig, FusionMode
-from fusionkit_core.contracts import FusionRunRequestV1
-from fusionkit_core.fusion import FusionEngine, normalize_messages
-from fusionkit_core.run import CreateRunResult, FusionRunManager, NativeRunError
+from fusionkit_core.contracts import FusionRunRequestV1, contract_metadata
+from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.run import (
+    CreateRunResult,
+    FusionRunManager,
+    NativeRunError,
+    RunInspection,
+    hash_json,
+    make_id,
+)
 from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.types import ChatMessage
 from pydantic import BaseModel, Field
@@ -107,32 +114,34 @@ def create_app(
             return _run_not_found_response()
         return _json_response(native_runs.store.event_page(run_id, after).model_dump(mode="json"))
 
-    @app.post("/v1/chat/completions")
-    async def chat_completions(request: FusionRequest) -> dict[str, Any]:
+    @app.post("/v1/chat/completions", response_model=None)
+    async def chat_completions(request: FusionRequest) -> dict[str, Any] | JSONResponse:
         if request.stream:
-            raise HTTPException(status_code=400, detail="Streaming is not implemented yet.")
+            return _openai_error_response(
+                "unsupported_streaming",
+                "Streaming is not implemented yet.",
+                status_code=400,
+            )
 
-        mode = _mode_from_request(request)
-        sampling = config.sampling.model_copy(
-            update={
-                key: value
-                for key, value in {
-                    "temperature": request.temperature,
-                    "top_p": request.top_p,
-                    "max_tokens": request.max_tokens,
-                }.items()
-                if value is not None
-            }
+        run_request = _fusion_request_to_run_request(request, config)
+        result = await native_runs.create_and_run(run_request)
+        if isinstance(result, CreateRunResult):
+            if result.idempotency_outcome == "conflict":
+                return _openai_native_error_response(result.terminal_error, status_code=409)
+            if result.run_id is None:
+                return _openai_error_response(
+                    "run_not_available",
+                    "Native run did not return a run id.",
+                    status_code=500,
+                )
+            result = native_runs.store.inspect_run(result.run_id)
+        if result.state != "completed" or result.final_output is None:
+            return _openai_native_error_response(result.terminal_error, status_code=500)
+        return _openai_chat_response(
+            request.model,
+            result.final_output,
+            _chat_fusion_metadata(result),
         )
-        result = await engine.run(
-            normalize_messages(request.messages),
-            mode=mode,
-            sampling=sampling,
-            panel_models=request.fusion.panel_models,
-            sample_count=request.fusion.sample_count,
-            verify=request.fusion.verify,
-        )
-        return _openai_chat_response(request.model, result.content, result.metrics)
 
     return app
 
@@ -161,6 +170,55 @@ def _create_run_payload(result: CreateRunResult) -> dict[str, Any]:
     }
 
 
+def _fusion_request_to_run_request(
+    request: FusionRequest,
+    config: FusionConfig,
+) -> FusionRunRequestV1:
+    sampling = config.sampling.model_copy(
+        update={
+            key: value
+            for key, value in {
+                "temperature": request.temperature,
+                "top_p": request.top_p,
+                "max_tokens": request.max_tokens,
+            }.items()
+            if value is not None
+        }
+    )
+    payload = {
+        **contract_metadata("fusion-run-request.v1"),
+        "request_id": make_id("chat_request"),
+        "mode": _mode_from_request(request),
+        "messages": [message.model_dump(mode="json") for message in request.messages],
+        "sampling": sampling.model_dump(mode="json"),
+        "sample_count": request.fusion.sample_count,
+        "verify": request.fusion.verify,
+        "requested_models": request.fusion.panel_models,
+        "tool_policy": "disabled",
+    }
+    payload["request_hash"] = hash_json(
+        {
+            "model": request.model,
+            "messages": payload["messages"],
+            "sampling": payload["sampling"],
+            "fusion": request.fusion.model_dump(mode="json"),
+        }
+    )
+    return FusionRunRequestV1.model_validate(payload)
+
+
+def _chat_fusion_metadata(inspection: RunInspection) -> dict[str, Any]:
+    return {
+        "run_id": inspection.run_id,
+        "trace_id": inspection.trace_id,
+        "state": inspection.state,
+        "status": inspection.status,
+        "event_cursor": inspection.event_cursor,
+        "candidate_count": len(inspection.candidates),
+        "candidate_model_ids": [candidate.model_id for candidate in inspection.candidates],
+    }
+
+
 def _native_error_response(
     error: NativeRunError | None,
     status_code: int,
@@ -173,6 +231,37 @@ def _native_error_response(
         terminal_reason="unknown_native_run_error",
     )
     return _json_response({"error": resolved_error.model_dump(mode="json")}, status_code)
+
+
+def _openai_native_error_response(
+    error: NativeRunError | None,
+    status_code: int,
+) -> JSONResponse:
+    resolved_error = error or NativeRunError(
+        error_kind="internal_error",
+        error_code="native_run_failed",
+        retryable=False,
+        owner="fusionkit",
+        terminal_reason="native_run_failed",
+    )
+    return _openai_error_response(
+        resolved_error.error_code,
+        resolved_error.message or resolved_error.terminal_reason,
+        status_code=status_code,
+    )
+
+
+def _openai_error_response(error_code: str, message: str, status_code: int) -> JSONResponse:
+    return _json_response(
+        {
+            "error": {
+                "message": message,
+                "type": "invalid_request_error",
+                "code": error_code,
+            }
+        },
+        status_code=status_code,
+    )
 
 
 def _run_not_found_response() -> JSONResponse:

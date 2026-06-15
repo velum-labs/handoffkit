@@ -48,6 +48,10 @@
         "sampling": {
           "$ref": "common.schema.json#/$defs/sampling"
         },
+        "sample_count": {
+          "type": "integer",
+          "minimum": 1
+        },
         "verify": {
           "type": "boolean"
         },

@@ -224,6 +224,7 @@ class FusionRunRequestV1(ContractRecord):
     sampling: ContractSampling
     verify: bool
     requested_models: list[str] | None = None
+    sample_count: int | None = Field(default=None, ge=1)
     tool_policy: ToolPolicy | None = None
     request_hash: Sha256 | None = None
 
