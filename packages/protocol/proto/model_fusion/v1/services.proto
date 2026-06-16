@@ -7,12 +7,15 @@ import "google/protobuf/timestamp.proto";
 option java_multiple_files = true;
 option java_package = "com.velum.model_fusion.v1";
 
-// Transport IDL for model-fusion service boundaries.
+// Consumer compatibility snapshot for model-fusion service boundaries.
+//
+// Canonical source belongs in FusionKit. HandoffKit keeps this narrow snapshot
+// only until it can consume generated protocol packages from that source.
 //
 // The durable audit format remains the JSON Schema record set represented by
-// persisted_json below. Protobuf messages are used for request/response
-// envelopes between repositories and services, not as the persisted record
-// source of truth.
+// persisted_json below. Protobuf/Buf is the source of truth for service and SDK
+// boundaries; OpenAPI, if needed, is generated from that IDL and not
+// hand-authored.
 
 message PersistedJsonRecord {
   string schema = 1;

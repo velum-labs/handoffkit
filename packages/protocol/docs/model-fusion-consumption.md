@@ -1,9 +1,9 @@
 # Model-fusion protocol consumption
 
-FusionKit remains the contract and IDL origin for model-fusion until there is a
-strong reason to split a separate protocol repository. HandoffKit should consume
-stable protocol artifacts and validators instead of copying record shapes,
-schema lists, or schema bundle hashes by hand.
+FusionKit remains the contract and IDL origin for model-fusion. Do not create a
+separate protocol repository from HandoffKit. HandoffKit should consume stable
+generated protocol artifacts instead of copying record shapes, schema lists,
+service types, or schema bundle hashes by hand.
 
 ## Current TypeScript consumption path
 
@@ -11,7 +11,8 @@ schema lists, or schema bundle hashes by hand.
   `@warrant/protocol`.
 - Cross-repo TypeScript consumers should target the generated package name
   `@velum/model-fusion-protocol` once FusionKit publishes it to npm or GitHub
-  Packages.
+  Packages. This package should be generated from the FusionKit Buf/protobuf
+  source.
 - The package target is recorded in
   `../model-fusion-bindings.json` so CI can reject stale generated-binding
   configuration when the service proto changes.
@@ -21,7 +22,7 @@ schema lists, or schema bundle hashes by hand.
 ## Python consumption path
 
 GitHub Packages is not sufficient for Python package distribution. Python
-consumers should use one of these private-package paths:
+consumers should use generated bindings from one of these private-package paths:
 
 - Cloudsmith, AWS CodeArtifact, or Gemfury as the private PyPI-compatible index.
 - Short-term bootstrap: publish wheels on GitHub Releases and consume them with
@@ -32,14 +33,19 @@ consumers should use one of these private-package paths:
 ## IDL and persisted records
 
 - JSON Schema remains the durable persisted record and audit format.
-- Protobuf/Buf IDL is for service and transport boundaries only.
-- The seed IDL in `../proto/model_fusion/v1/services.proto` captures the minimum
-  cross-repo boundaries:
+- Protobuf/Buf is the source of truth for service and SDK boundaries.
+- OpenAPI, if needed, must be generated from the Buf/protobuf source. Do not
+  hand-author OpenAPI for model-fusion boundaries in HandoffKit.
+- The local IDL in `../proto/model_fusion/v1/services.proto` is a consumer
+  compatibility snapshot only. Its canonical source belongs in FusionKit, and it
+  should be replaced by generated package consumption when FusionKit publishes
+  those packages.
+- The compatibility snapshot captures the minimum cross-repo boundaries:
   - `HarnessExecutorService` for FusionKit -> HandoffKit coding task execution.
   - `CursorHarnessService` for CursorKit adapter output.
   - `MlxProviderService` for provider capability and model-call metadata.
   - `BenchmarkExecutionService` for FusionKit eval execution and join envelopes.
-- Transport messages carry persisted JSON records as `PersistedJsonRecord`
+- Service messages carry persisted JSON records as `PersistedJsonRecord`
   payloads with schema name, version, and schema bundle hash.
 
 ## Drift checks
@@ -50,11 +56,14 @@ local protocol snapshot:
 - production code may not hardcode the model-fusion schema bundle hash outside
   `packages/protocol/src/model-fusion.ts`;
 - the TypeScript package must export `MODEL_FUSION_SCHEMA_BUNDLE_HASH`;
-- the Buf module and service-boundary IDL must exist with the required service
-  names;
+- the Buf module, local compatibility snapshot, and service-boundary IDL must
+  exist with the required service names;
+- the package target manifest must declare FusionKit as the canonical source,
+  Buf/protobuf as the service/SDK source, and OpenAPI as generated-only;
 - this document must retain the intended npm and Python publishing paths.
 
-When generated TS or Python bindings are checked in, add their generation command
-to this check so CI fails if regenerated output differs from source IDL. The
-binding target manifest already pins the proto source hash and package registry
-targets for that future generated output.
+Follow-up work belongs in FusionKit/openclaw-shared: publish the canonical Buf
+module, generate OpenAPI from it if an HTTP description is needed, and publish
+the generated TypeScript and Python packages. When HandoffKit can consume those
+packages, remove this compatibility snapshot and update the check to verify the
+package version/source digest instead of the local proto hash.

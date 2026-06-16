@@ -1,16 +1,33 @@
 {
+  "canonicalSourceRepo": "fusionkit",
+  "localRole": "consumer-compatibility-snapshot",
   "protoSource": "proto/model_fusion/v1/services.proto",
-  "protoSourceHash": "sha256:128fc3dbb8eb5487f521954f85ef04ad2be9c0cb7cb618bf2d4e070a2c9ed4bc",
+  "protoSourceHash": "sha256:5bc46f28ef9902103c719f48ca6c07556db2c99b5572dabf685aa2df4305b264",
   "jsonSchemaAuditFormat": "packages/protocol/src/fixtures/model-fusion-contract",
+  "serviceBoundarySourceOfTruth": "protobuf-buf",
+  "openapi": {
+    "status": "generated-from-buf",
+    "handAuthored": false
+  },
   "typescript": {
     "packageName": "@velum/model-fusion-protocol",
-    "registries": ["npm", "GitHub Packages"],
+    "registries": [
+      "npm",
+      "GitHub Packages"
+    ],
     "status": "planned-generated"
   },
   "python": {
     "packageName": "velum-model-fusion-protocol",
-    "privateIndexOptions": ["Cloudsmith", "CodeArtifact", "Gemfury"],
-    "bootstrapOptions": ["GitHub Releases wheels", "uv git dependency"],
+    "privateIndexOptions": [
+      "Cloudsmith",
+      "CodeArtifact",
+      "Gemfury"
+    ],
+    "bootstrapOptions": [
+      "GitHub Releases wheels",
+      "uv git dependency"
+    ],
     "status": "planned-generated"
   }
 }

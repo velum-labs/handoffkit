@@ -73,6 +73,18 @@ const bindings = JSON.parse(readFileSync(bindingsPath, "utf8"));
 if (bindings.protoSource !== "proto/model_fusion/v1/services.proto") {
   fail("binding target manifest must point at the model-fusion service proto");
 }
+if (bindings.canonicalSourceRepo !== "fusionkit") {
+  fail("binding target manifest must keep FusionKit as the canonical source repo");
+}
+if (bindings.localRole !== "consumer-compatibility-snapshot") {
+  fail("binding target manifest must mark this repo as a consumer compatibility snapshot");
+}
+if (bindings.serviceBoundarySourceOfTruth !== "protobuf-buf") {
+  fail("service/SDK boundaries must use protobuf/Buf as source of truth");
+}
+if (bindings.openapi?.status !== "generated-from-buf" || bindings.openapi?.handAuthored !== false) {
+  fail("OpenAPI must be generated from Buf/protobuf, not hand-authored");
+}
 if (bindings.protoSourceHash !== protoHash) {
   fail(`binding target manifest protoSourceHash is stale; expected ${protoHash}`);
 }
@@ -100,6 +112,20 @@ if (!buf.includes("version: v2") || !buf.includes("path: proto")) {
   fail("buf.yaml must define the proto module");
 }
 
+const openApiListing = spawnSync(
+  "git",
+  ["ls-files", "packages/protocol/**/*openapi*.json", "packages/protocol/**/*openapi*.yaml", "packages/protocol/**/*openapi*.yml"],
+  { encoding: "utf8" }
+);
+if (openApiListing.status === 0) {
+  const handAuthoredOpenApi = openApiListing.stdout
+    .split("\n")
+    .filter((line) => line.length > 0 && !line.includes("/generated/"));
+  for (const file of handAuthoredOpenApi) {
+    fail(`${file} looks like hand-authored OpenAPI; generate OpenAPI from Buf/protobuf instead`);
+  }
+}
+
 const docs = readFileSync(docsPath, "utf8");
 for (const required of [
   "FusionKit remains the contract and IDL origin",
@@ -110,7 +136,9 @@ for (const required of [
   "GitHub Releases",
   "uv",
   "JSON Schema remains the durable persisted record and audit format",
-  "Protobuf/Buf IDL is for service and transport boundaries only"
+  "Protobuf/Buf is the source of truth for service and SDK boundaries",
+  "OpenAPI, if needed, must be generated from the Buf/protobuf source",
+  "Follow-up work belongs in FusionKit/openclaw-shared"
 ]) {
   if (!docs.includes(required)) fail(`consumption docs missing: ${required}`);
 }
