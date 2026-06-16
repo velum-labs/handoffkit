@@ -13,6 +13,12 @@ service types, or schema bundle hashes by hand.
   `@velum/model-fusion-protocol` once FusionKit publishes it to npm or GitHub
   Packages. This package should be generated from the FusionKit JSON Schema and
   OpenAPI 3.1 contracts.
+- Service/API clients and request/response models should be generated from
+  OpenAPI 3.1. The local HandoffKit snapshot currently generates
+  `src/generated/model-fusion-openapi.ts` as a temporary compatibility surface.
+- Durable record validators and record types should be generated from the JSON
+  Schema bundle. HandoffKit continues to export its current model-fusion
+  validators until FusionKit publishes the generated JSON Schema package.
 - The package target is recorded in
   `../model-fusion-bindings.json` so CI can reject stale generated-binding
   configuration when the HTTP/OpenAPI compatibility snapshot changes.
@@ -29,6 +35,9 @@ consumers should use generated bindings from one of these private-package paths:
   `uv` URL dependencies.
 - Short-term repo dependency: consume generated Python bindings with `uv` git
   dependencies pinned to a commit while the private index is being provisioned.
+- Python service clients/models should be generated from OpenAPI 3.1, while
+  Pydantic validators/models for durable records should be generated from the
+  JSON Schema bundle.
 
 ## IDL and persisted records
 
@@ -57,6 +66,10 @@ local protocol snapshot:
 - the TypeScript package must export `MODEL_FUSION_SCHEMA_BUNDLE_HASH`;
 - the local OpenAPI 3.1 compatibility snapshot must exist with the required
   HandoffKit harness executor operation;
+- OpenAPI codegen output for TypeScript and Python must be regenerated and
+  checked for drift;
+- JSON Schema codegen for durable record validators belongs in FusionKit's
+  generated package follow-up;
 - the package target manifest must declare FusionKit as the canonical source,
   JSON Schema as the record source, OpenAPI 3.1 as the HTTP/service source, and
   protobuf as future-only;

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -18,6 +19,15 @@ function readJson(path) {
 for (const path of [RELEASE_MANIFEST, WORKFLOW, OPENAPI_SNAPSHOT, BINDINGS]) {
   if (!existsSync(path)) fail(`missing ${path}`);
 }
+
+const generatedCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-generated-model-fusion-sdk.mjs"],
+  { encoding: "utf8" }
+);
+if (generatedCheck.stdout.trim()) console.log(generatedCheck.stdout.trim());
+if (generatedCheck.stderr.trim()) console.error(generatedCheck.stderr.trim());
+if (generatedCheck.status !== 0) fail("generated model-fusion SDK drift check failed");
 
 const manifest = readJson(RELEASE_MANIFEST);
 if (manifest.canonicalRepository !== "velum-labs/handoffkit") {
@@ -58,6 +68,15 @@ const openApiHash = `sha256:${createHash("sha256")
 const bindings = readJson(BINDINGS);
 if (bindings.openapiSourceHash !== openApiHash) {
   fail(`model-fusion binding OpenAPI hash is stale; expected ${openApiHash}`);
+}
+if (bindings.typescript?.openapiGenerated !== "packages/protocol/src/generated/model-fusion-openapi.ts") {
+  fail("TypeScript binding manifest must point at generated OpenAPI types/client");
+}
+if (bindings.python?.openapiGenerated !== "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py") {
+  fail("Python binding manifest must point at generated OpenAPI models/client");
+}
+if (bindings.typescript?.jsonSchemaValidators !== "packages/protocol/src/model-fusion.ts") {
+  fail("TypeScript binding manifest must expose JSON Schema validators");
 }
 if (manifest.protocol?.openapiSourceHash !== openApiHash) {
   fail(`release manifest protocol OpenAPI hash is stale; expected ${openApiHash}`);

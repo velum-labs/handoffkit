@@ -72,11 +72,18 @@ corepack pnpm test
 - canonical repository and tag patterns;
 - GitHub Packages registry, restricted access, and provenance settings;
 - package metadata for every publishable workspace;
-- model-fusion OpenAPI snapshot hash and protocol package version.
+- model-fusion OpenAPI snapshot hash and protocol package version;
+- generated TypeScript and Python OpenAPI client/model drift.
 
 `scripts/check-model-fusion-protocol.mjs` separately verifies that v1 protocol
 packaging stays on JSON Schema durable records plus OpenAPI 3.1 HTTP/API
 contracts, and that protobuf/Buf is not required for v1.
+
+`scripts/check-generated-model-fusion-sdk.mjs` regenerates the temporary
+OpenAPI-derived TypeScript and Python SDK surfaces and fails if checked-in
+generated files differ. Durable record validators should come from JSON Schema
+codegen in the canonical FusionKit package; HandoffKit exports its current
+validators until that generated package is available.
 
 ## Python packages
 

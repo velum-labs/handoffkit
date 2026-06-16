@@ -12,8 +12,20 @@ const entrypointPath = "packages/protocol/src/index.ts";
 const openApiPath = "packages/protocol/openapi/model-fusion-harness-executor.openapi.json";
 const bindingsPath = "packages/protocol/model-fusion-bindings.json";
 const docsPath = "packages/protocol/docs/model-fusion-consumption.md";
+const generatedTsPath = "packages/protocol/src/generated/model-fusion-openapi.ts";
+const generatedPyInitPath = "packages/protocol/generated/python/velum_model_fusion_protocol/__init__.py";
+const generatedPyPath = "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py";
 
-for (const file of [originPath, entrypointPath, openApiPath, bindingsPath, docsPath]) {
+for (const file of [
+  originPath,
+  entrypointPath,
+  openApiPath,
+  bindingsPath,
+  docsPath,
+  generatedTsPath,
+  generatedPyInitPath,
+  generatedPyPath
+]) {
   if (!existsSync(file)) fail(`missing ${file}`);
 }
 
@@ -94,6 +106,12 @@ if (bindings.protobuf?.requiredForV1 !== false) {
 if (bindings.openapiSourceHash !== openApiHash) {
   fail(`binding target manifest openapiSourceHash is stale; expected ${openApiHash}`);
 }
+if (!readFileSync(generatedTsPath, "utf8").includes(openApiHash)) {
+  fail("generated TypeScript OpenAPI SDK is not stamped with the current OpenAPI hash");
+}
+if (!readFileSync(generatedPyPath, "utf8").includes(openApiHash)) {
+  fail("generated Python OpenAPI SDK is not stamped with the current OpenAPI hash");
+}
 if (bindings.typescript?.packageName !== "@velum/model-fusion-protocol") {
   fail("TypeScript binding target must be @velum/model-fusion-protocol");
 }
@@ -138,6 +156,8 @@ for (const required of [
   "uv",
   "JSON Schema remains the durable persisted record and audit format",
   "OpenAPI 3.1 is the v1 source of truth for HTTP/JSON service APIs",
+  "OpenAPI codegen",
+  "JSON Schema codegen",
   "Protobuf/Buf is reserved for later internal streaming",
   "Follow-up work belongs in FusionKit/openclaw-shared"
 ]) {

@@ -18,13 +18,16 @@ import {
   assertToolCallPlanV1,
   assertToolExecutionRecordV1,
   hashCanonicalSha256,
+  executeHarnessTask,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
+  MODEL_FUSION_OPENAPI_SOURCE_HASH,
   MODEL_FUSION_SCHEMA_NAMES,
   requestHash,
   responseHash,
   schemaBundleHash,
   sha256PrefixedHex
 } from "../index.js";
+import type { ModelFusionOpenApiHarnessExecutionRequest } from "../index.js";
 
 const FIXTURE_ROOT = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -261,4 +264,52 @@ test("model-fusion exports are available from the protocol package entrypoint", 
   assert.equal(typeof assertModelFusionRecord, "function");
   assert.equal(typeof assertHarnessRunRequestV1, "function");
   assert.equal(typeof requestHash, "function");
+});
+
+test("generated OpenAPI client and service models are exported", async () => {
+  assert.match(MODEL_FUSION_OPENAPI_SOURCE_HASH, /^sha256:[0-9a-f]{64}$/);
+  const request: ModelFusionOpenApiHarnessExecutionRequest = {
+    request_id: "req_generated",
+    task_id: "task_generated",
+    source_repo: "handoffkit",
+    base_git_sha: "0".repeat(40),
+    harness_kind: "generic",
+    prompt_hash: requestHash("generated"),
+    allowed_tools: ["read_file"],
+    side_effects: "read_only",
+    harness_run_request: {
+      schema: "harness-run-request.v1",
+      schema_version: "v1",
+      schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
+      persisted_json: {}
+    }
+  };
+  const result = await executeHarnessTask(
+    {
+      baseUrl: "https://executor.example",
+      fetch: async (url, init) => {
+        assert.equal(String(url), "https://executor.example/v1/harness-executions");
+        assert.equal(init?.method, "POST");
+        assert.match(String(init?.body), /req_generated/);
+        return new Response(
+          JSON.stringify({
+            request_id: request.request_id,
+            result_id: "result_generated",
+            status: "succeeded",
+            candidate_ids: [],
+            harness_run_result: {
+              schema: "harness-run-result.v1",
+              schema_version: "v1",
+              schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
+              persisted_json: {}
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+    },
+    request
+  );
+
+  assert.equal(result.result_id, "result_generated");
 });

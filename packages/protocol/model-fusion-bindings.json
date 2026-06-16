@@ -15,14 +15,18 @@
   },
   "typescript": {
     "packageName": "@velum/model-fusion-protocol",
+    "openapiGenerated": "packages/protocol/src/generated/model-fusion-openapi.ts",
+    "jsonSchemaValidators": "packages/protocol/src/model-fusion.ts",
     "registries": [
       "npm",
       "GitHub Packages"
     ],
-    "status": "planned-generated"
+    "status": "openapi-generated-json-schema-validator-exported"
   },
   "python": {
     "packageName": "velum-model-fusion-protocol",
+    "openapiGenerated": "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py",
+    "jsonSchemaValidators": "fusionkit-follow-up",
     "privateIndexOptions": [
       "Cloudsmith",
       "CodeArtifact",
@@ -32,6 +36,6 @@
       "GitHub Releases wheels",
       "uv git dependency"
     ],
-    "status": "planned-generated"
+    "status": "openapi-generated-json-schema-validator-follow-up"
   }
 }
