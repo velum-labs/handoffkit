@@ -9,12 +9,11 @@ const fail = (message) => {
 
 const originPath = "packages/protocol/src/model-fusion.ts";
 const entrypointPath = "packages/protocol/src/index.ts";
-const protoPath = "packages/protocol/proto/model_fusion/v1/services.proto";
-const bufPath = "packages/protocol/buf.yaml";
+const openApiPath = "packages/protocol/openapi/model-fusion-harness-executor.openapi.json";
 const bindingsPath = "packages/protocol/model-fusion-bindings.json";
 const docsPath = "packages/protocol/docs/model-fusion-consumption.md";
 
-for (const file of [originPath, entrypointPath, protoPath, bufPath, bindingsPath, docsPath]) {
+for (const file of [originPath, entrypointPath, openApiPath, bindingsPath, docsPath]) {
   if (!existsSync(file)) fail(`missing ${file}`);
 }
 
@@ -46,32 +45,36 @@ if (sourceListing.status === 0 && schemaBundleHash !== undefined) {
   }
 }
 
-const proto = readFileSync(protoPath, "utf8");
-for (const service of [
-  "HarnessExecutorService",
-  "CursorHarnessService",
-  "MlxProviderService",
-  "BenchmarkExecutionService"
-]) {
-  if (!proto.includes(`service ${service}`)) fail(`IDL missing ${service}`);
+const openApiText = readFileSync(openApiPath, "utf8");
+const openApiHash = `sha256:${createHash("sha256").update(openApiText).digest("hex")}`;
+const openApi = JSON.parse(openApiText);
+if (openApi.openapi !== "3.1.0") {
+  fail("OpenAPI compatibility snapshot must use OpenAPI 3.1.0");
 }
-for (const message of [
+if (openApi["x-canonical-source-repo"] !== "fusionkit") {
+  fail("OpenAPI compatibility snapshot must keep FusionKit as canonical source");
+}
+if (openApi["x-record-format"] !== "json-schema") {
+  fail("OpenAPI compatibility snapshot must carry JSON Schema records");
+}
+const harnessExecution = openApi.paths?.["/v1/harness-executions"]?.post;
+if (harnessExecution?.operationId !== "executeHarnessTask") {
+  fail("OpenAPI compatibility snapshot must define executeHarnessTask");
+}
+for (const schema of [
   "PersistedJsonRecord",
   "HarnessExecutionRequest",
   "HarnessExecutionResult",
-  "BenchmarkExecutionEnvelope",
-  "BenchmarkJoinEnvelope"
+  "ArtifactRef"
 ]) {
-  if (!proto.includes(`message ${message}`)) fail(`IDL missing ${message}`);
-}
-if (!proto.includes("bytes persisted_json")) {
-  fail("IDL must carry JSON Schema audit records as persisted_json bytes");
+  if (openApi.components?.schemas?.[schema] === undefined) {
+    fail(`OpenAPI compatibility snapshot missing schema: ${schema}`);
+  }
 }
 
-const protoHash = `sha256:${createHash("sha256").update(proto).digest("hex")}`;
 const bindings = JSON.parse(readFileSync(bindingsPath, "utf8"));
-if (bindings.protoSource !== "proto/model_fusion/v1/services.proto") {
-  fail("binding target manifest must point at the model-fusion service proto");
+if (bindings.openapiSource !== "openapi/model-fusion-harness-executor.openapi.json") {
+  fail("binding target manifest must point at the model-fusion OpenAPI snapshot");
 }
 if (bindings.canonicalSourceRepo !== "fusionkit") {
   fail("binding target manifest must keep FusionKit as the canonical source repo");
@@ -79,14 +82,17 @@ if (bindings.canonicalSourceRepo !== "fusionkit") {
 if (bindings.localRole !== "consumer-compatibility-snapshot") {
   fail("binding target manifest must mark this repo as a consumer compatibility snapshot");
 }
-if (bindings.serviceBoundarySourceOfTruth !== "protobuf-buf") {
-  fail("service/SDK boundaries must use protobuf/Buf as source of truth");
+if (bindings.serviceBoundarySourceOfTruth !== "openapi-3.1") {
+  fail("v1 HTTP/service boundaries must use OpenAPI 3.1 as source of truth");
 }
-if (bindings.openapi?.status !== "generated-from-buf" || bindings.openapi?.handAuthored !== false) {
-  fail("OpenAPI must be generated from Buf/protobuf, not hand-authored");
+if (bindings.openapi?.status !== "v1-http-json-source" || bindings.openapi?.version !== "3.1.0") {
+  fail("OpenAPI target must declare the v1 HTTP/JSON source");
 }
-if (bindings.protoSourceHash !== protoHash) {
-  fail(`binding target manifest protoSourceHash is stale; expected ${protoHash}`);
+if (bindings.protobuf?.requiredForV1 !== false) {
+  fail("protobuf/Buf must not be required for v1");
+}
+if (bindings.openapiSourceHash !== openApiHash) {
+  fail(`binding target manifest openapiSourceHash is stale; expected ${openApiHash}`);
 }
 if (bindings.typescript?.packageName !== "@velum/model-fusion-protocol") {
   fail("TypeScript binding target must be @velum/model-fusion-protocol");
@@ -107,22 +113,17 @@ for (const option of ["GitHub Releases wheels", "uv git dependency"]) {
   }
 }
 
-const buf = readFileSync(bufPath, "utf8");
-if (!buf.includes("version: v2") || !buf.includes("path: proto")) {
-  fail("buf.yaml must define the proto module");
-}
-
-const openApiListing = spawnSync(
+const protoListing = spawnSync(
   "git",
-  ["ls-files", "packages/protocol/**/*openapi*.json", "packages/protocol/**/*openapi*.yaml", "packages/protocol/**/*openapi*.yml"],
+  ["ls-files", "packages/protocol/**/*.proto", "packages/protocol/buf.yaml"],
   { encoding: "utf8" }
 );
-if (openApiListing.status === 0) {
-  const handAuthoredOpenApi = openApiListing.stdout
+if (protoListing.status === 0) {
+  const v1ProtoFiles = protoListing.stdout
     .split("\n")
-    .filter((line) => line.length > 0 && !line.includes("/generated/"));
-  for (const file of handAuthoredOpenApi) {
-    fail(`${file} looks like hand-authored OpenAPI; generate OpenAPI from Buf/protobuf instead`);
+    .filter((line) => line.length > 0 && !line.includes("/experimental/"));
+  for (const file of v1ProtoFiles) {
+    fail(`${file} makes protobuf/Buf look required for v1; keep it out of the v1 protocol path`);
   }
 }
 
@@ -136,8 +137,8 @@ for (const required of [
   "GitHub Releases",
   "uv",
   "JSON Schema remains the durable persisted record and audit format",
-  "Protobuf/Buf is the source of truth for service and SDK boundaries",
-  "OpenAPI, if needed, must be generated from the Buf/protobuf source",
+  "OpenAPI 3.1 is the v1 source of truth for HTTP/JSON service APIs",
+  "Protobuf/Buf is reserved for later internal streaming",
   "Follow-up work belongs in FusionKit/openclaw-shared"
 ]) {
   if (!docs.includes(required)) fail(`consumption docs missing: ${required}`);

@@ -1,13 +1,17 @@
 {
   "canonicalSourceRepo": "fusionkit",
   "localRole": "consumer-compatibility-snapshot",
-  "protoSource": "proto/model_fusion/v1/services.proto",
-  "protoSourceHash": "sha256:5bc46f28ef9902103c719f48ca6c07556db2c99b5572dabf685aa2df4305b264",
+  "openapiSource": "openapi/model-fusion-harness-executor.openapi.json",
+  "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb",
   "jsonSchemaAuditFormat": "packages/protocol/src/fixtures/model-fusion-contract",
-  "serviceBoundarySourceOfTruth": "protobuf-buf",
+  "serviceBoundarySourceOfTruth": "openapi-3.1",
   "openapi": {
-    "status": "generated-from-buf",
-    "handAuthored": false
+    "status": "v1-http-json-source",
+    "version": "3.1.0"
+  },
+  "protobuf": {
+    "status": "reserved-for-future-internal-streaming-connect-grpc",
+    "requiredForV1": false
   },
   "typescript": {
     "packageName": "@velum/model-fusion-protocol",

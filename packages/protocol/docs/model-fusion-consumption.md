@@ -11,11 +11,11 @@ service types, or schema bundle hashes by hand.
   `@warrant/protocol`.
 - Cross-repo TypeScript consumers should target the generated package name
   `@velum/model-fusion-protocol` once FusionKit publishes it to npm or GitHub
-  Packages. This package should be generated from the FusionKit Buf/protobuf
-  source.
+  Packages. This package should be generated from the FusionKit JSON Schema and
+  OpenAPI 3.1 contracts.
 - The package target is recorded in
   `../model-fusion-bindings.json` so CI can reject stale generated-binding
-  configuration when the service proto changes.
+  configuration when the HTTP/OpenAPI compatibility snapshot changes.
 - Producers must set `schema_bundle_hash` from the protocol package export
   `MODEL_FUSION_SCHEMA_BUNDLE_HASH`; they should not embed a local string copy.
 
@@ -33,19 +33,18 @@ consumers should use generated bindings from one of these private-package paths:
 ## IDL and persisted records
 
 - JSON Schema remains the durable persisted record and audit format.
-- Protobuf/Buf is the source of truth for service and SDK boundaries.
-- OpenAPI, if needed, must be generated from the Buf/protobuf source. Do not
-  hand-author OpenAPI for model-fusion boundaries in HandoffKit.
-- The local IDL in `../proto/model_fusion/v1/services.proto` is a consumer
-  compatibility snapshot only. Its canonical source belongs in FusionKit, and it
-  should be replaced by generated package consumption when FusionKit publishes
-  those packages.
-- The compatibility snapshot captures the minimum cross-repo boundaries:
-  - `HarnessExecutorService` for FusionKit -> HandoffKit coding task execution.
-  - `CursorHarnessService` for CursorKit adapter output.
-  - `MlxProviderService` for provider capability and model-call metadata.
-  - `BenchmarkExecutionService` for FusionKit eval execution and join envelopes.
-- Service messages carry persisted JSON records as `PersistedJsonRecord`
+- OpenAPI 3.1 is the v1 source of truth for HTTP/JSON service APIs.
+- Protobuf/Buf is reserved for later internal streaming, Connect, or gRPC seams
+  if the service boundary hardens; it is not required for v1 and is not part of
+  this PR.
+- The local OpenAPI document in
+  `../openapi/model-fusion-harness-executor.openapi.json` is a consumer
+  compatibility snapshot for the HandoffKit harness executor seam. Its canonical
+  source belongs in FusionKit, and it should be replaced by generated package
+  consumption when FusionKit publishes those packages.
+- The compatibility snapshot captures the FusionKit -> HandoffKit HTTP boundary:
+  `POST /v1/harness-executions` (`executeHarnessTask`).
+- HTTP messages carry persisted JSON records as `PersistedJsonRecord`
   payloads with schema name, version, and schema bundle hash.
 
 ## Drift checks
@@ -56,14 +55,16 @@ local protocol snapshot:
 - production code may not hardcode the model-fusion schema bundle hash outside
   `packages/protocol/src/model-fusion.ts`;
 - the TypeScript package must export `MODEL_FUSION_SCHEMA_BUNDLE_HASH`;
-- the Buf module, local compatibility snapshot, and service-boundary IDL must
-  exist with the required service names;
+- the local OpenAPI 3.1 compatibility snapshot must exist with the required
+  HandoffKit harness executor operation;
 - the package target manifest must declare FusionKit as the canonical source,
-  Buf/protobuf as the service/SDK source, and OpenAPI as generated-only;
+  JSON Schema as the record source, OpenAPI 3.1 as the HTTP/service source, and
+  protobuf as future-only;
 - this document must retain the intended npm and Python publishing paths.
 
-Follow-up work belongs in FusionKit/openclaw-shared: publish the canonical Buf
-module, generate OpenAPI from it if an HTTP description is needed, and publish
-the generated TypeScript and Python packages. When HandoffKit can consume those
-packages, remove this compatibility snapshot and update the check to verify the
-package version/source digest instead of the local proto hash.
+Follow-up work belongs in FusionKit/openclaw-shared: publish the canonical JSON
+Schema bundle, OpenAPI 3.1 service contracts, and generated TypeScript/Python
+packages. When HandoffKit can consume those packages, remove this compatibility
+snapshot and update the check to verify the package version/source digest instead
+of the local OpenAPI snapshot hash. Protobuf/Buf can be introduced later only for
+internal streaming/Connect/gRPC boundaries if needed.
