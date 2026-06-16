@@ -10,9 +10,8 @@ service types, or schema bundle hashes by hand.
 - In this monorepo, import model-fusion records, validators, and constants from
   `@warrant/protocol`.
 - Cross-repo TypeScript consumers should target the generated package name
-  `@velum/model-fusion-protocol` once FusionKit publishes it to npm or GitHub
-  Packages. This package should be generated from the FusionKit JSON Schema and
-  OpenAPI 3.1 contracts.
+  `@velum-labs/model-fusion-protocol` from GitHub Packages. This package should
+  be generated from the FusionKit JSON Schema and OpenAPI 3.1 contracts.
 - Service/API clients and request/response models should be generated from
   OpenAPI 3.1. The local HandoffKit snapshot currently generates
   `src/generated/model-fusion-openapi.ts` as a temporary compatibility surface.
@@ -73,6 +72,9 @@ local protocol snapshot:
 - the package target manifest must declare FusionKit as the canonical source,
   JSON Schema as the record source, OpenAPI 3.1 as the HTTP/service source, and
   protobuf as future-only;
+- the published protocol metadata must match the TypeScript package name,
+  Python package name `velum-model-fusion-protocol`, package version, schema
+  bundle hash, and OpenAPI source hash;
 - this document must retain the intended npm and Python publishing paths.
 
 Follow-up work belongs in FusionKit/openclaw-shared: publish the canonical JSON

@@ -15,8 +15,13 @@ const docsPath = "packages/protocol/docs/model-fusion-consumption.md";
 const generatedTsPath = "packages/protocol/src/generated/model-fusion-openapi.ts";
 const generatedPyInitPath = "packages/protocol/generated/python/velum_model_fusion_protocol/__init__.py";
 const generatedPyPath = "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py";
+const rootPackagePath = "package.json";
+
+const modelFusionTypescriptPackageName = "@velum-labs/model-fusion-protocol";
+const modelFusionPythonPackageName = "velum-model-fusion-protocol";
 
 for (const file of [
+  rootPackagePath,
   originPath,
   entrypointPath,
   openApiPath,
@@ -112,8 +117,11 @@ if (!readFileSync(generatedTsPath, "utf8").includes(openApiHash)) {
 if (!readFileSync(generatedPyPath, "utf8").includes(openApiHash)) {
   fail("generated Python OpenAPI SDK is not stamped with the current OpenAPI hash");
 }
-if (bindings.typescript?.packageName !== "@velum/model-fusion-protocol") {
-  fail("TypeScript binding target must be @velum/model-fusion-protocol");
+if (bindings.typescript?.packageName !== modelFusionTypescriptPackageName) {
+  fail(`TypeScript binding target must be ${modelFusionTypescriptPackageName}`);
+}
+if (bindings.python?.packageName !== modelFusionPythonPackageName) {
+  fail(`Python binding target must remain ${modelFusionPythonPackageName}`);
 }
 for (const registry of ["npm", "GitHub Packages"]) {
   if (!bindings.typescript?.registries?.includes(registry)) {
@@ -129,6 +137,24 @@ for (const option of ["GitHub Releases wheels", "uv git dependency"]) {
   if (!bindings.python?.bootstrapOptions?.includes(option)) {
     fail(`Python binding target missing bootstrap option: ${option}`);
   }
+}
+
+const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8"));
+const publishedMetadata = bindings.publishedProtocolMetadata;
+if (publishedMetadata?.typescriptPackageName !== bindings.typescript?.packageName) {
+  fail("published protocol metadata TypeScript package name must match the binding target");
+}
+if (publishedMetadata?.pythonPackageName !== bindings.python?.packageName) {
+  fail("published protocol metadata Python package name must match the binding target");
+}
+if (publishedMetadata?.version !== rootPackage.version) {
+  fail("published protocol metadata version must match the root package version");
+}
+if (publishedMetadata?.schemaBundleHash !== schemaBundleHash) {
+  fail("published protocol metadata schema bundle hash must match MODEL_FUSION_SCHEMA_BUNDLE_HASH");
+}
+if (publishedMetadata?.openapiSourceHash !== openApiHash) {
+  fail(`published protocol metadata OpenAPI hash is stale; expected ${openApiHash}`);
 }
 
 const protoListing = spawnSync(
@@ -148,7 +174,8 @@ if (protoListing.status === 0) {
 const docs = readFileSync(docsPath, "utf8");
 for (const required of [
   "FusionKit remains the contract and IDL origin",
-  "@velum/model-fusion-protocol",
+  modelFusionTypescriptPackageName,
+  modelFusionPythonPackageName,
   "Cloudsmith",
   "CodeArtifact",
   "Gemfury",
