@@ -23,6 +23,16 @@ from fusionkit_evals.fusion_bench import (
     write_fusion_bench_report_jsonl,
 )
 from fusionkit_evals.pareto import ParetoPoint, find_pareto_front, format_pareto_markdown
+from fusionkit_evals.public_smoke import (
+    PUBLIC_SMOKE_DISCLAIMER,
+    PUBLIC_SMOKE_FIXTURE_ROOT,
+    PUBLIC_SMOKE_SUITE_INFO,
+    PUBLIC_SMOKE_SUITES,
+    PublicSmokeSuite,
+    PublicSmokeSuiteInfo,
+    assert_public_smoke_matrix,
+    load_public_smoke_tasks,
+)
 from fusionkit_evals.schema import EvalResult, EvalSample
 from fusionkit_evals.scorers import contains_expected, exact_match
 from fusionkit_evals.tiny import (
@@ -50,9 +60,16 @@ __all__ = [
     "FusionBenchRunner",
     "FusionBenchTask",
     "FusionBenchTaskMetrics",
+    "PUBLIC_SMOKE_DISCLAIMER",
+    "PUBLIC_SMOKE_FIXTURE_ROOT",
+    "PUBLIC_SMOKE_SUITES",
+    "PUBLIC_SMOKE_SUITE_INFO",
     "ParetoPoint",
+    "PublicSmokeSuite",
+    "PublicSmokeSuiteInfo",
     "TinyBenchmarkResult",
     "TinyBenchmarkTask",
+    "assert_public_smoke_matrix",
     "build_fusion_bench_report",
     "contains_expected",
     "exact_match",
@@ -63,6 +80,7 @@ __all__ = [
     "format_tiny_benchmark_report",
     "load_benchmark_tasks",
     "load_fusion_bench_jsonl",
+    "load_public_smoke_tasks",
     "load_tiny_tasks",
     "run_tiny_benchmark",
     "score_fusion_bench_row",
