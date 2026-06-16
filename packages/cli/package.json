@@ -20,6 +20,7 @@
   },
   "files": ["dist"],
   "dependencies": {
+    "@warrant/ensemble": "workspace:*",
     "@warrant/handoff": "workspace:*",
     "@warrant/model-gateway": "workspace:*",
     "@warrant/plane": "workspace:*",

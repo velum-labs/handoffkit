@@ -1,12 +1,24 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
+import {
+  createCommandHarness,
+  createMockHarness,
+  createMockJudgeSynthesizer,
+  runEnsemble
+} from "@warrant/ensemble";
+import type { EnsembleDescriptor, EnsembleModel, EnsembleRunResult } from "@warrant/ensemble";
 import { agents, handoff, targets } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
 import {
   AGENT_KINDS,
+  assertHarnessCandidateRecordV1,
+  assertHarnessRunRequestV1,
+  assertHarnessRunResultV1,
+  assertJudgeSynthesisRecordV1,
+  assertModelCallRecordV1,
   isTerminalStatus,
   PolicyDeniedError,
   SESSION_ISOLATIONS,
@@ -21,7 +33,7 @@ import type {
 } from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
 import { PlaneClient } from "@warrant/sdk";
-import { captureWorkspace, pullRun } from "@warrant/workspace";
+import { captureWorkspace, gitText, pullRun } from "@warrant/workspace";
 
 import { initHome, loadHome, secretStoreFor } from "./config.js";
 import { LOCAL_TOOLS, runLocal } from "./local.js";
@@ -80,6 +92,16 @@ usage:
       --public-url URL    public tunnel URL for Cursor (or WARRANT_PUBLIC_URL)
       --auth-token TOKEN  require a bearer token on the gateway
       (model backend via WARRANT_LOCAL_MODEL_URL / WARRANT_MLX_MODEL; mlx by default)
+  warrant ensemble run [opts] "task"             run local ensemble smoke
+      --harness mock|command  harness to run (default: mock)
+      --command CMD           shell command for command harness
+      --model ID=MODEL        candidate model mapping (repeatable)
+      --repo DIR              workspace repository (default: .)
+      --out DIR               output directory (default: ./.warrant/ensemble-cli)
+      --task-file FILE        read task prompt from file
+      --judge ID              judge id (default: mock)
+      --policy ID             policy id (default: local-smoke)
+      --timeout-ms N          command timeout (default: 30000)
 
 global:
   --dir DIR    warrant home (default: ./.warrant)
@@ -151,6 +173,19 @@ type RunFlags = {
   isolation?: string;
 };
 
+type EnsembleFlags = {
+  harness?: string;
+  command?: string;
+  repo?: string;
+  out?: string;
+  id?: string;
+  model?: string[];
+  judge?: string;
+  policy?: string;
+  "timeout-ms"?: string;
+  "task-file"?: string;
+};
+
 function parseRunArgs(argv: string[]): { values: RunFlags; prompt: string } {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -170,6 +205,169 @@ function parseRunArgs(argv: string[]): { values: RunFlags; prompt: string } {
     allowPositionals: true
   });
   return { values, prompt: positionals.join(" ").trim() };
+}
+
+function parseEnsembleArgs(argv: string[]): { values: EnsembleFlags; prompt: string } {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      harness: { type: "string", default: "mock" },
+      command: { type: "string" },
+      repo: { type: "string", default: "." },
+      out: { type: "string" },
+      id: { type: "string" },
+      model: { type: "string", multiple: true },
+      judge: { type: "string", default: "mock" },
+      policy: { type: "string", default: "local-smoke" },
+      "timeout-ms": { type: "string" },
+      "task-file": { type: "string" }
+    },
+    allowPositionals: true
+  });
+  const prompt =
+    values["task-file"] !== undefined
+      ? readFileSync(values["task-file"], "utf8")
+      : positionals.join(" ").trim();
+  return { values, prompt };
+}
+
+function ensembleModels(values: EnsembleFlags): EnsembleModel[] {
+  const specs =
+    values.model ??
+    (values.harness === "command"
+      ? ["command=local-shell"]
+      : ["fast=fake-fast", "writer=fake-writer"]);
+  return specs.map((spec) => {
+    const separator = spec.indexOf("=");
+    if (separator <= 0 || separator === spec.length - 1) {
+      fail(`--model must be ID=MODEL, got "${spec}"`);
+    }
+    return {
+      id: spec.slice(0, separator),
+      model: spec.slice(separator + 1)
+    };
+  });
+}
+
+function safeId(value: string): string {
+  return value.replace(/[^A-Za-z0-9_.:-]/g, "_");
+}
+
+function writeJson(path: string, value: unknown): void {
+  writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
+}
+
+function writeEnsembleOutput(outDir: string, result: EnsembleRunResult): void {
+  mkdirSync(outDir, { recursive: true });
+  mkdirSync(join(outDir, "candidates"), { recursive: true });
+  mkdirSync(join(outDir, "model-call-records"), { recursive: true });
+  writeJson(join(outDir, "summary.json"), result.summary ?? {});
+  writeJson(join(outDir, "harness-run-request.json"), result.harnessRunRequest);
+  writeJson(join(outDir, "harness-run-result.json"), result.harnessRunResult);
+  for (const candidate of result.candidates) {
+    assertHarnessCandidateRecordV1(candidate);
+    writeJson(
+      join(outDir, "candidates", `${safeId(candidate.candidate_id)}.json`),
+      candidate
+    );
+  }
+  for (const record of result.modelCallRecords) {
+    assertModelCallRecordV1(record);
+    writeJson(
+      join(outDir, "model-call-records", `${safeId(record.call_id)}.json`),
+      record
+    );
+  }
+  if (result.judgeSynthesisRecord !== undefined) {
+    assertJudgeSynthesisRecordV1(result.judgeSynthesisRecord);
+    writeJson(join(outDir, "judge-synthesis-record.json"), result.judgeSynthesisRecord);
+  }
+}
+
+function renderEnsembleSummary(outDir: string, result: EnsembleRunResult): string {
+  const lines = [
+    `ensemble ${result.descriptorId} [${result.harnessRunResult.status}]`,
+    `candidates: ${result.candidates.length}`,
+    ...result.candidates.map(
+      (candidate) => `  ${candidate.candidate_id}: ${candidate.status}`
+    ),
+    `verification: ${result.verification.id}`,
+    result.judgeSynthesisRecord
+      ? `judge: ${result.judgeSynthesisRecord.status}/${result.judgeSynthesisRecord.decision}`
+      : "judge: none",
+    `output: ${outDir}`,
+    `summary: ${join(outDir, "summary.json")}`
+  ];
+  return lines.join("\n");
+}
+
+async function cmdEnsembleRun(argv: string[]): Promise<void> {
+  const { values, prompt } = parseEnsembleArgs(argv);
+  if (!prompt.trim()) fail("a task prompt or --task-file is required");
+  const harnessId = values.harness ?? "mock";
+  if (harnessId !== "mock" && harnessId !== "command") {
+    fail('--harness must be "mock" or "command"');
+  }
+  const repo = resolve(values.repo ?? ".");
+  const outDir = resolve(values.out ?? ".warrant/ensemble-cli");
+  const timeoutMs = Number(values["timeout-ms"] ?? "30000");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) fail("--timeout-ms must be positive");
+  if (harnessId === "command" && !values.command) {
+    fail("--command is required when --harness command");
+  }
+  const id = values.id ?? `ensemble_${Date.now()}`;
+  const harness =
+    harnessId === "command"
+      ? createCommandHarness({
+          command: values.command ?? "",
+          cwd: repo,
+          timeoutMs
+        })
+      : createMockHarness();
+  const judgeId = values.judge ?? "mock";
+  const descriptor: EnsembleDescriptor = {
+    id,
+    harness,
+    models: ensembleModels(values),
+    runtime: { id: "local" },
+    judge:
+      judgeId === "none"
+        ? { id: "none" }
+        : {
+            id: judgeId,
+            synthesizer: createMockJudgeSynthesizer({
+              output: {
+                decision: "synthesize",
+                finalOutput: "CI-safe ensemble smoke synthesis",
+                rationale: "synthetic smoke run",
+                patch: {
+                  content: "",
+                  author: "judge"
+                }
+              }
+            })
+          },
+    policy: {
+      id: values.policy ?? "local-smoke",
+      allowedTools: harnessId === "command" ? ["shell_command"] : ["read_file"],
+      sideEffects: harnessId === "command" ? "tool_execution" : "read_only",
+      timeoutMs
+    },
+    prompt,
+    sourceRepo: "handoffkit",
+    baseGitSha: gitText(repo, ["rev-parse", "HEAD"]).trim(),
+    workspace: repo,
+    outputRoot: outDir,
+    cleanupWorktrees: true
+  };
+  const result = await runEnsemble(descriptor);
+  assertHarnessRunRequestV1(result.harnessRunRequest);
+  assertHarnessRunResultV1(result.harnessRunResult);
+  writeEnsembleOutput(outDir, result);
+  console.log(renderEnsembleSummary(outDir, result));
+  if (result.harnessRunResult.status !== "succeeded" || result.failureSummary) {
+    process.exitCode = 1;
+  }
 }
 
 function isolationFlag(value: string | undefined): SessionIsolation | undefined {
@@ -405,6 +603,11 @@ async function main(): Promise<void> {
     }
     case "continue": {
       await cmdContinue(dir, sub ? [sub, ...rest] : rest);
+      return;
+    }
+    case "ensemble": {
+      if (sub !== "run") fail(`unknown ensemble subcommand: ${sub ?? ""}`);
+      await cmdEnsembleRun(rest);
       return;
     }
     case "runs": {

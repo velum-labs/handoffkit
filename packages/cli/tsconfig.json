@@ -6,6 +6,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
+    { "path": "../ensemble" },
     { "path": "../handoff" },
     { "path": "../model-gateway" },
     { "path": "../plane" },

@@ -5,7 +5,8 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  writeFileSync
+  writeFileSync,
+  mkdirSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,6 +42,7 @@ test("help prints usage", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /governed execution and provenance plane/);
   assert.match(result.stdout, /warrant continue --agent KIND/);
+  assert.match(result.stdout, /warrant ensemble run/);
   assert.match(result.stdout, /warrant ui/);
 });
 
@@ -131,4 +133,139 @@ test("verify fails closed on a tampered bundle file", () => {
   const result = warrant(["verify", path]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /VERIFICATION FAILED/);
+});
+
+function makeRepo(): { repo: string; cleanup: () => void; output: string } {
+  const root = mkdtempSync(join(tmpdir(), "warrant-ensemble-cli-"));
+  const repo = join(root, "repo");
+  const output = join(root, "out");
+  mkdirSync(repo);
+  spawnSync("git", ["init", "--quiet", "--initial-branch=main"], { cwd: repo });
+  spawnSync("git", ["config", "user.email", "cli@warrant.local"], { cwd: repo });
+  spawnSync("git", ["config", "user.name", "warrant-cli"], { cwd: repo });
+  writeFileSync(join(repo, "README.md"), "# cli ensemble\n");
+  spawnSync("git", ["add", "-A"], { cwd: repo });
+  spawnSync("git", ["commit", "--quiet", "-m", "init"], { cwd: repo });
+  return { repo, output, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test("ensemble mock smoke writes records and concise summary", () => {
+  const fixture = makeRepo();
+  try {
+    const result = warrant([
+      "ensemble",
+      "run",
+      "--harness",
+      "mock",
+      "--repo",
+      fixture.repo,
+      "--out",
+      fixture.output,
+      "--id",
+      "cli_mock",
+      "this prompt should not be printed in full"
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /ensemble cli_mock \[succeeded\]/);
+    assert.match(result.stdout, /candidates: 2/);
+    assert.ok(!result.stdout.includes("this prompt should not be printed in full"));
+    assert.ok(existsSync(join(fixture.output, "summary.json")));
+    assert.ok(existsSync(join(fixture.output, "harness-run-request.json")));
+    assert.ok(existsSync(join(fixture.output, "harness-run-result.json")));
+    assert.ok(existsSync(join(fixture.output, "candidates", "cli_mock_fast_0.json")));
+    const summary = JSON.parse(readFileSync(join(fixture.output, "summary.json"), "utf8")) as {
+      candidates: unknown[];
+      finalPatchPath: string | null;
+    };
+    assert.equal(summary.candidates.length, 2);
+    assert.equal(typeof summary.finalPatchPath === "string" || summary.finalPatchPath === null, true);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ensemble command smoke records command output", () => {
+  const fixture = makeRepo();
+  try {
+    const result = warrant([
+      "ensemble",
+      "run",
+      "--harness",
+      "command",
+      "--command",
+      "printf command-ok",
+      "--repo",
+      fixture.repo,
+      "--out",
+      fixture.output,
+      "--id",
+      "cli_command",
+      "command prompt"
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /ensemble cli_command \[succeeded\]/);
+    const summary = readFileSync(join(fixture.output, "summary.json"), "utf8");
+    assert.ok(summary.includes("cli_command_command_0"));
+    const candidate = readFileSync(
+      join(fixture.output, "candidates", "cli_command_command_0.json"),
+      "utf8"
+    );
+    assert.ok(candidate.includes("succeeded"));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ensemble command failure exits nonzero but writes summary", () => {
+  const fixture = makeRepo();
+  try {
+    const result = warrant([
+      "ensemble",
+      "run",
+      "--harness",
+      "command",
+      "--command",
+      "exit 7",
+      "--repo",
+      fixture.repo,
+      "--out",
+      fixture.output,
+      "--id",
+      "cli_fail",
+      "command prompt"
+    ]);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /ensemble cli_fail \[failed\]/);
+    assert.ok(existsSync(join(fixture.output, "summary.json")));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ensemble task-file input works without printing prompt contents", () => {
+  const fixture = makeRepo();
+  try {
+    const taskFile = join(fixture.repo, "task.txt");
+    writeFileSync(taskFile, "secret-ish task text that should not print");
+    const result = warrant([
+      "ensemble",
+      "run",
+      "--harness",
+      "mock",
+      "--task-file",
+      taskFile,
+      "--repo",
+      fixture.repo,
+      "--out",
+      fixture.output,
+      "--id",
+      "cli_file"
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /ensemble cli_file \[succeeded\]/);
+    assert.ok(!result.stdout.includes("secret-ish task text"));
+    assert.ok(existsSync(join(fixture.output, "summary.json")));
+  } finally {
+    fixture.cleanup();
+  }
 });

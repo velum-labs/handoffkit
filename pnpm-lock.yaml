@@ -325,6 +325,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@warrant/ensemble':
+        specifier: workspace:*
+        version: link:../ensemble
       '@warrant/handoff':
         specifier: workspace:*
         version: link:../handoff
