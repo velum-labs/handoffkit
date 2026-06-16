@@ -1,4 +1,12 @@
 from fusionkit_evals.benchmark import BenchmarkRunner
+from fusionkit_evals.dirty_dozen import (
+    DIRTY_DOZEN_REPOS,
+    DIRTY_DOZEN_ROOT,
+    DIRTY_DOZEN_TASK_COUNT,
+    DirtyDozenRepo,
+    assert_dirty_dozen_manifest,
+    load_dirty_dozen_tasks,
+)
 from fusionkit_evals.fusion_bench import (
     FUSION_BENCH_DISCLAIMER,
     FusionBenchAggregateMetrics,
@@ -47,6 +55,10 @@ from fusionkit_evals.tiny import (
 
 __all__ = [
     "BenchmarkRunner",
+    "DIRTY_DOZEN_REPOS",
+    "DIRTY_DOZEN_ROOT",
+    "DIRTY_DOZEN_TASK_COUNT",
+    "DirtyDozenRepo",
     "EvalResult",
     "EvalSample",
     "FUSION_BENCH_DISCLAIMER",
@@ -69,6 +81,7 @@ __all__ = [
     "PublicSmokeSuiteInfo",
     "TinyBenchmarkResult",
     "TinyBenchmarkTask",
+    "assert_dirty_dozen_manifest",
     "assert_public_smoke_matrix",
     "build_fusion_bench_report",
     "contains_expected",
@@ -79,6 +92,7 @@ __all__ = [
     "format_pareto_markdown",
     "format_tiny_benchmark_report",
     "load_benchmark_tasks",
+    "load_dirty_dozen_tasks",
     "load_fusion_bench_jsonl",
     "load_public_smoke_tasks",
     "load_tiny_tasks",
