@@ -1,6 +1,6 @@
 {
   "name": "@warrant/plane",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Warrant control plane: contracts, policy, approvals, receipt countersignature, secret broker, audit export, and the control panel UI.",
   "license": "UNLICENSED",
@@ -12,6 +12,11 @@
     }
   },
   "files": ["dist", "ui"],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "provenance": true
+  },
   "dependencies": {
     "@warrant/protocol": "workspace:*",
     "jose": "6.2.3",

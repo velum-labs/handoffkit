@@ -2,9 +2,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import {
-  assertHarnessRunResultV1
+  assertHarnessRunResultV1,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH
 } from "@warrant/protocol";
 import type {
+  ArtifactRef,
   HarnessRunResultV1,
   JsonValue,
   ModelFusionCapabilityStatus,
@@ -13,9 +15,12 @@ import type {
 } from "@warrant/protocol";
 import { gitText } from "@warrant/workspace";
 
-import { claudeCodeHarness } from "./claude-code.js";
+import {
+  claudeCodeHarness,
+  claudeCodeHarnessCredentialSkipReason
+} from "./claude-code.js";
 import { createCommandHarness } from "./command.js";
-import { codexHarness } from "./codex.js";
+import { codexHarness, codexHarnessCredentialSkipReason } from "./codex.js";
 import { createMockHarness } from "./mock.js";
 import { runEnsemble } from "./run.js";
 import type {
@@ -25,8 +30,6 @@ import type {
   HarnessCapabilities
 } from "./harness.js";
 
-const SCHEMA_BUNDLE_HASH =
-  "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3";
 const PRODUCER_GIT_SHA = "0".repeat(40);
 const PRODUCER = "handoffkit-ensemble";
 const PRODUCER_VERSION = "0.1.0";
@@ -36,6 +39,14 @@ const DEFAULT_PROMPT = "Run the CI-safe harness smoke task and report concise ev
 const DEFAULT_COMMAND_SUCCESS = "printf command-ok";
 const DEFAULT_COMMAND_FAILURE = "exit 7";
 const DEFAULT_OUTPUT_DIR = ".warrant/ensemble-dashboard";
+const CLAUDE_LIVE_SMOKE_ENV = "WARRANT_CLAUDE_SMOKE";
+const CODEX_LIVE_SMOKE_ENV = "WARRANT_CODEX_SMOKE";
+const ALL_LIVE_SMOKE_ENV = "WARRANT_ENSEMBLE_LIVE_SMOKE";
+const LIVE_SMOKE_TARGETS = ["claude-code", "codex"] as const;
+const CLAUDE_LIVE_SMOKE_PROMPT =
+  "Read README.md if present, then reply exactly CLAUDE_LIVE_SMOKE_OK. Do not modify files.";
+const CODEX_LIVE_SMOKE_PROMPT =
+  "Read README.md if present, then reply exactly CODEX_LIVE_SMOKE_OK. Do not modify files.";
 
 export type HarnessCapabilityTarget =
   | "cursor"
@@ -45,6 +56,17 @@ export type HarnessCapabilityTarget =
   | "mock";
 
 export type HarnessAvailability = "available" | "credential_gated" | "missing";
+export type HarnessLiveSmokeTarget = (typeof LIVE_SMOKE_TARGETS)[number];
+export type HarnessSmokePurpose = "contract" | "credential-skip" | "live" | "missing";
+export type HarnessAdapterReadiness = {
+  harnessId: HarnessCapabilityTarget;
+  displayName: string;
+  contractReadiness: string;
+  credentialState: string;
+  liveSmoke: string;
+  evidence: string[];
+  artifactRefs: string[];
+};
 
 export type HarnessCapabilityMatrixRow = {
   harnessId: HarnessCapabilityTarget;
@@ -65,6 +87,7 @@ export type HarnessSmokeOutcome = "success" | "failure" | "missing" | "skipped";
 export type HarnessSmokeRecord = {
   taskId: string;
   harnessId: HarnessCapabilityTarget;
+  purpose: HarnessSmokePurpose;
   outcome: HarnessSmokeOutcome;
   result: HarnessRunResultV1;
   resultPath: string;
@@ -75,6 +98,7 @@ export type HarnessSmokeDashboard = {
   dashboardPath: string;
   matrix: HarnessCapabilityMatrix;
   records: HarnessSmokeRecord[];
+  readiness: HarnessAdapterReadiness[];
 };
 
 export type HarnessSmokeDashboardOptions = {
@@ -85,24 +109,28 @@ export type HarnessSmokeDashboardOptions = {
   env?: Record<string, string | undefined>;
   commandSuccess?: string;
   commandFailure?: string;
+  liveSmoke?: readonly HarnessLiveSmokeTarget[];
+  liveSmokeHarnesses?: Partial<Record<HarnessLiveSmokeTarget, HarnessAdapter>>;
 };
 
 type SmokeRunInput = {
   taskId: string;
   harnessId: HarnessCapabilityTarget;
+  purpose: HarnessSmokePurpose;
   outcome: HarnessSmokeOutcome;
   harness: HarnessAdapter;
   model: EnsembleModel;
   sideEffects: ModelFusionSideEffects;
   allowedTools: string[];
   prompt?: string;
+  preflightFailureReason?: string;
 };
 
 function metadata<S extends "harness-run-result.v1">(schema: S, createdAt: string) {
   return {
     schema,
     schema_version: "v1" as const,
-    schema_bundle_hash: SCHEMA_BUNDLE_HASH,
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
     producer: PRODUCER,
     producer_version: PRODUCER_VERSION,
     producer_git_sha: PRODUCER_GIT_SHA,
@@ -120,6 +148,38 @@ function safeFileName(value: string): string {
 
 function escapeMarkdownCell(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+function isEnvEnabled(env: Record<string, string | undefined>, name: string): boolean {
+  return env[name] === "1" || env[name]?.toLowerCase() === "true";
+}
+
+function liveSmokeEnvName(target: HarnessLiveSmokeTarget): string {
+  switch (target) {
+    case "claude-code":
+      return CLAUDE_LIVE_SMOKE_ENV;
+    case "codex":
+      return CODEX_LIVE_SMOKE_ENV;
+    default: {
+      const exhausted: never = target;
+      throw new Error(`unsupported live smoke target: ${String(exhausted)}`);
+    }
+  }
+}
+
+function liveSmokeEnvEnabled(
+  env: Record<string, string | undefined>,
+  target: HarnessLiveSmokeTarget
+): boolean {
+  return isEnvEnabled(env, ALL_LIVE_SMOKE_ENV) || isEnvEnabled(env, liveSmokeEnvName(target));
+}
+
+function requestedLiveSmokeTargets(options: {
+  env: Record<string, string | undefined>;
+  liveSmoke?: readonly HarnessLiveSmokeTarget[];
+}): HarnessLiveSmokeTarget[] {
+  const selected = options.liveSmoke?.length ? options.liveSmoke : LIVE_SMOKE_TARGETS;
+  return selected.filter((target) => liveSmokeEnvEnabled(options.env, target));
 }
 
 function harnessKindFor(target: HarnessCapabilityTarget): ModelFusionHarnessKind {
@@ -404,6 +464,73 @@ function unsupportedCursorResult(input: {
   return result;
 }
 
+function liveSmokePreflightFailureResult(input: {
+  createdAt: string;
+  taskId: string;
+  harnessId: HarnessLiveSmokeTarget;
+  harness: HarnessAdapter;
+  reason: string;
+}): HarnessRunResultV1 {
+  const result: HarnessRunResultV1 = {
+    ...metadata("harness-run-result.v1", input.createdAt),
+    result_id: `ensemble_result_${input.taskId}`,
+    request_id: `ensemble_req_${input.taskId}`,
+    harness_kind: harnessKindFor(input.harnessId),
+    status: "failed",
+    candidate_ids: [],
+    output_summary: `Explicit live smoke failed before launch: ${input.reason}`,
+    capabilities: matrixCapabilities(input.harnessId, adapterCapabilities(input.harness)),
+    started_at: input.createdAt,
+    finished_at: input.createdAt,
+    errors: [
+      {
+        kind: "capability_missing",
+        message: input.reason,
+        retryable: false
+      }
+    ],
+    metadata: {
+      dashboard_outcome: "failure",
+      harness_id: input.harnessId,
+      live_smoke: true,
+      preflight: "credentials"
+    }
+  };
+  assertHarnessRunResultV1(result);
+  return result;
+}
+
+function failSkippedLiveSmokeResult(
+  result: HarnessRunResultV1,
+  taskId: string
+): HarnessRunResultV1 {
+  if (result.status !== "skipped") return result;
+  const metadata: Record<string, JsonValue> = {
+    ...(result.metadata ?? {}),
+    dashboard_outcome: "failure",
+    explicit_live_smoke: true,
+    original_status: "skipped"
+  };
+  const promoted: HarnessRunResultV1 = {
+    ...result,
+    status: "failed",
+    output_summary:
+      `Explicit live smoke ${taskId} failed because the adapter returned skipped. ` +
+      (result.output_summary ?? ""),
+    errors: [
+      ...(result.errors ?? []),
+      {
+        kind: "capability_missing",
+        message: "Explicit live smoke was requested but the adapter returned skipped.",
+        retryable: false
+      }
+    ],
+    metadata
+  };
+  assertHarnessRunResultV1(promoted);
+  return promoted;
+}
+
 function writeRunResult(outputRoot: string, taskId: string, result: HarnessRunResultV1): string {
   const dir = join(outputRoot, "harness-run-results");
   mkdirSync(dir, { recursive: true });
@@ -421,6 +548,25 @@ async function runSmokeTask(input: {
   timeoutMs: number;
   createdAt: string;
 }): Promise<HarnessSmokeRecord> {
+  if (input.run.preflightFailureReason !== undefined) {
+    const result = liveSmokePreflightFailureResult({
+      createdAt: input.createdAt,
+      taskId: input.run.taskId,
+      harnessId: input.run.harnessId as HarnessLiveSmokeTarget,
+      harness: input.run.harness,
+      reason: input.run.preflightFailureReason
+    });
+    const resultPath = writeRunResult(input.outputRoot, input.run.taskId, result);
+    return {
+      taskId: input.run.taskId,
+      harnessId: input.run.harnessId,
+      purpose: input.run.purpose,
+      outcome: input.run.outcome,
+      result,
+      resultPath
+    };
+  }
+
   if (input.run.harnessId === "cursor") {
     const result = unsupportedCursorResult({
       createdAt: input.createdAt,
@@ -430,6 +576,7 @@ async function runSmokeTask(input: {
     return {
       taskId: input.run.taskId,
       harnessId: input.run.harnessId,
+      purpose: input.run.purpose,
       outcome: input.run.outcome,
       result,
       resultPath
@@ -449,12 +596,17 @@ async function runSmokeTask(input: {
     prompt: input.run.prompt ?? DEFAULT_PROMPT
   });
   const result = await runEnsemble(descriptor);
-  const resultPath = writeRunResult(input.outputRoot, input.run.taskId, result.harnessRunResult);
+  const harnessRunResult =
+    input.run.purpose === "live"
+      ? failSkippedLiveSmokeResult(result.harnessRunResult, input.run.taskId)
+      : result.harnessRunResult;
+  const resultPath = writeRunResult(input.outputRoot, input.run.taskId, harnessRunResult);
   return {
     taskId: input.run.taskId,
     harnessId: input.run.harnessId,
+    purpose: input.run.purpose,
     outcome: input.run.outcome,
-    result: result.harnessRunResult,
+    result: harnessRunResult,
     resultPath
   };
 }
@@ -467,6 +619,7 @@ function smokeRuns(options: Required<Pick<
     {
       taskId: "mock-success",
       harnessId: "mock",
+      purpose: "contract",
       outcome: "success",
       harness: createMockHarness(),
       model: { id: "mock", model: "synthetic-mock" },
@@ -476,6 +629,7 @@ function smokeRuns(options: Required<Pick<
     {
       taskId: "command-success",
       harnessId: "command",
+      purpose: "contract",
       outcome: "success",
       harness: createCommandHarness({ command: options.commandSuccess }),
       model: { id: "command", model: "local-shell" },
@@ -485,6 +639,7 @@ function smokeRuns(options: Required<Pick<
     {
       taskId: "command-failure",
       harnessId: "command",
+      purpose: "contract",
       outcome: "failure",
       harness: createCommandHarness({ command: options.commandFailure }),
       model: { id: "command", model: "local-shell" },
@@ -494,6 +649,7 @@ function smokeRuns(options: Required<Pick<
     {
       taskId: "claude-code-skipped",
       harnessId: "claude-code",
+      purpose: "credential-skip",
       outcome: "skipped",
       harness: claudeCodeHarness({ env: {} }),
       model: { id: "claude", model: "claude-sonnet-4-6" },
@@ -503,6 +659,7 @@ function smokeRuns(options: Required<Pick<
     {
       taskId: "codex-skipped",
       harnessId: "codex",
+      purpose: "credential-skip",
       outcome: "skipped",
       harness: codexHarness({ env: {}, provider: { kind: "ambient" } }),
       model: { id: "codex", model: "gpt-5.5-codex" },
@@ -512,6 +669,7 @@ function smokeRuns(options: Required<Pick<
     {
       taskId: "cursor-missing",
       harnessId: "cursor",
+      purpose: "missing",
       outcome: "missing",
       harness: createMockHarness({ id: "cursor-missing-placeholder" }),
       model: { id: "cursor", model: "cursor-proprietary" },
@@ -519,6 +677,53 @@ function smokeRuns(options: Required<Pick<
       allowedTools: ["read_file", "write_file", "apply_patch"]
     }
   ];
+}
+
+function liveSmokeRuns(options: {
+  env: Record<string, string | undefined>;
+  targets: readonly HarnessLiveSmokeTarget[];
+  harnesses?: Partial<Record<HarnessLiveSmokeTarget, HarnessAdapter>>;
+}): SmokeRunInput[] {
+  const runs: SmokeRunInput[] = [];
+  if (options.targets.includes("claude-code")) {
+    const harness =
+      options.harnesses?.["claude-code"] ??
+      claudeCodeHarness({ env: options.env, skipWhenUnavailable: false });
+    runs.push({
+      taskId: "claude-code-live",
+      harnessId: "claude-code",
+      purpose: "live",
+      outcome: "success",
+      harness,
+      model: {
+        id: "claude",
+        model: options.env.WARRANT_CLAUDE_SMOKE_MODEL ?? "claude-sonnet-4-6"
+      },
+      sideEffects: "read_only",
+      allowedTools: ["read_file"],
+      prompt: CLAUDE_LIVE_SMOKE_PROMPT,
+      preflightFailureReason: claudeCodeHarnessCredentialSkipReason(options.env)
+    });
+  }
+  if (options.targets.includes("codex")) {
+    const harness = options.harnesses?.codex ?? codexHarness({ env: options.env });
+    runs.push({
+      taskId: "codex-live",
+      harnessId: "codex",
+      purpose: "live",
+      outcome: "success",
+      harness,
+      model: {
+        id: "codex",
+        model: options.env.WARRANT_CODEX_SMOKE_MODEL ?? "gpt-5.5-codex"
+      },
+      sideEffects: "read_only",
+      allowedTools: ["read_file"],
+      prompt: CODEX_LIVE_SMOKE_PROMPT,
+      preflightFailureReason: codexHarnessCredentialSkipReason(options.env)
+    });
+  }
+  return runs;
 }
 
 function capabilityCell(
@@ -559,17 +764,150 @@ function relativePath(path: string, from: string): string {
   return path.startsWith(from) ? path.slice(from.length + 1) : path;
 }
 
+function safeArtifactRefs(artifacts: readonly ArtifactRef[] | undefined): string[] {
+  if (artifacts === undefined || artifacts.length === 0) return [];
+  const refs: string[] = [];
+  let rawWithheld = 0;
+  for (const artifact of artifacts) {
+    if (artifact.redaction_status === "raw") {
+      rawWithheld++;
+      continue;
+    }
+    refs.push(`${artifact.kind}:${artifact.artifact_id}:${artifact.hash}`);
+    if (refs.length >= 5) break;
+  }
+  if (rawWithheld > 0) refs.push(`${rawWithheld} raw artifact ref(s) withheld`);
+  return refs;
+}
+
+function credentialStateFor(
+  harnessId: HarnessCapabilityTarget,
+  env: Record<string, string | undefined>
+): string {
+  switch (harnessId) {
+    case "claude-code":
+      return claudeCodeHarnessCredentialSkipReason(env) === undefined
+        ? "credentials available"
+        : "credentials missing/skipped";
+    case "codex":
+      return codexHarnessCredentialSkipReason(env) === undefined
+        ? "credentials available"
+        : "credentials missing/skipped";
+    case "command":
+    case "mock":
+      return "not required";
+    case "cursor":
+      return "not applicable";
+    default:
+      return assertNever(harnessId);
+  }
+}
+
+function contractReadinessFor(harnessId: HarnessCapabilityTarget): string {
+  switch (harnessId) {
+    case "mock":
+    case "command":
+      return "contract/mock ready";
+    case "claude-code":
+    case "codex":
+      return "contract/mock ready";
+    case "cursor":
+      return "adapter missing";
+    default:
+      return assertNever(harnessId);
+  }
+}
+
+function liveSmokeState(record: HarnessSmokeRecord | undefined): string {
+  if (record === undefined) return "live smoke not requested";
+  switch (record.result.status) {
+    case "succeeded":
+      return "live smoke passed";
+    case "failed":
+    case "canceled":
+    case "requires_action":
+    case "unsupported":
+    case "pending":
+    case "running":
+      return "live smoke failed";
+    case "skipped":
+      return "live smoke skipped";
+    default: {
+      const exhausted: never = record.result.status;
+      throw new Error(`unsupported live smoke status: ${String(exhausted)}`);
+    }
+  }
+}
+
+function createAdapterReadiness(input: {
+  matrix: HarnessCapabilityMatrix;
+  records: readonly HarnessSmokeRecord[];
+  env: Record<string, string | undefined>;
+  outputRoot: string;
+}): HarnessAdapterReadiness[] {
+  return input.matrix.rows.map((row) => {
+    const liveRecord = input.records.find(
+      (record) => record.harnessId === row.harnessId && record.purpose === "live"
+    );
+    const credentialRecord = input.records.find(
+      (record) => record.harnessId === row.harnessId && record.purpose === "credential-skip"
+    );
+    const evidence = [
+      ...(credentialRecord !== undefined && credentialStateFor(row.harnessId, input.env).includes("missing")
+        ? [`credential skip: ${relativePath(credentialRecord.resultPath, input.outputRoot)}`]
+        : []),
+      ...(liveRecord !== undefined
+        ? [
+            `live result: ${relativePath(liveRecord.resultPath, input.outputRoot)}`,
+            `status=${liveRecord.result.status}`
+          ]
+        : [])
+    ];
+    return {
+      harnessId: row.harnessId,
+      displayName: row.displayName,
+      contractReadiness: contractReadinessFor(row.harnessId),
+      credentialState: credentialStateFor(row.harnessId, input.env),
+      liveSmoke: liveSmokeState(liveRecord),
+      evidence,
+      artifactRefs: liveRecord !== undefined ? safeArtifactRefs(liveRecord.result.artifacts) : []
+    };
+  });
+}
+
+function renderAdapterReadiness(readiness: readonly HarnessAdapterReadiness[]): string[] {
+  const lines = [
+    "## Adapter Readiness",
+    "",
+    "| Adapter | Contract/Mock Readiness | Credentials | Live Smoke | Last Evidence | Safe Artifact Refs |",
+    "| --- | --- | --- | --- | --- | --- |"
+  ];
+  for (const row of readiness) {
+    const cells = [
+      row.displayName,
+      row.contractReadiness,
+      row.credentialState,
+      row.liveSmoke,
+      row.evidence.length > 0 ? row.evidence.join("; ") : "-",
+      row.artifactRefs.length > 0 ? row.artifactRefs.join("; ") : "-"
+    ];
+    lines.push(`| ${cells.map(escapeMarkdownCell).join(" | ")} |`);
+  }
+  return lines;
+}
+
 function renderSmokeRecords(records: readonly HarnessSmokeRecord[], outputRoot: string): string[] {
   const lines = [
     "## Smoke Records",
     "",
-    "| Task | Harness | Expected | Result Status | Harness Kind | Result Record | Summary |",
-    "| --- | --- | --- | --- | --- | --- | --- |"
+    "| Task | Harness | Purpose | Expected | Result Status | Harness Kind | Result Record | Summary |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |"
   ];
   for (const record of records) {
     const cells = [
       record.taskId,
       displayNameFor(record.harnessId),
+      record.purpose,
       record.outcome,
       record.result.status,
       record.result.harness_kind,
@@ -583,6 +921,7 @@ function renderSmokeRecords(records: readonly HarnessSmokeRecord[], outputRoot: 
 
 function renderDashboard(input: {
   matrix: HarnessCapabilityMatrix;
+  readiness: HarnessAdapterReadiness[];
   records: readonly HarnessSmokeRecord[];
   createdAt: string;
   outputRoot: string;
@@ -604,6 +943,8 @@ function renderDashboard(input: {
     "",
     ...renderCapabilityMatrix(input.matrix),
     "",
+    ...renderAdapterReadiness(input.readiness),
+    "",
     ...renderSmokeRecords(input.records, input.outputRoot),
     ""
   ].join("\n");
@@ -618,6 +959,7 @@ export async function runHarnessSmokeDashboard(
   const createdAt = options.createdAt ?? new Date().toISOString();
   const commandSuccess = options.commandSuccess ?? DEFAULT_COMMAND_SUCCESS;
   const commandFailure = options.commandFailure ?? DEFAULT_COMMAND_FAILURE;
+  const env = options.env ?? process.env;
   mkdirSync(outputRoot, { recursive: true });
 
   const matrix = createHarnessCapabilityMatrix({
@@ -625,11 +967,19 @@ export async function runHarnessSmokeDashboard(
     repo,
     commandSuccess,
     commandFailure,
-    env: {}
+    env
   });
   const baseGitSha = currentGitSha(repo);
   const records: HarnessSmokeRecord[] = [];
-  for (const run of smokeRuns({ commandSuccess, commandFailure })) {
+  const runs = [
+    ...smokeRuns({ commandSuccess, commandFailure }),
+    ...liveSmokeRuns({
+      env,
+      targets: requestedLiveSmokeTargets({ env, liveSmoke: options.liveSmoke }),
+      harnesses: options.liveSmokeHarnesses
+    })
+  ];
+  for (const run of runs) {
     records.push(
       await runSmokeTask({
         run,
@@ -641,12 +991,19 @@ export async function runHarnessSmokeDashboard(
       })
     );
   }
+  const readiness = createAdapterReadiness({
+    matrix,
+    records,
+    env,
+    outputRoot
+  });
 
   const dashboardPath = join(outputRoot, "dashboard.md");
   writeFileSync(
     dashboardPath,
     renderDashboard({
       matrix,
+      readiness,
       records,
       createdAt,
       outputRoot
@@ -656,7 +1013,8 @@ export async function runHarnessSmokeDashboard(
     outputRoot,
     dashboardPath,
     matrix,
-    records
+    records,
+    readiness
   };
 }
 

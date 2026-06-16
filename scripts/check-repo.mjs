@@ -13,6 +13,7 @@ const requiredFiles = [
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".github/workflows/ci.yml",
+  ".github/workflows/release-packages.yml",
   ".github/dependabot.yml",
   ".github/CODEOWNERS",
   "spec/2026-06-11-local-first-handoff-platform-spec.md",
@@ -39,6 +40,12 @@ const requiredFiles = [
   "packages/protocol/src/types.ts",
   "packages/protocol/src/api.ts",
   "packages/protocol/src/model-fusion.ts",
+  "packages/protocol/src/generated/model-fusion-openapi.ts",
+  "packages/protocol/generated/python/velum_model_fusion_protocol/__init__.py",
+  "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py",
+  "packages/protocol/openapi/model-fusion-harness-executor.openapi.json",
+  "packages/protocol/model-fusion-bindings.json",
+  "packages/protocol/docs/model-fusion-consumption.md",
   "packages/protocol/src/tool-executor.ts",
   "packages/protocol/src/receipt.ts",
   "packages/workspace/src/index.ts",
@@ -65,6 +72,9 @@ const requiredFiles = [
   "packages/ensemble/src/harness.ts",
   "packages/ensemble/src/run.ts",
   "packages/ensemble/src/artifacts.ts",
+  "packages/ensemble/src/dashboard.ts",
+  "packages/ensemble/src/claude-code.ts",
+  "packages/ensemble/src/codex.ts",
   "packages/ensemble/src/worktree.ts",
   "packages/ensemble/src/judge.ts",
   "packages/ensemble/src/synthesis.ts",
@@ -79,6 +89,13 @@ const requiredFiles = [
   "packages/example-utils/src/narrate.ts",
   "packages/example-utils/src/models.ts",
   "scripts/demo.mjs",
+  "scripts/check-release-publish.mjs",
+  "scripts/check-model-fusion-protocol.mjs",
+  "scripts/check-generated-model-fusion-sdk.mjs",
+  "scripts/generate-model-fusion-openapi-sdk.mjs",
+  "scripts/publish-npm-workspaces.mjs",
+  "release/npm-packages.json",
+  "docs/release-publishing.md",
   "examples/manifest.json",
   "packages/example-utils/src/manifest.ts",
   "examples/seed/src/index.ts",
@@ -91,6 +108,8 @@ const requiredFiles = [
   "packages/ensemble/src/test/tool-executor.test.ts",
   "packages/ensemble/src/test/external-executor.test.ts",
   "packages/ensemble/src/test/isolation.test.ts",
+  "packages/ensemble/src/test/dashboard.test.ts",
+  "packages/ensemble/src/test/codex.test.ts",
   "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/minimal.json",
   "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/realistic.json",
   "packages/protocol/src/fixtures/model-fusion-contract/benchmark-task-record.v1/minimal.json",
@@ -157,6 +176,36 @@ for (const entry of [...manifest.demos, ...manifest.infra]) {
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) fail(`missing ${file}`);
+}
+
+const modelFusionProtocolCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-model-fusion-protocol.mjs"],
+  { encoding: "utf8" }
+);
+if (modelFusionProtocolCheck.stdout.trim()) {
+  console.log(modelFusionProtocolCheck.stdout.trim());
+}
+if (modelFusionProtocolCheck.stderr.trim()) {
+  console.error(modelFusionProtocolCheck.stderr.trim());
+}
+if (modelFusionProtocolCheck.status !== 0) {
+  fail("model-fusion protocol check failed");
+}
+
+const releasePublishCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-release-publish.mjs"],
+  { encoding: "utf8" }
+);
+if (releasePublishCheck.stdout.trim()) {
+  console.log(releasePublishCheck.stdout.trim());
+}
+if (releasePublishCheck.stderr.trim()) {
+  console.error(releasePublishCheck.stderr.trim());
+}
+if (releasePublishCheck.status !== 0) {
+  fail("release publish check failed");
 }
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
@@ -270,6 +319,11 @@ function checkDeps(manifestPath, manifest) {
 // Root manifest may carry only allowlisted, exact-pinned dev tooling.
 checkDeps("package.json", pkg);
 
+const releaseManifest = JSON.parse(readFileSync("release/npm-packages.json", "utf8"));
+const publishableWorkspaceDirs = new Set(
+  (releaseManifest.packages ?? []).map((entry) => entry.path)
+);
+
 const workspaceDirs = [
   ...readdirSync("packages").map((dir) => join("packages", dir)),
   ...readdirSync("examples").map((dir) => join("examples", dir))
@@ -278,7 +332,13 @@ for (const dir of workspaceDirs) {
   const manifestPath = join(dir, "package.json");
   if (!existsSync(manifestPath)) continue;
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  if (manifest.private !== true) fail(`${manifestPath} must remain private`);
+  if (publishableWorkspaceDirs.has(dir)) {
+    if (manifest.private !== false) {
+      fail(`${manifestPath} must set private:false because it is in release/npm-packages.json`);
+    }
+  } else if (manifest.private !== true) {
+    fail(`${manifestPath} must remain private`);
+  }
   checkDeps(manifestPath, manifest);
 }
 

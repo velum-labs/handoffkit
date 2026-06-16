@@ -16,6 +16,7 @@ import {
   assertHarnessCandidateRecordV1,
   assertHarnessRunRequestV1,
   assertHarnessRunResultV1,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   requestHash,
   responseHash
 } from "@warrant/protocol";
@@ -28,7 +29,11 @@ import {
   claudeCodeHarnessCredentialSkipReason
 } from "../claude-code.js";
 import { createCommandHarness } from "../command.js";
-import { codexConfigToml, codexHarness } from "../codex.js";
+import {
+  codexConfigToml,
+  codexHarness,
+  codexHarnessCredentialSkipReason
+} from "../codex.js";
 import type { CodexExecInput } from "../codex.js";
 import { createMockJudgeSynthesizer } from "../judge.js";
 import { createMockHarness } from "../mock.js";
@@ -74,7 +79,7 @@ function modelCallRecord(callId: string, model = "fake-fast"): ModelCallRecordV1
   return {
     schema: "model-call-record.v1",
     schema_version: "v1",
-    schema_bundle_hash: "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
     producer: "ensemble-test",
     producer_version: "0.1.0",
     producer_git_sha: "0".repeat(40),
@@ -250,7 +255,7 @@ test("claude-code adapter delegates through a session backend from a generic des
 
 test(
   "smoke: claude-code adapter runs live when credentials are available",
-  { skip: claudeCodeHarnessCredentialSkipReason() },
+  { skip: liveClaudeSmokeSkipReason() },
   async () => {
     const repo = makeRepo();
     try {
@@ -275,11 +280,12 @@ test(
           },
           policy: {
             id: "claude-smoke-policy",
-            allowedTools: ["read_file", "write_file"],
-            sideEffects: "writes_workspace",
+            allowedTools: ["read_file"],
+            sideEffects: "read_only",
             timeoutMs: 180_000
           },
-          prompt: "Create CLAUDE_SMOKE.md containing exactly: ok",
+          prompt:
+            "Read README.md if present, then reply exactly CLAUDE_LIVE_SMOKE_OK. Do not modify files.",
           workspace: repo.repo,
           baseGitSha: repo.head,
           outputRoot: repo.outputRoot,
@@ -290,7 +296,6 @@ test(
       assertHarnessRunResultV1(result.harnessRunResult);
       assert.equal(result.harnessRunResult.status, "succeeded");
       assert.equal(result.candidates[0]?.status, "succeeded");
-      assert.ok(result.artifacts.some((artifact) => artifact.kind === "patch"));
     } finally {
       repo.cleanup();
     }
@@ -382,19 +387,18 @@ test("codex adapter runs through an injected Responses runner and records eviden
   assert.match(result.candidates[0]?.metadata?.adapter as string, /codex/);
 });
 
+function liveClaudeSmokeSkipReason(): string | false {
+  if (process.env.WARRANT_CLAUDE_SMOKE !== "1") {
+    return "set WARRANT_CLAUDE_SMOKE=1 plus Claude Code credentials to run the live Claude Code smoke";
+  }
+  return claudeCodeHarnessCredentialSkipReason() ?? false;
+}
+
 function liveCodexSmokeSkipReason(): string | false {
   if (process.env.WARRANT_CODEX_SMOKE !== "1") {
     return "set WARRANT_CODEX_SMOKE=1 plus Codex credentials to run the live Codex smoke";
   }
-  if (
-    !process.env.CODEX_API_KEY &&
-    !process.env.OPENAI_API_KEY &&
-    !process.env.WARRANT_CODEX_RESPONSES_BASE_URL &&
-    !process.env.CODEX_RESPONSES_BASE_URL
-  ) {
-    return "missing Codex credentials/provider env (CODEX_API_KEY, OPENAI_API_KEY, or a Responses provider URL)";
-  }
-  return false;
+  return codexHarnessCredentialSkipReason() ?? false;
 }
 
 test(
@@ -405,6 +409,8 @@ test(
     try {
       const result = await runEnsemble(
         descriptor({
+          prompt:
+            "Read README.md if present, then reply exactly CODEX_LIVE_SMOKE_OK. Do not modify files.",
           models: [{ id: "codex", model: process.env.WARRANT_CODEX_SMOKE_MODEL ?? "gpt-5.5-codex" }],
           harness: codexHarness({
             timeoutMs: 60_000,

@@ -1,6 +1,6 @@
 {
   "name": "@warrant/adapter-ai-sdk",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "AI SDK adapter for app-owned loops: tool calls execute in governed runner sessions and return with receipts. No durability claim attaches to the caller's loop.",
   "license": "UNLICENSED",
@@ -14,6 +14,11 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "provenance": true
+  },
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.48",
     "@ai-sdk/provider": "3.0.10",

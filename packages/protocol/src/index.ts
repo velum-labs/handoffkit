@@ -73,6 +73,7 @@ export {
   sha256PrefixedHex
 } from "./hash.js";
 export {
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   assertArtifactRefV1,
   assertBenchmarkTaskRecordV1,
   assertEnsembleReceiptV1,
@@ -85,6 +86,19 @@ export {
   assertToolCallPlanV1,
   assertToolExecutionRecordV1
 } from "./model-fusion.js";
+export {
+  executeHarnessTask,
+  MODEL_FUSION_HARNESS_EXECUTOR_PATH,
+  MODEL_FUSION_OPENAPI_SOURCE_HASH
+} from "./generated/model-fusion-openapi.js";
+export type {
+  ExecuteHarnessTaskClientOptions,
+  ModelFusionOpenApiArtifactRef,
+  ModelFusionOpenApiErrorResponse,
+  ModelFusionOpenApiHarnessExecutionRequest,
+  ModelFusionOpenApiHarnessExecutionResult,
+  ModelFusionOpenApiPersistedJsonRecord
+} from "./generated/model-fusion-openapi.js";
 export type {
   ArtifactRefV1,
   ArtifactRef,
