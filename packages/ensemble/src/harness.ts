@@ -3,6 +3,7 @@ import type {
   HarnessCandidateRecordV1,
   HarnessRunRequestV1,
   HarnessRunResultV1,
+  JudgeSynthesisRecordV1,
   JsonValue,
   ModelCallRecordV1,
   ModelFusionCapabilityStatus,
@@ -12,6 +13,11 @@ import type {
 } from "@warrant/protocol";
 
 import type { CandidateWorktree } from "./worktree.js";
+import type {
+  JudgeSynthesizer,
+  SynthesisFailureSummary,
+  SynthesisRepairAttempt
+} from "./judge.js";
 
 export type EnsembleModel = {
   id: string;
@@ -27,6 +33,7 @@ export type EnsembleRuntime = {
 export type EnsembleJudge = {
   id: string;
   model?: string;
+  synthesizer?: JudgeSynthesizer;
 };
 
 export type EnsemblePolicy = {
@@ -143,6 +150,10 @@ export type EnsembleRunResult = {
   verification: VerificationProfile;
   summaryPath?: string;
   summary?: EnsembleRunSummary;
+  judgeSynthesisRecord?: JudgeSynthesisRecordV1;
+  finalPatchPath?: string | null;
+  repairAttempts?: readonly SynthesisRepairAttempt[];
+  failureSummary?: SynthesisFailureSummary;
   reviewEvidence?: ReviewEvidence;
 };
 
@@ -168,5 +179,8 @@ export type EnsembleRunSummary = {
   candidates: EnsembleCandidateSummary[];
   artifacts: HarnessArtifact[];
   modelCallRecords: ModelCallRecordV1[];
-  finalPatchPath: null;
+  judgeSynthesisRecord?: JudgeSynthesisRecordV1;
+  finalPatchPath: string | null;
+  repairAttempts?: SynthesisRepairAttempt[];
+  failureSummary?: SynthesisFailureSummary;
 };

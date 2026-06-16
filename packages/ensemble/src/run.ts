@@ -23,6 +23,7 @@ import type {
   HarnessCandidateOutput,
   HarnessToolRecord
 } from "./harness.js";
+import { runJudgeSynthesis } from "./synthesis.js";
 import {
   cleanupWorktreePlan,
   createWorktreePlan,
@@ -352,11 +353,27 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       return record;
     });
 
-    const artifacts: HarnessArtifact[] = [
+    const baseArtifacts: HarnessArtifact[] = [
       ...collectedArtifacts,
       ...candidates.flatMap((candidate) => candidate.artifacts ?? [])
     ];
     const toolRecords: HarnessToolRecord[] = outputs.flatMap((output) => output.toolRecords ?? []);
+    const synthesis = await runJudgeSynthesis({
+      descriptor,
+      candidates,
+      outputs,
+      artifacts: baseArtifacts,
+      toolRecords,
+      modelCallRecords,
+      ...(descriptor.reviewEvidence ? { reviewEvidence: descriptor.reviewEvidence } : {}),
+      ...(worktreePlan?.workspace ? { workspace: worktreePlan.workspace } : {}),
+      ...(worktreePlan?.baseGitSha ? { baseGitSha: worktreePlan.baseGitSha } : {}),
+      store
+    });
+    const artifacts: HarnessArtifact[] = [
+      ...baseArtifacts,
+      ...(synthesis?.artifacts ?? [])
+    ];
     const summary: EnsembleRunSummary = {
       descriptorId: descriptor.id,
       ...(worktreePlan
@@ -387,7 +404,12 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       }),
       artifacts,
       modelCallRecords,
-      finalPatchPath: null
+      ...(synthesis?.judgeSynthesisRecord
+        ? { judgeSynthesisRecord: synthesis.judgeSynthesisRecord }
+        : {}),
+      finalPatchPath: synthesis?.finalPatchPath ?? null,
+      ...(synthesis?.repairAttempts ? { repairAttempts: synthesis.repairAttempts } : {}),
+      ...(synthesis?.failureSummary ? { failureSummary: synthesis.failureSummary } : {})
     };
     const summaryArtifact = store.writeJson({
       artifactId: `${descriptor.id}_summary`,
@@ -429,6 +451,12 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       verification,
       summaryPath,
       summary,
+      ...(synthesis?.judgeSynthesisRecord
+        ? { judgeSynthesisRecord: synthesis.judgeSynthesisRecord }
+        : {}),
+      ...(synthesis ? { finalPatchPath: synthesis.finalPatchPath } : {}),
+      ...(synthesis?.repairAttempts ? { repairAttempts: synthesis.repairAttempts } : {}),
+      ...(synthesis?.failureSummary ? { failureSummary: synthesis.failureSummary } : {}),
       ...(descriptor.reviewEvidence ? { reviewEvidence: descriptor.reviewEvidence } : {})
     });
   } finally {

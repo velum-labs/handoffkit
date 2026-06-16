@@ -63,6 +63,8 @@ const requiredFiles = [
   "packages/ensemble/src/run.ts",
   "packages/ensemble/src/artifacts.ts",
   "packages/ensemble/src/worktree.ts",
+  "packages/ensemble/src/judge.ts",
+  "packages/ensemble/src/synthesis.ts",
   "packages/ensemble/src/mock.ts",
   "packages/ensemble/src/command.ts",
   "packages/testkit/src/index.ts",
