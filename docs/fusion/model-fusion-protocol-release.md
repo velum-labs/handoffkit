@@ -37,7 +37,7 @@ The release workflow:
 5. Builds the Python `velum-model-fusion-protocol` wheel and sdist using
    `scripts/build_protocol_python_package.py`, which stages JSON Schema/OpenAPI
    assets into the package build tree without committing duplicate contract copies.
-6. Publishes `@velum/model-fusion-protocol` to GitHub Packages with npm provenance.
+6. Publishes `@velum/model-fusion-protocol` to private GitHub Packages.
 7. Publishes Python artifacts to a private PyPI-compatible registry when configured.
 8. Falls back to attaching Python wheel/sdist files to the GitHub Release when private
    registry secrets are absent.
@@ -48,7 +48,10 @@ a PyPI replacement while still preserving release artifacts for private distribu
 ## Required secrets
 
 No additional secret is needed for npm GitHub Packages publishing; the workflow uses
-`GITHUB_TOKEN` with `packages: write` and `id-token: write` for provenance.
+`GITHUB_TOKEN` with `packages: write` and publishes with `--access restricted`.
+The restricted private package path intentionally omits npm provenance because npm
+only supports provenance for public packages. Add an explicit public/provenance
+publish path before using `npm publish --provenance`.
 
 For private Python publishing, configure all of:
 
