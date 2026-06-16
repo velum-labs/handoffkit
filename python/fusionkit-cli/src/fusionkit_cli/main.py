@@ -12,9 +12,15 @@ from fusionkit_core.config import FusionMode, load_config
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
 from fusionkit_evals.fusion_bench import (
+    FusionBenchReport,
     FusionBenchRunner,
+    build_fusion_bench_report,
     load_benchmark_tasks,
+    load_fusion_bench_jsonl,
+    write_fusion_bench_html_report,
     write_fusion_bench_jsonl,
+    write_fusion_bench_markdown_report,
+    write_fusion_bench_report_jsonl,
 )
 from fusionkit_evals.pareto import load_points, write_pareto_report
 from fusionkit_evals.tiny import (
@@ -105,6 +111,12 @@ def fusion_bench(
     output: Annotated[Path, typer.Option("--output", "-o")],
     manifest: Annotated[Path | None, typer.Option("--manifest", "-m")] = None,
     run_root: Annotated[Path, typer.Option("--run-root")] = Path(".fusionkit/fusion-bench"),
+    report_jsonl: Annotated[Path | None, typer.Option("--report-jsonl")] = None,
+    report_markdown: Annotated[
+        Path | None,
+        typer.Option("--report", "-r", "--report-markdown"),
+    ] = None,
+    report_html: Annotated[Path | None, typer.Option("--report-html")] = None,
     mode: FusionMode = "panel",
     config_id: str = "local",
 ) -> None:
@@ -124,4 +136,59 @@ def fusion_bench(
     tasks = load_benchmark_tasks(manifest) if manifest else load_benchmark_tasks()
     rows = asyncio.run(runner.run_tasks(tasks))
     write_fusion_bench_jsonl(output, rows)
-    typer.echo(json.dumps({"rows": len(rows), "output": str(output)}))
+    response: dict[str, int | str] = {"rows": len(rows), "output": str(output)}
+    response.update(
+        _write_fusion_bench_reports(
+            build_fusion_bench_report(rows),
+            report_jsonl=report_jsonl,
+            report_markdown=report_markdown,
+            report_html=report_html,
+        )
+    )
+    typer.echo(json.dumps(response))
+
+
+@app.command("fusion-bench-report")
+def fusion_bench_report(
+    input_path: Annotated[Path, typer.Option("--input", "-i")],
+    report_jsonl: Annotated[Path | None, typer.Option("--jsonl")] = None,
+    report_markdown: Annotated[Path | None, typer.Option("--markdown", "-m")] = None,
+    report_html: Annotated[Path | None, typer.Option("--html")] = None,
+) -> None:
+    rows = load_fusion_bench_jsonl(input_path)
+    report = build_fusion_bench_report(rows)
+    response: dict[str, int | str] = {
+        "rows": len(rows),
+        "tasks": report.aggregate.total_tasks,
+        "skipped": report.aggregate.skipped_tasks,
+        "failed": report.aggregate.failed_tasks,
+    }
+    response.update(
+        _write_fusion_bench_reports(
+            report,
+            report_jsonl=report_jsonl,
+            report_markdown=report_markdown,
+            report_html=report_html,
+        )
+    )
+    typer.echo(json.dumps(response))
+
+
+def _write_fusion_bench_reports(
+    report: FusionBenchReport,
+    *,
+    report_jsonl: Path | None,
+    report_markdown: Path | None,
+    report_html: Path | None,
+) -> dict[str, str]:
+    outputs = {}
+    if report_jsonl is not None:
+        write_fusion_bench_report_jsonl(report_jsonl, report)
+        outputs["report_jsonl"] = str(report_jsonl)
+    if report_markdown is not None:
+        write_fusion_bench_markdown_report(report_markdown, report)
+        outputs["report_markdown"] = str(report_markdown)
+    if report_html is not None:
+        write_fusion_bench_html_report(report_html, report)
+        outputs["report_html"] = str(report_html)
+    return outputs
