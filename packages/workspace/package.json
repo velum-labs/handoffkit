@@ -1,6 +1,6 @@
 {
   "name": "@warrant/workspace",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Workspace capture, materialization, and divergence-safe pull. Shared by the CLI, runner, and handoff SDK.",
   "license": "UNLICENSED",
@@ -14,6 +14,11 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "provenance": true
+  },
   "dependencies": {
     "@warrant/protocol": "workspace:*",
     "minimatch": "10.2.5"

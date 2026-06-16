@@ -13,6 +13,7 @@ const requiredFiles = [
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".github/workflows/ci.yml",
+  ".github/workflows/release-packages.yml",
   ".github/dependabot.yml",
   ".github/CODEOWNERS",
   "spec/2026-06-11-local-first-handoff-platform-spec.md",
@@ -85,7 +86,11 @@ const requiredFiles = [
   "packages/example-utils/src/narrate.ts",
   "packages/example-utils/src/models.ts",
   "scripts/demo.mjs",
+  "scripts/check-release-publish.mjs",
   "scripts/check-model-fusion-protocol.mjs",
+  "scripts/publish-npm-workspaces.mjs",
+  "release/npm-packages.json",
+  "docs/release-publishing.md",
   "examples/manifest.json",
   "packages/example-utils/src/manifest.ts",
   "examples/seed/src/index.ts",
@@ -181,6 +186,21 @@ if (modelFusionProtocolCheck.stderr.trim()) {
 }
 if (modelFusionProtocolCheck.status !== 0) {
   fail("model-fusion protocol check failed");
+}
+
+const releasePublishCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-release-publish.mjs"],
+  { encoding: "utf8" }
+);
+if (releasePublishCheck.stdout.trim()) {
+  console.log(releasePublishCheck.stdout.trim());
+}
+if (releasePublishCheck.stderr.trim()) {
+  console.error(releasePublishCheck.stderr.trim());
+}
+if (releasePublishCheck.status !== 0) {
+  fail("release publish check failed");
 }
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
@@ -294,6 +314,11 @@ function checkDeps(manifestPath, manifest) {
 // Root manifest may carry only allowlisted, exact-pinned dev tooling.
 checkDeps("package.json", pkg);
 
+const releaseManifest = JSON.parse(readFileSync("release/npm-packages.json", "utf8"));
+const publishableWorkspaceDirs = new Set(
+  (releaseManifest.packages ?? []).map((entry) => entry.path)
+);
+
 const workspaceDirs = [
   ...readdirSync("packages").map((dir) => join("packages", dir)),
   ...readdirSync("examples").map((dir) => join("examples", dir))
@@ -302,7 +327,13 @@ for (const dir of workspaceDirs) {
   const manifestPath = join(dir, "package.json");
   if (!existsSync(manifestPath)) continue;
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  if (manifest.private !== true) fail(`${manifestPath} must remain private`);
+  if (publishableWorkspaceDirs.has(dir)) {
+    if (manifest.private !== false) {
+      fail(`${manifestPath} must set private:false because it is in release/npm-packages.json`);
+    }
+  } else if (manifest.private !== true) {
+    fail(`${manifestPath} must remain private`);
+  }
   checkDeps(manifestPath, manifest);
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@warrant/handoff",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Handoff SDK: continuation-first developer surface (checkpoint, continueIn, parallel, review, pull) built entirely on Warrant primitives.",
   "license": "UNLICENSED",
@@ -12,6 +12,11 @@
     }
   },
   "files": ["dist"],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "provenance": true
+  },
   "dependencies": {
     "@warrant/protocol": "workspace:*",
     "@warrant/sdk": "workspace:*",

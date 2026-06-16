@@ -1,6 +1,6 @@
 {
   "name": "@warrant/session-hermetic",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Hermetic session backend for Warrant runners: a simulated bash interpreter (just-bash) with a virtual filesystem and interpreter-enforced network allowlists. No real processes or sockets to escape with.",
   "license": "UNLICENSED",
@@ -12,6 +12,11 @@
     }
   },
   "files": ["dist"],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "provenance": true
+  },
   "dependencies": {
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",

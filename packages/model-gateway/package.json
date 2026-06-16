@@ -1,6 +1,6 @@
 {
   "name": "@warrant/model-gateway",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Native local-model gateway: fronts an OpenAI-compatible local model and exposes the wire dialects each agent harness needs (OpenAI chat, Anthropic Messages, OpenAI Responses) so a local model can transparently back Claude Code, Codex, opencode, and Cursor.",
   "license": "UNLICENSED",
@@ -12,6 +12,11 @@
     }
   },
   "files": ["dist"],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "provenance": true
+  },
   "dependencies": {
     "@warrant/adapter-ai-sdk": "workspace:*",
     "@warrant/protocol": "workspace:*"

@@ -1,6 +1,6 @@
 {
   "name": "@warrant/runner",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Warrant runner: outbound-only execution of vendor agent harnesses inside governed sessions with deny-by-default egress.",
   "license": "UNLICENSED",
@@ -12,6 +12,11 @@
     }
   },
   "files": ["dist"],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "provenance": true
+  },
   "dependencies": {
     "@warrant/protocol": "workspace:*",
     "@warrant/sdk": "workspace:*",
