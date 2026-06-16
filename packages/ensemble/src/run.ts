@@ -15,6 +15,7 @@ import type {
 
 import { createArtifactStore } from "./artifacts.js";
 import type {
+  CandidateHardeningMetadata,
   EnsembleCandidateSummary,
   EnsembleDescriptor,
   EnsembleRunResult,
@@ -128,6 +129,9 @@ function candidateMetadata(
     metadata.snapshot_hash = worktree.snapshotHash;
   }
   Object.assign(metadata, output.metadata ?? {});
+  if (metadata.hardening === undefined) {
+    metadata.hardening = fallbackCandidateHardening(descriptor) as unknown as JsonValue;
+  }
   if (descriptor.reviewEvidence !== undefined) {
     metadata.review_evidence_attached = true;
   }
@@ -236,6 +240,75 @@ function outputSummary(outputs: readonly HarnessCandidateOutput[], harnessId: st
   return `${outputs.length} candidate(s) produced by ${harnessId}; statuses ${countText}`;
 }
 
+function runtimeHardeningMetadata(descriptor: EnsembleDescriptor): Record<string, JsonValue> {
+  const isolation = descriptor.runtime.isolation;
+  return {
+    requested_isolation: isolation?.kind ?? "process",
+    runtime_id: descriptor.runtime.id,
+    ...(descriptor.runtime.environmentId !== undefined
+      ? { environment_id: descriptor.runtime.environmentId }
+      : {}),
+    ...(isolation?.kind === "container"
+      ? {
+          image: isolation.image ?? "node:22",
+          engine: isolation.engine ?? "docker",
+          driver: isolation.driver?.id ?? isolation.engine ?? "docker"
+        }
+      : {})
+  };
+}
+
+function fallbackCandidateHardening(descriptor: EnsembleDescriptor): CandidateHardeningMetadata {
+  const isolation = descriptor.runtime.isolation;
+  const mountPolicy = isolation?.mountPolicy;
+  const networkPolicy = isolation?.networkPolicy;
+  const secretPolicy = isolation?.secretPolicy;
+  return {
+    requested_isolation: isolation?.kind ?? "process",
+    actual_isolation: "process",
+    runtime: {
+      ...(isolation?.kind === "container" ? { image: isolation.image ?? "node:22" } : {}),
+      workdir: mountPolicy?.workdir ?? "/workspace"
+    },
+    mount_policy: {
+      worktree_writable: mountPolicy?.worktreeWritable ?? true,
+      read_only_caches: [...(mountPolicy?.readOnlyCachePaths ?? [])],
+      ignored_dirs: [...(mountPolicy?.ignoredDirs ?? [".git", "node_modules", ".warrant"])]
+    },
+    network_policy: {
+      default_deny: networkPolicy?.defaultDeny ?? true,
+      allow_hosts: [...(networkPolicy?.allowHosts ?? [])],
+      enforced: false
+    },
+    cleanup: {
+      attempted: false,
+      succeeded: true,
+      status: "not_required"
+    },
+    secret_absence: {
+      secret_names: [...(secretPolicy?.secretNames ?? [])],
+      secret_value_hashes: [...(secretPolicy?.secretValueHashes ?? [])],
+      injected_env_names: [...(secretPolicy?.injectedEnvNames ?? [])],
+      scanned: false,
+      leaks_found: false,
+      scan_scope: [],
+      leak_count: 0
+    }
+  };
+}
+
+function candidateHardening(
+  output: HarnessCandidateOutput | undefined,
+  descriptor: EnsembleDescriptor
+): CandidateHardeningMetadata | undefined {
+  const hardening = output?.metadata?.hardening;
+  if (typeof hardening === "object" && hardening !== null && !Array.isArray(hardening)) {
+    return hardening as unknown as CandidateHardeningMetadata;
+  }
+  if (output !== undefined) return fallbackCandidateHardening(descriptor);
+  return undefined;
+}
+
 export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<EnsembleRunResult> {
   assertDescriptor(descriptor);
   const createdAt = new Date().toISOString();
@@ -262,6 +335,7 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       runtime_id: descriptor.runtime.id,
       judge_id: descriptor.judge.id,
       policy_id: descriptor.policy.id,
+      hardening: runtimeHardeningMetadata(descriptor),
       output_root: outputRoot,
       ...(worktreePlan
         ? {
@@ -400,7 +474,10 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
           ...(candidate.worktree_path ? { worktreePath: candidate.worktree_path } : {}),
           toolExecutionIds: output?.toolRecords?.map((record) => record.execution_id) ?? [],
           diffArtifacts,
-          ...(output?.verification ? { verification: output.verification } : {})
+          ...(output?.verification ? { verification: output.verification } : {}),
+          ...(candidateHardening(output, descriptor)
+            ? { hardening: candidateHardening(output, descriptor) }
+            : {})
         };
       }),
       artifacts,
@@ -434,6 +511,16 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       metadata: {
         descriptor_id: descriptor.id,
         summary_path: summaryPath,
+        hardening: {
+          requested_isolation: descriptor.runtime.isolation?.kind ?? "process",
+          candidate_count: candidates.length,
+          cleanup_succeeded: outputs.filter(
+            (output) => candidateHardening(output, descriptor)?.cleanup.succeeded === true
+          ).length,
+          cleanup_failed: outputs.filter(
+            (output) => candidateHardening(output, descriptor)?.cleanup.status === "failed"
+          ).length
+        },
         ...(descriptor.reviewEvidence !== undefined
           ? { review_evidence: descriptor.reviewEvidence }
           : {})

@@ -26,7 +26,12 @@ import { createCommandHarness } from "../command.js";
 import { createMockJudgeSynthesizer } from "../judge.js";
 import { createMockHarness } from "../mock.js";
 import { runEnsemble } from "../run.js";
-import type { EnsembleDescriptor, HarnessAdapter } from "../harness.js";
+import type {
+  CandidateContainerDriver,
+  CandidateHardeningMetadata,
+  EnsembleDescriptor,
+  HarnessAdapter
+} from "../harness.js";
 
 const BASE_DESCRIPTOR = {
   id: "ensemble_test",
@@ -156,6 +161,89 @@ test("command adapter records command output, artifact, tool record, and verific
   assert.deepEqual(result.summary?.candidates[0]?.toolExecutionIds, [
     "exec_ensemble_test_command_0"
   ]);
+});
+
+test("command adapter records optional container hardening metadata", async () => {
+  const driver: CandidateContainerDriver = {
+    id: "fake-ensemble-container",
+    supportsNetworkPolicy: true,
+    execute(input) {
+      assert.equal(input.image, "node:22-hardening");
+      return {
+        stdout: "container-hardening",
+        stderr: "",
+        exitCode: 0,
+        cleanup: { attempted: true, succeeded: true }
+      };
+    }
+  };
+  const result = await runEnsemble(
+    descriptor({
+      models: [{ id: "command", model: "local-shell" }],
+      runtime: {
+        id: "local",
+        isolation: {
+          kind: "container",
+          image: "node:22-hardening",
+          driver,
+          mountPolicy: { readOnlyCachePaths: ["/tmp/cache"] },
+          networkPolicy: { defaultDeny: true, allowHosts: [], enforce: true },
+          secretPolicy: {
+            secretNames: ["API_TOKEN"],
+            secretValueHashes: ["sha256:" + "b".repeat(64)],
+            injectedEnvNames: ["API_TOKEN"]
+          }
+        }
+      },
+      harness: createCommandHarness({
+        command: "printf container-hardening"
+      })
+    })
+  );
+
+  const metadata = result.candidates[0]?.metadata as
+    | { hardening?: CandidateHardeningMetadata }
+    | undefined;
+  assert.equal(metadata?.hardening?.requested_isolation, "container");
+  assert.equal(metadata?.hardening?.runtime.image, "node:22-hardening");
+  assert.equal(metadata?.hardening?.mount_policy.read_only_caches[0], "/tmp/cache");
+  assert.equal(metadata?.hardening?.cleanup.status, "succeeded");
+  assert.equal(metadata?.hardening?.secret_absence.secret_names[0], "API_TOKEN");
+  assert.equal(result.summary?.candidates[0]?.hardening?.actual_isolation, "container");
+  assert.equal(
+    (result.harnessRunRequest.metadata?.hardening as { requested_isolation?: string })
+      .requested_isolation,
+    "container"
+  );
+  assert.equal(
+    (result.harnessRunResult.metadata?.hardening as { cleanup_succeeded?: number })
+      .cleanup_succeeded,
+    1
+  );
+});
+
+test("mock adapter preserves optional container request as process fallback metadata", async () => {
+  const result = await runEnsemble(
+    descriptor({
+      runtime: {
+        id: "local",
+        isolation: {
+          kind: "container",
+          image: "node:22-hardening",
+          networkPolicy: { defaultDeny: true, allowHosts: [], enforce: true }
+        }
+      }
+    })
+  );
+
+  const metadata = result.candidates[0]?.metadata as
+    | { hardening?: CandidateHardeningMetadata }
+    | undefined;
+  assert.equal(metadata?.hardening?.requested_isolation, "container");
+  assert.equal(metadata?.hardening?.actual_isolation, "process");
+  assert.equal(metadata?.hardening?.cleanup.status, "not_required");
+  assert.equal(metadata?.hardening?.network_policy.enforced, false);
+  assert.equal(result.summary?.candidates[0]?.hardening?.requested_isolation, "container");
 });
 
 test("command adapter maps non-zero exit to failed protocol status", async () => {

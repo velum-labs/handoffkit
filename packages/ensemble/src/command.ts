@@ -1,11 +1,7 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
 import { artifactHash } from "@warrant/protocol";
 
 import type { HarnessAdapter, HarnessCandidateOutput } from "./harness.js";
-
-const execFileAsync = promisify(execFile);
+import { runCandidateCommandWithIsolation } from "./isolation.js";
 
 export type CommandHarnessOptions = {
   id?: string;
@@ -34,28 +30,13 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
       requiredEvidence: ["command output", "exit code", "tool execution record"]
     }),
     run: async ({ descriptor, model, ordinal, worktree }) => {
-      let stdout = "";
-      let stderr = "";
-      let exitCode = 0;
-      try {
-        const result = await execFileAsync("/bin/sh", ["-lc", options.command], {
-          cwd: worktree?.path ?? options.cwd,
-          timeout: options.timeoutMs ?? descriptor.policy.timeoutMs
-        });
-        stdout = result.stdout;
-        stderr = result.stderr;
-      } catch (error) {
-        const failed = error as {
-          stdout?: string;
-          stderr?: string;
-          code?: number;
-          signal?: string;
-          message?: string;
-        };
-        stdout = failed.stdout ?? "";
-        stderr = failed.stderr ?? failed.message ?? "";
-        exitCode = typeof failed.code === "number" ? failed.code : 1;
-      }
+      const execution = await runCandidateCommandWithIsolation({
+        command: options.command,
+        cwd: worktree?.path ?? options.cwd ?? process.cwd(),
+        timeoutMs: options.timeoutMs ?? descriptor.policy.timeoutMs,
+        isolation: descriptor.runtime.isolation
+      });
+      const { stdout, stderr, exitCode } = execution;
       const transcript = [stdout, stderr].filter(Boolean).join("\n");
       const status: HarnessCandidateOutput["status"] =
         exitCode === 0 ? "succeeded" : "failed";
@@ -91,7 +72,9 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
         metadata: {
           command: options.command,
           stdout_bytes: Buffer.byteLength(stdout),
-          stderr_bytes: Buffer.byteLength(stderr)
+          stderr_bytes: Buffer.byteLength(stderr),
+          timed_out: execution.timedOut,
+          hardening: execution.hardening
         }
       };
     },

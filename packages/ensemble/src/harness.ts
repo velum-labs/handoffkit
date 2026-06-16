@@ -25,9 +25,113 @@ export type EnsembleModel = {
   endpointId?: string;
 };
 
+export type CandidateIsolationKind = "process" | "container";
+
+export type CandidateIsolationNetworkPolicy = {
+  defaultDeny: boolean;
+  allowHosts: string[];
+  enforce?: boolean;
+};
+
+export type CandidateIsolationMountPolicy = {
+  workdir?: string;
+  worktreeWritable?: boolean;
+  readOnlyCachePaths?: string[];
+  ignoredDirs?: string[];
+};
+
+export type CandidateIsolationSecretPolicy = {
+  secretNames?: string[];
+  secretValueHashes?: string[];
+  injectedEnvNames?: string[];
+};
+
+export type CandidateContainerDriverInput = {
+  command: string;
+  cwd: string;
+  timeoutMs?: number;
+  image: string;
+  workdir: string;
+  mountPolicy: Required<CandidateIsolationMountPolicy>;
+  networkPolicy: Required<CandidateIsolationNetworkPolicy>;
+};
+
+export type CandidateContainerDriverResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut?: boolean;
+  cleanup?: {
+    attempted: boolean;
+    succeeded: boolean;
+    error?: string;
+  };
+};
+
+export type CandidateContainerDriver = {
+  id: string;
+  supportsNetworkPolicy: boolean;
+  execute(
+    input: CandidateContainerDriverInput
+  ): Promise<CandidateContainerDriverResult> | CandidateContainerDriverResult;
+};
+
+export type CandidateIsolationConfig =
+  | {
+      kind: "process";
+      networkPolicy?: CandidateIsolationNetworkPolicy;
+      mountPolicy?: CandidateIsolationMountPolicy;
+      secretPolicy?: CandidateIsolationSecretPolicy;
+    }
+  | {
+      kind: "container";
+      image?: string;
+      engine?: "docker" | "podman";
+      driver?: CandidateContainerDriver;
+      networkPolicy?: CandidateIsolationNetworkPolicy;
+      mountPolicy?: CandidateIsolationMountPolicy;
+      secretPolicy?: CandidateIsolationSecretPolicy;
+    };
+
+export type CandidateHardeningMetadata = {
+  requested_isolation: CandidateIsolationKind;
+  actual_isolation: CandidateIsolationKind;
+  runtime: {
+    image?: string;
+    driver?: string;
+    workdir: string;
+  };
+  mount_policy: {
+    worktree_writable: boolean;
+    read_only_caches: string[];
+    ignored_dirs: string[];
+  };
+  network_policy: {
+    default_deny: boolean;
+    allow_hosts: string[];
+    enforced: boolean;
+  };
+  cleanup: {
+    attempted: boolean;
+    succeeded: boolean;
+    status: "not_required" | "succeeded" | "failed";
+    error?: string;
+  };
+  secret_absence: {
+    secret_names: string[];
+    secret_value_hashes: string[];
+    injected_env_names: string[];
+    scanned: boolean;
+    leaks_found: boolean;
+    scan_scope: string[];
+    leak_count: number;
+  };
+};
+
 export type EnsembleRuntime = {
   id: string;
   environmentId?: string;
+  isolation?: CandidateIsolationConfig;
 };
 
 export type EnsembleJudge = {
@@ -168,6 +272,7 @@ export type EnsembleCandidateSummary = {
   toolExecutionIds: string[];
   diffArtifacts: HarnessArtifact[];
   verification?: HarnessCandidateOutput["verification"];
+  hardening?: CandidateHardeningMetadata;
 };
 
 export type EnsembleRunSummary = {

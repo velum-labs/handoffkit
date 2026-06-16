@@ -40,6 +40,12 @@ export {
   FusionKitToolExecutorError,
   startFusionKitToolExecutorServer
 } from "./external-executor.js";
+export {
+  createCliContainerDriver,
+  runCandidateCommandWithIsolation,
+  secretAbsenceMetadata,
+  secretValueHash
+} from "./isolation.js";
 export type {
   FusionKitToolExecutionBatch,
   FusionKitToolExecutionRequest,
@@ -48,6 +54,10 @@ export type {
   FusionKitToolExecutorServer,
   FusionKitToolExecutorServerOptions
 } from "./external-executor.js";
+export type {
+  CandidateCommandIsolationInput,
+  CandidateCommandIsolationResult
+} from "./isolation.js";
 export {
   cleanupCandidateWorktree,
   cleanupWorktreePlan,
@@ -65,6 +75,15 @@ export type {
   EnsemblePolicy,
   EnsembleRunResult,
   EnsembleRuntime,
+  CandidateContainerDriver,
+  CandidateContainerDriverInput,
+  CandidateContainerDriverResult,
+  CandidateHardeningMetadata,
+  CandidateIsolationConfig,
+  CandidateIsolationKind,
+  CandidateIsolationMountPolicy,
+  CandidateIsolationNetworkPolicy,
+  CandidateIsolationSecretPolicy,
   HarnessAdapter,
   HarnessArtifact,
   HarnessCapabilities,
