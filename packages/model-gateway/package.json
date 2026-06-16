@@ -13,6 +13,7 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@warrant/adapter-ai-sdk": "workspace:*"
+    "@warrant/adapter-ai-sdk": "workspace:*",
+    "@warrant/protocol": "workspace:*"
   }
 }

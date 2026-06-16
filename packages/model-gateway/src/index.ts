@@ -40,4 +40,16 @@ export {
   responsesToChat
 } from "./adapters/responses.js";
 export type { ResponsesRequest } from "./adapters/responses.js";
-export type { GatewayDialect, ModelCallRecord, ProvenanceSink } from "./provenance.js";
+export {
+  buildModelCallRecord,
+  MODEL_CALL_ID_HEADER,
+  modelCallId,
+  responseBodyHash
+} from "./provenance.js";
+export type {
+  GatewayDialect,
+  ModelCallRecord,
+  ModelGatewayCallContext,
+  ModelGatewayCallResult,
+  ProvenanceSink
+} from "./provenance.js";

@@ -463,10 +463,14 @@ function jsonResponse(status: number, value: unknown): Response {
   });
 }
 
-export async function handleAnthropicMessages(backend: Backend, body: AnthropicRequest): Promise<Response> {
+export async function handleAnthropicMessages(
+  backend: Backend,
+  body: AnthropicRequest,
+  modelCallId?: string
+): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const chat = anthropicToChat(body, backend.defaultModel);
-  const upstream = await backend.chat(chat);
+  const upstream = await backend.chat(chat, undefined, { modelCallId });
 
   if (!upstream.ok) {
     const detail = await upstream.text();

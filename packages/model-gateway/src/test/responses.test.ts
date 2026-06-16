@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 
 import { OpenAiBackend } from "../backend.js";
+import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import { responsesToChat } from "../adapters/responses.js";
 import { startGateway } from "../server.js";
 
@@ -17,6 +18,7 @@ import { startGateway } from "../server.js";
 type Mock = {
   url: string;
   lastChatBody: () => Record<string, unknown> | undefined;
+  lastModelCallId: () => string | undefined;
   close: () => Promise<void>;
 };
 
@@ -34,10 +36,15 @@ async function readAll(req: IncomingMessage): Promise<Buffer> {
 
 async function startMock(): Promise<Mock> {
   let lastChatBody: Record<string, unknown> | undefined;
+  let lastModelCallId: string | undefined;
   const server = createServer((req, res) => {
     void (async () => {
       const body = JSON.parse((await readAll(req)).toString("utf8")) as Record<string, unknown>;
       lastChatBody = body;
+      lastModelCallId =
+        typeof req.headers[MODEL_CALL_ID_HEADER] === "string"
+          ? req.headers[MODEL_CALL_ID_HEADER]
+          : undefined;
       if (body.stream === true) {
         res.statusCode = 200;
         res.setHeader("content-type", "text/event-stream");
@@ -63,6 +70,7 @@ async function startMock(): Promise<Mock> {
   return {
     url: `http://127.0.0.1:${port}`,
     lastChatBody: () => lastChatBody,
+    lastModelCallId: () => lastModelCallId,
     close: () => new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())))
   };
 }
@@ -105,6 +113,7 @@ test("serves a non-streaming Responses object end to end", async () => {
       body: JSON.stringify({ model: "gpt-x", input: "hello" })
     });
     assert.equal(response.status, 200);
+    assert.equal(mock.lastModelCallId(), response.headers.get(MODEL_CALL_ID_HEADER));
     const json = (await response.json()) as {
       object: string;
       status: string;

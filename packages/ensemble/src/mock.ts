@@ -10,6 +10,8 @@ import type {
 export type MockCandidateFixture = {
   transcript?: string;
   diff?: string;
+  modelCallId?: string;
+  modelCallRecord?: HarnessCandidateOutput["modelCallRecord"];
   branchName?: string;
   worktreePath?: string;
   summary?: string;
@@ -62,6 +64,8 @@ export function createMockHarness(options: MockHarnessOptions = {}): HarnessAdap
         candidateId: `${descriptor.id}_${model.id}_${ordinal}`,
         model,
         status: fixture.status ?? "succeeded",
+        ...(fixture.modelCallId ? { modelCallId: fixture.modelCallId } : {}),
+        ...(fixture.modelCallRecord ? { modelCallRecord: fixture.modelCallRecord } : {}),
         ...(fixture.branchName ? { branchName: fixture.branchName } : {}),
         ...(fixture.worktreePath ? { worktreePath: fixture.worktreePath } : {}),
         transcript,

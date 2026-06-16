@@ -389,6 +389,9 @@ importers:
       '@warrant/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/plane:
     dependencies:

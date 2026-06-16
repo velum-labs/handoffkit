@@ -451,10 +451,14 @@ function jsonResponse(status: number, value: unknown): Response {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 }
 
-export async function handleResponses(backend: Backend, body: ResponsesRequest): Promise<Response> {
+export async function handleResponses(
+  backend: Backend,
+  body: ResponsesRequest,
+  modelCallId?: string
+): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const chat = responsesToChat(body, backend.defaultModel);
-  const upstream = await backend.chat(chat);
+  const upstream = await backend.chat(chat, undefined, { modelCallId });
 
   if (!upstream.ok) {
     const detail = await upstream.text();

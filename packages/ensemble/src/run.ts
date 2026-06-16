@@ -9,6 +9,7 @@ import type {
   HarnessRunRequestV1,
   HarnessRunResultV1,
   JsonValue,
+  ModelCallRecordV1,
   ModelFusionStatus
 } from "@warrant/protocol";
 
@@ -88,6 +89,7 @@ function freezeResult(result: EnsembleRunResult): EnsembleRunResult {
   }
   for (const artifact of result.artifacts) Object.freeze(artifact);
   for (const toolRecord of result.toolRecords) Object.freeze(toolRecord);
+  for (const modelCallRecord of result.modelCallRecords) Object.freeze(modelCallRecord);
   if (result.harnessRunResult.artifacts) {
     for (const artifact of result.harnessRunResult.artifacts) Object.freeze(artifact);
     Object.freeze(result.harnessRunResult.artifacts);
@@ -100,6 +102,7 @@ function freezeResult(result: EnsembleRunResult): EnsembleRunResult {
   Object.freeze(result.candidates);
   Object.freeze(result.artifacts);
   Object.freeze(result.toolRecords);
+  Object.freeze(result.modelCallRecords);
   return Object.freeze(result);
 }
 
@@ -126,6 +129,9 @@ function candidateMetadata(
   Object.assign(metadata, output.metadata ?? {});
   if (descriptor.reviewEvidence !== undefined) {
     metadata.review_evidence_attached = true;
+  }
+  if (output.modelCallRecord !== undefined) {
+    metadata.model_call_recorded = true;
   }
   return metadata;
 }
@@ -185,6 +191,15 @@ function artifactsForOutput(input: {
         artifactId: `${prefix}_verification`,
         kind: "metrics",
         value: input.output.verification
+      })
+    );
+  }
+  if (input.output.modelCallRecord !== undefined) {
+    artifacts.push(
+      input.store.writeJson({
+        artifactId: `${prefix}_model_call_record`,
+        kind: "metrics",
+        value: input.output.modelCallRecord
       })
     );
   }
@@ -303,6 +318,10 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       );
     }
 
+    const modelCallRecords: ModelCallRecordV1[] = outputs.flatMap((output) =>
+      output.modelCallRecord ? [output.modelCallRecord] : []
+    );
+
     const candidates: HarnessCandidateRecordV1[] = outputs.map((output, ordinal) => {
       const worktree = sealedWorktrees?.[ordinal];
       const id =
@@ -315,7 +334,7 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
         candidate_id: id,
         request_id: request.request_id,
         harness_kind: "generic",
-        model_call_id: `${id}_model_call`,
+        model_call_id: output.modelCallId ?? output.modelCallRecord?.call_id ?? `${id}_model_call`,
         status: output.status,
         side_effects: descriptor.policy.sideEffects,
         artifacts,
@@ -358,6 +377,7 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
           candidateId: candidate.candidate_id,
           modelId: output?.model.id ?? "",
           model: output?.model.model ?? "",
+          ...(candidate.model_call_id ? { modelCallId: candidate.model_call_id } : {}),
           status: candidate.status,
           ...(candidate.branch_name ? { branchName: candidate.branch_name } : {}),
           ...(candidate.worktree_path ? { worktreePath: candidate.worktree_path } : {}),
@@ -366,6 +386,7 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
         };
       }),
       artifacts,
+      modelCallRecords,
       finalPatchPath: null
     };
     const summaryArtifact = store.writeJson({
@@ -404,6 +425,7 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       candidates,
       artifacts: [...artifacts, summaryArtifactRef],
       toolRecords,
+      modelCallRecords,
       verification,
       summaryPath,
       summary,

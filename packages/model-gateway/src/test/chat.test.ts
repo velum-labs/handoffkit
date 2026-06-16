@@ -3,7 +3,10 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 
+import { assertModelCallRecordV1 } from "@warrant/protocol";
+
 import { OpenAiBackend } from "../backend.js";
+import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import type { ModelCallRecord } from "../provenance.js";
 import { startGateway } from "../server.js";
 
@@ -17,6 +20,7 @@ import { startGateway } from "../server.js";
 type Mock = {
   url: string;
   lastChatBody: () => Record<string, unknown> | undefined;
+  lastModelCallId: () => string | undefined;
   close: () => Promise<void>;
 };
 
@@ -34,6 +38,7 @@ async function readAll(req: IncomingMessage): Promise<Buffer> {
 
 async function startMock(): Promise<Mock> {
   let lastChatBody: Record<string, unknown> | undefined;
+  let lastModelCallId: string | undefined;
   const server = createServer((req, res) => {
     void (async () => {
       const path = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -44,10 +49,19 @@ async function startMock(): Promise<Mock> {
       if (req.method === "POST" && path === "/v1/chat/completions") {
         const body = JSON.parse((await readAll(req)).toString("utf8")) as Record<string, unknown>;
         lastChatBody = body;
+        lastModelCallId =
+          typeof req.headers[MODEL_CALL_ID_HEADER] === "string"
+            ? req.headers[MODEL_CALL_ID_HEADER]
+            : undefined;
+        if (body.model === "fail-model") {
+          sendJson(res, 500, { error: { message: "upstream failed" } });
+          return;
+        }
         if (body.stream === true) {
           res.statusCode = 200;
           res.setHeader("content-type", "text/event-stream");
           res.write('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n');
+          res.write('data: {"usage":{"prompt_tokens":1,"completion_tokens":1}}\n\n');
           res.write("data: [DONE]\n\n");
           res.end();
           return;
@@ -58,7 +72,8 @@ async function startMock(): Promise<Mock> {
           model: body.model,
           choices: [
             { index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }
-          ]
+          ],
+          usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 }
         });
         return;
       }
@@ -71,6 +86,7 @@ async function startMock(): Promise<Mock> {
   return {
     url: `http://127.0.0.1:${port}`,
     lastChatBody: () => lastChatBody,
+    lastModelCallId: () => lastModelCallId,
     close: () => new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())))
   };
 }
@@ -90,16 +106,81 @@ test("injects the default model and pipes the completion back", async () => {
       body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] })
     });
     assert.equal(response.status, 200);
+    const callId = response.headers.get(MODEL_CALL_ID_HEADER);
+    assert.ok(callId?.startsWith("model_call_"));
+    assert.equal(mock.lastModelCallId(), callId);
     const json = (await response.json()) as Record<string, unknown>;
     assert.equal(json.object, "chat.completion");
     assert.equal(mock.lastChatBody()?.model, "mlx-default");
     assert.equal(records.length, 1);
-    assert.equal(records[0]?.dialect, "openai-chat");
+    assertModelCallRecordV1(records[0]);
+    assert.equal(records[0]?.call_id, callId);
+    assert.equal(records[0]?.metadata?.dialect, "openai-chat");
     assert.equal(records[0]?.model, "mlx-default");
-    assert.equal(records[0]?.stream, false);
+    assert.equal(records[0]?.metadata?.stream, false);
+    assert.equal(records[0]?.usage?.total_tokens, 5);
+    assert.equal(records[0]?.metadata?.unknown_usage, false);
+    assert.equal(records[0]?.metadata?.unknown_cost, true);
+    assert.ok(!JSON.stringify(records[0]).includes('"hi"'));
+    assert.ok(!JSON.stringify(records[0]).includes('"ok"'));
   } finally {
     await gateway.close();
     await mock.close();
+  }
+});
+
+test("records failed upstream responses as failed model-call records", async () => {
+  const mock = await startMock();
+  const records: ModelCallRecord[] = [];
+  const gateway = await startGateway({
+    backend: new OpenAiBackend({ baseUrl: `${mock.url}/v1` }),
+    provenance: { onModelCall: (record) => records.push(record) }
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "fail-model", messages: [{ role: "user", content: "fail" }] })
+    });
+    assert.equal(response.status, 500);
+    assert.equal(records.length, 1);
+    assertModelCallRecordV1(records[0]);
+    assert.equal(records[0]?.status, "failed");
+    assert.equal(records[0]?.error?.kind, "provider_error");
+  } finally {
+    await gateway.close();
+    await mock.close();
+  }
+});
+
+test("records thrown backend failures as failed model-call records", async () => {
+  const records: ModelCallRecord[] = [];
+  const gateway = await startGateway({
+    backend: {
+      defaultModel: "throw-model",
+      chat: async () => {
+        throw new Error("backend exploded");
+      },
+      models: async () => new Response("{}", { status: 200 }),
+      embeddings: async () => new Response("{}", { status: 200 })
+    },
+    provenance: { onModelCall: (record) => records.push(record) }
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "fail" }] })
+    });
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get(MODEL_CALL_ID_HEADER), records[0]?.call_id);
+    assert.equal(records.length, 1);
+    assertModelCallRecordV1(records[0]);
+    assert.equal(records[0]?.status, "failed");
+    assert.equal(records[0]?.error?.kind, "provider_error");
+    assert.equal(records[0]?.metadata?.unknown_usage, true);
+  } finally {
+    await gateway.close();
   }
 });
 

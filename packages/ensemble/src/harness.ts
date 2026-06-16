@@ -4,6 +4,7 @@ import type {
   HarnessRunRequestV1,
   HarnessRunResultV1,
   JsonValue,
+  ModelCallRecordV1,
   ModelFusionCapabilityStatus,
   ModelFusionSideEffects,
   ModelFusionStatus,
@@ -55,6 +56,8 @@ export type HarnessCandidateOutput = {
   candidateId?: string;
   model: EnsembleModel;
   status: ModelFusionStatus;
+  modelCallId?: string;
+  modelCallRecord?: ModelCallRecordV1;
   branchName?: string;
   worktreePath?: string;
   transcript?: string;
@@ -136,6 +139,7 @@ export type EnsembleRunResult = {
   candidates: readonly HarnessCandidateRecordV1[];
   artifacts: readonly HarnessArtifact[];
   toolRecords: readonly HarnessToolRecord[];
+  modelCallRecords: readonly ModelCallRecordV1[];
   verification: VerificationProfile;
   summaryPath?: string;
   summary?: EnsembleRunSummary;
@@ -146,6 +150,7 @@ export type EnsembleCandidateSummary = {
   candidateId: string;
   modelId: string;
   model: string;
+  modelCallId?: string;
   status: ModelFusionStatus;
   branchName?: string;
   worktreePath?: string;
@@ -162,5 +167,6 @@ export type EnsembleRunSummary = {
   };
   candidates: EnsembleCandidateSummary[];
   artifacts: HarnessArtifact[];
+  modelCallRecords: ModelCallRecordV1[];
   finalPatchPath: null;
 };

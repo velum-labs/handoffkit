@@ -14,8 +14,11 @@ import { test } from "node:test";
 import {
   assertHarnessCandidateRecordV1,
   assertHarnessRunRequestV1,
-  assertHarnessRunResultV1
+  assertHarnessRunResultV1,
+  requestHash,
+  responseHash
 } from "@warrant/protocol";
+import type { ModelCallRecordV1 } from "@warrant/protocol";
 import { gitText } from "@warrant/workspace";
 
 import { createCommandHarness } from "../command.js";
@@ -49,6 +52,30 @@ function descriptor(
     ...BASE_DESCRIPTOR,
     harness: createMockHarness(),
     ...overrides
+  };
+}
+
+function modelCallRecord(callId: string, model = "fake-fast"): ModelCallRecordV1 {
+  return {
+    schema: "model-call-record.v1",
+    schema_version: "v1",
+    schema_bundle_hash: "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+    producer: "ensemble-test",
+    producer_version: "0.1.0",
+    producer_git_sha: "0".repeat(40),
+    created_at: "2026-06-16T00:00:00.000Z",
+    call_id: callId,
+    endpoint_id: "test-endpoint",
+    model,
+    request_hash: requestHash({ prompt: "test" }),
+    response_hash: responseHash({ output: "ok" }),
+    messages: [{ role: "user", content: requestHash("test") }],
+    status: "succeeded",
+    side_effects: "none",
+    started_at: "2026-06-16T00:00:00.000Z",
+    finished_at: "2026-06-16T00:00:00.010Z",
+    latency_ms: 10,
+    metadata: { unknown_usage: true, unknown_cost: true }
   };
 }
 
@@ -171,6 +198,27 @@ test("review evidence is attached but never becomes final selection", async () =
   assert.deepEqual(result.reviewEvidence, reviewEvidence);
   assert.equal("chosen" in result, false);
   assert.equal("selected_candidate_id" in result.harnessRunResult, false);
+});
+
+test("adapter-provided model call records link candidates and summary metadata", async () => {
+  const record = modelCallRecord("model_call_fast");
+  const result = await runEnsemble(
+    descriptor({
+      models: [{ id: "fast", model: "fake-fast" }],
+      harness: createMockHarness({
+        candidates: {
+          fast: { modelCallRecord: record }
+        }
+      })
+    })
+  );
+
+  assert.equal(result.candidates[0]?.model_call_id, "model_call_fast");
+  assert.equal(result.modelCallRecords.length, 1);
+  assert.equal(result.modelCallRecords[0]?.call_id, "model_call_fast");
+  assert.equal(result.summary?.modelCallRecords.length, 1);
+  assert.equal(result.summary?.candidates[0]?.modelCallId, "model_call_fast");
+  assert.ok(result.artifacts.some((artifact) => artifact.artifact_id.includes("model_call_record")));
 });
 
 test("candidate worktrees are created from one snapshot and summarized after cleanup", async () => {

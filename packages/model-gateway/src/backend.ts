@@ -13,11 +13,15 @@ export type Backend = {
   /** Model id sent to the backend when a request omits one. */
   readonly defaultModel: string | undefined;
   /** POST <base>/chat/completions — supports streaming (SSE) upstream. */
-  chat(body: unknown, signal?: AbortSignal): Promise<Response>;
+  chat(body: unknown, signal?: AbortSignal, options?: BackendRequestOptions): Promise<Response>;
   /** GET <base>/models. */
   models(signal?: AbortSignal): Promise<Response>;
   /** POST <base>/embeddings. */
   embeddings(body: unknown, signal?: AbortSignal): Promise<Response>;
+};
+
+export type BackendRequestOptions = {
+  modelCallId?: string;
 };
 
 export type OpenAiBackendOptions = {
@@ -56,17 +60,22 @@ export class OpenAiBackend implements Backend {
     this.defaultModel = options.defaultModel;
   }
 
-  #headers(): Record<string, string> {
+  #headers(options: BackendRequestOptions = {}): Record<string, string> {
     return {
       "content-type": "application/json",
-      authorization: `Bearer ${this.#apiKey}`
+      authorization: `Bearer ${this.#apiKey}`,
+      ...(options.modelCallId ? { "x-velum-model-call-id": options.modelCallId } : {})
     };
   }
 
-  chat(body: unknown, signal?: AbortSignal): Promise<Response> {
+  chat(
+    body: unknown,
+    signal?: AbortSignal,
+    options: BackendRequestOptions = {}
+  ): Promise<Response> {
     return fetch(joinPath(this.#baseUrl, "/chat/completions"), {
       method: "POST",
-      headers: this.#headers(),
+      headers: this.#headers(options),
       body: JSON.stringify(body),
       ...(signal ? { signal } : {})
     });

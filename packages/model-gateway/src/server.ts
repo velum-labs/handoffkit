@@ -12,7 +12,16 @@ import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 import type { Backend } from "./backend.js";
-import type { GatewayDialect, ProvenanceSink } from "./provenance.js";
+import {
+  buildModelCallRecord,
+  MODEL_CALL_ID_HEADER,
+  modelCallId
+} from "./provenance.js";
+import type {
+  GatewayDialect,
+  ModelGatewayCallContext,
+  ProvenanceSink
+} from "./provenance.js";
 
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
@@ -82,10 +91,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = withDefaultModel(raw, backend.defaultModel);
-      const started = Date.now();
-      const upstream = await backend.chat(body);
-      record(provenance, "openai-chat", body, backend.defaultModel, upstream.status, Date.now() - started);
-      await pipeUpstream(res, upstream);
+      await handleModelCall(res, provenance, {
+        dialect: "openai-chat",
+        body,
+        defaultModel: backend.defaultModel,
+        invoke: (callId) => backend.chat(body, undefined, { modelCallId: callId })
+      });
       return;
     }
 
@@ -107,10 +118,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as AnthropicRequest;
-      const started = Date.now();
-      const response = await handleAnthropicMessages(backend, body);
-      record(provenance, "anthropic-messages", body, backend.defaultModel, response.status, Date.now() - started);
-      await pipeUpstream(res, response);
+      await handleModelCall(res, provenance, {
+        dialect: "anthropic-messages",
+        body,
+        defaultModel: backend.defaultModel,
+        invoke: (callId) => handleAnthropicMessages(backend, body, callId)
+      });
       return;
     }
 
@@ -118,10 +131,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ResponsesRequest;
-      const started = Date.now();
-      const response = await handleResponses(backend, body);
-      record(provenance, "openai-responses", body, backend.defaultModel, response.status, Date.now() - started);
-      await pipeUpstream(res, response);
+      await handleModelCall(res, provenance, {
+        dialect: "openai-responses",
+        body,
+        defaultModel: backend.defaultModel,
+        invoke: (callId) => handleResponses(backend, body, callId)
+      });
       return;
     }
 
@@ -150,24 +165,6 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   };
 }
 
-function record(
-  sink: ProvenanceSink | undefined,
-  dialect: GatewayDialect,
-  body: unknown,
-  defaultModel: string | undefined,
-  status: number,
-  durationMs: number
-): void {
-  if (sink?.onModelCall === undefined) return;
-  sink.onModelCall({
-    dialect,
-    model: effectiveModel(body, defaultModel),
-    stream: isStream(body),
-    status,
-    durationMs
-  });
-}
-
 // ---- HTTP helpers (Node built-ins only) ----
 
 const NO_BODY = Symbol("no-body");
@@ -193,35 +190,92 @@ async function readJson(req: IncomingMessage, res: ServerResponse): Promise<unkn
   }
 }
 
-function writeJson(res: ServerResponse, status: number, value: unknown): void {
+function writeJson(res: ServerResponse, status: number, value: unknown): Buffer {
   const payload = Buffer.from(JSON.stringify(value), "utf8");
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
   res.setHeader("content-length", String(payload.byteLength));
   res.end(payload);
+  return payload;
 }
 
-async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<void> {
+type ModelCallRoute = {
+  dialect: GatewayDialect;
+  body: unknown;
+  defaultModel: string | undefined;
+  invoke: (callId: string) => Promise<Response>;
+};
+
+async function handleModelCall(
+  res: ServerResponse,
+  sink: ProvenanceSink | undefined,
+  route: ModelCallRoute
+): Promise<void> {
+  const callId = modelCallId();
+  const started = Date.now();
+  const startedAt = new Date(started).toISOString();
+  const context: ModelGatewayCallContext = {
+    callId,
+    dialect: route.dialect,
+    requestedModel: effectiveModel(route.body, route.defaultModel),
+    model: effectiveModel(route.body, route.defaultModel),
+    stream: isStream(route.body),
+    requestBody: route.body,
+    startedAt,
+    endpointId: route.defaultModel ?? route.dialect
+  };
+  res.setHeader(MODEL_CALL_ID_HEADER, callId);
+  try {
+    const upstream = await route.invoke(callId);
+    const body = await pipeUpstream(res, upstream);
+    sink?.onModelCall?.(
+      buildModelCallRecord(context, {
+        statusCode: upstream.status,
+        responseBody: body,
+        durationMs: Date.now() - started
+      })
+    );
+  } catch (error) {
+    const statusCode = 502;
+    const payload = writeJson(res, statusCode, {
+      error: { message: errorMessage(error), type: "upstream_error" }
+    });
+    sink?.onModelCall?.(
+      buildModelCallRecord(context, {
+        statusCode,
+        responseBody: payload,
+        durationMs: Date.now() - started,
+        error
+      })
+    );
+  }
+}
+
+async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<Buffer> {
   res.statusCode = upstream.status;
   const contentType = upstream.headers.get("content-type");
   if (contentType !== null) res.setHeader("content-type", contentType);
   const body = upstream.body;
   if (body === null) {
     res.end();
-    return;
+    return Buffer.alloc(0);
   }
   const reader = body.getReader();
+  const chunks: Buffer[] = [];
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value !== undefined && !res.write(Buffer.from(value))) {
-        await once(res, "drain");
+      if (value !== undefined) {
+        const chunk = Buffer.from(value);
+        chunks.push(chunk);
+        if (!res.write(chunk)) await once(res, "drain");
       }
     }
   } finally {
     res.end();
   }
+  return Buffer.concat(chunks);
 }
 
 function authorized(req: IncomingMessage, token: string): boolean {
