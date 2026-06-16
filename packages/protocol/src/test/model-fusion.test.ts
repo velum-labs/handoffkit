@@ -191,6 +191,46 @@ test("harness candidate metadata accepts nested microVM hardening evidence", () 
   );
 });
 
+test("harness candidate metadata accepts disclosure joins without top-level schema changes", () => {
+  const candidate = readFixture("harness-candidate-record.v1", "minimal") as Record<
+    string,
+    unknown
+  >;
+  const withDisclosureMetadata = {
+    ...candidate,
+    metadata: {
+      disclosures: [
+        {
+          candidate_id: "candidate_a",
+          tool_call_id: "tool_call_readme",
+          plan_id: "tool_plan_readme",
+          execution_id: "tool_exec_readme",
+          run_id: "run_secret_disclosure",
+          content_hash: "sha256:" + "a".repeat(64),
+          data_class: "session-log",
+          direction: "out",
+          policy_id: "policy_readonly",
+          environment_id: "env_local",
+          secret_names: ["API_TOKEN"],
+          injected_env_names: ["API_TOKEN"],
+          redaction_status: "redacted"
+        }
+      ]
+    }
+  };
+
+  assertHarnessCandidateRecordV1(withDisclosureMetadata);
+  assertModelFusionRecord(withDisclosureMetadata);
+  assert.throws(
+    () =>
+      assertHarnessCandidateRecordV1({
+        ...candidate,
+        disclosures: withDisclosureMetadata.metadata
+      }),
+    /unsupported field/
+  );
+});
+
 test("model-fusion hash helpers return sha256-prefixed hashes", () => {
   assert.match(sha256PrefixedHex("hello"), /^sha256:[0-9a-f]{64}$/);
   assert.match(artifactHash(Buffer.from("artifact")), /^sha256:[0-9a-f]{64}$/);

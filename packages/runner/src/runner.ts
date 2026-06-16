@@ -69,6 +69,19 @@ type StoredIdentity = {
 const DEFAULT_MOCK_SCRIPT = fileURLToPath(
   new URL("./mock-agent.js", import.meta.url)
 );
+const REDACTED_SECRET_PREFIX = "[REDACTED:";
+
+function redactSecrets(
+  buffer: Buffer,
+  secrets: readonly { name: string; value: string }[]
+): Buffer {
+  let text = buffer.toString("utf8");
+  for (const secret of secrets) {
+    if (secret.value.length === 0) continue;
+    text = text.split(secret.value).join(`${REDACTED_SECRET_PREFIX}${secret.name}]`);
+  }
+  return Buffer.from(text, "utf8");
+}
 
 export class Runner {
   private readonly options: RunnerOptions;
@@ -255,8 +268,10 @@ export class Runner {
 
       const artifactHashes: string[] = [];
       let diffHash = "";
-      if (session.output.diff.length > 0) {
-        diffHash = await this.client.putBlob(session.output.diff, claimToken);
+      const diff = redactSecrets(session.output.diff, claim.secrets);
+      const log = redactSecrets(session.log, claim.secrets);
+      if (diff.length > 0) {
+        diffHash = await this.client.putBlob(diff, claimToken);
         emitLocal({ type: "artifact.created", kind: "diff", hash: diffHash });
         emitLocal({
           type: "boundary.crossed",
@@ -266,8 +281,8 @@ export class Runner {
         });
         artifactHashes.push(diffHash);
       }
-      if (session.log.length > 0) {
-        const logHash = await this.client.putBlob(session.log, claimToken);
+      if (log.length > 0) {
+        const logHash = await this.client.putBlob(log, claimToken);
         emitLocal({ type: "artifact.created", kind: "log", hash: logHash });
         emitLocal({
           type: "boundary.crossed",

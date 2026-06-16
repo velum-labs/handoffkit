@@ -159,6 +159,8 @@ function receiptFixture(
   appendEvent(events, { type: "secret.released", name: "API_TOKEN", scope: "pool:default" }, genesis);
   appendEvent(events, { type: "command.executed", argvHash: "3".repeat(64), exitCode: 0 }, genesis);
   appendEvent(events, { type: "run.completed" }, genesis);
+  const secretEvent = events.find((event) => event.event.type === "secret.released");
+  assert.ok(secretEvent);
   const last = events.at(-1);
   assert.ok(last);
   const receipt = signReceipt(
@@ -187,7 +189,7 @@ function receiptFixture(
         {
           name: "API_TOKEN",
           scope: "pool:default",
-          ts: "2026-06-11T00:00:00.500Z"
+          ts: secretEvent.ts
         }
       ],
       networkAccessed: [],
@@ -231,6 +233,34 @@ test("verifyRunnerReceipt checks pre-countersign receipt evidence", () => {
   });
   assert.equal(result.ok, false);
   assert.ok(result.problems.includes("receipt.eventCount does not match the event chain"));
+
+  const forgedScope = structuredClone(fixture.receipt);
+  forgedScope.secretsReleased[0] = {
+    ...forgedScope.secretsReleased[0]!,
+    scope: "pool:other"
+  };
+  const scopeResult = verifyRunnerReceipt({
+    contract: fixture.contract,
+    receipt: forgedScope,
+    events: fixture.events,
+    runnerPublicKeyPem: fixture.runnerPublicKeyPem
+  });
+  assert.equal(scopeResult.ok, false);
+  assert.ok(scopeResult.problems.includes("secretsReleased does not match secret.released events"));
+
+  const forgedTimestamp = structuredClone(fixture.receipt);
+  forgedTimestamp.secretsReleased[0] = {
+    ...forgedTimestamp.secretsReleased[0]!,
+    ts: "2026-06-11T00:00:00.999Z"
+  };
+  const timestampResult = verifyRunnerReceipt({
+    contract: fixture.contract,
+    receipt: forgedTimestamp,
+    events: fixture.events,
+    runnerPublicKeyPem: fixture.runnerPublicKeyPem
+  });
+  assert.equal(timestampResult.ok, false);
+  assert.ok(timestampResult.problems.includes("secretsReleased does not match secret.released events"));
 });
 
 test("receipt story is the canonical CLI/UI summary model", () => {

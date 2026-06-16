@@ -12,7 +12,7 @@ import {
   SecretStore,
   startPlaneServer
 } from "@warrant/plane";
-import { generateEd25519KeyPair, verifyReceiptBundle } from "@warrant/protocol";
+import { buildReceiptStory, generateEd25519KeyPair, verifyReceiptBundle } from "@warrant/protocol";
 import type { ReceiptBundle, RunRequestInput } from "@warrant/protocol";
 import { Runner } from "@warrant/runner";
 import { PlaneClient, PlaneClientError } from "@warrant/sdk";
@@ -35,7 +35,7 @@ before(async () => {
 
   const policy = defaultPolicy();
   policy.runners.allowPools = ["eng-prod"];
-  policy.agents.allow = ["mock"];
+  policy.agents.allow = ["mock", "command"];
   policy.secrets.releasable = [
     { name: "MOCK_SECRET", scope: "e2e-test", pools: ["eng-prod"] }
   ];
@@ -93,6 +93,41 @@ function buildRequest(prompt: string): RunRequestInput {
   };
 }
 
+function buildNoSecretRequest(prompt: string): RunRequestInput {
+  const captured = captureWorkspace(repoDir);
+  return {
+    requestedBy: { kind: "human", id: "e2e-tester" },
+    agentKind: "mock",
+    prompt,
+    pool: "eng-prod",
+    secretNames: [],
+    workspace: captured.manifest,
+    network: { defaultDeny: true, allowHosts: [] },
+    budget: {},
+    disclosure: "minimal-context"
+  };
+}
+
+function buildSecretEchoRequest(prompt: string): RunRequestInput {
+  const captured = captureWorkspace(repoDir);
+  return {
+    requestedBy: { kind: "human", id: "e2e-tester" },
+    agentKind: "command",
+    prompt,
+    pool: "eng-prod",
+    secretNames: ["MOCK_SECRET"],
+    workspace: captured.manifest,
+    network: { defaultDeny: true, allowHosts: [] },
+    budget: {},
+    disclosure: "minimal-context",
+    execution: {
+      kind: "shell",
+      script: "printf \"$MOCK_SECRET\" && printf \"$MOCK_SECRET\\n\" > leaked-secret.txt",
+      shell: "sh"
+    }
+  };
+}
+
 async function uploadWorkspaceBlobs(): Promise<void> {
   const captured = captureWorkspace(repoDir);
   await client.putBlob(captured.bundle);
@@ -123,6 +158,36 @@ test("policy denies a disallowed agent kind, fail closed", async () => {
       return true;
     }
   );
+});
+
+test("policy denies unreleasable secrets without creating receipt residue", async () => {
+  const before = await client.listRuns();
+  const request = { ...buildRequest("unknown secret"), secretNames: ["UNKNOWN_SECRET"] };
+  await assert.rejects(
+    () => client.requestRun(request),
+    (error: unknown) => {
+      assert.ok(error instanceof PlaneClientError);
+      assert.equal(error.status, 403);
+      return true;
+    }
+  );
+  const after = await client.listRuns();
+  assert.equal(after.runs.length, before.runs.length);
+  assert.ok(!JSON.stringify(after).includes("UNKNOWN_SECRET"));
+});
+
+test("no-secret run records empty secret evidence", async () => {
+  await uploadWorkspaceBlobs();
+  const created = await client.requestRun(buildNoSecretRequest("no secret run"));
+  assert.equal(created.status, "created");
+
+  const processed = await runner.runOnce();
+  assert.equal(processed, created.runId);
+
+  const bundle = await client.getBundle(created.runId);
+  assert.equal(bundle.receipt.secretsReleased.length, 0);
+  assert.equal(bundle.events.some((event) => event.event.type === "secret.released"), false);
+  assert.deepEqual(buildReceiptStory(bundle).secrets, []);
 });
 
 test("governed run: consent, execution, secret injection, egress blocking, receipt", async () => {
@@ -199,6 +264,37 @@ test("receipt bundle verifies offline; tampering is detected", () => {
   forgedReceipt.receipt.secretsReleased = [];
   const forgedResult = verifyReceiptBundle(forgedReceipt);
   assert.equal(forgedResult.ok, false);
+});
+
+test("released secret values are redacted from diff and log artifacts", async () => {
+  await uploadWorkspaceBlobs();
+  const created = await client.requestRun(
+    buildSecretEchoRequest("print and write a secret so artifacts must redact it")
+  );
+  assert.equal(created.status, "awaiting_approval");
+  await client.approve(created.runId, { kind: "human", id: "security-lead" });
+
+  const processed = await runner.runOnce();
+  assert.equal(processed, created.runId);
+
+  const bundle = await client.getBundle(created.runId);
+  assert.equal(bundle.receipt.status, "completed");
+  assert.deepEqual(
+    bundle.receipt.secretsReleased.map((secret) => secret.name),
+    ["MOCK_SECRET"]
+  );
+  assert.ok(!JSON.stringify(bundle).includes(SECRET_VALUE));
+
+  const disclosedHashes = new Set(bundle.receipt.boundaryDisclosures.map((item) => item.contentHash));
+  assert.ok(disclosedHashes.size >= 2, "expected diff and log disclosures");
+  for (const hash of disclosedHashes) {
+    const content = (await client.getBlob(hash)).toString("utf8");
+    assert.ok(!content.includes(SECRET_VALUE));
+    assert.ok(content.includes("[REDACTED:MOCK_SECRET]"));
+  }
+
+  const jsonl = await client.exportJsonl();
+  assert.ok(!jsonl.includes(SECRET_VALUE));
 });
 
 test("pull applies the run output divergence-safely", async () => {

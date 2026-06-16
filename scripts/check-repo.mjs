@@ -18,6 +18,7 @@ const requiredFiles = [
   "spec/2026-06-11-local-first-handoff-platform-spec.md",
   "spec/2026-06-11-governed-agent-execution-plane-spec.md",
   "spec/2026-06-16-eng-596-microvm-design-spike.md",
+  "spec/2026-06-16-eng-597-secret-disclosure-receipts.md",
   "tsconfig.json",
   "tsconfig.base.json",
   "Dockerfile",

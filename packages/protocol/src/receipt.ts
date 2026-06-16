@@ -7,6 +7,7 @@ import type {
   Receipt,
   ReceiptBundle,
   RunEvent,
+  SecretReleaseRecord,
   Signature
 } from "./types.js";
 
@@ -55,13 +56,17 @@ export type RunnerReceiptVerificationInput = {
   runnerPublicKeyPem: string;
 };
 
-/** Element-wise equality for two already-sorted string arrays. */
-function stringArraysEqual(a: readonly string[], b: readonly string[]): boolean {
+/** Element-wise equality for two already-sorted arrays. */
+function arraysEqual<T>(a: readonly T[], b: readonly T[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return false;
   }
   return true;
+}
+
+function secretReleaseKey(record: SecretReleaseRecord): string {
+  return `${record.name}\u0000${record.scope}\u0000${record.ts}`;
 }
 
 function terminalEventMatches(event: RunEvent, status: Receipt["status"]): boolean {
@@ -141,10 +146,15 @@ export function verifyRunnerReceipt(
 
   const releasedInEvents = events
     .filter((e) => e.event.type === "secret.released")
-    .map((e) => (e.event.type === "secret.released" ? e.event.name : ""))
+    .map((e): SecretReleaseRecord =>
+      e.event.type === "secret.released"
+        ? { name: e.event.name, scope: e.event.scope, ts: e.ts }
+        : { name: "", scope: "", ts: "" }
+    )
+    .map(secretReleaseKey)
     .sort();
-  const releasedInReceipt = receipt.secretsReleased.map((r) => r.name).sort();
-  if (!stringArraysEqual(releasedInEvents, releasedInReceipt)) {
+  const releasedInReceipt = receipt.secretsReleased.map(secretReleaseKey).sort();
+  if (!arraysEqual(releasedInEvents, releasedInReceipt)) {
     problems.push("secretsReleased does not match secret.released events");
   }
 
