@@ -1,0 +1,14 @@
+{
+  "schema": "tool-call-plan.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:12:01Z",
+  "plan_id": "tool_plan_readonly_001",
+  "tool_name": "run_tests",
+  "arguments_hash": "sha256:abababababababababababababababababababababababababababababababab",
+  "side_effects": "read_only",
+  "status": "requires_action"
+}

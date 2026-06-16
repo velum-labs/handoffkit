@@ -22,6 +22,7 @@ export {
   HEX_HASH_PATTERN,
   isAgentKind,
   isTerminalStatus,
+  MODEL_FUSION_SCHEMA_NAMES,
   PROTOCOL_VERSIONS,
   RUN_EVENT_TYPES,
   RUN_STATUSES,
@@ -42,7 +43,61 @@ export type {
 } from "./execution.js";
 export { canonicalize } from "./jcs.js";
 export type { JsonValue } from "./jcs.js";
-export { hashCanonical, sha256Hex } from "./hash.js";
+export {
+  artifactHash,
+  hashCanonical,
+  hashCanonicalSha256,
+  requestHash,
+  responseHash,
+  schemaBundleHash,
+  SHA256_PREFIX,
+  sha256Hex,
+  sha256PrefixedHex
+} from "./hash.js";
+export {
+  assertArtifactRefV1,
+  assertBenchmarkTaskRecordV1,
+  assertEnsembleReceiptV1,
+  assertHarnessCandidateRecordV1,
+  assertHarnessRunRequestV1,
+  assertHarnessRunResultV1,
+  assertJudgeSynthesisRecordV1,
+  assertModelCallRecordV1,
+  assertModelFusionRecord,
+  assertToolCallPlanV1,
+  assertToolExecutionRecordV1
+} from "./model-fusion.js";
+export type {
+  ArtifactRefV1,
+  BenchmarkScorer,
+  BenchmarkScorerKind,
+  BenchmarkSourceRepo,
+  BenchmarkTaskKind,
+  BenchmarkTaskRecordV1,
+  ContractMetadataV1,
+  EnsembleReceiptV1,
+  HarnessCandidateRecordV1,
+  HarnessRunRequestV1,
+  HarnessRunResultV1,
+  JudgeSynthesisDecision,
+  JudgeSynthesisRecordV1,
+  ModelCallRecordV1,
+  ModelFusionArtifactKind,
+  ModelFusionCapabilityStatus,
+  ModelFusionChatMessage,
+  ModelFusionChatRole,
+  ModelFusionError,
+  ModelFusionErrorKind,
+  ModelFusionHarnessKind,
+  ModelFusionRecordV1,
+  ModelFusionRedactionStatus,
+  ModelFusionSchemaName,
+  ModelFusionSideEffects,
+  ModelFusionStatus,
+  ModelFusionUsage,
+  ToolCallPlanV1,
+  ToolExecutionRecordV1
+} from "./model-fusion.js";
 export {
   generateEd25519KeyPair,
   keyIdFromPublicPem,
