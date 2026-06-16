@@ -13,6 +13,7 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@warrant/protocol": "workspace:*"
+    "@warrant/protocol": "workspace:*",
+    "@warrant/workspace": "workspace:*"
   }
 }

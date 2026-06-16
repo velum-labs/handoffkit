@@ -10,6 +10,8 @@ import type {
   ToolExecutionRecordV1
 } from "@warrant/protocol";
 
+import type { CandidateWorktree } from "./worktree.js";
+
 export type EnsembleModel = {
   id: string;
   model: string;
@@ -53,8 +55,13 @@ export type HarnessCandidateOutput = {
   candidateId?: string;
   model: EnsembleModel;
   status: ModelFusionStatus;
+  branchName?: string;
+  worktreePath?: string;
   transcript?: string;
   diff?: string;
+  log?: string;
+  summary?: string;
+  screenshots?: HarnessArtifact[];
   score?: number;
   artifacts?: HarnessArtifact[];
   toolRecords?: HarnessToolRecord[];
@@ -78,6 +85,7 @@ export type HarnessRunInput = {
   model: EnsembleModel;
   ordinal: number;
   prepared: unknown;
+  worktree?: CandidateWorktree;
 };
 
 export type HarnessCollectInput = {
@@ -92,6 +100,7 @@ export type HarnessAdapter = {
   prepare(input: HarnessPrepareInput): Promise<unknown> | unknown;
   run(input: HarnessRunInput): Promise<HarnessCandidateOutput> | HarnessCandidateOutput;
   collectArtifacts(input: HarnessCollectInput): Promise<HarnessArtifact[]> | HarnessArtifact[];
+  cleanup?(input: HarnessCollectInput): Promise<void> | void;
   verificationProfile(descriptor: EnsembleDescriptor): VerificationProfile;
   capabilities(descriptor: EnsembleDescriptor): HarnessCapabilities;
 };
@@ -112,6 +121,9 @@ export type EnsembleDescriptor = {
   prompt: string;
   sourceRepo: string;
   baseGitSha: string;
+  workspace?: string;
+  outputRoot?: string;
+  cleanupWorktrees?: boolean;
   metadata?: Record<string, JsonValue>;
   reviewEvidence?: ReviewEvidence;
   checks?: never;
@@ -125,5 +137,30 @@ export type EnsembleRunResult = {
   artifacts: readonly HarnessArtifact[];
   toolRecords: readonly HarnessToolRecord[];
   verification: VerificationProfile;
+  summaryPath?: string;
+  summary?: EnsembleRunSummary;
   reviewEvidence?: ReviewEvidence;
+};
+
+export type EnsembleCandidateSummary = {
+  candidateId: string;
+  modelId: string;
+  model: string;
+  status: ModelFusionStatus;
+  branchName?: string;
+  worktreePath?: string;
+  diffArtifacts: HarnessArtifact[];
+  verification?: HarnessCandidateOutput["verification"];
+};
+
+export type EnsembleRunSummary = {
+  descriptorId: string;
+  snapshot?: {
+    baseGitSha: string;
+    snapshotHash: string;
+    workspace: string;
+  };
+  candidates: EnsembleCandidateSummary[];
+  artifacts: HarnessArtifact[];
+  finalPatchPath: null;
 };

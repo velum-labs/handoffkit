@@ -33,13 +33,13 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
       command: options.command,
       requiredEvidence: ["command output", "exit code", "tool execution record"]
     }),
-    run: async ({ descriptor, model, ordinal }) => {
+    run: async ({ descriptor, model, ordinal, worktree }) => {
       let stdout = "";
       let stderr = "";
       let exitCode = 0;
       try {
         const result = await execFileAsync("/bin/sh", ["-lc", options.command], {
-          cwd: options.cwd,
+          cwd: worktree?.path ?? options.cwd,
           timeout: options.timeoutMs ?? descriptor.policy.timeoutMs
         });
         stdout = result.stdout;
@@ -64,6 +64,7 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
         candidateId: `${descriptor.id}_${model.id}_${ordinal}`,
         model,
         status,
+        ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {}),
         transcript,
         diff: "",
         artifacts: [

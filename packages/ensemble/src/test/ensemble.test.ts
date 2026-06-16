@@ -1,4 +1,14 @@
 import assert from "node:assert/strict";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import {
@@ -6,11 +16,12 @@ import {
   assertHarnessRunRequestV1,
   assertHarnessRunResultV1
 } from "@warrant/protocol";
+import { gitText } from "@warrant/workspace";
 
 import { createCommandHarness } from "../command.js";
 import { createMockHarness } from "../mock.js";
 import { runEnsemble } from "../run.js";
-import type { EnsembleDescriptor } from "../harness.js";
+import type { EnsembleDescriptor, HarnessAdapter } from "../harness.js";
 
 const BASE_DESCRIPTOR = {
   id: "ensemble_test",
@@ -38,6 +49,24 @@ function descriptor(
     ...BASE_DESCRIPTOR,
     harness: createMockHarness(),
     ...overrides
+  };
+}
+
+function makeRepo(): { repo: string; cleanup: () => void; head: string; outputRoot: string } {
+  const root = mkdtempSync(join(tmpdir(), "ensemble-repo-"));
+  const repo = join(root, "repo");
+  mkdirSync(repo);
+  gitText(repo, ["init", "--quiet", "--initial-branch=main"]);
+  gitText(repo, ["config", "user.email", "ensemble@warrant.local"]);
+  gitText(repo, ["config", "user.name", "ensemble"]);
+  writeFileSync(join(repo, "README.md"), "# ensemble\n");
+  gitText(repo, ["add", "-A"]);
+  gitText(repo, ["commit", "--quiet", "-m", "init"]);
+  return {
+    repo,
+    outputRoot: join(root, "out"),
+    head: gitText(repo, ["rev-parse", "HEAD"]).trim(),
+    cleanup: () => rmSync(root, { recursive: true, force: true })
   };
 }
 
@@ -120,8 +149,13 @@ test("terminal candidate records and result arrays are immutable", async () => {
   assert.equal(Object.isFrozen(result), true);
   assert.equal(Object.isFrozen(result.candidates), true);
   assert.equal(Object.isFrozen(result.candidates[0]), true);
+  assert.equal(Object.isFrozen(result.candidates[0]?.artifacts), true);
+  assert.equal(Object.isFrozen(result.artifacts[0]), true);
   assert.throws(() => {
     (result.candidates as unknown as unknown[]).push({});
+  });
+  assert.throws(() => {
+    (result.candidates[0]?.artifacts as unknown as unknown[]).push({});
   });
 });
 
@@ -137,4 +171,116 @@ test("review evidence is attached but never becomes final selection", async () =
   assert.deepEqual(result.reviewEvidence, reviewEvidence);
   assert.equal("chosen" in result, false);
   assert.equal("selected_candidate_id" in result.harnessRunResult, false);
+});
+
+test("candidate worktrees are created from one snapshot and summarized after cleanup", async () => {
+  const repo = makeRepo();
+  try {
+    const harness = createMockHarness({
+      candidates: {
+        fast: { transcript: "fast transcript", summary: "fast summary" },
+        writer: { transcript: "writer transcript", summary: "writer summary" }
+      }
+    });
+    const result = await runEnsemble(
+      descriptor({
+        harness,
+        workspace: repo.repo,
+        baseGitSha: repo.head,
+        outputRoot: repo.outputRoot,
+        cleanupWorktrees: true
+      })
+    );
+
+    assert.equal(result.candidates.length, 2);
+    assert.equal(result.summary?.snapshot?.baseGitSha, repo.head);
+    assert.equal(result.summary?.candidates.length, 2);
+    assert.ok(result.summaryPath);
+    assert.equal(existsSync(result.summaryPath), true);
+
+    for (const candidate of result.candidates) {
+      assert.ok(candidate.branch_name);
+      assert.ok(candidate.worktree_path);
+      assert.equal(existsSync(candidate.worktree_path), false);
+      assert.ok(candidate.artifacts?.some((artifact) => artifact.kind === "worktree"));
+      assert.ok(candidate.artifacts?.some((artifact) => artifact.kind === "transcript"));
+    }
+
+    const summary = JSON.parse(readFileSync(result.summaryPath, "utf8")) as {
+      candidates: { worktreePath?: string; diffArtifacts: unknown[] }[];
+      finalPatchPath: string | null;
+    };
+    assert.equal(summary.finalPatchPath, null);
+    assert.equal(summary.candidates.length, 2);
+    assert.ok(summary.candidates.every((candidate) => candidate.worktreePath));
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("candidate worktree diffs become patch artifacts", async () => {
+  const repo = makeRepo();
+  try {
+    const harness: HarnessAdapter = {
+      id: "worktree-writer",
+      prepare: () => undefined,
+      capabilities: () => ({ workspace_write: "supported" }),
+      verificationProfile: () => ({
+        id: "worktree-writer",
+        requiredEvidence: ["patch", "worktree"]
+      }),
+      collectArtifacts: () => [],
+      run: ({ model, worktree }) => {
+        assert.ok(worktree);
+        writeFileSync(join(worktree.path, `${model.id}.txt`), `${model.model}\n`);
+        return {
+          model,
+          status: "succeeded",
+          transcript: `${model.id} wrote a file`,
+          verification: { status: "succeeded", evidence: ["file written"], exitCode: 0 }
+        };
+      }
+    };
+
+    const result = await runEnsemble(
+      descriptor({
+        harness,
+        workspace: repo.repo,
+        baseGitSha: repo.head,
+        outputRoot: repo.outputRoot
+      })
+    );
+
+    assert.equal(result.candidates.length, 2);
+    assert.ok(
+      result.candidates.every((candidate) =>
+        candidate.artifacts?.some((artifact) => artifact.kind === "patch")
+      )
+    );
+    assert.ok(
+      result.summary?.candidates.every((candidate) => candidate.diffArtifacts.length === 1)
+    );
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("adapter cleanup runs when collection fails", async () => {
+  let cleaned = false;
+  const harness: HarnessAdapter = {
+    id: "cleanup",
+    prepare: () => undefined,
+    capabilities: () => ({ cleanup: "supported" }),
+    verificationProfile: () => ({ id: "cleanup", requiredEvidence: [] }),
+    run: ({ model }) => ({ model, status: "succeeded" }),
+    collectArtifacts: () => {
+      throw new Error("boom");
+    },
+    cleanup: () => {
+      cleaned = true;
+    }
+  };
+
+  await assert.rejects(() => runEnsemble(descriptor({ harness })), /boom/);
+  assert.equal(cleaned, true);
 });

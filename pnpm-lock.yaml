@@ -356,6 +356,9 @@ importers:
       '@warrant/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../workspace
 
   packages/example-utils:
     dependencies:

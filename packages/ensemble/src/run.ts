@@ -2,7 +2,6 @@ import {
   assertHarnessCandidateRecordV1,
   assertHarnessRunRequestV1,
   assertHarnessRunResultV1,
-  hashCanonicalSha256,
   requestHash
 } from "@warrant/protocol";
 import type {
@@ -13,13 +12,25 @@ import type {
   ModelFusionStatus
 } from "@warrant/protocol";
 
+import { createArtifactStore } from "./artifacts.js";
 import type {
+  EnsembleCandidateSummary,
   EnsembleDescriptor,
   EnsembleRunResult,
+  EnsembleRunSummary,
   HarnessArtifact,
   HarnessCandidateOutput,
   HarnessToolRecord
 } from "./harness.js";
+import {
+  cleanupWorktreePlan,
+  createWorktreePlan,
+  defaultOutputRoot,
+  diffCandidateWorktree,
+  sealCandidateWorktree
+} from "./worktree.js";
+
+type StoredHarnessArtifact = HarnessArtifact & { path?: string };
 
 const SCHEMA_BUNDLE_HASH =
   "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3";
@@ -69,14 +80,23 @@ function assertDescriptor(descriptor: EnsembleDescriptor): void {
   if (!descriptor.policy?.id) throw new Error("ensemble descriptor requires one policy");
 }
 
-function candidateId(descriptor: EnsembleDescriptor, modelId: string, ordinal: number): string {
-  return `${descriptor.id}_${modelId}_${ordinal}`.replace(/[^A-Za-z0-9_.:-]/g, "_");
-}
-
 function freezeResult(result: EnsembleRunResult): EnsembleRunResult {
-  for (const candidate of result.candidates) Object.freeze(candidate);
+  for (const candidate of result.candidates) {
+    candidate.artifacts?.forEach((artifact) => Object.freeze(artifact));
+    Object.freeze(candidate.artifacts ?? []);
+    Object.freeze(candidate);
+  }
   for (const artifact of result.artifacts) Object.freeze(artifact);
   for (const toolRecord of result.toolRecords) Object.freeze(toolRecord);
+  if (result.harnessRunResult.artifacts) {
+    for (const artifact of result.harnessRunResult.artifacts) Object.freeze(artifact);
+    Object.freeze(result.harnessRunResult.artifacts);
+  }
+  Object.freeze(result.harnessRunResult);
+  Object.freeze(result.harnessRunRequest);
+  Object.freeze(result.summary?.candidates ?? []);
+  Object.freeze(result.summary?.artifacts ?? []);
+  if (result.summary) Object.freeze(result.summary);
   Object.freeze(result.candidates);
   Object.freeze(result.artifacts);
   Object.freeze(result.toolRecords);
@@ -85,21 +105,23 @@ function freezeResult(result: EnsembleRunResult): EnsembleRunResult {
 
 function candidateMetadata(
   output: HarnessCandidateOutput,
-  descriptor: EnsembleDescriptor
+  descriptor: EnsembleDescriptor,
+  worktree: { baseGitSha: string; snapshotHash: string } | undefined
 ): Record<string, JsonValue> {
   const metadata: Record<string, JsonValue> = {
     model_id: output.model.id,
     model: output.model.model,
     endpoint_id: output.model.endpointId ?? output.model.id
   };
-  if (output.transcript !== undefined) {
-    metadata.transcript_hash = hashCanonicalSha256(output.transcript);
-  }
-  if (output.diff !== undefined) {
-    metadata.diff_hash = hashCanonicalSha256(output.diff);
-  }
   if (output.verification !== undefined) {
     metadata.verification = output.verification;
+  }
+  if (output.summary !== undefined) {
+    metadata.summary = output.summary;
+  }
+  if (worktree !== undefined) {
+    metadata.base_git_sha = worktree.baseGitSha;
+    metadata.snapshot_hash = worktree.snapshotHash;
   }
   Object.assign(metadata, output.metadata ?? {});
   if (descriptor.reviewEvidence !== undefined) {
@@ -108,10 +130,103 @@ function candidateMetadata(
   return metadata;
 }
 
+function artifactsForOutput(input: {
+  descriptor: EnsembleDescriptor;
+  candidateId: string;
+  output: HarnessCandidateOutput;
+  patch: string;
+  worktree?: { path: string; baseGitSha: string; snapshotHash: string };
+  store: ReturnType<typeof createArtifactStore>;
+}): StoredHarnessArtifact[] {
+  const artifacts: StoredHarnessArtifact[] = [...(input.output.artifacts ?? [])];
+  const prefix = `${input.descriptor.id}_${input.candidateId}`;
+  if (input.patch.length > 0) {
+    artifacts.push(
+      input.store.writeText({
+        artifactId: `${prefix}_patch`,
+        kind: "patch",
+        content: input.patch,
+        suffix: ".patch"
+      })
+    );
+  }
+  if (input.output.transcript !== undefined) {
+    artifacts.push(
+      input.store.writeText({
+        artifactId: `${prefix}_transcript`,
+        kind: "transcript",
+        content: input.output.transcript,
+        suffix: ".txt"
+      })
+    );
+  }
+  if (input.output.log !== undefined) {
+    artifacts.push(
+      input.store.writeText({
+        artifactId: `${prefix}_log`,
+        kind: "log",
+        content: input.output.log,
+        suffix: ".log"
+      })
+    );
+  }
+  if (input.output.toolRecords && input.output.toolRecords.length > 0) {
+    artifacts.push(
+      input.store.writeJson({
+        artifactId: `${prefix}_tool_journal`,
+        kind: "other",
+        value: input.output.toolRecords
+      })
+    );
+  }
+  if (input.output.verification !== undefined) {
+    artifacts.push(
+      input.store.writeJson({
+        artifactId: `${prefix}_verification`,
+        kind: "metrics",
+        value: input.output.verification
+      })
+    );
+  }
+  if (input.worktree !== undefined) {
+    artifacts.push(
+      input.store.writeJson({
+        artifactId: `${prefix}_worktree`,
+        kind: "worktree",
+        value: {
+          path: input.worktree.path,
+          baseGitSha: input.worktree.baseGitSha,
+          snapshotHash: input.worktree.snapshotHash
+        }
+      })
+    );
+  }
+  artifacts.push(...(input.output.screenshots ?? []));
+  return artifacts;
+}
+
+function artifactRef(artifact: StoredHarnessArtifact): HarnessArtifact {
+  const { path: _path, ...ref } = artifact;
+  return ref;
+}
+
+function outputSummary(outputs: readonly HarnessCandidateOutput[], harnessId: string): string {
+  const counts = new Map<ModelFusionStatus, number>();
+  for (const output of outputs) counts.set(output.status, (counts.get(output.status) ?? 0) + 1);
+  const countText = [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([status, count]) => `${status}:${count}`)
+    .join(", ");
+  return `${outputs.length} candidate(s) produced by ${harnessId}; statuses ${countText}`;
+}
+
 export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<EnsembleRunResult> {
   assertDescriptor(descriptor);
   const createdAt = new Date().toISOString();
   const capabilities = descriptor.harness.capabilities(descriptor);
+  const outputRoot = defaultOutputRoot(descriptor);
+  const store = createArtifactStore(`${outputRoot}/artifacts`);
+  const worktreePlan = createWorktreePlan(descriptor);
   const request: HarnessRunRequestV1 = {
     ...metadata({ schema: "harness-run-request.v1", createdAt }),
     request_id: `ensemble_req_${descriptor.id}`,
@@ -131,80 +246,183 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       runtime_id: descriptor.runtime.id,
       judge_id: descriptor.judge.id,
       policy_id: descriptor.policy.id,
+      output_root: outputRoot,
+      ...(worktreePlan
+        ? {
+            snapshot_hash: worktreePlan.snapshotHash,
+            snapshot_base_git_sha: worktreePlan.baseGitSha
+          }
+        : {}),
       ...(descriptor.metadata ?? {})
     }
   };
   assertHarnessRunRequestV1(request);
 
-  const prepared = await descriptor.harness.prepare({ descriptor, request });
-  const outputs = await Promise.all(
-    descriptor.models.map((model, ordinal) =>
-      descriptor.harness.run({ descriptor, request, model, ordinal, prepared })
-    )
-  );
-  const collectedArtifacts = await descriptor.harness.collectArtifacts({
-    descriptor,
-    request,
-    candidates: outputs,
-    prepared
-  });
-  const verification = descriptor.harness.verificationProfile(descriptor);
+  let prepared: unknown;
+  let outputs: HarnessCandidateOutput[] = [];
+  let cleanupWorktrees = worktreePlan?.worktrees ?? [];
+  try {
+    prepared = await descriptor.harness.prepare({ descriptor, request });
+    outputs = await Promise.all(
+      descriptor.models.map((model, ordinal) =>
+        descriptor.harness.run({
+          descriptor,
+          request,
+          model,
+          ordinal,
+          prepared,
+          worktree: worktreePlan?.worktrees[ordinal]
+        })
+      )
+    );
+    const collectedArtifacts = await descriptor.harness.collectArtifacts({
+      descriptor,
+      request,
+      candidates: outputs,
+      prepared
+    });
+    const verification = descriptor.harness.verificationProfile(descriptor);
 
-  const candidates: HarnessCandidateRecordV1[] = outputs.map((output, ordinal) => {
-    const id = output.candidateId ?? candidateId(descriptor, output.model.id, ordinal);
-    const record: HarnessCandidateRecordV1 = {
-      ...metadata({ schema: "harness-candidate-record.v1", createdAt }),
-      candidate_id: id,
+    const generatedArtifacts = new Map<string, StoredHarnessArtifact[]>();
+    const sealedWorktrees = worktreePlan?.worktrees.map((worktree) => sealCandidateWorktree(worktree));
+    cleanupWorktrees = sealedWorktrees ?? cleanupWorktrees;
+    for (const [ordinal, output] of outputs.entries()) {
+      const worktree = sealedWorktrees?.[ordinal];
+      const id = output.candidateId ?? worktree?.candidateId ?? `${descriptor.id}_${output.model.id}_${ordinal}`;
+      const patch = worktree ? diffCandidateWorktree(worktree) : (output.diff ?? "");
+      generatedArtifacts.set(
+        id,
+        artifactsForOutput({
+          descriptor,
+          candidateId: id,
+          output,
+          patch,
+          ...(worktree ? { worktree } : {}),
+          store
+        })
+      );
+    }
+
+    const candidates: HarnessCandidateRecordV1[] = outputs.map((output, ordinal) => {
+      const worktree = sealedWorktrees?.[ordinal];
+      const id =
+        output.candidateId ??
+        worktree?.candidateId ??
+        `${descriptor.id}_${output.model.id}_${ordinal}`;
+      const artifacts = (generatedArtifacts.get(id) ?? output.artifacts ?? []).map(artifactRef);
+      const record: HarnessCandidateRecordV1 = {
+        ...metadata({ schema: "harness-candidate-record.v1", createdAt }),
+        candidate_id: id,
+        request_id: request.request_id,
+        harness_kind: "generic",
+        model_call_id: `${id}_model_call`,
+        status: output.status,
+        side_effects: descriptor.policy.sideEffects,
+        artifacts,
+        ...(output.branchName ?? worktree?.branchName
+          ? { branch_name: output.branchName ?? worktree?.branchName }
+          : {}),
+        ...(output.worktreePath ?? worktree?.path
+          ? { worktree_path: output.worktreePath ?? worktree?.path }
+          : {}),
+        ...(output.score !== undefined ? { score: output.score } : {}),
+        ...(output.error ? { error: output.error } : {}),
+        metadata: candidateMetadata(output, descriptor, worktree)
+      };
+      assertHarnessCandidateRecordV1(record);
+      return record;
+    });
+
+    const artifacts: HarnessArtifact[] = [
+      ...collectedArtifacts,
+      ...candidates.flatMap((candidate) => candidate.artifacts ?? [])
+    ];
+    const toolRecords: HarnessToolRecord[] = outputs.flatMap((output) => output.toolRecords ?? []);
+    const summary: EnsembleRunSummary = {
+      descriptorId: descriptor.id,
+      ...(worktreePlan
+        ? {
+            snapshot: {
+              baseGitSha: worktreePlan.baseGitSha,
+              snapshotHash: worktreePlan.snapshotHash,
+              workspace: worktreePlan.workspace
+            }
+          }
+        : {}),
+      candidates: candidates.map((candidate, ordinal): EnsembleCandidateSummary => {
+        const output = outputs[ordinal];
+        const diffArtifacts = (candidate.artifacts ?? []).filter(
+          (artifact) => artifact.kind === "patch"
+        );
+        return {
+          candidateId: candidate.candidate_id,
+          modelId: output?.model.id ?? "",
+          model: output?.model.model ?? "",
+          status: candidate.status,
+          ...(candidate.branch_name ? { branchName: candidate.branch_name } : {}),
+          ...(candidate.worktree_path ? { worktreePath: candidate.worktree_path } : {}),
+          diffArtifacts,
+          ...(output?.verification ? { verification: output.verification } : {})
+        };
+      }),
+      artifacts,
+      finalPatchPath: null
+    };
+    const summaryArtifact = store.writeJson({
+      artifactId: `${descriptor.id}_summary`,
+      kind: "metrics",
+      value: summary
+    });
+    const summaryPath = summaryArtifact.path;
+    const summaryArtifactRef = artifactRef(summaryArtifact);
+    const result: HarnessRunResultV1 = {
+      ...metadata({ schema: "harness-run-result.v1", createdAt }),
+      result_id: `ensemble_result_${descriptor.id}`,
       request_id: request.request_id,
       harness_kind: "generic",
-      model_call_id: `${id}_model_call`,
-      status: output.status,
-      side_effects: descriptor.policy.sideEffects,
-      artifacts: output.artifacts,
-      ...(output.score !== undefined ? { score: output.score } : {}),
-      ...(output.error ? { error: output.error } : {}),
-      metadata: candidateMetadata(output, descriptor)
+      status: terminalStatus(outputs),
+      candidate_ids: candidates.map((candidate) => candidate.candidate_id),
+      output_summary: outputSummary(outputs, descriptor.harness.id),
+      artifacts: [...artifacts, summaryArtifactRef],
+      capabilities,
+      started_at: createdAt,
+      finished_at: new Date().toISOString(),
+      metadata: {
+        descriptor_id: descriptor.id,
+        summary_path: summaryPath,
+        ...(descriptor.reviewEvidence !== undefined
+          ? { review_evidence: descriptor.reviewEvidence }
+          : {})
+      }
     };
-    assertHarnessCandidateRecordV1(record);
-    return record;
-  });
+    assertHarnessRunResultV1(result);
 
-  const artifacts: HarnessArtifact[] = [
-    ...collectedArtifacts,
-    ...outputs.flatMap((output) => output.artifacts ?? [])
-  ];
-  const toolRecords: HarnessToolRecord[] = outputs.flatMap((output) => output.toolRecords ?? []);
-  const result: HarnessRunResultV1 = {
-    ...metadata({ schema: "harness-run-result.v1", createdAt }),
-    result_id: `ensemble_result_${descriptor.id}`,
-    request_id: request.request_id,
-    harness_kind: "generic",
-    status: terminalStatus(outputs),
-    candidate_ids: candidates.map((candidate) => candidate.candidate_id),
-    output_summary: `${outputs.length} candidate(s) produced by ${descriptor.harness.id}`,
-    artifacts,
-    capabilities,
-    started_at: createdAt,
-    finished_at: new Date().toISOString(),
-    metadata: {
-      descriptor_id: descriptor.id,
-      ...(descriptor.reviewEvidence !== undefined
-        ? { review_evidence: descriptor.reviewEvidence }
-        : {})
+    return freezeResult({
+      descriptorId: descriptor.id,
+      harnessRunRequest: request,
+      harnessRunResult: result,
+      candidates,
+      artifacts: [...artifacts, summaryArtifactRef],
+      toolRecords,
+      verification,
+      summaryPath,
+      summary,
+      ...(descriptor.reviewEvidence ? { reviewEvidence: descriptor.reviewEvidence } : {})
+    });
+  } finally {
+    await descriptor.harness.cleanup?.({
+      descriptor,
+      request,
+      candidates: outputs,
+      prepared
+    });
+    if (worktreePlan && descriptor.cleanupWorktrees === true) {
+      cleanupWorktrees = cleanupWorktreePlan({
+        ...worktreePlan,
+        worktrees: cleanupWorktrees
+      });
     }
-  };
-  assertHarnessRunResultV1(result);
-
-  return freezeResult({
-    descriptorId: descriptor.id,
-    harnessRunRequest: request,
-    harnessRunResult: result,
-    candidates,
-    artifacts,
-    toolRecords,
-    verification,
-    ...(descriptor.reviewEvidence ? { reviewEvidence: descriptor.reviewEvidence } : {})
-  });
+  }
 }
 
 export const ensemble = {

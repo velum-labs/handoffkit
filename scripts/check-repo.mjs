@@ -61,6 +61,8 @@ const requiredFiles = [
   "packages/ensemble/src/index.ts",
   "packages/ensemble/src/harness.ts",
   "packages/ensemble/src/run.ts",
+  "packages/ensemble/src/artifacts.ts",
+  "packages/ensemble/src/worktree.ts",
   "packages/ensemble/src/mock.ts",
   "packages/ensemble/src/command.ts",
   "packages/testkit/src/index.ts",
