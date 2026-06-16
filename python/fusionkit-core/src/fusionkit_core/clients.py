@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from openai import AsyncOpenAI
 
 from fusionkit_core.config import ModelEndpoint, SamplingConfig
+from fusionkit_core.providers import resolve_api_key
 from fusionkit_core.types import ChatMessage, ModelResponse, Usage
 
 
@@ -29,7 +30,7 @@ class LocalModelClient:
         self.model_id = endpoint.id
         self._client = AsyncOpenAI(
             base_url=f"{endpoint.base_url}/v1",
-            api_key=endpoint.api_key,
+            api_key=resolve_api_key(endpoint),
             timeout=endpoint.timeout_s,
         )
 

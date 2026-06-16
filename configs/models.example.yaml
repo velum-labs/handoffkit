@@ -1,18 +1,97 @@
 endpoints:
   - id: qwen-fast
+    provider: mlx-lm
     model: mlx-community/Qwen3.5-9B-MLX-4bit
     base_url: http://127.0.0.1:8101
     api_key: not-needed
     max_context: 32768
     estimated_memory_gb: 6.0
+    capabilities:
+      structured_output: false
+      tool_calls: false
+      streaming: true
+    pricing:
+      input_per_1m_tokens: null
+      output_per_1m_tokens: null
+      currency: USD
     tags: [fast, reasoning]
   - id: gemma-writer
+    provider: mlx-lm
     model: mlx-community/gemma-4-4b-it-4bit
     base_url: http://127.0.0.1:8102
     api_key: not-needed
     max_context: 8192
     estimated_memory_gb: 3.0
+    capabilities:
+      structured_output: false
+      tool_calls: false
+      streaming: true
+    pricing:
+      input_per_1m_tokens: null
+      output_per_1m_tokens: null
+      currency: USD
     tags: [writer]
+  - id: openai-example
+    provider: openai
+    model: gpt-4.1-mini
+    base_url: https://api.openai.com
+    api_key_env: OPENAI_API_KEY
+    max_context: 128000
+    timeout_s: 120.0
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.4
+      output_per_1m_tokens: 1.6
+      currency: USD
+    tags: [cloud, example]
+  - id: anthropic-example
+    provider: anthropic
+    model: claude-sonnet-example
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+    max_context: 200000
+    capabilities:
+      structured_output: false
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 3.0
+      output_per_1m_tokens: 15.0
+      currency: USD
+    tags: [cloud, example]
+  - id: google-example
+    provider: google
+    model: gemini-example
+    base_url: https://generativelanguage.googleapis.com
+    api_key_env: GOOGLE_API_KEY
+    max_context: 1000000
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.35
+      output_per_1m_tokens: 1.05
+      currency: USD
+    tags: [cloud, example]
+  - id: openai-compatible-example
+    provider: openai-compatible
+    model: compatible-model
+    base_url: http://127.0.0.1:9000
+    api_key_env: COMPATIBLE_API_KEY
+    max_context: 32768
+    capabilities:
+      structured_output: null
+      tool_calls: null
+      streaming: null
+    pricing:
+      input_per_1m_tokens: null
+      output_per_1m_tokens: null
+      currency: USD
+    tags: [compatible, example]
 default_model: qwen-fast
 judge_model: qwen-fast
 synthesizer_model: qwen-fast
@@ -24,3 +103,9 @@ sampling:
   temperature: 0.2
   top_p: 0.95
   max_tokens: 1024
+budget:
+  max_candidates: 8
+  wall_clock_s: 300
+  max_cost: null
+  max_tool_rounds: 4
+  max_tool_calls: 16

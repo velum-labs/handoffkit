@@ -105,6 +105,7 @@ async def run_tiny_benchmark(
             candidate_outputs=[
                 candidate.content for candidate in fusion_result.candidates
             ],
+            cost_estimate=_optional_float(fusion_result.metrics.get("cost_estimate")),
         )
         results.append(
             TinyBenchmarkResult(
@@ -130,6 +131,7 @@ def score_tiny_output(
     *,
     latency_s: float | None,
     candidate_outputs: Iterable[str] = (),
+    cost_estimate: float | None = None,
 ) -> TinyBenchmarkMetrics:
     synthesized_success = _score_by_task(task, output)
     candidate_scores = [
@@ -146,7 +148,7 @@ def score_tiny_output(
         best_single_success=max(candidate_scores, default=None),
         oracle_success=max(oracle_scores, default=None),
         synthesized_success=synthesized_success,
-        cost_estimate=None,
+        cost_estimate=cost_estimate,
         latency_s=latency_s,
         schema_validity=schema_validity,
         tool_call_validity=tool_call_validity,
@@ -285,6 +287,10 @@ def _average_metric(results: list[TinyBenchmarkResult], field: str) -> str:
     if not values:
         return "unknown"
     return f"{sum(values) / len(values):.4f}"
+
+
+def _optional_float(value: Any) -> float | None:
+    return float(value) if isinstance(value, int | float) else None
 
 
 def _format_metric(value: float | None) -> str:

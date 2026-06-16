@@ -18,6 +18,7 @@ from fusionkit_evals.tiny import (
     load_tiny_results,
     load_tiny_tasks,
     run_tiny_benchmark,
+    score_tiny_output,
     write_tiny_jsonl,
 )
 
@@ -141,6 +142,14 @@ def test_tiny_benchmark_report_contains_required_summaries(tmp_path) -> None:
     assert "Latency" in markdown
     assert "Schema validity" in markdown
     assert "Tool-call validity" in markdown
+
+
+def test_tiny_benchmark_metrics_preserve_cost_estimate_when_available() -> None:
+    task = load_tiny_tasks()[0].record
+
+    metrics = score_tiny_output(task, "Paris", latency_s=0.01, cost_estimate=0.25)
+
+    assert metrics.cost_estimate == 0.25
 
 
 def load_tiny_results_from_model():

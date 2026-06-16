@@ -86,6 +86,7 @@ class FileSystemRunStore:
         final_output_artifact = None
         judge_synthesis_record = None
         pending_tool_actions: dict[str, ToolPausePlaceholder] = {}
+        provider_metadata = []
 
         for event in events:
             if event.event_type == "candidate_recorded":
@@ -110,6 +111,11 @@ class FileSystemRunStore:
             elif event.event_type == "model_call_recorded":
                 if event.model_call_id is not None:
                     model_call_ids.append(event.model_call_id)
+                model_call_payload = event.payload.get("model_call_record")
+                if isinstance(model_call_payload, dict) and isinstance(
+                    model_call_payload.get("metadata"), dict
+                ):
+                    provider_metadata.append(model_call_payload["metadata"])
             elif event.event_type == "artifact_recorded":
                 artifact = _artifact_from_payload(event.payload.get("artifact"))
                 if artifact is not None:
@@ -151,6 +157,7 @@ class FileSystemRunStore:
             judge_synthesis_record=judge_synthesis_record,
             requires_action=_latest_pending_action(pending_tool_actions),
             terminal_error=summary.terminal_error,
+            provider_metadata=provider_metadata,
         )
 
     def _summary_from_events(self, run_id: str) -> RunStateSummary:

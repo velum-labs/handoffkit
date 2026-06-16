@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -9,7 +10,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from fusionkit_core.artifacts import hash_text
-from fusionkit_core.config import SamplingConfig
+from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
 from fusionkit_core.contracts import (
     ArtifactKind,
     ContractArtifactRef,
@@ -30,6 +31,7 @@ from fusionkit_core.contracts import (
     status_for_run_state,
 )
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.providers import provider_metadata
 from fusionkit_core.types import Candidate, ChatMessage, FusionAnalysis
 
 IdempotencyOutcome = Literal["created", "replayed", "conflict"]
@@ -160,6 +162,7 @@ class RunInspection(RunBaseModel):
     judge_synthesis_record: dict[str, Any] | None = None
     requires_action: ToolPausePlaceholder | None = None
     terminal_error: NativeRunError | None = None
+    provider_metadata: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RunEventPage(RunBaseModel):
@@ -311,6 +314,7 @@ class FusionRunManager:
 
         events = self.store.list_events(run_id)
         request = _request_from_events(events)
+        started = time.perf_counter()
         self._append_state(summary, "generating")
         try:
             selected_mode: FusionMode = request.mode
@@ -319,6 +323,12 @@ class FusionRunManager:
                 selected_mode = decision.route
 
             sampling = _sampling_from_request(request)
+            budget_error = self._check_candidate_budget(request, selected_mode)
+            if budget_error is not None:
+                return self._fail_run(summary, budget_error)
+            budget_error = self._check_wall_clock_budget(started)
+            if budget_error is not None:
+                return self._fail_run(summary, budget_error)
             candidates = await self._generate_candidates(request, selected_mode, sampling)
             if selected_mode != "single":
                 candidates = self.engine.ranker.rank(candidates)
@@ -328,6 +338,9 @@ class FusionRunManager:
                 request,
                 candidates,
             )
+            budget_error = self._check_cost_budget(run_id)
+            if budget_error is not None:
+                return self._fail_run(summary, budget_error)
 
             analysis: FusionAnalysis | None = None
             answer: str
@@ -431,7 +444,10 @@ class FusionRunManager:
                     "final_output": answer,
                     "started_at": summary.event_cursor and events[0].created_at,
                     "finished_at": datetime.now(UTC),
-                    "metrics": _run_metrics(candidates, selected_mode, analysis),
+                    "metrics": {
+                        **_run_metrics(candidates, selected_mode, analysis),
+                        "cost_estimate": _run_cost_estimate(self.store.list_events(run_id)),
+                    },
                     "artifacts": [artifact.model_dump(mode="json") for artifact in artifacts],
                 }
             )
@@ -564,6 +580,9 @@ class FusionRunManager:
         policy: ToolExecutionPolicy | None = None,
     ) -> ToolPausePlaceholder | NativeRunError:
         resolved_policy = policy or ToolExecutionPolicy()
+        budget_error = self._check_tool_budget(run_id)
+        if budget_error is not None:
+            return budget_error
         policy_error = _validate_tool_policy(side_effects, resolved_policy)
         if policy_error is not None:
             return policy_error
@@ -804,6 +823,7 @@ class FusionRunManager:
             )
             artifacts.append(artifact)
             model_call = _model_call_record(
+                self.engine.config,
                 request=request,
                 candidate=candidate,
                 model_call_id=model_call_id,
@@ -901,6 +921,79 @@ class FusionRunManager:
             )
         )
 
+    def _fail_run(self, summary: RunStateSummary, error: NativeRunError) -> RunInspection:
+        event = self.store.append_event(
+            FusionRunEvent(
+                event_seq=1,
+                run_id=summary.run_id,
+                trace_id=summary.trace_id,
+                state="failed",
+                status=status_for_run_state("failed"),
+                event_type="error_recorded",
+                payload={"error": error.model_dump(mode="json")},
+            )
+        )
+        self.store.write_summary(
+            summary.model_copy(
+                update={
+                    "state": "failed",
+                    "status": status_for_run_state("failed"),
+                    "event_cursor": event.event_seq,
+                    "terminal_error": error,
+                    "terminal_reason": error.terminal_reason,
+                }
+            )
+        )
+        return self.store.inspect_run(summary.run_id)
+
+    def _check_candidate_budget(
+        self,
+        request: FusionRunRequestV1,
+        selected_mode: FusionMode,
+    ) -> NativeRunError | None:
+        budget = self.engine.config.budget
+        if budget.max_candidates is None:
+            return None
+        if selected_mode == "single":
+            candidate_count = 1
+        elif selected_mode == "panel":
+            candidate_count = len(request.requested_models or self.engine.config.panel_models)
+            if candidate_count == 0:
+                candidate_count = len(self.engine.config.endpoints)
+        else:
+            candidate_count = request.sample_count or self.engine.config.sample_count
+        if candidate_count <= budget.max_candidates:
+            return None
+        return _budget_error("max_candidates", f"candidate_count {candidate_count} exceeded budget")
+
+    def _check_wall_clock_budget(self, started: float) -> NativeRunError | None:
+        budget = self.engine.config.budget
+        if budget.wall_clock_s is None:
+            return None
+        if time.perf_counter() - started <= budget.wall_clock_s:
+            return None
+        return _budget_error("wall_clock_s", "wall-clock budget exceeded")
+
+    def _check_cost_budget(self, run_id: str) -> NativeRunError | None:
+        budget = self.engine.config.budget
+        if budget.max_cost is None:
+            return None
+        cost = _run_cost_estimate(self.store.list_events(run_id))
+        if cost is None or cost <= budget.max_cost:
+            return None
+        return _budget_error("max_cost", f"estimated cost {cost:.8f} exceeded budget")
+
+    def _check_tool_budget(self, run_id: str) -> NativeRunError | None:
+        budget = self.engine.config.budget
+        events = self.store.list_events(run_id)
+        planned = [event for event in events if event.event_type == "tool_call_planned"]
+        pauses = [event for event in events if event.event_type == "requires_action"]
+        if budget.max_tool_calls is not None and len(planned) + 1 > budget.max_tool_calls:
+            return _budget_error("max_tool_calls", "tool call budget exceeded")
+        if budget.max_tool_rounds is not None and len(pauses) + 1 > budget.max_tool_rounds:
+            return _budget_error("max_tool_rounds", "tool round budget exceeded")
+        return None
+
 
 def make_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
@@ -943,6 +1036,7 @@ def _sampling_from_request(request: FusionRunRequestV1) -> SamplingConfig:
 
 
 def _model_call_record(
+    config,
     *,
     request: FusionRunRequestV1,
     candidate: Candidate,
@@ -951,6 +1045,11 @@ def _model_call_record(
     latency_s = candidate.metadata.get("latency_s")
     usage = candidate.metadata.get("usage")
     latency_ms = latency_s * 1000 if isinstance(latency_s, int | float) else None
+    endpoint = _endpoint_for_candidate(config, candidate.model_id)
+    metadata = {
+        **provider_metadata(endpoint, usage if isinstance(usage, dict) else None),
+        "finish_reason": candidate.metadata.get("finish_reason"),
+    }
     return ModelCallRecordV1.model_validate(
         {
             **contract_metadata("model-call-record.v1"),
@@ -972,10 +1071,7 @@ def _model_call_record(
             "finished_at": datetime.now(UTC),
             "latency_ms": latency_ms,
             "usage": usage if isinstance(usage, dict) else None,
-            "metadata": {
-                "finish_reason": candidate.metadata.get("finish_reason"),
-                "unknown_cost": None,
-            },
+            "metadata": metadata,
         }
     )
 
@@ -993,6 +1089,43 @@ def _pending_tool_actions_from_events(
         elif event.event_type == "tool_execution_recorded" and event.tool_call_id is not None:
             pending.pop(event.tool_call_id, None)
     return pending
+
+
+def _endpoint_for_candidate(config: FusionConfig, model_id: str) -> ModelEndpoint | None:
+    try:
+        return config.endpoint_for(model_id)
+    except KeyError:
+        return None
+
+
+def _run_cost_estimate(events: Sequence[FusionRunEvent]) -> float | None:
+    costs = []
+    for event in events:
+        if event.event_type != "model_call_recorded":
+            continue
+        record = event.payload.get("model_call_record")
+        if not isinstance(record, dict):
+            continue
+        metadata = record.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        cost = metadata.get("cost_estimate")
+        if isinstance(cost, int | float):
+            costs.append(float(cost))
+    if not costs:
+        return None
+    return sum(costs)
+
+
+def _budget_error(field: str, message: str) -> NativeRunError:
+    return NativeRunError(
+        error_kind="validation_error",
+        error_code="budget_exceeded",
+        retryable=False,
+        owner="fusionkit",
+        terminal_reason=f"budget_exceeded:{field}",
+        message=message,
+    )
 
 
 def _validate_tool_policy(

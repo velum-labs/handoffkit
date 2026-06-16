@@ -1,6 +1,15 @@
 from fusionkit_core.artifacts import LocalArtifactStore, hash_bytes, hash_text
 from fusionkit_core.clients import FakeModelClient, LocalModelClient
-from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
+from fusionkit_core.config import (
+    CostMetadata,
+    EndpointCapabilities,
+    FusionConfig,
+    FusionMode,
+    ModelEndpoint,
+    ProviderKind,
+    RunBudget,
+    SamplingConfig,
+)
 from fusionkit_core.contracts import (
     ArtifactRefV1,
     BenchmarkTaskRecordV1,
@@ -24,6 +33,13 @@ from fusionkit_core.contracts import (
 )
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import CandidateEvidence, JudgeSynthesisResult, JudgeSynthesizer
+from fusionkit_core.providers import (
+    endpoint_to_contract,
+    estimate_cost,
+    normalize_usage,
+    provider_metadata,
+    resolve_api_key,
+)
 from fusionkit_core.router import HeuristicRouter
 from fusionkit_core.run import (
     CandidateInspection,
@@ -55,7 +71,9 @@ __all__ = [
     "ChatMessage",
     "ContractMetadata",
     "ContractRecord",
+    "CostMetadata",
     "CreateRunResult",
+    "EndpointCapabilities",
     "FakeModelClient",
     "FileSystemRunStore",
     "FusionConfig",
@@ -78,8 +96,10 @@ __all__ = [
     "ModelEndpointV1",
     "ModelResponse",
     "NativeRunError",
+    "ProviderKind",
     "RunEventPage",
     "RunInspection",
+    "RunBudget",
     "RunStateSummary",
     "SamplingConfig",
     "ToolExecutionMode",
@@ -92,13 +112,18 @@ __all__ = [
     "canonical_json",
     "contract_metadata",
     "contract_model_for_schema",
+    "endpoint_to_contract",
+    "estimate_cost",
     "hash_bytes",
     "hash_json",
     "hash_text",
     "make_id",
+    "normalize_usage",
     "producer",
     "producer_git_sha",
     "producer_version",
+    "provider_metadata",
+    "resolve_api_key",
     "schema_bundle_hash",
     "status_for_run_state",
 ]
