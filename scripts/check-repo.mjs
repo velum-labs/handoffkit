@@ -17,6 +17,7 @@ const requiredFiles = [
   ".github/CODEOWNERS",
   "spec/2026-06-11-local-first-handoff-platform-spec.md",
   "spec/2026-06-11-governed-agent-execution-plane-spec.md",
+  "spec/2026-06-16-eng-596-microvm-design-spike.md",
   "tsconfig.json",
   "tsconfig.base.json",
   "Dockerfile",
@@ -80,6 +81,8 @@ const requiredFiles = [
   "examples/manifest.json",
   "packages/example-utils/src/manifest.ts",
   "examples/seed/src/index.ts",
+  "examples/microvm-isolation-bench/package.json",
+  "examples/microvm-isolation-bench/tsconfig.json",
   // test suites
   "packages/protocol/src/test/protocol.test.ts",
   "packages/protocol/src/test/model-fusion.test.ts",
@@ -127,8 +130,10 @@ const requiredFiles = [
   "packages/adapter-ai-sdk/src/test/managed-server.test.ts",
   "packages/adapter-compute/src/test/sandbox.test.ts",
   "packages/session-hermetic/src/test/hermetic.test.ts",
+  "packages/session-vercel-sandbox/src/test/vercel-sandbox.test.ts",
   "packages/session-harness/src/test/harness.test.ts",
   "packages/ensemble/src/test/ensemble.test.ts",
+  "examples/microvm-isolation-bench/src/test/run.test.ts",
   "packages/cli/src/test/e2e.test.ts",
   "packages/cli/src/test/handoff.test.ts",
   "packages/cli/src/test/cli.test.ts",
@@ -160,6 +165,9 @@ if (!/^pnpm@\d+\.\d+\.\d+$/.test(pkg.packageManager ?? "")) {
 }
 if (pkg.scripts?.check !== "node scripts/check-repo.mjs") {
   fail("check script must run scripts/check-repo.mjs");
+}
+if (pkg.scripts?.["microvm:bench"] !== "node examples/microvm-isolation-bench/dist/run.js") {
+  fail("microvm:bench script must run examples/microvm-isolation-bench/dist/run.js");
 }
 
 const npmrc = readFileSync(".npmrc", "utf8");

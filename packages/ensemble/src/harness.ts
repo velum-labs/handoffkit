@@ -25,7 +25,9 @@ export type EnsembleModel = {
   endpointId?: string;
 };
 
-export type CandidateIsolationKind = "process" | "container";
+export type CandidateIsolationKind = "process" | "container" | "microvm";
+
+export type CandidateActualIsolationKind = CandidateIsolationKind | "vercel-sandbox";
 
 export type CandidateIsolationNetworkPolicy = {
   defaultDeny: boolean;
@@ -76,6 +78,54 @@ export type CandidateContainerDriver = {
   ): Promise<CandidateContainerDriverResult> | CandidateContainerDriverResult;
 };
 
+export type CandidateMicrovmProvider = "vercel-sandbox" | (string & {});
+
+export type CandidateMicrovmRuntimeMetadata = {
+  provider?: CandidateMicrovmProvider;
+  runtime?: string;
+  snapshotId?: string;
+  sandboxId?: string;
+  imageDigest?: string;
+  runtimeDigest?: string;
+};
+
+export type CandidateMicrovmDriverInput = {
+  command: string;
+  cwd: string;
+  timeoutMs?: number;
+  provider: CandidateMicrovmProvider;
+  runtime: string;
+  snapshotId?: string;
+  workdir: string;
+  mountPolicy: Required<CandidateIsolationMountPolicy>;
+  networkPolicy: Required<CandidateIsolationNetworkPolicy>;
+  secretPolicy: Required<CandidateIsolationSecretPolicy>;
+};
+
+export type CandidateMicrovmDriverResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut?: boolean;
+  actualIsolation?: Extract<CandidateActualIsolationKind, "microvm" | "vercel-sandbox">;
+  runtime?: CandidateMicrovmRuntimeMetadata;
+  cleanup?: {
+    attempted: boolean;
+    succeeded: boolean;
+    timedOut?: boolean;
+    error?: string;
+  };
+};
+
+export type CandidateMicrovmDriver = {
+  id: string;
+  provider: CandidateMicrovmProvider;
+  supportsNetworkPolicy: boolean;
+  execute(
+    input: CandidateMicrovmDriverInput
+  ): Promise<CandidateMicrovmDriverResult> | CandidateMicrovmDriverResult;
+};
+
 export type CandidateIsolationConfig =
   | {
       kind: "process";
@@ -91,14 +141,33 @@ export type CandidateIsolationConfig =
       networkPolicy?: CandidateIsolationNetworkPolicy;
       mountPolicy?: CandidateIsolationMountPolicy;
       secretPolicy?: CandidateIsolationSecretPolicy;
+    }
+  | {
+      kind: "microvm";
+      provider?: CandidateMicrovmProvider;
+      runtime?: string;
+      snapshotId?: string;
+      sandboxId?: string;
+      imageDigest?: string;
+      runtimeDigest?: string;
+      driver?: CandidateMicrovmDriver;
+      networkPolicy?: CandidateIsolationNetworkPolicy;
+      mountPolicy?: CandidateIsolationMountPolicy;
+      secretPolicy?: CandidateIsolationSecretPolicy;
     };
 
 export type CandidateHardeningMetadata = {
   requested_isolation: CandidateIsolationKind;
-  actual_isolation: CandidateIsolationKind;
+  actual_isolation: CandidateActualIsolationKind;
   runtime: {
     image?: string;
     driver?: string;
+    provider?: CandidateMicrovmProvider;
+    runtime?: string;
+    snapshot_id?: string;
+    sandbox_id?: string;
+    image_digest?: string;
+    runtime_digest?: string;
     workdir: string;
   };
   mount_policy: {
@@ -114,7 +183,8 @@ export type CandidateHardeningMetadata = {
   cleanup: {
     attempted: boolean;
     succeeded: boolean;
-    status: "not_required" | "succeeded" | "failed";
+    status: "not_required" | "succeeded" | "failed" | "timed_out";
+    timed_out?: boolean;
     error?: string;
   };
   secret_absence: {

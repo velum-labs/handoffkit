@@ -53,6 +53,9 @@
       "path": "examples/bench"
     },
     {
+      "path": "examples/microvm-isolation-bench"
+    },
+    {
       "path": "examples/seed"
     },
     {

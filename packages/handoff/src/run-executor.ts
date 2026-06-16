@@ -4,7 +4,8 @@ import type {
   BundleVerification,
   ExecutionSpec,
   ReceiptBundle,
-  RunStatus
+  RunStatus,
+  SessionIsolation
 } from "@warrant/protocol";
 import type { PlaneClient } from "@warrant/sdk";
 import type { PullResult } from "@warrant/workspace";
@@ -32,6 +33,8 @@ export type CommandHarnessConfig = {
   secrets?: string[];
   allowHosts?: string[];
   allowUntracked?: string[];
+  /** Requested session isolation for command runs. Defaults to "process". */
+  session?: SessionIsolation;
   /** Per-command wait ceiling. Defaults to 5 minutes. */
   timeoutMs?: number;
 };
@@ -61,6 +64,7 @@ export type GovernedCommandOptions = {
   timeoutMs: number;
   pullResults?: boolean;
   execution?: ExecutionSpec;
+  session?: SessionIsolation;
 };
 
 export type GovernedCommandResult = {
@@ -85,6 +89,8 @@ export type GovernedRunRecord = {
   status: RunStatus;
   exitCode?: number;
   contractHash: string;
+  /** Actual runner isolation recorded in the receipt. */
+  isolation?: SessionIsolation;
   /** Offline verification result of the receipt bundle for this command. */
   receiptVerified: boolean;
   pullMode?: PullResult["mode"];
@@ -101,6 +107,9 @@ export function toGovernedRunRecord(
     status: result.status,
     ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
     contractHash: result.receiptBundle.receipt.contractHash,
+    ...(result.receiptBundle.receipt.runner.isolation
+      ? { isolation: result.receiptBundle.receipt.runner.isolation }
+      : {}),
     receiptVerified: result.verification.ok,
     ...(result.pullResult ? { pullMode: result.pullResult.mode } : {})
   };
@@ -118,7 +127,8 @@ export async function executeGovernedCommand(
     task: options.command,
     agent: agents.command(),
     reason: options.reason,
-    execution
+    execution,
+    ...(options.session ? { session: options.session } : {})
   });
   const outcome = await run.wait({ timeoutMs: options.timeoutMs });
   if (outcome.status === "awaiting_approval") {

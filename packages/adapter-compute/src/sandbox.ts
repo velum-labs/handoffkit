@@ -10,7 +10,7 @@ import {
   toGovernedRunRecord
 } from "@warrant/handoff";
 import type { CommandHarnessConfig, GovernedRunRecord } from "@warrant/handoff";
-import type { RunStatus } from "@warrant/protocol";
+import type { RunStatus, SessionIsolation } from "@warrant/protocol";
 import { gitText, resolveInsideWorkspace } from "@warrant/workspace";
 
 /**
@@ -56,6 +56,7 @@ export type SandboxBinding = {
   context: Handoff;
   pool: string;
   timeoutMs?: number;
+  session?: SessionIsolation;
   committer?: { name: string; email: string };
 };
 
@@ -69,6 +70,7 @@ export class GovernedSandbox {
   private readonly context: Handoff;
   private readonly pool: string;
   private readonly timeoutMs: number;
+  private readonly session?: SessionIsolation;
   private readonly committer: { name: string; email: string };
   private readonly workspaceDir: string;
   private readonly records: SandboxRunRecord[] = [];
@@ -79,6 +81,7 @@ export class GovernedSandbox {
     this.context = binding.context;
     this.pool = binding.pool;
     this.timeoutMs = binding.timeoutMs ?? DEFAULT_SANDBOX_TIMEOUT_MS;
+    this.session = binding.session;
     this.committer = binding.committer ?? SANDBOX_COMMITTER;
     this.workspaceDir = binding.context.workspacePath;
     this.filesystem = {
@@ -139,7 +142,8 @@ export class GovernedSandbox {
       target: targets.pool(this.pool),
       reason: `sandbox ${this.sandboxId} command`,
       timeoutMs: this.timeoutMs,
-      pullResults: true
+      pullResults: true,
+      ...(this.session ? { session: this.session } : {})
     });
 
     this.records.push({
@@ -189,7 +193,8 @@ export function governedCompute(config: GovernedComputeConfig): GovernedCompute 
           new GovernedSandbox({
             context,
             pool: config.pool,
-            ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {})
+            ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
+            ...(config.session ? { session: config.session } : {})
           })
         );
       }
@@ -208,7 +213,7 @@ export function governedCompute(config: GovernedComputeConfig): GovernedCompute 
  */
 export function withCompute<H extends Handoff>(
   h: H,
-  options: { pool: string; timeoutMs?: number }
+  options: { pool: string; timeoutMs?: number; session?: SessionIsolation }
 ): H & { compute: GovernedCompute } {
   const compute: GovernedCompute = {
     sandbox: {
@@ -219,7 +224,8 @@ export function withCompute<H extends Handoff>(
             pool: options.pool,
             ...(options.timeoutMs !== undefined
               ? { timeoutMs: options.timeoutMs }
-              : {})
+              : {}),
+            ...(options.session ? { session: options.session } : {})
           })
         )
     }

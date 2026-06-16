@@ -171,6 +171,27 @@ importers:
         specifier: workspace:*
         version: link:../../packages/testkit
 
+  examples/microvm-isolation-bench:
+    dependencies:
+      '@vercel/sandbox':
+        specifier: 2.2.0
+        version: 2.2.0
+      '@warrant/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@warrant/ensemble':
+        specifier: workspace:*
+        version: link:../../packages/ensemble
+      '@warrant/session-vercel-sandbox':
+        specifier: workspace:*
+        version: link:../../packages/session-vercel-sandbox
+      '@warrant/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@warrant/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
+
   examples/mlx:
     dependencies:
       '@warrant/adapter-ai-sdk':

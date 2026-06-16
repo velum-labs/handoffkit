@@ -6,12 +6,16 @@ import { promisify } from "node:util";
 import { hashCanonicalSha256 } from "@warrant/protocol";
 
 import type {
+  CandidateActualIsolationKind,
   CandidateContainerDriver,
   CandidateHardeningMetadata,
   CandidateIsolationConfig,
   CandidateIsolationMountPolicy,
   CandidateIsolationNetworkPolicy,
-  CandidateIsolationSecretPolicy
+  CandidateIsolationSecretPolicy,
+  CandidateMicrovmDriver,
+  CandidateMicrovmProvider,
+  CandidateMicrovmRuntimeMetadata
 } from "./harness.js";
 
 const execFileAsync = promisify(execFile);
@@ -19,6 +23,9 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_CONTAINER_IMAGE = "node:22";
 const DEFAULT_CONTAINER_ENGINE = "docker";
 const DEFAULT_CONTAINER_WORKDIR = "/workspace";
+const DEFAULT_MICROVM_PROVIDER: CandidateMicrovmProvider = "vercel-sandbox";
+const DEFAULT_MICROVM_RUNTIME = "node24";
+const UNKNOWN_RUNTIME_DIGEST = "unknown";
 const DEFAULT_IGNORED_DIRS = [".git", "node_modules", ".warrant"];
 const DEFAULT_MAX_SCAN_BYTES = 256 * 1024;
 
@@ -37,15 +44,35 @@ export type CandidateCommandIsolationResult = {
   hardening: CandidateHardeningMetadata;
 };
 
-type NormalizedIsolation = {
-  kind: "process" | "container";
-  image?: string;
-  engine?: "docker" | "podman";
-  driver?: CandidateContainerDriver;
-  networkPolicy: Required<CandidateIsolationNetworkPolicy>;
-  mountPolicy: Required<CandidateIsolationMountPolicy>;
-  secretPolicy: Required<CandidateIsolationSecretPolicy>;
-};
+type NormalizedIsolation =
+  | {
+      kind: "process";
+      networkPolicy: Required<CandidateIsolationNetworkPolicy>;
+      mountPolicy: Required<CandidateIsolationMountPolicy>;
+      secretPolicy: Required<CandidateIsolationSecretPolicy>;
+    }
+  | {
+      kind: "container";
+      image: string;
+      engine: "docker" | "podman";
+      driver?: CandidateContainerDriver;
+      networkPolicy: Required<CandidateIsolationNetworkPolicy>;
+      mountPolicy: Required<CandidateIsolationMountPolicy>;
+      secretPolicy: Required<CandidateIsolationSecretPolicy>;
+    }
+  | {
+      kind: "microvm";
+      provider: CandidateMicrovmProvider;
+      runtime: string;
+      snapshotId?: string;
+      sandboxId?: string;
+      imageDigest?: string;
+      runtimeDigest?: string;
+      driver?: CandidateMicrovmDriver;
+      networkPolicy: Required<CandidateIsolationNetworkPolicy>;
+      mountPolicy: Required<CandidateIsolationMountPolicy>;
+      secretPolicy: Required<CandidateIsolationSecretPolicy>;
+    };
 
 type CommandResult = {
   stdout: string;
@@ -58,10 +85,16 @@ export async function runCandidateCommandWithIsolation(
   input: CandidateCommandIsolationInput
 ): Promise<CandidateCommandIsolationResult> {
   const isolation = normalizeIsolation(input.isolation);
-  if (isolation.kind === "container") {
-    return runContainerCommand(input, isolation);
+  switch (isolation.kind) {
+    case "process":
+      return runProcessCommand(input, isolation);
+    case "container":
+      return runContainerCommand(input, isolation);
+    case "microvm":
+      return runMicrovmCommand(input, isolation);
+    default:
+      return assertNever(isolation);
   }
-  return runProcessCommand(input, isolation);
 }
 
 export function createCliContainerDriver(
@@ -163,7 +196,7 @@ async function runProcessCommand(
 
 async function runContainerCommand(
   input: CandidateCommandIsolationInput,
-  isolation: NormalizedIsolation
+  isolation: Extract<NormalizedIsolation, { kind: "container" }>
 ): Promise<CandidateCommandIsolationResult> {
   const driver =
     isolation.driver ?? createCliContainerDriver(isolation.engine ?? DEFAULT_CONTAINER_ENGINE);
@@ -259,6 +292,129 @@ async function runContainerCommand(
   };
 }
 
+async function runMicrovmCommand(
+  input: CandidateCommandIsolationInput,
+  isolation: Extract<NormalizedIsolation, { kind: "microvm" }>
+): Promise<CandidateCommandIsolationResult> {
+  const driver = isolation.driver;
+  if (driver === undefined) {
+    const stderr = "microVM isolation requires an execution driver";
+    return {
+      stdout: "",
+      stderr,
+      exitCode: 1,
+      timedOut: false,
+      hardening: hardeningMetadata({
+        requestedIsolation: "microvm",
+        actualIsolation: "process",
+        isolation,
+        runtimeFields: microvmRuntimeFields(isolation),
+        secretAbsence: secretAbsenceMetadata({
+          cwd: input.cwd,
+          transcript: stderr,
+          secretPolicy: isolation.secretPolicy,
+          ignoredDirs: isolation.mountPolicy.ignoredDirs
+        }),
+        networkEnforced: false,
+        cleanup: {
+          attempted: false,
+          succeeded: true
+        }
+      })
+    };
+  }
+
+  if (
+    isolation.networkPolicy.enforce &&
+    isolation.networkPolicy.defaultDeny &&
+    isolation.networkPolicy.allowHosts.length > 0 &&
+    !driver.supportsNetworkPolicy
+  ) {
+    const stderr = "microVM driver cannot enforce host allowlist network policy";
+    return {
+      stdout: "",
+      stderr,
+      exitCode: 1,
+      timedOut: false,
+      hardening: hardeningMetadata({
+        requestedIsolation: "microvm",
+        actualIsolation: actualMicrovmIsolation(driver.provider),
+        isolation,
+        driverId: driver.id,
+        runtimeFields: microvmRuntimeFields(isolation, driver),
+        secretAbsence: secretAbsenceMetadata({
+          cwd: input.cwd,
+          transcript: stderr,
+          secretPolicy: isolation.secretPolicy,
+          ignoredDirs: isolation.mountPolicy.ignoredDirs
+        }),
+        networkEnforced: true,
+        cleanup: {
+          attempted: true,
+          succeeded: false,
+          error: "network policy unsupported"
+        }
+      })
+    };
+  }
+
+  let result: Awaited<ReturnType<CandidateMicrovmDriver["execute"]>>;
+  try {
+    result = await driver.execute({
+      command: input.command,
+      cwd: input.cwd,
+      timeoutMs: input.timeoutMs,
+      provider: isolation.provider,
+      runtime: isolation.runtime,
+      snapshotId: isolation.snapshotId,
+      workdir: isolation.mountPolicy.workdir,
+      mountPolicy: isolation.mountPolicy,
+      networkPolicy: isolation.networkPolicy,
+      secretPolicy: isolation.secretPolicy
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    result = {
+      stdout: "",
+      stderr: message,
+      exitCode: 1,
+      timedOut: false,
+      actualIsolation: actualMicrovmIsolation(driver.provider),
+      cleanup: {
+        attempted: true,
+        succeeded: false,
+        error: message
+      }
+    };
+  }
+
+  const transcript = [result.stdout, result.stderr].filter(Boolean).join("\n");
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    timedOut: result.timedOut ?? false,
+    hardening: hardeningMetadata({
+      requestedIsolation: "microvm",
+      actualIsolation: result.actualIsolation ?? actualMicrovmIsolation(driver.provider),
+      isolation,
+      driverId: driver.id,
+      runtimeFields: microvmRuntimeFields(isolation, driver, result.runtime),
+      secretAbsence: secretAbsenceMetadata({
+        cwd: input.cwd,
+        transcript,
+        secretPolicy: isolation.secretPolicy,
+        ignoredDirs: isolation.mountPolicy.ignoredDirs
+      }),
+      networkEnforced: isolation.networkPolicy.enforce && driver.supportsNetworkPolicy,
+      cleanup: result.cleanup ?? {
+        attempted: true,
+        succeeded: true
+      }
+    })
+  };
+}
+
 async function runHostCommand(
   command: string,
   args: string[],
@@ -313,6 +469,21 @@ function normalizeIsolation(
       secretPolicy
     };
   }
+  if (isolation?.kind === "microvm") {
+    return {
+      kind: "microvm",
+      provider: isolation.provider ?? DEFAULT_MICROVM_PROVIDER,
+      runtime: isolation.runtime ?? DEFAULT_MICROVM_RUNTIME,
+      snapshotId: isolation.snapshotId,
+      sandboxId: isolation.sandboxId,
+      imageDigest: isolation.imageDigest,
+      runtimeDigest: isolation.runtimeDigest ?? UNKNOWN_RUNTIME_DIGEST,
+      driver: isolation.driver,
+      mountPolicy,
+      networkPolicy,
+      secretPolicy
+    };
+  }
   return {
     kind: "process",
     mountPolicy,
@@ -353,16 +524,18 @@ function normalizeSecretPolicy(
 }
 
 function hardeningMetadata(input: {
-  requestedIsolation: "process" | "container";
-  actualIsolation: "process" | "container";
+  requestedIsolation: CandidateIsolationConfig["kind"];
+  actualIsolation: CandidateActualIsolationKind;
   isolation: NormalizedIsolation;
   image?: string;
   driverId?: string;
+  runtimeFields?: Partial<Omit<CandidateHardeningMetadata["runtime"], "workdir">>;
   secretAbsence: CandidateHardeningMetadata["secret_absence"];
   networkEnforced: boolean;
   cleanup: {
     attempted: boolean;
     succeeded: boolean;
+    timedOut?: boolean;
     error?: string;
   };
 }): CandidateHardeningMetadata {
@@ -370,6 +543,7 @@ function hardeningMetadata(input: {
     requested_isolation: input.requestedIsolation,
     actual_isolation: input.actualIsolation,
     runtime: {
+      ...(input.runtimeFields ?? {}),
       ...(input.image !== undefined ? { image: input.image } : {}),
       ...(input.driverId !== undefined ? { driver: input.driverId } : {}),
       workdir: input.isolation.mountPolicy.workdir
@@ -387,15 +561,54 @@ function hardeningMetadata(input: {
     cleanup: {
       attempted: input.cleanup.attempted,
       succeeded: input.cleanup.succeeded,
-      status: input.cleanup.attempted
-        ? input.cleanup.succeeded
-          ? "succeeded"
-          : "failed"
-        : "not_required",
+      status: cleanupStatus(input.cleanup),
+      ...(input.cleanup.timedOut === true ? { timed_out: true } : {}),
       ...(input.cleanup.error !== undefined ? { error: input.cleanup.error } : {})
     },
     secret_absence: input.secretAbsence
   };
+}
+
+function cleanupStatus(input: {
+  attempted: boolean;
+  succeeded: boolean;
+  timedOut?: boolean;
+}): CandidateHardeningMetadata["cleanup"]["status"] {
+  if (!input.attempted) return "not_required";
+  if (input.succeeded) return "succeeded";
+  if (input.timedOut === true) return "timed_out";
+  return "failed";
+}
+
+function actualMicrovmIsolation(
+  provider: CandidateMicrovmProvider
+): Extract<CandidateActualIsolationKind, "microvm" | "vercel-sandbox"> {
+  return provider === "vercel-sandbox" ? "vercel-sandbox" : "microvm";
+}
+
+function microvmRuntimeFields(
+  isolation: Extract<NormalizedIsolation, { kind: "microvm" }>,
+  driver?: CandidateMicrovmDriver,
+  runtime?: CandidateMicrovmRuntimeMetadata
+): Partial<Omit<CandidateHardeningMetadata["runtime"], "workdir">> {
+  return {
+    provider: runtime?.provider ?? driver?.provider ?? isolation.provider,
+    runtime: runtime?.runtime ?? isolation.runtime,
+    ...(runtime?.snapshotId ?? isolation.snapshotId
+      ? { snapshot_id: runtime?.snapshotId ?? isolation.snapshotId }
+      : {}),
+    ...(runtime?.sandboxId ?? isolation.sandboxId
+      ? { sandbox_id: runtime?.sandboxId ?? isolation.sandboxId }
+      : {}),
+    ...(runtime?.imageDigest ?? isolation.imageDigest
+      ? { image_digest: runtime?.imageDigest ?? isolation.imageDigest }
+      : {}),
+    runtime_digest: runtime?.runtimeDigest ?? isolation.runtimeDigest ?? UNKNOWN_RUNTIME_DIGEST
+  };
+}
+
+function assertNever(value: never): never {
+  throw new Error(`unsupported candidate isolation kind: ${String(value)}`);
 }
 
 function listScannableFiles(

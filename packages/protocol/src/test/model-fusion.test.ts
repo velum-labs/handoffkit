@@ -143,6 +143,54 @@ test("model-fusion validators reject unsupported fields", () => {
   );
 });
 
+test("harness candidate metadata accepts nested microVM hardening evidence", () => {
+  const candidate = readFixture("harness-candidate-record.v1", "minimal") as Record<
+    string,
+    unknown
+  >;
+  const withHardeningMetadata = {
+    ...candidate,
+    metadata: {
+      hardening: {
+        requested_isolation: "microvm",
+        actual_isolation: "vercel-sandbox",
+        provider: "vercel-sandbox",
+        runtime: {
+          engine: "firecracker",
+          node_version: "22.x"
+        },
+        sandbox: {
+          sandbox_id: "sbx_microvm_fixture",
+          snapshot_id: "snap_microvm_fixture",
+          persistent: false
+        },
+        network: {
+          default_deny: true,
+          allowed_hosts: []
+        },
+        cleanup: {
+          status: "succeeded",
+          duration_ms: 17
+        },
+        secrets: {
+          mounted: false
+        }
+      }
+    }
+  };
+
+  assertHarnessCandidateRecordV1(withHardeningMetadata);
+  assertModelFusionRecord(withHardeningMetadata);
+  assert.throws(
+    () =>
+      assertHarnessCandidateRecordV1({
+        ...candidate,
+        microvm: withHardeningMetadata.metadata
+      }),
+    /unsupported field/
+  );
+});
+
 test("model-fusion hash helpers return sha256-prefixed hashes", () => {
   assert.match(sha256PrefixedHex("hello"), /^sha256:[0-9a-f]{64}$/);
   assert.match(artifactHash(Buffer.from("artifact")), /^sha256:[0-9a-f]{64}$/);

@@ -29,6 +29,7 @@ import { runEnsemble } from "../run.js";
 import type {
   CandidateContainerDriver,
   CandidateHardeningMetadata,
+  CandidateMicrovmDriver,
   EnsembleDescriptor,
   HarnessAdapter
 } from "../harness.js";
@@ -214,6 +215,79 @@ test("command adapter records optional container hardening metadata", async () =
     (result.harnessRunRequest.metadata?.hardening as { requested_isolation?: string })
       .requested_isolation,
     "container"
+  );
+  assert.equal(
+    (result.harnessRunResult.metadata?.hardening as { cleanup_succeeded?: number })
+      .cleanup_succeeded,
+    1
+  );
+});
+
+test("command adapter records optional microVM hardening metadata", async () => {
+  const driver: CandidateMicrovmDriver = {
+    id: "fake-ensemble-microvm",
+    provider: "vercel-sandbox",
+    supportsNetworkPolicy: true,
+    execute(input) {
+      assert.equal(input.provider, "vercel-sandbox");
+      assert.equal(input.runtime, "node24");
+      assert.equal(input.snapshotId, "snap_ensemble");
+      return {
+        stdout: "microvm-hardening",
+        stderr: "",
+        exitCode: 0,
+        actualIsolation: "vercel-sandbox",
+        runtime: {
+          provider: "vercel-sandbox",
+          runtime: "node24",
+          snapshotId: "snap_ensemble",
+          sandboxId: "sbx_ensemble",
+          runtimeDigest: "sha256:" + "d".repeat(64)
+        },
+        cleanup: { attempted: true, succeeded: true }
+      };
+    }
+  };
+  const result = await runEnsemble(
+    descriptor({
+      models: [{ id: "command", model: "local-shell" }],
+      runtime: {
+        id: "local",
+        isolation: {
+          kind: "microvm",
+          provider: "vercel-sandbox",
+          runtime: "node24",
+          snapshotId: "snap_ensemble",
+          driver,
+          networkPolicy: { defaultDeny: true, allowHosts: [], enforce: true },
+          secretPolicy: {
+            secretNames: ["VERCEL_TOKEN"],
+            secretValueHashes: ["sha256:" + "e".repeat(64)],
+            injectedEnvNames: ["VERCEL_TOKEN"]
+          }
+        }
+      },
+      harness: createCommandHarness({
+        command: "printf microvm-hardening"
+      })
+    })
+  );
+
+  const metadata = result.candidates[0]?.metadata as
+    | { hardening?: CandidateHardeningMetadata }
+    | undefined;
+  assert.equal(metadata?.hardening?.requested_isolation, "microvm");
+  assert.equal(metadata?.hardening?.actual_isolation, "vercel-sandbox");
+  assert.equal(metadata?.hardening?.runtime.provider, "vercel-sandbox");
+  assert.equal(metadata?.hardening?.runtime.snapshot_id, "snap_ensemble");
+  assert.equal(metadata?.hardening?.runtime.sandbox_id, "sbx_ensemble");
+  assert.equal(metadata?.hardening?.runtime.driver, "fake-ensemble-microvm");
+  assert.equal(metadata?.hardening?.cleanup.status, "succeeded");
+  assert.equal(result.summary?.candidates[0]?.hardening?.actual_isolation, "vercel-sandbox");
+  assert.equal(
+    (result.harnessRunRequest.metadata?.hardening as { requested_isolation?: string })
+      .requested_isolation,
+    "microvm"
   );
   assert.equal(
     (result.harnessRunResult.metadata?.hardening as { cleanup_succeeded?: number })

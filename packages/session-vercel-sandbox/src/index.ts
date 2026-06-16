@@ -34,6 +34,49 @@ import { parseWorkspaceRelativePath, resolveInsideWorkspace } from "@warrant/wor
 import { Sandbox } from "@vercel/sandbox";
 import type { NetworkPolicy as VercelNetworkPolicy } from "@vercel/sandbox";
 
+export type VercelSandboxSource =
+  | { type: "git"; url: string; depth?: number; revision?: string }
+  | {
+      type: "git";
+      url: string;
+      username: string;
+      password: string;
+      depth?: number;
+      revision?: string;
+    }
+  | { type: "tarball"; url: string }
+  | { type: "snapshot"; snapshotId: string };
+
+export type VercelSandboxResources = {
+  vcpus: number;
+};
+
+type VercelSandboxCreateBase = {
+  token: string;
+  teamId?: string;
+  projectId?: string;
+  timeout: number;
+  networkPolicy: VercelNetworkPolicy;
+  persistent: boolean;
+  resources?: VercelSandboxResources;
+  tags?: Record<string, string>;
+};
+
+export type VercelSandboxCreateInput =
+  | (VercelSandboxCreateBase & {
+      runtime: string;
+      source?: Exclude<VercelSandboxSource, { type: "snapshot" }>;
+    })
+  | (VercelSandboxCreateBase & {
+      source: Extract<VercelSandboxSource, { type: "snapshot" }>;
+    });
+
+export type VercelSandboxInstance = Awaited<ReturnType<typeof Sandbox.create>>;
+
+export type VercelSandboxFactory = (
+  input: VercelSandboxCreateInput
+) => Promise<VercelSandboxInstance>;
+
 export type VercelSandboxOptions = {
   /** Sandbox runtime image. Defaults to node22. */
   runtime?: string;
@@ -43,6 +86,18 @@ export type VercelSandboxOptions = {
   token?: string;
   teamId?: string;
   projectId?: string;
+  /** Initial sandbox source. Supports git, tarball, and snapshot sources. */
+  source?: VercelSandboxSource;
+  /** Convenience for `source: { type: "snapshot", snapshotId }`. */
+  sourceSnapshotId?: string;
+  /** Whether the sandbox should auto-snapshot on stop. Defaults to false. */
+  persistent?: boolean;
+  /** Sandbox tags passed to Vercel. */
+  tags?: Record<string, string>;
+  /** Resource allocation passed to Vercel. */
+  resources?: VercelSandboxResources;
+  /** Test/extension seam for creating sandboxes without live credentials. */
+  createSandbox?: VercelSandboxFactory;
 };
 
 /**
@@ -52,11 +107,89 @@ export type VercelSandboxOptions = {
  * the task needs them. Backends with runtime-specific state directories
  * extend this set at the call site.
  */
-export const SANDBOX_IGNORED_DIRS: ReadonlySet<string> = new Set([".git", "node_modules"]);
+export const SANDBOX_IGNORED_DIRS: ReadonlySet<string> = new Set([
+  ".git",
+  "node_modules",
+  ".warrant"
+]);
 
 /** Defaults for the microVM; both are overridable via VercelSandboxOptions. */
 const DEFAULT_WORKDIR = "/warrant/workspace";
 const DEFAULT_RUNTIME = "node22";
+
+function defaultCreateSandbox(
+  input: VercelSandboxCreateInput
+): Promise<VercelSandboxInstance> {
+  return Sandbox.create(input);
+}
+
+function normalizeSandboxWorkdir(workdir: string): string {
+  if (!workdir.startsWith("/") || workdir.includes("\0")) {
+    throw new CapabilityMismatchError(
+      `vercel sandbox workdir must be an absolute VM path: ${workdir}`
+    );
+  }
+  if (workdir.split("/").includes("..")) {
+    throw new CapabilityMismatchError(
+      `vercel sandbox workdir must not contain '..': ${workdir}`
+    );
+  }
+  return workdir.replace(/\/+$/, "") || "/";
+}
+
+function posixJoin(base: string, rel: string): string {
+  const normalizedRel = rel.split("\\").join("/");
+  if (base === "/") return `/${normalizedRel}`;
+  return `${base}/${normalizedRel}`;
+}
+
+function sandboxCwd(workdir: string, cwd: string): string {
+  if (cwd === "." || cwd === "./") return workdir;
+  const safeRel = parseWorkspaceRelativePath(cwd);
+  return posixJoin(workdir, safeRel);
+}
+
+function sandboxSource(options: VercelSandboxOptions): VercelSandboxSource | undefined {
+  if (options.source !== undefined && options.sourceSnapshotId !== undefined) {
+    throw new CapabilityMismatchError(
+      "vercel sandbox options must not set both source and sourceSnapshotId"
+    );
+  }
+  if (options.source !== undefined) return options.source;
+  if (options.sourceSnapshotId !== undefined) {
+    return { type: "snapshot", snapshotId: options.sourceSnapshotId };
+  }
+  return undefined;
+}
+
+function sandboxCreateInput(input: {
+  credentials: ReturnType<typeof vercelCredentialsFromEnv>;
+  runtime: string;
+  timeoutMs: number;
+  networkPolicy: VercelNetworkPolicy;
+  options: VercelSandboxOptions;
+}): VercelSandboxCreateInput {
+  const { credentials, runtime, timeoutMs, networkPolicy, options } = input;
+  const base: VercelSandboxCreateBase = {
+    ...credentials,
+    timeout: timeoutMs,
+    networkPolicy,
+    persistent: options.persistent ?? false,
+    ...(options.resources !== undefined ? { resources: options.resources } : {}),
+    ...(options.tags !== undefined ? { tags: options.tags } : {})
+  };
+  const source = sandboxSource(options);
+  if (source?.type === "snapshot") {
+    // @vercel/sandbox@2.2.0 snapshot sources inherit their runtime from the
+    // snapshot and reject `runtime` on the same create call.
+    return { ...base, source };
+  }
+  return {
+    ...base,
+    runtime,
+    ...(source !== undefined ? { source } : {})
+  };
+}
 
 /**
  * Quote a value for POSIX sh: single quotes, with embedded single quotes
@@ -161,22 +294,26 @@ export class VercelSandboxBackend implements SessionBackend {
   async execute(input: SessionExecution): Promise<SessionBackendResult> {
     const { contract, repoDir, secrets, execution, emit } = input;
     const creds = vercelCredentialsFromEnv(this.options);
-    const workdir = this.options.workdir ?? DEFAULT_WORKDIR;
+    const workdir = normalizeSandboxWorkdir(this.options.workdir ?? DEFAULT_WORKDIR);
+    const cwd = sandboxCwd(workdir, execution.cwd);
     const runtime = this.options.runtime ?? DEFAULT_RUNTIME;
+    const createSandbox = this.options.createSandbox ?? defaultCreateSandbox;
 
-    const sandbox = await Sandbox.create({
-      ...creds,
+    const sandbox = await createSandbox(sandboxCreateInput({
+      credentials: creds,
       runtime,
-      timeout: execution.timeoutMs,
-      networkPolicy: toVercelNetwork(contract.network)
-    });
+      timeoutMs: execution.timeoutMs,
+      networkPolicy: toVercelNetwork(contract.network),
+      options: this.options
+    }));
 
     try {
+      await sandbox.fs.mkdir(workdir, { recursive: true });
       const inputFiles = listWorkspaceFiles(repoDir);
       if (inputFiles.length > 0) {
         await sandbox.writeFiles(
           inputFiles.map((rel) => ({
-            path: join(workdir, rel),
+            path: posixJoin(workdir, rel),
             content: readFileSync(join(repoDir, rel))
           }))
         );
@@ -194,7 +331,7 @@ export class VercelSandboxBackend implements SessionBackend {
           : `${shellQuote(execution.cmd)} ${execution.args.map(shellQuote).join(" ")}`;
       const result = await sandbox.runCommand("sh", [
         "-c",
-        `cd ${shellQuote(workdir)} && ${envPrefix}${script}`
+        `cd ${shellQuote(cwd)} && ${envPrefix}${script}`
       ]);
 
       emit({

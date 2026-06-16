@@ -1,0 +1,16 @@
+{
+  "name": "@warrant/example-microvm-isolation-bench",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MicroVM isolation migration benchmark: CI-safe local measurements plus optional live Vercel Sandbox timing.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@vercel/sandbox": "2.2.0",
+    "@warrant/adapter-compute": "workspace:*",
+    "@warrant/ensemble": "workspace:*",
+    "@warrant/session-vercel-sandbox": "workspace:*",
+    "@warrant/testkit": "workspace:*",
+    "@warrant/workspace": "workspace:*"
+  }
+}

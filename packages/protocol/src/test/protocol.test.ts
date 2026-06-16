@@ -11,7 +11,7 @@ import {
   signData,
   verifyData
 } from "../keys.js";
-import { signReceipt, verifyRunnerReceipt } from "../receipt.js";
+import { signReceipt, verifyReceiptBundle, verifyRunnerReceipt } from "../receipt.js";
 import { buildReceiptStory } from "../receipt-story.js";
 import {
   AGENT_KINDS,
@@ -22,7 +22,7 @@ import {
   RUN_STATUSES,
   SESSION_ISOLATIONS
 } from "../index.js";
-import type { ChainedEvent, Receipt, RunContract } from "../types.js";
+import type { ChainedEvent, Receipt, ReceiptBundle, RunContract } from "../types.js";
 
 test("canonicalize sorts keys and is whitespace-free", () => {
   const value = { b: 2, a: { d: [1, 2, { z: true, y: null }], c: "x" } };
@@ -109,10 +109,14 @@ test("protocol validators reject unsafe workspace paths and secret names", () =>
   assert.throws(() => parseSecretName("bad-name"));
 });
 
-function receiptFixture(): {
+function receiptFixture(
+  isolation: NonNullable<Receipt["runner"]["isolation"]> = "process"
+): {
   contract: RunContract;
   receipt: Receipt;
   events: ChainedEvent[];
+  planePrivateKeyPem: string;
+  planePublicKeyPem: string;
   runnerPublicKeyPem: string;
 } {
   const plane = generateEd25519KeyPair();
@@ -167,7 +171,7 @@ function receiptFixture(): {
         keyId: keyIdFromPublicPem(runner.publicKeyPem),
         pool: "default",
         attestationTier: "standard",
-        isolation: "process"
+        isolation
       },
       startedAt: "2026-06-11T00:00:00.000Z",
       endedAt: "2026-06-11T00:00:01.000Z",
@@ -195,7 +199,14 @@ function receiptFixture(): {
     runner.publicKeyPem,
     "runner"
   );
-  return { contract, receipt, events, runnerPublicKeyPem: runner.publicKeyPem };
+  return {
+    contract,
+    receipt,
+    events,
+    planePrivateKeyPem: plane.privateKeyPem,
+    planePublicKeyPem: plane.publicKeyPem,
+    runnerPublicKeyPem: runner.publicKeyPem
+  };
 }
 
 test("verifyRunnerReceipt checks pre-countersign receipt evidence", () => {
@@ -238,4 +249,29 @@ test("receipt story is the canonical CLI/UI summary model", () => {
   assert.equal(story.status, "completed");
   assert.equal(story.agent, "command");
   assert.deepEqual(story.secrets, ["API_TOKEN (pool:default)"]);
+});
+
+test("vercel-sandbox receipts verify offline and render through receipt story", () => {
+  const fixture = receiptFixture("vercel-sandbox");
+  const receipt = signReceipt(
+    fixture.receipt,
+    fixture.planePrivateKeyPem,
+    fixture.planePublicKeyPem,
+    "plane"
+  );
+  const bundle: ReceiptBundle = {
+    version: "warrant.bundle.v1",
+    contract: fixture.contract,
+    receipt,
+    events: fixture.events,
+    keys: {
+      planePublicKeyPem: fixture.planePublicKeyPem,
+      runnerPublicKeyPem: fixture.runnerPublicKeyPem
+    }
+  };
+
+  assert.deepEqual(verifyReceiptBundle(bundle), { ok: true, problems: [] });
+
+  const story = buildReceiptStory(bundle);
+  assert.equal(story.isolation, "vercel-sandbox");
 });

@@ -106,6 +106,10 @@
       "purpose": "performance budgets from spec section 8.4 (pnpm bench)"
     },
     {
+      "directory": "microvm-isolation-bench",
+      "purpose": "ENG-596 microVM isolation migration measurements (pnpm microvm:bench)"
+    },
+    {
       "directory": "mlx",
       "purpose": "Apple Silicon managed-MLX smoke and stress tools (pnpm mlx, pnpm mlx:stress)"
     },

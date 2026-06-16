@@ -40,6 +40,12 @@ const SCHEMA_BUNDLE_HASH =
 const PRODUCER_GIT_SHA = "0".repeat(40);
 const PRODUCER = "handoffkit-ensemble";
 const PRODUCER_VERSION = "0.1.0";
+const DEFAULT_CONTAINER_IMAGE = "node:22";
+const DEFAULT_CONTAINER_ENGINE = "docker";
+const DEFAULT_CONTAINER_WORKDIR = "/workspace";
+const DEFAULT_MICROVM_PROVIDER = "vercel-sandbox";
+const DEFAULT_MICROVM_RUNTIME = "node24";
+const UNKNOWN_RUNTIME_DIGEST = "unknown";
 
 type ContractMetadataInput<S extends string> = {
   schema: S;
@@ -242,20 +248,34 @@ function outputSummary(outputs: readonly HarnessCandidateOutput[], harnessId: st
 
 function runtimeHardeningMetadata(descriptor: EnsembleDescriptor): Record<string, JsonValue> {
   const isolation = descriptor.runtime.isolation;
-  return {
+  const base: Record<string, JsonValue> = {
     requested_isolation: isolation?.kind ?? "process",
     runtime_id: descriptor.runtime.id,
     ...(descriptor.runtime.environmentId !== undefined
       ? { environment_id: descriptor.runtime.environmentId }
-      : {}),
-    ...(isolation?.kind === "container"
-      ? {
-          image: isolation.image ?? "node:22",
-          engine: isolation.engine ?? "docker",
-          driver: isolation.driver?.id ?? isolation.engine ?? "docker"
-        }
       : {})
   };
+  if (isolation?.kind === "container") {
+    return {
+      ...base,
+      image: isolation.image ?? DEFAULT_CONTAINER_IMAGE,
+      engine: isolation.engine ?? DEFAULT_CONTAINER_ENGINE,
+      driver: isolation.driver?.id ?? isolation.engine ?? DEFAULT_CONTAINER_ENGINE
+    };
+  }
+  if (isolation?.kind === "microvm") {
+    return {
+      ...base,
+      provider: isolation.provider ?? DEFAULT_MICROVM_PROVIDER,
+      runtime: isolation.runtime ?? DEFAULT_MICROVM_RUNTIME,
+      driver: isolation.driver?.id ?? `${isolation.provider ?? DEFAULT_MICROVM_PROVIDER}-driver`,
+      ...(isolation.snapshotId !== undefined ? { snapshot_id: isolation.snapshotId } : {}),
+      ...(isolation.sandboxId !== undefined ? { sandbox_id: isolation.sandboxId } : {}),
+      ...(isolation.imageDigest !== undefined ? { image_digest: isolation.imageDigest } : {}),
+      runtime_digest: isolation.runtimeDigest ?? UNKNOWN_RUNTIME_DIGEST
+    };
+  }
+  return base;
 }
 
 function fallbackCandidateHardening(descriptor: EnsembleDescriptor): CandidateHardeningMetadata {
@@ -267,8 +287,20 @@ function fallbackCandidateHardening(descriptor: EnsembleDescriptor): CandidateHa
     requested_isolation: isolation?.kind ?? "process",
     actual_isolation: "process",
     runtime: {
-      ...(isolation?.kind === "container" ? { image: isolation.image ?? "node:22" } : {}),
-      workdir: mountPolicy?.workdir ?? "/workspace"
+      ...(isolation?.kind === "container"
+        ? { image: isolation.image ?? DEFAULT_CONTAINER_IMAGE }
+        : {}),
+      ...(isolation?.kind === "microvm"
+        ? {
+            provider: isolation.provider ?? DEFAULT_MICROVM_PROVIDER,
+            runtime: isolation.runtime ?? DEFAULT_MICROVM_RUNTIME,
+            ...(isolation.snapshotId !== undefined ? { snapshot_id: isolation.snapshotId } : {}),
+            ...(isolation.sandboxId !== undefined ? { sandbox_id: isolation.sandboxId } : {}),
+            ...(isolation.imageDigest !== undefined ? { image_digest: isolation.imageDigest } : {}),
+            runtime_digest: isolation.runtimeDigest ?? UNKNOWN_RUNTIME_DIGEST
+          }
+        : {}),
+      workdir: mountPolicy?.workdir ?? DEFAULT_CONTAINER_WORKDIR
     },
     mount_policy: {
       worktree_writable: mountPolicy?.worktreeWritable ?? true,

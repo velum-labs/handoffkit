@@ -349,6 +349,23 @@ How the runner isolates the agent session is pluggable, requested per run (`--is
 warrant run --agent command --isolation hermetic "awk -F, 'NR>1{s+=$2}END{print s}' orders.csv > total.txt"
 ```
 
+Compute callers can request the same tier without changing the ComputeSDK-shaped
+surface. Each `runCommand` is still a governed command with a receipt:
+
+```ts
+import { governedCompute } from "@warrant/adapter-compute";
+
+const compute = governedCompute({
+  workspace: ".",
+  plane,
+  pool: "microvm",
+  session: "vercel-sandbox"
+});
+const sandbox = await compute.sandbox.create();
+await sandbox.runCommand("npm test");
+sandbox.runs(); // [{ isolation: "vercel-sandbox", receiptVerified: true, ... }]
+```
+
 The two stronger backends are injected into the runner so the trust-critical kernel stays dependency-free:
 
 ```ts
@@ -416,6 +433,23 @@ Operational notes:
 
 - Set `WARRANT_MASTER_KEY` (e.g. `openssl rand -hex 32`) in any real deployment; the same value must be present wherever the plane or a CLI loads the home (the runner shares it to read the home config). `docker compose` injects a labeled dev default you should override.
 - Performance budgets from spec section 8.4 are asserted by `pnpm bench` (corpus size via `WARRANT_BENCH_FILES`).
+- MicroVM migration measurements are asserted separately by `pnpm microvm:bench`.
+  The default command is CI-safe and skips live Vercel Sandbox sections:
+
+  ```sh
+  pnpm build
+  WARRANT_MICROVM_LIVE=0 pnpm microvm:bench
+  ```
+
+  Live measurements are opt-in and require Vercel credentials. Set
+  `WARRANT_MICROVM_SNAPSHOT_ID` to measure the warm snapshot path:
+
+  ```sh
+  pnpm build
+  WARRANT_MICROVM_LIVE=1 pnpm microvm:bench
+  WARRANT_MICROVM_LIVE=1 WARRANT_MICROVM_SNAPSHOT_ID=snap_... pnpm microvm:bench
+  ```
+
 - Manage principals and enrollment from the CLI/API: `POST /v1/principals`, `POST /v1/enroll-tokens`, `GET /v1/metrics`.
 
 What remains explicitly out of scope: true multi-node HA (the `PlaneStore` interface is the seam for a Postgres adapter), real TEE attestation (still labeled `mock`), and a full OIDC login UI (only IdP assertion verification is implemented).
@@ -457,6 +491,7 @@ pnpm test            # unit + integration: protocol, policy, workspace, plane AP
                      # sealing, retention), planner, handoff e2e, CLI e2e, examples
 pnpm demo all        # the standalone examples double as an executable acceptance suite
 pnpm bench           # asserts the spec section 8.4 performance budgets
+pnpm microvm:bench   # CI-safe microVM migration benchmark; live Vercel sections opt in
 ```
 
 CI runs the suite, the standalone examples, the performance benchmark, and a Docker Compose smoke test (build, boot, seed, hit the API, readiness, metrics, and control panel).
@@ -464,6 +499,7 @@ CI runs the suite, the standalone examples, the performance benchmark, and a Doc
 ## Current artifacts
 
 - [Governed agent execution plane spec](spec/2026-06-11-governed-agent-execution-plane-spec.md)
+- [ENG-596 microVM design spike and migration plan](spec/2026-06-16-eng-596-microvm-design-spike.md)
 
 ## Superseded
 
