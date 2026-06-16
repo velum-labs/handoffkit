@@ -18,6 +18,7 @@ import {
   assertToolCallPlanV1,
   assertToolExecutionRecordV1,
   hashCanonicalSha256,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   MODEL_FUSION_SCHEMA_NAMES,
   requestHash,
   responseHash,
@@ -71,6 +72,16 @@ function readFixture(schema: SchemaName, variant: "minimal" | "realistic"): unkn
 
 test("model-fusion schema constants include the MF-02 record set", () => {
   assert.deepEqual([...MODEL_FUSION_SCHEMA_NAMES], [...SCHEMAS]);
+});
+
+test("model-fusion fixtures carry the exported schema bundle hash", () => {
+  assert.match(MODEL_FUSION_SCHEMA_BUNDLE_HASH, /^sha256:[0-9a-f]{64}$/);
+  for (const schema of SCHEMAS) {
+    for (const variant of ["minimal", "realistic"] as const) {
+      const fixture = readFixture(schema, variant) as { schema_bundle_hash?: string };
+      assert.equal(fixture.schema_bundle_hash, MODEL_FUSION_SCHEMA_BUNDLE_HASH);
+    }
+  }
 });
 
 test("specific validators accept copied MF-00 minimal and realistic fixtures", () => {

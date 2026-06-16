@@ -7,6 +7,7 @@ import { test } from "node:test";
 
 import {
   assertToolExecutionRecordV1,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   toolArgumentsHash
 } from "@warrant/protocol";
 import type {
@@ -26,9 +27,6 @@ import {
 } from "../external-executor.js";
 import { createToolExecutor, registerDemoTools } from "../tool-executor.js";
 import type { ToolExecutor } from "../tool-executor.js";
-
-const SCHEMA_BUNDLE_HASH =
-  "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3";
 
 function contract(overrides: Partial<ToolExecutorContract> = {}): ToolExecutorContract {
   return {
@@ -81,7 +79,7 @@ function plan(
   return {
     schema: "tool-call-plan.v1",
     schema_version: "v1",
-    schema_bundle_hash: SCHEMA_BUNDLE_HASH,
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
     producer: "test",
     producer_version: "0.1.0",
     producer_git_sha: "0".repeat(40),

@@ -39,6 +39,10 @@ const requiredFiles = [
   "packages/protocol/src/types.ts",
   "packages/protocol/src/api.ts",
   "packages/protocol/src/model-fusion.ts",
+  "packages/protocol/proto/model_fusion/v1/services.proto",
+  "packages/protocol/buf.yaml",
+  "packages/protocol/model-fusion-bindings.json",
+  "packages/protocol/docs/model-fusion-consumption.md",
   "packages/protocol/src/tool-executor.ts",
   "packages/protocol/src/receipt.ts",
   "packages/workspace/src/index.ts",
@@ -82,6 +86,7 @@ const requiredFiles = [
   "packages/example-utils/src/narrate.ts",
   "packages/example-utils/src/models.ts",
   "scripts/demo.mjs",
+  "scripts/check-model-fusion-protocol.mjs",
   "examples/manifest.json",
   "packages/example-utils/src/manifest.ts",
   "examples/seed/src/index.ts",
@@ -162,6 +167,21 @@ for (const entry of [...manifest.demos, ...manifest.infra]) {
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) fail(`missing ${file}`);
+}
+
+const modelFusionProtocolCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-model-fusion-protocol.mjs"],
+  { encoding: "utf8" }
+);
+if (modelFusionProtocolCheck.stdout.trim()) {
+  console.log(modelFusionProtocolCheck.stdout.trim());
+}
+if (modelFusionProtocolCheck.stderr.trim()) {
+  console.error(modelFusionProtocolCheck.stderr.trim());
+}
+if (modelFusionProtocolCheck.status !== 0) {
+  fail("model-fusion protocol check failed");
 }
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));

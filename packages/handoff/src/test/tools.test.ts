@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { MODEL_FUSION_SCHEMA_BUNDLE_HASH } from "@warrant/protocol";
 import type { ToolExecutionResult } from "@warrant/protocol";
 
 import { handoff } from "../handoff.js";
@@ -98,7 +99,7 @@ test("tool journal can append ToolExecutor results without replacing existing wr
     record: {
       schema: "tool-execution-record.v1",
       schema_version: "v1",
-      schema_bundle_hash: "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+      schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
       producer: "test",
       producer_version: "0.1.0",
       producer_git_sha: "0".repeat(40),

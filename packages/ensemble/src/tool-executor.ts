@@ -4,6 +4,7 @@ import {
   artifactHash,
   assertToolExecutionRecordV1,
   evaluateToolPolicy,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   modelFusionSideEffects,
   toolArgumentsHash,
   toolCallKey
@@ -31,14 +32,11 @@ export type ToolExecutor = {
   execute(request: ToolExecutionRequest): Promise<ToolExecutionResult>;
 };
 
-const SCHEMA_BUNDLE_HASH =
-  "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3";
-
 function metadata(createdAt: string) {
   return {
     schema: "tool-execution-record.v1" as const,
     schema_version: "v1" as const,
-    schema_bundle_hash: SCHEMA_BUNDLE_HASH,
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
     producer: "handoffkit-ensemble",
     producer_version: "0.1.0",
     producer_git_sha: "0".repeat(40),

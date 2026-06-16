@@ -1,0 +1,16 @@
+{
+  "protoSource": "proto/model_fusion/v1/services.proto",
+  "protoSourceHash": "sha256:128fc3dbb8eb5487f521954f85ef04ad2be9c0cb7cb618bf2d4e070a2c9ed4bc",
+  "jsonSchemaAuditFormat": "packages/protocol/src/fixtures/model-fusion-contract",
+  "typescript": {
+    "packageName": "@velum/model-fusion-protocol",
+    "registries": ["npm", "GitHub Packages"],
+    "status": "planned-generated"
+  },
+  "python": {
+    "packageName": "velum-model-fusion-protocol",
+    "privateIndexOptions": ["Cloudsmith", "CodeArtifact", "Gemfury"],
+    "bootstrapOptions": ["GitHub Releases wheels", "uv git dependency"],
+    "status": "planned-generated"
+  }
+}

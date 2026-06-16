@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { assertJudgeSynthesisRecordV1 } from "@warrant/protocol";
+import {
+  assertJudgeSynthesisRecordV1,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH
+} from "@warrant/protocol";
 import type {
   HarnessCandidateRecordV1,
   JudgeSynthesisRecordV1,
@@ -28,8 +31,6 @@ import type {
   SynthesisVerificationResult
 } from "./judge.js";
 
-const SCHEMA_BUNDLE_HASH =
-  "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3";
 const PRODUCER_GIT_SHA = "0".repeat(40);
 const PRODUCER = "handoffkit-ensemble";
 const PRODUCER_VERSION = "0.1.0";
@@ -62,7 +63,7 @@ function metadata(createdAt: string) {
   return {
     schema: "judge-synthesis-record.v1" as const,
     schema_version: "v1" as const,
-    schema_bundle_hash: SCHEMA_BUNDLE_HASH,
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
     producer: PRODUCER,
     producer_version: PRODUCER_VERSION,
     producer_git_sha: PRODUCER_GIT_SHA,

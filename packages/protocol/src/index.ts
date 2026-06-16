@@ -73,6 +73,7 @@ export {
   sha256PrefixedHex
 } from "./hash.js";
 export {
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   assertArtifactRefV1,
   assertBenchmarkTaskRecordV1,
   assertEnsembleReceiptV1,

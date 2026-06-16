@@ -12,6 +12,8 @@ export const MODEL_FUSION_SCHEMA_NAMES = [
   "tool-execution-record.v1",
   "ensemble-receipt.v1"
 ] as const;
+export const MODEL_FUSION_SCHEMA_BUNDLE_HASH =
+  "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3";
 
 export type ModelFusionSchemaName = (typeof MODEL_FUSION_SCHEMA_NAMES)[number];
 export type ModelFusionStatus =

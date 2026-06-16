@@ -16,6 +16,7 @@ import {
   assertHarnessCandidateRecordV1,
   assertHarnessRunRequestV1,
   assertHarnessRunResultV1,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   requestHash,
   responseHash
 } from "@warrant/protocol";
@@ -78,7 +79,7 @@ function modelCallRecord(callId: string, model = "fake-fast"): ModelCallRecordV1
   return {
     schema: "model-call-record.v1",
     schema_version: "v1",
-    schema_bundle_hash: "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
     producer: "ensemble-test",
     producer_version: "0.1.0",
     producer_git_sha: "0".repeat(40),

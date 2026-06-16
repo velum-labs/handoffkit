@@ -2,7 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import {
-  assertHarnessRunResultV1
+  assertHarnessRunResultV1,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH
 } from "@warrant/protocol";
 import type {
   ArtifactRef,
@@ -29,8 +30,6 @@ import type {
   HarnessCapabilities
 } from "./harness.js";
 
-const SCHEMA_BUNDLE_HASH =
-  "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3";
 const PRODUCER_GIT_SHA = "0".repeat(40);
 const PRODUCER = "handoffkit-ensemble";
 const PRODUCER_VERSION = "0.1.0";
@@ -131,7 +130,7 @@ function metadata<S extends "harness-run-result.v1">(schema: S, createdAt: strin
   return {
     schema,
     schema_version: "v1" as const,
-    schema_bundle_hash: SCHEMA_BUNDLE_HASH,
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
     producer: PRODUCER,
     producer_version: PRODUCER_VERSION,
     producer_git_sha: PRODUCER_GIT_SHA,
