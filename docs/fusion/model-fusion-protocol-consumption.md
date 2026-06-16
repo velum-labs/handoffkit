@@ -30,7 +30,7 @@ The initial IDL prepares these minimum service seams:
 ## Package targets
 
 TypeScript consumers should target the npm package name
-`@velum/model-fusion-protocol`, published to GitHub Packages while the repo remains
+`@velum-labs/model-fusion-protocol`, published to GitHub Packages while the repo remains
 private. The package should contain JSON Schemas, OpenAPI 3.1, and generated
 TypeScript SDK/types/validators. Service clients and request/response types are
 generated from OpenAPI with `openapi-typescript` and `openapi-fetch`; durable record

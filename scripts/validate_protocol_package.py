@@ -123,8 +123,8 @@ def _require_file(path: Path) -> None:
 
 
 def _validate_package_json(package_json: dict[str, Any]) -> None:
-    if package_json.get("name") != "@velum/model-fusion-protocol":
-        raise ValueError("package.json must publish @velum/model-fusion-protocol")
+    if package_json.get("name") != "@velum-labs/model-fusion-protocol":
+        raise ValueError("package.json must publish @velum-labs/model-fusion-protocol")
     if package_json.get("version") != "0.1.0":
         raise ValueError("package.json version must match protocol package version")
     publish_config = package_json.get("publishConfig")
@@ -164,7 +164,7 @@ def _validate_protocol_package_json(
     expected_hash = compute_schema_bundle_hash(contract_root / "schema")
     if protocol_package.get("schema_bundle_hash") != expected_hash:
         raise ValueError("protocol-package.json schema_bundle_hash is out of date")
-    if protocol_package.get("package_name") != "@velum/model-fusion-protocol":
+    if protocol_package.get("package_name") != "@velum-labs/model-fusion-protocol":
         raise ValueError("protocol-package.json package_name is incorrect")
     if protocol_package.get("version") != "0.1.0":
         raise ValueError("protocol-package.json version is incorrect")

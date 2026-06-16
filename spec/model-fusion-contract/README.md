@@ -73,7 +73,7 @@ of hand-copying contract shapes. See
 
 ```mermaid
 flowchart LR
-  MF00["FusionKit Contract/IDL Origin"] --> PKG["@velum/model-fusion-protocol"]
+  MF00["FusionKit Contract/IDL Origin"] --> PKG["@velum-labs/model-fusion-protocol"]
   PKG --> MF01["FusionKit Bindings"]
   PKG --> MF02["HandoffKit Protocol"]
   PKG --> MF03["CursorKit Fixtures"]
@@ -128,7 +128,7 @@ The validator checks:
 The protocol package validator checks:
 
 - `protocol-package.json` carries the current schema bundle hash;
-- npm metadata targets `@velum/model-fusion-protocol` on GitHub Packages;
+- npm metadata targets `@velum-labs/model-fusion-protocol` on GitHub Packages;
 - Python distribution docs mention private PyPI-compatible options;
 - required HTTP/service boundaries exist in OpenAPI 3.1;
 - OpenAPI references JSON Schema records rather than copying durable record fields;

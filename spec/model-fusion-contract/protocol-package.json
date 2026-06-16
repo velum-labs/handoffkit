@@ -1,5 +1,5 @@
 {
-  "package_name": "@velum/model-fusion-protocol",
+  "package_name": "@velum-labs/model-fusion-protocol",
   "version": "0.1.0",
   "schema_bundle_hash": "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
   "json_schema_format": "persisted-record-audit-format",
@@ -14,7 +14,7 @@
     "required_for_v1": false
   },
   "typescript": {
-    "package": "@velum/model-fusion-protocol",
+    "package": "@velum-labs/model-fusion-protocol",
     "registry": "https://npm.pkg.github.com",
     "contents": [
       "JSON Schema bundle",

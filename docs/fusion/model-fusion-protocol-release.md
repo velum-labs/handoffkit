@@ -37,7 +37,7 @@ The release workflow:
 5. Builds the Python `velum-model-fusion-protocol` wheel and sdist using
    `scripts/build_protocol_python_package.py`, which stages JSON Schema/OpenAPI
    assets into the package build tree without committing duplicate contract copies.
-6. Publishes `@velum/model-fusion-protocol` to private GitHub Packages.
+6. Publishes `@velum-labs/model-fusion-protocol` to private GitHub Packages.
 7. Publishes Python artifacts to a private PyPI-compatible registry when configured.
 8. Falls back to attaching Python wheel/sdist files to the GitHub Release when private
    registry secrets are absent.

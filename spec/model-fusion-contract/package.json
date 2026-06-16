@@ -1,5 +1,5 @@
 {
-  "name": "@velum/model-fusion-protocol",
+  "name": "@velum-labs/model-fusion-protocol",
   "version": "0.1.0",
   "description": "Model fusion JSON Schema records and OpenAPI 3.1 HTTP contracts.",
   "private": false,
