@@ -11,6 +11,11 @@ from fusionkit_core.clients import LocalModelClient
 from fusionkit_core.config import FusionMode, load_config
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
+from fusionkit_evals.fusion_bench import (
+    FusionBenchRunner,
+    load_benchmark_tasks,
+    write_fusion_bench_jsonl,
+)
 from fusionkit_evals.pareto import load_points, write_pareto_report
 from fusionkit_evals.tiny import (
     load_tiny_tasks,
@@ -92,3 +97,31 @@ def tiny_bench(
         write_tiny_benchmark_report(report, results)
         response["report"] = str(report)
     typer.echo(json.dumps(response))
+
+
+@app.command("fusion-bench")
+def fusion_bench(
+    config: Annotated[Path, typer.Option("--config", "-c")],
+    output: Annotated[Path, typer.Option("--output", "-o")],
+    manifest: Annotated[Path | None, typer.Option("--manifest", "-m")] = None,
+    run_root: Annotated[Path, typer.Option("--run-root")] = Path(".fusionkit/fusion-bench"),
+    mode: FusionMode = "panel",
+    config_id: str = "local",
+) -> None:
+    fusion_config = load_config(config)
+    clients = {
+        endpoint.id: LocalModelClient(endpoint)
+        for endpoint in fusion_config.endpoints
+    }
+    engine = FusionEngine(config=fusion_config, clients=clients)
+    runner = FusionBenchRunner(
+        engine,
+        run_root=run_root,
+        config_id=config_id,
+        mode=mode,
+        model_versions={endpoint.id: endpoint.model for endpoint in fusion_config.endpoints},
+    )
+    tasks = load_benchmark_tasks(manifest) if manifest else load_benchmark_tasks()
+    rows = asyncio.run(runner.run_tasks(tasks))
+    write_fusion_bench_jsonl(output, rows)
+    typer.echo(json.dumps({"rows": len(rows), "output": str(output)}))
