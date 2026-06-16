@@ -12,6 +12,12 @@ from fusionkit_core.config import FusionMode, load_config
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
 from fusionkit_evals.pareto import load_points, write_pareto_report
+from fusionkit_evals.tiny import (
+    load_tiny_tasks,
+    run_tiny_benchmark,
+    write_tiny_benchmark_report,
+    write_tiny_jsonl,
+)
 from fusionkit_server.app import create_app
 
 app = typer.Typer(help="Local model fusion toolkit.")
@@ -55,3 +61,34 @@ def pareto(
 ) -> None:
     write_pareto_report(output, load_points(points))
     typer.echo(json.dumps({"output": str(output)}))
+
+
+@app.command("tiny-bench")
+def tiny_bench(
+    config: Annotated[Path, typer.Option("--config", "-c")],
+    output: Annotated[Path, typer.Option("--output", "-o")],
+    report: Annotated[Path | None, typer.Option("--report", "-r")] = None,
+    mode: FusionMode = "panel",
+    config_id: str = "local",
+) -> None:
+    fusion_config = load_config(config)
+    clients = {
+        endpoint.id: LocalModelClient(endpoint)
+        for endpoint in fusion_config.endpoints
+    }
+    engine = FusionEngine(config=fusion_config, clients=clients)
+    results = asyncio.run(
+        run_tiny_benchmark(
+            engine,
+            config_id=config_id,
+            mode=mode,
+            tasks=load_tiny_tasks(),
+            model_versions={endpoint.id: endpoint.model for endpoint in fusion_config.endpoints},
+        )
+    )
+    write_tiny_jsonl(output, results)
+    response = {"results": len(results), "output": str(output)}
+    if report is not None:
+        write_tiny_benchmark_report(report, results)
+        response["report"] = str(report)
+    typer.echo(json.dumps(response))
