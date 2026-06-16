@@ -14,7 +14,7 @@
     "requiredForV1": false
   },
   "typescript": {
-    "packageName": "@velum/model-fusion-protocol",
+    "packageName": "@velum-labs/model-fusion-protocol",
     "openapiGenerated": "packages/protocol/src/generated/model-fusion-openapi.ts",
     "jsonSchemaValidators": "packages/protocol/src/model-fusion.ts",
     "registries": [
@@ -37,5 +37,12 @@
       "uv git dependency"
     ],
     "status": "openapi-generated-json-schema-validator-follow-up"
+  },
+  "publishedProtocolMetadata": {
+    "typescriptPackageName": "@velum-labs/model-fusion-protocol",
+    "pythonPackageName": "velum-model-fusion-protocol",
+    "version": "0.1.0",
+    "schemaBundleHash": "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+    "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb"
   }
 }
