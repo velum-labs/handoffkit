@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shlex
 from pathlib import Path
 from typing import Annotated
 
@@ -12,6 +13,7 @@ from fusionkit_core.config import FusionMode, load_config
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
 from fusionkit_evals.fusion_bench import (
+    CommandHandoffKitExecutor,
     FusionBenchReport,
     FusionBenchRunner,
     build_fusion_bench_report,
@@ -117,6 +119,20 @@ def fusion_bench(
         typer.Option("--report", "-r", "--report-markdown"),
     ] = None,
     report_html: Annotated[Path | None, typer.Option("--report-html")] = None,
+    handoff_command: Annotated[
+        str | None,
+        typer.Option(
+            "--handoff-command",
+            help=(
+                "Optional HandoffKit-compatible command. It receives task JSON on stdin "
+                "and emits model-fusion contract records on stdout."
+            ),
+        ),
+    ] = None,
+    handoff_timeout_s: Annotated[
+        float,
+        typer.Option("--handoff-timeout-s", min=1.0),
+    ] = 300.0,
     mode: FusionMode = "panel",
     config_id: str = "local",
 ) -> None:
@@ -132,6 +148,14 @@ def fusion_bench(
         config_id=config_id,
         mode=mode,
         model_versions={endpoint.id: endpoint.model for endpoint in fusion_config.endpoints},
+        handoff_executor=(
+            CommandHandoffKitExecutor(
+                shlex.split(handoff_command),
+                timeout_s=handoff_timeout_s,
+            )
+            if handoff_command is not None
+            else None
+        ),
     )
     tasks = load_benchmark_tasks(manifest) if manifest else load_benchmark_tasks()
     rows = asyncio.run(runner.run_tasks(tasks))

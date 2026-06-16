@@ -41,9 +41,17 @@ them as prompt-only tasks. `harness_coding` records use `record_join` because th
 real score depends on future harness artifacts, test output, worktree state, or
 receipts.
 
-Until an external harness adapter lands, `FusionBenchRunner` emits explicit
-`unavailable_harness` skip rows for `harness_coding` tasks. ENG-593 reports keep
-those skipped tasks separate from failed tasks.
+When no HandoffKit executor is configured, `FusionBenchRunner` emits explicit
+`unavailable_harness` skip rows for `harness_coding` tasks. When configured,
+`fusion-bench` can use a command-compatible HandoffKit seam that receives task JSON
+on stdin and returns model-fusion contract records on stdout. Joined rows validate
+harness run results, harness candidates, model calls, judge records, artifacts, tool
+execution records, receipts, and the benchmark task record before report generation.
+ENG-593 reports keep skipped tasks separate from failed tasks.
+
+`fixtures/adversarial-native-fusion/` contains synthetic native FusionKit tasks that
+document MVP heuristic-ranker limitations such as keyword and verbosity bait. These
+fixtures are for local characterization only and are not public benchmark claims.
 
 ## Contamination Policy
 

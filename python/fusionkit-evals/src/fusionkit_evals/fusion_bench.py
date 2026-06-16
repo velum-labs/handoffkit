@@ -1,24 +1,30 @@
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import math
 import platform
+import shlex
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from fusionkit_core.artifacts import LocalArtifactStore, hash_text
 from fusionkit_core.config import FusionMode
 from fusionkit_core.contracts import (
+    ArtifactRefV1,
     BenchmarkTaskRecordV1,
+    ContractArtifactRef,
+    ContractError,
     FusionRecordV1,
     FusionRunRequestV1,
     JudgeSynthesisRecordV1,
     ModelCallRecordV1,
     contract_metadata,
+    contract_model_for_schema,
     producer_git_sha,
     schema_bundle_hash,
 )
@@ -85,6 +91,8 @@ class FusionBenchAttemptRow(BaseModel):
     output: str | None = None
     failure: FusionBenchFailure = Field(default_factory=FusionBenchFailure)
     task_record: dict[str, Any]
+    harness_run_result: dict[str, Any] | None = None
+    harness_candidate_records: list[dict[str, Any]] = Field(default_factory=list)
     fusion_record: dict[str, Any] | None = None
     model_call_records: list[dict[str, Any]] = Field(default_factory=list)
     judge_synthesis_record: dict[str, Any] | None = None
@@ -118,6 +126,7 @@ class FusionBenchTaskMetrics(BaseModel):
     candidate_failure_rate: float | None = None
     candidate_failures: dict[str, bool] = Field(default_factory=dict)
     model_ids: list[str] = Field(default_factory=list)
+    judge_parse_failed: bool = False
 
 
 class FusionBenchAggregateMetrics(BaseModel):
@@ -137,6 +146,7 @@ class FusionBenchAggregateMetrics(BaseModel):
     candidate_failure_rate: float | None = None
     failure_kinds: dict[str, int] = Field(default_factory=dict)
     harness_verification_outcomes: dict[str, int] = Field(default_factory=dict)
+    judge_parse_failures: int = 0
 
 
 class FusionBenchFailureCorrelation(BaseModel):
@@ -185,6 +195,71 @@ class FusionBenchReport(BaseModel):
     quality_latency_points: list[FusionBenchParetoPoint] = Field(default_factory=list)
 
 
+class HandoffKitExecutorUnavailable(RuntimeError):
+    pass
+
+
+class HandoffKitExecutorError(RuntimeError):
+    pass
+
+
+class HandoffKitExecutor(Protocol):
+    async def run(self, task: FusionBenchTask) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+
+class CommandHandoffKitExecutor:
+    def __init__(
+        self,
+        command: Sequence[str] | str,
+        *,
+        timeout_s: float = 300.0,
+        cwd: str | Path | None = None,
+    ) -> None:
+        self.command = shlex.split(command) if isinstance(command, str) else list(command)
+        self.timeout_s = timeout_s
+        self.cwd = Path(cwd) if cwd is not None else None
+        if not self.command:
+            raise ValueError("HandoffKit command must not be empty")
+
+    async def run(self, task: FusionBenchTask) -> list[dict[str, Any]]:
+        payload = {
+            "category": task.category,
+            "manifest_path": str(task.path),
+            "task": task.record.model_dump(mode="json"),
+        }
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *self.command,
+                cwd=str(self.cwd) if self.cwd is not None else None,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise HandoffKitExecutorUnavailable(str(exc)) from exc
+
+        encoded_payload = json.dumps(payload).encode()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(encoded_payload),
+                timeout=self.timeout_s,
+            )
+        except TimeoutError as exc:
+            process.kill()
+            await process.wait()
+            raise HandoffKitExecutorError(
+                f"HandoffKit command timed out after {self.timeout_s:.1f}s"
+            ) from exc
+
+        if process.returncode != 0:
+            stderr_text = stderr.decode(errors="replace").strip()
+            raise HandoffKitExecutorError(
+                f"HandoffKit command exited with {process.returncode}: {stderr_text}"
+            )
+        return parse_handoffkit_records(stdout.decode())
+
+
 class FusionBenchRunner:
     def __init__(
         self,
@@ -194,12 +269,14 @@ class FusionBenchRunner:
         config_id: str,
         mode: FusionMode,
         model_versions: Mapping[str, str] | None = None,
+        handoff_executor: HandoffKitExecutor | None = None,
     ) -> None:
         self.engine = engine
         self.run_root = Path(run_root)
         self.config_id = config_id
         self.mode: FusionMode = mode
         self.model_versions = dict(model_versions or {})
+        self.handoff_executor = handoff_executor
 
     async def run_tasks(self, tasks: Iterable[FusionBenchTask]) -> list[FusionBenchAttemptRow]:
         rows = []
@@ -207,14 +284,7 @@ class FusionBenchRunner:
             if task.record.task_kind == "model_fusion":
                 rows.append(await self._run_model_fusion_task(task))
             elif task.record.task_kind == "harness_coding":
-                rows.append(
-                    skip_row(
-                        task,
-                        config_id=self.config_id,
-                        mode=self.mode,
-                        model_versions=self.model_versions,
-                    )
-                )
+                rows.append(await self._run_harness_coding_task(task))
             else:
                 rows.append(
                     skip_row(
@@ -231,6 +301,64 @@ class FusionBenchRunner:
                     )
                 )
         return rows
+
+    async def _run_harness_coding_task(self, task: FusionBenchTask) -> FusionBenchAttemptRow:
+        if self.handoff_executor is None:
+            return skip_row(
+                task,
+                config_id=self.config_id,
+                mode=self.mode,
+                model_versions=self.model_versions,
+            )
+        try:
+            records = await self.handoff_executor.run(task)
+        except HandoffKitExecutorUnavailable as exc:
+            return skip_row(
+                task,
+                config_id=self.config_id,
+                mode=self.mode,
+                model_versions=self.model_versions,
+                failure=FusionBenchFailure(
+                    failure_kind="unavailable_harness",
+                    error_code="handoffkit_adapter_unavailable",
+                    owner="handoffkit",
+                    terminal_reason=str(exc) or "handoffkit_adapter_unavailable",
+                ),
+            )
+        except (HandoffKitExecutorError, ValueError) as exc:
+            return skip_row(
+                task,
+                config_id=self.config_id,
+                mode=self.mode,
+                model_versions=self.model_versions,
+                failure=FusionBenchFailure(
+                    failure_kind="run_failed",
+                    error_code="handoffkit_executor_failed",
+                    owner="handoffkit",
+                    terminal_reason=str(exc),
+                ),
+            )
+        try:
+            return join_handoffkit_records(
+                task,
+                records,
+                config_id=self.config_id,
+                mode=self.mode,
+                model_versions=self.model_versions,
+            )
+        except ValueError as exc:
+            return skip_row(
+                task,
+                config_id=self.config_id,
+                mode=self.mode,
+                model_versions=self.model_versions,
+                failure=FusionBenchFailure(
+                    failure_kind="validation_error",
+                    error_code="handoffkit_contract_validation_failed",
+                    owner="handoffkit",
+                    terminal_reason=str(exc),
+                ),
+            )
 
     async def _run_model_fusion_task(self, task: FusionBenchTask) -> FusionBenchAttemptRow:
         store = FileSystemRunStore(self.run_root / task.record.task_id)
@@ -315,7 +443,7 @@ def join_run_records(
         for key in ("tool_call_plan", "tool_execution_record")
         if isinstance(payload := event.payload.get(key), dict)
     ]
-    failure = _failure_from_inspection(inspection)
+    failure = _failure_from_inspection(inspection, judge_synthesis_record)
     return FusionBenchAttemptRow(
         task_id=task.record.task_id,
         category=task.category,
@@ -342,6 +470,69 @@ def join_run_records(
         provider_metadata=inspection.provider_metadata,
         model_ids=[candidate.model_id for candidate in inspection.candidates],
         cost_estimate=_cost_from_provider_metadata(inspection.provider_metadata),
+        latency_s=_latency_from_model_calls(model_call_records),
+    )
+
+
+def join_handoffkit_records(
+    task: FusionBenchTask,
+    records: Iterable[Mapping[str, Any]],
+    *,
+    config_id: str,
+    mode: FusionMode,
+    model_versions: Mapping[str, str] | None = None,
+) -> FusionBenchAttemptRow:
+    validated_records = [_validate_contract_payload(record) for record in records]
+    benchmark_task_records = _records_by_schema(validated_records, "benchmark-task-record.v1")
+    if benchmark_task_records:
+        _assert_joined_task_matches(task, benchmark_task_records[0])
+
+    harness_run_results = _records_by_schema(validated_records, "harness-run-result.v1")
+    harness_candidates = _records_by_schema(validated_records, "harness-candidate-record.v1")
+    model_call_records = _records_by_schema(validated_records, "model-call-record.v1")
+    judge_synthesis_record = _first_record_by_schema(
+        validated_records,
+        "judge-synthesis-record.v1",
+    )
+    tool_records = [
+        *(_records_by_schema(validated_records, "tool-call-plan.v1")),
+        *(_records_by_schema(validated_records, "tool-execution-record.v1")),
+    ]
+    receipt_records = _records_by_schema(validated_records, "ensemble-receipt.v1")
+    artifact_records = _artifact_records_from_contracts(validated_records)
+    harness_run_result = harness_run_results[0] if harness_run_results else None
+    failure = _failure_from_handoff_records(harness_run_result, judge_synthesis_record)
+    status = harness_run_result.get("status") if harness_run_result is not None else "failed"
+    return FusionBenchAttemptRow(
+        task_id=task.record.task_id,
+        category=task.category,
+        task_kind=task.record.task_kind,
+        manifest_path=str(task.path),
+        manifest_hash=hash_text(task.path.read_text(encoding="utf-8")),
+        schema_bundle_hash=schema_bundle_hash(),
+        repo_sha=producer_git_sha(),
+        config_id=config_id,
+        mode=mode,
+        model_versions=dict(model_versions or {}),
+        run_id=_optional_string(harness_run_result, "result_id"),
+        trace_id=_handoff_trace_id(harness_run_result),
+        state=_state_for_handoff_status(status),
+        status=status if isinstance(status, str) else "failed",
+        output=_handoff_output(harness_run_result, judge_synthesis_record),
+        failure=failure,
+        task_record=task.record.model_dump(mode="json"),
+        harness_run_result=harness_run_result,
+        harness_candidate_records=harness_candidates,
+        model_call_records=model_call_records,
+        judge_synthesis_record=judge_synthesis_record,
+        artifact_records=artifact_records,
+        tool_records=tool_records,
+        receipt_records=receipt_records,
+        provider_metadata=_provider_metadata_from_model_calls(model_call_records),
+        model_ids=_model_ids_from_handoff_records(model_call_records, harness_candidates),
+        cost_estimate=_cost_from_provider_metadata(
+            _provider_metadata_from_model_calls(model_call_records)
+        ),
         latency_s=_latency_from_model_calls(model_call_records),
     )
 
@@ -406,6 +597,7 @@ def build_fusion_bench_report(rows: Iterable[FusionBenchAttemptRow]) -> FusionBe
 def score_fusion_bench_row(row: FusionBenchAttemptRow) -> FusionBenchTaskMetrics:
     skipped = _row_is_skipped(row)
     failed = _row_is_failed(row)
+    judge_parse_failed = _judge_parse_failed(row.judge_synthesis_record)
     candidate_scores = {} if skipped or failed else _candidate_scores(row)
     scored_candidates = list(candidate_scores.values())
     synthesized_success = None
@@ -440,6 +632,7 @@ def score_fusion_bench_row(row: FusionBenchAttemptRow) -> FusionBenchTaskMetrics
         candidate_failure_rate=_candidate_failure_rate(scored_candidates),
         candidate_failures=candidate_failures,
         model_ids=list(row.model_ids),
+        judge_parse_failed=judge_parse_failed,
     )
 
 
@@ -503,6 +696,7 @@ def format_fusion_bench_markdown_report(
         f"- Latency: {_format_metric(report.aggregate.latency_s)}",
         f"- Tool success: {_format_metric(report.aggregate.tool_success)}",
         f"- Candidate failure rate: {_format_metric(report.aggregate.candidate_failure_rate)}",
+        f"- Judge parse failures: {report.aggregate.judge_parse_failures}",
         "",
         "## Outcomes",
         "",
@@ -614,6 +808,76 @@ def format_fusion_bench_html_report(
     )
 
 
+def parse_handoffkit_records(output: str) -> list[dict[str, Any]]:
+    stripped = output.strip()
+    if not stripped:
+        raise ValueError("HandoffKit executor produced no records")
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return [_coerce_record(json.loads(line)) for line in stripped.splitlines() if line.strip()]
+    if isinstance(parsed, list):
+        return [_coerce_record(record) for record in parsed]
+    if isinstance(parsed, dict):
+        if isinstance(records := parsed.get("records"), list):
+            return [_coerce_record(record) for record in records]
+        if isinstance(parsed.get("schema"), str):
+            return [_coerce_record(parsed)]
+    raise ValueError("HandoffKit executor output must be a record, record list, or records object")
+
+
+def _coerce_record(record: Any) -> dict[str, Any]:
+    if not isinstance(record, dict):
+        raise ValueError("HandoffKit executor records must be JSON objects")
+    return record
+
+
+def _validate_contract_payload(record: Mapping[str, Any]) -> dict[str, Any]:
+    schema = record.get("schema")
+    if not isinstance(schema, str):
+        raise ValueError("Contract record is missing string schema")
+    try:
+        model_class = contract_model_for_schema(schema)  # type: ignore[arg-type]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported contract schema from handoff executor: {schema}") from exc
+    return model_class.model_validate(record).model_dump(mode="json")
+
+
+def _records_by_schema(records: list[dict[str, Any]], schema: str) -> list[dict[str, Any]]:
+    return [record for record in records if record.get("schema") == schema]
+
+
+def _first_record_by_schema(
+    records: list[dict[str, Any]],
+    schema: str,
+) -> dict[str, Any] | None:
+    matching = _records_by_schema(records, schema)
+    return matching[0] if matching else None
+
+
+def _assert_joined_task_matches(
+    task: FusionBenchTask,
+    joined_task_record: Mapping[str, Any],
+) -> None:
+    joined_task_id = joined_task_record.get("task_id")
+    if joined_task_id != task.record.task_id:
+        raise ValueError(
+            f"HandoffKit benchmark task record {joined_task_id!r} does not match "
+            f"manifest task {task.record.task_id!r}"
+        )
+
+
+def _artifact_records_from_contracts(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    artifacts = []
+    for record in records:
+        if record.get("schema") == "artifact-ref.v1":
+            artifacts.append(ArtifactRefV1.model_validate(record).model_dump(mode="json"))
+        for artifact in record.get("artifacts") or []:
+            if isinstance(artifact, dict):
+                artifacts.append(ContractArtifactRef.model_validate(artifact).model_dump(mode="json"))
+    return artifacts
+
+
 def _contract_payloads(events: list[Any], key: str, model_class: type) -> list[dict[str, Any]]:
     payloads = []
     for event in events:
@@ -632,7 +896,18 @@ def _first_contract_payload(
     return payloads[0] if payloads else None
 
 
-def _failure_from_inspection(inspection: RunInspection) -> FusionBenchFailure:
+def _failure_from_inspection(
+    inspection: RunInspection,
+    judge_synthesis_record: Mapping[str, Any] | None,
+) -> FusionBenchFailure:
+    if _judge_parse_failed(judge_synthesis_record):
+        return FusionBenchFailure(
+            failure_kind="validation_error",
+            error_code="judge_structured_json_parse_failed",
+            owner="fusionkit",
+            retryable=False,
+            terminal_reason="judge_structured_json_parse_failed",
+        )
     if inspection.terminal_error is None:
         return FusionBenchFailure()
     return FusionBenchFailure(
@@ -642,6 +917,81 @@ def _failure_from_inspection(inspection: RunInspection) -> FusionBenchFailure:
         retryable=inspection.terminal_error.retryable,
         terminal_reason=inspection.terminal_error.terminal_reason,
     )
+
+
+def _failure_from_handoff_records(
+    harness_run_result: Mapping[str, Any] | None,
+    judge_synthesis_record: Mapping[str, Any] | None,
+) -> FusionBenchFailure:
+    if harness_run_result is None:
+        return FusionBenchFailure(
+            failure_kind="validation_error",
+            error_code="missing_harness_run_result",
+            owner="handoffkit",
+            terminal_reason="missing_harness_run_result",
+        )
+    if _judge_parse_failed(judge_synthesis_record):
+        return FusionBenchFailure(
+            failure_kind="validation_error",
+            error_code="judge_structured_json_parse_failed",
+            owner="handoffkit",
+            terminal_reason="judge_structured_json_parse_failed",
+        )
+    status = harness_run_result.get("status")
+    if status == "succeeded":
+        return FusionBenchFailure()
+    error = _first_contract_error(harness_run_result.get("errors"))
+    if status in {"skipped", "unsupported"}:
+        return FusionBenchFailure(
+            failure_kind="unavailable_harness",
+            error_code=_error_code(error, status),
+            owner="handoffkit",
+            retryable=_error_retryable(error),
+            terminal_reason=_error_message(error, status),
+        )
+    return FusionBenchFailure(
+        failure_kind="run_failed",
+        error_code=_error_code(error, "harness_run_failed"),
+        owner="handoffkit",
+        retryable=_error_retryable(error),
+        terminal_reason=_error_message(error, "harness_run_failed"),
+    )
+
+
+def _first_contract_error(errors: Any) -> dict[str, Any] | None:
+    if not isinstance(errors, list):
+        return None
+    for error in errors:
+        if isinstance(error, dict):
+            return ContractError.model_validate(error).model_dump(mode="json")
+    return None
+
+
+def _error_code(error: Mapping[str, Any] | None, default: str) -> str:
+    if error is None:
+        return default
+    kind = error.get("kind")
+    return kind if isinstance(kind, str) else default
+
+
+def _error_message(error: Mapping[str, Any] | None, default: str) -> str:
+    if error is None:
+        return default
+    message = error.get("message")
+    return message if isinstance(message, str) else default
+
+
+def _error_retryable(error: Mapping[str, Any] | None) -> bool:
+    if error is None:
+        return False
+    return error.get("retryable") is True
+
+
+def _judge_parse_failed(judge_synthesis_record: Mapping[str, Any] | None) -> bool:
+    if judge_synthesis_record is None:
+        return False
+    metrics = judge_synthesis_record.get("metrics")
+    return isinstance(metrics, Mapping) and metrics.get("judge_structured_parse_status") == "failed"
 
 
 def _cost_from_provider_metadata(provider_metadata: list[dict[str, Any]]) -> float | None:
@@ -666,6 +1016,86 @@ def _latency_from_model_calls(model_call_records: list[dict[str, Any]]) -> float
     return sum(latencies)
 
 
+def _provider_metadata_from_model_calls(
+    model_call_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    provider_metadata = []
+    for record in model_call_records:
+        metadata = record.get("metadata")
+        if isinstance(metadata, dict):
+            provider_metadata.append(metadata)
+    return provider_metadata
+
+
+def _model_ids_from_handoff_records(
+    model_call_records: list[dict[str, Any]],
+    harness_candidate_records: list[dict[str, Any]],
+) -> list[str]:
+    model_ids = []
+    seen = set()
+    for record in model_call_records:
+        for key in ("endpoint_id", "model"):
+            value = record.get(key)
+            if isinstance(value, str) and value and value not in seen:
+                seen.add(value)
+                model_ids.append(value)
+                break
+    for record in harness_candidate_records:
+        metadata = record.get("metadata")
+        model_id = metadata.get("model_id") if isinstance(metadata, dict) else None
+        fallback = record.get("model_call_id") or record.get("candidate_id")
+        value = model_id if isinstance(model_id, str) else fallback
+        if isinstance(value, str) and value and value not in seen:
+            seen.add(value)
+            model_ids.append(value)
+    return model_ids
+
+
+def _handoff_trace_id(harness_run_result: Mapping[str, Any] | None) -> str | None:
+    metadata = harness_run_result.get("metadata") if harness_run_result is not None else None
+    if not isinstance(metadata, Mapping):
+        return None
+    trace_id = metadata.get("trace_id")
+    return trace_id if isinstance(trace_id, str) else None
+
+
+def _handoff_output(
+    harness_run_result: Mapping[str, Any] | None,
+    judge_synthesis_record: Mapping[str, Any] | None,
+) -> str | None:
+    if judge_synthesis_record is not None:
+        final_output = judge_synthesis_record.get("final_output")
+        if isinstance(final_output, str):
+            return final_output
+    if harness_run_result is None:
+        return None
+    output_summary = harness_run_result.get("output_summary")
+    return output_summary if isinstance(output_summary, str) else None
+
+
+def _optional_string(record: Mapping[str, Any] | None, key: str) -> str | None:
+    if record is None:
+        return None
+    value = record.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _state_for_handoff_status(status: Any) -> str | None:
+    if status == "succeeded":
+        return "completed"
+    if status == "failed":
+        return "failed"
+    if status == "canceled":
+        return "cancelled"
+    if status == "pending":
+        return "queued"
+    if status == "running":
+        return "generating"
+    if status in {"skipped", "unsupported"}:
+        return "completed"
+    return None
+
+
 def _ensure_report(
     report_or_rows: FusionBenchReport | Iterable[FusionBenchAttemptRow],
 ) -> FusionBenchReport:
@@ -688,6 +1118,8 @@ def _row_is_skipped(row: FusionBenchAttemptRow) -> bool:
 def _row_is_failed(row: FusionBenchAttemptRow) -> bool:
     if _row_is_skipped(row):
         return False
+    if _judge_parse_failed(row.judge_synthesis_record):
+        return True
     return row.status == "failed" or row.failure.failure_kind not in {
         "none",
         *SKIPPED_FAILURE_KINDS,
@@ -829,6 +1261,7 @@ def _aggregate_metrics(tasks: list[FusionBenchTaskMetrics]) -> FusionBenchAggreg
         harness_verification_outcomes=dict(
             Counter(task.harness_verification_outcome for task in tasks)
         ),
+        judge_parse_failures=sum(1 for task in tasks if task.judge_parse_failed),
     )
 
 
@@ -1009,6 +1442,7 @@ def _format_metric(value: float | None) -> str:
 
 
 __all__ = [
+    "CommandHandoffKitExecutor",
     "FUSION_BENCH_DISCLAIMER",
     "FusionBenchAggregateMetrics",
     "FusionBenchAttemptRow",
@@ -1020,12 +1454,17 @@ __all__ = [
     "FusionBenchRunner",
     "FusionBenchTask",
     "FusionBenchTaskMetrics",
+    "HandoffKitExecutor",
+    "HandoffKitExecutorError",
+    "HandoffKitExecutorUnavailable",
     "build_fusion_bench_report",
     "format_fusion_bench_html_report",
     "format_fusion_bench_markdown_report",
     "join_run_records",
+    "join_handoffkit_records",
     "load_benchmark_tasks",
     "load_fusion_bench_jsonl",
+    "parse_handoffkit_records",
     "score_fusion_bench_row",
     "skip_row",
     "write_fusion_bench_jsonl",

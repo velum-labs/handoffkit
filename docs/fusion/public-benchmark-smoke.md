@@ -36,6 +36,8 @@ uv run fusionkit fusion-bench \
   --report .fusionkit/public-smoke/report.md
 ```
 
-Until external public-suite harnesses exist, these tasks are `harness_coding` records.
+These tasks are `harness_coding` records. Without a configured HandoffKit executor,
 `FusionBenchRunner` emits explicit `unavailable_harness` skip rows for them, and the
-ENG-593 report layer keeps skipped tasks separate from failed tasks.
+ENG-593 report layer keeps skipped tasks separate from failed tasks. Running a local
+fake or command executor for smoke coverage still does not make these fixtures
+eligible for public benchmark claims.

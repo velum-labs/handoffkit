@@ -1,0 +1,56 @@
+{
+  "package_name": "@velum/model-fusion-protocol",
+  "version": "0.1.0",
+  "schema_bundle_hash": "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+  "json_schema_format": "persisted-record-audit-format",
+  "v1_service_source_of_truth": "openapi-3.1-http-json",
+  "openapi": {
+    "source": "v1_http_json_source_of_truth",
+    "path": "openapi/model-fusion.v1.openapi.json",
+    "version": "3.1.0"
+  },
+  "protobuf": {
+    "status": "reserved_future_internal_streaming_connect_grpc",
+    "required_for_v1": false
+  },
+  "typescript": {
+    "package": "@velum/model-fusion-protocol",
+    "registry": "https://npm.pkg.github.com",
+    "contents": [
+      "JSON Schema bundle",
+      "OpenAPI 3.1 HTTP contract",
+      "generated TypeScript SDK/types/validators when CI generation is enabled"
+    ]
+  },
+  "codegen": {
+    "openapi_service_clients": [
+      "gen/typescript/openapi.d.ts",
+      "gen/typescript/client.ts",
+      "python/src/velum_model_fusion_protocol/generated/openapi_client.py"
+    ],
+    "json_schema_record_validators": [
+      "gen/typescript/record-validators.ts",
+      "python/src/velum_model_fusion_protocol/generated/record_validators.py"
+    ],
+    "drift_check": "npm run check:generated"
+  },
+  "python": {
+    "package": "velum-model-fusion-protocol",
+    "preferred_private_indexes": [
+      "Cloudsmith",
+      "AWS CodeArtifact",
+      "Gemfury"
+    ],
+    "short_term_paths": [
+      "GitHub Releases wheels",
+      "uv git dependencies pinned by commit"
+    ],
+    "note": "GitHub Packages is not a private PyPI replacement for Python consumers."
+  },
+  "required_services": [
+    "HarnessExecutorService",
+    "CursorHarnessService",
+    "MlxProviderService",
+    "BenchmarkJoinService"
+  ]
+}

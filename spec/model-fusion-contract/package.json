@@ -1,0 +1,31 @@
+{
+  "name": "@velum/model-fusion-protocol",
+  "version": "0.1.0",
+  "description": "Model fusion JSON Schema records and OpenAPI 3.1 HTTP contracts.",
+  "private": false,
+  "scripts": {
+    "validate:contracts": "python3 ../../scripts/validate_contract_fixtures.py && python3 ../../scripts/validate_protocol_package.py",
+    "generate:typescript": "openapi-typescript openapi/model-fusion.v1.openapi.json -o gen/typescript/openapi.d.ts && python3 ../../scripts/generate_protocol_codegen.py --language typescript",
+    "generate:python": "python3 ../../scripts/generate_protocol_codegen.py --language python",
+    "generate": "npm run generate:typescript && npm run generate:python",
+    "check:generated": "npm run generate && git diff --exit-code -- gen python/src/velum_model_fusion_protocol/generated"
+  },
+  "files": [
+    "schema",
+    "openapi",
+    "gen",
+    "protocol-package.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "openapi-fetch": "^0.17.0",
+    "openapi-typescript": "^7.13.0"
+  },
+  "overrides": {
+    "js-yaml": "^4.2.0"
+  }
+}

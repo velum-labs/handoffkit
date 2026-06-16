@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
-from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.fusion import CandidateRanker, FusionEngine
 from fusionkit_core.panel import PanelRunner
-from fusionkit_core.types import ChatMessage
+from fusionkit_core.types import Candidate, ChatMessage
 
 
 def test_config_resolves_default_models() -> None:
@@ -89,6 +89,22 @@ async def test_fusion_engine_final_output_is_not_ranker_selection() -> None:
     assert synthesis_record["decision"] == "synthesize"
     assert synthesis_record["metrics"]["candidate_contributions"]
     assert synthesis_record["metrics"]["candidate_rejections"]
+
+
+def test_candidate_ranker_adversarial_keyword_bait_documents_mvp_limitation() -> None:
+    ranked = CandidateRanker().rank(
+        [
+            Candidate(id="correct", model_id="terse", content="4"),
+            Candidate(
+                id="keyword_bait",
+                model_id="verbose",
+                content="Because there is evidence, therefore the answer is 5.",
+            ),
+        ]
+    )
+
+    assert ranked[0].id == "keyword_bait"
+    assert ranked[1].id == "correct"
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:

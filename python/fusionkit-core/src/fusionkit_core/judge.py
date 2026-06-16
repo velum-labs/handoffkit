@@ -188,7 +188,10 @@ def _synthesis_metrics(
             {"candidate_id": candidate.id, "rank": candidate.rank, "score": candidate.score}
             for candidate in candidates
         ],
+        "judge_structured_parse_status": _judge_parse_status(analysis),
     }
+    if _judge_parse_failed(analysis):
+        metrics["judge_structured_parse_error"] = "invalid_json"
     if final_output_artifact_id is not None:
         metrics["final_output_artifact_id"] = final_output_artifact_id
     if repair_metadata is not None:
@@ -224,6 +227,14 @@ def _rationale(analysis: FusionAnalysis) -> str:
         *analysis.coverage_gaps,
     ]
     return "; ".join(rationale_parts[:6])
+
+
+def _judge_parse_status(analysis: FusionAnalysis) -> str:
+    return "failed" if _judge_parse_failed(analysis) else "parsed"
+
+
+def _judge_parse_failed(analysis: FusionAnalysis) -> bool:
+    return analysis.consensus == ["Judge did not return valid structured JSON."]
 
 
 def _synthesis_id() -> str:

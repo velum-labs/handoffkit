@@ -15,11 +15,17 @@ SchemaName: TypeAlias = Literal[
     "model-call-record.v1",
     "fusion-run-request.v1",
     "fusion-record.v1",
+    "harness-run-request.v1",
+    "harness-run-result.v1",
+    "harness-candidate-record.v1",
     "judge-synthesis-record.v1",
+    "cursor-run-request.v1",
+    "cursor-run-result.v1",
     "benchmark-task-record.v1",
     "artifact-ref.v1",
     "tool-call-plan.v1",
     "tool-execution-record.v1",
+    "ensemble-receipt.v1",
 ]
 
 ErrorKind: TypeAlias = Literal[
@@ -79,6 +85,13 @@ ApiCompatibility: TypeAlias = Literal[
     "custom",
 ]
 ToolPolicy: TypeAlias = Literal["disabled", "external_pause", "allowed"]
+HarnessKind: TypeAlias = Literal[
+    "generic",
+    "cursor",
+    "claude_code",
+    "codex",
+    "openai_responses",
+]
 SynthesisDecision: TypeAlias = Literal[
     "synthesize",
     "select_candidate",
@@ -248,6 +261,38 @@ class FusionRecordV1(ContractRecord):
     error: ContractError | None = None
 
 
+class HarnessRunResultV1(ContractRecord):
+    expected_schema: ClassVar[str] = "harness-run-result.v1"
+    result_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1)
+    harness_kind: HarnessKind
+    status: Status
+    candidate_ids: list[str]
+    output_summary: str | None = None
+    artifacts: list[ContractArtifactRef] | None = None
+    capabilities: dict[str, CapabilityStatus]
+    started_at: datetime
+    finished_at: datetime | None = None
+    errors: list[ContractError] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class HarnessCandidateRecordV1(ContractRecord):
+    expected_schema: ClassVar[str] = "harness-candidate-record.v1"
+    candidate_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1)
+    harness_kind: HarnessKind
+    model_call_id: str | None = None
+    status: Status
+    side_effects: SideEffects
+    branch_name: str | None = None
+    worktree_path: str | None = None
+    artifacts: list[ContractArtifactRef] | None = None
+    score: float | None = None
+    error: ContractError | None = None
+    metadata: dict[str, Any] | None = None
+
+
 class JudgeSynthesisRecordV1(ContractRecord):
     expected_schema: ClassVar[str] = "judge-synthesis-record.v1"
     synthesis_id: str = Field(min_length=1)
@@ -301,16 +346,27 @@ class ToolExecutionRecordV1(ContractRecord):
     error: ContractError | None = None
 
 
+class EnsembleReceiptV1(ContractRecord):
+    expected_schema: ClassVar[str] = "ensemble-receipt.v1"
+    receipt_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    status: Status
+    artifact_hashes: list[Sha256]
+
+
 CONTRACT_MODEL_REGISTRY: dict[SchemaName, type[ContractRecord]] = {
     "model_endpoint.v1": ModelEndpointV1,
     "model-call-record.v1": ModelCallRecordV1,
     "fusion-run-request.v1": FusionRunRequestV1,
     "fusion-record.v1": FusionRecordV1,
+    "harness-run-result.v1": HarnessRunResultV1,
+    "harness-candidate-record.v1": HarnessCandidateRecordV1,
     "judge-synthesis-record.v1": JudgeSynthesisRecordV1,
     "benchmark-task-record.v1": BenchmarkTaskRecordV1,
     "artifact-ref.v1": ArtifactRefV1,
     "tool-call-plan.v1": ToolCallPlanV1,
     "tool-execution-record.v1": ToolExecutionRecordV1,
+    "ensemble-receipt.v1": EnsembleReceiptV1,
 }
 
 FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
@@ -437,6 +493,9 @@ __all__ = [
     "FusionRunRequestV1",
     "FusionRunState",
     "GitSha",
+    "HarnessCandidateRecordV1",
+    "HarnessKind",
+    "HarnessRunResultV1",
     "JudgeSynthesisRecordV1",
     "ModelCallRecordV1",
     "ModelEndpointV1",
@@ -449,6 +508,7 @@ __all__ = [
     "ToolCallPlanV1",
     "ToolExecutionRecordV1",
     "ToolPolicy",
+    "EnsembleReceiptV1",
     "contract_metadata",
     "contract_model_for_schema",
     "producer",

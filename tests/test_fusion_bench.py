@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 
 import pytest
 from fusionkit_cli.main import app
@@ -14,6 +15,7 @@ from fusionkit_core.run import FusionRunManager
 from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_evals.fusion_bench import (
     FUSION_BENCH_DISCLAIMER,
+    CommandHandoffKitExecutor,
     FusionBenchAttemptRow,
     FusionBenchFailure,
     FusionBenchRunner,
@@ -38,6 +40,41 @@ def test_fusion_bench_loads_tiny_manifests() -> None:
 
     assert len(tasks) == 25
     assert all(isinstance(task.record, BenchmarkTaskRecordV1) for task in tasks)
+
+
+def test_fusion_bench_loads_adversarial_native_fusion_ranker_fixtures() -> None:
+    tasks = load_benchmark_tasks(
+        "packages/fusionkit-evals/fixtures/adversarial-native-fusion"
+    )
+
+    assert len(tasks) == 2
+    assert all(task.record.task_kind == "model_fusion" for task in tasks)
+    assert all(task.record.source_repo == "fusionkit" for task in tasks)
+    for task in tasks:
+        params = task.record.scorer.params or {}
+        assert params["public_claim_eligible"] is False
+        assert "mvp_heuristic_ranker_limitation" in params
+
+
+def test_adversarial_ranker_fixture_reports_regret_not_quality_claim() -> None:
+    task = load_benchmark_tasks(
+        "packages/fusionkit-evals/fixtures/adversarial-native-fusion"
+    )[0]
+    row = _report_row(
+        task.record.task_id,
+        output="Because there is evidence, therefore the answer is 5.",
+        candidate_outputs={
+            "keyword_bait": "Because there is evidence, therefore the answer is 5.",
+            "terse_correct": "4",
+        },
+    ).model_copy(update={"task_record": task.record.model_dump(mode="json")})
+
+    metrics = score_fusion_bench_row(row)
+
+    assert metrics.synthesized_success == 0.0
+    assert metrics.best_single_success == 1.0
+    assert metrics.oracle_success == 1.0
+    assert metrics.judge_synthesis_regret == 1.0
 
 
 def test_fusion_bench_missing_manifest_fails_clearly(tmp_path) -> None:
@@ -97,6 +134,86 @@ async def test_fusion_bench_emits_explicit_skip_for_harness_task(tmp_path) -> No
     assert rows[0].failure.failure_kind == "unavailable_harness"
     assert rows[0].failure.owner == "handoffkit"
     assert rows[0].model_versions == {}
+    assert rows[0].run_id is None
+
+
+@pytest.mark.asyncio
+async def test_fusion_bench_runs_harness_task_with_configured_executor(tmp_path) -> None:
+    task = next(
+        task for task in load_benchmark_tasks() if task.record.task_kind == "harness_coding"
+    )
+    runner = FusionBenchRunner(
+        _engine(),
+        run_root=tmp_path / "runs",
+        config_id="test",
+        mode="single",
+        handoff_executor=_FakeHandoffExecutor(),
+    )
+
+    rows = await runner.run_tasks([task])
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.failure.failure_kind == "none"
+    assert row.status == "succeeded"
+    assert row.run_id == f"harness_result_{task.record.task_id}"
+    assert row.harness_run_result is not None
+    assert row.harness_run_result["schema"] == "harness-run-result.v1"
+    assert row.harness_candidate_records[0]["schema"] == "harness-candidate-record.v1"
+    assert row.model_call_records[0]["schema"] == "model-call-record.v1"
+    assert row.judge_synthesis_record is not None
+    assert row.judge_synthesis_record["schema"] == "judge-synthesis-record.v1"
+    assert row.tool_records[0]["schema"] == "tool-execution-record.v1"
+    assert row.receipt_records[0]["schema"] == "ensemble-receipt.v1"
+    assert row.artifact_records
+    assert row.task_record["schema"] == "benchmark-task-record.v1"
+    assert row.model_ids == ["fake-handoff"]
+
+    metrics = score_fusion_bench_row(row)
+    assert metrics.harness_verification_outcome == "succeeded"
+    assert metrics.tool_success == 1.0
+    assert metrics.judge_parse_failed is False
+
+
+@pytest.mark.asyncio
+async def test_fusion_bench_runs_harness_task_with_command_executor(tmp_path) -> None:
+    task = next(
+        task for task in load_benchmark_tasks() if task.record.task_kind == "harness_coding"
+    )
+    command_path = tmp_path / "fake_handoff_executor.py"
+    command_path.write_text(_fake_handoff_command_script(), encoding="utf-8")
+    runner = FusionBenchRunner(
+        _engine(),
+        run_root=tmp_path / "runs",
+        config_id="test",
+        mode="single",
+        handoff_executor=CommandHandoffKitExecutor([sys.executable, str(command_path)]),
+    )
+
+    rows = await runner.run_tasks([task])
+
+    assert rows[0].failure.failure_kind == "none"
+    assert rows[0].harness_run_result is not None
+    assert rows[0].harness_run_result["result_id"] == f"harness_result_{task.record.task_id}"
+
+
+@pytest.mark.asyncio
+async def test_fusion_bench_marks_invalid_handoff_records_as_validation_errors(tmp_path) -> None:
+    task = next(
+        task for task in load_benchmark_tasks() if task.record.task_kind == "harness_coding"
+    )
+    runner = FusionBenchRunner(
+        _engine(),
+        run_root=tmp_path / "runs",
+        config_id="test",
+        mode="single",
+        handoff_executor=_InvalidHandoffExecutor(),
+    )
+
+    rows = await runner.run_tasks([task])
+
+    assert rows[0].failure.failure_kind == "validation_error"
+    assert rows[0].failure.error_code == "handoffkit_contract_validation_failed"
     assert rows[0].run_id is None
 
 
@@ -213,6 +330,32 @@ def test_fusion_bench_skipped_rows_do_not_contribute_candidate_metrics() -> None
     assert metrics.candidate_failures == {}
 
 
+def test_fusion_bench_judge_parse_failures_are_explicit_and_unscored() -> None:
+    row = _report_row(
+        "task_invalid_judge_json",
+        output="good",
+        candidate_outputs={"fast": "good"},
+    ).model_copy(
+        update={
+            "judge_synthesis_record": {
+                "schema": "judge-synthesis-record.v1",
+                "metrics": {"judge_structured_parse_status": "failed"},
+                "judge_model_call_id": "judge_call_task_invalid_judge_json",
+            }
+        }
+    )
+
+    metrics = score_fusion_bench_row(row)
+    report = build_fusion_bench_report([row])
+
+    assert metrics.failed is True
+    assert metrics.judge_parse_failed is True
+    assert metrics.synthesized_success is None
+    assert report.aggregate.failed_tasks == 1
+    assert report.aggregate.judge_parse_failures == 1
+    assert report.aggregate.synthesized_success is None
+
+
 def test_fusion_bench_report_aggregates_metrics_and_outcomes() -> None:
     rows = _report_rows()
 
@@ -316,6 +459,168 @@ def test_fusion_bench_report_cli_writes_markdown_and_jsonl(tmp_path) -> None:
     assert jsonl_output.exists()
     assert markdown_output.exists()
     assert "Skipped tasks: 1" in markdown_output.read_text(encoding="utf-8")
+
+
+class _FakeHandoffExecutor:
+    async def run(self, task) -> list[dict[str, object]]:
+        return _handoff_records(task)
+
+
+class _InvalidHandoffExecutor:
+    async def run(self, task) -> list[dict[str, object]]:
+        metadata = contract_metadata("harness-run-result.v1")
+        return [
+            {
+                **metadata,
+                "request_id": f"harness_req_{task.record.task_id}",
+                "harness_kind": "generic",
+                "status": "succeeded",
+                "candidate_ids": [],
+                "capabilities": {"tool_call_loop": "supported"},
+                "started_at": metadata["created_at"],
+            }
+        ]
+
+
+def _handoff_records(task) -> list[dict[str, object]]:
+    result_metadata = contract_metadata("harness-run-result.v1")
+    candidate_metadata = contract_metadata("harness-candidate-record.v1")
+    call_metadata = contract_metadata("model-call-record.v1")
+    judge_metadata = contract_metadata("judge-synthesis-record.v1")
+    tool_metadata = contract_metadata("tool-execution-record.v1")
+    receipt_metadata = contract_metadata("ensemble-receipt.v1")
+    artifact = {
+        "artifact_id": f"artifact_{task.record.task_id}",
+        "kind": "log",
+        "hash": "sha256:" + "8" * 64,
+        "uri": "memory://handoff/log",
+        "redaction_status": "synthetic",
+    }
+    return [
+        task.record.model_dump(mode="json"),
+        {
+            **result_metadata,
+            "result_id": f"harness_result_{task.record.task_id}",
+            "request_id": f"harness_req_{task.record.task_id}",
+            "harness_kind": "generic",
+            "status": "succeeded",
+            "candidate_ids": [f"harness_candidate_{task.record.task_id}"],
+            "output_summary": "harness final output",
+            "artifacts": [artifact],
+            "capabilities": {"tool_call_loop": "supported"},
+            "started_at": result_metadata["created_at"],
+            "finished_at": result_metadata["created_at"],
+            "errors": [],
+            "metadata": {"trace_id": f"trace_{task.record.task_id}"},
+        },
+        {
+            **candidate_metadata,
+            "candidate_id": f"harness_candidate_{task.record.task_id}",
+            "request_id": f"harness_req_{task.record.task_id}",
+            "harness_kind": "generic",
+            "model_call_id": f"call_{task.record.task_id}",
+            "status": "succeeded",
+            "side_effects": "read_only",
+            "artifacts": [artifact],
+            "score": 1.0,
+            "metadata": {"model_id": "fake-handoff"},
+        },
+        {
+            **call_metadata,
+            "call_id": f"call_{task.record.task_id}",
+            "endpoint_id": "fake-handoff",
+            "model": "fake-handoff-model",
+            "request_hash": "sha256:" + "9" * 64,
+            "status": "succeeded",
+            "messages": [{"role": "user", "content": task.record.prompt or ""}],
+            "side_effects": "read_only",
+            "started_at": call_metadata["created_at"],
+            "finished_at": call_metadata["created_at"],
+            "latency_ms": 250.0,
+            "output_text": "harness final output",
+            "metadata": {"cost_estimate": 0.01},
+        },
+        {
+            **judge_metadata,
+            "synthesis_id": f"synthesis_{task.record.task_id}",
+            "input_candidate_ids": [f"harness_candidate_{task.record.task_id}"],
+            "status": "succeeded",
+            "decision": "select_candidate",
+            "final_output": "harness final output",
+            "judge_model_call_id": f"call_{task.record.task_id}",
+            "selected_candidate_id": f"harness_candidate_{task.record.task_id}",
+            "metrics": {"judge_structured_parse_status": "parsed"},
+        },
+        {
+            **tool_metadata,
+            "execution_id": f"tool_exec_{task.record.task_id}",
+            "plan_id": f"tool_plan_{task.record.task_id}",
+            "status": "succeeded",
+            "output_hash": "sha256:" + "7" * 64,
+        },
+        {
+            **receipt_metadata,
+            "receipt_id": f"receipt_{task.record.task_id}",
+            "run_id": f"harness_result_{task.record.task_id}",
+            "status": "succeeded",
+            "artifact_hashes": ["sha256:" + "8" * 64],
+        },
+    ]
+
+
+def _fake_handoff_command_script() -> str:
+    return """
+import json
+import sys
+
+payload = json.load(sys.stdin)
+task = payload["task"]
+created_at = task["created_at"]
+metadata = {
+    "schema_version": "v1",
+    "schema_bundle_hash": task["schema_bundle_hash"],
+    "producer": "fake-handoff-command",
+    "producer_version": "0.1.0",
+    "producer_git_sha": "a" * 40,
+    "created_at": created_at,
+}
+task_id = task["task_id"]
+artifact = {
+    "artifact_id": f"artifact_{task_id}",
+    "kind": "log",
+    "hash": "sha256:" + "8" * 64,
+    "uri": "memory://handoff/log",
+    "redaction_status": "synthetic",
+}
+records = [
+    task,
+    {
+        **metadata,
+        "schema": "harness-run-result.v1",
+        "result_id": f"harness_result_{task_id}",
+        "request_id": f"harness_req_{task_id}",
+        "harness_kind": "generic",
+        "status": "succeeded",
+        "candidate_ids": [f"harness_candidate_{task_id}"],
+        "output_summary": "harness command output",
+        "artifacts": [artifact],
+        "capabilities": {"tool_call_loop": "supported"},
+        "started_at": created_at,
+    },
+    {
+        **metadata,
+        "schema": "harness-candidate-record.v1",
+        "candidate_id": f"harness_candidate_{task_id}",
+        "request_id": f"harness_req_{task_id}",
+        "harness_kind": "generic",
+        "status": "succeeded",
+        "side_effects": "read_only",
+        "artifacts": [artifact],
+        "metadata": {"model_id": "fake-handoff"},
+    },
+]
+json.dump({"records": records}, sys.stdout)
+"""
 
 
 def _engine() -> FusionEngine:
