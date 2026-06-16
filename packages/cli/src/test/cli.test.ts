@@ -14,12 +14,20 @@ import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 
 const CLI = fileURLToPath(new URL("../index.js", import.meta.url));
+const SMOKE_ENV_KEYS = [
+  "WARRANT_CLAUDE_SMOKE",
+  "WARRANT_CODEX_SMOKE",
+  "WARRANT_ENSEMBLE_LIVE_SMOKE"
+] as const;
 
 let home: string;
 
 function warrant(args: string[]): { status: number; stdout: string; stderr: string } {
+  const env = { ...process.env };
+  for (const key of SMOKE_ENV_KEYS) delete env[key];
   const result = spawnSync(process.execPath, [CLI, "--dir", home, ...args], {
-    encoding: "utf8"
+    encoding: "utf8",
+    env
   });
   return {
     status: result.status ?? 1,
@@ -43,6 +51,7 @@ test("help prints usage", () => {
   assert.match(result.stdout, /governed execution and provenance plane/);
   assert.match(result.stdout, /warrant continue --agent KIND/);
   assert.match(result.stdout, /warrant ensemble run/);
+  assert.match(result.stdout, /--live-smoke TARGET/);
   assert.match(result.stdout, /warrant ui/);
 });
 
@@ -264,6 +273,54 @@ test("ensemble dashboard writes markdown and run-result records", () => {
     const dashboard = readFileSync(join(fixture.output, "dashboard.md"), "utf8");
     assert.match(dashboard, /Capability Matrix/);
     assert.match(dashboard, /command-failure/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ensemble dashboard live-smoke flag remains env-gated by default", () => {
+  const fixture = makeRepo();
+  try {
+    const result = warrant([
+      "ensemble",
+      "dashboard",
+      "--repo",
+      fixture.repo,
+      "--out",
+      fixture.output,
+      "--timeout-ms",
+      "1000",
+      "--live-smoke",
+      "claude-code",
+      "--live-smoke",
+      "codex"
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /records: 6/);
+    const dashboard = readFileSync(join(fixture.output, "dashboard.md"), "utf8");
+    assert.match(dashboard, /live smoke not requested/);
+    assert.equal(dashboard.includes("claude-code-live"), false);
+    assert.equal(dashboard.includes("codex-live"), false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ensemble dashboard rejects unknown live-smoke targets", () => {
+  const fixture = makeRepo();
+  try {
+    const result = warrant([
+      "ensemble",
+      "dashboard",
+      "--repo",
+      fixture.repo,
+      "--out",
+      fixture.output,
+      "--live-smoke",
+      "cursor"
+    ]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /--live-smoke must be/);
   } finally {
     fixture.cleanup();
   }

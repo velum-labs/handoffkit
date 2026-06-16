@@ -14,6 +14,7 @@ import type {
   EnsembleDescriptor,
   EnsembleModel,
   EnsembleRunResult,
+  HarnessLiveSmokeTarget,
   HarnessSmokeDashboard
 } from "@warrant/ensemble";
 import { agents, handoff, targets } from "@warrant/handoff";
@@ -112,6 +113,7 @@ usage:
       --repo DIR              workspace repository (default: .)
       --out DIR               output directory (default: ./.warrant/ensemble-dashboard)
       --timeout-ms N          command timeout (default: 30000)
+      --live-smoke TARGET     include env-gated live smoke: claude-code | codex (repeatable)
 
 global:
   --dir DIR    warrant home (default: ./.warrant)
@@ -200,6 +202,7 @@ type EnsembleDashboardFlags = {
   repo?: string;
   out?: string;
   "timeout-ms"?: string;
+  "live-smoke"?: string[];
 };
 
 function parseRunArgs(argv: string[]): { values: RunFlags; prompt: string } {
@@ -253,7 +256,8 @@ function parseEnsembleDashboardArgs(argv: string[]): EnsembleDashboardFlags {
     options: {
       repo: { type: "string", default: "." },
       out: { type: "string" },
-      "timeout-ms": { type: "string" }
+      "timeout-ms": { type: "string" },
+      "live-smoke": { type: "string", multiple: true }
     },
     allowPositionals: true
   });
@@ -276,6 +280,19 @@ function ensembleModels(values: EnsembleFlags): EnsembleModel[] {
       id: spec.slice(0, separator),
       model: spec.slice(separator + 1)
     };
+  });
+}
+
+function liveSmokeTargets(values: EnsembleDashboardFlags): HarnessLiveSmokeTarget[] {
+  const targets = values["live-smoke"] ?? [];
+  return targets.map((target) => {
+    switch (target) {
+      case "claude-code":
+      case "codex":
+        return target;
+      default:
+        fail('--live-smoke must be "claude-code" or "codex"');
+    }
   });
 }
 
@@ -424,9 +441,17 @@ async function cmdEnsembleDashboard(argv: string[]): Promise<void> {
   const dashboard = await runHarnessSmokeDashboard({
     repo: resolve(values.repo ?? "."),
     ...(values.out !== undefined ? { outputRoot: resolve(values.out) } : {}),
-    timeoutMs
+    timeoutMs,
+    liveSmoke: liveSmokeTargets(values)
   });
   console.log(renderHarnessSmokeDashboardSummary(dashboard));
+  if (
+    dashboard.records.some(
+      (record) => record.purpose === "live" && record.result.status !== "succeeded"
+    )
+  ) {
+    process.exitCode = 1;
+  }
 }
 
 function isolationFlag(value: string | undefined): SessionIsolation | undefined {

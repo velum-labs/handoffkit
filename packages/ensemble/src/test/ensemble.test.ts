@@ -28,7 +28,11 @@ import {
   claudeCodeHarnessCredentialSkipReason
 } from "../claude-code.js";
 import { createCommandHarness } from "../command.js";
-import { codexConfigToml, codexHarness } from "../codex.js";
+import {
+  codexConfigToml,
+  codexHarness,
+  codexHarnessCredentialSkipReason
+} from "../codex.js";
 import type { CodexExecInput } from "../codex.js";
 import { createMockJudgeSynthesizer } from "../judge.js";
 import { createMockHarness } from "../mock.js";
@@ -250,7 +254,7 @@ test("claude-code adapter delegates through a session backend from a generic des
 
 test(
   "smoke: claude-code adapter runs live when credentials are available",
-  { skip: claudeCodeHarnessCredentialSkipReason() },
+  { skip: liveClaudeSmokeSkipReason() },
   async () => {
     const repo = makeRepo();
     try {
@@ -275,11 +279,12 @@ test(
           },
           policy: {
             id: "claude-smoke-policy",
-            allowedTools: ["read_file", "write_file"],
-            sideEffects: "writes_workspace",
+            allowedTools: ["read_file"],
+            sideEffects: "read_only",
             timeoutMs: 180_000
           },
-          prompt: "Create CLAUDE_SMOKE.md containing exactly: ok",
+          prompt:
+            "Read README.md if present, then reply exactly CLAUDE_LIVE_SMOKE_OK. Do not modify files.",
           workspace: repo.repo,
           baseGitSha: repo.head,
           outputRoot: repo.outputRoot,
@@ -290,7 +295,6 @@ test(
       assertHarnessRunResultV1(result.harnessRunResult);
       assert.equal(result.harnessRunResult.status, "succeeded");
       assert.equal(result.candidates[0]?.status, "succeeded");
-      assert.ok(result.artifacts.some((artifact) => artifact.kind === "patch"));
     } finally {
       repo.cleanup();
     }
@@ -382,19 +386,18 @@ test("codex adapter runs through an injected Responses runner and records eviden
   assert.match(result.candidates[0]?.metadata?.adapter as string, /codex/);
 });
 
+function liveClaudeSmokeSkipReason(): string | false {
+  if (process.env.WARRANT_CLAUDE_SMOKE !== "1") {
+    return "set WARRANT_CLAUDE_SMOKE=1 plus Claude Code credentials to run the live Claude Code smoke";
+  }
+  return claudeCodeHarnessCredentialSkipReason() ?? false;
+}
+
 function liveCodexSmokeSkipReason(): string | false {
   if (process.env.WARRANT_CODEX_SMOKE !== "1") {
     return "set WARRANT_CODEX_SMOKE=1 plus Codex credentials to run the live Codex smoke";
   }
-  if (
-    !process.env.CODEX_API_KEY &&
-    !process.env.OPENAI_API_KEY &&
-    !process.env.WARRANT_CODEX_RESPONSES_BASE_URL &&
-    !process.env.CODEX_RESPONSES_BASE_URL
-  ) {
-    return "missing Codex credentials/provider env (CODEX_API_KEY, OPENAI_API_KEY, or a Responses provider URL)";
-  }
-  return false;
+  return codexHarnessCredentialSkipReason() ?? false;
 }
 
 test(
@@ -405,6 +408,8 @@ test(
     try {
       const result = await runEnsemble(
         descriptor({
+          prompt:
+            "Read README.md if present, then reply exactly CODEX_LIVE_SMOKE_OK. Do not modify files.",
           models: [{ id: "codex", model: process.env.WARRANT_CODEX_SMOKE_MODEL ?? "gpt-5.5-codex" }],
           harness: codexHarness({
             timeoutMs: 60_000,

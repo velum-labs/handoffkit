@@ -85,6 +85,8 @@ export type CodexHarnessOptions = {
   keepCodexHome?: boolean;
 };
 
+export type CodexHarnessEnv = Record<string, string | undefined>;
+
 export type CodexConfigTomlInput = {
   model: string;
   sandboxMode: CodexSandboxMode;
@@ -214,6 +216,14 @@ function missingCredentialReason(
       throw new Error(`unsupported Codex provider: ${String(exhausted)}`);
     }
   }
+}
+
+export function codexHarnessCredentialSkipReason(
+  env: CodexHarnessEnv = process.env,
+  options: Pick<CodexHarnessOptions, "provider"> = {}
+): string | undefined {
+  const defined = definedEnv(env);
+  return missingCredentialReason(options.provider ?? providerFromEnv(defined), defined);
 }
 
 function sandboxModeFor(

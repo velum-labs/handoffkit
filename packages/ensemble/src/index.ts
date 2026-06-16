@@ -8,6 +8,7 @@ export {
 export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./claude-code.js";
 export {
   codexConfigToml,
+  codexHarnessCredentialSkipReason,
   codexHarness,
   createCodexHarness
 } from "./codex.js";
@@ -18,6 +19,7 @@ export type {
   CodexExecInput,
   CodexExecResult,
   CodexExecRunner,
+  CodexHarnessEnv,
   CodexHarnessOptions,
   CodexOpenAiCompatibleProvider,
   CodexProvider,
@@ -32,13 +34,16 @@ export {
   runHarnessSmokeDashboard
 } from "./dashboard.js";
 export type {
+  HarnessAdapterReadiness,
   HarnessAvailability,
   HarnessCapabilityMatrix,
   HarnessCapabilityMatrixRow,
   HarnessCapabilityTarget,
+  HarnessLiveSmokeTarget,
   HarnessSmokeDashboard,
   HarnessSmokeDashboardOptions,
   HarnessSmokeOutcome,
+  HarnessSmokePurpose,
   HarnessSmokeRecord
 } from "./dashboard.js";
 export { createMockJudgeSynthesizer } from "./judge.js";
