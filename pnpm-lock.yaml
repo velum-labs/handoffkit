@@ -351,6 +351,12 @@ importers:
         specifier: workspace:*
         version: link:../testkit
 
+  packages/ensemble:
+    dependencies:
+      '@warrant/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/example-utils:
     dependencies:
       '@ai-sdk/openai-compatible':

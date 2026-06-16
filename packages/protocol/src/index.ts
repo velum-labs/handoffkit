@@ -69,6 +69,7 @@ export {
 } from "./model-fusion.js";
 export type {
   ArtifactRefV1,
+  ArtifactRef,
   BenchmarkScorer,
   BenchmarkScorerKind,
   BenchmarkSourceRepo,

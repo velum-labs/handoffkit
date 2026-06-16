@@ -38,6 +38,9 @@
       "path": "packages/handoff"
     },
     {
+      "path": "packages/ensemble"
+    },
+    {
       "path": "packages/testkit"
     },
     {

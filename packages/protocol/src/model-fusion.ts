@@ -98,13 +98,15 @@ export type ModelFusionError = {
   retryable?: boolean;
 };
 
-export type ArtifactRefV1 = ContractMetadataV1<"artifact-ref.v1"> & {
+export type ArtifactRef = {
   artifact_id: string;
   kind: ModelFusionArtifactKind;
   uri?: string;
   hash: string;
   redaction_status?: ModelFusionRedactionStatus;
 };
+
+export type ArtifactRefV1 = ContractMetadataV1<"artifact-ref.v1"> & ArtifactRef;
 
 export type ModelCallRecordV1 = ContractMetadataV1<"model-call-record.v1"> & {
   call_id: string;
@@ -145,7 +147,7 @@ export type HarnessRunResultV1 = ContractMetadataV1<"harness-run-result.v1"> & {
   status: ModelFusionStatus;
   candidate_ids: string[];
   output_summary?: string;
-  artifacts?: ArtifactRefV1[];
+  artifacts?: ArtifactRef[];
   capabilities: Record<string, ModelFusionCapabilityStatus>;
   started_at: string;
   finished_at?: string;
@@ -162,7 +164,7 @@ export type HarnessCandidateRecordV1 = ContractMetadataV1<"harness-candidate-rec
   side_effects: ModelFusionSideEffects;
   branch_name?: string;
   worktree_path?: string;
-  artifacts?: ArtifactRefV1[];
+  artifacts?: ArtifactRef[];
   score?: number;
   error?: ModelFusionError;
   metadata?: Record<string, JsonValue>;
@@ -424,7 +426,7 @@ function assertArtifact(
   value: unknown,
   context: string,
   includeMetadata = false
-): asserts value is ArtifactRefV1 {
+): asserts value is ArtifactRef {
   assertObject(value, context);
   assertAllowedKeys(
     value,
@@ -457,7 +459,7 @@ function assertArtifact(
   }
 }
 
-function assertArtifacts(value: unknown, context: string): asserts value is ArtifactRefV1[] {
+function assertArtifacts(value: unknown, context: string): asserts value is ArtifactRef[] {
   if (!Array.isArray(value)) throw new Error(`${context} must be an array`);
   value.forEach((item, index) => assertArtifact(item, `${context}[${index}]`));
 }
