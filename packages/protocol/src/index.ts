@@ -41,6 +41,23 @@ export type {
   ExecutionLogPolicy,
   ExecutionSpec
 } from "./execution.js";
+export {
+  evaluateToolPolicy,
+  modelFusionSideEffects,
+  toolArgumentsHash,
+  toolCallKey
+} from "./tool-executor.js";
+export type {
+  ToolDefinition,
+  ToolExecutionRequest,
+  ToolExecutionResult,
+  ToolExecutorBudget,
+  ToolExecutorContract,
+  ToolExecutorLimits,
+  ToolExecutorMode,
+  ToolPolicyDecision,
+  ToolSideEffectClass
+} from "./tool-executor.js";
 export { canonicalize } from "./jcs.js";
 export type { JsonValue } from "./jcs.js";
 export {

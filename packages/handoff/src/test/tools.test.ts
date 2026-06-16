@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { ToolExecutionResult } from "@warrant/protocol";
+
 import { handoff } from "../handoff.js";
+import { HandoffToolJournal } from "../tool-journal.js";
 import { targets } from "../targets.js";
 import { localFirst } from "../policy.js";
 
@@ -87,4 +90,29 @@ test("h.summary recomputes counts from the trace", async () => {
   assert.equal(summary.continuations.denied, 0);
   assert.equal(summary.checkpoints, 0);
   assert.deepEqual(summary.runs, []);
+});
+
+test("tool journal can append ToolExecutor results without replacing existing wrapper", () => {
+  const journal = new HandoffToolJournal();
+  const result: ToolExecutionResult = {
+    record: {
+      schema: "tool-execution-record.v1",
+      schema_version: "v1",
+      schema_bundle_hash: "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+      producer: "test",
+      producer_version: "0.1.0",
+      producer_git_sha: "0".repeat(40),
+      created_at: "2026-06-16T00:00:00.000Z",
+      execution_id: "exec_read",
+      plan_id: "plan_read",
+      status: "succeeded",
+      output_hash: "sha256:" + "a".repeat(64)
+    },
+    output: { ok: true },
+    deduped: false,
+    decision: { decision: "allow", reason: "test" }
+  };
+  journal.appendExecutionResult(result);
+  assert.equal(journal.length, 1);
+  assert.ok(journal.snapshot()?.hash.match(/^[0-9a-f]{64}$/));
 });

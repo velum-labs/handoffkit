@@ -153,6 +153,9 @@ test("command adapter records command output, artifact, tool record, and verific
     | { verification?: { status?: string } }
     | undefined;
   assert.equal(metadata?.verification?.status, "succeeded");
+  assert.deepEqual(result.summary?.candidates[0]?.toolExecutionIds, [
+    "exec_ensemble_test_command_0"
+  ]);
 });
 
 test("command adapter maps non-zero exit to failed protocol status", async () => {

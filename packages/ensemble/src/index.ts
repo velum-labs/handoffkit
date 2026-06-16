@@ -28,6 +28,12 @@ export type {
 export { createMockHarness } from "./mock.js";
 export type { MockCandidateFixture, MockHarnessOptions } from "./mock.js";
 export {
+  createToolExecutor,
+  registerDemoTools,
+  sideEffectsForTool
+} from "./tool-executor.js";
+export type { ToolExecutor, ToolImplementation } from "./tool-executor.js";
+export {
   cleanupCandidateWorktree,
   cleanupWorktreePlan,
   createWorktreePlan,

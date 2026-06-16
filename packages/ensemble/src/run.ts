@@ -398,6 +398,7 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
           status: candidate.status,
           ...(candidate.branch_name ? { branchName: candidate.branch_name } : {}),
           ...(candidate.worktree_path ? { worktreePath: candidate.worktree_path } : {}),
+          toolExecutionIds: output?.toolRecords?.map((record) => record.execution_id) ?? [],
           diffArtifacts,
           ...(output?.verification ? { verification: output.verification } : {})
         };

@@ -165,6 +165,7 @@ export type EnsembleCandidateSummary = {
   status: ModelFusionStatus;
   branchName?: string;
   worktreePath?: string;
+  toolExecutionIds: string[];
   diffArtifacts: HarnessArtifact[];
   verification?: HarnessCandidateOutput["verification"];
 };
