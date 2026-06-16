@@ -38,6 +38,7 @@ export type ToolExecutorContract = {
 
 export type ToolExecutionRequest = {
   candidate_id?: string;
+  plan_id?: string;
   tool_name: string;
   arguments: JsonValue;
   side_effects: ToolSideEffectClass;
@@ -83,6 +84,28 @@ export function modelFusionSideEffects(
     default: {
       const exhausted: never = sideEffects;
       throw new Error(`unknown side effect class: ${String(exhausted)}`);
+    }
+  }
+}
+
+export function toolSideEffectClassFromModelFusion(
+  sideEffects: ModelFusionSideEffects
+): ToolSideEffectClass {
+  switch (sideEffects) {
+    case "none":
+      return "none";
+    case "read_only":
+      return "read";
+    case "writes_workspace":
+      return "write";
+    case "network":
+      return "external";
+    case "tool_execution":
+    case "unknown":
+      throw new Error(`unsupported tool side effect: ${sideEffects}`);
+    default: {
+      const exhausted: never = sideEffects;
+      throw new Error(`unknown model-fusion side effect: ${String(exhausted)}`);
     }
   }
 }

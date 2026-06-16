@@ -67,7 +67,9 @@ function executionRecord(input: {
       contract: input.contract,
       request: input.request
     }).slice(0, 16)}`,
-    plan_id: `tool_plan_${argumentsHash.slice("sha256:".length, "sha256:".length + 16)}`,
+    plan_id:
+      input.request.plan_id ??
+      `tool_plan_${argumentsHash.slice("sha256:".length, "sha256:".length + 16)}`,
     status: input.status,
     ...(input.output !== undefined ? { output_hash: artifactHash(JSON.stringify(input.output)) } : {}),
     ...(input.status !== "succeeded"
@@ -110,7 +112,21 @@ export function createToolExecutor(contract: ToolExecutorContract): ToolExecutor
       }
       if (decision.dedupeKey !== undefined && dedupe.has(decision.dedupeKey)) {
         const cached = dedupe.get(decision.dedupeKey);
-        if (cached !== undefined) return { ...cached, deduped: true };
+        if (cached !== undefined) {
+          return {
+            record: executionRecord({
+              contract,
+              request,
+              status: cached.record.status,
+              output: cached.output,
+              decision,
+              createdAt
+            }),
+            ...(cached.output !== undefined ? { output: cached.output } : {}),
+            deduped: true,
+            decision
+          };
+        }
       }
       const tool = tools.get(request.tool_name);
       if (tool === undefined) {

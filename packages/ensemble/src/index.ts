@@ -34,6 +34,21 @@ export {
 } from "./tool-executor.js";
 export type { ToolExecutor, ToolImplementation } from "./tool-executor.js";
 export {
+  executeFusionKitToolBatch,
+  FusionKitToolExecutorClient,
+  FusionKitToolExecutorClientError,
+  FusionKitToolExecutorError,
+  startFusionKitToolExecutorServer
+} from "./external-executor.js";
+export type {
+  FusionKitToolExecutionBatch,
+  FusionKitToolExecutionRequest,
+  FusionKitToolExecutionResponse,
+  FusionKitToolExecutionResult,
+  FusionKitToolExecutorServer,
+  FusionKitToolExecutorServerOptions
+} from "./external-executor.js";
+export {
   cleanupCandidateWorktree,
   cleanupWorktreePlan,
   createWorktreePlan,

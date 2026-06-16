@@ -45,7 +45,8 @@ export {
   evaluateToolPolicy,
   modelFusionSideEffects,
   toolArgumentsHash,
-  toolCallKey
+  toolCallKey,
+  toolSideEffectClassFromModelFusion
 } from "./tool-executor.js";
 export type {
   ToolDefinition,

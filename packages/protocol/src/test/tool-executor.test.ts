@@ -5,7 +5,8 @@ import {
   evaluateToolPolicy,
   modelFusionSideEffects,
   toolArgumentsHash,
-  toolCallKey
+  toolCallKey,
+  toolSideEffectClassFromModelFusion
 } from "../tool-executor.js";
 import type { ToolExecutorContract, ToolExecutionRequest, ToolExecutionResult } from "../tool-executor.js";
 
@@ -35,6 +36,17 @@ test("tool call keys are stable and policy scoped", () => {
     toolCallKey({
       contract: { ...contract, environment_id: "env_other" },
       request
+    })
+  );
+  assert.equal(
+    toolCallKey({ contract, request }),
+    toolCallKey({
+      contract,
+      request: {
+        ...request,
+        candidate_id: "candidate_b",
+        plan_id: "tool_plan_other"
+      }
     })
   );
 });
@@ -67,6 +79,11 @@ test("tool side effects map to model-fusion side effects", () => {
   assert.equal(modelFusionSideEffects("read"), "read_only");
   assert.equal(modelFusionSideEffects("write"), "writes_workspace");
   assert.equal(modelFusionSideEffects("external"), "network");
+  assert.equal(toolSideEffectClassFromModelFusion("none"), "none");
+  assert.equal(toolSideEffectClassFromModelFusion("read_only"), "read");
+  assert.equal(toolSideEffectClassFromModelFusion("writes_workspace"), "write");
+  assert.equal(toolSideEffectClassFromModelFusion("network"), "external");
+  assert.throws(() => toolSideEffectClassFromModelFusion("unknown"));
 });
 
 test("tool execution result shape remains JSON-safe", () => {
