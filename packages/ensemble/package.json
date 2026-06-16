@@ -13,7 +13,10 @@
   },
   "files": ["dist"],
   "dependencies": {
+    "@warrant/model-gateway": "workspace:*",
     "@warrant/protocol": "workspace:*",
+    "@warrant/runner": "workspace:*",
+    "@warrant/session-harness": "workspace:*",
     "@warrant/workspace": "workspace:*"
   }
 }

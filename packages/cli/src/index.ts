@@ -7,9 +7,15 @@ import {
   createCommandHarness,
   createMockHarness,
   createMockJudgeSynthesizer,
-  runEnsemble
+  runEnsemble,
+  runHarnessSmokeDashboard
 } from "@warrant/ensemble";
-import type { EnsembleDescriptor, EnsembleModel, EnsembleRunResult } from "@warrant/ensemble";
+import type {
+  EnsembleDescriptor,
+  EnsembleModel,
+  EnsembleRunResult,
+  HarnessSmokeDashboard
+} from "@warrant/ensemble";
 import { agents, handoff, targets } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
 import {
@@ -102,6 +108,10 @@ usage:
       --judge ID              judge id (default: mock)
       --policy ID             policy id (default: local-smoke)
       --timeout-ms N          command timeout (default: 30000)
+  warrant ensemble dashboard [opts]              generate harness smoke dashboard
+      --repo DIR              workspace repository (default: .)
+      --out DIR               output directory (default: ./.warrant/ensemble-dashboard)
+      --timeout-ms N          command timeout (default: 30000)
 
 global:
   --dir DIR    warrant home (default: ./.warrant)
@@ -186,6 +196,12 @@ type EnsembleFlags = {
   "task-file"?: string;
 };
 
+type EnsembleDashboardFlags = {
+  repo?: string;
+  out?: string;
+  "timeout-ms"?: string;
+};
+
 function parseRunArgs(argv: string[]): { values: RunFlags; prompt: string } {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -229,6 +245,20 @@ function parseEnsembleArgs(argv: string[]): { values: EnsembleFlags; prompt: str
       ? readFileSync(values["task-file"], "utf8")
       : positionals.join(" ").trim();
   return { values, prompt };
+}
+
+function parseEnsembleDashboardArgs(argv: string[]): EnsembleDashboardFlags {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      repo: { type: "string", default: "." },
+      out: { type: "string" },
+      "timeout-ms": { type: "string" }
+    },
+    allowPositionals: true
+  });
+  if (positionals.length > 0) fail("ensemble dashboard does not accept positional arguments");
+  return values;
 }
 
 function ensembleModels(values: EnsembleFlags): EnsembleModel[] {
@@ -301,6 +331,23 @@ function renderEnsembleSummary(outDir: string, result: EnsembleRunResult): strin
   return lines.join("\n");
 }
 
+function renderHarnessSmokeDashboardSummary(dashboard: HarnessSmokeDashboard): string {
+  const counts = new Map<string, number>();
+  for (const record of dashboard.records) {
+    counts.set(record.result.status, (counts.get(record.result.status) ?? 0) + 1);
+  }
+  const countText = [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([status, count]) => `${status}:${count}`)
+    .join(", ");
+  return [
+    `harness dashboard [${countText}]`,
+    `records: ${dashboard.records.length}`,
+    `dashboard: ${dashboard.dashboardPath}`,
+    `output: ${dashboard.outputRoot}`
+  ].join("\n");
+}
+
 async function cmdEnsembleRun(argv: string[]): Promise<void> {
   const { values, prompt } = parseEnsembleArgs(argv);
   if (!prompt.trim()) fail("a task prompt or --task-file is required");
@@ -368,6 +415,18 @@ async function cmdEnsembleRun(argv: string[]): Promise<void> {
   if (result.harnessRunResult.status !== "succeeded" || result.failureSummary) {
     process.exitCode = 1;
   }
+}
+
+async function cmdEnsembleDashboard(argv: string[]): Promise<void> {
+  const values = parseEnsembleDashboardArgs(argv);
+  const timeoutMs = Number(values["timeout-ms"] ?? "30000");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) fail("--timeout-ms must be positive");
+  const dashboard = await runHarnessSmokeDashboard({
+    repo: resolve(values.repo ?? "."),
+    ...(values.out !== undefined ? { outputRoot: resolve(values.out) } : {}),
+    timeoutMs
+  });
+  console.log(renderHarnessSmokeDashboardSummary(dashboard));
 }
 
 function isolationFlag(value: string | undefined): SessionIsolation | undefined {
@@ -606,8 +665,15 @@ async function main(): Promise<void> {
       return;
     }
     case "ensemble": {
-      if (sub !== "run") fail(`unknown ensemble subcommand: ${sub ?? ""}`);
-      await cmdEnsembleRun(rest);
+      if (sub === "run") {
+        await cmdEnsembleRun(rest);
+        return;
+      }
+      if (sub === "dashboard") {
+        await cmdEnsembleDashboard(rest);
+        return;
+      }
+      fail(`unknown ensemble subcommand: ${sub ?? ""}`);
       return;
     }
     case "runs": {

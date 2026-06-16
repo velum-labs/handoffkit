@@ -242,6 +242,33 @@ test("ensemble command failure exits nonzero but writes summary", () => {
   }
 });
 
+test("ensemble dashboard writes markdown and run-result records", () => {
+  const fixture = makeRepo();
+  try {
+    const result = warrant([
+      "ensemble",
+      "dashboard",
+      "--repo",
+      fixture.repo,
+      "--out",
+      fixture.output,
+      "--timeout-ms",
+      "1000"
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /harness dashboard/);
+    assert.match(result.stdout, /records: 6/);
+    assert.ok(existsSync(join(fixture.output, "dashboard.md")));
+    assert.ok(existsSync(join(fixture.output, "harness-run-results", "mock-success.json")));
+    assert.ok(existsSync(join(fixture.output, "harness-run-results", "cursor-missing.json")));
+    const dashboard = readFileSync(join(fixture.output, "dashboard.md"), "utf8");
+    assert.match(dashboard, /Capability Matrix/);
+    assert.match(dashboard, /command-failure/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("ensemble task-file input works without printing prompt contents", () => {
   const fixture = makeRepo();
   try {

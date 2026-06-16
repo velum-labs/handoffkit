@@ -5,5 +5,11 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../protocol" }, { "path": "../workspace" }]
+  "references": [
+    { "path": "../model-gateway" },
+    { "path": "../protocol" },
+    { "path": "../runner" },
+    { "path": "../session-harness" },
+    { "path": "../workspace" }
+  ]
 }

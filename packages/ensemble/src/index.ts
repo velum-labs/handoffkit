@@ -1,7 +1,46 @@
 export { createCommandHarness } from "./command.js";
 export type { CommandHarnessOptions } from "./command.js";
+export {
+  claudeCodeHarness,
+  claudeCodeHarnessCredentialSkipReason,
+  createClaudeCodeHarness
+} from "./claude-code.js";
+export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./claude-code.js";
+export {
+  codexConfigToml,
+  codexHarness,
+  createCodexHarness
+} from "./codex.js";
+export type {
+  CodexAmbientProvider,
+  CodexApprovalPolicy,
+  CodexConfigTomlInput,
+  CodexExecInput,
+  CodexExecResult,
+  CodexExecRunner,
+  CodexHarnessOptions,
+  CodexOpenAiCompatibleProvider,
+  CodexProvider,
+  CodexResponsesProvider,
+  CodexSandboxMode
+} from "./codex.js";
 export { createArtifactStore } from "./artifacts.js";
 export type { ArtifactStore } from "./artifacts.js";
+export {
+  createHarnessCapabilityMatrix,
+  harnessDashboard,
+  runHarnessSmokeDashboard
+} from "./dashboard.js";
+export type {
+  HarnessAvailability,
+  HarnessCapabilityMatrix,
+  HarnessCapabilityMatrixRow,
+  HarnessCapabilityTarget,
+  HarnessSmokeDashboard,
+  HarnessSmokeDashboardOptions,
+  HarnessSmokeOutcome,
+  HarnessSmokeRecord
+} from "./dashboard.js";
 export { createMockJudgeSynthesizer } from "./judge.js";
 export type {
   JudgeCandidateEvidence,

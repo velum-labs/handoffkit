@@ -345,13 +345,14 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
   assertDescriptor(descriptor);
   const createdAt = new Date().toISOString();
   const capabilities = descriptor.harness.capabilities(descriptor);
+  const harnessKind = descriptor.harness.harnessKind ?? "generic";
   const outputRoot = defaultOutputRoot(descriptor);
   const store = createArtifactStore(`${outputRoot}/artifacts`);
   const worktreePlan = createWorktreePlan(descriptor);
   const request: HarnessRunRequestV1 = {
     ...metadata({ schema: "harness-run-request.v1", createdAt }),
     request_id: `ensemble_req_${descriptor.id}`,
-    harness_kind: "generic",
+    harness_kind: harnessKind,
     source_repo: descriptor.sourceRepo,
     base_git_sha: descriptor.baseGitSha,
     prompt: descriptor.prompt,
@@ -440,7 +441,7 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
         ...metadata({ schema: "harness-candidate-record.v1", createdAt }),
         candidate_id: id,
         request_id: request.request_id,
-        harness_kind: "generic",
+        harness_kind: harnessKind,
         model_call_id: output.modelCallId ?? output.modelCallRecord?.call_id ?? `${id}_model_call`,
         status: output.status,
         side_effects: descriptor.policy.sideEffects,
@@ -532,7 +533,7 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       ...metadata({ schema: "harness-run-result.v1", createdAt }),
       result_id: `ensemble_result_${descriptor.id}`,
       request_id: request.request_id,
-      harness_kind: "generic",
+      harness_kind: harnessKind,
       status: terminalStatus(outputs),
       candidate_ids: candidates.map((candidate) => candidate.candidate_id),
       output_summary: outputSummary(outputs, descriptor.harness.id),

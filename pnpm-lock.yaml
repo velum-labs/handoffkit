@@ -377,9 +377,18 @@ importers:
 
   packages/ensemble:
     dependencies:
+      '@warrant/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@warrant/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@warrant/runner':
+        specifier: workspace:*
+        version: link:../runner
+      '@warrant/session-harness':
+        specifier: workspace:*
+        version: link:../session-harness
       '@warrant/workspace':
         specifier: workspace:*
         version: link:../workspace

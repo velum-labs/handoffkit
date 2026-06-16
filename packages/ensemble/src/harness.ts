@@ -5,6 +5,7 @@ import type {
   HarnessRunResultV1,
   JudgeSynthesisRecordV1,
   JsonValue,
+  ModelFusionHarnessKind,
   ModelCallRecordV1,
   ModelFusionCapabilityStatus,
   ModelFusionSideEffects,
@@ -281,6 +282,7 @@ export type HarnessCollectInput = {
 
 export type HarnessAdapter = {
   id: string;
+  harnessKind?: ModelFusionHarnessKind;
   prepare(input: HarnessPrepareInput): Promise<unknown> | unknown;
   run(input: HarnessRunInput): Promise<HarnessCandidateOutput> | HarnessCandidateOutput;
   collectArtifacts(input: HarnessCollectInput): Promise<HarnessArtifact[]> | HarnessArtifact[];
