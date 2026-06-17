@@ -12,6 +12,7 @@ RUN apt-get update \
 # Must match the packageManager pin in package.json (check-repo enforces
 # that the pin exists; keep the two in lockstep when bumping pnpm).
 RUN corepack enable && corepack prepare pnpm@10.33.4 --activate
+ARG PACKAGES_READ_TOKEN
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json tsconfig.json ./
 COPY packages ./packages

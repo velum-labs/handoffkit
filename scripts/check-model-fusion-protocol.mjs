@@ -16,6 +16,15 @@ const generatedTsPath = "packages/protocol/src/generated/model-fusion-openapi.ts
 const generatedPyInitPath = "packages/protocol/generated/python/velum_model_fusion_protocol/__init__.py";
 const generatedPyPath = "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py";
 const rootPackagePath = "package.json";
+const protocolPackageJsonPath = "node_modules/@velum-labs/model-fusion-protocol/package.json";
+const protocolPackageManifestPath =
+  "node_modules/@velum-labs/model-fusion-protocol/protocol-package.json";
+const protocolPackageOpenApiPath =
+  "node_modules/@velum-labs/model-fusion-protocol/openapi/model-fusion.v1.openapi.json";
+const protocolPackageTypesPath =
+  "node_modules/@velum-labs/model-fusion-protocol/gen/typescript/openapi.d.ts";
+const protocolPackageValidatorsPath =
+  "node_modules/@velum-labs/model-fusion-protocol/gen/typescript/record-validators.ts";
 
 const modelFusionTypescriptPackageName = "@velum-labs/model-fusion-protocol";
 const modelFusionPythonPackageName = "velum-model-fusion-protocol";
@@ -29,7 +38,12 @@ for (const file of [
   docsPath,
   generatedTsPath,
   generatedPyInitPath,
-  generatedPyPath
+  generatedPyPath,
+  protocolPackageJsonPath,
+  protocolPackageManifestPath,
+  protocolPackageOpenApiPath,
+  protocolPackageTypesPath,
+  protocolPackageValidatorsPath
 ]) {
   if (!existsSync(file)) fail(`missing ${file}`);
 }
@@ -140,6 +154,51 @@ for (const option of ["GitHub Releases wheels", "uv git dependency"]) {
 }
 
 const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8"));
+const protocolPackage = JSON.parse(readFileSync(protocolPackageJsonPath, "utf8"));
+const protocolPackageManifest = JSON.parse(readFileSync(protocolPackageManifestPath, "utf8"));
+const protocolPackageOpenApi = JSON.parse(readFileSync(protocolPackageOpenApiPath, "utf8"));
+
+if (rootPackage.devDependencies?.[modelFusionTypescriptPackageName] !== "0.1.0") {
+  fail(`${rootPackagePath}: devDependency ${modelFusionTypescriptPackageName} must be pinned to 0.1.0`);
+}
+if (protocolPackage.name !== modelFusionTypescriptPackageName) {
+  fail(`${protocolPackageJsonPath}: package name must be ${modelFusionTypescriptPackageName}`);
+}
+if (protocolPackage.version !== rootPackage.devDependencies?.[modelFusionTypescriptPackageName]) {
+  fail(`${protocolPackageJsonPath}: package version must match the root devDependency pin`);
+}
+if (protocolPackage.publishConfig?.registry !== "https://npm.pkg.github.com") {
+  fail(`${protocolPackageJsonPath}: package must publish from GitHub Packages`);
+}
+if (protocolPackageManifest.package_name !== modelFusionTypescriptPackageName) {
+  fail(`${protocolPackageManifestPath}: package_name must be ${modelFusionTypescriptPackageName}`);
+}
+if (protocolPackageManifest.version !== protocolPackage.version) {
+  fail(`${protocolPackageManifestPath}: version must match installed package.json`);
+}
+if (protocolPackageManifest.schema_bundle_hash !== schemaBundleHash) {
+  fail(`${protocolPackageManifestPath}: schema bundle hash must match @warrant/protocol export`);
+}
+if (protocolPackageManifest.openapi?.path !== "openapi/model-fusion.v1.openapi.json") {
+  fail(`${protocolPackageManifestPath}: OpenAPI path must point at the installed package OpenAPI`);
+}
+if (protocolPackageManifest.openapi?.version !== "3.1.0" || protocolPackageOpenApi.openapi !== "3.1.0") {
+  fail("installed model-fusion protocol package must expose OpenAPI 3.1.0");
+}
+if (protocolPackageManifest.protobuf?.required_for_v1 !== false) {
+  fail(`${protocolPackageManifestPath}: protobuf must remain future-only for v1`);
+}
+for (const service of [
+  "HarnessExecutorService",
+  "CursorHarnessService",
+  "MlxProviderService",
+  "BenchmarkJoinService"
+]) {
+  if (!protocolPackageManifest.required_services?.includes(service)) {
+    fail(`${protocolPackageManifestPath}: missing required service ${service}`);
+  }
+}
+
 const publishedMetadata = bindings.publishedProtocolMetadata;
 if (publishedMetadata?.typescriptPackageName !== bindings.typescript?.packageName) {
   fail("published protocol metadata TypeScript package name must match the binding target");

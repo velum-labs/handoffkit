@@ -226,9 +226,33 @@ for (const setting of [
   "package-manager-strict=true",
   "strict-peer-dependencies=true",
   "ignore-scripts=true",
-  "verify-store-integrity=true"
+  "verify-store-integrity=true",
+  "@velum-labs:registry=https://npm.pkg.github.com",
+  "//npm.pkg.github.com/:_authToken=${PACKAGES_READ_TOKEN}",
+  "minimum-release-age-exclude[]=@velum-labs/model-fusion-protocol"
 ]) {
   if (!npmrc.includes(setting)) fail(`.npmrc missing ${setting}`);
+}
+
+const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+for (const snippet of [
+  "packages: read",
+  "PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}"
+]) {
+  if (!ciWorkflow.includes(snippet)) fail(`CI workflow missing ${snippet}`);
+}
+
+const dockerfile = readFileSync("Dockerfile", "utf8");
+if (!dockerfile.includes("ARG PACKAGES_READ_TOKEN")) {
+  fail("Dockerfile must accept PACKAGES_READ_TOKEN as a build arg for private package installs");
+}
+const dockerCompose = readFileSync("docker-compose.yml", "utf8");
+for (const snippet of [
+  "x-app-build: &app-build",
+  "PACKAGES_READ_TOKEN: ${PACKAGES_READ_TOKEN:-}",
+  "build: *app-build"
+]) {
+  if (!dockerCompose.includes(snippet)) fail(`docker-compose.yml missing ${snippet}`);
 }
 
 // The positioning sentences are part of each spec's identity; an exact
@@ -278,6 +302,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@ai-sdk/sandbox-vercel", "1.0.0-canary.6"],
   ["@ai-sdk/tui", "1.0.0-canary.6"],
   ["@types/node", "22.19.20"],
+  ["@velum-labs/model-fusion-protocol", "0.1.0"],
   ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
   ["jose", "6.2.3"],
