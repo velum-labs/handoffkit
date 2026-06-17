@@ -130,6 +130,11 @@ function addFilePatch(path: string, content: string): string {
   ].join("\n");
 }
 
+function emptyCodexHome(): { path: string; cleanup: () => void } {
+  const path = mkdtempSync(join(tmpdir(), "ensemble-codex-empty-home-"));
+  return { path, cleanup: () => rmSync(path, { recursive: true, force: true }) };
+}
+
 test("mock adapter runs N candidates and emits valid model-fusion records", async () => {
   const result = await runEnsemble(
     descriptor({
@@ -326,19 +331,30 @@ test("codex config declares a Responses provider without touching Cursor records
 });
 
 test("codex adapter emits schema-valid skipped output without credentials", async () => {
-  const result = await runEnsemble(
-    descriptor({
-      models: [{ id: "codex", model: "gpt-5.5-codex" }],
-      harness: codexHarness({ env: {}, provider: { kind: "ambient" } })
-    })
-  );
+  const codexHome = emptyCodexHome();
+  try {
+    const result = await runEnsemble(
+      descriptor({
+        models: [{ id: "codex", model: "gpt-5.5-codex" }],
+        harness: codexHarness({
+          env: { CODEX_HOME: codexHome.path },
+          provider: { kind: "ambient" }
+        })
+      })
+    );
 
-  assertHarnessRunResultV1(result.harnessRunResult);
-  assert.equal(result.harnessRunResult.status, "skipped");
-  assert.equal(result.candidates[0]?.status, "skipped");
-  assert.equal(result.candidates[0]?.error?.kind, "capability_missing");
-  assert.match(result.candidates[0]?.error?.message ?? "", /Codex credentials are absent/);
-  assert.match(result.summary?.candidates[0]?.verification?.evidence[0] ?? "", /Codex credentials/);
+    assertHarnessRunResultV1(result.harnessRunResult);
+    assert.equal(result.harnessRunResult.status, "skipped");
+    assert.equal(result.candidates[0]?.status, "skipped");
+    assert.equal(result.candidates[0]?.error?.kind, "capability_missing");
+    assert.match(result.candidates[0]?.error?.message ?? "", /Codex credentials are absent/);
+    assert.match(
+      result.summary?.candidates[0]?.verification?.evidence[0] ?? "",
+      /Codex credentials/
+    );
+  } finally {
+    codexHome.cleanup();
+  }
 });
 
 test("codex adapter runs through an injected Responses runner and records evidence", async () => {

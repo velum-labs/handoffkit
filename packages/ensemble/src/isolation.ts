@@ -34,6 +34,7 @@ export type CandidateCommandIsolationInput = {
   cwd: string;
   timeoutMs?: number;
   isolation?: CandidateIsolationConfig;
+  env?: Record<string, string | undefined>;
 };
 
 export type CandidateCommandIsolationResult = {
@@ -171,7 +172,13 @@ async function runProcessCommand(
   input: CandidateCommandIsolationInput,
   isolation: NormalizedIsolation
 ): Promise<CandidateCommandIsolationResult> {
-  const command = await runHostCommand("/bin/sh", ["-lc", input.command], input.cwd, input.timeoutMs);
+  const command = await runHostCommand(
+    "/bin/sh",
+    ["-lc", input.command],
+    input.cwd,
+    input.timeoutMs,
+    input.env
+  );
   const transcript = [command.stdout, command.stderr].filter(Boolean).join("\n");
   return {
     ...command,
@@ -419,11 +426,22 @@ async function runHostCommand(
   command: string,
   args: string[],
   cwd: string,
-  timeoutMs: number | undefined
+  timeoutMs: number | undefined,
+  env?: Record<string, string | undefined>
 ): Promise<CommandResult> {
+  const mergedEnv =
+    env === undefined
+      ? undefined
+      : {
+          ...process.env,
+          ...Object.fromEntries(
+            Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)
+          )
+        };
   try {
     const result = await execFileAsync(command, args, {
       cwd,
+      ...(mergedEnv !== undefined ? { env: mergedEnv } : {}),
       ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {})
     });
     return {

@@ -1,13 +1,21 @@
 import { artifactHash } from "@warrant/protocol";
 
 import type { HarnessAdapter, HarnessCandidateOutput } from "./harness.js";
+import type { EnsembleModel } from "./harness.js";
 import { runCandidateCommandWithIsolation } from "./isolation.js";
+
+export type CommandHarnessEnvInput = {
+  model: EnsembleModel;
+  ordinal: number;
+  descriptorId: string;
+};
 
 export type CommandHarnessOptions = {
   id?: string;
   command: string;
   cwd?: string;
   timeoutMs?: number;
+  env?: Record<string, string | undefined> | ((input: CommandHarnessEnvInput) => Record<string, string | undefined>);
 };
 
 export function createCommandHarness(options: CommandHarnessOptions): HarnessAdapter {
@@ -30,11 +38,21 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
       requiredEvidence: ["command output", "exit code", "tool execution record"]
     }),
     run: async ({ descriptor, model, ordinal, worktree }) => {
+      const env =
+        typeof options.env === "function"
+          ? options.env({ model, ordinal, descriptorId: descriptor.id })
+          : options.env;
       const execution = await runCandidateCommandWithIsolation({
         command: options.command,
         cwd: worktree?.path ?? options.cwd ?? process.cwd(),
         timeoutMs: options.timeoutMs ?? descriptor.policy.timeoutMs,
-        isolation: descriptor.runtime.isolation
+        isolation: descriptor.runtime.isolation,
+        env: {
+          HARNESS_MODEL_ID: model.id,
+          HARNESS_MODEL: model.model,
+          ...(model.endpointId !== undefined ? { HARNESS_ENDPOINT_ID: model.endpointId } : {}),
+          ...env
+        }
       });
       const { stdout, stderr, exitCode } = execution;
       const transcript = [stdout, stderr].filter(Boolean).join("\n");

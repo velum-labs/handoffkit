@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -129,6 +129,7 @@ test("codexConfigToml declares a Responses provider without requiring auth", () 
 
 test("codex adapter skips clearly when credentials are absent", async () => {
   const { outputRoot, cleanup } = tempOutputRoot();
+  const emptyCodexHome = mkdtempSync(join(tmpdir(), "ensemble-codex-empty-home-"));
   let invoked = false;
   const runner: CodexExecRunner = () => {
     invoked = true;
@@ -138,7 +139,7 @@ test("codex adapter skips clearly when credentials are absent", async () => {
   try {
     const result = await ensemble.run(
       descriptor(outputRoot, {
-        harness: codexHarness({ env: {}, runner })
+        harness: codexHarness({ env: { CODEX_HOME: emptyCodexHome }, runner })
       })
     );
 
@@ -149,6 +150,38 @@ test("codex adapter skips clearly when credentials are absent", async () => {
     assert.match(result.candidates[0]?.error?.message ?? "", /CODEX_API_KEY|OPENAI_API_KEY/);
   } finally {
     cleanup();
+    rmSync(emptyCodexHome, { recursive: true, force: true });
+  }
+});
+
+test("codex adapter accepts local CLI auth without exported API keys", async () => {
+  const { outputRoot, cleanup } = tempOutputRoot();
+  const sourceHome = mkdtempSync(join(tmpdir(), "ensemble-codex-source-home-"));
+  writeFileSync(join(sourceHome, "auth.json"), "{\"auth\":\"redacted-test-token\"}\n");
+  let seenAuthFile = false;
+  const runner: CodexExecRunner = (input) => {
+    const codexHome = input.env.CODEX_HOME;
+    assert.ok(codexHome);
+    assert.notEqual(codexHome, sourceHome);
+    assert.equal(input.env.CODEX_API_KEY, undefined);
+    assert.equal(input.env.OPENAI_API_KEY, undefined);
+    seenAuthFile = existsSync(join(codexHome, "auth.json"));
+    return { stdout: "codex local auth ok", stderr: "", exitCode: 0 };
+  };
+
+  try {
+    const result = await ensemble.run(
+      descriptor(outputRoot, {
+        harness: codexHarness({ env: { CODEX_HOME: sourceHome }, runner })
+      })
+    );
+
+    assert.equal(seenAuthFile, true);
+    assert.equal(result.harnessRunResult.status, "succeeded");
+    assert.equal(result.candidates[0]?.metadata?.provider_kind, "ambient");
+  } finally {
+    cleanup();
+    rmSync(sourceHome, { recursive: true, force: true });
   }
 });
 

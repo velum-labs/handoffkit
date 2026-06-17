@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:http";
+import type { IncomingMessage, Server } from "node:http";
 import {
   existsSync,
   mkdtempSync,
@@ -25,6 +27,89 @@ const SMOKE_ENV_KEYS = [
 
 let home: string;
 
+async function readBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks);
+}
+
+async function closeServer(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
+async function startFusionBackend(): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = createServer((req, res) => {
+    void (async () => {
+      if (req.method !== "POST" || req.url !== "/v1/chat/completions") {
+        res.writeHead(404).end();
+        return;
+      }
+      const body = JSON.parse((await readBody(req)).toString("utf8")) as { model?: string };
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          choices: [{ message: { role: "assistant", content: `CLI_FUSION:${body.model}` } }]
+        })
+      );
+    })().catch((error: unknown) => {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: String(error) }));
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  assert.ok(typeof address === "object" && address !== null);
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server)
+  };
+}
+
+async function startSentinelBackend(
+  sentinel: string
+): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = createServer((req, res) => {
+    void (async () => {
+      if (req.method !== "POST" || req.url !== "/v1/chat/completions") {
+        res.writeHead(404).end();
+        return;
+      }
+      await readBody(req);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          choices: [{ message: { role: "assistant", content: `${sentinel} fusion synthesis` } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+        })
+      );
+    })().catch((error: unknown) => {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: String(error) }));
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  assert.ok(typeof address === "object" && address !== null);
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server)
+  };
+}
+
 function warrant(
   args: string[],
   options: { input?: string; env?: Record<string, string | undefined> } = {}
@@ -45,6 +130,40 @@ function warrant(
     stdout: result.stdout,
     stderr: result.stderr
   };
+}
+
+async function warrantAsync(
+  args: string[],
+  options: { input?: string; env?: Record<string, string | undefined> } = {}
+): Promise<{ status: number; stdout: string; stderr: string }> {
+  const env = { ...process.env };
+  for (const key of SMOKE_ENV_KEYS) delete env[key];
+  for (const [key, value] of Object.entries(options.env ?? {})) {
+    if (value === undefined) delete env[key];
+    else env[key] = value;
+  }
+  return await new Promise((resolve) => {
+    const child = spawn(process.execPath, [CLI, "--dir", home, ...args], {
+      env,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("exit", (code) => {
+      resolve({ status: code ?? 1, stdout, stderr });
+    });
+    if (options.input !== undefined) {
+      child.stdin.end(options.input);
+    } else {
+      child.stdin.end();
+    }
+  });
 }
 
 before(() => {
@@ -168,6 +287,62 @@ function makeRepo(): { repo: string; cleanup: () => void; output: string } {
   spawnSync("git", ["add", "-A"], { cwd: repo });
   spawnSync("git", ["commit", "--quiet", "-m", "init"], { cwd: repo });
   return { repo, output, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+function makeCodingRepo(): { repo: string; cleanup: () => void; output: string } {
+  const fixture = makeRepo();
+  writeFileSync(
+    join(fixture.repo, "calculator.js"),
+    "exports.add = (left, right) => left - right;\n"
+  );
+  writeFileSync(
+    join(fixture.repo, "calculator.test.js"),
+    [
+      "const assert = require('node:assert/strict');",
+      "const { add } = require('./calculator.js');",
+      "assert.equal(add(2, 3), 5);",
+      "console.log('TEST_OK');",
+      ""
+    ].join("\n")
+  );
+  writeFileSync(
+    join(fixture.repo, "fix-and-test.js"),
+    [
+      "const fs = require('node:fs');",
+      "fs.writeFileSync('calculator.js', 'exports.add = (left, right) => left + right;\\n');",
+      "require('./calculator.test.js');",
+      "console.log('PATCH_TEST_OK');",
+      ""
+    ].join("\n")
+  );
+  spawnSync("git", ["add", "-A"], { cwd: fixture.repo });
+  spawnSync("git", ["commit", "--quiet", "-m", "add failing coding fixture"], { cwd: fixture.repo });
+  return fixture;
+}
+
+function addFusionCommandProbe(repo: string): void {
+  writeFileSync(
+    join(repo, "fusion-probe.js"),
+    [
+      "const fs = require('node:fs');",
+      "(async () => {",
+      "  const response = await fetch(process.env.FUSIONKIT_CHAT_COMPLETIONS_URL, {",
+      "    method: 'POST',",
+      "    headers: { 'content-type': 'application/json' },",
+      "    body: JSON.stringify({",
+      "      model: process.env.FUSIONKIT_MODEL,",
+      "      messages: [{ role: 'user', content: 'probe' }]",
+      "    })",
+      "  });",
+      "  const body = await response.json();",
+      "  fs.writeFileSync('fusion-result.txt', body.choices[0].message.content);",
+      "  console.log('FUSION_PROBE_OK');",
+      "})().catch((error) => { console.error(error); process.exit(1); });",
+      ""
+    ].join("\n")
+  );
+  spawnSync("git", ["add", "-A"], { cwd: repo });
+  spawnSync("git", ["commit", "--quiet", "-m", "add fusion probe"], { cwd: repo });
 }
 
 test("ensemble mock smoke writes records and concise summary", () => {
@@ -383,8 +558,75 @@ test("ensemble handoff exits zero with failed command harness records for Fusion
   }
 });
 
+test("ensemble handoff command harness records real patch and test evidence", () => {
+  const fixture = makeCodingRepo();
+  try {
+    const payload = {
+      category: "coding",
+      manifest_path: "/tmp/handoff-command-patch-task.json",
+      task: {
+        ...benchmarkTask(
+          "handoff_command_patch",
+          "Fix calculator.js so calculator.test.js passes, then run the test."
+        ),
+        allowed_tools: ["read_file", "write_file", "run_tests"]
+      }
+    };
+    const result = warrant(
+      [
+        "ensemble",
+        "handoff",
+        "--harness",
+        "command",
+        "--command",
+        "node fix-and-test.js",
+        "--repo",
+        fixture.repo,
+        "--out",
+        fixture.output,
+        "--id",
+        "cli_command_patch"
+      ],
+      { input: JSON.stringify(payload) }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout) as {
+      records: Array<{
+        schema: string;
+        status?: string;
+        artifacts?: Array<{ kind?: string; uri?: string }>;
+      }>;
+    };
+    const runResult = parsed.records.find(
+      (record) => record.schema === "harness-run-result.v1"
+    );
+    const candidate = parsed.records.find(
+      (record) => record.schema === "harness-candidate-record.v1"
+    );
+    const toolExecution = parsed.records.find(
+      (record) => record.schema === "tool-execution-record.v1"
+    );
+    assert.equal(runResult?.status, "succeeded");
+    assert.equal(candidate?.status, "succeeded");
+    assert.equal(toolExecution?.status, "succeeded");
+
+    const patch = candidate?.artifacts?.find((artifact) => artifact.kind === "patch");
+    const transcript = candidate?.artifacts?.find((artifact) => artifact.kind === "transcript");
+    assert.ok(patch?.uri, "candidate must include a patch artifact");
+    assert.ok(transcript?.uri, "candidate must include a transcript artifact");
+    assert.match(
+      readFileSync(fileURLToPath(transcript.uri), "utf8"),
+      /PATCH_TEST_OK/
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("ensemble handoff returns structured skip records when codex credentials are absent", () => {
   const fixture = makeRepo();
+  const emptyCodexHome = mkdtempSync(join(tmpdir(), "warrant-codex-empty-home-"));
   try {
     const payload = {
       category: "coding",
@@ -409,6 +651,7 @@ test("ensemble handoff returns structured skip records when codex credentials ar
         env: {
           CODEX_API_KEY: "",
           OPENAI_API_KEY: "",
+          CODEX_HOME: emptyCodexHome,
           WARRANT_CODEX_RESPONSES_BASE_URL: "",
           CODEX_RESPONSES_BASE_URL: "",
           WARRANT_CODEX_OPENAI_BASE_URL: "",
@@ -428,6 +671,7 @@ test("ensemble handoff returns structured skip records when codex credentials ar
     assert.ok(JSON.stringify(runResult?.errors).includes("Codex credentials are absent"));
   } finally {
     fixture.cleanup();
+    rmSync(emptyCodexHome, { recursive: true, force: true });
   }
 });
 
@@ -530,6 +774,103 @@ test("ensemble task-file input works without printing prompt contents", () => {
     assert.ok(!result.stdout.includes("secret-ish task text"));
     assert.ok(existsSync(join(fixture.output, "summary.json")));
   } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ensemble e2e runs a FusionKit-backed command matrix and writes a report", async () => {
+  const fixture = makeRepo();
+  const backend = await startFusionBackend();
+  try {
+    addFusionCommandProbe(fixture.repo);
+    const result = await warrantAsync([
+      "ensemble",
+      "e2e",
+      "--fusion-backend",
+      backend.url,
+      "--harness",
+      "command",
+      "--command",
+      "node fusion-probe.js",
+      "--model",
+      "alpha=fusion-alpha",
+      "--judge-model",
+      "fusion-judge",
+      "--repo",
+      fixture.repo,
+      "--out",
+      fixture.output,
+      "Run the FusionKit-backed command harness."
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /unified e2e \[succeeded:1\]/);
+    assert.ok(existsSync(join(fixture.output, "unified-e2e-report.json")));
+    const report = readFileSync(join(fixture.output, "unified-e2e-report.json"), "utf8");
+    assert.match(report, /"harness": "command"/);
+    assert.match(report, /"judgeSynthesis": true/);
+  } finally {
+    await backend.close();
+    fixture.cleanup();
+  }
+});
+
+test("ensemble gateway codex-config prints a Responses provider snippet", () => {
+  const result = warrant([
+    "ensemble",
+    "gateway",
+    "codex-config",
+    "--fusion-backend",
+    "http://127.0.0.1:8787"
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /model_provider = "fusion-gateway"/);
+  assert.match(result.stdout, /wire_api = "responses"/);
+  assert.match(result.stdout, /base_url = "http:\/\/127\.0\.0\.1:8787\/v1"/);
+});
+
+test("ensemble gateway test runs the unified front-door acceptance suite", async () => {
+  const fixture = makeRepo();
+  const backend = await startSentinelBackend("FUSION_OK");
+  try {
+    addFusionCommandProbe(fixture.repo);
+    const reportPath = join(fixture.output, "front-door-report.json");
+    const result = await warrantAsync([
+      "ensemble",
+      "gateway",
+      "test",
+      "--fusion-backend",
+      backend.url,
+      "--harness",
+      "command",
+      "--command",
+      "node fusion-probe.js",
+      "--model",
+      "alpha=fusion-alpha",
+      "--judge-model",
+      "fusion-judge",
+      "--repo",
+      fixture.repo,
+      "--out",
+      reportPath,
+      "--sentinel",
+      "FUSION_OK"
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /front-door acceptance report/);
+    assert.ok(existsSync(reportPath));
+    const report = JSON.parse(readFileSync(reportPath, "utf8")) as {
+      front_doors: Array<{ id: string; status: string; reason?: string }>;
+    };
+    const statusOf = (id: string): string | undefined =>
+      report.front_doors.find((door) => door.id === id)?.status;
+    assert.equal(statusOf("codex-responses"), "passed");
+    assert.equal(statusOf("claude-messages"), "passed");
+    assert.equal(statusOf("openai-chat"), "passed");
+    assert.equal(statusOf("generic-acp"), "passed");
+    assert.equal(statusOf("codex-acp"), "blocked");
+    assert.equal(statusOf("cursor-acp"), "blocked");
+  } finally {
+    await backend.close();
     fixture.cleanup();
   }
 });

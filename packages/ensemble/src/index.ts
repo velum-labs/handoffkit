@@ -64,6 +64,18 @@ export {
   ensemble,
   runEnsemble
 } from "./run.js";
+export {
+  createFusionKitJudgeSynthesizer,
+  runUnifiedHarnessE2E
+} from "./unified.js";
+export type {
+  CursorHarnessRunnerInput,
+  CursorHarnessRunnerResult,
+  UnifiedHarnessE2EOptions,
+  UnifiedHarnessE2EResult,
+  UnifiedHarnessKind,
+  UnifiedHarnessMatrixResult
+} from "./unified.js";
 export { runJudgeSynthesis } from "./synthesis.js";
 export type {
   RunSynthesisInput,

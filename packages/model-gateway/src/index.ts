@@ -41,6 +41,55 @@ export {
 } from "./adapters/responses.js";
 export type { ResponsesRequest } from "./adapters/responses.js";
 export {
+  FUSION_EVIDENCE_HEADER,
+  FUSION_REPORT_HEADER,
+  FUSION_RUN_ID_HEADER,
+  FUSION_STATUS_HEADER,
+  formatAnthropic,
+  formatChat,
+  formatResponses,
+  promptFromAnthropic,
+  promptFromChat,
+  promptFromResponses,
+  startFusionGateway
+} from "./fusion-gateway.js";
+export type {
+  ChatRequest,
+  FrontDoorDialect,
+  FrontDoorRunner,
+  FrontDoorRunnerInput,
+  FrontDoorRunnerResult,
+  FusionGateway,
+  FusionGatewayOptions
+} from "./fusion-gateway.js";
+export { ACP_PROTOCOL_VERSION, runAcpAgent } from "./acp-agent.js";
+export type {
+  AcpAgentOptions,
+  AcpRunner,
+  AcpRunnerInput,
+  AcpRunnerResult
+} from "./acp-agent.js";
+export { runFrontDoorAcceptance } from "./front-door-acceptance.js";
+export type {
+  FrontDoorAcceptanceOptions,
+  FrontDoorAcceptanceReport,
+  FrontDoorOutcome,
+  FrontDoorOutcomeProducer,
+  FrontDoorStatus
+} from "./front-door-acceptance.js";
+export {
+  ACP_REGISTRY_URL,
+  fetchAcpRegistry,
+  installAcpAdapters
+} from "./acp-registry.js";
+export type {
+  AcpRegistry,
+  AcpRegistryAgent,
+  AcpRegistryFetcher,
+  InstallAcpAdaptersOptions,
+  InstalledAcpAdapter
+} from "./acp-registry.js";
+export {
   buildModelCallRecord,
   MODEL_CALL_ID_HEADER,
   modelCallId,

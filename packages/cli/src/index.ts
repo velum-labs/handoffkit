@@ -12,6 +12,7 @@ import {
   createMockHarness,
   createMockJudgeSynthesizer,
   runEnsemble,
+  runUnifiedHarnessE2E,
   runHarnessSmokeDashboard
 } from "@warrant/ensemble";
 import type {
@@ -20,7 +21,8 @@ import type {
   EnsembleRunResult,
   HarnessAdapter,
   HarnessLiveSmokeTarget,
-  HarnessSmokeDashboard
+  HarnessSmokeDashboard,
+  UnifiedHarnessKind
 } from "@warrant/ensemble";
 import { agents, handoff, targets } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
@@ -33,6 +35,7 @@ import {
   assertJudgeSynthesisRecordV1,
   assertModelCallRecordV1,
   assertModelFusionRecord,
+  assertToolExecutionRecordV1,
   isTerminalStatus,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   PolicyDeniedError,
@@ -45,8 +48,10 @@ import type {
   BenchmarkTaskRecordV1,
   HarnessRunRequestV1,
   HarnessRunResultV1,
+  ModelFusionSideEffects,
   ModelFusionHarnessKind,
   ModelFusionRecordV1,
+  ToolExecutionRecordV1,
   ReceiptBundle,
   RunRequestInput,
   SessionIsolation
@@ -56,6 +61,15 @@ import { PlaneClient } from "@warrant/sdk";
 import { captureWorkspace, gitText, pullRun } from "@warrant/workspace";
 
 import { initHome, loadHome, secretStoreFor } from "./config.js";
+import {
+  codexConfigSnippet,
+  gatewaySetupSnippets,
+  installRegistryAdapters,
+  runGatewayAcceptance,
+  runGatewayAcp,
+  startConfiguredGateway
+} from "./gateway.js";
+import type { GatewayRunnerConfig } from "./gateway.js";
 import { LOCAL_TOOLS, runLocal } from "./local.js";
 import type { LocalTool } from "./local.js";
 import {
@@ -136,6 +150,33 @@ usage:
       --out DIR               output directory (default: ./.warrant/ensemble-dashboard)
       --timeout-ms N          command timeout (default: 30000)
       --live-smoke TARGET     include env-gated live smoke: claude-code | codex (repeatable)
+  warrant ensemble e2e [opts] "task"             unified FusionKit-backed harness matrix
+      --fusion-backend URL    FusionKit/OpenAI-compatible backend URL
+      --harness TARGET        mock | command | codex | claude-code | cursor-acp | cursor-desktop
+      --model ID=MODEL        panel model mapping (repeatable)
+      --command CMD           command harness script
+      --repo DIR              workspace repository (default: .)
+      --out DIR               output directory (default: ./.warrant/ensemble-e2e)
+      --cursor-kit-dir DIR    Cursorkit repo for cursor ACP/desktop scenarios
+      --timeout-ms N          candidate timeout (default: 30000)
+  warrant ensemble gateway [serve] [opts]        front door: tools drive the fusion ensemble
+      --fusion-backend URL    FusionKit/OpenAI-compatible backend URL
+      --harness TARGET        mock | command | codex | claude-code | cursor-acp (repeatable)
+      --model ID=MODEL        panel model mapping (repeatable)
+      --command CMD           command harness script
+      --repo DIR              workspace repository (default: .)
+      --out DIR               output directory (default: ./.warrant/gateway)
+      --host H                bind host (default: 127.0.0.1)
+      --port N                bind port (default: 8787)
+      --auth-token TOKEN      require a bearer token on the gateway
+  warrant ensemble gateway acp [opts]            ACP local agent over JSON-RPC stdio
+  warrant ensemble gateway acp-registry install <id...>
+                                                 install registry-backed ACP adapters
+      --install-dir DIR       adapter metadata dir (default: ./.warrant/acp-registry)
+  warrant ensemble gateway test [opts]           unified front-door acceptance suite
+      --sentinel TEXT         expected substring (default: FUSION_OK)
+      --out FILE              report path (default: ./.warrant/front-door-e2e/front-door-report.json)
+  warrant ensemble gateway codex-config [opts]   print Codex provider config snippet
 
 global:
   --dir DIR    warrant home (default: ./.warrant)
@@ -227,6 +268,20 @@ type EnsembleDashboardFlags = {
   "live-smoke"?: string[];
 };
 
+type EnsembleE2EFlags = {
+  "fusion-backend"?: string;
+  harness?: string[];
+  command?: string;
+  repo?: string;
+  out?: string;
+  id?: string;
+  model?: string[];
+  "judge-model"?: string;
+  "cursor-kit-dir"?: string;
+  "timeout-ms"?: string;
+  "task-file"?: string;
+};
+
 function parseRunArgs(argv: string[]): { values: RunFlags; prompt: string } {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -307,6 +362,31 @@ function parseEnsembleDashboardArgs(argv: string[]): EnsembleDashboardFlags {
   return values;
 }
 
+function parseEnsembleE2EArgs(argv: string[]): { values: EnsembleE2EFlags; prompt: string } {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      "fusion-backend": { type: "string" },
+      harness: { type: "string", multiple: true },
+      command: { type: "string" },
+      repo: { type: "string", default: "." },
+      out: { type: "string" },
+      id: { type: "string" },
+      model: { type: "string", multiple: true },
+      "judge-model": { type: "string" },
+      "cursor-kit-dir": { type: "string" },
+      "timeout-ms": { type: "string" },
+      "task-file": { type: "string" }
+    },
+    allowPositionals: true
+  });
+  const prompt =
+    values["task-file"] !== undefined
+      ? readFileSync(values["task-file"], "utf8")
+      : positionals.join(" ").trim();
+  return { values, prompt };
+}
+
 function ensembleModels(values: EnsembleFlags): EnsembleModel[] {
   const specs =
     values.model ??
@@ -334,6 +414,23 @@ function liveSmokeTargets(values: EnsembleDashboardFlags): HarnessLiveSmokeTarge
         return target;
       default:
         fail('--live-smoke must be "claude-code" or "codex"');
+    }
+  });
+}
+
+function unifiedHarnessKinds(values: EnsembleE2EFlags): UnifiedHarnessKind[] {
+  const targets = values.harness ?? ["mock", "command"];
+  return targets.flatMap((target) => target.split(",")).map((target): UnifiedHarnessKind => {
+    switch (target) {
+      case "mock":
+      case "command":
+      case "codex":
+      case "claude-code":
+      case "cursor-acp":
+      case "cursor-desktop":
+        return target;
+      default:
+        fail(`--harness must be mock, command, codex, claude-code, cursor-acp, or cursor-desktop; got "${target}"`);
     }
   });
 }
@@ -427,16 +524,33 @@ function recordsForResult(
   task: BenchmarkTaskRecordV1,
   result: EnsembleRunResult
 ): ModelFusionRecordV1[] {
+  const toolRecords = toolRecordsForResult(result);
   const records: ModelFusionRecordV1[] = [
     task,
     result.harnessRunRequest,
     result.harnessRunResult,
     ...result.candidates,
-    ...result.modelCallRecords
+    ...result.modelCallRecords,
+    ...toolRecords
   ];
   if (result.judgeSynthesisRecord !== undefined) records.push(result.judgeSynthesisRecord);
   for (const record of records) assertModelFusionRecord(record);
   return records;
+}
+
+function toolRecordsForResult(result: EnsembleRunResult): ToolExecutionRecordV1[] {
+  return result.toolRecords.map((record): ToolExecutionRecordV1 => {
+    const toolRecord: ToolExecutionRecordV1 = {
+      ...metadata("tool-execution-record.v1", result.harnessRunResult.created_at),
+      execution_id: record.execution_id,
+      plan_id: record.plan_id,
+      status: record.status,
+      ...(record.output_hash !== undefined ? { output_hash: record.output_hash } : {}),
+      ...(record.error !== undefined ? { error: record.error } : {})
+    };
+    assertToolExecutionRecordV1(toolRecord);
+    return toolRecord;
+  });
 }
 
 function skippedHandoffRecords(input: {
@@ -526,6 +640,12 @@ function handoffModels(values: EnsembleFlags): EnsembleModel[] {
   return ensembleModels(values);
 }
 
+function handoffSideEffects(values: EnsembleFlags, task: BenchmarkTaskRecordV1): ModelFusionSideEffects {
+  if (values.harness === "command") return "tool_execution";
+  const writeTools = new Set(["apply_patch", "write_file", "run_tests", "shell_command"]);
+  return task.allowed_tools.some((tool) => writeTools.has(tool)) ? "writes_workspace" : "read_only";
+}
+
 async function cmdEnsembleHandoff(argv: string[]): Promise<void> {
   const values = parseEnsembleHandoffArgs(argv);
   const payload = readStdinJson();
@@ -571,7 +691,7 @@ async function cmdEnsembleHandoff(argv: string[]): Promise<void> {
     policy: {
       id: values.policy ?? "handoff-smoke",
       allowedTools: task.allowed_tools,
-      sideEffects: values.harness === "command" ? "tool_execution" : "read_only",
+      sideEffects: handoffSideEffects(values, task),
       timeoutMs
     },
     prompt: task.prompt ?? "",
@@ -628,6 +748,197 @@ function renderHarnessSmokeDashboardSummary(dashboard: HarnessSmokeDashboard): s
     `dashboard: ${dashboard.dashboardPath}`,
     `output: ${dashboard.outputRoot}`
   ].join("\n");
+}
+
+async function cmdEnsembleE2E(argv: string[]): Promise<void> {
+  const { values, prompt } = parseEnsembleE2EArgs(argv);
+  if (!prompt.trim()) fail("a task prompt or --task-file is required");
+  const fusionBackendUrl = values["fusion-backend"];
+  if (!fusionBackendUrl) fail("--fusion-backend is required");
+  const timeoutMs = Number(values["timeout-ms"] ?? "30000");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) fail("--timeout-ms must be positive");
+  const repo = resolve(values.repo ?? ".");
+  const outDir = resolve(values.out ?? ".warrant/ensemble-e2e");
+  const models = ensembleModels({ model: values.model });
+  const result = await runUnifiedHarnessE2E({
+    id: values.id ?? `unified_${Date.now()}`,
+    fusionBackendUrl,
+    repo,
+    outputRoot: outDir,
+    prompt,
+    harnesses: unifiedHarnessKinds(values),
+    models,
+    ...(values.command !== undefined ? { command: values.command } : {}),
+    timeoutMs,
+    ...(values["judge-model"] !== undefined ? { judgeModel: values["judge-model"] } : {}),
+    ...(values["cursor-kit-dir"] !== undefined
+      ? { cursorKitDir: resolve(values["cursor-kit-dir"]) }
+      : {})
+  });
+  const counts = new Map<string, number>();
+  for (const row of result.results) {
+    counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+  }
+  const countText = [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([status, count]) => `${status}:${count}`)
+    .join(", ");
+  console.log(`unified e2e [${countText}]`);
+  console.log(`results: ${result.results.length}`);
+  console.log(`report: ${result.reportPath}`);
+  for (const row of result.results) {
+    console.log(`  ${row.harness}: ${row.status} (${row.message})`);
+  }
+  if (result.results.some((row) => row.status === "failed")) {
+    process.exitCode = 1;
+  }
+}
+
+const GATEWAY_SUBCOMMANDS = ["serve", "acp", "acp-registry", "test", "codex-config"] as const;
+
+function gatewayConfigFromFlags(values: {
+  "fusion-backend"?: string;
+  harness?: string[];
+  command?: string;
+  repo?: string;
+  out?: string;
+  model?: string[];
+  "judge-model"?: string;
+  "cursor-kit-dir"?: string;
+  "timeout-ms"?: string;
+  "fusion-api-key"?: string;
+}): GatewayRunnerConfig {
+  const fusionBackendUrl = values["fusion-backend"];
+  if (!fusionBackendUrl) fail("--fusion-backend is required");
+  const timeoutMs = Number(values["timeout-ms"] ?? "120000");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) fail("--timeout-ms must be positive");
+  return {
+    fusionBackendUrl,
+    repo: resolve(values.repo ?? "."),
+    outputRoot: resolve(values.out ?? ".warrant/gateway"),
+    harnesses: unifiedHarnessKinds({ harness: values.harness }),
+    models: ensembleModels({ model: values.model }),
+    timeoutMs,
+    ...(values.command !== undefined ? { command: values.command } : {}),
+    ...(values["judge-model"] !== undefined ? { judgeModel: values["judge-model"] } : {}),
+    ...(values["cursor-kit-dir"] !== undefined
+      ? { cursorKitDir: resolve(values["cursor-kit-dir"]) }
+      : {}),
+    ...(values["fusion-api-key"] !== undefined ? { fusionApiKey: values["fusion-api-key"] } : {})
+  };
+}
+
+function parseGatewayArgs(argv: string[]): {
+  values: {
+    "fusion-backend"?: string;
+    harness?: string[];
+    command?: string;
+    repo?: string;
+    out?: string;
+    model?: string[];
+    "judge-model"?: string;
+    "cursor-kit-dir"?: string;
+    "timeout-ms"?: string;
+    "fusion-api-key"?: string;
+    host?: string;
+    port?: string;
+    "auth-token"?: string;
+    sentinel?: string;
+    "install-dir"?: string;
+  };
+  positionals: string[];
+} {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      "fusion-backend": { type: "string" },
+      harness: { type: "string", multiple: true },
+      command: { type: "string" },
+      repo: { type: "string", default: "." },
+      out: { type: "string" },
+      model: { type: "string", multiple: true },
+      "judge-model": { type: "string" },
+      "cursor-kit-dir": { type: "string" },
+      "timeout-ms": { type: "string" },
+      "fusion-api-key": { type: "string" },
+      host: { type: "string", default: "127.0.0.1" },
+      port: { type: "string", default: "8787" },
+      "auth-token": { type: "string" },
+      sentinel: { type: "string" },
+      "install-dir": { type: "string" }
+    },
+    allowPositionals: true
+  });
+  return { values, positionals };
+}
+
+async function cmdEnsembleGateway(argv: string[]): Promise<void> {
+  const first = argv[0];
+  const isSub =
+    first !== undefined &&
+    !first.startsWith("-") &&
+    (GATEWAY_SUBCOMMANDS as readonly string[]).includes(first);
+  const sub = isSub ? (first as (typeof GATEWAY_SUBCOMMANDS)[number]) : "serve";
+  const rest = isSub ? argv.slice(1) : argv;
+
+  if (sub === "acp-registry") {
+    const action = rest[0];
+    if (action !== "install") fail("usage: warrant ensemble gateway acp-registry install <id...>");
+    const { values, positionals } = parseGatewayArgs(rest.slice(1));
+    const agentIds = positionals.length > 0 ? positionals : ["codex-cli", "claude-agent"];
+    const installDir = resolve(values["install-dir"] ?? ".warrant/acp-registry");
+    const installed = await installRegistryAdapters({ agentIds, installDir });
+    console.log(`installed ${installed.length} ACP registry adapter(s):`);
+    for (const line of installed) console.log(`  ${line}`);
+    return;
+  }
+
+  const { values } = parseGatewayArgs(rest);
+
+  if (sub === "codex-config") {
+    const base = values["fusion-backend"] ?? `http://${values.host}:${values.port}`;
+    console.log(codexConfigSnippet(base));
+    return;
+  }
+
+  const config = gatewayConfigFromFlags(values);
+
+  if (sub === "acp") {
+    await runGatewayAcp(config);
+    return;
+  }
+
+  if (sub === "test") {
+    const sentinel = values.sentinel ?? "FUSION_OK";
+    const outPath = resolve(values.out ?? ".warrant/front-door-e2e/front-door-report.json");
+    // The report path and the per-run gateway output root must not collide.
+    const acceptanceConfig: GatewayRunnerConfig = {
+      ...config,
+      outputRoot: join(resolve(outPath, ".."), "gateway-runs")
+    };
+    const { reportPath, failed } = await runGatewayAcceptance({
+      config: acceptanceConfig,
+      sentinel,
+      host: values.host ?? "127.0.0.1",
+      outPath
+    });
+    console.log(`front-door acceptance report: ${reportPath}`);
+    if (failed) process.exitCode = 1;
+    return;
+  }
+
+  const host = values.host ?? "127.0.0.1";
+  const port = Number(values.port ?? "8787");
+  if (!Number.isInteger(port) || port < 0) fail("--port must be a non-negative integer");
+  const gateway = await startConfiguredGateway({
+    config,
+    host,
+    port,
+    ...(values["auth-token"] !== undefined ? { authToken: values["auth-token"] } : {})
+  });
+  console.log(`fusion harness gateway listening on ${gateway.url()}`);
+  console.log("");
+  console.log(gatewaySetupSnippets(gateway.url(), "http://127.0.0.1:<cursorkit-port>"));
 }
 
 async function cmdEnsembleRun(argv: string[]): Promise<void> {
@@ -965,6 +1276,14 @@ async function main(): Promise<void> {
       }
       if (sub === "dashboard") {
         await cmdEnsembleDashboard(rest);
+        return;
+      }
+      if (sub === "e2e") {
+        await cmdEnsembleE2E(rest);
+        return;
+      }
+      if (sub === "gateway") {
+        await cmdEnsembleGateway(rest);
         return;
       }
       fail(`unknown ensemble subcommand: ${sub ?? ""}`);

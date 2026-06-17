@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { artifactHash } from "@warrant/protocol";
@@ -19,6 +19,7 @@ const DEFAULT_PROVIDER_ID = "warrant-codex";
 const DEFAULT_PROVIDER_NAME = "Warrant Codex";
 const DEFAULT_CREDENTIAL_ENV_NAMES = ["CODEX_API_KEY", "OPENAI_API_KEY"] as const;
 const INLINE_PROVIDER_API_KEY_ENV = "WARRANT_CODEX_PROVIDER_API_KEY";
+const CODEX_AUTH_FILE = "auth.json";
 
 export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 export type CodexApprovalPolicy = "untrusted" | "on-failure" | "on-request" | "never";
@@ -150,6 +151,17 @@ function firstPresentEnv(
   return names.find((name) => env[name] !== undefined && env[name].length > 0);
 }
 
+function codexHome(env: Record<string, string>): string {
+  return env.CODEX_HOME && env.CODEX_HOME.length > 0
+    ? env.CODEX_HOME
+    : join(homedir(), ".codex");
+}
+
+function codexAuthFile(env: Record<string, string>): string | undefined {
+  const path = join(codexHome(env), CODEX_AUTH_FILE);
+  return existsSync(path) ? path : undefined;
+}
+
 function providerFromEnv(env: Record<string, string>): CodexProvider {
   const responsesBaseUrl = env.WARRANT_CODEX_RESPONSES_BASE_URL ?? env.CODEX_RESPONSES_BASE_URL;
   if (responsesBaseUrl !== undefined && responsesBaseUrl.length > 0) {
@@ -198,7 +210,7 @@ function missingCredentialReason(
   switch (provider.kind) {
     case "ambient": {
       const names = provider.credentialEnvNames ?? DEFAULT_CREDENTIAL_ENV_NAMES;
-      return firstPresentEnv(env, names) === undefined
+      return firstPresentEnv(env, names) === undefined && codexAuthFile(env) === undefined
         ? `Codex credentials are absent; set ${names.join(" or ")} or configure a Responses/OpenAI-compatible provider.`
         : undefined;
     }
@@ -316,6 +328,15 @@ function writeCodexHome(input: {
       ...(providerConfig ? { provider: providerConfig } : {})
     })
   );
+  if (
+    input.provider.kind === "ambient" &&
+    firstPresentEnv(input.env, input.provider.credentialEnvNames ?? DEFAULT_CREDENTIAL_ENV_NAMES) === undefined
+  ) {
+    const authFile = codexAuthFile(input.env);
+    if (authFile !== undefined) {
+      copyFileSync(authFile, join(codexHome, CODEX_AUTH_FILE));
+    }
+  }
   return codexHome;
 }
 

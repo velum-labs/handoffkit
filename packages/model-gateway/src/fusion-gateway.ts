@@ -1,0 +1,333 @@
+/**
+ * Fusion Harness Gateway — the provider-facing front door that lets a coding
+ * tool (Codex, Claude Code, Cursor via Cursorkit) be the entrypoint. A prompt
+ * sent from the tool hits this gateway, which translates the request into a
+ * dialect-agnostic prompt, runs the unified HandoffKit/FusionKit harness
+ * ensemble through an injected runner, then translates the synthesized final
+ * answer back into the tool's native wire format.
+ *
+ * The runner is injected (not imported) so this package stays free of a
+ * dependency on `@warrant/ensemble`, which already depends on this package.
+ */
+
+import { createServer } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+import { chatToAnthropicMessage } from "./adapters/anthropic.js";
+import type { AnthropicRequest } from "./adapters/anthropic.js";
+import { chatToResponses } from "./adapters/responses.js";
+import type { ResponsesRequest } from "./adapters/responses.js";
+
+export type FrontDoorDialect = "openai-responses" | "anthropic-messages" | "openai-chat";
+
+export type FrontDoorRunnerInput = {
+  dialect: FrontDoorDialect;
+  prompt: string;
+  requestedModel: string | undefined;
+  requestId: string;
+};
+
+export type FrontDoorRunnerResult = {
+  finalOutput: string;
+  runId: string;
+  status: "succeeded" | "failed" | "skipped";
+  evidence: string[];
+  reportPath?: string;
+};
+
+export type FrontDoorRunner = (input: FrontDoorRunnerInput) => Promise<FrontDoorRunnerResult>;
+
+export type FusionGatewayOptions = {
+  /** Runs the unified harness ensemble for a single front-door prompt. */
+  runner: FrontDoorRunner;
+  /** Bind host; defaults to loopback. */
+  host?: string;
+  /** Bind port; defaults to an ephemeral free port. */
+  port?: number;
+  /** When set, require this bearer token (or matching `x-api-key`). */
+  authToken?: string;
+  /** Model id echoed back in responses and `/v1/models`. */
+  defaultModel?: string;
+};
+
+export type FusionGateway = {
+  /** Base URL clients should target (without the `/v1` suffix). */
+  url(): string;
+  port(): number;
+  close(): Promise<void>;
+};
+
+export const FUSION_RUN_ID_HEADER = "x-fusion-run-id";
+export const FUSION_STATUS_HEADER = "x-fusion-status";
+export const FUSION_EVIDENCE_HEADER = "x-fusion-evidence";
+export const FUSION_REPORT_HEADER = "x-fusion-report";
+
+const DEFAULT_MODEL = "fusion-panel";
+
+// ---- prompt extraction ----
+
+type ResponsesContentPart = { type?: string; text?: string };
+
+function partText(part: ResponsesContentPart): string {
+  if (typeof part.text === "string") return part.text;
+  return "";
+}
+
+function contentToText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => partText(part as ResponsesContentPart)).join("");
+  }
+  return "";
+}
+
+export function promptFromResponses(body: ResponsesRequest): string {
+  const parts: string[] = [];
+  if (typeof body.instructions === "string" && body.instructions.length > 0) {
+    parts.push(body.instructions);
+  }
+  const input = body.input;
+  if (typeof input === "string") {
+    parts.push(input);
+  } else if (Array.isArray(input)) {
+    for (const item of input) {
+      const type = (item as { type?: string }).type;
+      if (type === "function_call" || type === "function_call_output") continue;
+      const content = (item as { content?: unknown }).content;
+      const text = contentToText(content);
+      if (text.length > 0) parts.push(text);
+    }
+  }
+  return parts.join("\n\n").trim();
+}
+
+export function promptFromAnthropic(body: AnthropicRequest): string {
+  const parts: string[] = [];
+  if (typeof body.system === "string" && body.system.length > 0) {
+    parts.push(body.system);
+  } else if (Array.isArray(body.system)) {
+    parts.push(body.system.map((block) => block.text).join("\n"));
+  }
+  for (const message of body.messages ?? []) {
+    if (message.role !== "user") continue;
+    const text = contentToText(message.content);
+    if (text.length > 0) parts.push(text);
+  }
+  return parts.join("\n\n").trim();
+}
+
+type ChatMessage = { role?: string; content?: unknown };
+export type ChatRequest = { model?: string; messages?: ChatMessage[] };
+
+export function promptFromChat(body: ChatRequest): string {
+  const parts: string[] = [];
+  for (const message of body.messages ?? []) {
+    if (message.role !== "user" && message.role !== "system") continue;
+    const text = contentToText(message.content);
+    if (text.length > 0) parts.push(text);
+  }
+  return parts.join("\n\n").trim();
+}
+
+// ---- response formatting ----
+
+function syntheticOpenAiResponse(finalOutput: string): {
+  id: string;
+  choices: Array<{ message: { content: string }; finish_reason: string }>;
+  usage: { prompt_tokens: number; completion_tokens: number };
+} {
+  return {
+    id: Math.random().toString(36).slice(2, 12),
+    choices: [{ message: { content: finalOutput }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 0, completion_tokens: 0 }
+  };
+}
+
+export function formatResponses(finalOutput: string, model: string): Record<string, unknown> {
+  return chatToResponses(syntheticOpenAiResponse(finalOutput), model);
+}
+
+export function formatAnthropic(finalOutput: string, model: string): Record<string, unknown> {
+  return chatToAnthropicMessage(syntheticOpenAiResponse(finalOutput), model);
+}
+
+export function formatChat(finalOutput: string, model: string): Record<string, unknown> {
+  return {
+    id: `chatcmpl_${Math.random().toString(36).slice(2, 12)}`,
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: finalOutput },
+        finish_reason: "stop"
+      }
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+  };
+}
+
+function openAiModels(model: string): Record<string, unknown> {
+  return { object: "list", data: [{ id: model, object: "model", owned_by: "fusion-gateway" }] };
+}
+
+function anthropicModels(model: string): Record<string, unknown> {
+  return {
+    object: "list",
+    data: [{ type: "model", id: model, display_name: model }],
+    has_more: false
+  };
+}
+
+// ---- server ----
+
+const NO_BODY = Symbol("no-body");
+
+async function readBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks);
+}
+
+async function readJson(req: IncomingMessage, res: ServerResponse): Promise<unknown> {
+  const buffer = await readBody(req);
+  if (buffer.length === 0) return {};
+  try {
+    return JSON.parse(buffer.toString("utf8")) as unknown;
+  } catch {
+    writeJson(res, 400, { error: { message: "invalid JSON body", type: "bad_request" } });
+    return NO_BODY;
+  }
+}
+
+function writeJson(res: ServerResponse, status: number, value: unknown): void {
+  const payload = Buffer.from(JSON.stringify(value), "utf8");
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json");
+  res.setHeader("content-length", String(payload.byteLength));
+  res.end(payload);
+}
+
+function authorized(req: IncomingMessage, token: string): boolean {
+  const auth = req.headers.authorization;
+  if (typeof auth === "string" && auth === `Bearer ${token}`) return true;
+  const apiKey = req.headers["x-api-key"];
+  return typeof apiKey === "string" && apiKey === token;
+}
+
+function requestId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export async function startFusionGateway(options: FusionGatewayOptions): Promise<FusionGateway> {
+  const host = options.host ?? "127.0.0.1";
+  const defaultModel = options.defaultModel ?? DEFAULT_MODEL;
+  const { runner, authToken } = options;
+
+  async function runFrontDoor(
+    res: ServerResponse,
+    dialect: FrontDoorDialect,
+    prompt: string,
+    requestedModel: string | undefined,
+    format: (finalOutput: string, model: string) => Record<string, unknown>
+  ): Promise<void> {
+    const id = requestId(dialect);
+    const result = await runner({ dialect, prompt, requestedModel, requestId: id });
+    res.setHeader(FUSION_RUN_ID_HEADER, result.runId);
+    res.setHeader(FUSION_STATUS_HEADER, result.status);
+    res.setHeader(FUSION_EVIDENCE_HEADER, JSON.stringify(result.evidence));
+    if (result.reportPath !== undefined) res.setHeader(FUSION_REPORT_HEADER, result.reportPath);
+    writeJson(res, 200, format(result.finalOutput, requestedModel ?? defaultModel));
+  }
+
+  async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const method = req.method ?? "GET";
+    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+
+    if (path === "/health") {
+      writeJson(res, 200, { status: "ok", service: "fusion-harness-gateway" });
+      return;
+    }
+
+    if (authToken !== undefined && !authorized(req, authToken)) {
+      writeJson(res, 401, { error: { message: "unauthorized", type: "auth_error" } });
+      return;
+    }
+
+    if (method === "GET" && (path === "/v1/models" || path === "/models")) {
+      if (req.headers["anthropic-version"] !== undefined) {
+        writeJson(res, 200, anthropicModels(defaultModel));
+        return;
+      }
+      writeJson(res, 200, openAiModels(defaultModel));
+      return;
+    }
+
+    if (method === "POST" && (path === "/v1/responses" || path === "/responses")) {
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      const body = raw as ResponsesRequest;
+      await runFrontDoor(res, "openai-responses", promptFromResponses(body), body.model, formatResponses);
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/messages/count_tokens") {
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      const body = raw as AnthropicRequest;
+      const text = promptFromAnthropic(body);
+      writeJson(res, 200, { input_tokens: Math.max(1, Math.ceil(text.length / 4)) });
+      return;
+    }
+
+    if (method === "POST" && (path === "/v1/messages" || path === "/messages")) {
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      const body = raw as AnthropicRequest;
+      await runFrontDoor(res, "anthropic-messages", promptFromAnthropic(body), body.model, formatAnthropic);
+      return;
+    }
+
+    if (method === "POST" && (path === "/v1/chat/completions" || path === "/chat/completions")) {
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      const body = raw as ChatRequest;
+      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, formatChat);
+      return;
+    }
+
+    writeJson(res, 404, { error: { message: `no route for ${method} ${path}`, type: "not_found" } });
+  }
+
+  const server = createServer((req, res) => {
+    void handle(req, res).catch((error: unknown) => {
+      writeJson(res, 502, { error: { message: errorMessage(error), type: "front_door_error" } });
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => reject(error);
+    server.once("error", onError);
+    server.listen(options.port ?? 0, host, () => {
+      server.off("error", onError);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : options.port ?? 0;
+
+  return {
+    url: () => `http://${host}:${port}`,
+    port: () => port,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      })
+  };
+}
