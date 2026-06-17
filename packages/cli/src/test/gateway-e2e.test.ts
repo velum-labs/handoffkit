@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -383,3 +383,58 @@ test("unified acceptance suite passes every reachable front door against the rea
 
   assert.ok(backend.judgeCallCount() >= 4, "judge synthesis must hit the model backend per front door");
 });
+
+const LIVE_CLAUDE =
+  process.env.WARRANT_GATEWAY_LIVE_CLAUDE === "1" ? false : "set WARRANT_GATEWAY_LIVE_CLAUDE=1 with a working claude CLI";
+
+test(
+  "live: real Claude Code CLI drives the gateway fusion run and receives the synthesized answer",
+  { skip: LIVE_CLAUDE },
+  async () => {
+    // A dedicated single-model gateway keeps the live run light: each Claude
+    // model call triggers one real unified harness run (worktree + command +
+    // judge) on this gateway and the synthesized answer is returned to Claude.
+    const liveGateway = await startConfiguredGateway({
+      config: { ...config, models: [{ id: "claude-panel", model: "fusion-claude" }] },
+      host: "127.0.0.1",
+      port: 0
+    });
+    try {
+      const result = await new Promise<{ code: number; stdout: string; stderr: string }>(
+        (resolve) => {
+          const child = spawn(
+            "claude",
+            ["-p", "Report the final calculator fix result.", "--output-format", "text"],
+            {
+              env: {
+                ...process.env,
+                // Claude Code appends `/v1/messages`, so the base URL is the
+                // gateway root without a `/v1` suffix.
+                ANTHROPIC_BASE_URL: liveGateway.url(),
+                ANTHROPIC_AUTH_TOKEN: "local-gateway"
+              },
+              stdio: ["ignore", "pipe", "pipe"]
+            }
+          );
+          let stdout = "";
+          let stderr = "";
+          child.stdout.on("data", (chunk: Buffer) => {
+            stdout += chunk.toString("utf8");
+          });
+          child.stderr.on("data", (chunk: Buffer) => {
+            stderr += chunk.toString("utf8");
+          });
+          const timer = setTimeout(() => child.kill("SIGTERM"), 120_000);
+          child.on("exit", (code) => {
+            clearTimeout(timer);
+            resolve({ code: code ?? 1, stdout, stderr });
+          });
+        }
+      );
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(result.stdout, new RegExp(SENTINEL));
+    } finally {
+      await liveGateway.close();
+    }
+  }
+);
