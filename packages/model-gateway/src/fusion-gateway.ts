@@ -10,12 +10,13 @@
  * dependency on `@warrant/ensemble`, which already depends on this package.
  */
 
+import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { chatToAnthropicMessage } from "./adapters/anthropic.js";
+import { chatToAnthropicMessage, openAiSseToAnthropic } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
-import { chatToResponses } from "./adapters/responses.js";
+import { chatToResponses, openAiSseToResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 
 export type FrontDoorDialect = "openai-responses" | "anthropic-messages" | "openai-chat";
@@ -117,7 +118,7 @@ export function promptFromAnthropic(body: AnthropicRequest): string {
 }
 
 type ChatMessage = { role?: string; content?: unknown };
-export type ChatRequest = { model?: string; messages?: ChatMessage[] };
+export type ChatRequest = { model?: string; messages?: ChatMessage[]; stream?: boolean };
 
 export function promptFromChat(body: ChatRequest): string {
   const parts: string[] = [];
@@ -166,6 +167,83 @@ export function formatChat(finalOutput: string, model: string): Record<string, u
     ],
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
   };
+}
+
+// ---- streaming ----
+
+const SSE_ENCODER = new TextEncoder();
+
+/**
+ * Build a synthetic OpenAI Chat Completions SSE stream carrying a single
+ * already-complete answer. The existing Responses/Anthropic SSE translators
+ * consume this to emit each dialect's native streamed event sequence.
+ */
+function openAiChatSseFromText(finalOutput: string): ReadableStream<Uint8Array> {
+  const frames = [
+    `data: ${JSON.stringify({
+      choices: [{ index: 0, delta: { role: "assistant", content: finalOutput }, finish_reason: null }]
+    })}\n\n`,
+    `data: ${JSON.stringify({
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: 0, completion_tokens: 0 }
+    })}\n\n`,
+    "data: [DONE]\n\n"
+  ];
+  let index = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (index < frames.length) {
+        controller.enqueue(SSE_ENCODER.encode(frames[index]));
+        index += 1;
+      } else {
+        controller.close();
+      }
+    }
+  });
+}
+
+async function pipeSse(res: ServerResponse, stream: ReadableStream<Uint8Array>): Promise<void> {
+  res.statusCode = 200;
+  res.setHeader("content-type", "text/event-stream");
+  res.setHeader("cache-control", "no-cache");
+  const reader = stream.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value !== undefined && !res.write(Buffer.from(value))) await once(res, "drain");
+    }
+  } finally {
+    res.end();
+  }
+}
+
+function writeChatSse(res: ServerResponse, finalOutput: string, model: string): void {
+  res.statusCode = 200;
+  res.setHeader("content-type", "text/event-stream");
+  res.setHeader("cache-control", "no-cache");
+  const id = `chatcmpl_${Math.random().toString(36).slice(2, 12)}`;
+  const created = Math.floor(Date.now() / 1000);
+  res.write(
+    `data: ${JSON.stringify({
+      id,
+      object: "chat.completion.chunk",
+      created,
+      model,
+      choices: [{ index: 0, delta: { role: "assistant", content: finalOutput }, finish_reason: null }]
+    })}\n\n`
+  );
+  res.write(
+    `data: ${JSON.stringify({
+      id,
+      object: "chat.completion.chunk",
+      created,
+      model,
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }]
+    })}\n\n`
+  );
+  res.write("data: [DONE]\n\n");
+  res.end();
 }
 
 function openAiModels(model: string): Record<string, unknown> {
@@ -234,6 +312,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
     dialect: FrontDoorDialect,
     prompt: string,
     requestedModel: string | undefined,
+    stream: boolean,
     format: (finalOutput: string, model: string) => Record<string, unknown>
   ): Promise<void> {
     const id = requestId(dialect);
@@ -242,7 +321,26 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
     res.setHeader(FUSION_STATUS_HEADER, result.status);
     res.setHeader(FUSION_EVIDENCE_HEADER, JSON.stringify(result.evidence));
     if (result.reportPath !== undefined) res.setHeader(FUSION_REPORT_HEADER, result.reportPath);
-    writeJson(res, 200, format(result.finalOutput, requestedModel ?? defaultModel));
+    const model = requestedModel ?? defaultModel;
+    if (!stream) {
+      writeJson(res, 200, format(result.finalOutput, model));
+      return;
+    }
+    switch (dialect) {
+      case "openai-responses":
+        await pipeSse(res, openAiSseToResponses(openAiChatSseFromText(result.finalOutput), model));
+        return;
+      case "anthropic-messages":
+        await pipeSse(res, openAiSseToAnthropic(openAiChatSseFromText(result.finalOutput), model));
+        return;
+      case "openai-chat":
+        writeChatSse(res, result.finalOutput, model);
+        return;
+      default: {
+        const exhaustive: never = dialect;
+        throw new Error(`unhandled dialect ${String(exhaustive)}`);
+      }
+    }
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -272,7 +370,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ResponsesRequest;
-      await runFrontDoor(res, "openai-responses", promptFromResponses(body), body.model, formatResponses);
+      await runFrontDoor(res, "openai-responses", promptFromResponses(body), body.model, body.stream === true, formatResponses);
       return;
     }
 
@@ -289,7 +387,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as AnthropicRequest;
-      await runFrontDoor(res, "anthropic-messages", promptFromAnthropic(body), body.model, formatAnthropic);
+      await runFrontDoor(res, "anthropic-messages", promptFromAnthropic(body), body.model, body.stream === true, formatAnthropic);
       return;
     }
 
@@ -297,7 +395,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ChatRequest;
-      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, formatChat);
+      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat);
       return;
     }
 

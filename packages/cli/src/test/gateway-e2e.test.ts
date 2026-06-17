@@ -5,6 +5,7 @@ import type { IncomingMessage, Server } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import readline from "node:readline";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
@@ -315,6 +316,102 @@ test("Cursorkit chat front door returns native chat-completion shape backed by a
   assert.match(body.choices[0]?.message.content ?? "", new RegExp(SENTINEL));
 });
 
+function sseEvents(raw: string): Array<{ event?: string; data: unknown }> {
+  const events: Array<{ event?: string; data: unknown }> = [];
+  for (const block of raw.split("\n\n")) {
+    let event: string | undefined;
+    const dataLines: string[] = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+    }
+    if (dataLines.length === 0) continue;
+    const payload = dataLines.join("\n");
+    if (payload === "[DONE]") {
+      events.push({ event, data: "[DONE]" });
+      continue;
+    }
+    try {
+      events.push({ event, data: JSON.parse(payload) });
+    } catch {
+      // ignore partial frames
+    }
+  }
+  return events;
+}
+
+test("Codex Responses streaming emits a response.completed SSE sequence carrying the synthesized answer", async () => {
+  const response = await fetch(`${gateway.url()}/v1/responses`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: "fusion-panel",
+      stream: true,
+      input: [{ role: "user", content: [{ type: "input_text", text: "Fix add() and report." }] }]
+    })
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+  const events = sseEvents(await response.text());
+  const types = events
+    .map((event) => (typeof event.data === "object" && event.data !== null ? (event.data as { type?: string }).type : undefined))
+    .filter((value): value is string => typeof value === "string");
+  assert.ok(types.includes("response.created"), "must open with response.created");
+  assert.ok(types.includes("response.output_text.delta"), "must stream output text deltas");
+  assert.ok(types.includes("response.completed"), "must close with response.completed");
+  const completed = events.find(
+    (event) => typeof event.data === "object" && event.data !== null && (event.data as { type?: string }).type === "response.completed"
+  )?.data as { response?: { output?: Array<{ content?: Array<{ text?: string }> }> } } | undefined;
+  assert.match(completed?.response?.output?.[0]?.content?.[0]?.text ?? "", new RegExp(SENTINEL));
+});
+
+test("Anthropic Messages streaming emits message_stop SSE carrying the synthesized answer", async () => {
+  const response = await fetch(`${gateway.url()}/v1/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: "fusion-panel",
+      stream: true,
+      max_tokens: 256,
+      messages: [{ role: "user", content: "Fix calculator add() and report." }]
+    })
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+  const events = sseEvents(await response.text());
+  const types = events
+    .map((event) => (typeof event.data === "object" && event.data !== null ? (event.data as { type?: string }).type : undefined))
+    .filter((value): value is string => typeof value === "string");
+  assert.ok(types.includes("message_start"), "must open with message_start");
+  assert.ok(types.includes("message_stop"), "must close with message_stop");
+  const text = events
+    .filter((event) => typeof event.data === "object" && event.data !== null && (event.data as { type?: string }).type === "content_block_delta")
+    .map((event) => ((event.data as { delta?: { text?: string } }).delta?.text ?? ""))
+    .join("");
+  assert.match(text, new RegExp(SENTINEL));
+});
+
+test("OpenAI chat streaming emits chat.completion.chunk frames carrying the synthesized answer", async () => {
+  const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: "fusion-panel",
+      stream: true,
+      messages: [{ role: "user", content: "Fix calculator add() and report." }]
+    })
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+  const events = sseEvents(await response.text());
+  assert.ok(events.some((event) => event.data === "[DONE]"), "must terminate with [DONE]");
+  const text = events
+    .filter((event) => typeof event.data === "object" && event.data !== null && (event.data as { object?: string }).object === "chat.completion.chunk")
+    .map((event) => ((event.data as { choices?: Array<{ delta?: { content?: string } }> }).choices?.[0]?.delta?.content ?? ""))
+    .join("");
+  assert.match(text, new RegExp(SENTINEL));
+});
+
 test("generic ACP session lifecycle drives the real runner and streams the synthesized answer", async () => {
   const input = new PassThrough();
   const output = new PassThrough();
@@ -434,6 +531,210 @@ test(
       assert.equal(result.code, 0, result.stderr);
       assert.match(result.stdout, new RegExp(SENTINEL));
     } finally {
+      await liveGateway.close();
+    }
+  }
+);
+
+const LIVE_CODEX =
+  process.env.WARRANT_GATEWAY_LIVE_CODEX === "1" ? false : "set WARRANT_GATEWAY_LIVE_CODEX=1 with a working codex CLI";
+
+test(
+  "live: real Codex CLI drives the gateway fusion run and receives the synthesized answer",
+  { skip: LIVE_CODEX },
+  async () => {
+    // Codex streams `/v1/responses`; the gateway must emit the Responses SSE
+    // sequence ending in response.completed for Codex to accept the answer.
+    const liveGateway = await startConfiguredGateway({
+      config: { ...config, models: [{ id: "codex-panel", model: "fusion-codex" }] },
+      host: "127.0.0.1",
+      port: 0
+    });
+    const codexHome = mkdtempSync(join(tmpdir(), "gateway-live-codex-"));
+    writeFileSync(
+      join(codexHome, "config.toml"),
+      [
+        'model = "fusion-panel"',
+        'model_provider = "fusion-gateway"',
+        'approval_policy = "never"',
+        'sandbox_mode = "read-only"',
+        "",
+        "[model_providers.fusion-gateway]",
+        'name = "Fusion Harness Gateway"',
+        // Codex appends `/responses`, so the provider base URL ends in `/v1`.
+        `base_url = "${liveGateway.url()}/v1"`,
+        'wire_api = "responses"',
+        "requires_openai_auth = false",
+        ""
+      ].join("\n")
+    );
+    try {
+      const result = await new Promise<{ code: number; stdout: string; stderr: string }>(
+        (resolve) => {
+          const child = spawn(
+            "codex",
+            ["exec", "--json", "--skip-git-repo-check", "Report the final calculator fix result."],
+            {
+              cwd: fixture.repo,
+              env: { ...process.env, CODEX_HOME: codexHome },
+              stdio: ["ignore", "pipe", "pipe"]
+            }
+          );
+          let stdout = "";
+          let stderr = "";
+          child.stdout.on("data", (chunk: Buffer) => {
+            stdout += chunk.toString("utf8");
+          });
+          child.stderr.on("data", (chunk: Buffer) => {
+            stderr += chunk.toString("utf8");
+          });
+          const timer = setTimeout(() => child.kill("SIGTERM"), 120_000);
+          child.on("exit", (code) => {
+            clearTimeout(timer);
+            resolve({ code: code ?? 1, stdout, stderr });
+          });
+        }
+      );
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(result.stdout, new RegExp(SENTINEL));
+    } finally {
+      await liveGateway.close();
+      rmSync(codexHome, { recursive: true, force: true });
+    }
+  }
+);
+
+// Drives the real cursor-agent CLI in ACP mode through the real Cursorkit
+// bridge, whose local model backend is pointed at this gateway. Requires a
+// logged-in cursor-agent and a built Cursorkit checkout (WARRANT_CURSORKIT_DIR).
+const CURSORKIT_DIR = process.env.WARRANT_CURSORKIT_DIR;
+const LIVE_CURSOR =
+  process.env.WARRANT_GATEWAY_LIVE_CURSOR === "1" && CURSORKIT_DIR !== undefined
+    ? false
+    : "set WARRANT_GATEWAY_LIVE_CURSOR=1 and WARRANT_CURSORKIT_DIR=<built cursorkit checkout> with a logged-in cursor-agent";
+
+test(
+  "live: real cursor-agent (ACP) drives the Cursorkit bridge into the gateway fusion run",
+  { skip: LIVE_CURSOR },
+  async () => {
+    const cursorkitDir = CURSORKIT_DIR as string;
+    const liveGateway = await startConfiguredGateway({
+      config: { ...config, models: [{ id: "cursor-panel", model: "fusion-cursor" }] },
+      host: "127.0.0.1",
+      port: 0
+    });
+    const bridgePort = 9700 + Math.floor(Math.random() * 250);
+    let bridgeOut = "";
+    const scrubbed: Record<string, string | undefined> = {};
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith("BRIDGE_") || key.startsWith("MODEL_") || key.startsWith("E2E_") || key.startsWith("CURSOR_UPSTREAM")) {
+        scrubbed[key] = undefined;
+      }
+    }
+    const bridgeEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries({ ...process.env, ...scrubbed })) {
+      if (value !== undefined) bridgeEnv[key] = value;
+    }
+    Object.assign(bridgeEnv, {
+      BRIDGE_PORT: String(bridgePort),
+      BRIDGE_ROUTE_INVENTORY: "true",
+      CURSOR_UPSTREAM_BASE_URL: "https://api2.cursor.sh",
+      MODEL_BASE_URL: `${liveGateway.url()}/v1`,
+      MODEL_API_KEY: "local",
+      MODEL_NAME: "local-fusion",
+      MODEL_PROVIDER_MODEL: "fusion-panel",
+      MODEL_CONTEXT_TOKEN_LIMIT: "128000"
+    });
+    const bridge = spawn(process.execPath, ["dist/src/cli.js", "serve"], {
+      cwd: cursorkitDir,
+      env: bridgeEnv,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    bridge.stdout.on("data", (chunk: Buffer) => {
+      bridgeOut += chunk.toString("utf8");
+    });
+    bridge.stderr.on("data", (chunk: Buffer) => {
+      bridgeOut += chunk.toString("utf8");
+    });
+    try {
+      const deadline = Date.now() + 15_000;
+      while (!/bridge listening/.test(bridgeOut) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      assert.match(bridgeOut, /bridge listening/, "Cursorkit bridge must start");
+
+      const acp = spawn(
+        "cursor-agent",
+        ["--endpoint", `http://127.0.0.1:${bridgePort}`, "--model", "local-fusion", "--mode", "ask", "acp"],
+        { cwd: fixture.repo, stdio: ["pipe", "pipe", "pipe"] }
+      );
+      let acpText = "";
+      let nextId = 1;
+      const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>();
+      const rl = readline.createInterface({ input: acp.stdout });
+      const send = (method: string, params: unknown): Promise<unknown> => {
+        const id = nextId++;
+        acp.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+        return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+      };
+      rl.on("line", (line) => {
+        let message: { id?: number | string; method?: string; params?: unknown; result?: unknown; error?: unknown };
+        try {
+          message = JSON.parse(line);
+        } catch {
+          return;
+        }
+        if (message.id !== undefined && message.method === undefined) {
+          const waiter = pending.get(Number(message.id));
+          if (waiter === undefined) return;
+          pending.delete(Number(message.id));
+          if (message.error !== undefined) waiter.reject(message.error);
+          else waiter.resolve(message.result);
+          return;
+        }
+        if (message.method !== undefined) {
+          if (message.method === "session/update") acpText += JSON.stringify(message.params);
+          if (message.id !== undefined) {
+            acp.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { outcome: { outcome: "skipped", reason: "harness" } } })}\n`);
+          }
+        }
+      });
+      const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([
+          promise,
+          new Promise<T>((_resolve, reject) => setTimeout(() => reject(new Error("ACP step timed out")), ms))
+        ]);
+      try {
+        await withTimeout(
+          send("initialize", {
+            protocolVersion: 1,
+            clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+            clientInfo: { name: "warrant-live", version: "0.1.0" }
+          }),
+          60_000
+        );
+        await withTimeout(send("authenticate", { methodId: "cursor_login" }), 60_000);
+        const session = (await withTimeout(send("session/new", { cwd: fixture.repo, mcpServers: [] }), 60_000)) as {
+          sessionId?: string;
+          session?: { id?: string };
+        };
+        const sessionId = session.sessionId ?? session.session?.id;
+        assert.ok(sessionId, "cursor-agent must create an ACP session");
+        await withTimeout(
+          send("session/prompt", {
+            sessionId,
+            prompt: [{ type: "text", text: "Fix calculator add() so the test passes, then report the result." }]
+          }),
+          60_000
+        );
+      } finally {
+        rl.close();
+        acp.kill("SIGTERM");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      assert.match(acpText, new RegExp(SENTINEL), "fusion-synthesized answer must reach cursor-agent via session/update");
+    } finally {
+      bridge.kill("SIGTERM");
       await liveGateway.close();
     }
   }
