@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import pytest
 from fusionkit_cli.main import app
@@ -22,6 +23,7 @@ from fusionkit_evals.fusion_bench import (
     FusionBenchAttemptRow,
     FusionBenchFailure,
     FusionBenchRunner,
+    FusionBenchTask,
     build_fusion_bench_report,
     format_fusion_bench_html_report,
     format_fusion_bench_markdown_report,
@@ -252,6 +254,59 @@ async def test_fusion_bench_invokes_real_handoffkit_handoff_command(tmp_path) ->
 
 
 @pytest.mark.asyncio
+async def test_fusion_bench_invokes_real_handoffkit_command_harness_patch_and_test(
+    tmp_path,
+) -> None:
+    handoffkit_cli = _handoffkit_cli_or_skip()
+    task = _coding_harness_task(tmp_path / "manifests" / "coding" / "calculator.json")
+    repo = _coding_repo(tmp_path / "repo-command-patch")
+    runner = FusionBenchRunner(
+        _engine(),
+        run_root=tmp_path / "runs",
+        config_id="test",
+        mode="single",
+        handoff_executor=CommandHandoffKitExecutor(
+            [
+                sys.executable,
+                "-c",
+                _HANDOFFKIT_NODE_SHIM,
+                "ensemble",
+                "handoff",
+                "--harness",
+                "command",
+                "--command",
+                "node fix-and-test.js",
+                "--repo",
+                str(repo),
+                "--out",
+                str(tmp_path / "handoffkit-out-command-patch"),
+                "--id",
+                "fusionkit_command_patch_handoff",
+            ],
+            env={"HANDOFFKIT_CLI": str(handoffkit_cli)},
+        ),
+    )
+
+    rows = await runner.run_tasks([task])
+
+    row = rows[0]
+    assert row.failure.failure_kind == "none"
+    assert row.status == "succeeded"
+    assert row.harness_run_result is not None
+    assert row.harness_run_result["harness_kind"] == "generic"
+    assert row.harness_candidate_records
+    assert row.harness_candidate_records[0]["status"] == "succeeded"
+    assert any(artifact.get("kind") == "patch" for artifact in row.artifact_records)
+    transcript = next(
+        artifact
+        for artifact in row.artifact_records
+        if artifact.get("kind") == "transcript" and isinstance(artifact.get("uri"), str)
+    )
+    assert "PATCH_TEST_OK" in _read_file_uri(transcript["uri"])
+    assert score_fusion_bench_row(row).tool_success == 1.0
+
+
+@pytest.mark.asyncio
 async def test_fusion_bench_invokes_real_handoffkit_codex_harness_success_with_stub(
     tmp_path,
 ) -> None:
@@ -333,6 +388,8 @@ async def test_fusion_bench_invokes_real_handoffkit_coding_harness_skip_records(
         task for task in load_benchmark_tasks() if task.record.task_kind == "harness_coding"
     )
     repo = _git_repo(tmp_path / f"repo-{harness_kind}")
+    empty_codex_home = tmp_path / "empty-codex-home"
+    empty_codex_home.mkdir()
     runner = FusionBenchRunner(
         _engine(),
         run_root=tmp_path / "runs",
@@ -356,6 +413,7 @@ async def test_fusion_bench_invokes_real_handoffkit_coding_harness_skip_records(
             ],
             env={
                 "HANDOFFKIT_CLI": str(handoffkit_cli),
+                    "CODEX_HOME": str(empty_codex_home),
                 "CODEX_API_KEY": None,
                 "OPENAI_API_KEY": None,
                 "WARRANT_CODEX_RESPONSES_BASE_URL": None,
@@ -650,10 +708,26 @@ def test_fusion_bench_report_cli_writes_markdown_and_jsonl(tmp_path) -> None:
 
 
 def _handoffkit_cli_or_skip() -> Path:
-    cli = Path("/opt/velum/repos/handoffkit/packages/cli/dist/index.js")
-    if not cli.exists():
-        pytest.skip(f"HandoffKit CLI build not found: {cli}")
-    return cli
+    candidates = []
+    if env_cli := os.environ.get("HANDOFFKIT_CLI"):
+        candidates.append(Path(env_cli))
+    candidates.extend(
+        [
+            Path(__file__).resolve().parents[2]
+            / "handoffkit"
+            / "packages"
+            / "cli"
+            / "dist"
+            / "index.js",
+            Path("/opt/velum/repos/handoffkit/packages/cli/dist/index.js"),
+        ]
+    )
+    for cli in candidates:
+        if cli.exists():
+            return cli
+    pytest.skip(
+        "HandoffKit CLI build not found; run `pnpm build` in the sibling handoffkit repo"
+    )
 
 
 def _git_repo(path: Path) -> Path:
@@ -665,6 +739,82 @@ def _git_repo(path: Path) -> Path:
     subprocess.run(["git", "add", "-A"], cwd=path, check=True)
     subprocess.run(["git", "commit", "--quiet", "-m", "init"], cwd=path, check=True)
     return path
+
+
+def _coding_repo(path: Path) -> Path:
+    repo = _git_repo(path)
+    (repo / "calculator.js").write_text(
+        "exports.add = (left, right) => left - right;\n",
+        encoding="utf-8",
+    )
+    (repo / "calculator.test.js").write_text(
+        "\n".join(
+            [
+                "const assert = require('node:assert/strict');",
+                "const { add } = require('./calculator.js');",
+                "assert.equal(add(2, 3), 5);",
+                "console.log('TEST_OK');",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (repo / "fix-and-test.js").write_text(
+        "\n".join(
+            [
+                "const fs = require('node:fs');",
+                "fs.writeFileSync(",
+                "  'calculator.js',",
+                "  'exports.add = (left, right) => left + right;\\n'",
+                ");",
+                "require('./calculator.test.js');",
+                "console.log('PATCH_TEST_OK');",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "commit", "--quiet", "-m", "add failing coding fixture"],
+        cwd=repo,
+        check=True,
+    )
+    return repo
+
+
+def _coding_harness_task(path: Path) -> FusionBenchTask:
+    path.parent.mkdir(parents=True)
+    metadata = contract_metadata("benchmark-task-record.v1")
+    record = BenchmarkTaskRecordV1.model_validate(
+        {
+            **metadata,
+            "task_id": "fusionkit_command_patch_01",
+            "task_kind": "harness_coding",
+            "source_repo": "fusionkit",
+            "source_sha": "c" * 40,
+            "prompt": "Fix calculator.js so calculator.test.js passes, then run the test.",
+            "prompt_hash": "sha256:" + "5" * 64,
+            "setup_hash": "sha256:" + "6" * 64,
+            "expected_evidence": [
+                "Patch artifact changes calculator.js from subtraction to addition.",
+                "Transcript contains PATCH_TEST_OK after running calculator.test.js.",
+            ],
+            "scorer": {"kind": "record_join", "params": {"smoke_only": True}},
+            "holdout": False,
+            "contamination_notes": "synthetic local coding e2e fixture",
+            "allowed_tools": ["read_file", "write_file", "run_tests"],
+        }
+    )
+    path.write_text(record.model_dump_json() + "\n", encoding="utf-8")
+    return FusionBenchTask(category=path.parent.name, path=path, record=record)
+
+
+def _read_file_uri(uri: str) -> str:
+    parsed = urlparse(uri)
+    if parsed.scheme != "file":
+        raise AssertionError(f"Expected file URI, got {uri!r}")
+    return Path(unquote(parsed.path)).read_text(encoding="utf-8")
 
 
 class _FakeHandoffExecutor:

@@ -24,10 +24,11 @@ autoinstall_mlx_env() {
     uv venv --python 3.12 "$VENV"
   fi
   # transformers 5 pre-releases have broken mlx-lm chat server behavior. Keep this demo on <5.
-  "$VENV/bin/python" -m pip install -q 'mlx-lm==0.29.1' 'transformers<5'
+  uv pip install --python "$VENV/bin/python" 'mlx-lm==0.29.1' 'transformers<5'
 }
 
 autoinstall_mlx_env
+uv sync --all-packages
 source "$VENV/bin/activate"
 python - <<'PY'
 import mlx_lm
@@ -41,7 +42,6 @@ for port in "$PORT_QWEN" "$PORT_GEMMA" "$PORT_LLAMA" "$FUSION_PORT"; do
   if [ -n "$pids" ]; then echo "killing stale port $port: $pids"; kill $pids 2>/dev/null || true; sleep 1; fi
 done
 
-uv sync --all-packages
 GIT_SHA=$(git rev-parse HEAD)
 echo "fusionkit_sha=$GIT_SHA"
 
@@ -198,7 +198,7 @@ curl -fsS "http://$HOST:$FUSION_PORT/v1/fusion/runs/$RUN_ID/inspect" | tee "$ART
 curl -fsS "http://$HOST:$FUSION_PORT/v1/fusion/runs/$RUN_ID/events" | tee "$ART/events.json"
 
 ART="$ART" python - <<'PY'
-import json, os, pathlib, shutil
+import json, os, pathlib, shutil, sys
 art = pathlib.Path(os.environ['ART'])
 inspect = json.load(open(art / 'inspect.json'))
 events = json.load(open(art / 'events.json'))
@@ -241,6 +241,8 @@ summary = {
     + '\n'
 )
 print(json.dumps(summary, indent=2))
+if summary['status'] != 'succeeded':
+    sys.exit(1)
 PY
 
 echo "DONE artifact_dir=$ART"

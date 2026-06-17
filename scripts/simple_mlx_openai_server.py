@@ -4,11 +4,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import threading
 import time
 import traceback
 import uuid
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
 import mlx.core as mx  # type: ignore[import-not-found]
@@ -41,8 +40,6 @@ def build_prompt(tokenizer: Any, messages: list[dict[str, str]]) -> tuple[str | 
 
 
 def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequestHandler]:
-    lock = threading.Lock()
-
     class Handler(BaseHTTPRequestHandler):
         server_version = "simple-mlx-openai/0.1"
 
@@ -99,17 +96,16 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                 prompt, prompt_tokens = build_prompt(tokenizer, messages)
                 sampler = make_sampler(temperature, top_p)
                 started = time.perf_counter()
-                with lock:
-                    text = generate(
-                        model,
-                        tokenizer,
-                        prompt,
-                        max_tokens=max_tokens,
-                        sampler=sampler,
-                        verbose=False,
-                    )
-                    mx.synchronize()
-                    mx.clear_cache()
+                text = generate(
+                    model,
+                    tokenizer,
+                    prompt,
+                    max_tokens=max_tokens,
+                    sampler=sampler,
+                    verbose=False,
+                )
+                mx.synchronize()
+                mx.clear_cache()
                 latency_s = time.perf_counter() - started
                 completion_tokens = len(tokenizer.encode(text)) if text else 0
                 print(
@@ -168,7 +164,7 @@ def main() -> None:
     model, tokenizer = load(args.model)
     mx.eval(model.parameters())
     print(json.dumps({"event": "loaded", "model": args.model, "port": args.port}), flush=True)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(args.model, model, tokenizer))
+    server = HTTPServer((args.host, args.port), make_handler(args.model, model, tokenizer))
     print(json.dumps({"event": "listening", "host": args.host, "port": args.port}), flush=True)
     server.serve_forever()
 
