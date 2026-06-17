@@ -11,9 +11,14 @@
 # 32-byte key (e.g. `openssl rand -hex 32`) in production:
 #
 #   WARRANT_MASTER_KEY=$(openssl rand -hex 32) docker compose up
+x-app-build: &app-build
+  context: .
+  args:
+    PACKAGES_READ_TOKEN: ${PACKAGES_READ_TOKEN:-}
+
 services:
   plane:
-    build: .
+    build: *app-build
     init: true
     environment:
       # Dev-only fallback so `docker compose up` works out of the box; any
@@ -41,7 +46,7 @@ services:
       retries: 30
 
   runner:
-    build: .
+    build: *app-build
     init: true
     depends_on:
       plane:
@@ -57,7 +62,7 @@ services:
       - runner-home:/data/runner
 
   seed:
-    build: .
+    build: *app-build
     init: true
     restart: "no"
     depends_on:

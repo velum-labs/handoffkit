@@ -10,8 +10,10 @@ service types, or schema bundle hashes by hand.
 - In this monorepo, import model-fusion records, validators, and constants from
   `@warrant/protocol`.
 - Cross-repo TypeScript consumers should target the generated package name
-  `@velum-labs/model-fusion-protocol` from GitHub Packages. This package should
-  be generated from the FusionKit JSON Schema and OpenAPI 3.1 contracts.
+  `@velum-labs/model-fusion-protocol` from GitHub Packages. HandoffKit pins
+  `@velum-labs/model-fusion-protocol@0.1.0` at the root and CI verifies the
+  installed package metadata, schema bundle hash, OpenAPI 3.1 contract, and
+  generated TypeScript artifacts from `node_modules`.
 - Service/API clients and request/response models should be generated from
   OpenAPI 3.1. The local HandoffKit snapshot currently generates
   `src/generated/model-fusion-openapi.ts` as a temporary compatibility surface.
@@ -58,11 +60,14 @@ consumers should use generated bindings from one of these private-package paths:
 ## Drift checks
 
 The repository check runs `scripts/check-model-fusion-protocol.mjs` to guard the
-local protocol snapshot:
+installed protocol package and local compatibility snapshot:
 
 - production code may not hardcode the model-fusion schema bundle hash outside
   `packages/protocol/src/model-fusion.ts`;
 - the TypeScript package must export `MODEL_FUSION_SCHEMA_BUNDLE_HASH`;
+- the installed `@velum-labs/model-fusion-protocol` package metadata, OpenAPI
+  3.1 contract, generated TypeScript types, and JSON Schema validator artifact
+  paths must exist and match the pinned package metadata;
 - the local OpenAPI 3.1 compatibility snapshot must exist with the required
   HandoffKit harness executor operation;
 - OpenAPI codegen output for TypeScript and Python must be regenerated and
@@ -76,6 +81,15 @@ local protocol snapshot:
   Python package name `velum-model-fusion-protocol`, package version, schema
   bundle hash, and OpenAPI source hash;
 - this document must retain the intended npm and Python publishing paths.
+
+CI needs `PACKAGES_READ_TOKEN` with GitHub Packages read access so `pnpm install
+--frozen-lockfile` can fetch the private `@velum-labs/model-fusion-protocol`
+package from `npm.pkg.github.com`; when that secret is not configured, CI falls
+back to `github.token` with `packages: read`. Docker builds receive the same
+value through the `PACKAGES_READ_TOKEN` build argument. `.npmrc` keeps the token
+as an environment placeholder and excludes this first-party package from the
+24-hour minimum release-age quarantine so same-day protocol releases can be
+consumed deliberately.
 
 Follow-up work belongs in FusionKit/openclaw-shared: publish the canonical JSON
 Schema bundle, OpenAPI 3.1 service contracts, and generated TypeScript/Python
