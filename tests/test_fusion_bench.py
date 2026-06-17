@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from fusionkit_cli.main import app
@@ -33,6 +36,13 @@ from fusionkit_evals.fusion_bench import (
     write_fusion_bench_report_jsonl,
 )
 from typer.testing import CliRunner
+
+_HANDOFFKIT_NODE_SHIM = (
+    "import os, subprocess, sys; "
+    "raise SystemExit("
+    "subprocess.call(['node', os.environ['HANDOFFKIT_CLI'], *sys.argv[1:]])"
+    ")"
+)
 
 
 def test_fusion_bench_loads_tiny_manifests() -> None:
@@ -195,6 +205,184 @@ async def test_fusion_bench_runs_harness_task_with_command_executor(tmp_path) ->
     assert rows[0].failure.failure_kind == "none"
     assert rows[0].harness_run_result is not None
     assert rows[0].harness_run_result["result_id"] == f"harness_result_{task.record.task_id}"
+
+
+@pytest.mark.asyncio
+async def test_fusion_bench_invokes_real_handoffkit_handoff_command(tmp_path) -> None:
+    handoffkit_cli = _handoffkit_cli_or_skip()
+    task = next(
+        task for task in load_benchmark_tasks() if task.record.task_kind == "harness_coding"
+    )
+    repo = _git_repo(tmp_path / "repo")
+    runner = FusionBenchRunner(
+        _engine(),
+        run_root=tmp_path / "runs",
+        config_id="test",
+        mode="single",
+        handoff_executor=CommandHandoffKitExecutor(
+            [
+                sys.executable,
+                "-c",
+                _HANDOFFKIT_NODE_SHIM,
+                "ensemble",
+                "handoff",
+                "--harness",
+                "mock",
+                "--repo",
+                str(repo),
+                "--out",
+                str(tmp_path / "handoffkit-out"),
+                "--id",
+                "fusionkit_real_handoff",
+            ],
+            env={"HANDOFFKIT_CLI": str(handoffkit_cli)},
+        ),
+    )
+
+    rows = await runner.run_tasks([task])
+
+    row = rows[0]
+    assert row.failure.failure_kind == "none"
+    assert row.status == "succeeded"
+    assert row.harness_run_result is not None
+    assert row.harness_run_result["schema"] == "harness-run-result.v1"
+    assert row.harness_candidate_records
+    assert row.judge_synthesis_record is not None
+    assert row.model_ids
+
+
+@pytest.mark.asyncio
+async def test_fusion_bench_invokes_real_handoffkit_codex_harness_success_with_stub(
+    tmp_path,
+) -> None:
+    handoffkit_cli = _handoffkit_cli_or_skip()
+    task = next(
+        task for task in load_benchmark_tasks() if task.record.task_kind == "harness_coding"
+    )
+    repo = _git_repo(tmp_path / "repo-codex-stub")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    codex = bin_dir / "codex"
+    codex.write_text(
+        "#!/bin/sh\n"
+        "printf '{\"type\":\"session.started\",\"id\":\"stub\"}\\n'\n"
+        "printf '{\"type\":\"turn.completed\",\"result\":\"stub codex completed\"}\\n'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    codex.chmod(0o755)
+    runner = FusionBenchRunner(
+        _engine(),
+        run_root=tmp_path / "runs",
+        config_id="test",
+        mode="single",
+        handoff_executor=CommandHandoffKitExecutor(
+            [
+                sys.executable,
+                "-c",
+                _HANDOFFKIT_NODE_SHIM,
+                "ensemble",
+                "handoff",
+                "--harness",
+                "codex",
+                "--repo",
+                str(repo),
+                "--out",
+                str(tmp_path / "handoffkit-out-codex-stub"),
+                "--id",
+                "fusionkit_codex_stub_handoff",
+            ],
+            env={
+                "HANDOFFKIT_CLI": str(handoffkit_cli),
+                "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+                "CODEX_API_KEY": "test-codex-key",
+                "OPENAI_API_KEY": None,
+                "WARRANT_CODEX_RESPONSES_BASE_URL": None,
+                "CODEX_RESPONSES_BASE_URL": None,
+                "WARRANT_CODEX_OPENAI_BASE_URL": None,
+                "OPENAI_BASE_URL": None,
+            },
+        ),
+    )
+
+    rows = await runner.run_tasks([task])
+
+    row = rows[0]
+    assert row.failure.failure_kind == "none"
+    assert row.status == "succeeded"
+    assert row.harness_run_result is not None
+    assert row.harness_run_result["harness_kind"] == "codex"
+    assert row.harness_run_result["status"] == "succeeded"
+    assert row.harness_candidate_records
+    assert {record["status"] for record in row.harness_candidate_records} == {"succeeded"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("harness_kind,expected_kind,expected_reason", [
+    ("codex", "codex", "Codex credentials are absent"),
+    ("claude-code", "claude_code", "Claude Code harness skipped"),
+])
+async def test_fusion_bench_invokes_real_handoffkit_coding_harness_skip_records(
+    tmp_path,
+    harness_kind: str,
+    expected_kind: str,
+    expected_reason: str,
+) -> None:
+    handoffkit_cli = _handoffkit_cli_or_skip()
+    task = next(
+        task for task in load_benchmark_tasks() if task.record.task_kind == "harness_coding"
+    )
+    repo = _git_repo(tmp_path / f"repo-{harness_kind}")
+    runner = FusionBenchRunner(
+        _engine(),
+        run_root=tmp_path / "runs",
+        config_id="test",
+        mode="single",
+        handoff_executor=CommandHandoffKitExecutor(
+            [
+                sys.executable,
+                "-c",
+                _HANDOFFKIT_NODE_SHIM,
+                "ensemble",
+                "handoff",
+                "--harness",
+                harness_kind,
+                "--repo",
+                str(repo),
+                "--out",
+                str(tmp_path / f"handoffkit-out-{harness_kind}"),
+                "--id",
+                f"fusionkit_{harness_kind}_handoff",
+            ],
+            env={
+                "HANDOFFKIT_CLI": str(handoffkit_cli),
+                "CODEX_API_KEY": None,
+                "OPENAI_API_KEY": None,
+                "WARRANT_CODEX_RESPONSES_BASE_URL": None,
+                "CODEX_RESPONSES_BASE_URL": None,
+                "WARRANT_CODEX_OPENAI_BASE_URL": None,
+                "OPENAI_BASE_URL": None,
+                "AI_GATEWAY_API_KEY": None,
+                "AI_GATEWAY_BASE_URL": None,
+                "ANTHROPIC_API_KEY": None,
+                "ANTHROPIC_AUTH_TOKEN": None,
+                "ANTHROPIC_BASE_URL": None,
+                "VERCEL_TOKEN": None,
+                "VERCEL_TEAM_ID": None,
+                "VERCEL_PROJECT_ID": None,
+            },
+        ),
+    )
+
+    rows = await runner.run_tasks([task])
+
+    row = rows[0]
+    assert row.failure.failure_kind == "unavailable_harness"
+    assert row.failure.owner == "handoffkit"
+    assert row.status == "skipped"
+    assert row.harness_run_result is not None
+    assert row.harness_run_result["harness_kind"] == expected_kind
+    assert expected_reason in (row.harness_run_result.get("output_summary") or "")
 
 
 @pytest.mark.asyncio
@@ -459,6 +647,24 @@ def test_fusion_bench_report_cli_writes_markdown_and_jsonl(tmp_path) -> None:
     assert jsonl_output.exists()
     assert markdown_output.exists()
     assert "Skipped tasks: 1" in markdown_output.read_text(encoding="utf-8")
+
+
+def _handoffkit_cli_or_skip() -> Path:
+    cli = Path("/opt/velum/repos/handoffkit/packages/cli/dist/index.js")
+    if not cli.exists():
+        pytest.skip(f"HandoffKit CLI build not found: {cli}")
+    return cli
+
+
+def _git_repo(path: Path) -> Path:
+    path.mkdir(parents=True)
+    subprocess.run(["git", "init", "--quiet", "--initial-branch=main"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "fusionkit@velum.local"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "fusionkit"], cwd=path, check=True)
+    (path / "README.md").write_text("# fusionkit handoff e2e\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=path, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "init"], cwd=path, check=True)
+    return path
 
 
 class _FakeHandoffExecutor:

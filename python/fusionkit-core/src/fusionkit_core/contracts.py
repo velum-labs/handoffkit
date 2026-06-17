@@ -261,6 +261,20 @@ class FusionRecordV1(ContractRecord):
     error: ContractError | None = None
 
 
+class HarnessRunRequestV1(ContractRecord):
+    expected_schema: ClassVar[str] = "harness-run-request.v1"
+    request_id: str = Field(min_length=1)
+    harness_kind: HarnessKind
+    source_repo: str = Field(min_length=1)
+    base_git_sha: GitSha
+    prompt: str = Field(min_length=1)
+    prompt_hash: Sha256
+    allowed_tools: list[str] | None = None
+    side_effects: SideEffects
+    requested_capabilities: dict[str, CapabilityStatus]
+    metadata: dict[str, Any] | None = None
+
+
 class HarnessRunResultV1(ContractRecord):
     expected_schema: ClassVar[str] = "harness-run-result.v1"
     result_id: str = Field(min_length=1)
@@ -359,6 +373,7 @@ CONTRACT_MODEL_REGISTRY: dict[SchemaName, type[ContractRecord]] = {
     "model-call-record.v1": ModelCallRecordV1,
     "fusion-run-request.v1": FusionRunRequestV1,
     "fusion-record.v1": FusionRecordV1,
+    "harness-run-request.v1": HarnessRunRequestV1,
     "harness-run-result.v1": HarnessRunResultV1,
     "harness-candidate-record.v1": HarnessCandidateRecordV1,
     "judge-synthesis-record.v1": JudgeSynthesisRecordV1,
@@ -495,6 +510,7 @@ __all__ = [
     "GitSha",
     "HarnessCandidateRecordV1",
     "HarnessKind",
+    "HarnessRunRequestV1",
     "HarnessRunResultV1",
     "JudgeSynthesisRecordV1",
     "ModelCallRecordV1",

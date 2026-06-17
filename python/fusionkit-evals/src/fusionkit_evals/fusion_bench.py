@@ -4,6 +4,7 @@ import asyncio
 import html
 import json
 import math
+import os
 import platform
 import shlex
 from collections import Counter
@@ -215,12 +216,25 @@ class CommandHandoffKitExecutor:
         *,
         timeout_s: float = 300.0,
         cwd: str | Path | None = None,
+        env: Mapping[str, str | None] | None = None,
     ) -> None:
         self.command = shlex.split(command) if isinstance(command, str) else list(command)
         self.timeout_s = timeout_s
         self.cwd = Path(cwd) if cwd is not None else None
+        self.env = dict(env) if env is not None else None
         if not self.command:
             raise ValueError("HandoffKit command must not be empty")
+
+    def _subprocess_env(self) -> dict[str, str] | None:
+        if self.env is None:
+            return None
+        merged = os.environ.copy()
+        for key, value in self.env.items():
+            if value is None:
+                merged.pop(key, None)
+            else:
+                merged[key] = value
+        return merged
 
     async def run(self, task: FusionBenchTask) -> list[dict[str, Any]]:
         payload = {
@@ -235,6 +249,7 @@ class CommandHandoffKitExecutor:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=self._subprocess_env(),
             )
         except FileNotFoundError as exc:
             raise HandoffKitExecutorUnavailable(str(exc)) from exc
