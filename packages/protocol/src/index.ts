@@ -22,7 +22,6 @@ export {
   HEX_HASH_PATTERN,
   isAgentKind,
   isTerminalStatus,
-  MODEL_FUSION_SCHEMA_NAMES,
   PROTOCOL_VERSIONS,
   RUN_EVENT_TYPES,
   RUN_STATUSES,
@@ -74,6 +73,8 @@ export {
 } from "./hash.js";
 export {
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
+  MODEL_FUSION_SCHEMA_NAMES,
+  executeHarnessTask,
   assertArtifactRefV1,
   assertBenchmarkTaskRecordV1,
   assertEnsembleReceiptV1,
@@ -84,13 +85,10 @@ export {
   assertModelCallRecordV1,
   assertModelFusionRecord,
   assertToolCallPlanV1,
-  assertToolExecutionRecordV1
-} from "./model-fusion.js";
-export {
-  executeHarnessTask,
+  assertToolExecutionRecordV1,
   MODEL_FUSION_HARNESS_EXECUTOR_PATH,
   MODEL_FUSION_OPENAPI_SOURCE_HASH
-} from "./generated/model-fusion-openapi.js";
+} from "./model-fusion.js";
 export type {
   ExecuteHarnessTaskClientOptions,
   ModelFusionOpenApiArtifactRef,
@@ -98,7 +96,7 @@ export type {
   ModelFusionOpenApiHarnessExecutionRequest,
   ModelFusionOpenApiHarnessExecutionResult,
   ModelFusionOpenApiPersistedJsonRecord
-} from "./generated/model-fusion-openapi.js";
+} from "./model-fusion.js";
 export type {
   ArtifactRefV1,
   ArtifactRef,

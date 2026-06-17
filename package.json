@@ -23,6 +23,7 @@
     "verify": "pnpm check && pnpm build && pnpm test"
   },
   "devDependencies": {
+    "@velum-labs/model-fusion-protocol": "0.1.0",
     "@types/node": "22.19.20",
     "typescript": "5.9.3"
   }

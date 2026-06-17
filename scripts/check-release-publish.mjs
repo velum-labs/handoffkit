@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -6,6 +5,8 @@ const RELEASE_MANIFEST = "release/npm-packages.json";
 const WORKFLOW = ".github/workflows/release-packages.yml";
 const OPENAPI_SNAPSHOT = "packages/protocol/openapi/model-fusion-harness-executor.openapi.json";
 const BINDINGS = "packages/protocol/model-fusion-bindings.json";
+const MODEL_FUSION_PACKAGE = "@velum-labs/model-fusion-protocol";
+const MODEL_FUSION_PACKAGE_VERSION = "0.1.0";
 
 const fail = (message) => {
   console.error(`release publish check failed: ${message}`);
@@ -19,15 +20,6 @@ function readJson(path) {
 for (const path of [RELEASE_MANIFEST, WORKFLOW, OPENAPI_SNAPSHOT, BINDINGS]) {
   if (!existsSync(path)) fail(`missing ${path}`);
 }
-
-const generatedCheck = spawnSync(
-  process.execPath,
-  ["scripts/check-generated-model-fusion-sdk.mjs"],
-  { encoding: "utf8" }
-);
-if (generatedCheck.stdout.trim()) console.log(generatedCheck.stdout.trim());
-if (generatedCheck.stderr.trim()) console.error(generatedCheck.stderr.trim());
-if (generatedCheck.status !== 0) fail("generated model-fusion SDK drift check failed");
 
 const manifest = readJson(RELEASE_MANIFEST);
 if (manifest.canonicalRepository !== "velum-labs/handoffkit") {
@@ -69,17 +61,26 @@ const bindings = readJson(BINDINGS);
 if (bindings.openapiSourceHash !== openApiHash) {
   fail(`model-fusion binding OpenAPI hash is stale; expected ${openApiHash}`);
 }
-if (bindings.typescript?.openapiGenerated !== "packages/protocol/src/generated/model-fusion-openapi.ts") {
-  fail("TypeScript binding manifest must point at generated OpenAPI types/client");
+if (bindings.sharedProtocolPackage?.name !== MODEL_FUSION_PACKAGE) {
+  fail("model-fusion binding manifest must name the shared protocol package");
 }
-if (bindings.python?.openapiGenerated !== "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py") {
-  fail("Python binding manifest must point at generated OpenAPI models/client");
+if (bindings.sharedProtocolPackage?.version !== MODEL_FUSION_PACKAGE_VERSION) {
+  fail("model-fusion binding manifest must pin the shared protocol package version");
 }
-if (bindings.typescript?.jsonSchemaValidators !== "packages/protocol/src/model-fusion.ts") {
-  fail("TypeScript binding manifest must expose JSON Schema validators");
+if (bindings.durableRecordSourceOfTruth !== MODEL_FUSION_PACKAGE) {
+  fail("model-fusion durable record source must be the shared protocol package");
+}
+if (bindings.generatedArtifactsSourceOfTruth !== MODEL_FUSION_PACKAGE) {
+  fail("model-fusion generated artifact source must be the shared protocol package");
 }
 if (manifest.protocol?.openapiSourceHash !== openApiHash) {
   fail(`release manifest protocol OpenAPI hash is stale; expected ${openApiHash}`);
+}
+if (manifest.protocol?.modelFusionPackageName !== MODEL_FUSION_PACKAGE) {
+  fail("release manifest protocol metadata must name the consumed model-fusion package");
+}
+if (manifest.protocol?.modelFusionPackageVersion !== MODEL_FUSION_PACKAGE_VERSION) {
+  fail("release manifest protocol metadata must pin the consumed model-fusion package version");
 }
 
 const root = readJson("package.json");

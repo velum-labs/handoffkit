@@ -3,18 +3,19 @@
   "info": {
     "title": "Model Fusion Harness Executor API",
     "version": "0.1.0",
-    "description": "Consumer compatibility snapshot for the HandoffKit HTTP/JSON harness executor seam. FusionKit remains the canonical contract origin for v1."
+    "description": "HandoffKit-owned HTTP/JSON harness executor seam. Durable model-fusion records, schema metadata, and generated client artifacts are consumed from @velum-labs/model-fusion-protocol."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
-  "x-canonical-source-repo": "fusionkit",
-  "x-local-role": "consumer-compatibility-snapshot",
+  "x-local-role": "handoffkit-owned-harness-executor-contract",
+  "x-shared-protocol-package": "@velum-labs/model-fusion-protocol",
+  "x-shared-protocol-package-version": "0.1.0",
   "x-record-format": "json-schema",
   "paths": {
     "/v1/harness-executions": {
       "post": {
         "operationId": "executeHarnessTask",
         "summary": "Execute a model-fusion harness task",
-        "description": "FusionKit calls this HTTP/JSON seam to ask HandoffKit to execute a coding harness task and return persisted JSON Schema audit records.",
+        "description": "FusionKit calls this HTTP/JSON seam to ask HandoffKit to execute a coding harness task and return persisted JSON Schema audit records from @velum-labs/model-fusion-protocol.",
         "requestBody": {
           "required": true,
           "content": {
@@ -81,7 +82,7 @@
           },
           "persisted_json": {
             "type": "object",
-            "description": "The durable JSON Schema audit/benchmark record. Consumers validate it with the generated model-fusion JSON Schema validators.",
+            "description": "The durable JSON Schema audit/benchmark record. Consumers validate it with the generated model-fusion JSON Schema validators from @velum-labs/model-fusion-protocol.",
             "additionalProperties": true
           }
         }

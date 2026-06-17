@@ -7,7 +7,9 @@
   "protocol": {
     "packageName": "@warrant/protocol",
     "version": "0.1.0",
-    "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb"
+    "openapiSourceHash": "sha256:22c879c8cc4576ca2b5e63e1a97ecf2ae471d05951a5d2389d1e239d04cbf84f",
+    "modelFusionPackageName": "@velum-labs/model-fusion-protocol",
+    "modelFusionPackageVersion": "0.1.0"
   },
   "packages": [
     { "path": "packages/protocol", "name": "@warrant/protocol" },

@@ -30,19 +30,6 @@ export const PROTOCOL_VERSIONS = {
   sealed: "warrant.sealed.v1"
 } as const;
 
-export const MODEL_FUSION_SCHEMA_NAMES = [
-  "model-call-record.v1",
-  "harness-run-request.v1",
-  "harness-run-result.v1",
-  "harness-candidate-record.v1",
-  "judge-synthesis-record.v1",
-  "benchmark-task-record.v1",
-  "artifact-ref.v1",
-  "tool-call-plan.v1",
-  "tool-execution-record.v1",
-  "ensemble-receipt.v1"
-] as const;
-
 /**
  * Length (in hex characters) of the public-key fingerprint embedded in a
  * key id. 16 hex = 64 bits of a SHA-256 digest: ample collision resistance

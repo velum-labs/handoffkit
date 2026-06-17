@@ -40,9 +40,6 @@ const requiredFiles = [
   "packages/protocol/src/types.ts",
   "packages/protocol/src/api.ts",
   "packages/protocol/src/model-fusion.ts",
-  "packages/protocol/src/generated/model-fusion-openapi.ts",
-  "packages/protocol/generated/python/velum_model_fusion_protocol/__init__.py",
-  "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py",
   "packages/protocol/openapi/model-fusion-harness-executor.openapi.json",
   "packages/protocol/model-fusion-bindings.json",
   "packages/protocol/docs/model-fusion-consumption.md",
@@ -91,8 +88,6 @@ const requiredFiles = [
   "scripts/demo.mjs",
   "scripts/check-release-publish.mjs",
   "scripts/check-model-fusion-protocol.mjs",
-  "scripts/check-generated-model-fusion-sdk.mjs",
-  "scripts/generate-model-fusion-openapi-sdk.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "release/npm-packages.json",
   "docs/release-publishing.md",
@@ -110,26 +105,6 @@ const requiredFiles = [
   "packages/ensemble/src/test/isolation.test.ts",
   "packages/ensemble/src/test/dashboard.test.ts",
   "packages/ensemble/src/test/codex.test.ts",
-  "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/benchmark-task-record.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/benchmark-task-record.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/ensemble-receipt.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/ensemble-receipt.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/harness-candidate-record.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/harness-candidate-record.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/harness-run-request.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/harness-run-request.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/harness-run-result.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/harness-run-result.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/judge-synthesis-record.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/judge-synthesis-record.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/model-call-record.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/model-call-record.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/tool-call-plan.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/tool-call-plan.v1/realistic.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/tool-execution-record.v1/minimal.json",
-  "packages/protocol/src/fixtures/model-fusion-contract/tool-execution-record.v1/realistic.json",
   "packages/workspace/src/test/workspace.test.ts",
   "packages/plane/src/test/policy.test.ts",
   "packages/plane/src/test/api.test.ts",
@@ -226,7 +201,9 @@ for (const setting of [
   "package-manager-strict=true",
   "strict-peer-dependencies=true",
   "ignore-scripts=true",
-  "verify-store-integrity=true"
+  "verify-store-integrity=true",
+  "@velum-labs:registry=https://npm.pkg.github.com",
+  "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
 ]) {
   if (!npmrc.includes(setting)) fail(`.npmrc missing ${setting}`);
 }
@@ -277,6 +254,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@ai-sdk/sandbox-just-bash", "1.0.0-canary.6"],
   ["@ai-sdk/sandbox-vercel", "1.0.0-canary.6"],
   ["@ai-sdk/tui", "1.0.0-canary.6"],
+  ["@velum-labs/model-fusion-protocol", "0.1.0"],
   ["@types/node", "22.19.20"],
   ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
@@ -354,6 +332,7 @@ const sourceListing = spawnSync(
 if (sourceListing.status === 0) {
   for (const file of sourceListing.stdout.split("\n").filter((l) => l.length > 0)) {
     if (file === "scripts/check-repo.mjs") continue;
+    if (!existsSync(file)) continue;
     const lines = readFileSync(file, "utf8").split("\n");
     for (let i = 0; i < lines.length; i++) {
       if (todoMarker.test(lines[i])) {

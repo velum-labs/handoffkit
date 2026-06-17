@@ -1,12 +1,17 @@
 {
-  "canonicalSourceRepo": "fusionkit",
-  "localRole": "consumer-compatibility-snapshot",
+  "sharedProtocolPackage": {
+    "name": "@velum-labs/model-fusion-protocol",
+    "version": "0.1.0",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "localRole": "handoffkit-owned-harness-executor-contract",
   "openapiSource": "openapi/model-fusion-harness-executor.openapi.json",
-  "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb",
-  "jsonSchemaAuditFormat": "packages/protocol/src/fixtures/model-fusion-contract",
+  "openapiSourceHash": "sha256:22c879c8cc4576ca2b5e63e1a97ecf2ae471d05951a5d2389d1e239d04cbf84f",
+  "durableRecordSourceOfTruth": "@velum-labs/model-fusion-protocol",
+  "generatedArtifactsSourceOfTruth": "@velum-labs/model-fusion-protocol",
   "serviceBoundarySourceOfTruth": "openapi-3.1",
   "openapi": {
-    "status": "v1-http-json-source",
+    "status": "handoffkit-owned-v1-http-json-source",
     "version": "3.1.0"
   },
   "protobuf": {
@@ -15,34 +20,9 @@
   },
   "typescript": {
     "packageName": "@velum-labs/model-fusion-protocol",
-    "openapiGenerated": "packages/protocol/src/generated/model-fusion-openapi.ts",
-    "jsonSchemaValidators": "packages/protocol/src/model-fusion.ts",
     "registries": [
-      "npm",
       "GitHub Packages"
     ],
-    "status": "openapi-generated-json-schema-validator-exported"
-  },
-  "python": {
-    "packageName": "velum-model-fusion-protocol",
-    "openapiGenerated": "packages/protocol/generated/python/velum_model_fusion_protocol/model_fusion_openapi.py",
-    "jsonSchemaValidators": "fusionkit-follow-up",
-    "privateIndexOptions": [
-      "Cloudsmith",
-      "CodeArtifact",
-      "Gemfury"
-    ],
-    "bootstrapOptions": [
-      "GitHub Releases wheels",
-      "uv git dependency"
-    ],
-    "status": "openapi-generated-json-schema-validator-follow-up"
-  },
-  "publishedProtocolMetadata": {
-    "typescriptPackageName": "@velum-labs/model-fusion-protocol",
-    "pythonPackageName": "velum-model-fusion-protocol",
-    "version": "0.1.0",
-    "schemaBundleHash": "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
-    "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb"
+    "status": "consumed-from-published-package"
   }
 }

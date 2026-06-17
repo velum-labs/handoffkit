@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@velum-labs/model-fusion-protocol':
+        specifier: 0.1.0
+        version: 0.1.0
       '@types/node':
         specifier: 22.19.20
         version: 22.19.20
@@ -441,7 +444,11 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
-  packages/protocol: {}
+  packages/protocol:
+    dependencies:
+      '@velum-labs/model-fusion-protocol':
+        specifier: 0.1.0
+        version: 0.1.0
 
   packages/runner:
     dependencies:
@@ -701,6 +708,9 @@ packages:
 
   '@types/node@22.19.20':
     resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
+
+  '@velum-labs/model-fusion-protocol@0.1.0':
+    resolution: {}
 
   '@vercel/oidc@3.2.0':
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
@@ -1293,6 +1303,8 @@ snapshots:
   '@types/node@22.19.20':
     dependencies:
       undici-types: 6.21.0
+
+  '@velum-labs/model-fusion-protocol@0.1.0': {}
 
   '@vercel/oidc@3.2.0': {}
 

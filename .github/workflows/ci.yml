@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -41,6 +42,8 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.MODEL_FUSION_PROTOCOL_NPM_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Check
         run: pnpm check

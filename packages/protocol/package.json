@@ -12,6 +12,9 @@
     }
   },
   "files": ["dist"],
+  "dependencies": {
+    "@velum-labs/model-fusion-protocol": "0.1.0"
+  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
     "access": "restricted",
