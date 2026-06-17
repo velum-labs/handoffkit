@@ -5,6 +5,10 @@ import { parseArgs } from "node:util";
 
 import {
   createCommandHarness,
+  claudeCodeHarness,
+  claudeCodeHarnessCredentialSkipReason,
+  codexHarness,
+  codexHarnessCredentialSkipReason,
   createMockHarness,
   createMockJudgeSynthesizer,
   runEnsemble,
@@ -14,6 +18,7 @@ import type {
   EnsembleDescriptor,
   EnsembleModel,
   EnsembleRunResult,
+  HarnessAdapter,
   HarnessLiveSmokeTarget,
   HarnessSmokeDashboard
 } from "@warrant/ensemble";
@@ -21,12 +26,15 @@ import { agents, handoff, targets } from "@warrant/handoff";
 import { Plane, startPlaneServer } from "@warrant/plane";
 import {
   AGENT_KINDS,
+  assertBenchmarkTaskRecordV1,
   assertHarnessCandidateRecordV1,
   assertHarnessRunRequestV1,
   assertHarnessRunResultV1,
   assertJudgeSynthesisRecordV1,
   assertModelCallRecordV1,
+  assertModelFusionRecord,
   isTerminalStatus,
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   PolicyDeniedError,
   SESSION_ISOLATIONS,
   verifyReceiptBundle
@@ -34,6 +42,11 @@ import {
 import type {
   AgentKind,
   AgentSpec,
+  BenchmarkTaskRecordV1,
+  HarnessRunRequestV1,
+  HarnessRunResultV1,
+  ModelFusionHarnessKind,
+  ModelFusionRecordV1,
   ReceiptBundle,
   RunRequestInput,
   SessionIsolation
@@ -109,6 +122,15 @@ usage:
       --judge ID              judge id (default: mock)
       --policy ID             policy id (default: local-smoke)
       --timeout-ms N          command timeout (default: 30000)
+  warrant ensemble handoff [opts] < payload.json
+                                                 FusionKit stdin/stdout handoff executor
+      --harness mock|command|claude-code|codex
+      --command CMD           shell command for command harness
+      --model ID=MODEL        candidate model mapping (repeatable)
+      --repo DIR              workspace repository (default: .)
+      --out DIR               output directory (default: ./.warrant/ensemble-handoff)
+      --id ID                 descriptor id (default: handoff_<task_id>)
+      --timeout-ms N          command/coding harness timeout (default: 30000)
   warrant ensemble dashboard [opts]              generate harness smoke dashboard
       --repo DIR              workspace repository (default: .)
       --out DIR               output directory (default: ./.warrant/ensemble-dashboard)
@@ -250,6 +272,26 @@ function parseEnsembleArgs(argv: string[]): { values: EnsembleFlags; prompt: str
   return { values, prompt };
 }
 
+function parseEnsembleHandoffArgs(argv: string[]): EnsembleFlags {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      harness: { type: "string", default: "mock" },
+      command: { type: "string" },
+      repo: { type: "string", default: "." },
+      out: { type: "string" },
+      id: { type: "string" },
+      model: { type: "string", multiple: true },
+      judge: { type: "string", default: "mock" },
+      policy: { type: "string", default: "local-smoke" },
+      "timeout-ms": { type: "string" }
+    },
+    allowPositionals: true
+  });
+  if (positionals.length > 0) fail("ensemble handoff reads task payload from stdin and does not accept positional arguments");
+  return values;
+}
+
 function parseEnsembleDashboardArgs(argv: string[]): EnsembleDashboardFlags {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -329,6 +371,229 @@ function writeEnsembleOutput(outDir: string, result: EnsembleRunResult): void {
     assertJudgeSynthesisRecordV1(result.judgeSynthesisRecord);
     writeJson(join(outDir, "judge-synthesis-record.json"), result.judgeSynthesisRecord);
   }
+}
+
+
+type HandoffPayload = {
+  category?: string;
+  manifest_path?: string;
+  task?: unknown;
+};
+
+type HandoffHarnessSelection =
+  | { harness: HarnessAdapter; harnessKind: ModelFusionHarnessKind }
+  | { skipReason: string; harnessKind: ModelFusionHarnessKind; harnessId: string };
+
+function readStdinJson(): unknown {
+  const input = readFileSync(0, "utf8").trim();
+  if (!input) fail("handoff payload is required on stdin");
+  try {
+    return JSON.parse(input) as unknown;
+  } catch (error) {
+    fail(`handoff payload must be valid JSON: ${(error as Error).message}`);
+  }
+}
+
+function parseHandoffTask(payload: unknown): BenchmarkTaskRecordV1 {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    fail("handoff payload must be a JSON object");
+  }
+  const task = (payload as HandoffPayload).task;
+  assertBenchmarkTaskRecordV1(task);
+  return task;
+}
+
+function baseGitSha(repo: string): string {
+  try {
+    return gitText(repo, ["rev-parse", "HEAD"]).trim();
+  } catch {
+    return "0".repeat(40);
+  }
+}
+
+function metadata<S extends ModelFusionRecordV1["schema"]>(schema: S, createdAt: string) {
+  return {
+    schema,
+    schema_version: "v1" as const,
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
+    producer: "handoffkit-cli",
+    producer_version: "0.1.0",
+    producer_git_sha: "0".repeat(40),
+    created_at: createdAt
+  };
+}
+
+function recordsForResult(
+  task: BenchmarkTaskRecordV1,
+  result: EnsembleRunResult
+): ModelFusionRecordV1[] {
+  const records: ModelFusionRecordV1[] = [
+    task,
+    result.harnessRunRequest,
+    result.harnessRunResult,
+    ...result.candidates,
+    ...result.modelCallRecords
+  ];
+  if (result.judgeSynthesisRecord !== undefined) records.push(result.judgeSynthesisRecord);
+  for (const record of records) assertModelFusionRecord(record);
+  return records;
+}
+
+function skippedHandoffRecords(input: {
+  task: BenchmarkTaskRecordV1;
+  descriptorId: string;
+  repo: string;
+  harnessKind: ModelFusionHarnessKind;
+  harnessId: string;
+  reason: string;
+}): ModelFusionRecordV1[] {
+  const createdAt = new Date().toISOString();
+  const request: HarnessRunRequestV1 = {
+    ...metadata("harness-run-request.v1", createdAt),
+    request_id: `ensemble_req_${input.descriptorId}`,
+    harness_kind: input.harnessKind,
+    source_repo: "handoffkit",
+    base_git_sha: baseGitSha(input.repo),
+    prompt: input.task.prompt ?? "",
+    prompt_hash: input.task.prompt_hash,
+    allowed_tools: input.task.allowed_tools,
+    side_effects: "unknown",
+    requested_capabilities: { coding_harness: "unsupported" },
+    metadata: {
+      harness_id: input.harnessId,
+      skipped: true,
+      skip_reason: input.reason
+    }
+  };
+  const result: HarnessRunResultV1 = {
+    ...metadata("harness-run-result.v1", createdAt),
+    result_id: `ensemble_result_${input.descriptorId}`,
+    request_id: request.request_id,
+    harness_kind: input.harnessKind,
+    status: "skipped",
+    candidate_ids: [],
+    output_summary: input.reason,
+    capabilities: { coding_harness: "unsupported" },
+    started_at: createdAt,
+    finished_at: createdAt,
+    errors: [{ kind: "capability_missing", message: input.reason, retryable: false }],
+    metadata: {
+      descriptor_id: input.descriptorId,
+      harness_id: input.harnessId,
+      skipped: true
+    }
+  };
+  const records: ModelFusionRecordV1[] = [input.task, request, result];
+  for (const record of records) assertModelFusionRecord(record);
+  return records;
+}
+
+function selectHandoffHarness(
+  values: EnsembleFlags,
+  repo: string,
+  timeoutMs: number
+): HandoffHarnessSelection {
+  const harnessId = values.harness ?? "mock";
+  switch (harnessId) {
+    case "mock":
+      return { harness: createMockHarness(), harnessKind: "generic" };
+    case "command":
+      if (!values.command) fail("--command is required when --harness command");
+      return {
+        harness: createCommandHarness({ command: values.command, cwd: repo, timeoutMs }),
+        harnessKind: "generic"
+      };
+    case "claude-code": {
+      const reason = claudeCodeHarnessCredentialSkipReason();
+      if (reason !== undefined) {
+        return { skipReason: reason, harnessKind: "claude_code", harnessId };
+      }
+      return { harness: claudeCodeHarness({ timeoutMs }), harnessKind: "claude_code" };
+    }
+    case "codex": {
+      const reason = codexHarnessCredentialSkipReason();
+      if (reason !== undefined) {
+        return { skipReason: reason, harnessKind: "codex", harnessId };
+      }
+      return { harness: codexHarness({ cwd: repo, timeoutMs }), harnessKind: "codex" };
+    }
+    default:
+      fail('--harness must be "mock", "command", "claude-code", or "codex"');
+  }
+}
+
+function handoffModels(values: EnsembleFlags): EnsembleModel[] {
+  return ensembleModels(values);
+}
+
+async function cmdEnsembleHandoff(argv: string[]): Promise<void> {
+  const values = parseEnsembleHandoffArgs(argv);
+  const payload = readStdinJson();
+  const task = parseHandoffTask(payload);
+  const repo = resolve(values.repo ?? ".");
+  const outDir = resolve(values.out ?? ".warrant/ensemble-handoff");
+  const timeoutMs = Number(values["timeout-ms"] ?? "30000");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) fail("--timeout-ms must be positive");
+  const id = values.id ?? `handoff_${safeId(task.task_id)}`;
+  const selection = selectHandoffHarness(values, repo, timeoutMs);
+  if ("skipReason" in selection) {
+    process.stdout.write(
+      JSON.stringify({
+        records: skippedHandoffRecords({
+          task,
+          descriptorId: id,
+          repo,
+          harnessKind: selection.harnessKind,
+          harnessId: selection.harnessId,
+          reason: selection.skipReason
+        })
+      }) + "\n"
+    );
+    return;
+  }
+
+  const descriptor: EnsembleDescriptor = {
+    id,
+    harness: selection.harness,
+    models: handoffModels(values),
+    runtime: { id: "handoff-local" },
+    judge: {
+      id: values.judge ?? "mock",
+      synthesizer: createMockJudgeSynthesizer({
+        output: {
+          decision: "synthesize",
+          finalOutput: "CI-safe handoff synthesis",
+          rationale: "synthetic handoff smoke run",
+          patch: { content: "", author: "judge" }
+        }
+      })
+    },
+    policy: {
+      id: values.policy ?? "handoff-smoke",
+      allowedTools: task.allowed_tools,
+      sideEffects: values.harness === "command" ? "tool_execution" : "read_only",
+      timeoutMs
+    },
+    prompt: task.prompt ?? "",
+    sourceRepo: "handoffkit",
+    baseGitSha: baseGitSha(repo),
+    workspace: repo,
+    outputRoot: outDir,
+    cleanupWorktrees: true,
+    metadata: {
+      handoff_protocol: "fusionkit-command-v1",
+      benchmark_task_id: task.task_id,
+      ...(typeof (payload as HandoffPayload).manifest_path === "string"
+        ? { benchmark_manifest_path: (payload as HandoffPayload).manifest_path }
+        : {}),
+      ...(typeof (payload as HandoffPayload).category === "string"
+        ? { benchmark_category: (payload as HandoffPayload).category }
+        : {})
+    }
+  };
+  const result = await runEnsemble(descriptor);
+  writeEnsembleOutput(outDir, result);
+  process.stdout.write(JSON.stringify({ records: recordsForResult(task, result) }) + "\n");
 }
 
 function renderEnsembleSummary(outDir: string, result: EnsembleRunResult): string {
@@ -692,6 +957,10 @@ async function main(): Promise<void> {
     case "ensemble": {
       if (sub === "run") {
         await cmdEnsembleRun(rest);
+        return;
+      }
+      if (sub === "handoff") {
+        await cmdEnsembleHandoff(rest);
         return;
       }
       if (sub === "dashboard") {

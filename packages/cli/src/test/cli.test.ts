@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -13,6 +14,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 
+import { MODEL_FUSION_SCHEMA_BUNDLE_HASH } from "@warrant/protocol";
+
 const CLI = fileURLToPath(new URL("../index.js", import.meta.url));
 const SMOKE_ENV_KEYS = [
   "WARRANT_CLAUDE_SMOKE",
@@ -22,12 +25,20 @@ const SMOKE_ENV_KEYS = [
 
 let home: string;
 
-function warrant(args: string[]): { status: number; stdout: string; stderr: string } {
+function warrant(
+  args: string[],
+  options: { input?: string; env?: Record<string, string | undefined> } = {}
+): { status: number; stdout: string; stderr: string } {
   const env = { ...process.env };
   for (const key of SMOKE_ENV_KEYS) delete env[key];
+  for (const [key, value] of Object.entries(options.env ?? {})) {
+    if (value === undefined) delete env[key];
+    else env[key] = value;
+  }
   const result = spawnSync(process.execPath, [CLI, "--dir", home, ...args], {
     encoding: "utf8",
-    env
+    env,
+    input: options.input
   });
   return {
     status: result.status ?? 1,
@@ -51,6 +62,7 @@ test("help prints usage", () => {
   assert.match(result.stdout, /governed execution and provenance plane/);
   assert.match(result.stdout, /warrant continue --agent KIND/);
   assert.match(result.stdout, /warrant ensemble run/);
+  assert.match(result.stdout, /warrant ensemble handoff/);
   assert.match(result.stdout, /--live-smoke TARGET/);
   assert.match(result.stdout, /warrant ui/);
 });
@@ -246,6 +258,174 @@ test("ensemble command failure exits nonzero but writes summary", () => {
     assert.equal(result.status, 1);
     assert.match(result.stdout, /ensemble cli_fail \[failed\]/);
     assert.ok(existsSync(join(fixture.output, "summary.json")));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+
+function benchmarkTask(taskId: string, prompt: string) {
+  const hash = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+  return {
+    schema: "benchmark-task-record.v1",
+    schema_version: "v1",
+    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
+    producer: "fusionkit-evals",
+    producer_version: "0.1.0",
+    producer_git_sha: "a".repeat(40),
+    created_at: "2026-01-01T00:00:00.000Z",
+    task_id: taskId,
+    task_kind: "harness_coding",
+    source_repo: "fusionkit",
+    source_sha: "b".repeat(40),
+    prompt,
+    prompt_hash: hash(prompt),
+    setup_hash: hash(`${taskId}:setup`),
+    expected_evidence: ["harness records join"],
+    scorer: { kind: "record_join" },
+    holdout: false,
+    contamination_notes: "synthetic cli handoff test",
+    allowed_tools: ["read_file"]
+  };
+}
+
+test("ensemble handoff rejects positional prompts", () => {
+  const payload = {
+    category: "coding",
+    manifest_path: "/tmp/handoff-positional-task.json",
+    task: benchmarkTask("handoff_positional", "should come from stdin")
+  };
+  const result = warrant(["ensemble", "handoff", "unexpected prompt"], {
+    input: JSON.stringify(payload)
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /does not accept positional arguments/);
+  assert.equal(result.stdout, "");
+});
+
+test("ensemble handoff emits FusionKit-compatible contract records on stdout", () => {
+  const fixture = makeRepo();
+  try {
+    const payload = {
+      category: "coding",
+      manifest_path: "/tmp/handoff-cli-task.json",
+      task: benchmarkTask("handoff_cli_task", "summarize the repo for handoff")
+    };
+    const result = warrant(
+      [
+        "ensemble",
+        "handoff",
+        "--harness",
+        "mock",
+        "--repo",
+        fixture.repo,
+        "--out",
+        fixture.output,
+        "--id",
+        "cli_handoff"
+      ],
+      { input: JSON.stringify(payload) }
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout) as { records: Array<{ schema: string }> };
+    const schemas = parsed.records.map((record) => record.schema);
+    assert.deepEqual(schemas.slice(0, 3), [
+      "benchmark-task-record.v1",
+      "harness-run-request.v1",
+      "harness-run-result.v1"
+    ]);
+    assert.ok(schemas.includes("harness-candidate-record.v1"));
+    assert.ok(schemas.includes("judge-synthesis-record.v1"));
+    assert.ok(existsSync(join(fixture.output, "harness-run-result.json")));
+    assert.ok(!result.stdout.includes("ensemble cli_handoff"));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ensemble handoff exits zero with failed command harness records for FusionKit ingestion", () => {
+  const fixture = makeRepo();
+  try {
+    const payload = {
+      category: "coding",
+      manifest_path: "/tmp/handoff-command-fail-task.json",
+      task: benchmarkTask("handoff_command_fail", "run a failing command harness")
+    };
+    const result = warrant(
+      [
+        "ensemble",
+        "handoff",
+        "--harness",
+        "command",
+        "--command",
+        "exit 7",
+        "--repo",
+        fixture.repo,
+        "--out",
+        fixture.output,
+        "--id",
+        "cli_command_fail"
+      ],
+      { input: JSON.stringify(payload) }
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout) as {
+      records: Array<{ schema: string; status?: string; harness_kind?: string }>;
+    };
+    const runResult = parsed.records.find(
+      (record) => record.schema === "harness-run-result.v1"
+    );
+    assert.equal(runResult?.status, "failed");
+    assert.equal(runResult?.harness_kind, "generic");
+    assert.ok(parsed.records.some((record) => record.schema === "harness-candidate-record.v1"));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ensemble handoff returns structured skip records when codex credentials are absent", () => {
+  const fixture = makeRepo();
+  try {
+    const payload = {
+      category: "coding",
+      manifest_path: "/tmp/handoff-codex-task.json",
+      task: benchmarkTask("handoff_codex_skip", "try the codex coding harness")
+    };
+    const result = warrant(
+      [
+        "ensemble",
+        "handoff",
+        "--harness",
+        "codex",
+        "--repo",
+        fixture.repo,
+        "--out",
+        fixture.output,
+        "--id",
+        "cli_codex_skip"
+      ],
+      {
+        input: JSON.stringify(payload),
+        env: {
+          CODEX_API_KEY: "",
+          OPENAI_API_KEY: "",
+          WARRANT_CODEX_RESPONSES_BASE_URL: "",
+          CODEX_RESPONSES_BASE_URL: "",
+          WARRANT_CODEX_OPENAI_BASE_URL: "",
+          OPENAI_BASE_URL: ""
+        }
+      }
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout) as {
+      records: Array<{ schema: string; status?: string; harness_kind?: string; errors?: unknown[] }>;
+    };
+    const runResult = parsed.records.find(
+      (record) => record.schema === "harness-run-result.v1"
+    );
+    assert.equal(runResult?.status, "skipped");
+    assert.equal(runResult?.harness_kind, "codex");
+    assert.ok(JSON.stringify(runResult?.errors).includes("Codex credentials are absent"));
   } finally {
     fixture.cleanup();
   }
