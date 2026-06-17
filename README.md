@@ -42,6 +42,10 @@ uv run pytest python/uniroute/tests   # test a member
 uv run uniroute-demo                   # run a member's entry point
 ```
 
+## FusionKit integration
+
+- [FusionKit handoff executor](docs/fusionkit-handoff-executor.md): stdin/stdout record envelope for FusionKit coding-harness benchmark tasks.
+
 ## Quickstart
 
 Prerequisites: Node >= 22 and git. The exact pnpm version is pinned via Corepack — no global install needed:
