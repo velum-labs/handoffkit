@@ -101,6 +101,39 @@ test("responsesToChat maps instructions, input items, and function output", () =
   assert.equal(tools[0]?.function.name, "search");
 });
 
+test("responsesToChat coalesces parallel function calls into one assistant message", () => {
+  // Codex emits parallel tool calls as separate function_call items; they must
+  // become a single assistant message so the following tool messages answer it
+  // (the chat API rejects an assistant tool_calls message that is not directly
+  // followed by tool responses for each tool_call_id).
+  const chat = responsesToChat(
+    {
+      input: [
+        { type: "message", role: "user", content: "fix it" },
+        { type: "function_call", call_id: "call_a", name: "read_file", arguments: '{"path":"a.js"}' },
+        { type: "function_call", call_id: "call_b", name: "read_file", arguments: '{"path":"b.js"}' },
+        { type: "function_call_output", call_id: "call_a", output: "A" },
+        { type: "function_call_output", call_id: "call_b", output: "B" }
+      ]
+    },
+    "local-model"
+  );
+  const messages = chat.messages as Record<string, unknown>[];
+  // user, assistant(tool_calls:[a,b]), tool(a), tool(b)
+  assert.equal(messages.length, 4);
+  assert.equal(messages[1]?.role, "assistant");
+  const toolCalls = (messages[1] as { tool_calls?: Array<{ id: string }> }).tool_calls ?? [];
+  assert.equal(toolCalls.length, 2);
+  assert.deepEqual(
+    toolCalls.map((call) => call.id),
+    ["call_a", "call_b"]
+  );
+  assert.equal(messages[2]?.role, "tool");
+  assert.equal((messages[2] as { tool_call_id?: string }).tool_call_id, "call_a");
+  assert.equal(messages[3]?.role, "tool");
+  assert.equal((messages[3] as { tool_call_id?: string }).tool_call_id, "call_b");
+});
+
 test("serves a non-streaming Responses object end to end", async () => {
   const mock = await startMock();
   const gateway = await startGateway({

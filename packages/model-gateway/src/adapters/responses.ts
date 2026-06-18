@@ -100,22 +100,28 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
   if (typeof input === "string") {
     messages.push({ role: "user", content: input });
   } else if (Array.isArray(input)) {
+    // Coalesce consecutive function_call items into ONE assistant message.
+    // Codex emits parallel tool calls as separate function_call items; the chat
+    // API requires an assistant message's tool_calls to be answered by the
+    // following tool messages before the next assistant message, so each call
+    // must not become its own assistant turn.
+    let pendingToolCalls: Array<Record<string, unknown>> = [];
+    const flushToolCalls = (): void => {
+      if (pendingToolCalls.length === 0) return;
+      messages.push({ role: "assistant", content: null, tool_calls: pendingToolCalls });
+      pendingToolCalls = [];
+    };
     for (const item of input) {
       if (item.type === "function_call") {
         const call = item as Extract<ResponsesInputItem, { type: "function_call" }>;
-        messages.push({
-          role: "assistant",
-          content: null,
-          tool_calls: [
-            {
-              id: call.call_id ?? call.id ?? `call_${randomId()}`,
-              type: "function",
-              function: { name: call.name, arguments: call.arguments }
-            }
-          ]
+        pendingToolCalls.push({
+          id: call.call_id ?? call.id ?? `call_${randomId()}`,
+          type: "function",
+          function: { name: call.name, arguments: call.arguments }
         });
         continue;
       }
+      flushToolCalls();
       if (item.type === "function_call_output") {
         const out = item as Extract<ResponsesInputItem, { type: "function_call_output" }>;
         const content = typeof out.output === "string" ? out.output : JSON.stringify(out.output);
@@ -128,6 +134,7 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
       const role = message.role === "developer" ? "system" : message.role ?? "user";
       messages.push({ role, content: contentToParts(message.content) });
     }
+    flushToolCalls();
   }
 
   const chat: Record<string, unknown> = {
