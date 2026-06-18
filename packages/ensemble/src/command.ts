@@ -50,6 +50,7 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
         env: {
           HARNESS_MODEL_ID: model.id,
           HARNESS_MODEL: model.model,
+          HARNESS_PROMPT: descriptor.prompt,
           ...(model.endpointId !== undefined ? { HARNESS_ENDPOINT_ID: model.endpointId } : {}),
           ...env
         }

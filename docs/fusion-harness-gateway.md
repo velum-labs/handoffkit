@@ -9,6 +9,50 @@ FusionKit-synthesized answer is returned in the tool's native wire protocol.
 The tool never learns that fusion happened. It speaks its normal dialect and
 gets back a single synthesized answer.
 
+## Quickstart: one command
+
+`warrant fusion <tool>` spawns everything and launches the agent for you — no
+manual gateway, no separate model servers, no juggling terminals:
+
+```bash
+warrant fusion codex      # or: claude | cursor | serve
+```
+
+Omit the tool on a TTY to pick interactively. In one command it:
+
+1. starts a real local MLX panel (the cached `Qwen3-1.7B` + `Gemma-3-1B` +
+   `Llama-3.2-1B` trio by default),
+2. starts the Fusion Harness Gateway over a real, model-backed coding harness
+   (each panel model produces a real candidate patch in its own git worktree on
+   a real repo) with real judge synthesis,
+3. launches the chosen agent pre-wired to the gateway.
+
+One Ctrl+C tears the whole stack (trio + gateway + any Cursorkit bridge) down.
+
+Each prompt is treated as a coding task against a repo. By default it
+materializes a real sample repo with a failing test; point it at your own with
+`--repo`. Useful flags:
+
+```bash
+warrant fusion claude --repo /path/to/your/repo
+warrant fusion cursor --cursor-kit-dir /path/to/cursorkit   # or WARRANT_CURSORKIT_DIR
+warrant fusion codex --model a=mlx-community/Qwen3-1.7B-4bit --model b=...   # custom panel
+warrant fusion serve                                        # just run the gateway + print setup
+```
+
+Notes:
+
+- First run loads three real models (the trio); later runs reuse them. Swap in a
+  lighter real set with `--model`.
+- Cursor needs a built `cursorkit` checkout and a logged-in `cursor-agent`;
+  without `--cursor-kit-dir`/`WARRANT_CURSORKIT_DIR` the command prints manual
+  setup instead of launching.
+- Small local models produce imperfect patches; fusion quality scales with the
+  panel. The default is a fully real, local, zero-credential path.
+
+For full control over the gateway itself (custom backends, ACP, acceptance
+suite), use `warrant ensemble gateway` directly as described below.
+
 ## Data flow
 
 ```mermaid

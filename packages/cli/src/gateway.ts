@@ -39,6 +39,7 @@ export type GatewayRunnerConfig = {
   judgeModel?: string;
   cursorKitDir?: string;
   fusionApiKey?: string;
+  modelEndpoints?: Record<string, string>;
 };
 
 function mapStatus(status: string): FrontDoorRunnerResult["status"] {
@@ -86,7 +87,8 @@ export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunn
       ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
       ...(config.judgeModel !== undefined ? { judgeModel: config.judgeModel } : {}),
       ...(config.cursorKitDir !== undefined ? { cursorKitDir: config.cursorKitDir } : {}),
-      ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {})
+      ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
+      ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {})
     });
     return summarize(report, config.harnesses[0] ?? "command");
   };

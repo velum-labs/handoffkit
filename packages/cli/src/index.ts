@@ -72,6 +72,8 @@ import {
 import type { GatewayRunnerConfig } from "./gateway.js";
 import { LOCAL_TOOLS, runLocal } from "./local.js";
 import type { LocalTool } from "./local.js";
+import { FUSION_TOOLS, pickTool, runFusion } from "./fusion-quickstart.js";
+import type { FusionTool, RunFusionOptions } from "./fusion-quickstart.js";
 import {
   renderDisclosure,
   renderReceipt,
@@ -126,6 +128,15 @@ usage:
       --public-url URL    public tunnel URL for Cursor (or WARRANT_PUBLIC_URL)
       --auth-token TOKEN  require a bearer token on the gateway
       (model backend via WARRANT_LOCAL_MODEL_URL / WARRANT_MLX_MODEL; mlx by default)
+  warrant fusion [tool] [args...]                one command: real model fusion backs a coding agent
+      tool: codex | claude | cursor | serve   (omit on a TTY to pick interactively)
+      --model ID=MODEL    panel model (repeatable; default: real local Qwen+Gemma+Llama trio)
+      --judge-model MODEL model used for judge synthesis
+      --repo DIR          coding workspace (default: a bundled real sample repo)
+      --command CMD       per-candidate solve command (default: shipped model-backed solve agent)
+      --cursor-kit-dir D  built Cursorkit checkout for the cursor tool (or WARRANT_CURSORKIT_DIR)
+      --auth-token TOKEN  require a bearer token on the gateway
+      --port N            gateway port (default: ephemeral)
   warrant ensemble run [opts] "task"             run local ensemble smoke
       --harness mock|command  harness to run (default: mock)
       --command CMD           shell command for command harness
@@ -941,6 +952,56 @@ async function cmdEnsembleGateway(argv: string[]): Promise<void> {
   console.log(gatewaySetupSnippets(gateway.url(), "http://127.0.0.1:<cursorkit-port>"));
 }
 
+function parseFusionTool(value: string | undefined): FusionTool {
+  if (value === undefined || !(FUSION_TOOLS as readonly string[]).includes(value)) {
+    fail(`--tool must be one of ${FUSION_TOOLS.join(" | ")}`);
+  }
+  return value as FusionTool;
+}
+
+function parseModelSpec(spec: string): EnsembleModel {
+  const separator = spec.indexOf("=");
+  if (separator <= 0 || separator === spec.length - 1) {
+    fail(`--model must be ID=MODEL, got "${spec}"`);
+  }
+  return { id: spec.slice(0, separator), model: spec.slice(separator + 1) };
+}
+
+async function cmdFusion(argv: string[]): Promise<void> {
+  const options: RunFusionOptions = {};
+  const modelSpecs: string[] = [];
+  const toolArgs: string[] = [];
+  let tool: FusionTool | undefined;
+  const next = (i: number): string => {
+    const value = argv[i];
+    if (value === undefined) fail(`${argv[i - 1]} requires a value`);
+    return value;
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i] as string;
+    if (token === "--tool") tool = parseFusionTool(next(++i));
+    else if (token === "--model" || token === "--models") modelSpecs.push(next(++i));
+    else if (token === "--judge-model") options.judgeModel = next(++i);
+    else if (token === "--repo") options.repo = resolve(next(++i));
+    else if (token === "--command") options.command = next(++i);
+    else if (token === "--cursor-kit-dir") options.cursorKitDir = resolve(next(++i));
+    else if (token === "--auth-token") options.authToken = next(++i);
+    else if (token === "--port") {
+      const port = Number(next(++i));
+      if (!Number.isInteger(port) || port < 0) fail("--port must be a non-negative integer");
+      options.port = port;
+    } else if (tool === undefined && (FUSION_TOOLS as readonly string[]).includes(token)) {
+      tool = token as FusionTool;
+    } else {
+      toolArgs.push(token);
+    }
+  }
+  if (modelSpecs.length > 0) options.models = modelSpecs.map(parseModelSpec);
+  const resolvedTool = tool ?? (process.stdin.isTTY ? await pickTool() : "codex");
+  const code = await runFusion(resolvedTool, toolArgs, options);
+  process.exit(code);
+}
+
 async function cmdEnsembleRun(argv: string[]): Promise<void> {
   const { values, prompt } = parseEnsembleArgs(argv);
   if (!prompt.trim()) fail("a task prompt or --task-file is required");
@@ -1430,6 +1491,10 @@ async function main(): Promise<void> {
       }
       const code = await runLocal(sub as LocalTool, toolArgs, options);
       process.exit(code);
+    }
+    case "fusion": {
+      await cmdFusion(sub ? [sub, ...rest] : rest);
+      return;
     }
     case undefined:
     case "help":

@@ -81,6 +81,13 @@ export type UnifiedHarnessE2EOptions = {
   judgeModel?: string;
   cursorKitDir?: string;
   cursorRunner?: (input: CursorHarnessRunnerInput) => Promise<CursorHarnessRunnerResult>;
+  /**
+   * Per-candidate model backend URLs keyed by `EnsembleModel.id`. When a
+   * candidate's model id is present, its command harness is pointed at that
+   * endpoint instead of the shared `fusionBackendUrl`, so each panel model can
+   * back its own real candidate (e.g. a local MLX trio).
+   */
+  modelEndpoints?: Record<string, string>;
 };
 
 function normalizeFusionBackendUrl(value: string): string {
@@ -123,13 +130,16 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
       return createCommandHarness({
         command: options.command,
         timeoutMs: options.timeoutMs,
-        env: ({ model }) => ({
-          FUSIONKIT_BASE_URL: normalizeFusionBackendUrl(options.fusionBackendUrl),
-          FUSIONKIT_CHAT_COMPLETIONS_URL: chatCompletionsUrl(options.fusionBackendUrl),
-          FUSIONKIT_MODEL: model.model,
-          FUSIONKIT_MODEL_ID: model.id,
-          ...(options.fusionApiKey ? { FUSIONKIT_API_KEY: options.fusionApiKey } : {})
-        })
+        env: ({ model }) => {
+          const backend = options.modelEndpoints?.[model.id] ?? options.fusionBackendUrl;
+          return {
+            FUSIONKIT_BASE_URL: normalizeFusionBackendUrl(backend),
+            FUSIONKIT_CHAT_COMPLETIONS_URL: chatCompletionsUrl(backend),
+            FUSIONKIT_MODEL: model.model,
+            FUSIONKIT_MODEL_ID: model.id,
+            ...(options.fusionApiKey ? { FUSIONKIT_API_KEY: options.fusionApiKey } : {})
+          };
+        }
       });
     }
     case "codex":
