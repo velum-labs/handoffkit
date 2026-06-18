@@ -139,7 +139,7 @@ usage:
       --model-endpoint ID=URL pre-running OpenAI-compatible endpoint for a panel model (repeatable)
       --judge-model MODEL     model used for judge synthesis
       --judge-endpoint URL    OpenAI-compatible endpoint for judge synthesis
-      --repo DIR              coding workspace (default: a bundled real sample repo)
+      --repo DIR              coding workspace the panel fuses over (default: the current directory's git repo)
       --command CMD           per-candidate solve command (default: shipped model-backed solve agent)
       --cursor-kit-dir DIR    built Cursorkit checkout for the cursor tool (or WARRANT_CURSORKIT_DIR)
       --observe               boot the local scope dashboard (http://127.0.0.1:4317) and stream live trace events into it

@@ -107,6 +107,21 @@ export function solveAgentPath(): string {
   return fileURLToPath(new URL("./fusion-solve-agent.js", import.meta.url));
 }
 
+/** The git repository root containing `dir`, or undefined if it is not in a repo. */
+export function gitToplevel(dir: string): string | undefined {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: dir,
+      encoding: "utf8",
+      // Don't leak git's "fatal: not a git repository" to our stderr; we surface
+      // a clearer message ourselves.
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
 /** Fixed port for the local observability dashboard (the scope app). */
 export const SCOPE_DASHBOARD_PORT = 4317;
 
@@ -563,9 +578,18 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
   }
 }
 
-function spawnTool(command: string, args: string[], env: Record<string, string>): Promise<number> {
+function spawnTool(
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  cwd?: string
+): Promise<number> {
   return new Promise((resolveExit, reject) => {
-    const child = spawn(command, args, { stdio: "inherit", env: { ...process.env, ...env } });
+    const child = spawn(command, args, {
+      stdio: "inherit",
+      env: { ...process.env, ...env },
+      ...(cwd !== undefined ? { cwd } : {})
+    });
     child.on("error", reject);
     child.on("exit", (code) => resolveExit(code ?? 0));
   });
@@ -651,11 +675,25 @@ export async function runFusion(
 ): Promise<number> {
   const log = options.log ?? ((line: string) => console.error(line));
   const root = mkdtempSync(join(tmpdir(), "warrant-fusion-"));
-  const repo = options.repo ?? materializeSampleRepo(join(root, "repo"));
+  // Default the fused repo to the current directory's git repo: the panel models
+  // and the launched harness must operate on the SAME codebase, and the launched
+  // tool runs in this repo (below). No hidden sample repo — if the user wants a
+  // different repo they pass --repo.
+  let repo = options.repo;
+  if (repo === undefined) {
+    const toplevel = gitToplevel(process.cwd());
+    if (toplevel === undefined) {
+      throw new Error(
+        "no --repo given and the current directory is not a git repository; " +
+          "cd into your project (or pass --repo <dir>) so the panel fuses over the code you're working on"
+      );
+    }
+    repo = toplevel;
+  }
   const models = options.models ?? [...DEFAULT_TRIO];
 
   log(`fusion: panel = ${models.map((model) => model.id).join(", ")}`);
-  if (options.repo === undefined) log(`fusion: sample repo at ${repo} (a failing test to fix)`);
+  log(`fusion: repo = ${repo}`);
 
   // When --observe is set, boot the dashboard and export the trace env BEFORE
   // anything starts, so the in-process gateway/ensemble/agent emitters and every
@@ -732,11 +770,11 @@ export async function runFusion(
         const home = mkdtempSync(join(tmpdir(), "warrant-fusion-codex-"));
         writeFileSync(join(home, "config.toml"), codexConfigToml(stack.fusionUrl, FUSION_MODEL_LABEL));
         log("fusion: launching codex (each prompt is a coding task fused across the panel)...");
-        return await spawnTool("codex", toolArgs, { CODEX_HOME: home });
+        return await spawnTool("codex", toolArgs, { CODEX_HOME: home }, repo);
       }
       case "claude": {
         log("fusion: launching claude...");
-        return await spawnTool("claude", toolArgs, claudeEnv(stack.fusionUrl, options.authToken));
+        return await spawnTool("claude", toolArgs, claudeEnv(stack.fusionUrl, options.authToken), repo);
       }
       case "cursor": {
         const cursorKitDir = options.cursorKitDir ?? process.env.WARRANT_CURSORKIT_DIR;
@@ -756,7 +794,8 @@ export async function runFusion(
         return await spawnTool(
           "cursor-agent",
           ["--endpoint", `http://127.0.0.1:${started.port}`, "--model", FUSION_MODEL_LABEL, ...toolArgs],
-          {}
+          {},
+          repo
         );
       }
       default: {
