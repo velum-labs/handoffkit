@@ -45,6 +45,7 @@ uv run uniroute-demo                   # run a member's entry point
 ## FusionKit integration
 
 - [FusionKit handoff executor](docs/fusionkit-handoff-executor.md): stdin/stdout record envelope for FusionKit coding-harness benchmark tasks.
+- [Fusion Harness Gateway](docs/fusion-harness-gateway.md): front door that lets unmodified Codex, Claude Code, and Cursor use model fusion as their backend over their native wire protocols.
 
 ## Quickstart
 
