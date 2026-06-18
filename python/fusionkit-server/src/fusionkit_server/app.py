@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
+import traceback
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -34,7 +35,7 @@ from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER
 from fusionkit_core.trace import emit as trace_emit
 from fusionkit_core.trace import new_span_id
-from fusionkit_core.types import ChatMessage
+from fusionkit_core.types import ChatMessage, ModelResponse, ToolCall
 from pydantic import BaseModel, Field
 
 
@@ -102,6 +103,22 @@ class FuseTrajectoriesRequest(BaseModel):
     trajectories: list[TrajectoryInput]
     judge_model: str | None = None
     synthesizer_model: str | None = None
+
+
+class StepTrajectoriesRequest(BaseModel):
+    """A single front-door turn: the judge synthesizes the next step (tool call
+    or final answer) from the candidate trajectories + the live conversation."""
+
+    model: str = "fusionkit/router"
+    # Raw OpenAI chat messages (assistant tool_calls are nested under `function`,
+    # tool results carry `tool_call_id`, content may be a parts array); normalized
+    # to FusionKit ChatMessage in the handler.
+    messages: list[dict[str, Any]]
+    trajectories: list[TrajectoryInput] = Field(default_factory=list)
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | dict[str, Any] | None = None
+    judge_model: str | None = None
+    stream: bool = False
 
 
 def create_app(
@@ -265,6 +282,55 @@ def create_app(
             "rationale": result.record.rationale,
             "judge_synthesis_record": result.record.model_dump(mode="json"),
         }
+
+    @app.post("/v1/fusion/trajectory:step", response_model=None)
+    async def step_trajectory(
+        request: StepTrajectoriesRequest,
+        trace_id: str | None = Header(default=None, alias=TRACE_ID_HEADER),
+        span_id: str | None = Header(default=None, alias=TRACE_SPAN_HEADER),
+    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
+        judge_model = request.judge_model or config.resolved_judge_model
+        try:
+            judge_client = engine.clients[judge_model]
+        except KeyError as exc:
+            return _openai_error_response(
+                "unknown_model",
+                f"Unknown model endpoint {exc}.",
+                status_code=400,
+            )
+        trajectories = [
+            HarnessTrajectoryV1.model_validate(
+                {
+                    **contract_metadata("harness-trajectory.v1"),
+                    **trajectory.model_dump(exclude_none=True),
+                }
+            )
+            for trajectory in request.trajectories
+        ]
+        try:
+            response = await engine.judge_synthesizer.step(
+                [_to_chat_message(message) for message in request.messages],
+                trajectories,
+                judge_client=judge_client,
+                sampling=config.sampling,
+                tools=_normalize_tools(request.tools),
+                tool_choice=_normalize_tool_choice(request.tool_choice),
+                trace_id=trace_id,
+                span_id=span_id or new_span_id(),
+            )
+        except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+            traceback.print_exc()
+            return _openai_error_response(
+                exc.__class__.__name__,
+                f"trajectory step failed: {exc}",
+                status_code=502,
+            )
+        if request.stream:
+            return StreamingResponse(
+                _step_completion_sse(request.model, response),
+                media_type="text/event-stream",
+            )
+        return _openai_step_response(request.model, response)
 
     return app
 
@@ -503,6 +569,153 @@ def _mode_from_request(request: FusionRequest) -> FusionMode:
     if suffix == "router":
         return "router"
     return "router"
+
+
+def _coerce_message_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                parts.append(part["text"])
+        return "".join(parts)
+    return ""
+
+
+def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
+    """Normalize a raw OpenAI chat message into a FusionKit ChatMessage,
+    flattening nested ({function:{name,arguments}}) tool calls."""
+    kwargs: dict[str, Any] = {
+        "role": message.get("role", "user"),
+        "content": _coerce_message_content(message.get("content")),
+    }
+    if message.get("tool_call_id"):
+        kwargs["tool_call_id"] = message["tool_call_id"]
+    if message.get("name"):
+        kwargs["name"] = message["name"]
+    tool_calls = message.get("tool_calls")
+    if tool_calls:
+        parsed: list[ToolCall] = []
+        for call in tool_calls:
+            function = call.get("function") if isinstance(call, dict) and "function" in call else call
+            function = function if isinstance(function, dict) else {}
+            parsed.append(
+                ToolCall(
+                    id=call.get("id", "") if isinstance(call, dict) else "",
+                    name=function.get("name", ""),
+                    arguments=function.get("arguments", "{}") or "{}",
+                )
+            )
+        if parsed:
+            kwargs["tool_calls"] = parsed
+    return ChatMessage(**kwargs)
+
+
+def _normalize_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    """Accept OpenAI-nested ({type:function, function:{...}}) or flat tool defs and
+    return the flat {name, description, parameters} shape FusionKit's clients expect."""
+    if not tools:
+        return None
+    normalized: list[dict[str, Any]] = []
+    for entry in tools:
+        function = entry.get("function") if isinstance(entry, dict) and "function" in entry else entry
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name", "")
+        # Skip tools without a usable name (some agent CLIs advertise custom or
+        # freeform tool shapes that resolve to an empty name, which providers reject).
+        if not isinstance(name, str) or not name:
+            continue
+        normalized.append(
+            {
+                "name": name,
+                "description": function.get("description", ""),
+                "parameters": function.get("parameters", {"type": "object", "properties": {}}),
+            }
+        )
+    return normalized or None
+
+
+def _normalize_tool_choice(choice: str | dict[str, Any] | None) -> str | dict[str, Any] | None:
+    if choice is None or isinstance(choice, str):
+        return choice
+    if isinstance(choice, dict):
+        function = choice.get("function") if "function" in choice else choice
+        name = function.get("name") if isinstance(function, dict) else None
+        if isinstance(name, str) and name:
+            return {"name": name}
+    return None
+
+
+def _tool_calls_payload(response: ModelResponse) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": call.id or f"call_{index}",
+            "type": "function",
+            "function": {"name": call.name, "arguments": call.arguments},
+        }
+        for index, call in enumerate(response.tool_calls)
+    ]
+
+
+def _usage_dict(response: ModelResponse) -> dict[str, Any]:
+    return {
+        "prompt_tokens": response.usage.prompt_tokens,
+        "completion_tokens": response.usage.completion_tokens,
+        "total_tokens": response.usage.total_tokens,
+    }
+
+
+def _openai_step_response(model: str, response: ModelResponse) -> dict[str, Any]:
+    message: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
+    tool_calls = _tool_calls_payload(response)
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+    finish_reason = "tool_calls" if tool_calls else (response.finish_reason or "stop")
+    return {
+        "id": f"chatcmpl-{uuid.uuid4()}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
+        "usage": _usage_dict(response),
+    }
+
+
+async def _step_completion_sse(model: str, response: ModelResponse) -> AsyncIterator[str]:
+    completion_id = f"chatcmpl-{uuid.uuid4()}"
+    created = int(time.time())
+    tool_calls = _tool_calls_payload(response)
+    finish_reason = "tool_calls" if tool_calls else (response.finish_reason or "stop")
+
+    def chunk(delta: dict[str, Any], finish: str | None) -> str:
+        payload = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        }
+        return f"data: {json.dumps(payload)}\n\n"
+
+    yield chunk({"role": "assistant"}, None)
+    if response.content:
+        for piece in _stream_pieces(response.content):
+            yield chunk({"content": piece}, None)
+    if tool_calls:
+        yield chunk(
+            {
+                "tool_calls": [
+                    {"index": index, **call} for index, call in enumerate(tool_calls)
+                ]
+            },
+            None,
+        )
+    yield chunk({}, finish_reason)
+    yield "data: [DONE]\n\n"
 
 
 def _openai_chat_response(model: str, content: str, metadata: dict[str, Any]) -> dict[str, Any]:

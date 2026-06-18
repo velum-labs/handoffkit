@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -22,11 +22,12 @@ from fusionkit_core.prompts import (
     build_judge_prompt,
     build_synthesis_prompt,
     build_trajectory_judge_prompt,
+    build_trajectory_step_system,
     build_trajectory_synthesis_prompt,
 )
 from fusionkit_core.trace import emit as trace_emit
 from fusionkit_core.trace import new_span_id
-from fusionkit_core.types import Candidate, ChatMessage, FusionAnalysis
+from fusionkit_core.types import Candidate, ChatMessage, FusionAnalysis, ModelResponse
 
 
 class CandidateEvidence(BaseModel):
@@ -59,6 +60,58 @@ class TrajectorySynthesisResult(BaseModel):
 
 
 class JudgeSynthesizer:
+    async def step(
+        self,
+        messages: Sequence[ChatMessage],
+        trajectories: Sequence[HarnessTrajectoryV1],
+        *,
+        judge_client: ChatClient,
+        sampling: SamplingConfig,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> ModelResponse:
+        """One step of the judge acting as a streaming agent on the front door.
+
+        The judge is given the candidate trajectories as reference and the live
+        conversation (the consolidated trajectory so far, including any tool
+        results the user's harness fed back), and produces the next consolidated
+        step: either a tool call for the harness to execute, or the final answer
+        when the work is done. Iteration/verification is the harness's job — this
+        method performs no apply/verify/repair of its own.
+        """
+        judge_span = span_id or new_span_id()
+        system = build_trajectory_step_system(trajectories)
+        conversation = [ChatMessage(role="system", content=system), *messages]
+        response = await judge_client.chat(
+            conversation,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+        terminal = not response.tool_calls
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.final" if terminal else "judge.thinking",
+            payload={
+                "fusion_unit": "trajectory_step",
+                "terminal": terminal,
+                "content_preview": response.content[:500],
+                # On the terminal step this is the judge's final answer; carry it
+                # so the collector can surface it as the session's final output.
+                **({"final_output": response.content} if terminal else {}),
+                "tool_calls": [
+                    {"id": call.id, "name": call.name, "arguments": call.arguments}
+                    for call in response.tool_calls
+                ],
+                "input_trajectory_ids": [trajectory.trajectory_id for trajectory in trajectories],
+                "usage": _usage_payload(response),
+            },
+        )
+        return response
+
     async def synthesize_trajectories(
         self,
         messages: Sequence[ChatMessage],
