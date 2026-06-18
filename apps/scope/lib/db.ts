@@ -167,13 +167,20 @@ function updateSession(event: FusionTraceEvent): void {
   }
 
   if (event.event_type === "judge.final") {
+    // In the judge-streamed-trajectory front door there is no single
+    // session.finished (the harness simply stops calling); the judge's terminal
+    // answer (judge.final) is the natural completion marker, so mark the session
+    // succeeded and capture the final output unless an explicit finish set it.
     const record = (payload as { record?: { final_output?: unknown } }).record;
     const full = asString(record?.final_output) ?? asString((payload as { final_output?: unknown }).final_output);
-    if (full !== null) {
-      handle
-        .prepare(`UPDATE sessions SET final_output = ? WHERE trace_id = ?`)
-        .run(full, event.trace_id);
-    }
+    handle
+      .prepare(
+        `UPDATE sessions
+         SET final_output = coalesce(?, final_output),
+             status = CASE WHEN status = 'running' THEN 'succeeded' ELSE status END
+         WHERE trace_id = ?`
+      )
+      .run(full, event.trace_id);
   }
 }
 

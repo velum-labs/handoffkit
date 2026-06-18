@@ -66,11 +66,13 @@ export {
 } from "./run.js";
 export {
   createFusionKitJudgeSynthesizer,
+  runFusionPanels,
   runUnifiedHarnessE2E
 } from "./unified.js";
 export type {
   CursorHarnessRunnerInput,
   CursorHarnessRunnerResult,
+  FusionPanelOptions,
   UnifiedHarnessE2EOptions,
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind,

@@ -333,6 +333,62 @@ export function createFusionKitJudgeSynthesizer(input: {
   };
 }
 
+export type FusionPanelOptions = {
+  id?: string;
+  repo: string;
+  outputRoot: string;
+  prompt: string;
+  models: EnsembleModel[];
+  modelEndpoints?: Record<string, string>;
+  /** Fallback agent backend URL for models without a dedicated endpoint. */
+  fusionBackendUrl: string;
+  fusionApiKey?: string;
+  timeoutMs?: number;
+  traceId?: string;
+};
+
+/**
+ * Run the panel once: each panel model executes the task as a real coding agent
+ * in its own git worktree, and we capture the resulting trajectories (the
+ * candidate reference solutions the judge fuses). This reuses the full agent
+ * harness via `runEnsemble` with a capturing judge — no fusion/synthesis call is
+ * made here; the trajectories are the product.
+ */
+export async function runFusionPanels(
+  options: FusionPanelOptions
+): Promise<Record<string, unknown>[]> {
+  let captured: HarnessTrajectory[] = [];
+  const e2eOptions: UnifiedHarnessE2EOptions = {
+    id: options.id ?? `panels_${Date.now()}`,
+    fusionBackendUrl: options.fusionBackendUrl,
+    repo: options.repo,
+    outputRoot: options.outputRoot,
+    prompt: options.prompt,
+    harnesses: ["agent"],
+    models: options.models,
+    ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
+    ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    ...(options.traceId !== undefined ? { traceId: options.traceId } : {})
+  };
+  const descriptor = descriptorFor("agent", e2eOptions);
+  descriptor.judge = {
+    id: "panel-capture",
+    synthesizer: {
+      synthesize(judgeInput: JudgeInput): JudgeSynthesisOutput {
+        captured = judgeInput.candidates
+          .map((candidate) => candidate.trajectory)
+          .filter((trajectory): trajectory is HarnessTrajectory => trajectory !== undefined);
+        // The trajectories are the product; this output is discarded. A
+        // non-empty final_output is required by the synthesis record contract.
+        return { decision: "synthesize", finalOutput: `captured ${captured.length} panel trajectories` };
+      }
+    }
+  };
+  await runEnsemble(descriptor);
+  return captured.map(trajectoryToWire);
+}
+
 function descriptorFor(
   kind: Exclude<UnifiedHarnessKind, "cursor-acp" | "cursor-desktop">,
   options: UnifiedHarnessE2EOptions

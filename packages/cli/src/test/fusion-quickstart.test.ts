@@ -245,19 +245,38 @@ async function startFakeAnswerModel(answer: string): Promise<Fake> {
   };
 }
 
-test("agent harness produces a trajectory and fuses it through the synthesis endpoint", async () => {
+test("agent front door: panel produces a trajectory the judge step consumes", async () => {
   const repo = materializeSampleRepo(join(freshDir("fusion-agent-"), "repo"));
   const model = await startFakeAnswerModel("This repo is a calculator sample.");
-  // Fake fusionkit synthesis endpoint: records trajectories and returns a sentinel.
-  let fusedTrajectories: unknown[] = [];
+  // Fake FusionKit judge step: records the candidate trajectories + conversation it
+  // receives and returns a terminal assistant answer (no tool calls) as an OpenAI
+  // chat completion, which is what the new front door proxies to the harness.
+  let stepTrajectories: unknown[] = [];
+  let stepMessages: Array<{ role?: string }> = [];
   const synth = createServer((req, res) => {
     void (async () => {
       const path = new URL(req.url ?? "/", "http://localhost").pathname;
-      if (req.method === "POST" && path === "/v1/fusion/trajectories:fuse") {
-        const body = JSON.parse(await readBody(req)) as { trajectories?: unknown[] };
-        fusedTrajectories = body.trajectories ?? [];
+      if (req.method === "POST" && path === "/v1/fusion/trajectory:step") {
+        const body = JSON.parse(await readBody(req)) as { trajectories?: unknown[]; messages?: Array<{ role?: string }> };
+        stepTrajectories = body.trajectories ?? [];
+        stepMessages = body.messages ?? [];
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ final_output: `${SENTINEL}: this repo is a calculator sample`, decision: "synthesize" }));
+        res.end(
+          JSON.stringify({
+            id: "chatcmpl-step",
+            object: "chat.completion",
+            created: 0,
+            model: "fusion-panel",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: `${SENTINEL}: this repo is a calculator sample` },
+                finish_reason: "stop"
+              }
+            ],
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+          })
+        );
         return;
       }
       res.writeHead(404).end();
@@ -287,11 +306,12 @@ test("agent harness produces a trajectory and fuses it through the synthesis end
     const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
     assert.match(body.choices[0]?.message.content ?? "", new RegExp(SENTINEL));
     assert.ok(model.solveCalls() >= 1, "the panel model agent must run");
-    assert.equal(fusedTrajectories.length, 1, "one trajectory must be fused");
-    const trajectory = fusedTrajectories[0] as { steps?: unknown[]; final_output?: string; model_id?: string };
+    assert.equal(stepTrajectories.length, 1, "the panel's one trajectory must reach the judge step");
+    const trajectory = stepTrajectories[0] as { steps?: unknown[]; final_output?: string; model_id?: string };
     assert.equal(trajectory.model_id, "alpha");
     assert.ok(Array.isArray(trajectory.steps) && trajectory.steps.length >= 1, "trajectory must carry steps");
     assert.match(trajectory.final_output ?? "", /calculator sample/);
+    assert.ok(stepMessages.some((message) => message.role === "user"), "the conversation must reach the judge");
   } finally {
     await stack.close();
     await model.close();

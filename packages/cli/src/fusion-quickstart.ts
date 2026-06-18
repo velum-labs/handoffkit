@@ -25,7 +25,7 @@ import type { EnsembleModel } from "@warrant/ensemble";
 import { MlxBackend, startGateway } from "@warrant/model-gateway";
 import type { Gateway } from "@warrant/model-gateway";
 
-import { gatewaySetupSnippets, startConfiguredGateway } from "./gateway.js";
+import { gatewaySetupSnippets, startConfiguredGateway, startFusionStepGateway } from "./gateway.js";
 import { claudeEnv, codexConfigToml } from "./local.js";
 
 export type FusionTool = "codex" | "claude" | "cursor" | "serve";
@@ -525,18 +525,24 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       synthesisUrl = synthesis.url;
     }
 
-    const gateway = await startConfiguredGateway({
-      config: {
-        fusionBackendUrl: synthesisUrl,
-        repo: options.repo,
-        outputRoot: options.outputRoot,
-        harnesses: [harness],
-        models: servers.models,
-        ...(harness === "command" ? { command: options.command ?? `node ${solveAgentPath()}` } : {}),
-        judgeModel: options.judgeModel ?? servers.judgeModel,
-        modelEndpoints: servers.endpoints,
-        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
-      },
+    // The agent harness uses the judge-streamed-trajectory front door (the judge
+    // emits a trajectory the user's tool executes); the command harness keeps the
+    // one-shot synthesis front door.
+    const gatewayConfig = {
+      fusionBackendUrl: synthesisUrl,
+      repo: options.repo,
+      outputRoot: options.outputRoot,
+      harnesses: [harness],
+      models: servers.models,
+      ...(harness === "command" ? { command: options.command ?? `node ${solveAgentPath()}` } : {}),
+      judgeModel: options.judgeModel ?? servers.judgeModel,
+      modelEndpoints: servers.endpoints,
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+    };
+    const startGatewayForHarness =
+      harness === "agent" ? startFusionStepGateway : startConfiguredGateway;
+    const gateway = await startGatewayForHarness({
+      config: gatewayConfig,
       host: options.host ?? "127.0.0.1",
       port: options.port ?? 0,
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {})

@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { runUnifiedHarnessE2E } from "@warrant/ensemble";
+import { runFusionPanels, runUnifiedHarnessE2E } from "@warrant/ensemble";
 import type {
   EnsembleModel,
   UnifiedHarnessE2EResult,
@@ -17,16 +17,21 @@ import type {
 } from "@warrant/ensemble";
 import { emitTrace, newSpanId, newTraceId } from "@warrant/protocol";
 import {
+  FusionBackend,
   installAcpAdapters,
   runAcpAgent,
   runFrontDoorAcceptance,
-  startFusionGateway
+  startFusionGateway,
+  startGateway
 } from "@warrant/model-gateway";
 import type {
   AcpRunner,
   FrontDoorRunner,
   FrontDoorRunnerResult,
-  FusionGateway
+  FusionGateway,
+  Gateway,
+  PanelRunner,
+  WireTrajectory
 } from "@warrant/model-gateway";
 
 export type GatewayRunnerConfig = {
@@ -202,6 +207,86 @@ export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string):
     "ACP registry adapters:",
     "  warrant ensemble gateway acp-registry install codex-cli claude-agent"
   ].join("\n");
+}
+
+/**
+ * The judge-streamed-trajectory front door: the panel runs once per session to
+ * produce candidate trajectories, then the judge acts as a streaming tool-calling
+ * agent (FusionKit `trajectory:step`) whose trajectory the user's harness executes.
+ * Built on the dialect-aware `startGateway` + a {@link FusionBackend}; iteration is
+ * the harness's job (no verify/repair here).
+ */
+export async function startFusionStepGateway(input: {
+  config: GatewayRunnerConfig;
+  host: string;
+  port: number;
+  authToken?: string;
+  defaultModel?: string;
+}): Promise<Gateway> {
+  const { config } = input;
+  const base = config.fusionBackendUrl.replace(/\/+$/, "");
+  const stepUrl = `${base}/v1/fusion/trajectory:step`;
+  const defaultModel = input.defaultModel ?? "fusion-panel";
+
+  const runPanels: PanelRunner = async ({ task, traceId, sessionKey }) => {
+    emitTrace({
+      component: "gateway",
+      event_type: "session.started",
+      traceId,
+      spanId: newSpanId(),
+      payload: {
+        dialect: "fusion-step",
+        prompt_preview: task.slice(0, 600),
+        environment: {
+          repo: config.repo,
+          fusion_backend_url: config.fusionBackendUrl,
+          harnesses: ["agent"],
+          judge_model: config.judgeModel ?? null,
+          models: config.models.map((model) => ({
+            id: model.id,
+            model: model.model,
+            ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
+          })),
+          ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
+        }
+      }
+    });
+    console.error(`fusion: running panel (${config.models.map((m) => m.id).join(", ")}) for session ${sessionKey}...`);
+    try {
+      const wire = await runFusionPanels({
+        id: `panels_${sessionKey}`,
+        repo: config.repo,
+        outputRoot: join(config.outputRoot, sessionKey),
+        prompt: task,
+        models: config.models,
+        fusionBackendUrl: config.fusionBackendUrl,
+        traceId,
+        ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
+        ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
+        ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {})
+      });
+      console.error(
+        `fusion: panel produced ${wire.length} candidate trajectories ` +
+          `(${wire.map((t) => `${t.model_id}:${t.status}`).join(", ")})`
+      );
+      return wire as WireTrajectory[];
+    } catch (error) {
+      console.error(`fusion: panel run failed: ${error instanceof Error ? error.stack : String(error)}`);
+      throw error;
+    }
+  };
+
+  const backend = new FusionBackend({
+    stepUrl,
+    runPanels,
+    defaultModel
+  });
+  return await startGateway({
+    backend,
+    host: input.host,
+    port: input.port,
+    ...(input.authToken !== undefined ? { authToken: input.authToken } : {})
+  });
 }
 
 export async function startConfiguredGateway(input: {

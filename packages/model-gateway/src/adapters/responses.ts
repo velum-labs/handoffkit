@@ -139,14 +139,22 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (Array.isArray(body.tools) && body.tools.length > 0) {
-    chat.tools = body.tools.map((tool) => ({
-      type: "function",
-      function: {
-        name: tool.name,
-        ...(tool.description !== undefined ? { description: tool.description } : {}),
-        parameters: tool.parameters ?? { type: "object", properties: {} }
-      }
-    }));
+    // Only forward function tools with a usable name. Codex advertises some
+    // tools (e.g. custom/freeform shapes) that translate to an empty function
+    // name, which OpenAI Chat Completions rejects outright.
+    const named = body.tools.filter(
+      (tool) => typeof tool.name === "string" && tool.name.length > 0
+    );
+    if (named.length > 0) {
+      chat.tools = named.map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          ...(tool.description !== undefined ? { description: tool.description } : {}),
+          parameters: tool.parameters ?? { type: "object", properties: {} }
+        }
+      }));
+    }
   }
   if (body.tool_choice !== undefined) chat.tool_choice = mapToolChoice(body.tool_choice);
   if (body.stream === true) chat.stream_options = { include_usage: true };
@@ -217,6 +225,7 @@ export function openAiSseToResponses(
   const tools = new Map<number, ToolAccumulator>();
   let buffer = "";
   let created = false;
+  let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
   let textOpen = false;
   let textValue = "";
   let nextOutputIndex = 0;
@@ -294,6 +303,7 @@ export function openAiSseToResponses(
   const finalize = (controller: Controller): void => {
     if (finished) return;
     finished = true;
+    if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
     if (textOpen) {
       controller.enqueue(
         sse("response.output_text.done", {
@@ -413,6 +423,21 @@ export function openAiSseToResponses(
   };
 
   return new ReadableStream<Uint8Array>({
+    start(controller) {
+      // Emit `response.created` immediately and keep the connection alive with
+      // SSE comments while the upstream is still producing its first event. Real
+      // CLIs (codex) reconnect if they see nothing for a while — which happens
+      // during the fusion panel phase before the judge's first token.
+      ensureCreated(controller);
+      keepaliveTimer = setInterval(() => {
+        if (finished) return;
+        try {
+          controller.enqueue(ENCODER.encode(": keepalive\n\n"));
+        } catch {
+          // controller closed
+        }
+      }, 3000);
+    },
     async pull(controller) {
       const { done, value } = await reader.read();
       if (done) {
@@ -440,6 +465,7 @@ export function openAiSseToResponses(
       }
     },
     cancel(reason) {
+      if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
       return reader.cancel(reason);
     }
   });

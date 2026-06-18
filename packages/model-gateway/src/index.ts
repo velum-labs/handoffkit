@@ -16,7 +16,15 @@
 export { startGateway } from "./server.js";
 export type { Gateway, GatewayOptions } from "./server.js";
 export { joinPath, OpenAiBackend } from "./backend.js";
-export type { Backend, OpenAiBackendOptions } from "./backend.js";
+export type { Backend, BackendRequestOptions, OpenAiBackendOptions } from "./backend.js";
+export { FusionBackend } from "./fusion-backend.js";
+export type {
+  ChatMessageLike,
+  FusionBackendOptions,
+  PanelRunInput,
+  PanelRunner,
+  WireTrajectory
+} from "./fusion-backend.js";
 export { MlxBackend } from "./mlx-backend.js";
 export type { MlxBackendOptions } from "./mlx-backend.js";
 export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";
