@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import type { JsonValue, ModelFusionStatus } from "@warrant/protocol";
+import { newSpanId, TRACE_ID_HEADER, TRACE_SPAN_HEADER } from "@warrant/protocol";
 import { gitText } from "@warrant/workspace";
 
 import { createAgentHarness } from "./agent.js";
@@ -91,6 +92,12 @@ export type UnifiedHarnessE2EOptions = {
    * back its own real candidate (e.g. a local MLX trio).
    */
   modelEndpoints?: Record<string, string>;
+  /**
+   * Observability correlation id. When set, the agent harness, panel-model
+   * calls, and the FusionKit trajectory synthesis are all tagged with this
+   * trace so the companion app can reconstruct one session.
+   */
+  traceId?: string;
 };
 
 function normalizeFusionBackendUrl(value: string): string {
@@ -133,7 +140,8 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
         modelEndpoints: options.modelEndpoints ?? {},
         fallbackBaseUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
         ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
-        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+        ...(options.traceId !== undefined ? { traceId: options.traceId } : {})
       });
     case "command": {
       if (!options.command) {
@@ -149,7 +157,8 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
             FUSIONKIT_CHAT_COMPLETIONS_URL: chatCompletionsUrl(backend),
             FUSIONKIT_MODEL: model.model,
             FUSIONKIT_MODEL_ID: model.id,
-            ...(options.fusionApiKey ? { FUSIONKIT_API_KEY: options.fusionApiKey } : {})
+            ...(options.fusionApiKey ? { FUSIONKIT_API_KEY: options.fusionApiKey } : {}),
+            ...(options.traceId ? { FUSION_TRACE_ID: options.traceId } : {})
           };
         }
       });
@@ -233,10 +242,15 @@ export function createFusionKitJudgeSynthesizer(input: {
   model: string;
   apiKey?: string;
   responseShape: string;
+  traceId?: string;
 }): JudgeSynthesizer {
   const authHeaders: Record<string, string> = input.apiKey
     ? { authorization: `Bearer ${input.apiKey}` }
     : {};
+  const traceHeaders: Record<string, string> =
+    input.traceId !== undefined
+      ? { [TRACE_ID_HEADER]: input.traceId, [TRACE_SPAN_HEADER]: newSpanId() }
+      : {};
   return {
     async synthesize(judgeInput: JudgeInput): Promise<JudgeSynthesisOutput> {
       // Trajectory-level fusion: when candidates carry agent trajectories, fuse
@@ -248,7 +262,7 @@ export function createFusionKitJudgeSynthesizer(input: {
       if (trajectories.length > 0) {
         const fuseResponse = await fetch(trajectoryFuseUrl(input.fusionBackendUrl), {
           method: "POST",
-          headers: { "content-type": "application/json", ...authHeaders },
+          headers: { "content-type": "application/json", ...authHeaders, ...traceHeaders },
           body: JSON.stringify({
             messages: [{ role: "user", content: judgeInput.descriptor.prompt }],
             trajectories: trajectories.map(trajectoryToWire)
@@ -336,7 +350,8 @@ function descriptorFor(
         fusionBackendUrl: options.fusionBackendUrl,
         model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/router",
         apiKey: options.fusionApiKey,
-        responseShape: responseShapeFor(kind)
+        responseShape: responseShapeFor(kind),
+        ...(options.traceId !== undefined ? { traceId: options.traceId } : {})
       })
     },
     policy: {

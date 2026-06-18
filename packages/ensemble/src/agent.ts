@@ -1,5 +1,5 @@
 import { runWorktreeAgent } from "@warrant/adapter-ai-sdk";
-import { artifactHash } from "@warrant/protocol";
+import { artifactHash, emitTrace, newSpanId } from "@warrant/protocol";
 
 import type {
   HarnessAdapter,
@@ -25,6 +25,8 @@ export type AgentHarnessOptions = {
   apiKey?: string;
   maxSteps?: number;
   timeoutMs?: number;
+  /** Observability correlation id; when set, each candidate is traced. */
+  traceId?: string;
 };
 
 /**
@@ -69,6 +71,23 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         throw new Error(`no model endpoint configured for panel model "${model.id}"`);
       }
       const root = worktree?.path ?? process.cwd();
+      const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
+      const traceId = options.traceId;
+      const candidateSpan = newSpanId();
+      if (traceId !== undefined) {
+        emitTrace({
+          component: "ensemble",
+          event_type: "harness.candidate.started",
+          traceId,
+          spanId: candidateSpan,
+          candidateId,
+          modelId: model.id,
+          payload: {
+            model: model.model,
+            ...(worktree ? { branch_name: worktree.branchName, worktree_path: worktree.path } : {})
+          }
+        });
+      }
       const result = await runWorktreeAgent({
         worktree: root,
         prompt: descriptor.prompt,
@@ -76,11 +95,11 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         model: model.model,
         ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
         ...(options.maxSteps !== undefined ? { maxSteps: options.maxSteps } : {}),
-        ...(options.timeoutMs !== undefined ? { commandTimeoutMs: options.timeoutMs } : {})
+        ...(options.timeoutMs !== undefined ? { commandTimeoutMs: options.timeoutMs } : {}),
+        ...(traceId !== undefined ? { traceId, candidateId, parentSpanId: candidateSpan } : {})
       });
 
       const steps = result.steps as TrajectoryStep[];
-      const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
       const status: HarnessCandidateOutput["status"] = result.status === "failed" ? "failed" : "succeeded";
       const verification = deriveVerification(steps);
       const trajectory: HarnessTrajectory = {
@@ -97,6 +116,39 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
 
       const transcript = JSON.stringify(steps, null, 2);
       const outputHash = artifactHash(transcript);
+      if (traceId !== undefined) {
+        emitTrace({
+          component: "ensemble",
+          event_type: "harness.candidate.finished",
+          traceId,
+          spanId: candidateSpan,
+          candidateId,
+          modelId: model.id,
+          payload: {
+            status,
+            tool_call_count: result.toolCallCount,
+            finish_reason: result.finishReason,
+            step_count: steps.length,
+            final_output_preview: result.finalOutput.slice(0, 400),
+            ...(verification !== undefined ? { verification_status: verification.status } : {})
+          }
+        });
+        emitTrace({
+          component: "ensemble",
+          event_type: "tool.execution",
+          traceId,
+          spanId: candidateSpan,
+          candidateId,
+          modelId: model.id,
+          payload: {
+            execution_id: `exec_${descriptor.id}_${model.id}_${ordinal}`,
+            plan_id: `plan_${descriptor.id}_${model.id}_${ordinal}`,
+            status,
+            output_hash: outputHash,
+            tool_call_count: result.toolCallCount
+          }
+        });
+      }
       return {
         candidateId,
         model,

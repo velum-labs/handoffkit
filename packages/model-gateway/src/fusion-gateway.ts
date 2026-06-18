@@ -14,6 +14,8 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { newTraceId, TRACE_ID_HEADER } from "@warrant/protocol";
+
 import { chatToAnthropicMessage, openAiSseToAnthropic } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { chatToResponses, openAiSseToResponses } from "./adapters/responses.js";
@@ -26,6 +28,8 @@ export type FrontDoorRunnerInput = {
   prompt: string;
   requestedModel: string | undefined;
   requestId: string;
+  /** Correlates this front-door request with all downstream trace events. */
+  traceId: string;
 };
 
 export type FrontDoorRunnerResult = {
@@ -313,10 +317,12 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
     prompt: string,
     requestedModel: string | undefined,
     stream: boolean,
-    format: (finalOutput: string, model: string) => Record<string, unknown>
+    format: (finalOutput: string, model: string) => Record<string, unknown>,
+    traceId: string
   ): Promise<void> {
     const id = requestId(dialect);
-    const result = await runner({ dialect, prompt, requestedModel, requestId: id });
+    res.setHeader(TRACE_ID_HEADER, traceId);
+    const result = await runner({ dialect, prompt, requestedModel, requestId: id, traceId });
     res.setHeader(FUSION_RUN_ID_HEADER, result.runId);
     res.setHeader(FUSION_STATUS_HEADER, result.status);
     res.setHeader(FUSION_EVIDENCE_HEADER, JSON.stringify(result.evidence));
@@ -341,6 +347,13 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
         throw new Error(`unhandled dialect ${String(exhaustive)}`);
       }
     }
+  }
+
+  function traceIdFor(req: IncomingMessage): string {
+    const incoming = req.headers[TRACE_ID_HEADER];
+    if (typeof incoming === "string" && incoming.length > 0) return incoming;
+    if (Array.isArray(incoming) && incoming.length > 0 && incoming[0]) return incoming[0];
+    return newTraceId();
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -370,7 +383,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ResponsesRequest;
-      await runFrontDoor(res, "openai-responses", promptFromResponses(body), body.model, body.stream === true, formatResponses);
+      await runFrontDoor(res, "openai-responses", promptFromResponses(body), body.model, body.stream === true, formatResponses, traceIdFor(req));
       return;
     }
 
@@ -387,7 +400,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as AnthropicRequest;
-      await runFrontDoor(res, "anthropic-messages", promptFromAnthropic(body), body.model, body.stream === true, formatAnthropic);
+      await runFrontDoor(res, "anthropic-messages", promptFromAnthropic(body), body.model, body.stream === true, formatAnthropic, traceIdFor(req));
       return;
     }
 
@@ -395,7 +408,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ChatRequest;
-      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat);
+      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat, traceIdFor(req));
       return;
     }
 

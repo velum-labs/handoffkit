@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
@@ -105,6 +105,110 @@ export function defaultKeyEnv(provider: PanelProvider): string | undefined {
 /** Absolute path to the compiled solve agent shipped alongside this module. */
 export function solveAgentPath(): string {
   return fileURLToPath(new URL("./fusion-solve-agent.js", import.meta.url));
+}
+
+/** Fixed port for the local observability dashboard (the scope app). */
+export const SCOPE_DASHBOARD_PORT = 4317;
+
+/**
+ * Locate the isolated scope dashboard app (handoffkit/apps/scope) by walking up
+ * from this module. Works from both the compiled dist and src layouts.
+ */
+export function findScopeAppDir(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let depth = 0; depth < 8; depth++) {
+    const candidate = join(dir, "apps", "scope");
+    if (existsSync(join(candidate, "package.json"))) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error("could not locate apps/scope relative to the handoffkit CLI");
+}
+
+/** Poll an HTTP endpoint until it answers (any status) or the child dies. */
+async function waitForHttpReady(url: string, child: ChildProcess, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "";
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) throw new Error(`dashboard exited (code ${child.exitCode}) before becoming ready`);
+    try {
+      await fetch(url);
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  throw new Error(`dashboard did not become ready within ${timeoutMs}ms (${lastError})`);
+}
+
+/** Best-effort: open a URL in the default browser (no-op on failure). */
+function openUrl(url: string): void {
+  const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  try {
+    const child = spawn(command, args, { stdio: "ignore", detached: true });
+    child.on("error", () => {});
+    child.unref();
+  } catch {
+    // opening a browser is a convenience, never required
+  }
+}
+
+export type Observability = {
+  url: string;
+  ingestUrl: string;
+  traceDir: string;
+  close: () => Promise<void>;
+};
+
+/**
+ * Build the scope dashboard once and `next start` it on the fixed port, backed
+ * by a fresh per-run SQLite file and trace dir. Returns the URLs the caller
+ * injects (as FUSION_TRACE_URL / FUSION_TRACE_DIR) into every spawned process.
+ */
+export async function startObservability(input: { log: (line: string) => void }): Promise<Observability> {
+  const scopeDir = findScopeAppDir();
+  const nextBin = join(scopeDir, "node_modules", ".bin", "next");
+  if (!existsSync(nextBin)) {
+    throw new Error(
+      `scope dashboard dependencies are not installed.\n  Run: cd ${scopeDir} && pnpm install`
+    );
+  }
+
+  const traceDir = mkdtempSync(join(tmpdir(), "fusion-trace-"));
+  const dbPath = join(traceDir, "scope.db");
+
+  input.log("fusion: building observability dashboard (one-time)...");
+  execFileSync(nextBin, ["build"], { cwd: scopeDir, stdio: "inherit", env: { ...process.env } });
+
+  input.log("fusion: starting observability dashboard...");
+  const child = spawn(nextBin, ["start", "-p", String(SCOPE_DASHBOARD_PORT)], {
+    cwd: scopeDir,
+    env: { ...process.env, SCOPEKIT_DB: dbPath, FUSION_TRACE_DIR: traceDir },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  let output = "";
+  child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+  child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+
+  const url = `http://127.0.0.1:${SCOPE_DASHBOARD_PORT}`;
+  try {
+    await waitForHttpReady(url, child, 60_000);
+  } catch (error) {
+    child.kill("SIGTERM");
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${output.slice(-500)}`);
+  }
+
+  return {
+    url,
+    ingestUrl: `${url}/api/ingest`,
+    traceDir,
+    close: async () => {
+      child.kill("SIGTERM");
+    }
+  };
 }
 
 function freePort(): Promise<number> {
@@ -529,6 +633,8 @@ export type RunFusionOptions = {
   authToken?: string;
   port?: number;
   timeoutMs?: number;
+  /** Boot the local scope dashboard and stream trace events into it. */
+  observe?: boolean;
   log?: (line: string) => void;
 };
 
@@ -545,22 +651,42 @@ export async function runFusion(
   log(`fusion: panel = ${models.map((model) => model.id).join(", ")}`);
   if (options.repo === undefined) log(`fusion: sample repo at ${repo} (a failing test to fix)`);
 
-  const stack = await startFusionStack({
-    repo,
-    outputRoot: join(root, "runs"),
-    models,
-    ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
-    ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
-    ...(options.harness !== undefined ? { harness: options.harness } : {}),
-    ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
-    ...(options.judgeEndpoint !== undefined ? { judgeUrl: options.judgeEndpoint } : {}),
-    ...(options.synthesisUrl !== undefined ? { synthesisUrl: options.synthesisUrl } : {}),
-    ...(options.command !== undefined ? { command: options.command } : {}),
-    ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-    ...(options.port !== undefined ? { port: options.port } : {}),
-    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-    log
-  });
+  // When --observe is set, boot the dashboard and export the trace env BEFORE
+  // anything starts, so the in-process gateway/ensemble/agent emitters and every
+  // spawned child (panel servers, synthesis serve, cursor bridge) inherit it.
+  // Without the flag, FUSION_TRACE_* stays unset and all emitters are no-ops.
+  let observability: Observability | undefined;
+  if (options.observe === true) {
+    observability = await startObservability({ log });
+    process.env.FUSION_TRACE_URL = observability.ingestUrl;
+    process.env.FUSION_TRACE_DIR = observability.traceDir;
+    log(`fusion: observability dashboard at ${observability.url}`);
+    log(`fusion: trace events -> ${observability.ingestUrl} (jsonl fallback in ${observability.traceDir})`);
+    openUrl(observability.url);
+  }
+
+  let stack: FusionStack;
+  try {
+    stack = await startFusionStack({
+      repo,
+      outputRoot: join(root, "runs"),
+      models,
+      ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
+      ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
+      ...(options.harness !== undefined ? { harness: options.harness } : {}),
+      ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
+      ...(options.judgeEndpoint !== undefined ? { judgeUrl: options.judgeEndpoint } : {}),
+      ...(options.synthesisUrl !== undefined ? { synthesisUrl: options.synthesisUrl } : {}),
+      ...(options.command !== undefined ? { command: options.command } : {}),
+      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(options.port !== undefined ? { port: options.port } : {}),
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      log
+    });
+  } catch (error) {
+    if (observability !== undefined) await observability.close().catch(() => {});
+    throw error;
+  }
   log(`fusion: gateway on ${stack.fusionUrl} (model: ${FUSION_MODEL_LABEL})`);
 
   let bridge: ChildProcess | undefined;
@@ -576,6 +702,7 @@ export async function runFusion(
       }
     }
     await stack.close().catch(() => {});
+    if (observability !== undefined) await observability.close().catch(() => {});
   };
   const onSignal = (): void => {
     void cleanup().then(() => process.exit(0));

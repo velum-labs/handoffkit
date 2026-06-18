@@ -15,6 +15,7 @@ import type {
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@warrant/ensemble";
+import { emitTrace, newSpanId, newTraceId } from "@warrant/protocol";
 import {
   installAcpAdapters,
   runAcpAgent,
@@ -75,22 +76,73 @@ function summarize(report: UnifiedHarnessE2EResult, primary: UnifiedHarnessKind)
 
 export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunner {
   return async (input) => {
-    const report = await runUnifiedHarnessE2E({
-      id: `gateway_${input.requestId}`,
-      fusionBackendUrl: config.fusionBackendUrl,
-      repo: config.repo,
-      outputRoot: join(config.outputRoot, input.requestId),
-      prompt: input.prompt,
-      harnesses: config.harnesses,
-      models: config.models,
-      ...(config.command !== undefined ? { command: config.command } : {}),
-      ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
-      ...(config.judgeModel !== undefined ? { judgeModel: config.judgeModel } : {}),
-      ...(config.cursorKitDir !== undefined ? { cursorKitDir: config.cursorKitDir } : {}),
-      ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
-      ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {})
+    const traceId = input.traceId;
+    const sessionSpan = newSpanId();
+    emitTrace({
+      component: "gateway",
+      event_type: "session.started",
+      traceId,
+      spanId: sessionSpan,
+      payload: {
+        request_id: input.requestId,
+        dialect: input.dialect,
+        prompt_preview: input.prompt.slice(0, 600),
+        environment: {
+          repo: config.repo,
+          fusion_backend_url: config.fusionBackendUrl,
+          harnesses: config.harnesses,
+          judge_model: config.judgeModel ?? null,
+          models: config.models.map((model) => ({
+            id: model.id,
+            model: model.model,
+            ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
+          })),
+          ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
+        }
+      }
     });
-    return summarize(report, config.harnesses[0] ?? "command");
+    try {
+      const report = await runUnifiedHarnessE2E({
+        id: `gateway_${input.requestId}`,
+        fusionBackendUrl: config.fusionBackendUrl,
+        repo: config.repo,
+        outputRoot: join(config.outputRoot, input.requestId),
+        prompt: input.prompt,
+        harnesses: config.harnesses,
+        models: config.models,
+        traceId,
+        ...(config.command !== undefined ? { command: config.command } : {}),
+        ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
+        ...(config.judgeModel !== undefined ? { judgeModel: config.judgeModel } : {}),
+        ...(config.cursorKitDir !== undefined ? { cursorKitDir: config.cursorKitDir } : {}),
+        ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
+        ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {})
+      });
+      const summary = summarize(report, config.harnesses[0] ?? "command");
+      emitTrace({
+        component: "gateway",
+        event_type: "session.finished",
+        traceId,
+        spanId: sessionSpan,
+        payload: {
+          status: summary.status,
+          run_id: summary.runId,
+          evidence: summary.evidence,
+          final_output_preview: summary.finalOutput.slice(0, 600),
+          ...(summary.reportPath !== undefined ? { report_path: summary.reportPath } : {})
+        }
+      });
+      return summary;
+    } catch (error) {
+      emitTrace({
+        component: "gateway",
+        event_type: "session.finished",
+        traceId,
+        spanId: sessionSpan,
+        payload: { status: "failed", error: error instanceof Error ? error.message : String(error) }
+      });
+      throw error;
+    }
   };
 }
 
@@ -101,7 +153,8 @@ export function buildAcpRunner(config: GatewayRunnerConfig): AcpRunner {
       dialect: "openai-chat",
       prompt: input.prompt,
       requestedModel: undefined,
-      requestId: input.requestId
+      requestId: input.requestId,
+      traceId: newTraceId()
     });
     return {
       finalOutput: result.finalOutput,

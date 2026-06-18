@@ -149,6 +149,26 @@ export {
 export type { BundleVerification } from "./receipt.js";
 export { buildReceiptStory, summarizeRunEvent } from "./receipt-story.js";
 export type { EventSummary, ReceiptStory } from "./receipt-story.js";
+export {
+  ambientTraceId,
+  emitTrace,
+  FUSION_TRACE_EVENT_SCHEMA,
+  FUSION_TRACE_EVENT_VERSION,
+  getTraceEmitter,
+  newSpanId,
+  newTraceId,
+  TRACE_CANDIDATE_HEADER,
+  TRACE_ID_HEADER,
+  TRACE_PARENT_SPAN_HEADER,
+  TRACE_SPAN_HEADER,
+  TraceEmitter
+} from "./trace.js";
+export type {
+  EmitInput,
+  FusionTraceComponent,
+  FusionTraceEvent,
+  FusionTraceEventType
+} from "./trace.js";
 export { PolicyDeniedError } from "./types.js";
 export type {
   ActorRef,

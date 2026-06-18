@@ -5,6 +5,14 @@ import { dirname, relative, resolve } from "node:path";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 
+import {
+  emitTrace,
+  newSpanId,
+  TRACE_CANDIDATE_HEADER,
+  TRACE_ID_HEADER,
+  TRACE_SPAN_HEADER
+} from "@warrant/protocol";
+
 /**
  * A uniform, real model-driven agent loop for trajectory-level fusion. One
  * panel model drives an AI SDK tool loop over a real git worktree (read/list/
@@ -49,7 +57,44 @@ export type WorktreeAgentInput = {
   /** Per-`run` command timeout in ms. Defaults to 120000. */
   commandTimeoutMs?: number;
   abortSignal?: AbortSignal;
+  /** Observability correlation id; when set, steps and model calls are traced. */
+  traceId?: string;
+  /** Candidate id this agent run belongs to (for trace correlation). */
+  candidateId?: string;
+  /** Parent span (e.g. the ensemble candidate span) for waterfall linking. */
+  parentSpanId?: string;
 };
+
+type AgentContentPart = { type: string; [key: string]: unknown };
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+/** Normalize one AI SDK step's content parts into trajectory steps. */
+function extractSteps(content: readonly AgentContentPart[]): Array<Omit<TrajectoryStep, "index">> {
+  const out: Array<Omit<TrajectoryStep, "index">> = [];
+  for (const part of content) {
+    const text = asString(part.text);
+    if ((part.type === "reasoning" || part.type === "text") && text !== undefined && text.length > 0) {
+      out.push({ type: "reasoning", text: truncate(text) });
+    } else if (part.type === "tool-call") {
+      out.push({
+        type: "tool_call",
+        ...(asString(part.toolName) !== undefined ? { tool_name: asString(part.toolName) } : {}),
+        ...(asString(part.toolCallId) !== undefined ? { tool_call_id: asString(part.toolCallId) } : {}),
+        tool_input: truncate(stringifyOutput(part.input), 600)
+      });
+    } else if (part.type === "tool-result") {
+      out.push({
+        type: "observation",
+        ...(asString(part.toolCallId) !== undefined ? { tool_call_id: asString(part.toolCallId) } : {}),
+        text: truncate(stringifyOutput(part.output), MAX_TOOL_OUTPUT)
+      });
+    }
+  }
+  return out;
+}
 
 const AGENT_SYSTEM_PROMPT =
   "You are a coding agent working in a real repository checkout. Use the tools to inspect " +
@@ -180,16 +225,41 @@ function stringifyOutput(value: unknown): string {
 
 /** Run one panel model as a real agent over the worktree and capture its trajectory. */
 export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<WorktreeAgentResult> {
+  const agentSpan = newSpanId();
+  const traceHeaders: Record<string, string> | undefined =
+    input.traceId !== undefined
+      ? {
+          [TRACE_ID_HEADER]: input.traceId,
+          [TRACE_SPAN_HEADER]: agentSpan,
+          ...(input.candidateId !== undefined ? { [TRACE_CANDIDATE_HEADER]: input.candidateId } : {})
+        }
+      : undefined;
   const provider = createOpenAICompatible({
     name: "fusion-panel-agent",
     baseURL: `${input.baseUrl.replace(/\/+$/, "")}/v1`,
-    apiKey: input.apiKey ?? "not-needed"
+    apiKey: input.apiKey ?? "not-needed",
+    ...(traceHeaders !== undefined ? { headers: traceHeaders } : {})
   });
   const model = provider(input.model);
   const steps: TrajectoryStep[] = [];
   let index = 0;
-  const push = (step: Omit<TrajectoryStep, "index">): void => {
-    steps.push({ index: index++, ...step });
+  const push = (step: Omit<TrajectoryStep, "index">): TrajectoryStep => {
+    const full = { index: index++, ...step };
+    steps.push(full);
+    return full;
+  };
+  const emitStep = (step: TrajectoryStep): void => {
+    if (input.traceId === undefined) return;
+    emitTrace({
+      component: "agent",
+      event_type: "trajectory.step",
+      traceId: input.traceId,
+      spanId: agentSpan,
+      ...(input.parentSpanId !== undefined ? { parentSpanId: input.parentSpanId } : {}),
+      ...(input.candidateId !== undefined ? { candidateId: input.candidateId } : {}),
+      modelId: input.model,
+      payload: { step }
+    });
   };
 
   try {
@@ -199,35 +269,17 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
       prompt: input.prompt,
       tools: worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000),
       stopWhen: stepCountIs(input.maxSteps ?? 12),
+      onStepFinish: (step) => {
+        for (const normalized of extractSteps(step.content as AgentContentPart[])) {
+          emitStep(push(normalized));
+        }
+      },
       ...(input.abortSignal !== undefined ? { abortSignal: input.abortSignal } : {})
     });
 
-    let toolCallCount = 0;
-    for (const step of result.steps) {
-      for (const part of step.content) {
-        if (part.type === "reasoning" && part.text.length > 0) {
-          push({ type: "reasoning", text: truncate(part.text) });
-        } else if (part.type === "text" && part.text.length > 0) {
-          push({ type: "reasoning", text: truncate(part.text) });
-        } else if (part.type === "tool-call") {
-          toolCallCount += 1;
-          push({
-            type: "tool_call",
-            tool_name: part.toolName,
-            tool_call_id: part.toolCallId,
-            tool_input: truncate(stringifyOutput(part.input), 600)
-          });
-        } else if (part.type === "tool-result") {
-          push({
-            type: "observation",
-            tool_call_id: part.toolCallId,
-            text: truncate(stringifyOutput(part.output), MAX_TOOL_OUTPUT)
-          });
-        }
-      }
-    }
+    const toolCallCount = steps.filter((step) => step.type === "tool_call").length;
     const finalOutput = result.text ?? "";
-    push({ type: "output", text: finalOutput });
+    emitStep(push({ type: "output", text: finalOutput }));
     return {
       status: "succeeded",
       steps,
@@ -237,7 +289,7 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    push({ type: "output", text: `agent failed: ${message}` });
+    emitStep(push({ type: "output", text: `agent failed: ${message}` }));
     return { status: "failed", steps, finalOutput: `agent failed: ${message}`, finishReason: "error", toolCallCount: 0 };
   }
 }

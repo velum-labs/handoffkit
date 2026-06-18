@@ -142,6 +142,7 @@ usage:
       --repo DIR              coding workspace (default: a bundled real sample repo)
       --command CMD           per-candidate solve command (default: shipped model-backed solve agent)
       --cursor-kit-dir DIR    built Cursorkit checkout for the cursor tool (or WARRANT_CURSORKIT_DIR)
+      --observe               boot the local scope dashboard (http://127.0.0.1:4317) and stream live trace events into it
       --auth-token TOKEN      require a bearer token on the gateway
       --port N                gateway port (default: ephemeral)
   warrant ensemble run [opts] "task"             run local ensemble smoke
@@ -1022,6 +1023,7 @@ async function cmdFusion(argv: string[]): Promise<void> {
     else if (token === "--repo") options.repo = resolve(next(++i));
     else if (token === "--command") options.command = next(++i);
     else if (token === "--cursor-kit-dir") options.cursorKitDir = resolve(next(++i));
+    else if (token === "--observe") options.observe = true;
     else if (token === "--auth-token") options.authToken = next(++i);
     else if (token === "--port") {
       const port = Number(next(++i));

@@ -76,6 +76,24 @@ export type {
   UnifiedHarnessKind,
   UnifiedHarnessMatrixResult
 } from "./unified.js";
+export {
+  ambientTraceId,
+  emitTrace,
+  getTraceEmitter,
+  newSpanId,
+  newTraceId,
+  TRACE_CANDIDATE_HEADER,
+  TRACE_ID_HEADER,
+  TRACE_PARENT_SPAN_HEADER,
+  TRACE_SPAN_HEADER,
+  TraceEmitter
+} from "./trace.js";
+export type {
+  EmitInput,
+  FusionTraceComponent,
+  FusionTraceEvent,
+  FusionTraceEventType
+} from "./trace.js";
 export { runJudgeSynthesis } from "./synthesis.js";
 export type {
   RunSynthesisInput,
