@@ -31,6 +31,9 @@ from fusionkit_core.run import (
     make_id,
 )
 from fusionkit_core.run_store import FileSystemRunStore
+from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER
+from fusionkit_core.trace import emit as trace_emit
+from fusionkit_core.trace import new_span_id
 from fusionkit_core.types import ChatMessage
 from pydantic import BaseModel, Field
 
@@ -199,7 +202,11 @@ def create_app(
         return _openai_chat_response(request.model, final_output, metadata)
 
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
-    async def fuse_trajectories(request: FuseTrajectoriesRequest) -> dict[str, Any] | JSONResponse:
+    async def fuse_trajectories(
+        request: FuseTrajectoriesRequest,
+        trace_id: str | None = Header(default=None, alias=TRACE_ID_HEADER),
+        span_id: str | None = Header(default=None, alias=TRACE_SPAN_HEADER),
+    ) -> dict[str, Any] | JSONResponse:
         if not request.trajectories:
             return _openai_error_response(
                 "no_trajectories",
@@ -226,6 +233,21 @@ def create_app(
             )
             for trajectory in request.trajectories
         ]
+        synthesis_span = new_span_id()
+        trace_emit(
+            component="synthesis",
+            event_type="log",
+            trace_id=trace_id,
+            span_id=synthesis_span,
+            parent_span_id=span_id,
+            payload={
+                "message": "trajectories:fuse received",
+                "judge_model": judge_model,
+                "synthesizer_model": synthesizer_model,
+                "input_trajectory_ids": [trajectory.trajectory_id for trajectory in trajectories],
+                "input_model_ids": [trajectory.model_id for trajectory in trajectories],
+            },
+        )
         result = await engine.judge_synthesizer.synthesize_trajectories(
             request.messages,
             trajectories,
@@ -233,6 +255,8 @@ def create_app(
             synthesizer_client=synthesizer_client,
             judge_sampling=config.sampling.model_copy(update={"temperature": 0.0}),
             synthesis_sampling=config.sampling,
+            trace_id=trace_id,
+            span_id=synthesis_span,
         )
         return {
             "final_output": result.final_output,

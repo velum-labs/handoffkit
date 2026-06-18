@@ -1,0 +1,11 @@
+{
+  "schema": "fusion-trace-event.v1",
+  "schema_version": "1.0.0",
+  "trace_id": "trace_2f1c9a",
+  "span_id": "span_root",
+  "seq": 0,
+  "ts": 1750000000000,
+  "component": "gateway",
+  "event_type": "session.started",
+  "payload": {}
+}

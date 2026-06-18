@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/fusion-trace/fusion-trace-event.v1.schema.json",
+  "title": "fusion-trace-event.v1",
+  "description": "A single observability event emitted by any component of the fusion stack (gateway, ensemble harness, panel model server, judge/synthesis, or the Cursorkit bridge). Events sharing a trace_id form one observable session. This contract is intentionally standalone and is NOT part of the frozen model-fusion-contract bundle.",
+  "type": "object",
+  "required": [
+    "schema",
+    "trace_id",
+    "span_id",
+    "seq",
+    "ts",
+    "component",
+    "event_type"
+  ],
+  "properties": {
+    "schema": {
+      "const": "fusion-trace-event.v1"
+    },
+    "schema_version": {
+      "type": "string",
+      "default": "1.0.0"
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Correlates every event belonging to one fusion session."
+    },
+    "span_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifies the unit of work that produced this event."
+    },
+    "parent_span_id": {
+      "type": "string",
+      "description": "The span that caused this span, enabling waterfall reconstruction."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Producer-assigned monotonic counter; ties are broken by collector ingest order."
+    },
+    "ts": {
+      "type": "number",
+      "description": "Event time in epoch milliseconds."
+    },
+    "component": {
+      "type": "string",
+      "enum": [
+        "gateway",
+        "ensemble",
+        "agent",
+        "panel-model",
+        "judge",
+        "synthesis",
+        "cursor-bridge"
+      ]
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "session.started",
+        "session.finished",
+        "harness.candidate.started",
+        "harness.candidate.finished",
+        "trajectory.step",
+        "model.call.started",
+        "model.call.finished",
+        "judge.thinking",
+        "judge.scored",
+        "judge.synthesis",
+        "judge.final",
+        "tool.execution",
+        "cursor.route",
+        "log"
+      ]
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Optional alias used when a host already has a session identifier distinct from trace_id."
+    },
+    "candidate_id": {
+      "type": "string"
+    },
+    "model_id": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Event-specific data. Shape depends on event_type."
+    }
+  },
+  "additionalProperties": false
+}

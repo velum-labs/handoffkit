@@ -24,6 +24,8 @@ from fusionkit_core.prompts import (
     build_trajectory_judge_prompt,
     build_trajectory_synthesis_prompt,
 )
+from fusionkit_core.trace import emit as trace_emit
+from fusionkit_core.trace import new_span_id
 from fusionkit_core.types import Candidate, ChatMessage, FusionAnalysis
 
 
@@ -66,6 +68,8 @@ class JudgeSynthesizer:
         synthesizer_client: ChatClient,
         judge_sampling: SamplingConfig,
         synthesis_sampling: SamplingConfig,
+        trace_id: str | None = None,
+        span_id: str | None = None,
     ) -> TrajectorySynthesisResult:
         """Fuse several agent trajectories into one final response.
 
@@ -75,12 +79,27 @@ class JudgeSynthesizer:
         """
         if not trajectories:
             raise ValueError("at least one trajectory is required")
+        judge_span = span_id or new_span_id()
         user_request = _last_user_text(messages)
         analysis = await self._analyze_trajectories(
             user_request,
             trajectories,
             judge_client=judge_client,
             judge_sampling=judge_sampling,
+            trace_id=trace_id,
+            judge_span=judge_span,
+        )
+        metrics = _trajectory_metrics(trajectories, analysis)
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.scored",
+            payload={
+                "fusion_unit": "trajectory",
+                "analysis": analysis.model_dump(mode="json"),
+                "metrics": metrics,
+                "input_ids": [trajectory.trajectory_id for trajectory in trajectories],
+            },
         )
         synthesis_response = await synthesizer_client.chat(
             [
@@ -93,22 +112,45 @@ class JudgeSynthesizer:
             synthesis_sampling,
         )
         final_output = synthesis_response.content.strip()
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.synthesis",
+            payload={
+                "raw_output": synthesis_response.content,
+                "empty": not final_output,
+                "usage": _usage_payload(synthesis_response),
+            },
+        )
         if not final_output:
             # The synthesizer returned nothing (e.g. a reasoning model exhausted
             # its token budget on reasoning). Fall back to the best trajectory's
             # own answer so a fused response is always produced.
             final_output = _best_trajectory_output(trajectories)
+        synthesis_id = _synthesis_id()
         record = JudgeSynthesisRecordV1.model_validate(
             {
                 **contract_metadata("judge-synthesis-record.v1"),
-                "synthesis_id": _synthesis_id(),
+                "synthesis_id": synthesis_id,
                 "input_candidate_ids": [trajectory.trajectory_id for trajectory in trajectories],
                 "status": "succeeded",
                 "decision": "synthesize",
                 "rationale": _rationale(analysis),
                 "final_output": final_output,
-                "metrics": _trajectory_metrics(trajectories, analysis),
+                "metrics": metrics,
             }
+        )
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.final",
+            payload={
+                "synthesis_id": synthesis_id,
+                "decision": "synthesize",
+                "rationale": _rationale(analysis),
+                "final_output": final_output,
+                "record": record.model_dump(mode="json"),
+            },
         )
         return TrajectorySynthesisResult(record=record, final_output=final_output, analysis=analysis)
 
@@ -119,6 +161,8 @@ class JudgeSynthesizer:
         *,
         judge_client: ChatClient,
         judge_sampling: SamplingConfig,
+        trace_id: str | None = None,
+        judge_span: str | None = None,
     ) -> FusionAnalysis:
         response = await judge_client.chat(
             [
@@ -129,6 +173,16 @@ class JudgeSynthesizer:
                 ),
             ],
             judge_sampling,
+        )
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.thinking",
+            payload={
+                "fusion_unit": "trajectory",
+                "raw_analysis": response.content,
+                "usage": _usage_payload(response),
+            },
         )
         return parse_analysis(response.content)
 
@@ -144,12 +198,34 @@ class JudgeSynthesizer:
         analysis: FusionAnalysis | None = None,
         final_output_artifact_id: str | None = None,
         repair_metadata: dict[str, Any] | None = None,
+        trace_id: str | None = None,
+        span_id: str | None = None,
     ) -> JudgeSynthesisResult:
+        judge_span = span_id or new_span_id()
         resolved_analysis = analysis or await self.analyze(
             messages,
             candidates,
             judge_client=judge_client,
             judge_sampling=judge_sampling,
+            trace_id=trace_id,
+            judge_span=judge_span,
+        )
+        metrics = _synthesis_metrics(
+            candidates,
+            resolved_analysis,
+            final_output_artifact_id=final_output_artifact_id,
+            repair_metadata=repair_metadata,
+        )
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.scored",
+            payload={
+                "fusion_unit": "candidate",
+                "analysis": resolved_analysis.model_dump(mode="json"),
+                "metrics": metrics,
+                "input_ids": [candidate.id for candidate in candidates],
+            },
         )
         final_output = await self._synthesize_answer(
             messages,
@@ -157,19 +233,16 @@ class JudgeSynthesizer:
             resolved_analysis,
             synthesizer_client=synthesizer_client,
             synthesis_sampling=synthesis_sampling,
+            trace_id=trace_id,
+            judge_span=judge_span,
         )
         evidence = [candidate_evidence(candidate) for candidate in candidates]
-        metrics = _synthesis_metrics(
-            candidates,
-            resolved_analysis,
-            final_output_artifact_id=final_output_artifact_id,
-            repair_metadata=repair_metadata,
-        )
         selected_candidate_id = _selected_candidate_id(final_output, candidates)
+        synthesis_id = _synthesis_id()
         record = JudgeSynthesisRecordV1.model_validate(
             {
                 **contract_metadata("judge-synthesis-record.v1"),
-                "synthesis_id": _synthesis_id(),
+                "synthesis_id": synthesis_id,
                 "input_candidate_ids": [candidate.id for candidate in candidates],
                 "status": "succeeded",
                 "decision": "select_candidate" if selected_candidate_id else "synthesize",
@@ -178,6 +251,19 @@ class JudgeSynthesizer:
                 "final_output": final_output,
                 "metrics": metrics,
             }
+        )
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.final",
+            payload={
+                "synthesis_id": synthesis_id,
+                "decision": "select_candidate" if selected_candidate_id else "synthesize",
+                "selected_candidate_id": selected_candidate_id,
+                "rationale": _rationale(resolved_analysis),
+                "final_output": final_output,
+                "record": record.model_dump(mode="json"),
+            },
         )
         return JudgeSynthesisResult(
             record=record,
@@ -194,6 +280,8 @@ class JudgeSynthesizer:
         *,
         judge_client: ChatClient,
         judge_sampling: SamplingConfig,
+        trace_id: str | None = None,
+        judge_span: str | None = None,
     ) -> FusionAnalysis:
         response = await judge_client.chat(
             [
@@ -205,6 +293,16 @@ class JudgeSynthesizer:
             ],
             judge_sampling,
         )
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.thinking",
+            payload={
+                "fusion_unit": "candidate",
+                "raw_analysis": response.content,
+                "usage": _usage_payload(response),
+            },
+        )
         return parse_analysis(response.content)
 
     async def _synthesize_answer(
@@ -215,6 +313,8 @@ class JudgeSynthesizer:
         *,
         synthesizer_client: ChatClient,
         synthesis_sampling: SamplingConfig,
+        trace_id: str | None = None,
+        judge_span: str | None = None,
     ) -> str:
         response = await synthesizer_client.chat(
             [
@@ -225,6 +325,16 @@ class JudgeSynthesizer:
                 ),
             ],
             synthesis_sampling,
+        )
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.synthesis",
+            payload={
+                "raw_output": response.content,
+                "empty": not response.content.strip(),
+                "usage": _usage_payload(response),
+            },
         )
         return response.content
 
@@ -384,6 +494,40 @@ def _extract_json(content: str) -> str:
     if fenced:
         return fenced.group(1).strip()
     return stripped
+
+
+def _emit_judge(
+    trace_id: str | None,
+    span_id: str | None,
+    event_type: str,
+    *,
+    payload: dict[str, Any],
+) -> None:
+    trace_emit(
+        component="judge",
+        event_type=event_type,
+        trace_id=trace_id,
+        span_id=span_id,
+        payload=payload,
+    )
+
+
+def _usage_payload(response: Any) -> dict[str, Any]:
+    usage = getattr(response, "usage", None)
+    out: dict[str, Any] = {}
+    if usage is not None:
+        out = {
+            "prompt_tokens": getattr(usage, "prompt_tokens", None),
+            "completion_tokens": getattr(usage, "completion_tokens", None),
+            "total_tokens": getattr(usage, "total_tokens", None),
+        }
+    latency = getattr(response, "latency_s", None)
+    if latency is not None:
+        out["latency_s"] = latency
+    model_id = getattr(response, "model_id", None)
+    if model_id is not None:
+        out["model_id"] = model_id
+    return out
 
 
 __all__ = [

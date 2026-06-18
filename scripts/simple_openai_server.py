@@ -25,6 +25,13 @@ from typing import Any
 
 from fusionkit_core.clients import build_client
 from fusionkit_core.config import ModelEndpoint, SamplingConfig
+from fusionkit_core.trace import (
+    TRACE_CANDIDATE_HEADER,
+    TRACE_ID_HEADER,
+    TRACE_SPAN_HEADER,
+)
+from fusionkit_core.trace import emit as trace_emit
+from fusionkit_core.trace import new_span_id
 from fusionkit_core.types import ChatMessage, ToolCall
 
 
@@ -108,6 +115,10 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
             if self.path != "/v1/chat/completions":
                 self._send_json(404, {"error": {"message": "not found"}})
                 return
+            trace_id = self.headers.get(TRACE_ID_HEADER)
+            candidate_id = self.headers.get(TRACE_CANDIDATE_HEADER)
+            parent_span = self.headers.get(TRACE_SPAN_HEADER)
+            call_span = new_span_id()
             try:
                 length = int(self.headers.get("content-length", "0"))
                 request = json.loads(self.rfile.read(length).decode("utf-8"))
@@ -118,6 +129,21 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                     temperature=float(request.get("temperature", 0.2) or 0.2),
                     top_p=float(request.get("top_p", 0.95) or 0.95),
                     max_tokens=int(request.get("max_tokens", 1024) or 1024),
+                )
+                trace_emit(
+                    component="panel-model",
+                    event_type="model.call.started",
+                    trace_id=trace_id,
+                    span_id=call_span,
+                    parent_span_id=parent_span,
+                    candidate_id=candidate_id,
+                    model_id=endpoint.id,
+                    payload={
+                        "model": endpoint.model,
+                        "provider": endpoint.provider,
+                        "message_count": len(messages),
+                        "tool_count": len(tools) if tools else 0,
+                    },
                 )
 
                 async def run() -> Any:
@@ -132,6 +158,28 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                 started = time.perf_counter()
                 response = asyncio.run(run())
                 latency_s = time.perf_counter() - started
+                trace_emit(
+                    component="panel-model",
+                    event_type="model.call.finished",
+                    trace_id=trace_id,
+                    span_id=call_span,
+                    parent_span_id=parent_span,
+                    candidate_id=candidate_id,
+                    model_id=endpoint.id,
+                    payload={
+                        "model": endpoint.model,
+                        "provider": endpoint.provider,
+                        "latency_s": round(latency_s, 3),
+                        "finish_reason": "tool_calls" if response.tool_calls else (response.finish_reason or "stop"),
+                        "tool_call_count": len(response.tool_calls),
+                        "content_preview": (response.content or "")[:400],
+                        "usage": {
+                            "prompt_tokens": response.usage.prompt_tokens,
+                            "completion_tokens": response.usage.completion_tokens,
+                            "total_tokens": response.usage.total_tokens,
+                        },
+                    },
+                )
                 print(
                     json.dumps(
                         {
@@ -177,6 +225,21 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                 )
             except Exception as exc:  # noqa: BLE001 - surface as an OpenAI error body
                 traceback.print_exc()
+                trace_emit(
+                    component="panel-model",
+                    event_type="model.call.finished",
+                    trace_id=trace_id,
+                    span_id=call_span,
+                    parent_span_id=parent_span,
+                    candidate_id=candidate_id,
+                    model_id=endpoint.id,
+                    payload={
+                        "model": endpoint.model,
+                        "provider": endpoint.provider,
+                        "error": str(exc),
+                        "error_type": exc.__class__.__name__,
+                    },
+                )
                 self._send_json(
                     500,
                     {"error": {"message": str(exc), "type": exc.__class__.__name__}},

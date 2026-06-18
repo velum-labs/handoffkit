@@ -1,0 +1,31 @@
+{
+  "schema": "fusion-trace-event.v1",
+  "schema_version": "1.0.0",
+  "trace_id": "trace_2f1c9a",
+  "span_id": "span_judge_01",
+  "parent_span_id": "span_root",
+  "seq": 42,
+  "ts": 1750000004210,
+  "component": "judge",
+  "event_type": "judge.scored",
+  "session_id": "trace_2f1c9a",
+  "model_id": "judge:gpt-5.5",
+  "payload": {
+    "decision": "synthesize",
+    "selected_candidate_id": "unified_e2e_agent_gpt_0",
+    "analysis": {
+      "consensus": ["both candidates fix the add() sign bug"],
+      "contradictions": [],
+      "unique_insights": ["opus adds a regression test"],
+      "coverage_gaps": [],
+      "likely_errors": []
+    },
+    "candidate_ranks": {
+      "unified_e2e_agent_gpt_0": 1,
+      "unified_e2e_agent_opus_0": 2
+    },
+    "candidate_contributions": {
+      "unified_e2e_agent_opus_0": ["regression test"]
+    }
+  }
+}
