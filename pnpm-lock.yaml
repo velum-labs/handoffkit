@@ -373,6 +373,9 @@ importers:
       '@warrant/workspace':
         specifier: workspace:*
         version: link:../workspace
+      commander:
+        specifier: 14.0.3
+        version: 14.0.3
     devDependencies:
       '@warrant/testkit':
         specifier: workspace:*
@@ -781,6 +784,10 @@ packages:
 
   chownr@1.1.4:
     resolution: {integrity: sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg==}
+
+  commander@14.0.3:
+    resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
+    engines: {node: '>=20'}
 
   commander@6.2.1:
     resolution: {integrity: sha512-U7VdrJFnJgo4xjrHpTzu0yrHPGImdsmD95ZlgYSEajAn2JKzDhDTPG9kBTefmObL2w/ngeZnilk+OV9CG3d7UA==}
@@ -1386,6 +1393,8 @@ snapshots:
 
   chownr@1.1.4:
     optional: true
+
+  commander@14.0.3: {}
 
   commander@6.2.1: {}
 

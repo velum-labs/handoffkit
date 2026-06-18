@@ -305,6 +305,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@velum-labs/model-fusion-protocol", "0.1.0"],
   ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
+  ["commander", "14.0.3"],
   ["jose", "6.2.3"],
   ["just-bash", "3.0.1"],
   ["minimatch", "10.2.5"],

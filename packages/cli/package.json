@@ -32,7 +32,8 @@
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",
     "@warrant/sdk": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@warrant/workspace": "workspace:*",
+    "commander": "14.0.3"
   },
   "devDependencies": {
     "@warrant/testkit": "workspace:*"
