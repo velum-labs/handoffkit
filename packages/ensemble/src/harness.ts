@@ -26,6 +26,43 @@ export type EnsembleModel = {
   endpointId?: string;
 };
 
+export type TrajectoryStepType = "reasoning" | "tool_call" | "observation" | "output";
+
+/** One step of an agent trajectory (mirrors harness-trajectory.v1 steps). */
+export type TrajectoryStep = {
+  index: number;
+  type: TrajectoryStepType;
+  text?: string;
+  tool_name?: string;
+  tool_call_id?: string;
+  tool_input?: string;
+  is_error?: boolean;
+};
+
+export type TrajectoryVerification = {
+  status: ModelFusionStatus;
+  evidence: string[];
+  exitCode?: number;
+};
+
+/**
+ * A normalized agent trajectory produced by one panel model: the ordered
+ * reasoning/tool-call/observation/output sequence plus the final output and
+ * any verification. This is the unit of trajectory-level fusion.
+ */
+export type HarnessTrajectory = {
+  trajectoryId: string;
+  modelId: string;
+  model?: string;
+  candidateId?: string;
+  harnessKind?: ModelFusionHarnessKind;
+  status: ModelFusionStatus;
+  steps: TrajectoryStep[];
+  finalOutput: string;
+  diff?: string;
+  verification?: TrajectoryVerification;
+};
+
 export type CandidateIsolationKind = "process" | "container" | "microvm";
 
 export type CandidateActualIsolationKind = CandidateIsolationKind | "vercel-sandbox";
@@ -243,6 +280,7 @@ export type HarnessCandidateOutput = {
   branchName?: string;
   worktreePath?: string;
   transcript?: string;
+  trajectory?: HarnessTrajectory;
   diff?: string;
   log?: string;
   summary?: string;

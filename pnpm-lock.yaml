@@ -380,6 +380,9 @@ importers:
 
   packages/ensemble:
     dependencies:
+      '@warrant/adapter-ai-sdk':
+        specifier: workspace:*
+        version: link:../adapter-ai-sdk
       '@warrant/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway

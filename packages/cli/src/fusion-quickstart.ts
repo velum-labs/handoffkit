@@ -14,7 +14,7 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,12 +35,72 @@ export const FUSION_TOOLS: readonly FusionTool[] = ["codex", "claude", "cursor",
 /** The model label the launched tool uses; the gateway ignores it for routing. */
 const FUSION_MODEL_LABEL = "fusion-panel";
 
+export type PanelProvider = "mlx" | "openai" | "anthropic" | "google" | "openai-compatible";
+
+/**
+ * One panel model. `mlx` models run locally via the in-repo provisioner; cloud
+ * providers (openai/anthropic/google/openai-compatible) are fronted as
+ * OpenAI-compatible endpoints by FusionKit's `simple_openai_server.py`, which
+ * requires `--fusionkit-dir` / `WARRANT_FUSIONKIT_DIR`.
+ */
+export type PanelModelSpec = {
+  id: string;
+  model: string;
+  provider?: PanelProvider;
+  baseUrl?: string;
+  keyEnv?: string;
+};
+
 /** The verified, locally cached trio used as the default real panel. */
-export const DEFAULT_TRIO: readonly EnsembleModel[] = [
-  { id: "qwen", model: "mlx-community/Qwen3-1.7B-4bit" },
-  { id: "gemma", model: "mlx-community/gemma-3-1b-it-4bit" },
-  { id: "llama", model: "mlx-community/Llama-3.2-1B-Instruct-4bit" }
+export const DEFAULT_TRIO: readonly PanelModelSpec[] = [
+  { id: "qwen", model: "mlx-community/Qwen3-1.7B-4bit", provider: "mlx" },
+  { id: "gemma", model: "mlx-community/gemma-3-1b-it-4bit", provider: "mlx" },
+  { id: "llama", model: "mlx-community/Llama-3.2-1B-Instruct-4bit", provider: "mlx" }
 ];
+
+/**
+ * Parse a `.env` file (KEY=VALUE lines, `#` comments, optional `export`,
+ * single/double quotes) and fill any keys not already present in `env`.
+ * Existing env values win, so an explicitly exported key is never overridden.
+ */
+export function loadEnvFileInto(path: string, env: Record<string, string | undefined>): void {
+  if (!existsSync(path)) return;
+  for (const rawLine of readFileSync(path, "utf8").split("\n")) {
+    const line = rawLine.trim();
+    if (line.length === 0 || line.startsWith("#")) continue;
+    const withoutExport = line.startsWith("export ") ? line.slice("export ".length) : line;
+    const eq = withoutExport.indexOf("=");
+    if (eq <= 0) continue;
+    const key = withoutExport.slice(0, eq).trim();
+    let value = withoutExport.slice(eq + 1).trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (env[key] === undefined) env[key] = value;
+  }
+}
+
+/** Default env var holding the API key for each cloud provider. */
+export function defaultKeyEnv(provider: PanelProvider): string | undefined {
+  switch (provider) {
+    case "openai":
+      return "OPENAI_API_KEY";
+    case "anthropic":
+      return "ANTHROPIC_API_KEY";
+    case "google":
+      return "GEMINI_API_KEY";
+    case "openai-compatible":
+    case "mlx":
+      return undefined;
+    default: {
+      const exhaustive: never = provider;
+      throw new Error(`unknown provider ${String(exhaustive)}`);
+    }
+  }
+}
 
 /** Absolute path to the compiled solve agent shipped alongside this module. */
 export function solveAgentPath(): string {
@@ -102,20 +162,89 @@ export type ModelServers = {
   close: () => Promise<void>;
 };
 
+async function waitForEndpoint(url: string, label: string, child: ChildProcess, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "";
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) throw new Error(`${label} exited (code ${child.exitCode}) before becoming ready`);
+    try {
+      const response = await fetch(`${url}/v1/models`);
+      if (response.ok) return;
+      lastError = `status ${response.status}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  throw new Error(`${label} did not become ready within ${timeoutMs}ms (${lastError})`);
+}
+
 /**
- * Bring up one real local model server per panel model and return an
- * id -> base URL map. When `endpoints` is supplied (e.g. pre-running servers or
- * tests), those are used verbatim and nothing is spawned.
+ * Spawn FusionKit's single-endpoint OpenAI-compatible server for one cloud
+ * model, so the per-candidate coding harness can call it like any other
+ * OpenAI-compatible backend. Anthropic/OpenAI/Google calls go through
+ * FusionKit's provider clients.
+ */
+async function spawnCloudServer(input: {
+  spec: PanelModelSpec;
+  provider: Exclude<PanelProvider, "mlx">;
+  fusionkitDir: string;
+  env: Record<string, string | undefined>;
+  log: (line: string) => void;
+}): Promise<{ url: string; child: ChildProcess }> {
+  const port = await freePort();
+  const keyEnv = input.spec.keyEnv ?? defaultKeyEnv(input.provider);
+  const args = [
+    "run",
+    "python",
+    "scripts/simple_openai_server.py",
+    "--id",
+    input.spec.id,
+    "--model",
+    input.spec.model,
+    "--provider",
+    input.provider,
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(port),
+    ...(input.spec.baseUrl !== undefined ? ["--base-url", input.spec.baseUrl] : []),
+    ...(keyEnv !== undefined ? ["--api-key-env", keyEnv] : [])
+  ];
+  input.log(`fusion: starting ${input.spec.id} (${input.provider}:${input.spec.model})...`);
+  const child = spawn("uv", args, { cwd: input.fusionkitDir, env: input.env, stdio: ["ignore", "pipe", "pipe"] });
+  let log = "";
+  child.stdout?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
+  child.stderr?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
+  const url = `http://127.0.0.1:${port}`;
+  try {
+    await waitForEndpoint(url, `${input.spec.id} server`, child, 30_000);
+  } catch (error) {
+    child.kill("SIGTERM");
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${log.slice(-500)}`);
+  }
+  input.log(`fusion: ${input.spec.id} ready on ${url}`);
+  return { url, child };
+}
+
+/**
+ * Bring up one real model server per panel model and return an id -> base URL
+ * map. `mlx` specs run locally; cloud specs are fronted by FusionKit. When
+ * `endpoints` is supplied (pre-running servers or tests), those are used
+ * verbatim and nothing is spawned.
  */
 export async function startModelServers(options: {
-  models: EnsembleModel[];
+  specs: PanelModelSpec[];
   endpoints?: Record<string, string>;
+  fusionkitDir?: string;
   log: (line: string) => void;
 }): Promise<ModelServers> {
-  const { models } = options;
+  const { specs } = options;
+  const judge = specs[0];
+  if (judge === undefined) throw new Error("at least one panel model is required");
+  const models: EnsembleModel[] = specs.map((spec) => ({ id: spec.id, model: spec.model }));
+
   if (options.endpoints !== undefined) {
-    const judge = models[0];
-    if (judge === undefined) throw new Error("at least one panel model is required");
     return {
       endpoints: options.endpoints,
       judgeUrl: options.endpoints[judge.id] ?? Object.values(options.endpoints)[0] ?? "",
@@ -125,34 +254,63 @@ export async function startModelServers(options: {
     };
   }
 
-  const started: Array<{ gateway: Gateway; backend: MlxBackend }> = [];
+  // Cloud servers inherit the parent env plus the FusionKit checkout's `.env`
+  // (so OPENAI_API_KEY / ANTHROPIC_API_KEY load seamlessly), without overriding
+  // anything already exported.
+  const cloudEnv: Record<string, string | undefined> = { ...process.env };
+  if (options.fusionkitDir !== undefined) {
+    loadEnvFileInto(join(options.fusionkitDir, ".env"), cloudEnv);
+  }
+
+  const gateways: Gateway[] = [];
+  const backends: MlxBackend[] = [];
+  const children: ChildProcess[] = [];
   const endpoints: Record<string, string> = {};
+  const closeAll = async (): Promise<void> => {
+    for (const child of children) child.kill("SIGTERM");
+    await Promise.allSettled(gateways.map((gateway) => gateway.close()));
+    await Promise.allSettled(backends.map((backend) => backend.stop()));
+  };
   try {
-    for (const model of models) {
-      options.log(`fusion: loading ${model.id} (${model.model})...`);
-      const backend = new MlxBackend({ model: model.model });
-      await backend.start();
-      const gateway = await startGateway({ backend });
-      started.push({ gateway, backend });
-      endpoints[model.id] = gateway.url();
-      options.log(`fusion: ${model.id} ready on ${gateway.url()}`);
+    for (const spec of specs) {
+      const provider = spec.provider ?? "mlx";
+      if (provider === "mlx") {
+        options.log(`fusion: loading ${spec.id} (${spec.model})...`);
+        const backend = new MlxBackend({ model: spec.model });
+        await backend.start();
+        const gateway = await startGateway({ backend });
+        backends.push(backend);
+        gateways.push(gateway);
+        endpoints[spec.id] = gateway.url();
+        options.log(`fusion: ${spec.id} ready on ${gateway.url()}`);
+      } else {
+        if (options.fusionkitDir === undefined) {
+          throw new Error(
+            `cloud panel model "${spec.id}" (${provider}) requires --fusionkit-dir or WARRANT_FUSIONKIT_DIR`
+          );
+        }
+        const started = await spawnCloudServer({
+          spec,
+          provider,
+          fusionkitDir: options.fusionkitDir,
+          env: cloudEnv,
+          log: options.log
+        });
+        children.push(started.child);
+        endpoints[spec.id] = started.url;
+      }
     }
   } catch (error) {
-    await Promise.allSettled(started.map(({ gateway }) => gateway.close()));
-    await Promise.allSettled(started.map(({ backend }) => backend.stop()));
+    await closeAll();
     throw error;
   }
 
-  const judge = models[0] as EnsembleModel;
   return {
     endpoints,
     judgeUrl: endpoints[judge.id] as string,
     judgeModel: judge.model,
     models,
-    close: async () => {
-      await Promise.allSettled(started.map(({ gateway }) => gateway.close()));
-      await Promise.allSettled(started.map(({ backend }) => backend.stop()));
-    }
+    close: closeAll
   };
 }
 
@@ -162,12 +320,20 @@ export type FusionStack = {
   close: () => Promise<void>;
 };
 
+/** The per-candidate harness: `agent` (trajectory fusion, default) or `command`. */
+export type FusionHarness = "agent" | "command";
+
 export type StartFusionStackOptions = {
   repo: string;
   outputRoot: string;
-  models: EnsembleModel[];
+  models: PanelModelSpec[];
   endpoints?: Record<string, string>;
+  fusionkitDir?: string;
+  harness?: FusionHarness;
   judgeModel?: string;
+  judgeUrl?: string;
+  /** Pre-running fusionkit serve URL for trajectory synthesis (skips spawn). */
+  synthesisUrl?: string;
   command?: string;
   host?: string;
   port?: number;
@@ -176,21 +342,93 @@ export type StartFusionStackOptions = {
   log: (line: string) => void;
 };
 
+/**
+ * Spawn a `fusionkit serve` as the trajectory-synthesis backend, configured
+ * with the judge model. FusionKit owns synthesis, so the agent harness fuses
+ * its trajectories through this server's `/v1/fusion/trajectories:fuse`.
+ */
+export async function startSynthesisServer(input: {
+  fusionkitDir: string;
+  judgeModel: string;
+  judgeBaseUrl: string;
+  env: Record<string, string | undefined>;
+  log: (line: string) => void;
+}): Promise<{ url: string; child: ChildProcess }> {
+  const port = await freePort();
+  const config = [
+    "endpoints:",
+    "  - id: judge",
+    "    provider: openai-compatible",
+    `    model: ${JSON.stringify(input.judgeModel)}`,
+    `    base_url: ${JSON.stringify(input.judgeBaseUrl)}`,
+    "    api_key: not-needed",
+    "default_model: judge",
+    "judge_model: judge",
+    "synthesizer_model: judge",
+    // Generous budget: reasoning models (gpt-5.x) spend tokens on reasoning
+    // before producing content, so a small cap can yield an empty answer.
+    "sampling: {temperature: 0.2, top_p: 0.9, max_tokens: 8192}",
+    ""
+  ].join("\n");
+  const configPath = join(mkdtempSync(join(tmpdir(), "fusion-synth-")), "synthesis.yaml");
+  writeFileSync(configPath, config);
+  input.log("fusion: starting synthesis backend (fusionkit serve)...");
+  const child = spawn(
+    "uv",
+    ["run", "fusionkit", "serve", "--config", configPath, "--host", "127.0.0.1", "--port", String(port)],
+    { cwd: input.fusionkitDir, env: input.env, stdio: ["ignore", "pipe", "pipe"] }
+  );
+  let log = "";
+  child.stdout?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
+  child.stderr?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
+  const url = `http://127.0.0.1:${port}`;
+  try {
+    await waitForEndpoint(url, "synthesis backend", child, 60_000);
+  } catch (error) {
+    child.kill("SIGTERM");
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${log.slice(-500)}`);
+  }
+  input.log(`fusion: synthesis backend ready on ${url}`);
+  return { child, url };
+}
+
 export async function startFusionStack(options: StartFusionStackOptions): Promise<FusionStack> {
+  const harness: FusionHarness = options.harness ?? "agent";
   const servers = await startModelServers({
-    models: options.models,
+    specs: options.models,
     ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
+    ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
     log: options.log
   });
+
+  let synthesisChild: ChildProcess | undefined;
+  let synthesisUrl = options.synthesisUrl ?? options.judgeUrl ?? servers.judgeUrl;
   try {
+    if (harness === "agent" && options.synthesisUrl === undefined) {
+      if (options.fusionkitDir === undefined) {
+        throw new Error("trajectory synthesis requires --fusionkit-dir or WARRANT_FUSIONKIT_DIR");
+      }
+      const cloudEnv: Record<string, string | undefined> = { ...process.env };
+      loadEnvFileInto(join(options.fusionkitDir, ".env"), cloudEnv);
+      const synthesis = await startSynthesisServer({
+        fusionkitDir: options.fusionkitDir,
+        judgeModel: options.judgeModel ?? servers.judgeModel,
+        judgeBaseUrl: servers.judgeUrl,
+        env: cloudEnv,
+        log: options.log
+      });
+      synthesisChild = synthesis.child;
+      synthesisUrl = synthesis.url;
+    }
+
     const gateway = await startConfiguredGateway({
       config: {
-        fusionBackendUrl: servers.judgeUrl,
+        fusionBackendUrl: synthesisUrl,
         repo: options.repo,
         outputRoot: options.outputRoot,
-        harnesses: ["command"],
+        harnesses: [harness],
         models: servers.models,
-        command: options.command ?? `node ${solveAgentPath()}`,
+        ...(harness === "command" ? { command: options.command ?? `node ${solveAgentPath()}` } : {}),
         judgeModel: options.judgeModel ?? servers.judgeModel,
         modelEndpoints: servers.endpoints,
         ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
@@ -204,10 +442,12 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       endpoints: servers.endpoints,
       close: async () => {
         await gateway.close();
+        if (synthesisChild !== undefined) synthesisChild.kill("SIGTERM");
         await servers.close();
       }
     };
   } catch (error) {
+    if (synthesisChild !== undefined) synthesisChild.kill("SIGTERM");
     await servers.close();
     throw error;
   }
@@ -276,11 +516,15 @@ export async function startCursorBridge(input: {
 }
 
 export type RunFusionOptions = {
-  models?: EnsembleModel[];
+  models?: PanelModelSpec[];
   endpoints?: Record<string, string>;
+  fusionkitDir?: string;
+  harness?: FusionHarness;
   repo?: string;
   command?: string;
   judgeModel?: string;
+  judgeEndpoint?: string;
+  synthesisUrl?: string;
   cursorKitDir?: string;
   authToken?: string;
   port?: number;
@@ -306,7 +550,11 @@ export async function runFusion(
     outputRoot: join(root, "runs"),
     models,
     ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
+    ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
+    ...(options.harness !== undefined ? { harness: options.harness } : {}),
     ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
+    ...(options.judgeEndpoint !== undefined ? { judgeUrl: options.judgeEndpoint } : {}),
+    ...(options.synthesisUrl !== undefined ? { synthesisUrl: options.synthesisUrl } : {}),
     ...(options.command !== undefined ? { command: options.command } : {}),
     ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
     ...(options.port !== undefined ? { port: options.port } : {}),

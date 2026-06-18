@@ -18,6 +18,7 @@
     "provenance": true
   },
   "dependencies": {
+    "@warrant/adapter-ai-sdk": "workspace:*",
     "@warrant/model-gateway": "workspace:*",
     "@warrant/protocol": "workspace:*",
     "@warrant/runner": "workspace:*",

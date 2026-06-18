@@ -73,7 +73,7 @@ import type { GatewayRunnerConfig } from "./gateway.js";
 import { LOCAL_TOOLS, runLocal } from "./local.js";
 import type { LocalTool } from "./local.js";
 import { FUSION_TOOLS, pickTool, runFusion } from "./fusion-quickstart.js";
-import type { FusionTool, RunFusionOptions } from "./fusion-quickstart.js";
+import type { FusionTool, PanelModelSpec, PanelProvider, RunFusionOptions } from "./fusion-quickstart.js";
 import {
   renderDisclosure,
   renderReceipt,
@@ -130,13 +130,20 @@ usage:
       (model backend via WARRANT_LOCAL_MODEL_URL / WARRANT_MLX_MODEL; mlx by default)
   warrant fusion [tool] [args...]                one command: real model fusion backs a coding agent
       tool: codex | claude | cursor | serve   (omit on a TTY to pick interactively)
-      --model ID=MODEL    panel model (repeatable; default: real local Qwen+Gemma+Llama trio)
-      --judge-model MODEL model used for judge synthesis
-      --repo DIR          coding workspace (default: a bundled real sample repo)
-      --command CMD       per-candidate solve command (default: shipped model-backed solve agent)
-      --cursor-kit-dir D  built Cursorkit checkout for the cursor tool (or WARRANT_CURSORKIT_DIR)
-      --auth-token TOKEN  require a bearer token on the gateway
-      --port N            gateway port (default: ephemeral)
+      --model ID=MODEL        local panel model (repeatable; default: Qwen+Gemma+Llama trio)
+      --model ID=PROVIDER:MODEL  cloud panel model, e.g. gpt=openai:gpt-5.5, opus=anthropic:claude-opus-4-8
+      --key-env ID=ENV        env var holding that model's API key (default: OPENAI_API_KEY / ANTHROPIC_API_KEY)
+      --harness agent|command per-candidate harness (default: agent = trajectory fusion)
+      --fusionkit-dir DIR     FusionKit checkout (fronts cloud models + runs trajectory synthesis; or WARRANT_FUSIONKIT_DIR)
+      --synthesis-url URL     pre-running fusionkit serve for synthesis (skips auto-spawn)
+      --model-endpoint ID=URL pre-running OpenAI-compatible endpoint for a panel model (repeatable)
+      --judge-model MODEL     model used for judge synthesis
+      --judge-endpoint URL    OpenAI-compatible endpoint for judge synthesis
+      --repo DIR              coding workspace (default: a bundled real sample repo)
+      --command CMD           per-candidate solve command (default: shipped model-backed solve agent)
+      --cursor-kit-dir DIR    built Cursorkit checkout for the cursor tool (or WARRANT_CURSORKIT_DIR)
+      --auth-token TOKEN      require a bearer token on the gateway
+      --port N                gateway port (default: ephemeral)
   warrant ensemble run [opts] "task"             run local ensemble smoke
       --harness mock|command  harness to run (default: mock)
       --command CMD           shell command for command harness
@@ -435,13 +442,14 @@ function unifiedHarnessKinds(values: EnsembleE2EFlags): UnifiedHarnessKind[] {
     switch (target) {
       case "mock":
       case "command":
+      case "agent":
       case "codex":
       case "claude-code":
       case "cursor-acp":
       case "cursor-desktop":
         return target;
       default:
-        fail(`--harness must be mock, command, codex, claude-code, cursor-acp, or cursor-desktop; got "${target}"`);
+        fail(`--harness must be mock, command, agent, codex, claude-code, cursor-acp, or cursor-desktop; got "${target}"`);
     }
   });
 }
@@ -959,17 +967,35 @@ function parseFusionTool(value: string | undefined): FusionTool {
   return value as FusionTool;
 }
 
-function parseModelSpec(spec: string): EnsembleModel {
+const PANEL_PROVIDERS: readonly PanelProvider[] = ["mlx", "openai", "anthropic", "google", "openai-compatible"];
+
+function parseIdValue(flag: string, spec: string): { id: string; value: string } {
   const separator = spec.indexOf("=");
-  if (separator <= 0 || separator === spec.length - 1) {
-    fail(`--model must be ID=MODEL, got "${spec}"`);
+  if (separator <= 0 || separator === spec.length - 1) fail(`${flag} must be ID=VALUE, got "${spec}"`);
+  return { id: spec.slice(0, separator), value: spec.slice(separator + 1) };
+}
+
+/** Parse `id=provider:model` (or `id=model`, defaulting to the local mlx provider). */
+function parsePanelModelSpec(spec: string, keyEnvs: Record<string, string>): PanelModelSpec {
+  const { id, value } = parseIdValue("--model", spec);
+  const colon = value.indexOf(":");
+  let provider: PanelProvider = "mlx";
+  let model = value;
+  if (colon > 0) {
+    const maybe = value.slice(0, colon);
+    if ((PANEL_PROVIDERS as readonly string[]).includes(maybe)) {
+      provider = maybe as PanelProvider;
+      model = value.slice(colon + 1);
+    }
   }
-  return { id: spec.slice(0, separator), model: spec.slice(separator + 1) };
+  return { id, model, provider, ...(keyEnvs[id] !== undefined ? { keyEnv: keyEnvs[id] } : {}) };
 }
 
 async function cmdFusion(argv: string[]): Promise<void> {
   const options: RunFusionOptions = {};
   const modelSpecs: string[] = [];
+  const endpointSpecs: string[] = [];
+  const keyEnvs: Record<string, string> = {};
   const toolArgs: string[] = [];
   let tool: FusionTool | undefined;
   const next = (i: number): string => {
@@ -981,7 +1007,18 @@ async function cmdFusion(argv: string[]): Promise<void> {
     const token = argv[i] as string;
     if (token === "--tool") tool = parseFusionTool(next(++i));
     else if (token === "--model" || token === "--models") modelSpecs.push(next(++i));
-    else if (token === "--judge-model") options.judgeModel = next(++i);
+    else if (token === "--model-endpoint") endpointSpecs.push(next(++i));
+    else if (token === "--key-env") {
+      const { id, value } = parseIdValue("--key-env", next(++i));
+      keyEnvs[id] = value;
+    }     else if (token === "--judge-model") options.judgeModel = next(++i);
+    else if (token === "--judge-endpoint") options.judgeEndpoint = next(++i);
+    else if (token === "--synthesis-url") options.synthesisUrl = next(++i);
+    else if (token === "--harness") {
+      const value = next(++i);
+      if (value !== "agent" && value !== "command") fail('--harness must be "agent" or "command"');
+      options.harness = value;
+    } else if (token === "--fusionkit-dir") options.fusionkitDir = resolve(next(++i));
     else if (token === "--repo") options.repo = resolve(next(++i));
     else if (token === "--command") options.command = next(++i);
     else if (token === "--cursor-kit-dir") options.cursorKitDir = resolve(next(++i));
@@ -996,7 +1033,20 @@ async function cmdFusion(argv: string[]): Promise<void> {
       toolArgs.push(token);
     }
   }
-  if (modelSpecs.length > 0) options.models = modelSpecs.map(parseModelSpec);
+  if (options.fusionkitDir === undefined && process.env.WARRANT_FUSIONKIT_DIR !== undefined) {
+    options.fusionkitDir = resolve(process.env.WARRANT_FUSIONKIT_DIR);
+  }
+  if (modelSpecs.length > 0) options.models = modelSpecs.map((spec) => parsePanelModelSpec(spec, keyEnvs));
+  if (endpointSpecs.length > 0) {
+    const endpoints: Record<string, string> = {};
+    for (const spec of endpointSpecs) {
+      const { id, value } = parseIdValue("--model-endpoint", spec);
+      endpoints[id] = value;
+    }
+    options.endpoints = endpoints;
+    // Pre-running endpoints define the panel; ignore any --model specs.
+    options.models = Object.keys(endpoints).map((id) => ({ id, model: id, provider: "openai-compatible" }));
+  }
   const resolvedTool = tool ?? (process.stdin.isTTY ? await pickTool() : "codex");
   const code = await runFusion(resolvedTool, toolArgs, options);
   process.exit(code);

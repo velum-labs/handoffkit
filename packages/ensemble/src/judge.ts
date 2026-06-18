@@ -5,6 +5,7 @@ import type {
   HarnessArtifact,
   HarnessCandidateOutput,
   HarnessToolRecord,
+  HarnessTrajectory,
   ReviewEvidence
 } from "./harness.js";
 
@@ -15,6 +16,7 @@ export type JudgeCandidateEvidence = {
   status: ModelFusionStatus;
   artifacts: readonly HarnessArtifact[];
   verification?: HarnessCandidateOutput["verification"];
+  trajectory?: HarnessTrajectory;
 };
 
 export type JudgeInput = {

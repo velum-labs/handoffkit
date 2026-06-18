@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import type { JsonValue, ModelFusionStatus } from "@warrant/protocol";
 import { gitText } from "@warrant/workspace";
 
+import { createAgentHarness } from "./agent.js";
 import { claudeCodeHarness } from "./claude-code.js";
 import { createCommandHarness } from "./command.js";
 import { codexHarness } from "./codex.js";
@@ -15,7 +16,8 @@ import type {
   EnsembleModel,
   EnsembleRunResult,
   HarnessAdapter,
-  HarnessArtifact
+  HarnessArtifact,
+  HarnessTrajectory
 } from "./harness.js";
 import type {
   JudgeInput,
@@ -26,6 +28,7 @@ import type {
 export type UnifiedHarnessKind =
   | "mock"
   | "command"
+  | "agent"
   | "codex"
   | "claude-code"
   | "cursor-acp"
@@ -107,6 +110,8 @@ function sideEffectsForHarness(kind: UnifiedHarnessKind): EnsembleDescriptor["po
       return "read_only";
     case "command":
       return "tool_execution";
+    case "agent":
+      return "writes_workspace";
     case "codex":
     case "claude-code":
     case "cursor-acp":
@@ -123,6 +128,13 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
   switch (kind) {
     case "mock":
       return createMockHarness();
+    case "agent":
+      return createAgentHarness({
+        modelEndpoints: options.modelEndpoints ?? {},
+        fallbackBaseUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
+        ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+      });
     case "command": {
       if (!options.command) {
         throw new Error("--command is required for the command unified harness");
@@ -168,6 +180,11 @@ function responseShapeFor(kind: UnifiedHarnessKind): string {
     case "mock":
     case "command":
       return "Return a concise markdown summary and include any final patch guidance.";
+    case "agent":
+      return (
+        "Respond to the user in the natural shape the request calls for: a direct answer, " +
+        "a plan, or the concrete code change. Reply in first person as the assistant."
+      );
     case "codex":
       return "Return a Codex-style result summary with patch and verification evidence.";
     case "claude-code":
@@ -182,14 +199,77 @@ function responseShapeFor(kind: UnifiedHarnessKind): string {
   }
 }
 
+function trajectoryFuseUrl(baseUrl: string): string {
+  return `${normalizeFusionBackendUrl(baseUrl)}/v1/fusion/trajectories:fuse`;
+}
+
+function trajectoryToWire(trajectory: HarnessTrajectory): Record<string, unknown> {
+  return {
+    trajectory_id: trajectory.trajectoryId,
+    model_id: trajectory.modelId,
+    status: trajectory.status,
+    steps: trajectory.steps,
+    final_output: trajectory.finalOutput,
+    ...(trajectory.candidateId !== undefined ? { candidate_id: trajectory.candidateId } : {}),
+    ...(trajectory.model !== undefined ? { model: trajectory.model } : {}),
+    ...(trajectory.harnessKind !== undefined ? { harness_kind: trajectory.harnessKind } : {}),
+    ...(trajectory.diff !== undefined && trajectory.diff.length > 0 ? { diff: trajectory.diff } : {}),
+    ...(trajectory.verification !== undefined
+      ? {
+          verification: {
+            status: trajectory.verification.status,
+            evidence: trajectory.verification.evidence,
+            ...(trajectory.verification.exitCode !== undefined
+              ? { exit_code: trajectory.verification.exitCode }
+              : {})
+          }
+        }
+      : {})
+  };
+}
+
 export function createFusionKitJudgeSynthesizer(input: {
   fusionBackendUrl: string;
   model: string;
   apiKey?: string;
   responseShape: string;
 }): JudgeSynthesizer {
+  const authHeaders: Record<string, string> = input.apiKey
+    ? { authorization: `Bearer ${input.apiKey}` }
+    : {};
   return {
     async synthesize(judgeInput: JudgeInput): Promise<JudgeSynthesisOutput> {
+      // Trajectory-level fusion: when candidates carry agent trajectories, fuse
+      // them through FusionKit's trajectory-aware, intent-agnostic synthesizer,
+      // which returns the answer in the request's native shape and first person.
+      const trajectories = judgeInput.candidates
+        .map((candidate) => candidate.trajectory)
+        .filter((trajectory): trajectory is HarnessTrajectory => trajectory !== undefined);
+      if (trajectories.length > 0) {
+        const fuseResponse = await fetch(trajectoryFuseUrl(input.fusionBackendUrl), {
+          method: "POST",
+          headers: { "content-type": "application/json", ...authHeaders },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: judgeInput.descriptor.prompt }],
+            trajectories: trajectories.map(trajectoryToWire)
+          })
+        });
+        if (!fuseResponse.ok) {
+          throw new Error(
+            `FusionKit trajectory fusion failed: ${fuseResponse.status} ${(await fuseResponse.text()).slice(0, 500)}`
+          );
+        }
+        const fused = (await fuseResponse.json()) as { final_output?: string; rationale?: string };
+        return {
+          decision: "synthesize",
+          finalOutput: fused.final_output ?? "",
+          rationale: fused.rationale ?? "FusionKit trajectory fusion",
+          contributions: trajectories.map((trajectory) => ({
+            candidateId: trajectory.candidateId ?? trajectory.trajectoryId,
+            reason: `fused ${trajectory.status} trajectory`
+          }))
+        };
+      }
       const response = await fetch(chatCompletionsUrl(input.fusionBackendUrl), {
         method: "POST",
         headers: {

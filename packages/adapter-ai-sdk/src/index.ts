@@ -37,6 +37,13 @@ export { handoffModel, withModel } from "./model.js";
 export type { EscalationReason, HandoffModelConfig } from "./model.js";
 export { loadRouterCard, routedModel, withRoutedModel } from "./routed-model.js";
 export type { RouteDecision, RoutedModelConfig, RouterCard } from "./routed-model.js";
+export { runWorktreeAgent, worktreeDiff } from "./worktree-agent.js";
+export type {
+  TrajectoryStep,
+  TrajectoryStepType,
+  WorktreeAgentInput,
+  WorktreeAgentResult
+} from "./worktree-agent.js";
 export { defaultMlxDir, MlxCapabilityError, MlxEnv } from "./mlx-env.js";
 export { managedModelServer, mlxServer } from "./managed-server.js";
 export type {

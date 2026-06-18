@@ -22,15 +22,34 @@ Omit the tool on a TTY to pick interactively. In one command it:
 
 1. starts a real local MLX panel (the cached `Qwen3-1.7B` + `Gemma-3-1B` +
    `Llama-3.2-1B` trio by default),
-2. starts the Fusion Harness Gateway over a real, model-backed coding harness
-   (each panel model produces a real candidate patch in its own git worktree on
-   a real repo) with real judge synthesis,
-3. launches the chosen agent pre-wired to the gateway.
+2. starts the Fusion Harness Gateway running the **agent harness** (each panel
+   model drives a real tool loop — read/list/grep/write/run — in its own git
+   worktree, producing a full **trajectory**),
+3. auto-spawns a `fusionkit serve` that fuses the trajectories
+   (`/v1/fusion/trajectories:fuse`) into one answer,
+4. launches the chosen agent pre-wired to the gateway.
 
-One Ctrl+C tears the whole stack (trio + gateway + any Cursorkit bridge) down.
+One Ctrl+C tears the whole stack (panel + synthesis + gateway + any Cursorkit
+bridge) down.
 
-Each prompt is treated as a coding task against a repo. By default it
-materializes a real sample repo with a failing test; point it at your own with
+### Trajectory-level fusion
+
+Fusion operates on **trajectories**, not one-shot patches. Each panel model runs
+the same uniform agent over the repo and produces a `harness-trajectory.v1`
+(reasoning + tool calls + observations + final output + verification). FusionKit's
+trajectory-aware, intent-agnostic synthesizer then produces the final response in
+the request's natural shape and **first person**:
+
+- a question (`"what's in this repo?"`) gets a direct answer,
+- a planning request gets a plan,
+- a code change gets the concrete edit (with tests run as verification),
+
+so every way you use the tool works — not just patch-shaped requests. The synthesis
+backend requires a FusionKit checkout (`--fusionkit-dir` / `WARRANT_FUSIONKIT_DIR`),
+which `warrant fusion` runs for you; pass `--synthesis-url` to reuse an already-running
+`fusionkit serve`, or `--harness command` for the legacy one-shot solve agent.
+
+By default it materializes a real sample repo; point it at your own with
 `--repo`. Useful flags:
 
 ```bash
@@ -39,6 +58,40 @@ warrant fusion cursor --cursor-kit-dir /path/to/cursorkit   # or WARRANT_CURSORK
 warrant fusion codex --model a=mlx-community/Qwen3-1.7B-4bit --model b=...   # custom panel
 warrant fusion serve                                        # just run the gateway + print setup
 ```
+
+### Cloud / SOTA panel
+
+The panel is not limited to local models. A `--model` spec can name a cloud
+provider as `ID=PROVIDER:MODEL`, and FusionKit fronts it as an OpenAI-compatible
+endpoint (so OpenAI, Anthropic, and Google all work through the same
+per-candidate coding harness):
+
+```bash
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+warrant fusion codex \
+  --fusionkit-dir /path/to/fusionkit \
+  --model gpt=openai:gpt-5.5 \
+  --model opus=anthropic:claude-opus-4-8 \
+  --judge-model gpt-5.5
+```
+
+- Cloud models require `--fusionkit-dir` (or `WARRANT_FUSIONKIT_DIR`): each cloud
+  candidate is served by FusionKit's `scripts/simple_openai_server.py`, which
+  uses FusionKit's provider clients. Keys come from `OPENAI_API_KEY` /
+  `ANTHROPIC_API_KEY` (override per model with `--key-env ID=ENV`).
+- Keys load seamlessly: the FusionKit checkout's `.env` is read automatically and
+  injected into the cloud server processes (already-exported env vars win), so a
+  `.env` with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` in the FusionKit dir means
+  you never pass keys on the command line. Secrets stay in FusionKit's `.env`;
+  nothing is copied into this repo.
+- You can mix local and cloud (e.g. `--model local=mlx:...:` alongside cloud).
+- For an already-running OpenAI-compatible server, skip provisioning entirely
+  with `--model-endpoint ID=URL` (repeatable) and `--judge-endpoint URL`.
+
+With SOTA models the coding-harness output becomes genuinely good, and you get
+real cross-vendor diversity (a frontier OpenAI model and a frontier Anthropic
+model, judged).
 
 Notes:
 
