@@ -10,12 +10,14 @@ import { stepColor } from "@/lib/format";
 import type { CandidateView, TrajectoryStepView } from "@/lib/sessions";
 import { cn } from "@/lib/utils";
 
-function StepRow({ step }: { step: TrajectoryStepView }) {
+function StepRow({ step, isLast }: { step: TrajectoryStepView; isLast: boolean }) {
   const color = stepColor(step.type);
   return (
     <div className="relative pl-5">
       <span className="absolute top-1.5 left-0 size-2 rounded-full" style={{ background: color }} />
-      <span className="absolute top-3.5 bottom-0 left-[3.5px] w-px bg-border" />
+      {isLast ? null : (
+        <span className="absolute top-3.5 bottom-0 left-[3.5px] w-px bg-border" />
+      )}
       <div className="flex items-center gap-2 pb-1">
         <span className="text-xs font-medium capitalize" style={{ color }}>
           {step.type.replace(/_/g, " ")}
@@ -71,10 +73,14 @@ function CandidatePanel({ candidate }: { candidate: CandidateView }) {
       {candidate.steps.length === 0 ? (
         <p className="text-muted-foreground text-sm">No trajectory steps captured yet.</p>
       ) : (
-        <ScrollArea className="max-h-[460px] pr-3">
+        <ScrollArea viewportClassName="max-h-[460px] pr-3">
           <div className="space-y-0">
             {candidate.steps.map((step, index) => (
-              <StepRow key={`${step.index}-${index}`} step={step} />
+              <StepRow
+                key={`${step.index}-${index}`}
+                step={step}
+                isLast={index === candidate.steps.length - 1}
+              />
             ))}
           </div>
         </ScrollArea>

@@ -99,7 +99,7 @@ export function JudgeViewPanel({ judge }: { judge: JudgeView }) {
                   ) : null}
                   <UsageChip usage={judge.thinking.usage} />
                 </div>
-                <ScrollArea className="max-h-[440px] pr-3">
+                <ScrollArea viewportClassName="max-h-[440px] pr-3">
                   <pre className="mono text-xs leading-relaxed">{judge.thinking.raw}</pre>
                 </ScrollArea>
               </>
@@ -154,7 +154,7 @@ export function JudgeViewPanel({ judge }: { judge: JudgeView }) {
                   ) : null}
                   <UsageChip usage={judge.synthesis.usage} />
                 </div>
-                <ScrollArea className="max-h-[440px] pr-3">
+                <ScrollArea viewportClassName="max-h-[440px] pr-3">
                   <pre className="mono text-xs leading-relaxed">{judge.synthesis.raw}</pre>
                 </ScrollArea>
               </>

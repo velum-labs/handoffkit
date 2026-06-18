@@ -27,8 +27,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={cn("dark", geist.variable, geistMono.variable)}>
       <body className="antialiased">
         <TooltipProvider delayDuration={200}>
-          <div className="flex min-h-screen">
-            <aside className="bg-sidebar text-sidebar-foreground flex w-60 shrink-0 flex-col border-r p-5">
+          <div className="flex h-screen overflow-hidden">
+            <aside className="bg-sidebar text-sidebar-foreground flex w-60 shrink-0 flex-col overflow-y-auto border-r p-5">
               <div className="flex items-center gap-2">
                 <span className="bg-primary inline-block size-2.5 rounded-full" />
                 <div>
@@ -52,7 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Tails the fusion-trace event spine across FusionKit, HandoffKit, and Cursorkit.
               </div>
             </aside>
-            <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
+            <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
           </div>
         </TooltipProvider>
       </body>

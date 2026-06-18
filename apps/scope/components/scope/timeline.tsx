@@ -21,7 +21,7 @@ export function Timeline({
         <CardTitle className="text-base">Timeline</CardTitle>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="max-h-[440px] pr-3">
+        <ScrollArea viewportClassName="max-h-[440px] pr-3">
           <div className="space-y-1">
             {events.map((event) => {
               const offset = Math.max(0, event.ts - startedAt);
