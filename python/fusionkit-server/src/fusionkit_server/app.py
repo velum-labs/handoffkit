@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import json
+import re
 import time
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fusionkit_core.artifacts import LocalArtifactStore
-from fusionkit_core.clients import ChatClient, LocalModelClient
+from fusionkit_core.clients import ChatClient, build_clients
 from fusionkit_core.config import FusionConfig, FusionMode
 from fusionkit_core.contracts import FusionRunRequestV1, contract_metadata
 from fusionkit_core.fusion import FusionEngine
@@ -63,10 +66,7 @@ def create_app(
     run_store_path: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="fusionkit", version="0.1.0")
-    model_clients = clients or {
-        endpoint.id: LocalModelClient(endpoint)
-        for endpoint in config.endpoints
-    }
+    model_clients = clients or build_clients(config)
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
 
@@ -142,35 +142,80 @@ def create_app(
         return _json_response(result.model_dump(mode="json"))
 
     @app.post("/v1/chat/completions", response_model=None)
-    async def chat_completions(request: FusionRequest) -> dict[str, Any] | JSONResponse:
+    async def chat_completions(
+        request: FusionRequest,
+    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
+        resolved = await _resolve_native_chat(native_runs, request, config)
+        if isinstance(resolved, JSONResponse):
+            return resolved
+        final_output, metadata = resolved
         if request.stream:
-            return _openai_error_response(
-                "unsupported_streaming",
-                "Streaming is not implemented yet.",
-                status_code=400,
+            return StreamingResponse(
+                _chat_completion_sse(request.model, final_output, metadata),
+                media_type="text/event-stream",
             )
-
-        run_request = _fusion_request_to_run_request(request, config)
-        result = await native_runs.create_and_run(run_request)
-        if isinstance(result, CreateRunResult):
-            if result.idempotency_outcome == "conflict":
-                return _openai_native_error_response(result.terminal_error, status_code=409)
-            if result.run_id is None:
-                return _openai_error_response(
-                    "run_not_available",
-                    "Native run did not return a run id.",
-                    status_code=500,
-                )
-            result = native_runs.store.inspect_run(result.run_id)
-        if result.state != "completed" or result.final_output is None:
-            return _openai_native_error_response(result.terminal_error, status_code=500)
-        return _openai_chat_response(
-            request.model,
-            result.final_output,
-            _chat_fusion_metadata(result),
-        )
+        return _openai_chat_response(request.model, final_output, metadata)
 
     return app
+
+
+async def _resolve_native_chat(
+    native_runs: FusionRunManager,
+    request: FusionRequest,
+    config: FusionConfig,
+) -> tuple[str, dict[str, Any]] | JSONResponse:
+    run_request = _fusion_request_to_run_request(request, config)
+    result = await native_runs.create_and_run(run_request)
+    if isinstance(result, CreateRunResult):
+        if result.idempotency_outcome == "conflict":
+            return _openai_native_error_response(result.terminal_error, status_code=409)
+        if result.run_id is None:
+            return _openai_error_response(
+                "run_not_available",
+                "Native run did not return a run id.",
+                status_code=500,
+            )
+        result = native_runs.store.inspect_run(result.run_id)
+    if result.state != "completed" or result.final_output is None:
+        return _openai_native_error_response(result.terminal_error, status_code=500)
+    return result.final_output, _chat_fusion_metadata(result)
+
+
+async def _chat_completion_sse(
+    model: str,
+    content: str,
+    metadata: dict[str, Any],
+) -> AsyncIterator[str]:
+    completion_id = f"chatcmpl-{uuid.uuid4()}"
+    created = int(time.time())
+
+    def chunk(delta: dict[str, Any], finish_reason: str | None) -> str:
+        payload: dict[str, Any] = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [
+                {"index": 0, "delta": delta, "finish_reason": finish_reason},
+            ],
+        }
+        if finish_reason is not None:
+            payload["fusionkit"] = metadata
+        return f"data: {json.dumps(payload)}\n\n"
+
+    yield chunk({"role": "assistant"}, None)
+    for piece in _stream_pieces(content):
+        yield chunk({"content": piece}, None)
+    yield chunk({}, "stop")
+    yield "data: [DONE]\n\n"
+
+
+def _stream_pieces(content: str) -> list[str]:
+    if not content:
+        return []
+    # Split into tokens that retain their trailing whitespace so the
+    # concatenation of all pieces reproduces the original content exactly.
+    return [token for token in re.findall(r"\S+\s*|\s+", content) if token]
 
 
 def _create_run_manager(
@@ -216,7 +261,10 @@ def _fusion_request_to_run_request(
         **contract_metadata("fusion-run-request.v1"),
         "request_id": make_id("chat_request"),
         "mode": _mode_from_request(request),
-        "messages": [message.model_dump(mode="json") for message in request.messages],
+        "messages": [
+            message.model_dump(mode="json", include={"role", "content"})
+            for message in request.messages
+        ],
         "sampling": sampling.model_dump(mode="json"),
         "sample_count": request.fusion.sample_count,
         "verify": request.fusion.verify,

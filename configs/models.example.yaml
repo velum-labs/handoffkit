@@ -49,7 +49,7 @@ endpoints:
     tags: [cloud, example]
   - id: anthropic-example
     provider: anthropic
-    model: claude-sonnet-example
+    model: claude-sonnet-4-5
     base_url: https://api.anthropic.com
     api_key_env: ANTHROPIC_API_KEY
     max_context: 200000
@@ -64,7 +64,7 @@ endpoints:
     tags: [cloud, example]
   - id: google-example
     provider: google
-    model: gemini-example
+    model: gemini-2.5-flash
     base_url: https://generativelanguage.googleapis.com
     api_key_env: GOOGLE_API_KEY
     max_context: 1000000

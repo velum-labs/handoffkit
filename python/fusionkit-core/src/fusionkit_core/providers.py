@@ -99,9 +99,13 @@ def provider_metadata(
 
 
 def _api_compatibility(endpoint: ModelEndpoint) -> str:
+    # The model_endpoint.v1 contract enum only allows openai-chat-completions,
+    # openai-responses, mlx-lm-server and custom. Native Anthropic/Google
+    # providers therefore map to "custom" until the versioned contract grows
+    # dedicated wire-format values.
     if endpoint.provider == "mlx-lm":
         return "mlx-lm-server"
-    if endpoint.provider == "openai-compatible":
+    if endpoint.provider in ("openai", "openai-compatible"):
         return "openai-chat-completions"
     return "custom"
 

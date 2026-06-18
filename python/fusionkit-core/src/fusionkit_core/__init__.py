@@ -1,5 +1,13 @@
 from fusionkit_core.artifacts import LocalArtifactStore, hash_bytes, hash_text
-from fusionkit_core.clients import FakeModelClient, LocalModelClient
+from fusionkit_core.clients import (
+    AnthropicModelClient,
+    FakeModelClient,
+    GoogleModelClient,
+    LocalModelClient,
+    OpenAICompatibleClient,
+    build_client,
+    build_clients,
+)
 from fusionkit_core.config import (
     CostMetadata,
     EndpointCapabilities,
@@ -63,9 +71,17 @@ from fusionkit_core.run import (
     make_id,
 )
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.types import Candidate, ChatMessage, ModelResponse, Usage
+from fusionkit_core.types import (
+    Candidate,
+    ChatMessage,
+    ModelResponse,
+    StreamChunk,
+    ToolCall,
+    Usage,
+)
 
 __all__ = [
+    "AnthropicModelClient",
     "ArtifactRefV1",
     "BenchmarkTaskRecordV1",
     "Candidate",
@@ -88,6 +104,7 @@ __all__ = [
     "FusionRecordV1",
     "FusionRunRequestV1",
     "FusionRunState",
+    "GoogleModelClient",
     "HarnessCandidateRecordV1",
     "HarnessRunResultV1",
     "HeuristicRouter",
@@ -102,12 +119,15 @@ __all__ = [
     "ModelEndpointV1",
     "ModelResponse",
     "NativeRunError",
+    "OpenAICompatibleClient",
     "ProviderKind",
     "RunEventPage",
     "RunInspection",
     "RunBudget",
     "RunStateSummary",
     "SamplingConfig",
+    "StreamChunk",
+    "ToolCall",
     "ToolExecutionMode",
     "ToolExecutionPolicy",
     "ToolPausePlaceholder",
@@ -115,6 +135,8 @@ __all__ = [
     "ToolCallPlanV1",
     "ToolExecutionRecordV1",
     "Usage",
+    "build_client",
+    "build_clients",
     "canonical_json",
     "contract_metadata",
     "contract_model_for_schema",

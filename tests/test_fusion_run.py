@@ -171,7 +171,9 @@ def _request(mode: str, request_id: str) -> FusionRunRequestV1:
             "request_id": request_id,
             "mode": mode,
             "messages": [
-                ChatMessage(role="user", content="Explain model fusion").model_dump(mode="json")
+                ChatMessage(role="user", content="Explain model fusion").model_dump(
+                    mode="json", include={"role", "content"}
+                )
             ],
             "sampling": {},
             "verify": False,

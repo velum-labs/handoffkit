@@ -8,6 +8,7 @@ from fusionkit_core.config import (
     EndpointCapabilities,
     FusionConfig,
     ModelEndpoint,
+    ProviderKind,
     RunBudget,
 )
 from fusionkit_core.contracts import FusionRunRequestV1, contract_metadata
@@ -58,6 +59,22 @@ def test_provider_config_supports_required_families(monkeypatch) -> None:
         "custom",
     ]
     assert resolve_api_key(config.endpoint_for("secret")) == "synthetic-openai-key"
+
+
+def test_api_compatibility_maps_providers_within_contract_enum() -> None:
+    def compatibility(provider: ProviderKind) -> str:
+        endpoint = ModelEndpoint(
+            id=provider, provider=provider, model="m", base_url="https://example.test"
+        )
+        return endpoint_to_contract(endpoint).api_compatibility
+
+    assert compatibility("openai") == "openai-chat-completions"
+    assert compatibility("openai-compatible") == "openai-chat-completions"
+    assert compatibility("mlx-lm") == "mlx-lm-server"
+    # The model_endpoint.v1 enum has no native cloud value, so Anthropic and
+    # Google map to the generic "custom" wire format.
+    assert compatibility("anthropic") == "custom"
+    assert compatibility("google") == "custom"
 
 
 def test_endpoint_metadata_converts_to_contract_capabilities() -> None:

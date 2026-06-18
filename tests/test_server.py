@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint
@@ -56,8 +58,12 @@ def test_models_endpoint_remains_openai_compatible(tmp_path) -> None:
     assert {"id": "fusionkit/router", "object": "model"} in body["data"]
 
 
-def test_chat_completions_streaming_returns_openai_error(tmp_path) -> None:
-    app = create_app(_config(), run_store_path=tmp_path / "runs")
+def test_chat_completions_streaming_returns_sse_chunks(tmp_path) -> None:
+    app = create_app(
+        _config(default_mode="single"),
+        clients={"fast": FakeModelClient("fast", ["hello from fused stream"])},
+        run_store_path=tmp_path / "runs",
+    )
     client = TestClient(app)
 
     response = client.post(
@@ -69,10 +75,24 @@ def test_chat_completions_streaming_returns_openai_error(tmp_path) -> None:
         },
     )
 
-    assert response.status_code == 400
-    body = response.json()
-    assert body["error"]["code"] == "unsupported_streaming"
-    assert not [path for path in (tmp_path / "runs").iterdir() if path.name != "_idempotency"]
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    body = response.text
+    assert "chat.completion.chunk" in body
+    assert body.rstrip().endswith("data: [DONE]")
+
+    streamed_content = ""
+    final_finish_reason = None
+    for line in body.splitlines():
+        if not line.startswith("data: ") or line == "data: [DONE]":
+            continue
+        chunk = json.loads(line[len("data: ") :])
+        delta = chunk["choices"][0]["delta"]
+        streamed_content += delta.get("content", "")
+        if chunk["choices"][0]["finish_reason"] is not None:
+            final_finish_reason = chunk["choices"][0]["finish_reason"]
+    assert streamed_content
+    assert final_finish_reason == "stop"
 
 
 def test_chat_completions_rejects_invalid_fusion_mode(tmp_path) -> None:

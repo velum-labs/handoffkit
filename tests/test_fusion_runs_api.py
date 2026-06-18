@@ -135,7 +135,9 @@ def _request_payload(request_id: str, mode: str = "panel") -> dict:
             "request_id": request_id,
             "mode": mode,
             "messages": [
-                ChatMessage(role="user", content="Explain model fusion").model_dump(mode="json")
+                ChatMessage(role="user", content="Explain model fusion").model_dump(
+                    mode="json", include={"role", "content"}
+                )
             ],
             "sampling": {},
             "verify": False,

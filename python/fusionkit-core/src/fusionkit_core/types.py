@@ -7,9 +7,18 @@ from pydantic import BaseModel, Field
 ChatRole = Literal["system", "user", "assistant", "tool"]
 
 
+class ToolCall(BaseModel):
+    id: str
+    name: str
+    arguments: str = "{}"
+
+
 class ChatMessage(BaseModel):
     role: ChatRole
-    content: str
+    content: str = ""
+    name: str | None = None
+    tool_call_id: str | None = None
+    tool_calls: list[ToolCall] | None = None
 
 
 class Usage(BaseModel):
@@ -31,7 +40,15 @@ class ModelResponse(BaseModel):
     finish_reason: str | None = None
     usage: Usage = Field(default_factory=Usage)
     latency_s: float = 0.0
+    tool_calls: list[ToolCall] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class StreamChunk(BaseModel):
+    delta: str = ""
+    tool_call_delta: ToolCall | None = None
+    finish_reason: str | None = None
+    usage: Usage | None = None
 
 
 class Candidate(BaseModel):

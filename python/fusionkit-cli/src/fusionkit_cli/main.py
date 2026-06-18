@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 import uvicorn
-from fusionkit_core.clients import LocalModelClient
+from fusionkit_core.clients import build_clients
 from fusionkit_core.config import FusionMode, load_config
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
@@ -56,10 +56,7 @@ def eval(
     config_id: str = "local",
 ) -> None:
     fusion_config = load_config(config)
-    clients = {
-        endpoint.id: LocalModelClient(endpoint)
-        for endpoint in fusion_config.endpoints
-    }
+    clients = build_clients(fusion_config)
     engine = FusionEngine(config=fusion_config, clients=clients)
     runner = BenchmarkRunner(engine)
     results = asyncio.run(runner.run_samples(load_jsonl_samples(samples), config_id, mode))
@@ -85,10 +82,7 @@ def tiny_bench(
     config_id: str = "local",
 ) -> None:
     fusion_config = load_config(config)
-    clients = {
-        endpoint.id: LocalModelClient(endpoint)
-        for endpoint in fusion_config.endpoints
-    }
+    clients = build_clients(fusion_config)
     engine = FusionEngine(config=fusion_config, clients=clients)
     results = asyncio.run(
         run_tiny_benchmark(
@@ -137,10 +131,7 @@ def fusion_bench(
     config_id: str = "local",
 ) -> None:
     fusion_config = load_config(config)
-    clients = {
-        endpoint.id: LocalModelClient(endpoint)
-        for endpoint in fusion_config.endpoints
-    }
+    clients = build_clients(fusion_config)
     engine = FusionEngine(config=fusion_config, clients=clients)
     runner = FusionBenchRunner(
         engine,
