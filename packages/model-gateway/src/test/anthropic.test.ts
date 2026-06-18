@@ -3,7 +3,12 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 
-import { anthropicToChat, chatToAnthropicMessage, mapStopReason } from "../adapters/anthropic.js";
+import {
+  anthropicToChat,
+  chatToAnthropicMessage,
+  mapStopReason,
+  openAiSseToAnthropic
+} from "../adapters/anthropic.js";
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import { startGateway } from "../server.js";
@@ -108,6 +113,86 @@ test("anthropicToChat maps system, tools, and tool results", () => {
   assert.equal((messages[3] as { tool_call_id?: string }).tool_call_id, "tu_1");
   const tools = chat.tools as Array<{ type: string; function: { name: string } }>;
   assert.equal(tools[0]?.function.name, "search");
+});
+
+test("anthropicToChat groups parallel tool_use into one assistant message", () => {
+  // Anthropic batches parallel tool calls as multiple tool_use blocks in a
+  // single assistant message; they must stay one assistant message followed by
+  // the tool results so the chat API's tool_calls pairing stays valid.
+  const chat = anthropicToChat(
+    {
+      messages: [
+        { role: "user", content: "do both" },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "tu_a", name: "read_file", input: { path: "a" } },
+            { type: "tool_use", id: "tu_b", name: "read_file", input: { path: "b" } }
+          ]
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "tu_a", content: "A" },
+            { type: "tool_result", tool_use_id: "tu_b", content: "B" }
+          ]
+        }
+      ]
+    },
+    "local-model"
+  );
+  const messages = chat.messages as Record<string, unknown>[];
+  const assistant = messages.find((m) => m.role === "assistant") as { tool_calls?: Array<{ id: string }> };
+  assert.equal(assistant.tool_calls?.length, 2);
+  assert.deepEqual(
+    assistant.tool_calls?.map((call) => call.id),
+    ["tu_a", "tu_b"]
+  );
+  const toolMessages = messages.filter((m) => m.role === "tool") as Array<{ tool_call_id: string }>;
+  assert.deepEqual(
+    toolMessages.map((m) => m.tool_call_id),
+    ["tu_a", "tu_b"]
+  );
+});
+
+test("anthropic streaming starts eagerly and pings during the panel phase", async () => {
+  // A never-ending upstream simulates the silent fusion panel phase before the
+  // judge's first token.
+  let upstreamController!: ReadableStreamDefaultController<Uint8Array>;
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      upstreamController = controller;
+    }
+  });
+  const decoder = new TextDecoder();
+  const reader = openAiSseToAnthropic(upstream, "claude-x").getReader();
+  try {
+    // message_start must arrive before any upstream data is produced.
+    const first = await reader.read();
+    assert.ok(first.value !== undefined);
+    assert.ok(decoder.decode(first.value).includes("event: message_start"));
+
+    // A ping keepalive must arrive while the upstream is still silent.
+    let sawPing = false;
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value !== undefined && decoder.decode(value).includes("event: ping")) {
+        sawPing = true;
+        break;
+      }
+    }
+    assert.ok(sawPing, "a ping keepalive must be emitted while the upstream is silent");
+  } finally {
+    await reader.cancel();
+    // cancel() already propagates to the upstream; closing again is a no-op.
+    try {
+      upstreamController.close();
+    } catch {
+      // already closed via cancel
+    }
+  }
 });
 
 test("chatToAnthropicMessage produces a text content block", () => {

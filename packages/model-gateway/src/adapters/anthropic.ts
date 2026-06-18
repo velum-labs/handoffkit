@@ -278,6 +278,7 @@ type StreamState = {
   nextIndex: number;
   finished: boolean;
   outputTokens: number;
+  keepaliveTimer: ReturnType<typeof setInterval> | undefined;
 };
 
 export function openAiSseToAnthropic(
@@ -294,7 +295,8 @@ export function openAiSseToAnthropic(
     textIndex: -1,
     nextIndex: 0,
     finished: false,
-    outputTokens: 0
+    outputTokens: 0,
+    keepaliveTimer: undefined
   };
   let buffer = "";
 
@@ -337,6 +339,7 @@ export function openAiSseToAnthropic(
   const finalize = (controller: Controller, stopReason: string): void => {
     if (state.finished) return;
     state.finished = true;
+    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
     if (state.textOpen) {
       controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index: state.textIndex }));
     }
@@ -413,6 +416,21 @@ export function openAiSseToAnthropic(
   };
 
   return new ReadableStream<Uint8Array>({
+    start(controller) {
+      // Start the message immediately and keep the connection alive with `ping`
+      // events while the upstream is still producing its first token. Claude
+      // Code times out if it sees nothing during the fusion panel phase (the
+      // chat-layer keepalive comments are dropped by this translator).
+      ensureStarted(controller);
+      state.keepaliveTimer = setInterval(() => {
+        if (state.finished) return;
+        try {
+          controller.enqueue(sse("ping", { type: "ping" }));
+        } catch {
+          // controller closed
+        }
+      }, 3000);
+    },
     async pull(controller) {
       const { done, value } = await reader.read();
       if (done) {
@@ -440,6 +458,7 @@ export function openAiSseToAnthropic(
       }
     },
     cancel(reason) {
+      if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
       return reader.cancel(reason);
     }
   });

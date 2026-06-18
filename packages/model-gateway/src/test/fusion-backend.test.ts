@@ -84,6 +84,30 @@ const CANDIDATES: WireTrajectory[] = [
   { trajectory_id: "t_opus", model_id: "opus", status: "succeeded", final_output: "fixed and added a test" }
 ];
 
+/** A streaming `trajectory:step` stand-in that emits a keepalive comment + a tool_call chunk. */
+async function startStreamingStepServer(): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+      res.write(": keepalive\n\n");
+      res.write(
+        'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_x","type":"function","function":{"name":"write_file","arguments":"{}"}}]},"finish_reason":null}]}\n\n'
+      );
+      res.write('data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n');
+      res.write("data: [DONE]\n\n");
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+  };
+}
+
 test("fusion front door runs panels once and loops tool calls to a final answer", async () => {
   const step = await startFakeStepServer();
   let panelRuns = 0;
@@ -170,6 +194,43 @@ test("fusion front door runs panels once and loops tool calls to a final answer"
     const lastRequest = step.requests.at(-1) as { trajectories?: unknown[]; tools?: unknown[] };
     assert.equal((lastRequest.trajectories ?? []).length, 2);
     assert.ok(Array.isArray(lastRequest.tools) && lastRequest.tools.length === 1);
+  } finally {
+    await gateway.close();
+    await step.close();
+  }
+});
+
+test("chat (cursor) front door streams tool_calls and keepalive through unchanged", async () => {
+  const step = await startStreamingStepServer();
+  const backend = new FusionBackend({
+    stepUrl: `${step.url}/v1/fusion/trajectory:step`,
+    defaultModel: "fusion-panel",
+    mintTraceId: () => "trace_chat",
+    runPanels: async () => CANDIDATES
+  });
+  const gateway = await startGateway({ backend, host: "127.0.0.1", port: 0 });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "fusion-panel",
+        stream: true,
+        tools: [{ type: "function", function: { name: "write_file", parameters: { type: "object", properties: {} } } }],
+        messages: [
+          { role: "system", content: "agent" },
+          { role: "user", content: "fix it" }
+        ]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "text/event-stream");
+    const text = await response.text();
+    // The chat path is a pass-through, so the cursor bridge sees keepalive
+    // comments and tool_calls deltas exactly as produced.
+    assert.ok(text.includes(": keepalive"), "keepalive comments must pass through the chat path");
+    assert.ok(text.includes("write_file"), "tool_calls must pass through the chat path");
+    assert.ok(text.includes("[DONE]"));
   } finally {
     await gateway.close();
     await step.close();
