@@ -4,7 +4,7 @@
     "title": "Model Fusion Protocol HTTP API",
     "version": "0.1.0",
     "description": "V1 HTTP/JSON service surfaces for model-fusion integrations. Durable records are JSON Schema payloads from ../schema.",
-    "x-schema-bundle-hash": "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3"
+    "x-schema-bundle-hash": "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671"
   },
   "paths": {
     "/v1/harness/execute-coding-task": {

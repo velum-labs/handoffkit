@@ -72,12 +72,20 @@ class OpenAICompatibleClient:
         payload: dict[str, Any] = {
             "model": self.endpoint.model,
             "messages": _openai_messages(messages),
-            "temperature": sampling.temperature,
-            "top_p": sampling.top_p,
-            "max_tokens": sampling.max_tokens,
         }
-        if sampling.seed is not None:
-            payload["seed"] = sampling.seed
+        if self.endpoint.provider == "openai":
+            # Modern OpenAI chat models (gpt-5.x, o-series) require
+            # ``max_completion_tokens`` instead of ``max_tokens`` and only accept
+            # the default temperature/top_p, so the sampling knobs are omitted to
+            # stay compatible across the whole OpenAI line. Callers that target an
+            # OpenAI-compatible server (vLLM, MLX, …) keep the classic params.
+            payload["max_completion_tokens"] = sampling.max_tokens
+        else:
+            payload["temperature"] = sampling.temperature
+            payload["top_p"] = sampling.top_p
+            payload["max_tokens"] = sampling.max_tokens
+            if sampling.seed is not None:
+                payload["seed"] = sampling.seed
         if tools:
             payload["tools"] = _openai_tools(tools)
         if tool_choice is not None:
@@ -172,14 +180,15 @@ class AnthropicModelClient:
         extra: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
         system_text, conversation = _anthropic_messages(messages)
-        # Anthropic rejects requests that set both temperature and top_p for
-        # several models, so only the primary temperature knob is sent. Callers
-        # that need nucleus sampling can pass top_p explicitly via ``extra``.
+        # Sampling knobs are omitted by default: newer Anthropic models (e.g.
+        # claude-opus-4-8) reject `temperature` outright ("deprecated for this
+        # model"), and several reject setting both temperature and top_p. The
+        # model default is used; callers that need explicit sampling can pass
+        # `temperature`/`top_p` via ``extra``.
         kwargs: dict[str, Any] = {
             "model": self.endpoint.model,
             "messages": conversation,
             "max_tokens": sampling.max_tokens,
-            "temperature": sampling.temperature,
         }
         if system_text:
             kwargs["system"] = system_text

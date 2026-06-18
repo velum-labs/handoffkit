@@ -10,8 +10,8 @@ def test_model_fusion_contract_fixtures_validate() -> None:
     module = _load_validator_module()
     summary = module.validate_contract_fixtures()
 
-    assert summary.schema_count == 15
-    assert summary.fixture_count == 30
+    assert summary.schema_count == 16
+    assert summary.fixture_count == 32
     assert all(count == 2 for count in summary.fixture_counts.values())
 
 

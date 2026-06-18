@@ -10,6 +10,7 @@ import FusionRunRequestv1Schema from "../../schema/fusion-run-request.v1.schema.
 import HarnessCandidateRecordv1Schema from "../../schema/harness-candidate-record.v1.schema.json" with { type: "json" };
 import HarnessRunRequestv1Schema from "../../schema/harness-run-request.v1.schema.json" with { type: "json" };
 import HarnessRunResultv1Schema from "../../schema/harness-run-result.v1.schema.json" with { type: "json" };
+import HarnessTrajectoryv1Schema from "../../schema/harness-trajectory.v1.schema.json" with { type: "json" };
 import JudgeSynthesisRecordv1Schema from "../../schema/judge-synthesis-record.v1.schema.json" with { type: "json" };
 import ModelCallRecordv1Schema from "../../schema/model-call-record.v1.schema.json" with { type: "json" };
 import ModelEndpointv1Schema from "../../schema/model-endpoint.v1.schema.json" with { type: "json" };
@@ -27,6 +28,7 @@ export const recordSchemas = {
   "harness-candidate-record.v1": HarnessCandidateRecordv1Schema,
   "harness-run-request.v1": HarnessRunRequestv1Schema,
   "harness-run-result.v1": HarnessRunResultv1Schema,
+  "harness-trajectory.v1": HarnessTrajectoryv1Schema,
   "judge-synthesis-record.v1": JudgeSynthesisRecordv1Schema,
   "model-call-record.v1": ModelCallRecordv1Schema,
   "model_endpoint.v1": ModelEndpointv1Schema,

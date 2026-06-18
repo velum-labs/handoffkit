@@ -1,0 +1,20 @@
+{
+  "schema": "harness-trajectory.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-17T22:13:01Z",
+  "trajectory_id": "traj_minimal_001",
+  "model_id": "qwen-judge",
+  "status": "succeeded",
+  "steps": [
+    {
+      "index": 0,
+      "type": "output",
+      "text": "The repository is a small calculator package."
+    }
+  ],
+  "final_output": "The repository is a small calculator package."
+}

@@ -12,7 +12,7 @@ def test_protocol_package_metadata_and_idl_are_drift_checked() -> None:
     summary = module.validate_protocol_package()
 
     assert summary.schema_bundle_hash == (
-        "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3"
+        "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671"
     )
     assert summary.package_name == "@velum-labs/model-fusion-protocol"
     assert summary.package_version == "0.1.0"

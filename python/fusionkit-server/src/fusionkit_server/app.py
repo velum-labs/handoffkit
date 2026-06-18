@@ -13,7 +13,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import ChatClient, build_clients
 from fusionkit_core.config import FusionConfig, FusionMode
-from fusionkit_core.contracts import FusionRunRequestV1, contract_metadata
+from fusionkit_core.contracts import (
+    FusionRunRequestV1,
+    HarnessTrajectoryV1,
+    contract_metadata,
+)
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.run import (
     CreateRunResult,
@@ -57,6 +61,44 @@ class FusionRequest(BaseModel):
     max_tokens: int | None = None
     stream: bool = False
     fusion: FusionOptions = Field(default_factory=FusionOptions)
+
+
+class TrajectoryStepInput(BaseModel):
+    index: int
+    type: str
+    text: str | None = None
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+    tool_input: str | None = None
+    is_error: bool | None = None
+    output_hash: str | None = None
+
+
+class TrajectoryVerificationInput(BaseModel):
+    status: str
+    evidence: list[str] | None = None
+    exit_code: int | None = None
+
+
+class TrajectoryInput(BaseModel):
+    trajectory_id: str
+    model_id: str
+    status: str
+    steps: list[TrajectoryStepInput] = Field(default_factory=list)
+    final_output: str
+    candidate_id: str | None = None
+    model: str | None = None
+    harness_kind: str | None = None
+    diff: str | None = None
+    verification: TrajectoryVerificationInput | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class FuseTrajectoriesRequest(BaseModel):
+    messages: list[ChatMessage]
+    trajectories: list[TrajectoryInput]
+    judge_model: str | None = None
+    synthesizer_model: str | None = None
 
 
 def create_app(
@@ -155,6 +197,50 @@ def create_app(
                 media_type="text/event-stream",
             )
         return _openai_chat_response(request.model, final_output, metadata)
+
+    @app.post("/v1/fusion/trajectories:fuse", response_model=None)
+    async def fuse_trajectories(request: FuseTrajectoriesRequest) -> dict[str, Any] | JSONResponse:
+        if not request.trajectories:
+            return _openai_error_response(
+                "no_trajectories",
+                "At least one trajectory is required.",
+                status_code=400,
+            )
+        judge_model = request.judge_model or config.resolved_judge_model
+        synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
+        try:
+            judge_client = engine.clients[judge_model]
+            synthesizer_client = engine.clients[synthesizer_model]
+        except KeyError as exc:
+            return _openai_error_response(
+                "unknown_model",
+                f"Unknown model endpoint {exc}.",
+                status_code=400,
+            )
+        trajectories = [
+            HarnessTrajectoryV1.model_validate(
+                {
+                    **contract_metadata("harness-trajectory.v1"),
+                    **trajectory.model_dump(exclude_none=True),
+                }
+            )
+            for trajectory in request.trajectories
+        ]
+        result = await engine.judge_synthesizer.synthesize_trajectories(
+            request.messages,
+            trajectories,
+            judge_client=judge_client,
+            synthesizer_client=synthesizer_client,
+            judge_sampling=config.sampling.model_copy(update={"temperature": 0.0}),
+            synthesis_sampling=config.sampling,
+        )
+        return {
+            "final_output": result.final_output,
+            "synthesis_id": result.record.synthesis_id,
+            "decision": result.record.decision,
+            "rationale": result.record.rationale,
+            "judge_synthesis_record": result.record.model_dump(mode="json"),
+        }
 
     return app
 

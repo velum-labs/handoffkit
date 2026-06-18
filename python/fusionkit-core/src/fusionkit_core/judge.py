@@ -10,12 +10,19 @@ from pydantic import BaseModel, ConfigDict
 
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import SamplingConfig
-from fusionkit_core.contracts import JudgeSynthesisRecordV1, contract_metadata
+from fusionkit_core.contracts import (
+    HarnessTrajectoryV1,
+    JudgeSynthesisRecordV1,
+    contract_metadata,
+)
 from fusionkit_core.prompts import (
     JUDGE_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
+    TRAJECTORY_SYNTHESIZER_SYSTEM_PROMPT,
     build_judge_prompt,
     build_synthesis_prompt,
+    build_trajectory_judge_prompt,
+    build_trajectory_synthesis_prompt,
 )
 from fusionkit_core.types import Candidate, ChatMessage, FusionAnalysis
 
@@ -41,7 +48,90 @@ class JudgeSynthesisResult(BaseModel):
     ranked_candidates: list[Candidate]
 
 
+class TrajectorySynthesisResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record: JudgeSynthesisRecordV1
+    final_output: str
+    analysis: FusionAnalysis
+
+
 class JudgeSynthesizer:
+    async def synthesize_trajectories(
+        self,
+        messages: Sequence[ChatMessage],
+        trajectories: Sequence[HarnessTrajectoryV1],
+        *,
+        judge_client: ChatClient,
+        synthesizer_client: ChatClient,
+        judge_sampling: SamplingConfig,
+        synthesis_sampling: SamplingConfig,
+    ) -> TrajectorySynthesisResult:
+        """Fuse several agent trajectories into one final response.
+
+        Trajectory-level fusion: the judge compares the trajectories (reasoning,
+        tool calls, observations, results) and the synthesizer produces the final
+        answer in the request's natural shape and first person.
+        """
+        if not trajectories:
+            raise ValueError("at least one trajectory is required")
+        user_request = _last_user_text(messages)
+        analysis = await self._analyze_trajectories(
+            user_request,
+            trajectories,
+            judge_client=judge_client,
+            judge_sampling=judge_sampling,
+        )
+        synthesis_response = await synthesizer_client.chat(
+            [
+                ChatMessage(role="system", content=TRAJECTORY_SYNTHESIZER_SYSTEM_PROMPT),
+                ChatMessage(
+                    role="user",
+                    content=build_trajectory_synthesis_prompt(user_request, trajectories, analysis),
+                ),
+            ],
+            synthesis_sampling,
+        )
+        final_output = synthesis_response.content.strip()
+        if not final_output:
+            # The synthesizer returned nothing (e.g. a reasoning model exhausted
+            # its token budget on reasoning). Fall back to the best trajectory's
+            # own answer so a fused response is always produced.
+            final_output = _best_trajectory_output(trajectories)
+        record = JudgeSynthesisRecordV1.model_validate(
+            {
+                **contract_metadata("judge-synthesis-record.v1"),
+                "synthesis_id": _synthesis_id(),
+                "input_candidate_ids": [trajectory.trajectory_id for trajectory in trajectories],
+                "status": "succeeded",
+                "decision": "synthesize",
+                "rationale": _rationale(analysis),
+                "final_output": final_output,
+                "metrics": _trajectory_metrics(trajectories, analysis),
+            }
+        )
+        return TrajectorySynthesisResult(record=record, final_output=final_output, analysis=analysis)
+
+    async def _analyze_trajectories(
+        self,
+        user_request: str,
+        trajectories: Sequence[HarnessTrajectoryV1],
+        *,
+        judge_client: ChatClient,
+        judge_sampling: SamplingConfig,
+    ) -> FusionAnalysis:
+        response = await judge_client.chat(
+            [
+                ChatMessage(role="system", content=JUDGE_SYSTEM_PROMPT),
+                ChatMessage(
+                    role="user",
+                    content=build_trajectory_judge_prompt(user_request, trajectories),
+                ),
+            ],
+            judge_sampling,
+        )
+        return parse_analysis(response.content)
+
     async def synthesize(
         self,
         messages: Sequence[ChatMessage],
@@ -199,6 +289,46 @@ def _synthesis_metrics(
     return metrics
 
 
+def _best_trajectory_output(trajectories: Sequence[HarnessTrajectoryV1]) -> str:
+    """Pick a non-empty answer: prefer a verified trajectory, then any succeeded
+    one, then the first with text."""
+    ordered = sorted(
+        trajectories,
+        key=lambda trajectory: (
+            0 if (trajectory.verification is not None and trajectory.verification.status == "succeeded") else 1,
+            0 if trajectory.status == "succeeded" else 1,
+        ),
+    )
+    for trajectory in ordered:
+        if trajectory.final_output.strip():
+            return trajectory.final_output.strip()
+    return "No candidate produced a usable result."
+
+
+def _trajectory_metrics(
+    trajectories: Sequence[HarnessTrajectoryV1],
+    analysis: FusionAnalysis,
+) -> dict[str, Any]:
+    contributions = [
+        {
+            "trajectory_id": trajectory.trajectory_id,
+            "model_id": trajectory.model_id,
+            "status": trajectory.status,
+            "verification_status": (
+                trajectory.verification.status if trajectory.verification is not None else None
+            ),
+            "step_count": len(trajectory.steps),
+            "reason": "included as trajectory fusion evidence",
+        }
+        for trajectory in trajectories
+    ]
+    return {
+        "trajectory_contributions": contributions,
+        "judge_structured_parse_status": _judge_parse_status(analysis),
+        "fusion_unit": "trajectory",
+    }
+
+
 def _selected_candidate_id(final_output: str, candidates: Sequence[Candidate]) -> str | None:
     stripped = final_output.strip()
     for candidate in candidates:
@@ -260,6 +390,7 @@ __all__ = [
     "CandidateEvidence",
     "JudgeSynthesisResult",
     "JudgeSynthesizer",
+    "TrajectorySynthesisResult",
     "candidate_evidence",
     "parse_analysis",
 ]

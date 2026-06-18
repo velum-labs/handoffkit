@@ -18,6 +18,7 @@ SchemaName: TypeAlias = Literal[
     "harness-run-request.v1",
     "harness-run-result.v1",
     "harness-candidate-record.v1",
+    "harness-trajectory.v1",
     "judge-synthesis-record.v1",
     "cursor-run-request.v1",
     "cursor-run-result.v1",
@@ -307,6 +308,41 @@ class HarnessCandidateRecordV1(ContractRecord):
     metadata: dict[str, Any] | None = None
 
 
+class TrajectoryStep(ContractBaseModel):
+    index: int = Field(ge=0)
+    type: Literal["reasoning", "tool_call", "observation", "output"]
+    text: str | None = None
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+    tool_input: str | None = None
+    is_error: bool | None = None
+    output_hash: Sha256 | None = None
+
+
+class TrajectoryVerification(ContractBaseModel):
+    status: Status
+    evidence: list[str] | None = None
+    exit_code: int | None = None
+
+
+class HarnessTrajectoryV1(ContractRecord):
+    expected_schema: ClassVar[str] = "harness-trajectory.v1"
+    trajectory_id: str = Field(min_length=1)
+    model_id: str = Field(min_length=1)
+    status: Status
+    steps: list[TrajectoryStep]
+    final_output: str
+    candidate_id: str | None = None
+    model: str | None = None
+    harness_kind: HarnessKind | None = None
+    diff: str | None = None
+    patch_artifact: ContractArtifactRef | None = None
+    verification: TrajectoryVerification | None = None
+    usage: ContractUsage | None = None
+    error: ContractError | None = None
+    metadata: dict[str, Any] | None = None
+
+
 class JudgeSynthesisRecordV1(ContractRecord):
     expected_schema: ClassVar[str] = "judge-synthesis-record.v1"
     synthesis_id: str = Field(min_length=1)
@@ -376,6 +412,7 @@ CONTRACT_MODEL_REGISTRY: dict[SchemaName, type[ContractRecord]] = {
     "harness-run-request.v1": HarnessRunRequestV1,
     "harness-run-result.v1": HarnessRunResultV1,
     "harness-candidate-record.v1": HarnessCandidateRecordV1,
+    "harness-trajectory.v1": HarnessTrajectoryV1,
     "judge-synthesis-record.v1": JudgeSynthesisRecordV1,
     "benchmark-task-record.v1": BenchmarkTaskRecordV1,
     "artifact-ref.v1": ArtifactRefV1,

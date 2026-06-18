@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/harness-trajectory.v1.schema.json",
+  "title": "harness-trajectory.v1",
+  "description": "An agent trajectory produced by one panel model: an ordered sequence of reasoning, tool calls, observations, and the final output. Trajectory-level fusion synthesizes a final answer from several of these.",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "trajectory_id",
+        "model_id",
+        "status",
+        "steps",
+        "final_output"
+      ],
+      "properties": {
+        "schema": {
+          "const": "harness-trajectory.v1"
+        },
+        "trajectory_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_id": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string"
+        },
+        "harness_kind": {
+          "$ref": "common.schema.json#/$defs/harness_kind"
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "index",
+              "type"
+            ],
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "reasoning",
+                  "tool_call",
+                  "observation",
+                  "output"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "tool_name": {
+                "type": "string"
+              },
+              "tool_call_id": {
+                "type": "string"
+              },
+              "tool_input": {
+                "type": "string"
+              },
+              "is_error": {
+                "type": "boolean"
+              },
+              "output_hash": {
+                "$ref": "common.schema.json#/$defs/hash"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "final_output": {
+          "type": "string"
+        },
+        "diff": {
+          "type": "string"
+        },
+        "patch_artifact": {
+          "$ref": "common.schema.json#/$defs/artifactRef"
+        },
+        "verification": {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "common.schema.json#/$defs/status"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "exit_code": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        "usage": {
+          "$ref": "common.schema.json#/$defs/usage"
+        },
+        "error": {
+          "$ref": "common.schema.json#/$defs/error"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}
