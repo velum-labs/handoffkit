@@ -135,6 +135,39 @@ deprecated `httpx` test-client path by adding `httpx2`.
 - Do not run arbitrary tools in the FusionKit server process.
 - Do not make compatibility aliases the product boundary.
 
+## Fusion As A Backend For Coding Agents
+
+The external-executor seam is now exercised end to end by a HandoffKit-owned
+**Fusion Harness Gateway** that lets unmodified coding agents (Codex, Claude
+Code, Cursor) use model fusion as their model backend. The full chain is
+verified live: tool → gateway → per-model git worktrees + real command harness →
+FusionKit judge synthesis → answer returned in the tool's native wire protocol.
+
+Durable learnings relevant to FusionKit:
+
+- FusionKit's `/v1/chat/completions` compatibility projection is what the gateway
+  calls for judge synthesis. Keeping it OpenAI-shaped (single
+  `choices[0].message.content`) is exactly what allows a freeform synthesized
+  answer to flow back through every harness without structured-output coupling.
+- The judge synthesizer consumes freeform content, so even a tiny local model
+  (e.g. `mlx-community/Qwen3-1.7B-4bit` via `scripts/simple_mlx_openai_server.py`)
+  can back the whole flow. This was verified: judge synthesis `succeeded` with a
+  genuine model-written synthesis grounded in two real candidate patches.
+- A real local MLX backend behind the gateway proves the contract is not a stub.
+  `simple_mlx_openai_server.py` must stay single-threaded (`HTTPServer`, not
+  `ThreadingHTTPServer`): MLX generation crashes with
+  `There is no Stream(gpu, 0) in current thread` when run from request-handler
+  threads.
+- Live, credential-gated paths (Codex ambient auth, Claude credits, logged-in
+  `cursor-agent`) must remain opt-in. Unavailable providers/harnesses produce
+  `blocked`/`skipped` outcomes with explicit reasons; silent success is not a
+  valid result.
+
+The gateway, its dialect translation, streaming behavior, and live verification
+live in HandoffKit (`docs/fusion-harness-gateway.md`). FusionKit's responsibility
+remains the fusion/judge synthesis behind `--fusion-backend`, not the dialect
+plumbing.
+
 ## Known Follow-Ups
 
 - Public benchmark smoke adapters can build on the `fusion_bench` manifest/row shape.
