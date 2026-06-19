@@ -41,6 +41,14 @@ jobs:
       - name: Pin pnpm
         run: corepack prepare pnpm@10.33.4 --activate
 
+      # `pnpm publish` performs the npm OIDC exchange via the npm CLI, which must
+      # be >= 11.5.1 for trusted publishing. Once a Trusted Publisher is
+      # configured on npmjs.com, publishing uses OIDC automatically and the
+      # NPM_TOKEN below is no longer used (it remains only as a bootstrap
+      # fallback for the very first publish, before the packages exist).
+      - name: Update npm for OIDC trusted publishing
+        run: npm install -g npm@latest
+
       - name: Validate release tag
         if: github.event_name == 'release'
         run: |
