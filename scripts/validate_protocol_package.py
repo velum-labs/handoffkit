@@ -125,13 +125,15 @@ def _require_file(path: Path) -> None:
 def _validate_package_json(package_json: dict[str, Any]) -> None:
     if package_json.get("name") != "@velum-labs/model-fusion-protocol":
         raise ValueError("package.json must publish @velum-labs/model-fusion-protocol")
-    if package_json.get("version") != "0.1.0":
+    if package_json.get("version") != "0.1.1":
         raise ValueError("package.json version must match protocol package version")
     publish_config = package_json.get("publishConfig")
     if not isinstance(publish_config, dict):
         raise ValueError("package.json must include publishConfig")
-    if publish_config.get("registry") != "https://npm.pkg.github.com":
-        raise ValueError("package.json must target GitHub Packages for npm")
+    if publish_config.get("registry") != "https://registry.npmjs.org":
+        raise ValueError("package.json must target public npm (registry.npmjs.org)")
+    if publish_config.get("access") != "public":
+        raise ValueError("package.json publishConfig.access must be public")
     files = package_json.get("files")
     if not isinstance(files, list):
         raise ValueError("package.json must include a files list")
@@ -166,7 +168,7 @@ def _validate_protocol_package_json(
         raise ValueError("protocol-package.json schema_bundle_hash is out of date")
     if protocol_package.get("package_name") != "@velum-labs/model-fusion-protocol":
         raise ValueError("protocol-package.json package_name is incorrect")
-    if protocol_package.get("version") != "0.1.0":
+    if protocol_package.get("version") != "0.1.1":
         raise ValueError("protocol-package.json version is incorrect")
     if protocol_package.get("json_schema_format") != "persisted-record-audit-format":
         raise ValueError("protocol-package.json must keep JSON Schema as audit format")

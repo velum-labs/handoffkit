@@ -3,7 +3,7 @@ from __future__ import annotations
 from importlib.resources import files
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 SCHEMA_BUNDLE_HASH = "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671"
 
 
