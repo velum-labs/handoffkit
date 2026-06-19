@@ -61,7 +61,12 @@ export function spawnLogged(
   args: string[],
   options: SpawnOptions = {}
 ): LoggedChild {
-  const child = spawn(command, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+  // `detached: true` makes the child its own process-group leader so that
+  // `terminate()` can signal the whole tree. This matters for wrappers like
+  // `uvx` (uvx -> uv -> python): signalling only the immediate child would
+  // orphan the grandchildren. Output is still piped; we never `unref()`, so the
+  // parent keeps managing the child's lifecycle.
+  const child = spawn(command, args, { ...options, detached: true, stdio: ["ignore", "pipe", "pipe"] });
   let log = "";
   let spawnError: Error | undefined;
   child.stdout?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
@@ -141,21 +146,28 @@ export function waitForOutput(
   });
 }
 
-/** SIGTERM a child, escalating to SIGKILL if it ignores the grace period. */
+/**
+ * SIGTERM a child's whole process group, escalating to SIGKILL if it ignores the
+ * grace period. Killing the group (`process.kill(-pid, ...)`) tears down wrapper
+ * trees like `uvx -> uv -> python`; if the child was not spawned detached (no
+ * group), it falls back to signalling the child directly.
+ */
 export function terminate(child: ChildProcess, graceMs = 5000): void {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  try {
-    child.kill("SIGTERM");
-  } catch {
-    return;
-  }
-  const timer = setTimeout(() => {
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+  const pid = child.pid;
+  const signal = (sig: NodeJS.Signals): void => {
     try {
-      child.kill("SIGKILL");
+      process.kill(-pid, sig);
     } catch {
-      // already gone
+      try {
+        child.kill(sig);
+      } catch {
+        // already gone
+      }
     }
-  }, graceMs);
+  };
+  signal("SIGTERM");
+  const timer = setTimeout(() => signal("SIGKILL"), graceMs);
   timer.unref();
   child.once("exit", () => clearTimeout(timer));
 }
