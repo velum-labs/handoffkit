@@ -435,8 +435,21 @@ FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
 }
 
 
+# Precomputed hash of the frozen model-fusion-contract schema bundle. The
+# canonical schema (spec/model-fusion-contract/schema) lives outside the packaged
+# wheel, so an installed package (e.g. `uvx fusionkit`) cannot locate it on disk.
+# We fall back to this constant there; a source checkout still recomputes from the
+# files. tests/ assert the two agree, so this can never silently drift from the
+# schema source. (Mirrors handoffkit's pinned MODEL_FUSION_SCHEMA_BUNDLE_HASH.)
+SCHEMA_BUNDLE_HASH = "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671"
+
+
 def schema_bundle_hash(schema_dir: Path | None = None) -> str:
-    resolved_schema_dir = schema_dir or _default_schema_dir()
+    resolved_schema_dir = schema_dir if schema_dir is not None else _find_schema_dir()
+    # Installed wheels do not ship the canonical schema dir; the contract bundle
+    # is frozen, so the pinned hash is the source of truth there.
+    if resolved_schema_dir is None:
+        return SCHEMA_BUNDLE_HASH
     payload = []
     for path in sorted(resolved_schema_dir.glob("*.schema.json")):
         payload.append({"path": path.name, "schema": _load_json(path)})
@@ -452,7 +465,7 @@ def producer_version() -> str:
     try:
         return metadata.version(PRODUCER)
     except metadata.PackageNotFoundError:
-        return "0.1.0"
+        return "0.1.1"
 
 
 def producer_git_sha(repo_root: Path | None = None) -> str:
@@ -501,12 +514,17 @@ def status_for_run_state(state: FusionRunState) -> Status:
     return FUSION_RUN_STATE_TO_STATUS[state]
 
 
-def _default_schema_dir() -> Path:
+def _find_schema_dir() -> Path | None:
+    """Locate the canonical contract schema dir in a source checkout.
+
+    Returns None when it cannot be found (e.g. an installed wheel that does not
+    ship spec/), in which case callers fall back to the pinned SCHEMA_BUNDLE_HASH.
+    """
     for parent in Path(__file__).resolve().parents:
         schema_dir = parent / "spec" / "model-fusion-contract" / "schema"
         if schema_dir.exists():
             return schema_dir
-    raise FileNotFoundError("Could not locate spec/model-fusion-contract/schema")
+    return None
 
 
 def _default_repo_root() -> Path:

@@ -6,6 +6,7 @@ from typing import Any
 
 from fusionkit_core.contracts import (
     CONTRACT_MODEL_REGISTRY,
+    SCHEMA_BUNDLE_HASH,
     ArtifactRefV1,
     BenchmarkTaskRecordV1,
     EnsembleReceiptV1,
@@ -67,6 +68,23 @@ def test_fusionkit_contract_fixtures_validate_through_pydantic_models() -> None:
                 mode="json",
                 exclude_none=True,
             ) == dumped
+
+
+def test_pinned_schema_bundle_hash_matches_canonical_schema() -> None:
+    # The installed wheel cannot locate spec/ on disk and falls back to the
+    # pinned SCHEMA_BUNDLE_HASH; this guards it against drifting from the source.
+    assert schema_bundle_hash(SCHEMA_ROOT) == SCHEMA_BUNDLE_HASH
+
+
+def test_schema_bundle_hash_falls_back_to_pinned_constant_without_schema_dir(
+    monkeypatch,
+) -> None:
+    # Simulate an installed wheel where the canonical schema dir is absent: the
+    # helper must still return the frozen hash instead of raising (the bug that
+    # 500'd `/v1/fusion/trajectory:step` under `uvx fusionkit`).
+    monkeypatch.setattr("fusionkit_core.contracts._find_schema_dir", lambda: None)
+    assert schema_bundle_hash() == SCHEMA_BUNDLE_HASH
+    assert contract_metadata("harness-trajectory.v1")["schema_bundle_hash"] == SCHEMA_BUNDLE_HASH
 
 
 def test_contract_model_registry_covers_downstream_fusionkit_tickets() -> None:

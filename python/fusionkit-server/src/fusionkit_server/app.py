@@ -126,7 +126,7 @@ def create_app(
     run_manager: FusionRunManager | None = None,
     run_store_path: Path | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="fusionkit", version="0.1.0")
+    app = FastAPI(title="fusionkit", version="0.1.1")
     model_clients = clients or build_clients(config)
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
