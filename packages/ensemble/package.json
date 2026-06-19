@@ -2,6 +2,7 @@
   "name": "@fusionkit/ensemble",
   "private": false,
   "version": "0.1.0",
+  "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/ensemble" },
   "description": "Harness-agnostic ensemble runner that emits model-fusion protocol records.",
   "license": "UNLICENSED",
   "type": "module",

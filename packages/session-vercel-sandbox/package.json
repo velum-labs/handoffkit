@@ -2,6 +2,7 @@
   "name": "@fusionkit/session-vercel-sandbox",
   "private": false,
   "version": "0.1.0",
+  "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/session-vercel-sandbox" },
   "description": "Vercel Sandbox session backend for Warrant runners: each governed session runs in a Firecracker microVM with VM-level isolation and domain-based egress policy.",
   "license": "UNLICENSED",
   "type": "module",

@@ -2,6 +2,7 @@
   "name": "@fusionkit/cli",
   "private": false,
   "version": "0.1.0",
+  "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/cli" },
   "description": "fusionkit — real model fusion behind your coding agent (codex, claude, cursor).",
   "license": "UNLICENSED",
   "type": "module",
