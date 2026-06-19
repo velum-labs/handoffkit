@@ -45,7 +45,10 @@ test("capability matrix covers Cursor, Claude Code, Codex, command, and mock", (
   assert.ok(matrix.capabilities.includes("replay_support"));
   assert.ok(matrix.capabilities.includes("workspace_read"));
   assert.ok(matrix.capabilities.includes("verification"));
-  assert.equal(matrix.rows.find((row) => row.harnessId === "cursor")?.availability, "missing");
+  assert.equal(
+    matrix.rows.find((row) => row.harnessId === "cursor")?.availability,
+    "credential_gated"
+  );
   assert.equal(
     matrix.rows.find((row) => row.harnessId === "claude-code")?.harnessKind,
     "claude_code"
@@ -77,9 +80,9 @@ test("smoke dashboard writes schema-valid success, failure, skipped, and missing
       "failed",
       "skipped",
       "skipped",
+      "skipped",
       "succeeded",
-      "succeeded",
-      "unsupported"
+      "succeeded"
     ]);
     assert.equal(
       dashboard.records.find((record) => record.taskId === "claude-code-skipped")?.result
@@ -91,9 +94,12 @@ test("smoke dashboard writes schema-valid success, failure, skipped, and missing
       "codex"
     );
     assert.equal(
-      dashboard.records.find((record) => record.taskId === "cursor-missing")?.result
-        .errors?.[0]?.kind,
-      "capability_missing"
+      dashboard.records.find((record) => record.taskId === "cursor-skipped")?.result.harness_kind,
+      "cursor"
+    );
+    assert.equal(
+      dashboard.records.find((record) => record.taskId === "cursor-skipped")?.result.status,
+      "skipped"
     );
 
     const markdown = readFileSync(dashboard.dashboardPath, "utf8");
@@ -104,7 +110,7 @@ test("smoke dashboard writes schema-valid success, failure, skipped, and missing
     assert.match(markdown, /credentials missing\/skipped/);
     assert.match(markdown, /live smoke not requested/);
     assert.match(markdown, /command-failure/);
-    assert.match(markdown, /cursor-missing/);
+    assert.match(markdown, /cursor-skipped/);
     assert.match(markdown, /harness-run-results\/mock-success\.json/);
     assert.equal(dashboard.readiness.length, 5);
   } finally {

@@ -28,6 +28,7 @@ export const TERMINAL_RUN_STATUSES = [
 export const AGENT_KINDS = [
   "claude-code",
   "codex",
+  "cursor",
   "pi",
   "mock",
   "command"

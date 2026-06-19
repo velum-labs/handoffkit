@@ -748,7 +748,7 @@ test("ensemble dashboard writes markdown and run-result records", () => {
     assert.match(result.stdout, /records: 6/);
     assert.ok(existsSync(join(fixture.output, "dashboard.md")));
     assert.ok(existsSync(join(fixture.output, "harness-run-results", "mock-success.json")));
-    assert.ok(existsSync(join(fixture.output, "harness-run-results", "cursor-missing.json")));
+    assert.ok(existsSync(join(fixture.output, "harness-run-results", "cursor-skipped.json")));
     const dashboard = readFileSync(join(fixture.output, "dashboard.md"), "utf8");
     assert.match(dashboard, /Capability Matrix/);
     assert.match(dashboard, /command-failure/);

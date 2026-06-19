@@ -60,9 +60,16 @@ export type SessionIsolation = "process" | "hermetic" | "vercel-sandbox";
  * a single shell command executed inside a governed session. "mock" is the
  * built-in test harness. "pi" is a host-runtime harness with no vendor CLI:
  * it runs only through the AI SDK harness session backend, never as a
- * spawned process. The rest are vendor CLIs wrapped as-is.
+ * spawned process. The rest are vendor CLIs wrapped as-is. "cursor" is the
+ * Cursor CLI (cursor-agent), wrapped as-is and run against a Cursorkit bridge.
  */
-export type AgentKind = "claude-code" | "codex" | "pi" | "mock" | "command";
+export type AgentKind =
+  | "claude-code"
+  | "codex"
+  | "cursor"
+  | "pi"
+  | "mock"
+  | "command";
 
 export type AgentSpec = {
   kind: AgentKind;

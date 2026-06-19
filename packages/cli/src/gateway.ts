@@ -34,6 +34,8 @@ import type {
   WireTrajectory
 } from "@fusionkit/model-gateway";
 
+import { buildCursorAcpProducer } from "./cursor-acp.js";
+
 export type GatewayRunnerConfig = {
   fusionBackendUrl: string;
   repo: string;
@@ -366,10 +368,21 @@ export async function runGatewayAcceptance(input: GatewayAcceptanceInput): Promi
     port: 0
   });
   try {
+    const cursorAcp = buildCursorAcpProducer({
+      cursorKitDir: input.config.cursorKitDir,
+      gatewayUrl: gateway.url(),
+      sentinel: input.sentinel,
+      repo: input.config.repo,
+      ...(input.config.models[0]?.id !== undefined
+        ? { modelName: input.config.models[0].id }
+        : {}),
+      ...(input.config.timeoutMs !== undefined ? { timeoutMs: input.config.timeoutMs } : {})
+    });
     const report = await runFrontDoorAcceptance({
       gatewayUrl: gateway.url(),
       sentinel: input.sentinel,
-      acpRunner: buildAcpRunner(input.config)
+      acpRunner: buildAcpRunner(input.config),
+      ...(cursorAcp !== undefined ? { cursorAcp } : {})
     });
     mkdirSync(resolve(input.outPath, ".."), { recursive: true });
     writeFileSync(input.outPath, JSON.stringify(report, null, 2) + "\n");

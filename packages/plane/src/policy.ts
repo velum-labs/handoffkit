@@ -110,7 +110,7 @@ export function defaultPolicy(): Policy {
   return {
     version: "warrant.policy.v1",
     runners: { allowPools: ["default"] },
-    agents: { allow: ["claude-code", "codex", "pi", "mock", "command"] },
+    agents: { allow: ["claude-code", "codex", "cursor", "pi", "mock", "command"] },
     dataClasses: [],
     network: { defaultDeny: true, allowHosts: [] },
     secrets: { releasable: [] },

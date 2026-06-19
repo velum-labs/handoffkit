@@ -33,6 +33,13 @@ export function buildAgentCommand(
         cmd: "codex",
         args: ["exec", "--skip-git-repo-check", prompt]
       };
+    case "cursor":
+      // The Cursor CLI in non-interactive print mode, wrapped as-is. --force
+      // auto-approves tool actions (the vendor's equivalent of acceptEdits).
+      return {
+        cmd: "cursor-agent",
+        args: ["-p", prompt, "--force"]
+      };
     case "pi":
       // Pi is a host-runtime harness with no vendor CLI to wrap: it runs only
       // through the AI SDK harness session backend, which ignores this argv

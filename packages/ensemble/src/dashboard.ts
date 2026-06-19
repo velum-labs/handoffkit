@@ -21,6 +21,7 @@ import {
 } from "./claude-code.js";
 import { createCommandHarness } from "./command.js";
 import { codexHarness, codexHarnessCredentialSkipReason } from "./codex.js";
+import { createCursorHarness, cursorHarnessUnavailableReason } from "./cursor.js";
 import { createMockHarness } from "./mock.js";
 import { runEnsemble } from "./run.js";
 import type {
@@ -41,12 +42,15 @@ const DEFAULT_COMMAND_FAILURE = "exit 7";
 const DEFAULT_OUTPUT_DIR = ".warrant/ensemble-dashboard";
 const CLAUDE_LIVE_SMOKE_ENV = "WARRANT_CLAUDE_SMOKE";
 const CODEX_LIVE_SMOKE_ENV = "WARRANT_CODEX_SMOKE";
+const CURSOR_LIVE_SMOKE_ENV = "WARRANT_CURSOR_SMOKE";
 const ALL_LIVE_SMOKE_ENV = "WARRANT_ENSEMBLE_LIVE_SMOKE";
-const LIVE_SMOKE_TARGETS = ["claude-code", "codex"] as const;
+const LIVE_SMOKE_TARGETS = ["claude-code", "codex", "cursor"] as const;
 const CLAUDE_LIVE_SMOKE_PROMPT =
   "Read README.md if present, then reply exactly CLAUDE_LIVE_SMOKE_OK. Do not modify files.";
 const CODEX_LIVE_SMOKE_PROMPT =
   "Read README.md if present, then reply exactly CODEX_LIVE_SMOKE_OK. Do not modify files.";
+const CURSOR_LIVE_SMOKE_PROMPT =
+  "Read README.md if present, then reply exactly CURSOR_LIVE_SMOKE_OK. Do not modify files.";
 
 export type HarnessCapabilityTarget =
   | "cursor"
@@ -160,6 +164,8 @@ function liveSmokeEnvName(target: HarnessLiveSmokeTarget): string {
       return CLAUDE_LIVE_SMOKE_ENV;
     case "codex":
       return CODEX_LIVE_SMOKE_ENV;
+    case "cursor":
+      return CURSOR_LIVE_SMOKE_ENV;
     default: {
       const exhausted: never = target;
       throw new Error(`unsupported live smoke target: ${String(exhausted)}`);
@@ -215,30 +221,18 @@ function displayNameFor(target: HarnessCapabilityTarget): string {
   }
 }
 
-function cursorCapabilities(): HarnessCapabilities {
-  return {
-    workspace_read: "degraded",
-    workspace_write: "degraded",
-    apply_patch: "degraded",
-    tool_records: "degraded",
-    verification: "degraded",
-    proprietary_harness: "unsupported",
-    adapter_available: "unsupported"
-  };
-}
-
 function dashboardCapabilitiesFor(target: HarnessCapabilityTarget): HarnessCapabilities {
   switch (target) {
     case "cursor":
       return {
-        model_override: "degraded",
-        transcript_capture: "degraded",
-        diff_capture: "degraded",
-        tool_loop_capture: "degraded",
-        patch_apply_visibility: "degraded",
-        route_model_observation: "degraded",
-        verification_hint: "degraded",
-        replay_support: "unsupported"
+        model_override: "supported",
+        transcript_capture: "supported",
+        diff_capture: "supported",
+        tool_loop_capture: "supported",
+        patch_apply_visibility: "supported",
+        route_model_observation: "supported",
+        verification_hint: "supported",
+        replay_support: "degraded"
       };
     case "claude-code":
       return {
@@ -345,9 +339,14 @@ export function createHarnessCapabilityMatrix(
   const rows = [
     matrixRow({
       harnessId: "cursor",
-      availability: "missing",
-      capabilities: matrixCapabilities("cursor", cursorCapabilities()),
-      notes: ["No CI-safe package adapter; represented as an unsupported result record."]
+      availability: "credential_gated",
+      capabilities: matrixCapabilities(
+        "cursor",
+        adapterCapabilities(createCursorHarness({ env }))
+      ),
+      notes: [
+        "Credential-gated; requires a logged-in Cursor CLI and a built Cursorkit checkout (WARRANT_CURSORKIT_DIR)."
+      ]
     }),
     matrixRow({
       harnessId: "claude-code",
@@ -431,37 +430,6 @@ function smokeDescriptor(input: {
     baseGitSha: input.baseGitSha,
     outputRoot: join(input.outputRoot, "runs", input.id)
   };
-}
-
-function unsupportedCursorResult(input: {
-  createdAt: string;
-  taskId: string;
-}): HarnessRunResultV1 {
-  const result: HarnessRunResultV1 = {
-    ...metadata("harness-run-result.v1", input.createdAt),
-    result_id: `ensemble_result_${input.taskId}`,
-    request_id: `ensemble_req_${input.taskId}`,
-    harness_kind: "cursor",
-    status: "unsupported",
-    candidate_ids: [],
-    output_summary: "Cursor harness unavailable in CI-safe package context.",
-    capabilities: cursorCapabilities(),
-    started_at: input.createdAt,
-    finished_at: input.createdAt,
-    errors: [
-      {
-        kind: "capability_missing",
-        message: "Cursor proprietary harness is not available from @fusionkit/ensemble.",
-        retryable: false
-      }
-    ],
-    metadata: {
-      dashboard_outcome: "missing",
-      harness_id: "cursor"
-    }
-  };
-  assertHarnessRunResultV1(result);
-  return result;
 }
 
 function liveSmokePreflightFailureResult(input: {
@@ -567,22 +535,6 @@ async function runSmokeTask(input: {
     };
   }
 
-  if (input.run.harnessId === "cursor") {
-    const result = unsupportedCursorResult({
-      createdAt: input.createdAt,
-      taskId: input.run.taskId
-    });
-    const resultPath = writeRunResult(input.outputRoot, input.run.taskId, result);
-    return {
-      taskId: input.run.taskId,
-      harnessId: input.run.harnessId,
-      purpose: input.run.purpose,
-      outcome: input.run.outcome,
-      result,
-      resultPath
-    };
-  }
-
   const descriptor = smokeDescriptor({
     id: input.run.taskId,
     harness: input.run.harness,
@@ -667,14 +619,14 @@ function smokeRuns(options: Required<Pick<
       allowedTools: ["read_file", "apply_patch"]
     },
     {
-      taskId: "cursor-missing",
+      taskId: "cursor-skipped",
       harnessId: "cursor",
-      purpose: "missing",
-      outcome: "missing",
-      harness: createMockHarness({ id: "cursor-missing-placeholder" }),
-      model: { id: "cursor", model: "cursor-proprietary" },
+      purpose: "credential-skip",
+      outcome: "skipped",
+      harness: createCursorHarness({ env: {} }),
+      model: { id: "cursor", model: "fusion-panel" },
       sideEffects: "writes_workspace",
-      allowedTools: ["read_file", "write_file", "apply_patch"]
+      allowedTools: ["read_file", "write_file", "apply_patch", "run_shell"]
     }
   ];
 }
@@ -721,6 +673,26 @@ function liveSmokeRuns(options: {
       allowedTools: ["read_file"],
       prompt: CODEX_LIVE_SMOKE_PROMPT,
       preflightFailureReason: codexHarnessCredentialSkipReason(options.env)
+    });
+  }
+  if (options.targets.includes("cursor")) {
+    const harness =
+      options.harnesses?.cursor ??
+      createCursorHarness({ env: options.env, skipWhenUnavailable: false });
+    runs.push({
+      taskId: "cursor-live",
+      harnessId: "cursor",
+      purpose: "live",
+      outcome: "success",
+      harness,
+      model: {
+        id: "cursor",
+        model: options.env.WARRANT_CURSOR_SMOKE_MODEL ?? "fusion-panel"
+      },
+      sideEffects: "read_only",
+      allowedTools: ["read_file"],
+      prompt: CURSOR_LIVE_SMOKE_PROMPT,
+      preflightFailureReason: cursorHarnessUnavailableReason(options.env)
     });
   }
   return runs;
@@ -797,7 +769,9 @@ function credentialStateFor(
     case "mock":
       return "not required";
     case "cursor":
-      return "not applicable";
+      return cursorHarnessUnavailableReason(env) === undefined
+        ? "credentials available"
+        : "credentials missing/skipped";
     default:
       return assertNever(harnessId);
   }
@@ -810,9 +784,8 @@ function contractReadinessFor(harnessId: HarnessCapabilityTarget): string {
       return "contract/mock ready";
     case "claude-code":
     case "codex":
-      return "contract/mock ready";
     case "cursor":
-      return "adapter missing";
+      return "contract/mock ready";
     default:
       return assertNever(harnessId);
   }

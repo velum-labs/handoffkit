@@ -10,6 +10,7 @@ import { createAgentHarness } from "./agent.js";
 import { claudeCodeHarness } from "./claude-code.js";
 import { createCommandHarness } from "./command.js";
 import { codexHarness } from "./codex.js";
+import { createCursorHarness } from "./cursor.js";
 import { createMockHarness } from "./mock.js";
 import { runEnsemble } from "./run.js";
 import type {
@@ -182,7 +183,13 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
       return claudeCodeHarness({ timeoutMs: options.timeoutMs });
     case "cursor-acp":
     case "cursor-desktop":
-      throw new Error(`${kind} runs through the Cursor harness adapter path`);
+      return createCursorHarness({
+        id: kind,
+        fusionBackendUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
+        ...(options.fusionApiKey ? { apiKey: options.fusionApiKey } : {}),
+        ...(options.cursorKitDir !== undefined ? { cursorKitDir: options.cursorKitDir } : {}),
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+      });
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported unified harness: ${String(exhausted)}`);
@@ -402,7 +409,7 @@ export async function runFusionPanels(
 }
 
 function descriptorFor(
-  kind: Exclude<UnifiedHarnessKind, "cursor-acp" | "cursor-desktop">,
+  kind: UnifiedHarnessKind,
   options: UnifiedHarnessE2EOptions
 ): EnsembleDescriptor {
   const id = `${options.id ?? "unified_e2e"}_${kind.replace(/-/g, "_")}`;
@@ -539,7 +546,12 @@ export async function runUnifiedHarnessE2E(
   mkdirSync(outputRoot, { recursive: true });
   const results: UnifiedHarnessMatrixResult[] = [];
   for (const kind of options.harnesses) {
-    if (kind === "cursor-acp" || kind === "cursor-desktop") {
+    if (
+      (kind === "cursor-acp" || kind === "cursor-desktop") &&
+      options.cursorRunner !== undefined
+    ) {
+      // Explicit probe runner: drive the Cursorkit harness suite and record a
+      // route/transcript probe instead of producing real ensemble candidates.
       results.push(await runCursorHarness(kind, options));
       continue;
     }
