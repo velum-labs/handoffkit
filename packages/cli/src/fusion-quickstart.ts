@@ -27,6 +27,8 @@ import type { Gateway } from "@fusionkit/model-gateway";
 import { gatewaySetupSnippets, setGatewayChatter, startFusionStepGateway } from "./gateway.js";
 import type { GatewayRunnerConfig } from "./gateway.js";
 import { claudeEnv, codexConfigToml } from "./local.js";
+import { createPortlessSession } from "./shared/portless.js";
+import type { PortlessSession } from "./shared/portless.js";
 import { runPreflight } from "./shared/preflight.js";
 import { createBootView } from "./ui/boot.js";
 import { confirm, select } from "./ui/prompt.js";
@@ -71,7 +73,7 @@ export type PanelModelSpec = {
  * synthesizer (`fusionkit serve`) and the single-model OpenAI shim
  * (`fusionkit serve-endpoint`). Pinned so `uvx` resolves a reproducible build.
  */
-export const FUSIONKIT_PYPI_VERSION = "0.1.1";
+export const FUSIONKIT_PYPI_VERSION = "0.2.0";
 
 /**
  * Default cloud panel — works cross-platform with only `OPENAI_API_KEY` and
@@ -253,6 +255,29 @@ export function bundledScopeServer(): string | undefined {
   return existsSync(serverJs) ? serverJs : undefined;
 }
 
+/**
+ * Inject the portless CA so spawned Node children (dashboard, cursor bridge,
+ * launched agents) trust the proxy's HTTPS routes. Only `NODE_EXTRA_CA_CERTS` is
+ * set: it *extends* Node's trust store. We deliberately do NOT set Python's
+ * `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE`, because those *replace* the bundle — and
+ * pointing them at the portless CA alone breaks the router's outbound HTTPS to
+ * real providers (api.openai.com, etc.). The router never calls a portless HTTPS
+ * URL (providers go direct; MLX is loopback), so it needs no portless CA. If a
+ * Python process ever must reach a portless HTTPS URL, build a combined
+ * certifi+portless bundle rather than replacing the bundle here. A no-op when
+ * portless is off (no CA path).
+ */
+function withCaEnv<T extends Record<string, string | undefined>>(
+  env: T,
+  caCertPath: string | undefined
+): T {
+  if (caCertPath === undefined) return env;
+  return {
+    ...env,
+    NODE_EXTRA_CA_CERTS: env.NODE_EXTRA_CA_CERTS ?? caCertPath
+  };
+}
+
 /** Best-effort: open a URL in the default browser (no-op on failure). */
 function openUrl(url: string): void {
   const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
@@ -349,75 +374,122 @@ function startDevDashboard(input: {
  * prebuilt bundle shipped inside the npm package; falls back to building the
  * app from source in a monorepo dev checkout.
  */
+/** Identity token of a reusable scope dashboard (any healthy instance qualifies). */
+const SCOPE_IDENTITY = "scope-dashboard";
+
 export async function startObservability(input: {
   log: (line: string) => void;
   logFile?: string;
   report?: StackReporter;
+  portless: PortlessSession;
 }): Promise<Observability> {
   const traceDir = mkdtempSync(join(tmpdir(), "fusion-trace-"));
   const dbPath = join(traceDir, "scope.db");
 
   // The dashboard server loads node:sqlite; keep its experimental warnings out
   // of the log just like the parent CLI. The per-run db/trace dir isolate state.
-  const childEnv = {
-    ...process.env,
-    NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
-    SCOPEKIT_DB: dbPath,
-    FUSION_TRACE_DIR: traceDir
+  const childEnv = withCaEnv(
+    {
+      ...process.env,
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
+      SCOPEKIT_DB: dbPath,
+      FUSION_TRACE_DIR: traceDir
+    },
+    input.portless.caCertPath
+  );
+
+  const spawnDashboard = async (): Promise<{ port: number; pid?: number; close: () => void }> => {
+    const bundled = bundledScopeServer();
+    if (input.report) input.report({ kind: "dashboard.start" });
+    else if (bundled !== undefined) input.log("fusion: starting observability dashboard...");
+    else input.log("fusion: building observability dashboard (one-time)...");
+
+    let proc: LoggedChild;
+    try {
+      proc =
+        bundled !== undefined
+          ? startBundledDashboard({
+              serverJs: bundled,
+              env: childEnv,
+              ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
+            })
+          : startDevDashboard({
+              env: childEnv,
+              traceDir,
+              ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
+            });
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+    try {
+      await waitForHttp(`http://127.0.0.1:${SCOPE_DASHBOARD_PORT}`, proc, {
+        timeoutMs: 60_000,
+        label: "dashboard"
+      });
+    } catch (error) {
+      terminate(proc.child);
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+    return {
+      port: SCOPE_DASHBOARD_PORT,
+      ...(proc.child.pid !== undefined ? { pid: proc.child.pid } : {}),
+      close: () => terminate(proc.child)
+    };
   };
 
-  const bundled = bundledScopeServer();
-  if (input.report) input.report({ kind: "dashboard.start" });
-  else if (bundled !== undefined) input.log("fusion: starting observability dashboard...");
-  else input.log("fusion: building observability dashboard (one-time)...");
-
-  let proc: LoggedChild;
+  let resolved: Awaited<ReturnType<PortlessSession["discoverOrSpawn"]>>;
   try {
-    proc =
-      bundled !== undefined
-        ? startBundledDashboard({
-            serverJs: bundled,
-            env: childEnv,
-            ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
-          })
-        : startDevDashboard({
-            env: childEnv,
-            traceDir,
-            ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
-          });
+    resolved = await input.portless.discoverOrSpawn({
+      name: "scope",
+      identity: SCOPE_IDENTITY,
+      healthCheck: async (loopbackUrl) => {
+        try {
+          const response = await fetch(loopbackUrl, { signal: AbortSignal.timeout(2000) });
+          return response.ok ? SCOPE_IDENTITY : undefined;
+        } catch {
+          return undefined;
+        }
+      },
+      spawn: spawnDashboard
+    });
   } catch (error) {
     rmSync(traceDir, { recursive: true, force: true });
     throw error instanceof Error ? error : new Error(String(error));
   }
 
-  const url = `http://127.0.0.1:${SCOPE_DASHBOARD_PORT}`;
-  try {
-    await waitForHttp(url, proc, { timeoutMs: 60_000, label: "dashboard" });
-  } catch (error) {
-    terminate(proc.child);
-    rmSync(traceDir, { recursive: true, force: true });
-    throw error instanceof Error ? error : new Error(String(error));
-  }
-
-  if (input.report) input.report({ kind: "dashboard.ready", detail: url });
-  else input.log(`fusion: observability dashboard ready on ${url}`);
+  if (input.report) input.report({ kind: "dashboard.ready", detail: resolved.url });
+  else input.log(`fusion: observability dashboard ready on ${resolved.url}`);
 
   return {
-    url,
-    ingestUrl: `${url}/api/ingest`,
+    url: resolved.url,
+    // Trace events post over loopback (the in-process emitters do not carry the
+    // portless CA), so ingest uses the raw port; the named URL is for humans.
+    ingestUrl: `${resolved.loopbackUrl}/api/ingest`,
     traceDir,
     close: async () => {
-      terminate(proc.child);
+      await resolved.close();
       rmSync(traceDir, { recursive: true, force: true });
     }
   };
 }
 
-export type ModelServers = {
+/**
+ * The single `fusionkit serve` router: one process that fronts every panel
+ * model (passthrough, routed by the endpoint id in the request `model` field)
+ * and also performs trajectory synthesis. `endpoints` maps each panel id to the
+ * router URL so the harness reaches its model through the one base URL.
+ */
+export type Router = {
+  url: string;
+  port: number;
+  /** The router process pid (owns its portless route across runs). */
+  pid?: number;
   endpoints: Record<string, string>;
-  judgeUrl: string;
-  judgeModel: string;
   models: EnsembleModel[];
+  /** The endpoint id used as the judge/synthesizer. */
+  judgeModel: string;
+  /** Sorted endpoint ids — the router's discover-or-spawn identity token. */
+  identity: string;
   close: () => Promise<void>;
 };
 
@@ -459,202 +531,190 @@ function looksPermanentFailure(log: string): boolean {
   );
 }
 
-async function spawnCloudServer(input: {
-  spec: PanelModelSpec;
-  provider: Exclude<PanelProvider, "mlx">;
-  fusionkitDir?: string;
-  env: Record<string, string | undefined>;
-  logFile?: string;
-  log: (line: string) => void;
-}): Promise<{ url: string; child: ChildProcess }> {
-  const keyEnv = input.spec.keyEnv ?? defaultKeyEnv(input.provider);
-  const runner = fusionkitPyCommand(input.fusionkitDir);
-  const label = `${input.spec.id} (${input.provider}:${input.spec.model})`;
-  const maxAttempts = 3;
-  let lastError: Error | undefined;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const port = await freePort();
-    const args = [
-      ...runner.prefix,
-      "serve-endpoint",
-      "--id",
-      input.spec.id,
-      "--model",
-      input.spec.model,
-      "--provider",
-      input.provider,
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      ...(input.spec.baseUrl !== undefined ? ["--base-url", input.spec.baseUrl] : []),
-      ...(keyEnv !== undefined ? ["--api-key-env", keyEnv] : [])
-    ];
-    input.log(
-      attempt === 1
-        ? `fusion: starting ${label}...`
-        : `fusion: retrying ${label} (attempt ${attempt}/${maxAttempts})...`
-    );
-    const proc = spawnLogged(runner.command, args, {
-      ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
-      ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
-      env: input.env
-    });
-    const url = `http://127.0.0.1:${port}`;
-    try {
-      await waitForHttp(`${url}/v1/models`, proc, {
-        timeoutMs: 30_000,
-        label: `${input.spec.id} server`,
-        requireOk: true
-      });
-      input.log(`fusion: ${input.spec.id} ready on ${url}`);
-      return { url, child: proc.child };
-    } catch (error) {
-      terminate(proc.child);
-      lastError = error instanceof Error ? error : new Error(String(error));
-      // A missing runner binary or a provider-side rejection (bad key / model)
-      // will not be fixed by retrying — surface it immediately with guidance.
-      const permanent = proc.spawnError() !== undefined || looksPermanentFailure(proc.log());
-      if (permanent || attempt === maxAttempts) {
-        const keyHint = keyEnv !== undefined ? ` and that ${keyEnv} grants access` : "";
-        throw new Error(
-          `panel model "${input.spec.id}" (${input.provider}:${input.spec.model}) could not start.\n` +
-            `  Check the model name${keyHint}.\n` +
-            `  ${lastError.message}`
-        );
-      }
-      // Transient: brief backoff, then retry on a fresh port.
-      await sleep(500 * attempt);
+/**
+ * Default provider base URL when a cloud spec carries no explicit `baseUrl`.
+ * fusionkit's `ModelEndpoint` requires `base_url`, so the router config must
+ * always set it (the `serve-endpoint` shim filled this in for us before). Mirrors
+ * `PROVIDER_DEFAULT_BASE_URL` in fusionkit's openai_endpoint.py.
+ */
+function providerDefaultBaseUrl(provider: Exclude<PanelProvider, "mlx">): string {
+  switch (provider) {
+    case "openai":
+      return "https://api.openai.com";
+    case "anthropic":
+      return "https://api.anthropic.com";
+    case "google":
+      return "https://generativelanguage.googleapis.com";
+    case "openai-compatible":
+      return "http://127.0.0.1";
+    default: {
+      const exhaustive: never = provider;
+      throw new Error(`unknown provider ${String(exhaustive)}`);
     }
   }
-  throw lastError ?? new Error(`panel model "${input.spec.id}" could not start`);
+}
+
+/** Pick the panel spec that backs the judge (by model name), else the first. */
+function judgeSpecFor(specs: PanelModelSpec[], judgeModel: string | undefined): PanelModelSpec {
+  const first = specs[0];
+  if (first === undefined) throw new Error("at least one panel model is required");
+  if (judgeModel === undefined) return first;
+  return specs.find((spec) => spec.model === judgeModel) ?? first;
 }
 
 /**
- * Bring up one real model server per panel model and return an id -> base URL
- * map. `mlx` specs run locally; cloud specs are fronted by FusionKit. When
- * `endpoints` is supplied (pre-running servers or tests), those are used
- * verbatim and nothing is spawned.
+ * Build the `fusionkit serve` config (YAML) for the consolidated router: one
+ * endpoint per panel model. Cloud models call their provider directly (keyed by
+ * `api_key_env`); MLX models are fronted as `openai-compatible` endpoints
+ * pointing at their in-process gateway loopback URL. The judge endpoint doubles
+ * as the synthesizer. Values are JSON-quoted (valid YAML flow scalars).
  */
-export async function startModelServers(options: {
+function routerConfigYaml(input: {
   specs: PanelModelSpec[];
-  endpoints?: Record<string, string>;
+  mlxUrls: Record<string, string>;
+  judgeId: string;
+}): string {
+  const lines = ["endpoints:"];
+  for (const spec of input.specs) {
+    const provider = spec.provider ?? "mlx";
+    lines.push(`  - id: ${JSON.stringify(spec.id)}`);
+    lines.push(`    model: ${JSON.stringify(spec.model)}`);
+    if (provider === "mlx") {
+      lines.push("    provider: openai-compatible");
+      lines.push(`    base_url: ${JSON.stringify(input.mlxUrls[spec.id] ?? "")}`);
+      lines.push("    api_key: not-needed");
+    } else {
+      // `base_url` is required by fusionkit's ModelEndpoint, so always emit one
+      // (the spec's, or the provider default).
+      const baseUrl = spec.baseUrl ?? providerDefaultBaseUrl(provider);
+      lines.push(`    provider: ${provider}`);
+      lines.push(`    base_url: ${JSON.stringify(baseUrl)}`);
+      const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);
+      if (keyEnv !== undefined) lines.push(`    api_key_env: ${JSON.stringify(keyEnv)}`);
+    }
+  }
+  lines.push(`default_model: ${JSON.stringify(input.judgeId)}`);
+  lines.push(`judge_model: ${JSON.stringify(input.judgeId)}`);
+  lines.push(`synthesizer_model: ${JSON.stringify(input.judgeId)}`);
+  // Generous budget: reasoning models (gpt-5.x) spend tokens on reasoning before
+  // producing content, so a small cap can yield an empty answer.
+  lines.push("sampling: {temperature: 0.2, top_p: 0.9, max_tokens: 8192}");
+  lines.push("");
+  return lines.join("\n");
+}
+
+/**
+ * Spawn the single `fusionkit serve` router fronting every panel model + the
+ * synthesizer. MLX specs first get an in-process OpenAI-compatible gateway
+ * (loopback) that the router proxies to; cloud specs call their provider
+ * directly. Returns the router URL, an id->routerUrl endpoint map, and a close
+ * that tears down the router process and any MLX gateways it fronts.
+ */
+export async function startRouter(options: {
+  specs: PanelModelSpec[];
+  judgeModel?: string;
   fusionkitDir?: string;
   logsDir?: string;
   report?: StackReporter;
   log: (line: string) => void;
-}): Promise<ModelServers> {
+}): Promise<Router> {
   const { specs, report } = options;
-  const judge = specs[0];
-  if (judge === undefined) throw new Error("at least one panel model is required");
+  const judgeSpec = judgeSpecFor(specs, options.judgeModel);
   const models: EnsembleModel[] = specs.map((spec) => ({ id: spec.id, model: spec.model }));
+  const identity = specs.map((spec) => spec.id).sort().join(",");
 
-  // Prefer structured events when a reporter is present; otherwise keep the
-  // plain line logs that non-interactive callers and tests rely on.
-  const announceStart = (id: string, label: string): void => {
-    if (report) report({ kind: "server.start", id, label });
+  const announceStart = (label: string): void => {
+    if (report) report({ kind: "server.start", id: "router", label });
     else options.log(`fusion: starting ${label}...`);
   };
-  const announceReady = (id: string, detail: string): void => {
-    if (report) report({ kind: "server.ready", id, detail });
-    else options.log(`fusion: ${id} ready on ${detail}`);
+  const announceReady = (detail: string): void => {
+    if (report) report({ kind: "server.ready", id: "router", detail });
+    else options.log(`fusion: router ready on ${detail}`);
   };
 
-  if (options.endpoints !== undefined) {
-    return {
-      endpoints: options.endpoints,
-      judgeUrl: options.endpoints[judge.id] ?? Object.values(options.endpoints)[0] ?? "",
-      judgeModel: judge.model,
-      models,
-      close: async () => {}
-    };
-  }
+  announceStart(`router · ${specs.map((spec) => spec.id).join(", ")}`);
 
-  // Cloud servers inherit the parent env plus the FusionKit checkout's `.env`
-  // (so OPENAI_API_KEY / ANTHROPIC_API_KEY load seamlessly), without overriding
-  // anything already exported.
-  const cloudEnv: Record<string, string | undefined> = { ...process.env };
+  // The router inherits the parent env plus the FusionKit checkout's `.env` (so
+  // provider keys load seamlessly), without overriding anything already exported.
+  // It calls providers directly and MLX over loopback (never a portless HTTPS
+  // URL), so it needs no portless CA — and must keep its default certifi bundle
+  // intact to verify real provider certificates.
+  const env: Record<string, string | undefined> = { ...process.env };
   if (options.fusionkitDir !== undefined) {
-    loadEnvFileInto(join(options.fusionkitDir, ".env"), cloudEnv);
+    loadEnvFileInto(join(options.fusionkitDir, ".env"), env);
   }
 
-  const gateways: Gateway[] = [];
   const backends: MlxBackend[] = [];
-  const children: ChildProcess[] = [];
-  const endpoints: Record<string, string> = {};
-  const closeAll = async (): Promise<void> => {
-    for (const child of children) terminate(child);
+  const gateways: Gateway[] = [];
+  const mlxUrls: Record<string, string> = {};
+  const closeBackends = async (): Promise<void> => {
     await Promise.allSettled(gateways.map((gateway) => gateway.close()));
     await Promise.allSettled(backends.map((backend) => backend.stop()));
   };
 
-  const logFileFor = (id: string): string | undefined =>
-    options.logsDir !== undefined ? join(options.logsDir, `${id}.log`) : undefined;
-
-  // MLX backends are memory-heavy (each loads a model into RAM), so they start
-  // sequentially. Cloud `serve-endpoint` servers are cheap and network-bound, so
-  // they start concurrently to cut perceived boot time.
-  const mlxSpecs = specs.filter((spec) => (spec.provider ?? "mlx") === "mlx");
-  const cloudSpecs = specs.filter((spec) => (spec.provider ?? "mlx") !== "mlx");
-
   try {
-    for (const spec of mlxSpecs) {
-      announceStart(spec.id, `${spec.id} (${spec.model})`);
+    // MLX backends are memory-heavy (each loads a model into RAM), so they start
+    // sequentially before the router that fronts them.
+    for (const spec of specs) {
+      if ((spec.provider ?? "mlx") !== "mlx") continue;
       const backend = new MlxBackend({ model: spec.model });
       await backend.start();
       const gateway = await startGateway({ backend });
       backends.push(backend);
       gateways.push(gateway);
-      endpoints[spec.id] = gateway.url();
-      announceReady(spec.id, gateway.url());
+      mlxUrls[spec.id] = gateway.url();
     }
 
-    for (const spec of cloudSpecs) {
-      announceStart(spec.id, `${spec.id} (${spec.provider}:${spec.model})`);
-    }
-    const cloudResults = await Promise.allSettled(
-      cloudSpecs.map((spec) =>
-        spawnCloudServer({
-          spec,
-          provider: (spec.provider ?? "mlx") as Exclude<PanelProvider, "mlx">,
-          ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
-          ...(logFileFor(spec.id) !== undefined ? { logFile: logFileFor(spec.id) as string } : {}),
-          env: cloudEnv,
-          log: () => {}
-        }).then((started) => ({ id: spec.id, started }))
-      )
-    );
-    const failures: string[] = [];
-    for (let index = 0; index < cloudResults.length; index++) {
-      const result = cloudResults[index];
-      const spec = cloudSpecs[index];
-      if (result === undefined || spec === undefined) continue;
-      if (result.status === "fulfilled") {
-        children.push(result.value.started.child);
-        endpoints[result.value.id] = result.value.started.url;
-        announceReady(result.value.id, result.value.started.url);
-      } else {
-        const detail = result.reason instanceof Error ? result.reason.message : String(result.reason);
-        if (report) report({ kind: "server.fail", id: spec.id, detail });
-        failures.push(`${spec.id}: ${detail}`);
+    const config = routerConfigYaml({ specs, mlxUrls, judgeId: judgeSpec.id });
+    const configDir = mkdtempSync(join(tmpdir(), "fusion-router-"));
+    const configPath = join(configDir, "router.yaml");
+    writeFileSync(configPath, config);
+    const runner = fusionkitPyCommand(options.fusionkitDir);
+    const port = await freePort();
+    const proc = spawnLogged(
+      runner.command,
+      [...runner.prefix, "serve", "--config", configPath, "--host", "127.0.0.1", "--port", String(port)],
+      {
+        ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
+        ...(options.logsDir !== undefined ? { logFile: join(options.logsDir, "router.log") } : {}),
+        env
       }
+    );
+    proc.child.once("exit", () => rmSync(configDir, { recursive: true, force: true }));
+    const url = `http://127.0.0.1:${port}`;
+    try {
+      await waitForHttp(`${url}/v1/models`, proc, {
+        timeoutMs: 60_000,
+        label: "fusion router",
+        requireOk: true
+      });
+    } catch (error) {
+      terminate(proc.child);
+      // A provider-side rejection (bad key / model) will not be fixed by a
+      // retry, so surface the distilled cause with guidance.
+      const hint = looksPermanentFailure(proc.log()) ? " (check model names and provider API keys)" : "";
+      throw new Error(`${error instanceof Error ? error.message : String(error)}${hint}`);
     }
-    if (failures.length > 0) {
-      throw new Error(`panel server(s) failed to start:\n${failures.join("\n")}`);
-    }
+    announceReady(url);
+
+    const endpoints: Record<string, string> = Object.fromEntries(specs.map((spec) => [spec.id, url]));
+    return {
+      url,
+      port,
+      ...(proc.child.pid !== undefined ? { pid: proc.child.pid } : {}),
+      endpoints,
+      models,
+      judgeModel: judgeSpec.id,
+      identity,
+      close: async () => {
+        terminate(proc.child);
+        await closeBackends();
+      }
+    };
   } catch (error) {
-    await closeAll();
+    await closeBackends();
     throw error;
   }
-
-  return {
-    endpoints,
-    judgeUrl: endpoints[judge.id] ?? Object.values(endpoints)[0] ?? "",
-    judgeModel: judge.model,
-    models,
-    close: closeAll
-  };
 }
 
 export type FusionStack = {
@@ -678,116 +738,85 @@ export type StartFusionStackOptions = {
   timeoutMs?: number;
   logsDir?: string;
   report?: StackReporter;
+  /** Active portless session; defaults to a disabled (loopback) session. */
+  portless?: PortlessSession;
   log: (line: string) => void;
 };
 
-/**
- * Spawn a `fusionkit serve` as the trajectory-synthesis backend, configured
- * with the judge model. FusionKit owns synthesis, so the agent harness fuses
- * its trajectories through this server's `/v1/fusion/trajectories:fuse`.
- */
-export async function startSynthesisServer(input: {
-  fusionkitDir?: string;
-  judgeModel: string;
-  judgeBaseUrl: string;
-  env: Record<string, string | undefined>;
-  logFile?: string;
-  log: (line: string) => void;
-}): Promise<{ url: string; child: ChildProcess }> {
-  const port = await freePort();
-  const config = [
-    "endpoints:",
-    "  - id: judge",
-    "    provider: openai-compatible",
-    `    model: ${JSON.stringify(input.judgeModel)}`,
-    `    base_url: ${JSON.stringify(input.judgeBaseUrl)}`,
-    "    api_key: not-needed",
-    "default_model: judge",
-    "judge_model: judge",
-    "synthesizer_model: judge",
-    // Generous budget: reasoning models (gpt-5.x) spend tokens on reasoning
-    // before producing content, so a small cap can yield an empty answer.
-    "sampling: {temperature: 0.2, top_p: 0.9, max_tokens: 8192}",
-    ""
-  ].join("\n");
-  const configDir = mkdtempSync(join(tmpdir(), "fusion-synth-"));
-  const configPath = join(configDir, "synthesis.yaml");
-  writeFileSync(configPath, config);
-  input.log("fusion: starting synthesis backend (fusionkit serve)...");
-  const runner = fusionkitPyCommand(input.fusionkitDir);
-  const proc = spawnLogged(
-    runner.command,
-    [...runner.prefix, "serve", "--config", configPath, "--host", "127.0.0.1", "--port", String(port)],
-    {
-      ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
-      ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
-      env: input.env
-    }
-  );
-  // The temp config is only read at startup; drop it once the server exits.
-  proc.child.once("exit", () => rmSync(configDir, { recursive: true, force: true }));
-  const url = `http://127.0.0.1:${port}`;
-  try {
-    await waitForHttp(`${url}/v1/models`, proc, {
-      timeoutMs: 60_000,
-      label: "synthesis backend",
-      requireOk: true
-    });
-  } catch (error) {
-    terminate(proc.child);
-    throw error instanceof Error ? error : new Error(String(error));
-  }
-  input.log(`fusion: synthesis backend ready on ${url}`);
-  return { child: proc.child, url };
-}
-
 export async function startFusionStack(options: StartFusionStackOptions): Promise<FusionStack> {
   const report = options.report;
-  const servers = await startModelServers({
-    specs: options.models,
-    ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
-    ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
-    ...(options.logsDir !== undefined ? { logsDir: options.logsDir } : {}),
-    ...(report !== undefined ? { report } : {}),
-    log: options.log
-  });
+  const portless = options.portless ?? (await createPortlessSession({ enabled: false }));
 
-  let synthesisChild: ChildProcess | undefined;
-  let synthesisUrl = options.synthesisUrl ?? servers.judgeUrl;
-  try {
-    // Trajectory fusion needs a FusionKit synthesizer; spawn one (via `uvx
-    // fusionkit serve`, or a local checkout if --fusionkit-dir is given) unless
-    // the caller supplied a pre-running server via --synthesis-url.
-    if (options.synthesisUrl === undefined) {
-      const cloudEnv: Record<string, string | undefined> = { ...process.env };
-      if (options.fusionkitDir !== undefined) {
-        loadEnvFileInto(join(options.fusionkitDir, ".env"), cloudEnv);
+  // Full override (pre-running per-model endpoints + a pre-running synthesis
+  // URL, e.g. tests): use them verbatim and spawn no router.
+  const override = options.endpoints !== undefined && options.synthesisUrl !== undefined;
+  const judgeModelName = options.judgeModel ?? options.models[0]?.model ?? "";
+  const models: EnsembleModel[] = options.models.map((spec) => ({ id: spec.id, model: spec.model }));
+
+  let modelEndpoints: Record<string, string>;
+  let fusionBackendUrl: string;
+  let routerClose: () => Promise<void> | void = () => {};
+
+  if (override) {
+    modelEndpoints = options.endpoints as Record<string, string>;
+    fusionBackendUrl = options.synthesisUrl as string;
+  } else {
+    // Discover-or-spawn the single router (models + synthesis), reusing a
+    // compatible running instance (same endpoint id set) across runs.
+    const expectedIdentity = options.models.map((spec) => spec.id).sort().join(",");
+    const resolved = await portless.discoverOrSpawn({
+      name: "router",
+      identity: expectedIdentity,
+      healthCheck: async (loopbackUrl) => {
+        try {
+          const response = await fetch(`${loopbackUrl}/v1/models`, { signal: AbortSignal.timeout(2000) });
+          if (!response.ok) return undefined;
+          const body = (await response.json()) as { data?: Array<{ id?: string }> };
+          return (body.data ?? [])
+            .map((entry) => entry.id)
+            .filter((id): id is string => typeof id === "string" && id !== "fusionkit/router")
+            .sort()
+            .join(",");
+        } catch {
+          return undefined;
+        }
+      },
+      spawn: async () => {
+        if (report) report({ kind: "server.start", id: "router", label: "router" });
+        const router = await startRouter({
+          specs: options.models,
+          ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
+          ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
+          ...(options.logsDir !== undefined ? { logsDir: options.logsDir } : {}),
+          ...(report !== undefined ? { report } : {}),
+          log: options.log
+        });
+        return {
+          port: router.port,
+          ...(router.pid !== undefined ? { pid: router.pid } : {}),
+          close: router.close
+        };
       }
-      if (report) report({ kind: "synth.start" });
-      const synthesis = await startSynthesisServer({
-        ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
-        ...(options.logsDir !== undefined ? { logFile: join(options.logsDir, "synthesis.log") } : {}),
-        judgeModel: options.judgeModel ?? servers.judgeModel,
-        judgeBaseUrl: servers.judgeUrl,
-        env: cloudEnv,
-        log: report ? () => {} : options.log
-      });
-      synthesisChild = synthesis.child;
-      synthesisUrl = synthesis.url;
-      if (report) report({ kind: "synth.ready", detail: synthesis.url });
-    }
+    });
+    // The harness + the in-process step call reach the router over loopback (the
+    // portless name is for humans); see the CA-at-startup note in portless.ts.
+    modelEndpoints = Object.fromEntries(options.models.map((spec) => [spec.id, resolved.loopbackUrl]));
+    fusionBackendUrl = resolved.loopbackUrl;
+    routerClose = resolved.close;
+  }
 
+  try {
     if (report) report({ kind: "gateway.start" });
     // The judge-streamed-trajectory front door: each panel model produces a
     // trajectory and the judge emits the trajectory the user's tool executes.
     const gatewayConfig: GatewayRunnerConfig = {
-      fusionBackendUrl: synthesisUrl,
+      fusionBackendUrl,
       repo: options.repo,
       outputRoot: options.outputRoot,
       harnesses: ["agent"],
-      models: servers.models,
-      judgeModel: options.judgeModel ?? servers.judgeModel,
-      modelEndpoints: servers.endpoints,
+      models,
+      judgeModel: judgeModelName,
+      modelEndpoints,
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
     };
     const gateway = await startFusionStepGateway({
@@ -796,19 +825,21 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       port: options.port ?? 0,
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {})
     });
-    if (report) report({ kind: "gateway.ready", detail: gateway.url() });
+    // The gateway runs in-process (dies with this CLI), so it gets a per-run
+    // portless name rather than being a cross-run singleton.
+    const fusionUrl = portless.register("gateway", gateway.port());
+    if (report) report({ kind: "gateway.ready", detail: fusionUrl });
     return {
-      fusionUrl: gateway.url(),
-      endpoints: servers.endpoints,
+      fusionUrl,
+      endpoints: modelEndpoints,
       close: async () => {
         await gateway.close();
-        if (synthesisChild !== undefined) terminate(synthesisChild);
-        await servers.close();
+        portless.unregister("gateway");
+        await routerClose();
       }
     };
   } catch (error) {
-    if (synthesisChild !== undefined) terminate(synthesisChild);
-    await servers.close();
+    await routerClose();
     throw error;
   }
 }
@@ -833,11 +864,12 @@ export async function startCursorBridge(input: {
   cursorKitDir: string;
   fusionUrl: string;
   logFile?: string;
+  caCertPath?: string;
   log: (line: string) => void;
 }): Promise<{ child: ChildProcess; port: number }> {
   const port = await freePort();
   const env = {
-    ...scrubbedBridgeEnv(),
+    ...withCaEnv(scrubbedBridgeEnv(), input.caCertPath),
     BRIDGE_PORT: String(port),
     BRIDGE_ROUTE_INVENTORY: "true",
     CURSOR_UPSTREAM_BASE_URL: "https://api2.cursor.sh",
@@ -879,8 +911,16 @@ export type RunFusionOptions = {
   observe?: boolean;
   /** Skip the interactive cost/scope confirmation for the cloud panel. */
   yes?: boolean;
+  /** Route services through portless (stable named URLs + singletons). Default on. */
+  portless?: boolean;
   log?: (line: string) => void;
 };
+
+/** Whether portless is enabled: explicit flag/config wins, else on unless PORTLESS=0. */
+export function portlessEnabled(options: RunFusionOptions): boolean {
+  if (options.portless !== undefined) return options.portless;
+  return process.env.PORTLESS !== "0";
+}
 
 export async function runFusion(
   tool: FusionTool,
@@ -915,6 +955,12 @@ export async function runFusion(
 
   // Fail fast on missing prerequisites before we start spawning a stack.
   runPreflight(preflightRequirements(tool, models, options));
+
+  // Bring up the portless session (programmatic RouteStore). Portless is a
+  // polish layer, never a hard requirement: when it is off, unavailable (Node <
+  // 24), or its proxy isn't running, the session degrades to loopback URLs and
+  // logs a one-line hint, so a fresh install always runs out of the box.
+  const portless = await createPortlessSession({ enabled: portlessEnabled(options), log });
 
   const judgeLabel = options.judgeModel ?? models[0]?.model ?? "(first panel model)";
   // The live boot checklist only renders on an interactive TTY when the caller
@@ -978,14 +1024,15 @@ export async function runFusion(
     }
   }
 
-  // The live boot checklist, driven by structured stack events.
+  // The live boot checklist, driven by structured stack events. The panel now
+  // runs behind a single `fusionkit serve` router (models + synthesis), so the
+  // checklist shows one router row instead of one per model; the override path
+  // (pre-running endpoints + synthesis) spawns nothing.
+  const spawnsRouter = !(options.endpoints !== undefined && options.synthesisUrl !== undefined);
   const boot = useBootView
     ? createBootView({
-        servers:
-          options.endpoints === undefined
-            ? models.map((model) => ({ id: model.id, label: `${model.id} · ${model.model}` }))
-            : [],
-        includeSynth: options.synthesisUrl === undefined,
+        servers: spawnsRouter ? [{ id: "router", label: `router · ${models.map((model) => model.id).join(", ")}` }] : [],
+        includeSynth: false,
         includeDashboard: options.observe === true,
         title: dim("booting the fusion stack")
       })
@@ -1009,6 +1056,7 @@ export async function runFusion(
         observability = await startObservability({
           log,
           logFile: join(logsDir, "dashboard.log"),
+          portless,
           ...(report !== undefined ? { report } : {})
         });
         disposers.push(() => observability?.close() ?? Promise.resolve());
@@ -1032,6 +1080,7 @@ export async function runFusion(
       outputRoot: join(root, "runs"),
       models,
       logsDir,
+      portless,
       ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
@@ -1114,17 +1163,20 @@ export async function runFusion(
           cursorKitDir,
           fusionUrl: stack.fusionUrl,
           logFile: join(logsDir, "cursor-bridge.log"),
+          ...(portless.caCertPath !== undefined ? { caCertPath: portless.caCertPath } : {}),
           log
         });
         bridge = started.child;
+        const bridgeUrl = portless.register("cursor", started.port);
         disposers.push(() => {
+          portless.unregister("cursor");
           if (bridge !== undefined) terminate(bridge);
         });
         prepareForPassthrough();
         log("fusion: launching cursor-agent...");
         return await spawnTool(
           "cursor-agent",
-          ["--endpoint", `http://127.0.0.1:${started.port}`, "--model", FUSION_MODEL_LABEL, ...toolArgs],
+          ["--endpoint", bridgeUrl, "--model", FUSION_MODEL_LABEL, ...toolArgs],
           {},
           repo
         );

@@ -3,6 +3,11 @@
 #
 #   docker compose up --build
 #   open http://localhost:7172/ui/
+#
+#   With portless installed on the host (containers can't share the host route
+#   table), register the published port for a clean URL:
+#     portless alias warrant 7172   # -> https://warrant.localhost/ui/
+#
 #   docker compose exec plane warrant ui        # control panel login token
 #   docker compose exec plane warrant runs      # ...or use the CLI directly
 #

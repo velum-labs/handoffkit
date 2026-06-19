@@ -9,6 +9,7 @@ import type { FusionConfig } from "../fusion-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { fail } from "../shared/errors.js";
 import { collect, parseFusionTool, parseIdValue, parsePanelModelSpec, parsePort } from "../shared/options.js";
+import { reapFusionServices } from "../shared/portless.js";
 
 type FusionOpts = {
   tool?: string;
@@ -27,6 +28,7 @@ type FusionOpts = {
   force?: boolean;
   authToken?: string;
   port?: string;
+  portless?: boolean;
 };
 
 /** Attach the panel/gateway flags shared by `fusion` and the per-tool launchers. */
@@ -48,6 +50,8 @@ function applyFusionOptions(command: Command): Command {
     .option("--yes", "skip the interactive cloud-panel cost confirmation")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .option("--port <n>", "gateway port (default: ephemeral)")
+    .option("--portless", "route services through portless stable URLs (default; needs the proxy)")
+    .option("--no-portless", "disable portless; use raw loopback ports (same as PORTLESS=0)")
     .allowUnknownOption()
     .passThroughOptions();
 }
@@ -71,6 +75,7 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.local !== undefined) options.local = opts.local;
   if (opts.observe !== undefined) options.observe = opts.observe;
   if (opts.yes === true) options.yes = true;
+  if (opts.portless !== undefined) options.portless = opts.portless;
   if (opts.authToken !== undefined) options.authToken = opts.authToken;
   if (opts.port !== undefined) options.port = parsePort(opts.port, 0);
 
@@ -111,6 +116,7 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   if (options.judgeModel === undefined && config.judgeModel !== undefined) options.judgeModel = config.judgeModel;
   if (options.local === undefined && config.local !== undefined) options.local = config.local;
   if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
+  if (options.portless === undefined && config.portless !== undefined) options.portless = config.portless;
   if (options.cursorKitDir === undefined && config.cursorKitDir != null) options.cursorKitDir = config.cursorKitDir;
   if (options.port === undefined && config.port != null) options.port = config.port;
 }
@@ -145,7 +151,7 @@ export function registerFusion(program: Command): void {
     program
       .command("fusion")
       .description("one command: real model fusion backs a coding agent")
-      .argument("[tool]", `${FUSION_TOOLS.join(" | ")} | init (omit on a TTY to pick interactively)`)
+      .argument("[tool]", `${FUSION_TOOLS.join(" | ")} | init | stop (omit on a TTY to pick interactively)`)
       .argument("[args...]", "arguments forwarded to the tool")
       .option("--tool <tool>", `coding agent to launch (${FUSION_TOOLS.join(" | ")})`)
       .option("--force", "overwrite an existing fusionkit.json (with `fusion init`)")
@@ -153,7 +159,8 @@ export function registerFusion(program: Command): void {
     .addHelpText(
       "after",
       "\nfusionkit's own flags must precede the tool name; everything after the tool is forwarded to it." +
-        "\nRun `fusionkit fusion init` to scaffold a committed fusionkit.json for this repo."
+        "\nRun `fusionkit fusion init` to scaffold a committed fusionkit.json for this repo." +
+        "\nRun `fusionkit fusion stop` to reap portless singleton services (router, dashboard, ...)."
     )
     .action(async (positionalTool: string | undefined, args: string[], opts: FusionOpts) => {
       // `fusion init` scaffolds the per-repo config instead of launching a tool.
@@ -161,6 +168,14 @@ export function registerFusion(program: Command): void {
         const repoRoot = configRepoRoot(resolveOptions(opts));
         const code = await runFusionInit({ repoRoot, force: opts.force === true });
         process.exit(code);
+      }
+
+      // `fusion stop` reaps persistent portless singletons left running by prior
+      // runs (the router, dashboard, ...).
+      if (positionalTool === "stop") {
+        const stopped = await reapFusionServices((line) => console.error(line));
+        console.error(`fusion: stopped ${stopped} portless service(s)`);
+        process.exit(0);
       }
 
       const { options, configTool } = resolveContext(opts);

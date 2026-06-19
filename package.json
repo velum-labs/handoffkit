@@ -1,7 +1,7 @@
 {
   "name": "warrant",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "The governed execution and provenance plane for AI agents.",
   "license": "UNLICENSED",
   "type": "module",
@@ -14,7 +14,7 @@
     "check": "node scripts/check-repo.mjs",
     "build": "tsc -b tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean",
-    "test": "node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\" \"test/*.test.js\"",
+    "test": "PORTLESS=0 node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\" \"test/*.test.js\"",
     "demo": "node scripts/demo.mjs",
     "mlx": "node examples/mlx/dist/run.js",
     "mlx:stress": "node examples/mlx/dist/stress.js",

@@ -41,7 +41,7 @@
   "publishedProtocolMetadata": {
     "typescriptPackageName": "@velum-labs/model-fusion-protocol",
     "pythonPackageName": "velum-model-fusion-protocol",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "schemaBundleHash": "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
     "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb"
   }

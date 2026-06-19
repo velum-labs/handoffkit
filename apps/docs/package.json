@@ -5,13 +5,15 @@
   "type": "module",
   "description": "Documentation site for fusionkit (the @fusionkit/cli coding-agent fusion CLI), built with Fumadocs.",
   "scripts": {
-    "dev": "fumadocs-mdx && next dev -p 4318",
+    "dev": "portless",
+    "dev:app": "fumadocs-mdx && next dev -p 4318",
     "build": "fumadocs-mdx && next build",
     "start": "next start -p 4318",
     "postinstall": "fumadocs-mdx",
     "generate:openapi": "node --import tsx scripts/generate-openapi.ts",
     "lint": "next lint"
   },
+  "portless": { "name": "docs.fusion", "script": "dev:app" },
   "dependencies": {
     "fumadocs-core": "^15.3.0",
     "fumadocs-mdx": "^11.6.0",

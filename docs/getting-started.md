@@ -6,6 +6,31 @@
 - pnpm `>=10.33.4`
 - Docker, if you want the compose stack or containerized demos
 - uv, optional but recommended for the Python UniRoute workspace and managed MLX
+- [portless](https://github.com/vercel-labs/portless) `>=0.14` (Node `>=24`), recommended for stable named URLs (see below)
+
+## Portless (stable named URLs)
+
+Every service the fusion stack starts — the scope dashboard, the gateway your
+coding agent connects to, the `fusionkit serve` router, and the control panel —
+is registered with [portless](https://github.com/vercel-labs/portless) so it is
+reachable at a stable HTTPS name (e.g. `https://scope.localhost`,
+`https://gateway.fusion.localhost`) instead of a raw port. Named services are
+also reused across runs (discover-or-spawn singletons).
+
+One-time setup (needs Node `>=24`):
+
+```sh
+npm install -g portless
+portless service install   # run the HTTPS proxy at OS startup
+portless trust             # add the local CA to your system trust store
+```
+
+Then `fusionkit codex|claude|cursor|serve` and `fusionkit plane start` print
+`https://*.localhost` URLs automatically. To opt out for a run (raw loopback
+ports, e.g. in CI), pass `--no-portless` or set `PORTLESS=0`. When portless is
+not installed (Node `<24`) the stack transparently falls back to ports.
+
+Reap persistent singletons left running by prior runs with `fusionkit fusion stop`.
 
 ## Install and verify
 

@@ -2,6 +2,9 @@
 const nextConfig = {
   // The collector uses node:sqlite (built-in), so route handlers run on Node.
   experimental: {},
+  // Allow the portless proxy's hostnames as dev origins (Next blocks unknown
+  // cross-origin dev requests). Covers `.localhost` and worktree subdomains.
+  allowedDevOrigins: ["scope.localhost", "*.scope.localhost"],
   // Emit a self-contained server (.next/standalone/server.js bundling a minimal
   // Node server + only the traced node_modules) so the dashboard can be staged
   // into and shipped with the @fusionkit/cli npm package — no separate install.

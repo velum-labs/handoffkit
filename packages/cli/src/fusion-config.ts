@@ -26,6 +26,7 @@ export type FusionConfig = {
   judgeModel?: string;
   local?: boolean;
   observe?: boolean;
+  portless?: boolean;
   cursorKitDir?: string | null;
   port?: number | null;
 };
@@ -107,6 +108,10 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
   if (raw.observe !== undefined) {
     if (typeof raw.observe !== "boolean") throw new FusionConfigError(`${source}: observe must be a boolean`);
     config.observe = raw.observe;
+  }
+  if (raw.portless !== undefined) {
+    if (typeof raw.portless !== "boolean") throw new FusionConfigError(`${source}: portless must be a boolean`);
+    config.portless = raw.portless;
   }
   if (raw.cursorKitDir !== undefined && raw.cursorKitDir !== null) {
     if (typeof raw.cursorKitDir !== "string") {

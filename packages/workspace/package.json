@@ -1,8 +1,12 @@
 {
   "name": "@fusionkit/workspace",
   "private": false,
-  "version": "0.1.3",
-  "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/workspace" },
+  "version": "0.1.4",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/workspace"
+  },
   "description": "Workspace capture, materialization, and divergence-safe pull. Shared by the CLI, runner, and handoff SDK.",
   "license": "UNLICENSED",
   "type": "module",

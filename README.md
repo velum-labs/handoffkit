@@ -69,13 +69,21 @@ pnpm build               # tsc -b builds every package in dependency order
 pnpm verify              # repo checks + build + the full test suite
 ```
 
+Optional but recommended: install [portless](https://github.com/vercel-labs/portless)
+(`npm i -g portless && portless service install && portless trust`, Node `>=24`)
+so the dashboard, gateway, router, and control panel come up at stable HTTPS
+names (`https://scope.localhost`, `https://gateway.fusion.localhost`, ...) and
+are reused across runs. Without it the stack falls back to raw ports; pass
+`--no-portless` (or `PORTLESS=0`) to force ports. See
+[docs/getting-started.md](docs/getting-started.md#portless-stable-named-urls).
+
 ```sh
 
 # one-time: org keys, config, policy
 node packages/cli/dist/index.js init
 
 # terminal 1: control plane + control panel
-node packages/cli/dist/index.js plane start      # http://127.0.0.1:7172/ui/
+node packages/cli/dist/index.js plane start      # http://127.0.0.1:7172/ui/ (or https://plane.fusion.localhost/ui/ with portless)
 
 # terminal 2: an outbound-only runner (your machine is the "customer infra")
 node packages/cli/dist/index.js runner start --pool default

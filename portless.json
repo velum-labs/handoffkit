@@ -1,0 +1,6 @@
+{
+  "apps": {
+    "apps/scope": { "name": "scope", "script": "dev:app" },
+    "apps/docs": { "name": "docs.fusion", "script": "dev:app" }
+  }
+}

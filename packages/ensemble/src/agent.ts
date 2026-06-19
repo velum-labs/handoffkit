@@ -64,6 +64,11 @@ function deriveVerification(steps: TrajectoryStep[]): TrajectoryVerification | u
 
 export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter {
   const id = options.id ?? "agent";
+  // The base URL is shared across panel models (one `fusionkit serve` router),
+  // which routes by the request `model` field. So the request model is the panel
+  // *endpoint id* (what the router's passthrough matches), not the provider model
+  // name. With a dedicated per-model endpoint the id is ignored, so this is safe
+  // either way.
   return {
     id,
     harnessKind: "generic",
@@ -112,7 +117,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         worktree: root,
         prompt: descriptor.prompt,
         baseUrl,
-        model: model.model,
+        model: model.id,
         abortSignal: AbortSignal.timeout(modelTimeoutMs),
         ...(options.turn !== undefined ? { turn: options.turn } : {}),
         ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),

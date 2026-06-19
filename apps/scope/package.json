@@ -5,12 +5,14 @@
   "type": "module",
   "description": "Local observability companion for the fusion stack (FusionKit + HandoffKit + Cursorkit). Visualizes sessions, environments, panel-model trajectories, and the judge's thinking-to-final flow over a live fusion-trace event spine.",
   "scripts": {
-    "dev": "next dev -p 4317",
+    "dev": "portless",
+    "dev:app": "next dev -p 4317",
     "build": "next build",
     "start": "next start -p 4317",
     "lint": "next lint",
     "test": "node --test --import tsx test/*.test.ts"
   },
+  "portless": { "name": "scope", "script": "dev:app" },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

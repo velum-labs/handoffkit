@@ -25,29 +25,37 @@ gateway, no separate model servers, no juggling terminals. Omit the tool on a
 TTY to pick interactively. In one command it:
 
 1. starts the model panel — a **cloud** trio by default (one OpenAI + one
-   Anthropic model, fronted via `uvx fusionkit serve-endpoint`), or the local
-   MLX trio with `--local` on Apple Silicon,
+   Anthropic model), or the local MLX trio with `--local` on Apple Silicon,
+   all fronted by a **single `fusionkit serve` router** (one process routes every
+   panel model by id and also performs synthesis),
 2. starts the Fusion Harness Gateway running the **agent harness** (each panel
    model drives a real tool loop — read/list/grep/write/run — in its own git
    worktree, producing a full **trajectory**),
-3. auto-spawns a `fusionkit serve` (via `uvx`, no checkout) that fuses the
-   trajectories (`/v1/fusion/trajectories:fuse`) into one answer,
+3. fuses the trajectories through that router (`/v1/fusion/trajectories:fuse`)
+   into one answer,
 4. launches the chosen agent pre-wired to the gateway.
 
-One Ctrl+C tears the whole stack (panel + synthesis + gateway + any Cursorkit
-bridge) down.
+One Ctrl+C tears the whole stack (router + gateway + any Cursorkit bridge) down.
+With [portless](https://github.com/vercel-labs/portless) the gateway, router,
+and dashboard come up at stable HTTPS names and are reused across runs; the
+router persists between runs (reap it with `fusionkit fusion stop`).
 
 ### Prerequisites
 
 `fusionkit codex` runs a quick preflight and fails with guidance if anything is
 missing:
 
-- **`uv`/`uvx`** on PATH (runs the FusionKit synthesizer + cloud model shims):
+- **`uv`/`uvx`** on PATH (runs the FusionKit router + synthesizer):
   <https://docs.astral.sh/uv/>
 - the **coding agent** you launch (`codex`, `claude`, or `cursor-agent`),
 - **API keys** for the default cloud panel (`OPENAI_API_KEY`,
   `ANTHROPIC_API_KEY`) — not needed with `--local`,
-- a **git repository** (run inside it, or pass `--repo`).
+- a **git repository** (run inside it, or pass `--repo`),
+- optionally **[portless](https://github.com/vercel-labs/portless)** `>=0.14`
+  (Node `>=24`) for stable named URLs. With it installed, the gateway requires
+  the proxy to be running (`portless service install` + `portless trust`);
+  preflight fails fast otherwise. Use `--no-portless`/`PORTLESS=0` to use raw
+  ports.
 
 ### Trajectory-level fusion
 

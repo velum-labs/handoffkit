@@ -6,6 +6,7 @@ import { Plane, startPlaneServer } from "@fusionkit/plane";
 
 import { loadHome, secretStoreFor } from "../config.js";
 import { resolveDir } from "../shared/plane.js";
+import { createPortlessSession } from "../shared/portless.js";
 
 export function registerPlane(program: Command): void {
   const plane = program.command("plane").description("control plane + control panel");
@@ -30,7 +31,14 @@ export function registerPlane(program: Command): void {
       const port = opts.port ? Number(opts.port) : home.config.port;
       const host = opts.host ?? home.config.host;
       const started = await startPlaneServer(planeInstance, { port, host });
-      console.log(`warrant plane listening on http://${started.host}:${started.port}`);
-      console.log(`control panel: http://${started.host}:${started.port}/ui/`);
+      // Register a stable portless name for the control panel (enabled unless
+      // PORTLESS=0 or no proxy is detected; falls back to the loopback URL).
+      const portless = await createPortlessSession({
+        enabled: process.env.PORTLESS !== "0",
+        log: (line) => console.error(line)
+      });
+      const baseUrl = portless.register("plane", started.port);
+      console.log(`warrant plane listening on ${baseUrl}`);
+      console.log(`control panel: ${baseUrl}/ui/`);
     });
 }

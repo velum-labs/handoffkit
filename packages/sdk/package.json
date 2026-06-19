@@ -1,8 +1,12 @@
 {
   "name": "@fusionkit/sdk",
   "private": false,
-  "version": "0.1.3",
-  "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/sdk" },
+  "version": "0.1.4",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/sdk"
+  },
   "description": "Warrant SDK: a thin client over the plane API plus offline receipt verification.",
   "license": "UNLICENSED",
   "type": "module",
@@ -12,7 +16,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",

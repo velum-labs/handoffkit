@@ -1,8 +1,12 @@
 {
   "name": "@fusionkit/plane",
   "private": false,
-  "version": "0.1.3",
-  "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/plane" },
+  "version": "0.1.4",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/plane"
+  },
   "description": "Warrant control plane: contracts, policy, approvals, receipt countersignature, secret broker, audit export, and the control panel UI.",
   "license": "UNLICENSED",
   "type": "module",
@@ -12,7 +16,10 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "ui"],
+  "files": [
+    "dist",
+    "ui"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
