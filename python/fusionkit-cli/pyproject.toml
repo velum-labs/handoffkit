@@ -1,18 +1,21 @@
 [project]
-name = "fusionkit-cli"
+name = "fusionkit"
 version = "0.1.0"
-description = "Command line interface for fusionkit."
+description = "Command line interface for fusionkit: local response-level model fusion."
 requires-python = ">=3.11"
 dependencies = [
-  "fusionkit-core",
-  "fusionkit-evals",
-  "fusionkit-mlx",
-  "fusionkit-server",
+  "fusionkit-core==0.1.0",
+  "fusionkit-evals==0.1.0",
+  "fusionkit-mlx==0.1.0",
+  "fusionkit-server==0.1.0",
   "typer>=0.20.0",
 ]
 
 [project.scripts]
 fusionkit = "fusionkit_cli.main:app"
+
+[tool.uv.build-backend]
+module-name = "fusionkit_cli"
 
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12.0"]

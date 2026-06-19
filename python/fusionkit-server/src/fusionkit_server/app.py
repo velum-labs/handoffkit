@@ -32,9 +32,8 @@ from fusionkit_core.run import (
     make_id,
 )
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER
+from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER, new_span_id
 from fusionkit_core.trace import emit as trace_emit
-from fusionkit_core.trace import new_span_id
 from fusionkit_core.types import ChatMessage, ModelResponse, ToolCall
 from pydantic import BaseModel, Field
 
@@ -600,7 +599,9 @@ def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
     if tool_calls:
         parsed: list[ToolCall] = []
         for call in tool_calls:
-            function = call.get("function") if isinstance(call, dict) and "function" in call else call
+            function = (
+                call.get("function") if isinstance(call, dict) and "function" in call else call
+            )
             function = function if isinstance(function, dict) else {}
             parsed.append(
                 ToolCall(
@@ -621,7 +622,9 @@ def _normalize_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]
         return None
     normalized: list[dict[str, Any]] = []
     for entry in tools:
-        function = entry.get("function") if isinstance(entry, dict) and "function" in entry else entry
+        function = (
+            entry.get("function") if isinstance(entry, dict) and "function" in entry else entry
+        )
         if not isinstance(function, dict):
             continue
         name = function.get("name", "")

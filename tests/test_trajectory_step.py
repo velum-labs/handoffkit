@@ -132,7 +132,9 @@ def test_step_emits_tool_calls_and_injects_candidate_context(tmp_path) -> None:
 
 
 def test_step_streams_sse_with_tool_calls(tmp_path) -> None:
-    app = create_app(_config(), clients={"judge": _ToolCallClient()}, run_store_path=tmp_path / "runs")
+    app = create_app(
+        _config(), clients={"judge": _ToolCallClient()}, run_store_path=tmp_path / "runs"
+    )
     client = TestClient(app)
 
     response = client.post(

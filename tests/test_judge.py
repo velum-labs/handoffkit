@@ -8,7 +8,9 @@ from fusionkit_core.judge import JudgeSynthesizer
 from fusionkit_core.types import Candidate, ChatMessage
 
 
-def _trajectory(trajectory_id: str, model_id: str, final_output: str, verified: bool) -> HarnessTrajectoryV1:
+def _trajectory(
+    trajectory_id: str, model_id: str, final_output: str, verified: bool
+) -> HarnessTrajectoryV1:
     return HarnessTrajectoryV1.model_validate(
         {
             **contract_metadata("harness-trajectory.v1"),
@@ -16,7 +18,12 @@ def _trajectory(trajectory_id: str, model_id: str, final_output: str, verified: 
             "model_id": model_id,
             "status": "succeeded",
             "steps": [
-                {"index": 0, "type": "tool_call", "tool_name": "read_file", "tool_input": "calculator.js"},
+                {
+                    "index": 0,
+                    "type": "tool_call",
+                    "tool_name": "read_file",
+                    "tool_input": "calculator.js",
+                },
                 {"index": 1, "type": "observation", "text": "add subtracts"},
                 {"index": 2, "type": "output", "text": final_output},
             ],

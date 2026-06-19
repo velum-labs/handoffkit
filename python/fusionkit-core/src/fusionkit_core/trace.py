@@ -14,6 +14,7 @@ Environment variables:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import queue
@@ -59,7 +60,9 @@ class TraceEmitter:
         directory: str | None = None,
     ) -> None:
         self._url = url if url is not None else os.environ.get("FUSION_TRACE_URL") or None
-        self._dir = directory if directory is not None else os.environ.get("FUSION_TRACE_DIR") or None
+        self._dir = (
+            directory if directory is not None else os.environ.get("FUSION_TRACE_DIR") or None
+        )
         self._enabled = bool(self._url or self._dir)
         self._seq = 0
         self._seq_lock = threading.Lock()
@@ -123,10 +126,8 @@ class TraceEmitter:
             event["model_id"] = model_id
         if payload is not None:
             event["payload"] = payload
-        try:
+        with contextlib.suppress(queue.Full):
             self._queue.put_nowait(event)
-        except queue.Full:
-            pass
 
     def _run(self) -> None:
         while True:

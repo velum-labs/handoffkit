@@ -205,7 +205,9 @@ class JudgeSynthesizer:
                 "record": record.model_dump(mode="json"),
             },
         )
-        return TrajectorySynthesisResult(record=record, final_output=final_output, analysis=analysis)
+        return TrajectorySynthesisResult(
+            record=record, final_output=final_output, analysis=analysis
+        )
 
     async def _analyze_trajectories(
         self,
@@ -455,13 +457,13 @@ def _synthesis_metrics(
 def _best_trajectory_output(trajectories: Sequence[HarnessTrajectoryV1]) -> str:
     """Pick a non-empty answer: prefer a verified trajectory, then any succeeded
     one, then the first with text."""
-    ordered = sorted(
-        trajectories,
-        key=lambda trajectory: (
-            0 if (trajectory.verification is not None and trajectory.verification.status == "succeeded") else 1,
-            0 if trajectory.status == "succeeded" else 1,
-        ),
-    )
+
+    def _rank(trajectory: HarnessTrajectoryV1) -> tuple[int, int]:
+        verification = trajectory.verification
+        verified = verification is not None and verification.status == "succeeded"
+        return (0 if verified else 1, 0 if trajectory.status == "succeeded" else 1)
+
+    ordered = sorted(trajectories, key=_rank)
     for trajectory in ordered:
         if trajectory.final_output.strip():
             return trajectory.final_output.strip()

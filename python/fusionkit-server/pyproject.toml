@@ -5,7 +5,7 @@ description = "OpenAI-compatible HTTP server for fusionkit."
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.124.4",
-  "fusionkit-core",
+  "fusionkit-core==0.1.0",
   "uvicorn>=0.38.0",
 ]
 

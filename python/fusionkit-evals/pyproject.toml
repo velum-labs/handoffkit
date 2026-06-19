@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Evaluation and Pareto analysis tools for fusionkit."
 requires-python = ">=3.11"
 dependencies = [
-  "fusionkit-core",
+  "fusionkit-core==0.1.0",
   "pydantic>=2.12.5",
 ]
 

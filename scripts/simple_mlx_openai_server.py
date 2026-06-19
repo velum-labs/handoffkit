@@ -19,9 +19,9 @@ try:  # Trace emission is optional: this server may run in an MLX-only venv.
         TRACE_CANDIDATE_HEADER,
         TRACE_ID_HEADER,
         TRACE_SPAN_HEADER,
+        new_span_id,
     )
-    from fusionkit_core.trace import emit as trace_emit
-    from fusionkit_core.trace import new_span_id
+    from fusionkit_core.trace import emit as trace_emit  # type: ignore[assignment]
 except Exception:  # noqa: BLE001 - degrade gracefully without fusionkit_core
     TRACE_CANDIDATE_HEADER = "x-fusion-candidate-id"
     TRACE_ID_HEADER = "x-fusion-trace-id"
@@ -123,7 +123,11 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                     parent_span_id=parent_span,
                     candidate_id=candidate_id,
                     model_id=model_id,
-                    payload={"model": model_id, "provider": "local-mlx", "message_count": len(messages)},
+                    payload={
+                        "model": model_id,
+                        "provider": "local-mlx",
+                        "message_count": len(messages),
+                    },
                 )
 
                 prompt, prompt_tokens = build_prompt(tokenizer, messages)

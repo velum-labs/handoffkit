@@ -32,6 +32,7 @@ from fusionkit_evals.tiny import (
     write_tiny_jsonl,
 )
 from fusionkit_server.app import create_app
+from fusionkit_server.openai_endpoint import build_endpoint, serve_single_endpoint
 
 app = typer.Typer(help="Local model fusion toolkit.")
 
@@ -45,6 +46,33 @@ def serve(
     fusion_config = load_config(config)
     api = create_app(fusion_config)
     uvicorn.run(api, host=host, port=port)
+
+
+@app.command("serve-endpoint")
+def serve_endpoint(
+    id: Annotated[str, typer.Option("--id", help="endpoint id exposed via /v1/models")],
+    model: Annotated[str, typer.Option("--model", help="provider model name (e.g. gpt-5.5)")],
+    port: Annotated[int, typer.Option("--port")],
+    provider: Annotated[str, typer.Option("--provider")] = "openai",
+    base_url: Annotated[
+        str | None, typer.Option("--base-url", help="override the provider base URL")
+    ] = None,
+    api_key_env: Annotated[
+        str | None, typer.Option("--api-key-env", help="env var holding the API key")
+    ] = None,
+    timeout_s: Annotated[float, typer.Option("--timeout-s")] = 120.0,
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+) -> None:
+    """Front a single provider model as an OpenAI Chat Completions endpoint."""
+    endpoint = build_endpoint(
+        id=id,
+        model=model,
+        provider=provider,
+        base_url=base_url,
+        api_key_env=api_key_env,
+        timeout_s=timeout_s,
+    )
+    serve_single_endpoint(endpoint, host=host, port=port)
 
 
 @app.command()
