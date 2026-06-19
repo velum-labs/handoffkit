@@ -1,5 +1,5 @@
 /**
- * @warrant/model-gateway — a native local-model gateway.
+ * @fusionkit/model-gateway — a native local-model gateway.
  *
  * It fronts a single OpenAI Chat Completions backend (the owned
  * `velum-labs/mlx-lm` fork by default — "mlx_lm.server first") and exposes the

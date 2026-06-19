@@ -3,9 +3,9 @@ import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "no
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { artifactHash } from "@warrant/protocol";
-import type { JsonValue, ModelCallRecordV1 } from "@warrant/protocol";
-import { OpenAiBackend, startGateway } from "@warrant/model-gateway";
+import { artifactHash } from "@fusionkit/protocol";
+import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
+import { OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 
 import type {
   EnsembleDescriptor,

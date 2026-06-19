@@ -3,9 +3,9 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { verifyReceiptBundle } from "@warrant/protocol";
-import type { ReceiptBundle } from "@warrant/protocol";
-import { pullRun } from "@warrant/workspace";
+import { verifyReceiptBundle } from "@fusionkit/protocol";
+import type { ReceiptBundle } from "@fusionkit/protocol";
+import { pullRun } from "@fusionkit/workspace";
 
 import { loadHome } from "../config.js";
 import { renderReceipt, renderRunList } from "../render.js";

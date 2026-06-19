@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { RUN_EVENT_TYPES } from "@warrant/protocol";
+import { RUN_EVENT_TYPES } from "@fusionkit/protocol";
 
 /**
  * The control panel is deliberately dependency-free, so it carries its own

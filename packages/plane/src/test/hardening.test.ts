@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { generateEd25519KeyPair } from "@warrant/protocol";
-import type { RunRequest, WorkspaceManifest } from "@warrant/protocol";
+import { generateEd25519KeyPair } from "@fusionkit/protocol";
+import type { RunRequest, WorkspaceManifest } from "@fusionkit/protocol";
 
 import { generateMasterKeyHex, masterKeyFromMaterial, open, seal } from "../keys.js";
 import { Plane } from "../plane.js";

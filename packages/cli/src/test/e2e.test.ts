@@ -11,13 +11,13 @@ import {
   Plane,
   SecretStore,
   startPlaneServer
-} from "@warrant/plane";
-import { buildReceiptStory, generateEd25519KeyPair, verifyReceiptBundle } from "@warrant/protocol";
-import type { ReceiptBundle, RunRequestInput } from "@warrant/protocol";
-import { Runner } from "@warrant/runner";
-import { PlaneClient, PlaneClientError } from "@warrant/sdk";
-import { git, makeRepo } from "@warrant/testkit";
-import { captureWorkspace, pullRun } from "@warrant/workspace";
+} from "@fusionkit/plane";
+import { buildReceiptStory, generateEd25519KeyPair, verifyReceiptBundle } from "@fusionkit/protocol";
+import type { ReceiptBundle, RunRequestInput } from "@fusionkit/protocol";
+import { Runner } from "@fusionkit/runner";
+import { PlaneClient, PlaneClientError } from "@fusionkit/sdk";
+import { git, makeRepo } from "@fusionkit/testkit";
+import { captureWorkspace, pullRun } from "@fusionkit/workspace";
 
 const SECRET_VALUE = "super-sensitive-value-1234";
 

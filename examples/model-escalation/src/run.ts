@@ -1,9 +1,9 @@
 import { generateText } from "ai";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
 
-import { withModel } from "@warrant/adapter-ai-sdk";
-import { handoff, localFirst, targets, triggers } from "@warrant/handoff";
-import { withStackAndRepo } from "@warrant/testkit";
+import { withModel } from "@fusionkit/adapter-ai-sdk";
+import { handoff, localFirst, targets, triggers } from "@fusionkit/handoff";
+import { withStackAndRepo } from "@fusionkit/testkit";
 
 import {
   demoBanner,
@@ -13,7 +13,7 @@ import {
   ok,
   resolveDemoModels,
   step
-} from "@warrant/example-utils";
+} from "@fusionkit/example-utils";
 
 const POOL = "eng-prod";
 

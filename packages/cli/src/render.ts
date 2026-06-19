@@ -2,9 +2,9 @@ import type {
   DisclosureReport,
   ReceiptBundle,
   RunSummary
-} from "@warrant/protocol";
-import { buildReceiptStory } from "@warrant/protocol";
-import type { HandoffTraceEvent } from "@warrant/handoff";
+} from "@fusionkit/protocol";
+import { buildReceiptStory } from "@fusionkit/protocol";
+import type { HandoffTraceEvent } from "@fusionkit/handoff";
 
 /** One screen, five questions. This is the product. */
 export function renderReceipt(bundle: ReceiptBundle): string {

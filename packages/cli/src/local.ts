@@ -2,8 +2,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createBackend, resolveBackendConfig, startGateway } from "@warrant/model-gateway";
-import type { BackendConfig } from "@warrant/model-gateway";
+import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
+import type { BackendConfig } from "@fusionkit/model-gateway";
 
 import { spawnTool } from "./shared/proc.js";
 

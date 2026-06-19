@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/session-hermetic",
+  "name": "@fusionkit/session-hermetic",
   "private": false,
   "version": "0.1.0",
   "description": "Hermetic session backend for Warrant runners: a simulated bash interpreter (just-bash) with a virtual filesystem and interpreter-enforced network allowlists. No real processes or sockets to escape with.",
@@ -13,19 +13,19 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/protocol": "workspace:*",
-    "@warrant/runner": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runner": "workspace:*",
     "just-bash": "3.0.1"
   },
   "devDependencies": {
-    "@warrant/plane": "workspace:*",
-    "@warrant/sdk": "workspace:*",
-    "@warrant/testkit": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/plane": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/testkit": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   }
 }

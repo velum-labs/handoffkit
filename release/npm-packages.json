@@ -1,28 +1,28 @@
 {
   "canonicalRepository": "velum-labs/handoffkit",
   "tagPatterns": ["handoffkit-v*", "v*"],
-  "registry": "https://npm.pkg.github.com",
-  "access": "restricted",
+  "registry": "https://registry.npmjs.org",
+  "access": "public",
   "provenance": true,
   "protocol": {
-    "packageName": "@warrant/protocol",
+    "packageName": "@fusionkit/protocol",
     "version": "0.1.0",
     "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb"
   },
   "packages": [
-    { "path": "packages/protocol", "name": "@warrant/protocol" },
-    { "path": "packages/sdk", "name": "@warrant/sdk" },
-    { "path": "packages/workspace", "name": "@warrant/workspace" },
-    { "path": "packages/plane", "name": "@warrant/plane" },
-    { "path": "packages/runner", "name": "@warrant/runner" },
-    { "path": "packages/handoff", "name": "@warrant/handoff" },
-    { "path": "packages/adapter-compute", "name": "@warrant/adapter-compute" },
-    { "path": "packages/adapter-ai-sdk", "name": "@warrant/adapter-ai-sdk" },
-    { "path": "packages/session-vercel-sandbox", "name": "@warrant/session-vercel-sandbox" },
-    { "path": "packages/session-hermetic", "name": "@warrant/session-hermetic" },
-    { "path": "packages/session-harness", "name": "@warrant/session-harness" },
-    { "path": "packages/model-gateway", "name": "@warrant/model-gateway" },
-    { "path": "packages/ensemble", "name": "@warrant/ensemble" },
-    { "path": "packages/cli", "name": "@warrant/cli" }
+    { "path": "packages/protocol", "name": "@fusionkit/protocol" },
+    { "path": "packages/sdk", "name": "@fusionkit/sdk" },
+    { "path": "packages/workspace", "name": "@fusionkit/workspace" },
+    { "path": "packages/plane", "name": "@fusionkit/plane" },
+    { "path": "packages/runner", "name": "@fusionkit/runner" },
+    { "path": "packages/handoff", "name": "@fusionkit/handoff" },
+    { "path": "packages/adapter-compute", "name": "@fusionkit/adapter-compute" },
+    { "path": "packages/adapter-ai-sdk", "name": "@fusionkit/adapter-ai-sdk" },
+    { "path": "packages/session-vercel-sandbox", "name": "@fusionkit/session-vercel-sandbox" },
+    { "path": "packages/session-hermetic", "name": "@fusionkit/session-hermetic" },
+    { "path": "packages/session-harness", "name": "@fusionkit/session-harness" },
+    { "path": "packages/model-gateway", "name": "@fusionkit/model-gateway" },
+    { "path": "packages/ensemble", "name": "@fusionkit/ensemble" },
+    { "path": "packages/cli", "name": "@fusionkit/cli" }
   ]
 }

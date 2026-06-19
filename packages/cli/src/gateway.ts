@@ -9,13 +9,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { runFusionPanels, runUnifiedHarnessE2E } from "@warrant/ensemble";
+import { runFusionPanels, runUnifiedHarnessE2E } from "@fusionkit/ensemble";
 import type {
   EnsembleModel,
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
-} from "@warrant/ensemble";
-import { emitTrace, newSpanId, newTraceId } from "@warrant/protocol";
+} from "@fusionkit/ensemble";
+import { emitTrace, newSpanId, newTraceId } from "@fusionkit/protocol";
 import {
   FusionBackend,
   installAcpAdapters,
@@ -23,7 +23,7 @@ import {
   runFrontDoorAcceptance,
   startFusionGateway,
   startGateway
-} from "@warrant/model-gateway";
+} from "@fusionkit/model-gateway";
 import type {
   AcpRunner,
   FrontDoorRunner,
@@ -32,7 +32,7 @@ import type {
   Gateway,
   PanelRunner,
   WireTrajectory
-} from "@warrant/model-gateway";
+} from "@fusionkit/model-gateway";
 
 export type GatewayRunnerConfig = {
   fusionBackendUrl: string;
@@ -202,10 +202,10 @@ export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string):
     `  Cursorkit model backend: ${base}/v1/chat/completions`,
     "",
     "Generic ACP local agent:",
-    "  warrant ensemble gateway acp --fusion-backend <fusion-backend>",
+    "  fusionkit ensemble gateway acp --fusion-backend <fusion-backend>",
     "",
     "ACP registry adapters:",
-    "  warrant ensemble gateway acp-registry install codex-cli claude-agent"
+    "  fusionkit ensemble gateway acp-registry install codex-cli claude-agent"
   ].join("\n");
 }
 

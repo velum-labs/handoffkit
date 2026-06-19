@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/testkit",
+  "name": "@fusionkit/testkit",
   "private": true,
   "version": "0.1.0",
   "description": "Test and demo harness: in-process plane + runner stacks and git repo fixtures.",
@@ -13,10 +13,10 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@warrant/plane": "workspace:*",
-    "@warrant/protocol": "workspace:*",
-    "@warrant/runner": "workspace:*",
-    "@warrant/sdk": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/plane": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runner": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   }
 }

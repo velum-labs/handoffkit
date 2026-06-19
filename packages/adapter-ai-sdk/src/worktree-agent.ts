@@ -13,7 +13,7 @@ import {
   TRACE_CANDIDATE_HEADER,
   TRACE_ID_HEADER,
   TRACE_SPAN_HEADER
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 /**
  * A uniform, real model-driven agent loop for trajectory-level fusion. One

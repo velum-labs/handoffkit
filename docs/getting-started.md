@@ -22,36 +22,37 @@ pnpm test
 
 ```sh
 pnpm build
-warrant init
+fusionkit init
 ```
 
 The CLI stores local plane configuration, signing keys, and encrypted secret
-state under the Warrant home directory managed by `packages/cli/src/config.ts`.
+state under the fusionkit home directory (`./.fusionkit`) managed by
+`packages/cli/src/config.ts`.
 
 ## Run the local plane and runner
 
 In separate terminals:
 
 ```sh
-warrant plane start
-warrant runner start
+fusionkit plane start
+fusionkit runner start
 ```
 
 Then request a governed run:
 
 ```sh
-warrant run --agent mock "summarize the repository layout"
-warrant runs
-warrant receipt <run-id>
-warrant verify <run-id>
+fusionkit run --agent mock "summarize the repository layout"
+fusionkit runs
+fusionkit receipt <run-id>
+fusionkit verify <run-id>
 ```
 
 Use real agent harnesses by selecting an agent kind and releasing only the
 required secrets and egress hosts through policy:
 
 ```sh
-warrant secrets set ANTHROPIC_API_KEY sk-ant-...
-warrant run --agent claude-code --secret ANTHROPIC_API_KEY \
+fusionkit secrets set ANTHROPIC_API_KEY sk-ant-...
+fusionkit run --agent claude-code --secret ANTHROPIC_API_KEY \
   --allow-host api.anthropic.com "fix the flaky auth test and run the suite"
 ```
 

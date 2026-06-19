@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { PROTOCOL_VERSIONS } from "@warrant/protocol";
-import type { Checkpoint, SemanticState } from "@warrant/protocol";
-import type { CapturedWorkspace } from "@warrant/workspace";
+import { PROTOCOL_VERSIONS } from "@fusionkit/protocol";
+import type { Checkpoint, SemanticState } from "@fusionkit/protocol";
+import type { CapturedWorkspace } from "@fusionkit/workspace";
 
 export class HandoffCheckpointManager {
   private readonly history: Checkpoint[] = [];

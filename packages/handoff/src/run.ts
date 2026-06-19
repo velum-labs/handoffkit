@@ -1,4 +1,4 @@
-import { isTerminalStatus } from "@warrant/protocol";
+import { isTerminalStatus } from "@fusionkit/protocol";
 import type {
   ActorRef,
   ChainedEvent,
@@ -6,10 +6,10 @@ import type {
   HandoffEnvelope,
   ReceiptBundle,
   RunStatus
-} from "@warrant/protocol";
-import { PlaneClient } from "@warrant/sdk";
-import { pullRun } from "@warrant/workspace";
-import type { PullResult } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import { PlaneClient } from "@fusionkit/sdk";
+import { pullRun } from "@fusionkit/workspace";
+import type { PullResult } from "@fusionkit/workspace";
 
 import {
   DEFAULT_POLL_INTERVAL_MS,

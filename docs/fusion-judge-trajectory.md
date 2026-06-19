@@ -55,7 +55,7 @@ the harness loop ends.
 | CLI wiring | [packages/cli/src/gateway.ts](../packages/cli/src/gateway.ts) `startFusionStepGateway`, [fusion-quickstart.ts](../packages/cli/src/fusion-quickstart.ts) |
 | Observability spine + dashboard | [apps/scope](../apps/scope) |
 
-The `model-gateway` package stays free of an `@warrant/ensemble` dependency: the
+The `model-gateway` package stays free of an `@fusionkit/ensemble` dependency: the
 panel runner is injected into `FusionBackend` as a `PanelRunner`.
 
 ## Why streaming + keepalive

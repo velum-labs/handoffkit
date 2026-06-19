@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/workspace",
+  "name": "@fusionkit/workspace",
   "private": false,
   "version": "0.1.0",
   "description": "Workspace capture, materialization, and divergence-safe pull. Shared by the CLI, runner, and handoff SDK.",
@@ -15,12 +15,12 @@
     "dist"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/protocol": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
     "minimatch": "10.2.5"
   }
 }

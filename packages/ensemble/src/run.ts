@@ -4,7 +4,7 @@ import {
   assertHarnessRunResultV1,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   requestHash
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   HarnessCandidateRecordV1,
   HarnessRunRequestV1,
@@ -12,7 +12,7 @@ import type {
   JsonValue,
   ModelCallRecordV1,
   ModelFusionStatus
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import { createArtifactStore } from "./artifacts.js";
 import type {

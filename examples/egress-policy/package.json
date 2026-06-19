@@ -1,13 +1,13 @@
 {
-  "name": "@warrant/example-egress-policy",
+  "name": "@fusionkit/example-egress-policy",
   "private": true,
   "version": "0.1.0",
   "description": "Standalone Warrant example: deny-by-default network policy.",
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
-    "@warrant/example-utils": "workspace:*",
-    "@warrant/sdk": "workspace:*",
-    "@warrant/testkit": "workspace:*"
+    "@fusionkit/example-utils": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/testkit": "workspace:*"
   }
 }

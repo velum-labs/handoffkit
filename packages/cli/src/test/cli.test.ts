@@ -16,13 +16,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 
-import { MODEL_FUSION_SCHEMA_BUNDLE_HASH } from "@warrant/protocol";
+import { MODEL_FUSION_SCHEMA_BUNDLE_HASH } from "@fusionkit/protocol";
 import {
   makeRepo as makeStackRepo,
   mockRunRequest,
   startStack,
   uploadWorkspace
-} from "@warrant/testkit";
+} from "@fusionkit/testkit";
 
 const CLI = fileURLToPath(new URL("../index.js", import.meta.url));
 const SMOKE_ENV_KEYS = [
@@ -184,8 +184,8 @@ after(() => {
 test("help prints usage and lists the top-level commands", () => {
   const result = warrant(["help"]);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /governed execution and provenance plane/);
-  for (const command of ["run", "continue", "ensemble", "local", "fusion", "ui"]) {
+  assert.match(result.stdout, /real model fusion behind your coding agent/);
+  for (const command of ["run", "continue", "ensemble", "local", "fusion", "ui", "codex", "claude", "cursor", "serve"]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
 });

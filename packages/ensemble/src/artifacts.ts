@@ -2,8 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { artifactHash } from "@warrant/protocol";
-import type { ModelFusionArtifactKind } from "@warrant/protocol";
+import { artifactHash } from "@fusionkit/protocol";
+import type { ModelFusionArtifactKind } from "@fusionkit/protocol";
 
 import type { HarnessArtifact } from "./harness.js";
 

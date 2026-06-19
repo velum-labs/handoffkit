@@ -1,8 +1,8 @@
 import { generateText, stepCountIs } from "ai";
 import type { LanguageModel } from "ai";
 
-import { remoteTools } from "@warrant/adapter-ai-sdk";
-import { withStackAndRepo } from "@warrant/testkit";
+import { remoteTools } from "@fusionkit/adapter-ai-sdk";
+import { withStackAndRepo } from "@fusionkit/testkit";
 
 import {
   demoBanner,
@@ -12,7 +12,7 @@ import {
   ok,
   resolveDemoModels,
   step
-} from "@warrant/example-utils";
+} from "@fusionkit/example-utils";
 
 async function main(): Promise<void> {
   demoBanner("09");

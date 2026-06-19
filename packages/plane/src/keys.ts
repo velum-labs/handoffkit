@@ -7,7 +7,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { generateEd25519KeyPair } from "@warrant/protocol";
+import { generateEd25519KeyPair } from "@fusionkit/protocol";
 
 /**
  * A master key protects everything the plane stores at rest (the org

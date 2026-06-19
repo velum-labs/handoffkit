@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { defaultPolicy, evaluatePolicy } from "../policy.js";
-import { PolicyDeniedError } from "@warrant/protocol";
-import type { Policy } from "@warrant/protocol";
+import { PolicyDeniedError } from "@fusionkit/protocol";
+import type { Policy } from "@fusionkit/protocol";
 
 function policyFixture(): Policy {
   const policy = defaultPolicy();

@@ -5,14 +5,14 @@ import {
   assertToolCallPlanV1,
   toolArgumentsHash,
   toolSideEffectClassFromModelFusion
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   JsonValue,
   ToolCallPlanV1,
   ToolExecutionRecordV1,
   ToolExecutionResult,
   ToolPolicyDecision
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import type { ToolExecutor } from "./tool-executor.js";
 

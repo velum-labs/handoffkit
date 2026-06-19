@@ -1,11 +1,11 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { agents, handoff, localFirst, targets } from "@warrant/handoff";
-import { isTerminalStatus } from "@warrant/protocol";
-import { PlaneClient } from "@warrant/sdk";
-import { makeRepo } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import { agents, handoff, localFirst, targets } from "@fusionkit/handoff";
+import { isTerminalStatus } from "@fusionkit/protocol";
+import { PlaneClient } from "@fusionkit/sdk";
+import { makeRepo } from "@fusionkit/testkit";
+import { captureWorkspace } from "@fusionkit/workspace";
 
 export type SeedOptions = {
   planeUrl: string;

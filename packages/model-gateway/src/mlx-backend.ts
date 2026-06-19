@@ -1,5 +1,5 @@
-import { mlxServer } from "@warrant/adapter-ai-sdk";
-import type { ManagedServerEvent } from "@warrant/adapter-ai-sdk";
+import { mlxServer } from "@fusionkit/adapter-ai-sdk";
+import type { ManagedServerEvent } from "@fusionkit/adapter-ai-sdk";
 
 import { OpenAiBackend } from "./backend.js";
 import type { Backend } from "./backend.js";
@@ -7,7 +7,7 @@ import type { Backend } from "./backend.js";
 /**
  * The first-class gateway backend: the owned `velum-labs/mlx-lm` fork run as
  * `mlx_lm.server`, provisioned and supervised by `mlxServer`
- * (`@warrant/adapter-ai-sdk`). The gateway does not speak the AI SDK model
+ * (`@fusionkit/adapter-ai-sdk`). The gateway does not speak the AI SDK model
  * interface to it — it proxies raw HTTP to the server's OpenAI-compatible
  * `/v1` surface — so this wrapper only needs the process lifecycle and the
  * resolved base URL. A long-lived gateway keeps the server up

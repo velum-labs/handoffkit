@@ -7,9 +7,9 @@ import {
   Handoff,
   targets,
   toGovernedRunRecord
-} from "@warrant/handoff";
-import type { CommandHarnessConfig, GovernedRunRecord } from "@warrant/handoff";
-import type { RunStatus } from "@warrant/protocol";
+} from "@fusionkit/handoff";
+import type { CommandHarnessConfig, GovernedRunRecord } from "@fusionkit/handoff";
+import type { RunStatus } from "@fusionkit/protocol";
 
 export type RemoteToolsConfig = CommandHarnessConfig & {
   /** Pull workspace changes back after each call. Defaults to true. */

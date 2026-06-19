@@ -430,7 +430,7 @@ warrant export --jsonl --since 30d
 Minimal SDK shape (adapter-owned runs):
 
 ```ts
-import { warrant, pools, agents } from "@warrant/sdk";
+import { warrant, pools, agents } from "@fusionkit/sdk";
 
 const w = warrant(); // resolves org config; no ambient magic beyond explicit config file
 

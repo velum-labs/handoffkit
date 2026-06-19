@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import {
   assertHarnessRunResultV1,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   ArtifactRef,
   HarnessRunResultV1,
@@ -12,8 +12,8 @@ import type {
   ModelFusionCapabilityStatus,
   ModelFusionHarnessKind,
   ModelFusionSideEffects
-} from "@warrant/protocol";
-import { gitText } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import { gitText } from "@fusionkit/workspace";
 
 import {
   claudeCodeHarness,
@@ -451,7 +451,7 @@ function unsupportedCursorResult(input: {
     errors: [
       {
         kind: "capability_missing",
-        message: "Cursor proprietary harness is not available from @warrant/ensemble.",
+        message: "Cursor proprietary harness is not available from @fusionkit/ensemble.",
         retryable: false
       }
     ],

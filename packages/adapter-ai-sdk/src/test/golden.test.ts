@@ -5,11 +5,11 @@ import { after, before, test } from "node:test";
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 
-import { agents, handoff, localFirst, targets } from "@warrant/handoff";
-import type { Handoff } from "@warrant/handoff";
-import type { ToolJournal } from "@warrant/protocol";
-import { makeRepo, startStack } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
+import { agents, handoff, localFirst, targets } from "@fusionkit/handoff";
+import type { Handoff } from "@fusionkit/handoff";
+import type { ToolJournal } from "@fusionkit/protocol";
+import { makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
 
 const POOL = "eng-prod";
 

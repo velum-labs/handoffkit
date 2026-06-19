@@ -3,9 +3,9 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
-import { agents, localFirst } from "@warrant/handoff";
-import { makeRepo, startStack } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
+import { agents, localFirst } from "@fusionkit/handoff";
+import { makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
 
 import { swarmTools } from "../swarm-tools.js";
 import type {

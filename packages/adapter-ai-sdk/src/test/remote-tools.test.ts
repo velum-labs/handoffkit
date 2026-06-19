@@ -6,10 +6,10 @@ import { after, before, test } from "node:test";
 import { generateText, stepCountIs } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 
-import { localFirst } from "@warrant/handoff";
-import { PolicyDeniedError } from "@warrant/protocol";
-import { makeRepo, startStack } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
+import { localFirst } from "@fusionkit/handoff";
+import { PolicyDeniedError } from "@fusionkit/protocol";
+import { makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
 
 import { remoteTools } from "../remote-tools.js";
 

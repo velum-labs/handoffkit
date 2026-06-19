@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-import { resolveInsideWorkspace } from "@warrant/workspace";
+import { resolveInsideWorkspace } from "@fusionkit/workspace";
 import type {
   SessionBackend,
   SessionBackendResult,

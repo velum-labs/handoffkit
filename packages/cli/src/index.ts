@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { PolicyDeniedError } from "@warrant/protocol";
+import { PolicyDeniedError } from "@fusionkit/protocol";
 
 import { buildProgram } from "./cli.js";
+import { PreflightError } from "./shared/preflight.js";
 
 async function main(): Promise<void> {
   const program = buildProgram();
@@ -19,6 +20,10 @@ main().catch((error: unknown) => {
     console.error(`POLICY DENIED (fail closed):`);
     for (const reason of error.reasons) console.error(`  - ${reason}`);
     process.exit(2);
+  }
+  if (error instanceof PreflightError) {
+    console.error(error.message);
+    process.exit(1);
   }
   console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);

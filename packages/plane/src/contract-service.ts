@@ -5,7 +5,7 @@ import {
   signContract,
   type ActorRef,
   type RunContract
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import type { RunRequest } from "./store.js";
 

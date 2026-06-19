@@ -1,12 +1,12 @@
 {
-  "name": "@warrant/cli",
+  "name": "@fusionkit/cli",
   "private": false,
   "version": "0.1.0",
-  "description": "warrant — the governed execution and provenance plane for AI agents.",
+  "description": "fusionkit — real model fusion behind your coding agent (codex, claude, cursor).",
   "license": "UNLICENSED",
   "type": "module",
   "bin": {
-    "warrant": "./dist/index.js"
+    "fusionkit": "./dist/index.js"
   },
   "exports": {
     ".": {
@@ -20,22 +20,22 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/ensemble": "workspace:*",
-    "@warrant/handoff": "workspace:*",
-    "@warrant/model-gateway": "workspace:*",
-    "@warrant/plane": "workspace:*",
-    "@warrant/protocol": "workspace:*",
-    "@warrant/runner": "workspace:*",
-    "@warrant/sdk": "workspace:*",
-    "@warrant/workspace": "workspace:*",
+    "@fusionkit/ensemble": "workspace:*",
+    "@fusionkit/handoff": "workspace:*",
+    "@fusionkit/model-gateway": "workspace:*",
+    "@fusionkit/plane": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runner": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/workspace": "workspace:*",
     "commander": "14.0.3"
   },
   "devDependencies": {
-    "@warrant/testkit": "workspace:*"
+    "@fusionkit/testkit": "workspace:*"
   }
 }

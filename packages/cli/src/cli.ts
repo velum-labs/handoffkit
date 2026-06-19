@@ -11,7 +11,7 @@ import { registerRunner } from "./commands/runner.js";
 import { registerSecrets } from "./commands/secrets.js";
 
 /**
- * Build the `warrant` command tree. The global `--dir` option must precede the
+ * Build the `fusionkit` command tree. The global `--dir` option must precede the
  * subcommand (`enablePositionalOptions` keeps the launcher commands' passthrough
  * unambiguous). Each `register*` helper attaches its command(s) and reads the
  * global home directory via `program.opts().dir`.
@@ -19,9 +19,9 @@ import { registerSecrets } from "./commands/secrets.js";
 export function buildProgram(): Command {
   const program = new Command();
   program
-    .name("warrant")
-    .description("the governed execution and provenance plane for AI agents")
-    .option("-d, --dir <dir>", "warrant home (default: ./.warrant)")
+    .name("fusionkit")
+    .description("real model fusion behind your coding agent (codex, claude, cursor)")
+    .option("-d, --dir <dir>", "fusionkit home (default: ./.fusionkit)")
     .enablePositionalOptions();
 
   registerInit(program);

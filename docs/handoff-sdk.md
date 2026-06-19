@@ -1,13 +1,13 @@
 # Handoff SDK
 
-`@warrant/handoff` is the continuation-first developer surface. It packages
+`@fusionkit/handoff` is the continuation-first developer surface. It packages
 local state into Warrant checkpoints, requests governed runs through the plane,
 and pulls results back with receipts.
 
 ## Golden shape
 
 ```ts
-import { agents, handoff, targets } from "@warrant/handoff";
+import { agents, handoff, targets } from "@fusionkit/handoff";
 
 const h = await handoff({
   task: "fix the flaky auth test",

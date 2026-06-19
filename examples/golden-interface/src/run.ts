@@ -1,10 +1,10 @@
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 import type { LanguageModel } from "ai";
 
-import { withCompute } from "@warrant/adapter-compute";
-import { agents, handoff, localFirst, targets } from "@warrant/handoff";
-import type { ToolJournal } from "@warrant/protocol";
-import { withStackAndRepo } from "@warrant/testkit";
+import { withCompute } from "@fusionkit/adapter-compute";
+import { agents, handoff, localFirst, targets } from "@fusionkit/handoff";
+import type { ToolJournal } from "@fusionkit/protocol";
+import { withStackAndRepo } from "@fusionkit/testkit";
 
 import {
   demoBanner,
@@ -14,7 +14,7 @@ import {
   ok,
   resolveDemoModels,
   step
-} from "@warrant/example-utils";
+} from "@fusionkit/example-utils";
 
 const POOL = "eng-prod";
 

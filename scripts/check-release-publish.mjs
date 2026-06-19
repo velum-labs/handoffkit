@@ -36,11 +36,11 @@ if (manifest.canonicalRepository !== "velum-labs/handoffkit") {
 for (const pattern of ["handoffkit-v*", "v*"]) {
   if (!manifest.tagPatterns?.includes(pattern)) fail(`release manifest missing tag pattern ${pattern}`);
 }
-if (manifest.registry !== "https://npm.pkg.github.com") {
-  fail("release manifest must publish npm packages to GitHub Packages");
+if (manifest.registry !== "https://registry.npmjs.org") {
+  fail("release manifest must publish npm packages to the public npm registry");
 }
-if (manifest.access !== "restricted") {
-  fail("release manifest must default npm packages to restricted access");
+if (manifest.access !== "public") {
+  fail("release manifest must publish npm packages with public access");
 }
 if (manifest.provenance !== true) {
   fail("release manifest must require npm provenance");
@@ -52,7 +52,7 @@ for (const required of [
   "handoffkit-v*",
   "v*",
   "permissions:",
-  "packages: write",
+  "contents: read",
   "id-token: write",
   "corepack pnpm check",
   "corepack pnpm build",

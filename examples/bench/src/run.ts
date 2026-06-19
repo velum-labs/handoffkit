@@ -15,9 +15,9 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { isTerminalStatus, verifyReceiptBundle } from "@warrant/protocol";
-import { captureWorkspace } from "@warrant/workspace";
-import { git, makeRepo, startStack } from "@warrant/testkit";
+import { isTerminalStatus, verifyReceiptBundle } from "@fusionkit/protocol";
+import { captureWorkspace } from "@fusionkit/workspace";
+import { git, makeRepo, startStack } from "@fusionkit/testkit";
 
 const FILE_COUNT = Number(process.env.WARRANT_BENCH_FILES ?? "2000");
 const ITERATIONS = Number(process.env.WARRANT_BENCH_ITERS ?? "10");

@@ -14,17 +14,17 @@
  * dispatch and escalation is a signed governed run with a verifiable receipt,
  * and only governed-run pulls ever mutate the workspace of record.
  */
-import { agents } from "@warrant/handoff";
-import { swarmTools } from "@warrant/adapter-ai-sdk";
+import { agents } from "@fusionkit/handoff";
+import { swarmTools } from "@fusionkit/adapter-ai-sdk";
 import type {
   DispatchOutput,
   EscalateOutput,
   PullOutput,
   StatusOutput
-} from "@warrant/adapter-ai-sdk";
-import { withStackAndRepo } from "@warrant/testkit";
+} from "@fusionkit/adapter-ai-sdk";
+import { withStackAndRepo } from "@fusionkit/testkit";
 
-import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
+import { demoBanner, detail, finale, ok, step } from "@fusionkit/example-utils";
 
 const POOL = "swarm-pool";
 const CTX = { toolCallId: "demo", messages: [] };

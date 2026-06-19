@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
-import { verifyReceiptBundle } from "@warrant/protocol";
-import { CapabilityMismatchError } from "@warrant/runner";
-import { makeRepo, startStack } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import { verifyReceiptBundle } from "@fusionkit/protocol";
+import { CapabilityMismatchError } from "@fusionkit/runner";
+import { makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
+import { captureWorkspace } from "@fusionkit/workspace";
 
 import { isPiAgentRun, piAuthFromEnv, piHarnessBackend } from "../index.js";
 import { emptyHarnessLog, fakeHarness, fakeLocalSandboxProvider } from "./fakes.js";

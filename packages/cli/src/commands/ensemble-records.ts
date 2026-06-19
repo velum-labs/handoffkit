@@ -8,8 +8,8 @@ import {
   codexHarnessCredentialSkipReason,
   createCommandHarness,
   createMockHarness
-} from "@warrant/ensemble";
-import type { EnsembleRunResult, HarnessAdapter, HarnessSmokeDashboard } from "@warrant/ensemble";
+} from "@fusionkit/ensemble";
+import type { EnsembleRunResult, HarnessAdapter, HarnessSmokeDashboard } from "@fusionkit/ensemble";
 import {
   assertBenchmarkTaskRecordV1,
   assertHarnessCandidateRecordV1,
@@ -18,7 +18,7 @@ import {
   assertModelFusionRecord,
   assertToolExecutionRecordV1,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   BenchmarkTaskRecordV1,
   HarnessRunRequestV1,
@@ -27,8 +27,8 @@ import type {
   ModelFusionRecordV1,
   ModelFusionSideEffects,
   ToolExecutionRecordV1
-} from "@warrant/protocol";
-import { gitText } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import { gitText } from "@fusionkit/workspace";
 
 import { fail } from "../shared/errors.js";
 

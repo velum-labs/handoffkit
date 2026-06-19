@@ -2,9 +2,9 @@ import type {
   EnsembleModel,
   HarnessLiveSmokeTarget,
   UnifiedHarnessKind
-} from "@warrant/ensemble";
-import { SESSION_ISOLATIONS } from "@warrant/protocol";
-import type { SessionIsolation } from "@warrant/protocol";
+} from "@fusionkit/ensemble";
+import { SESSION_ISOLATIONS } from "@fusionkit/protocol";
+import type { SessionIsolation } from "@fusionkit/protocol";
 
 import type { FusionTool, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
 import { FUSION_TOOLS } from "../fusion-quickstart.js";

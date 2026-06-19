@@ -1,11 +1,11 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { renderDisclosure } from "@warrant/cli/render";
-import { mockRunRequest, withStackAndRepo } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import { renderDisclosure } from "@fusionkit/cli/render";
+import { mockRunRequest, withStackAndRepo } from "@fusionkit/testkit";
+import { captureWorkspace } from "@fusionkit/workspace";
 
-import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
+import { demoBanner, detail, finale, ok, step } from "@fusionkit/example-utils";
 
 async function main(): Promise<void> {
   demoBanner("02");

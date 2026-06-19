@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { sha256Hex } from "@warrant/protocol";
+import { sha256Hex } from "@fusionkit/protocol";
 import {
   captureWorkspace,
   collectOutput,

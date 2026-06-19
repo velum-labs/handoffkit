@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/plane",
+  "name": "@fusionkit/plane",
   "private": false,
   "version": "0.1.0",
   "description": "Warrant control plane: contracts, policy, approvals, receipt countersignature, secret broker, audit export, and the control panel UI.",
@@ -13,12 +13,12 @@
   },
   "files": ["dist", "ui"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/protocol": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
     "jose": "6.2.3",
     "pino": "10.3.1",
     "zod": "4.4.3"

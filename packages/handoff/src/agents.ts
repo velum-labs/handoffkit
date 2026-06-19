@@ -1,4 +1,4 @@
-import type { AgentKind, AgentSpec } from "@warrant/protocol";
+import type { AgentKind, AgentSpec } from "@fusionkit/protocol";
 
 /**
  * Typed agent constructors, mirroring the AI SDK provider pattern:

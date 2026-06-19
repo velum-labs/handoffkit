@@ -6,14 +6,14 @@ import { join } from "node:path";
 import {
   assertJudgeSynthesisRecordV1,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   HarnessCandidateRecordV1,
   JudgeSynthesisRecordV1,
   JsonValue,
   ModelFusionStatus
-} from "@warrant/protocol";
-import { gitText } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import { gitText } from "@fusionkit/workspace";
 
 import type { ArtifactStore } from "./artifacts.js";
 import type {

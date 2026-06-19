@@ -9,13 +9,13 @@ import {
   assertToolExecutionRecordV1,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   toolArgumentsHash
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   JsonValue,
   ModelFusionSideEffects,
   ToolCallPlanV1,
   ToolExecutorContract
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import {
   executeFusionKitToolBatch,

@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import type { Command } from "commander";
 
-import { Plane, startPlaneServer } from "@warrant/plane";
+import { Plane, startPlaneServer } from "@fusionkit/plane";
 
 import { loadHome, secretStoreFor } from "../config.js";
 import { resolveDir } from "../shared/plane.js";

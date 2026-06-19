@@ -4,8 +4,8 @@ import { test } from "node:test";
 import { generateText } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 
-import { handoff, localFirst, targets, triggers } from "@warrant/handoff";
-import type { ModelDecision } from "@warrant/handoff";
+import { handoff, localFirst, targets, triggers } from "@fusionkit/handoff";
+import type { ModelDecision } from "@fusionkit/handoff";
 
 import { handoffModel, withModel } from "../model.js";
 

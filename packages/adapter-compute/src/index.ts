@@ -1,5 +1,5 @@
 /**
- * @warrant/adapter-compute — a ComputeSDK-shaped compute surface over
+ * @fusionkit/adapter-compute — a ComputeSDK-shaped compute surface over
  * governed runner sessions.
  *
  * The shape matches what ComputeSDK users already write —

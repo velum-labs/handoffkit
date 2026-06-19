@@ -15,7 +15,7 @@ unchanged. This package is the bridge to running models:
    centroids, each model's per-cluster error vector Ψ, and costs.
 3. **Route** anywhere. The card is pure data; the online rule (embed → assign →
    cost-adjusted argmin) runs in this package's CLI or in the repository's
-   TypeScript `routedModel` (`@warrant/adapter-ai-sdk`), which delegates to
+   TypeScript `routedModel` (`@fusionkit/adapter-ai-sdk`), which delegates to
    `mlxServer(...)`-managed processes.
 
 ## Usage

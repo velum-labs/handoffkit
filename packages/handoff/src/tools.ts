@@ -1,5 +1,5 @@
-import { hashCanonical } from "@warrant/protocol";
-import type { JsonValue, ToolCallRecord } from "@warrant/protocol";
+import { hashCanonical } from "@fusionkit/protocol";
+import type { JsonValue, ToolCallRecord } from "@fusionkit/protocol";
 
 /**
  * Structural stand-in for an AI SDK tool (or any tool object). The wrapper

@@ -1,5 +1,5 @@
 {
-  "//": "Single source of truth for the example projects: scripts/demo.mjs (listing/running), test/demos.test.js (the acceptance suite), scripts/check-repo.mjs (required files), and @warrant/example-utils demoBanner (per-demo narration) all read this file.",
+  "//": "Single source of truth for the example projects: scripts/demo.mjs (listing/running), test/demos.test.js (the acceptance suite), scripts/check-repo.mjs (required files), and @fusionkit/example-utils demoBanner (per-demo narration) all read this file.",
   "demos": [
     {
       "id": "01",

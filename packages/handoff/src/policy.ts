@@ -1,4 +1,4 @@
-import type { CheckpointTier, DisclosureMode } from "@warrant/protocol";
+import type { CheckpointTier, DisclosureMode } from "@fusionkit/protocol";
 
 import type { RuntimeTarget } from "./targets.js";
 import type { Trigger } from "./triggers.js";

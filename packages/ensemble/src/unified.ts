@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import type { JsonValue, ModelFusionStatus } from "@warrant/protocol";
-import { newSpanId, TRACE_ID_HEADER, TRACE_SPAN_HEADER } from "@warrant/protocol";
-import { gitText } from "@warrant/workspace";
+import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
+import { newSpanId, TRACE_ID_HEADER, TRACE_SPAN_HEADER } from "@fusionkit/protocol";
+import { gitText } from "@fusionkit/workspace";
 
 import { createAgentHarness } from "./agent.js";
 import { claudeCodeHarness } from "./claude-code.js";

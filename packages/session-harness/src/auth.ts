@@ -13,7 +13,7 @@
  */
 import type { ClaudeCodeAuthOptions } from "@ai-sdk/harness-claude-code";
 import type { PiAuthOptions } from "@ai-sdk/harness-pi";
-import { CapabilityMismatchError } from "@warrant/runner";
+import { CapabilityMismatchError } from "@fusionkit/runner";
 
 /**
  * The only environment variables this harness path can honor: the adapter

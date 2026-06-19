@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/seed-example",
+  "name": "@fusionkit/seed-example",
   "private": true,
   "version": "0.1.0",
   "description": "Docker and control-panel seeder for showcase Warrant runs.",
@@ -15,10 +15,10 @@
     "dist"
   ],
   "dependencies": {
-    "@warrant/handoff": "workspace:*",
-    "@warrant/protocol": "workspace:*",
-    "@warrant/sdk": "workspace:*",
-    "@warrant/testkit": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/handoff": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/testkit": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   }
 }

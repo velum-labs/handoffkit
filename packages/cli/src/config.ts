@@ -7,9 +7,9 @@ import {
   FileKeyProvider,
   resolveMasterKey,
   SecretStore
-} from "@warrant/plane";
-import type { MasterKey } from "@warrant/plane";
-import type { Policy } from "@warrant/protocol";
+} from "@fusionkit/plane";
+import type { MasterKey } from "@fusionkit/plane";
+import type { Policy } from "@fusionkit/protocol";
 
 /** Defaults for `warrant init`; flags (--port/--host) override them. */
 const DEFAULT_PLANE_PORT = 7172;

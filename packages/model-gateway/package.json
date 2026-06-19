@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/model-gateway",
+  "name": "@fusionkit/model-gateway",
   "private": false,
   "version": "0.1.0",
   "description": "Native local-model gateway: fronts an OpenAI-compatible local model and exposes the wire dialects each agent harness needs (OpenAI chat, Anthropic Messages, OpenAI Responses) so a local model can transparently back Claude Code, Codex, opencode, and Cursor.",
@@ -13,12 +13,12 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/adapter-ai-sdk": "workspace:*",
-    "@warrant/protocol": "workspace:*"
+    "@fusionkit/adapter-ai-sdk": "workspace:*",
+    "@fusionkit/protocol": "workspace:*"
   }
 }

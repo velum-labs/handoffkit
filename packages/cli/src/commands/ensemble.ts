@@ -10,10 +10,10 @@ import {
   runEnsemble,
   runHarnessSmokeDashboard,
   runUnifiedHarnessE2E
-} from "@warrant/ensemble";
-import type { EnsembleDescriptor } from "@warrant/ensemble";
-import { assertHarnessRunRequestV1, assertHarnessRunResultV1 } from "@warrant/protocol";
-import { gitText } from "@warrant/workspace";
+} from "@fusionkit/ensemble";
+import type { EnsembleDescriptor } from "@fusionkit/ensemble";
+import { assertHarnessRunRequestV1, assertHarnessRunResultV1 } from "@fusionkit/protocol";
+import { gitText } from "@fusionkit/workspace";
 
 import { fail } from "../shared/errors.js";
 import {

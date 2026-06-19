@@ -1,4 +1,4 @@
-import { verifyReceiptBundle } from "@warrant/protocol";
+import { verifyReceiptBundle } from "@fusionkit/protocol";
 import type {
   ActorRef,
   BundleVerification,
@@ -6,9 +6,9 @@ import type {
   ReceiptBundle,
   RunStatus,
   SessionIsolation
-} from "@warrant/protocol";
-import type { PlaneClient } from "@warrant/sdk";
-import type { PullResult } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import type { PlaneClient } from "@fusionkit/sdk";
+import type { PullResult } from "@fusionkit/workspace";
 
 import { agents } from "./agents.js";
 import { handoff } from "./handoff.js";

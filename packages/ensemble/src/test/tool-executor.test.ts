@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { assertToolExecutionRecordV1 } from "@warrant/protocol";
-import type { ToolExecutorContract } from "@warrant/protocol";
+import { assertToolExecutionRecordV1 } from "@fusionkit/protocol";
+import type { ToolExecutorContract } from "@fusionkit/protocol";
 
 import { createToolExecutor, registerDemoTools } from "../tool-executor.js";
 import { createMockHarness } from "../mock.js";

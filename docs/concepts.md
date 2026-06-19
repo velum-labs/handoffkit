@@ -28,7 +28,7 @@ services that exchange them.
 - **Session backend** provides the isolation boundary for the actual execution:
   hermetic just-bash, Vercel Sandbox microVMs, or AI SDK harness bindings.
 - **Verifier** checks signatures, hashes, event chains, and receipt bundles
-  offline using `@warrant/protocol` and `@warrant/sdk`.
+  offline using `@fusionkit/protocol` and `@fusionkit/sdk`.
 
 ## The five receipt questions
 

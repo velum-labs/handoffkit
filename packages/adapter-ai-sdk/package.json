@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/adapter-ai-sdk",
+  "name": "@fusionkit/adapter-ai-sdk",
   "private": false,
   "version": "0.1.0",
   "description": "AI SDK adapter for app-owned loops: tool calls execute in governed runner sessions and return with receipts. No durability claim attaches to the caller's loop.",
@@ -15,20 +15,20 @@
     "dist"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.48",
     "@ai-sdk/provider": "3.0.10",
-    "@warrant/handoff": "workspace:*",
-    "@warrant/protocol": "workspace:*",
-    "@warrant/sdk": "workspace:*",
+    "@fusionkit/handoff": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
     "ai": "6.0.200",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@warrant/testkit": "workspace:*"
+    "@fusionkit/testkit": "workspace:*"
   }
 }

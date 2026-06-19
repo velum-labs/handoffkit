@@ -1,5 +1,5 @@
-import type { ReceiptBundle } from "@warrant/protocol";
-import { PlaneClient } from "@warrant/sdk";
+import type { ReceiptBundle } from "@fusionkit/protocol";
+import { PlaneClient } from "@fusionkit/sdk";
 
 import { HandoffRun } from "./run.js";
 

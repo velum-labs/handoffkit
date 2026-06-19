@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/ensemble",
+  "name": "@fusionkit/ensemble",
   "private": false,
   "version": "0.1.0",
   "description": "Harness-agnostic ensemble runner that emits model-fusion protocol records.",
@@ -13,16 +13,16 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/adapter-ai-sdk": "workspace:*",
-    "@warrant/model-gateway": "workspace:*",
-    "@warrant/protocol": "workspace:*",
-    "@warrant/runner": "workspace:*",
-    "@warrant/session-harness": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/adapter-ai-sdk": "workspace:*",
+    "@fusionkit/model-gateway": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runner": "workspace:*",
+    "@fusionkit/session-harness": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   }
 }

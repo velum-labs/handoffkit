@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/session-harness",
+  "name": "@fusionkit/session-harness",
   "private": false,
   "version": "0.1.0",
   "description": "AI SDK harness session backend for Warrant runners: drives vendor agent harnesses (Claude Code) through @ai-sdk/harness inside a Vercel Sandbox microVM, capturing the structured harness event stream as governed-session evidence.",
@@ -15,8 +15,8 @@
     "dist"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
@@ -25,16 +25,16 @@
     "@ai-sdk/harness-pi": "1.0.0-canary.2",
     "@ai-sdk/sandbox-just-bash": "1.0.0-canary.6",
     "@ai-sdk/sandbox-vercel": "1.0.0-canary.6",
-    "@warrant/protocol": "workspace:*",
-    "@warrant/runner": "workspace:*",
-    "@warrant/session-hermetic": "workspace:*",
-    "@warrant/session-vercel-sandbox": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runner": "workspace:*",
+    "@fusionkit/session-hermetic": "workspace:*",
+    "@fusionkit/session-vercel-sandbox": "workspace:*",
     "ws": "8.21.0"
   },
   "devDependencies": {
-    "@warrant/plane": "workspace:*",
-    "@warrant/sdk": "workspace:*",
-    "@warrant/testkit": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/plane": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/testkit": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   }
 }

@@ -9,7 +9,7 @@
  * turn's stop reason.
  *
  * The runner is injected so this package stays free of a dependency on
- * `@warrant/ensemble` (which depends on this package). The input/output streams
+ * `@fusionkit/ensemble` (which depends on this package). The input/output streams
  * are injectable for deterministic testing.
  */
 

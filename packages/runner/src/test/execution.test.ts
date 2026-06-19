@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { RunContract } from "@warrant/protocol";
+import type { RunContract } from "@fusionkit/protocol";
 
 import {
   executionSpecFor,

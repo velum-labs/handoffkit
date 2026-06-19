@@ -5,7 +5,7 @@ import type {
   LanguageModelV3StreamResult
 } from "@ai-sdk/provider";
 
-import type { Handoff, ModelDecision } from "@warrant/handoff";
+import type { Handoff, ModelDecision } from "@fusionkit/handoff";
 
 /**
  * Why a call left the local model. Deterministic and observable: an error

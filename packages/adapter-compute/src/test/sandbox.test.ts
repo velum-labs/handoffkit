@@ -3,10 +3,10 @@ import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import { after, before, test } from "node:test";
 
-import { handoff, localFirst } from "@warrant/handoff";
-import { makeRepo, startStack } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
-import { resolveInsideWorkspace } from "@warrant/workspace";
+import { handoff, localFirst } from "@fusionkit/handoff";
+import { makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
+import { resolveInsideWorkspace } from "@fusionkit/workspace";
 
 import { governedCompute, withCompute } from "../sandbox.js";
 import type { GovernedSandbox } from "../sandbox.js";

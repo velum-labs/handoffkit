@@ -8,8 +8,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 
-import { PolicyDeniedError } from "@warrant/protocol";
-import type { ChainedEvent, Receipt } from "@warrant/protocol";
+import { PolicyDeniedError } from "@fusionkit/protocol";
+import type { ChainedEvent, Receipt } from "@fusionkit/protocol";
 
 import type { Capability, Principal } from "./auth.js";
 import { isPlaneDomainError } from "./domain-errors.js";

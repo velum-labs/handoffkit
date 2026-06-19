@@ -8,7 +8,7 @@ import {
   modelFusionSideEffects,
   toolArgumentsHash,
   toolCallKey
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   JsonValue,
   ToolDefinition,
@@ -18,8 +18,8 @@ import type {
   ToolExecutorContract,
   ToolPolicyDecision,
   ToolSideEffectClass
-} from "@warrant/protocol";
-import { resolveInsideWorkspace } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import { resolveInsideWorkspace } from "@fusionkit/workspace";
 
 export type ToolImplementation = {
   definition: ToolDefinition;

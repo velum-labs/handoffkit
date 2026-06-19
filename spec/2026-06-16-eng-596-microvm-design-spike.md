@@ -6,7 +6,7 @@ Status: Implemented for the opt-in Vercel Sandbox path
 Design note: this document closes MF-61. It evaluates the path from ENG-595's
 candidate container hardening to a Firecracker-backed microVM runtime without
 replacing the Phase 2 worktree/container path. The public API recommendation is
-to preserve the ComputeSDK-shaped surface in `@warrant/adapter-compute` while
+to preserve the ComputeSDK-shaped surface in `@fusionkit/adapter-compute` while
 moving the underlying isolation tier toward Vercel Sandbox first.
 
 ## Recommendation
@@ -85,13 +85,13 @@ Later production hardening should add orphan scanning by tags and retention TTL.
 
 ## Compute adapter migration
 
-`@warrant/adapter-compute` keeps the right public shape for sandbox workflows:
+`@fusionkit/adapter-compute` keeps the right public shape for sandbox workflows:
 `sandbox.create()`, filesystem methods, and `runCommand()` over governed
 sessions. The implemented names are:
 
-- `CommandHarnessConfig.session?: SessionIsolation` in `@warrant/handoff`
+- `CommandHarnessConfig.session?: SessionIsolation` in `@fusionkit/handoff`
 - `GovernedComputeConfig = CommandHarnessConfig` in
-  `@warrant/adapter-compute`
+  `@fusionkit/adapter-compute`
 - `governedCompute({ ..., session: "vercel-sandbox" })`
 - `withCompute(h, { pool, session: "vercel-sandbox" })`
 - `SandboxRunRecord.isolation`, derived from `receipt.runner.isolation`
@@ -120,7 +120,7 @@ Default no-credential run reports:
 - local workspace file discovery/staging input size
 - ENG-595 process and fake-container command overhead
 - secret/artifact scan overhead
-- `@warrant/adapter-compute` governed sandbox command overhead on the local
+- `@fusionkit/adapter-compute` governed sandbox command overhead on the local
   test stack
 - governed Vercel Sandbox, direct live substrate, and warm snapshot sections as
   `SKIP` unless live mode and credentials are present
@@ -183,7 +183,7 @@ Stable fields:
 - `network.connected`
 - `boundary.crossed`
 - `ReceiptBundle` offline verification
-- `@warrant/adapter-compute` caller shape and per-command receipt records
+- `@fusionkit/adapter-compute` caller shape and per-command receipt records
 
 Metadata-only additions:
 

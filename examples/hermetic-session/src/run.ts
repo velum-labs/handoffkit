@@ -1,9 +1,9 @@
-import { hermeticBackend } from "@warrant/session-hermetic";
-import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
+import { hermeticBackend } from "@fusionkit/session-hermetic";
+import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
 
-import { renderReceipt } from "@warrant/cli/render";
-import { demoBanner, detail, expectedFailure, finale, ok, step } from "@warrant/example-utils";
+import { renderReceipt } from "@fusionkit/cli/render";
+import { demoBanner, detail, expectedFailure, finale, ok, step } from "@fusionkit/example-utils";
 
 const POOL = "eng-prod";
 

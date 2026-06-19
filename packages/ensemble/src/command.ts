@@ -1,4 +1,4 @@
-import { artifactHash } from "@warrant/protocol";
+import { artifactHash } from "@fusionkit/protocol";
 
 import type { HarnessAdapter, HarnessCandidateOutput } from "./harness.js";
 import type { EnsembleModel } from "./harness.js";

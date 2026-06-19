@@ -1,5 +1,5 @@
-import { PolicyDeniedError } from "@warrant/protocol";
-import type { AgentKind, Policy, PolicyDecision } from "@warrant/protocol";
+import { PolicyDeniedError } from "@fusionkit/protocol";
+import type { AgentKind, Policy, PolicyDecision } from "@fusionkit/protocol";
 
 export type PolicyRequest = {
   agentKind: AgentKind;

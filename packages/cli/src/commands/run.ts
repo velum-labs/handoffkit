@@ -3,10 +3,10 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { agents, handoff, targets } from "@warrant/handoff";
-import { AGENT_KINDS } from "@warrant/protocol";
-import type { AgentKind, AgentSpec, RunRequestInput } from "@warrant/protocol";
-import { captureWorkspace } from "@warrant/workspace";
+import { agents, handoff, targets } from "@fusionkit/handoff";
+import { AGENT_KINDS } from "@fusionkit/protocol";
+import type { AgentKind, AgentSpec, RunRequestInput } from "@fusionkit/protocol";
+import { captureWorkspace } from "@fusionkit/workspace";
 
 import { loadHome } from "../config.js";
 import { renderDisclosure, renderReceipt, renderTrace } from "../render.js";

@@ -12,7 +12,7 @@ import {
   parseWorkspaceManifestPath,
   PROTOCOL_VERSIONS,
   SESSION_ISOLATIONS
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import { PRINCIPAL_ROLES } from "./store.js";
 

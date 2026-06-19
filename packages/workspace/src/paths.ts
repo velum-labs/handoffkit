@@ -1,6 +1,6 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
-import { parseWorkspaceManifestPath } from "@warrant/protocol";
+import { parseWorkspaceManifestPath } from "@fusionkit/protocol";
 
 declare const workspaceRootBrand: unique symbol;
 declare const workspaceRelativePathBrand: unique symbol;

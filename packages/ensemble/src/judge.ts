@@ -1,4 +1,4 @@
-import type { JudgeSynthesisDecision, ModelCallRecordV1, ModelFusionStatus } from "@warrant/protocol";
+import type { JudgeSynthesisDecision, ModelCallRecordV1, ModelFusionStatus } from "@fusionkit/protocol";
 
 import type {
   EnsembleDescriptor,

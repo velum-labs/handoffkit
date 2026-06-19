@@ -6,7 +6,7 @@ import {
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   requestHash,
   responseHash
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   ModelCallRecordV1,
   ModelFusionChatMessage,
@@ -14,7 +14,7 @@ import type {
   ModelFusionStatus,
   JsonValue,
   ModelFusionUsage
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 /** The wire dialect a request arrived on. */
 export type GatewayDialect = "openai-chat" | "anthropic-messages" | "openai-responses";

@@ -1,14 +1,14 @@
 {
-  "name": "@warrant/example-hermetic-session",
+  "name": "@fusionkit/example-hermetic-session",
   "private": true,
   "version": "0.1.0",
   "description": "Standalone Warrant example: hermetic interpreter-backed sessions.",
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
-    "@warrant/cli": "workspace:*",
-    "@warrant/example-utils": "workspace:*",
-    "@warrant/session-hermetic": "workspace:*",
-    "@warrant/testkit": "workspace:*"
+    "@fusionkit/cli": "workspace:*",
+    "@fusionkit/example-utils": "workspace:*",
+    "@fusionkit/session-hermetic": "workspace:*",
+    "@fusionkit/testkit": "workspace:*"
   }
 }

@@ -11,7 +11,7 @@ import type {
   ModelFusionSideEffects,
   ModelFusionStatus,
   ToolExecutionRecordV1
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import type { CandidateWorktree } from "./worktree.js";
 import type {

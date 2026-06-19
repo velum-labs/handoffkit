@@ -11,7 +11,7 @@ import {
   hashCanonical,
   keyIdFromPublicPem,
   signReceipt
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   ChainedEvent,
   ClaimResult,
@@ -19,9 +19,9 @@ import type {
   RunEvent,
   RunnerIdentity,
   SessionIsolation
-} from "@warrant/protocol";
-import { PlaneClient } from "@warrant/sdk";
-import { materializeWorkspace } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import { PlaneClient } from "@fusionkit/sdk";
+import { materializeWorkspace } from "@fusionkit/workspace";
 import type { SessionBackend } from "./backend.js";
 import { runSession } from "./session.js";
 

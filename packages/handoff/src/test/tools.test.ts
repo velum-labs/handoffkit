@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { MODEL_FUSION_SCHEMA_BUNDLE_HASH } from "@warrant/protocol";
-import type { ToolExecutionResult } from "@warrant/protocol";
+import { MODEL_FUSION_SCHEMA_BUNDLE_HASH } from "@fusionkit/protocol";
+import type { ToolExecutionResult } from "@fusionkit/protocol";
 
 import { handoff } from "../handoff.js";
 import { HandoffToolJournal } from "../tool-journal.js";

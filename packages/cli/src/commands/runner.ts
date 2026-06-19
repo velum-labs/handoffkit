@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { Runner } from "@warrant/runner";
+import { Runner } from "@fusionkit/runner";
 
 import { loadHome } from "../config.js";
 import { resolveDir } from "../shared/plane.js";

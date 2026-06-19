@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/runner",
+  "name": "@fusionkit/runner",
   "private": false,
   "version": "0.1.0",
   "description": "Warrant runner: outbound-only execution of vendor agent harnesses inside governed sessions with deny-by-default egress.",
@@ -13,13 +13,13 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/protocol": "workspace:*",
-    "@warrant/sdk": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   }
 }

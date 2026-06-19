@@ -3,7 +3,7 @@ import {
   hashCanonical,
   type ExecutionSpec,
   type RunContract
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import { buildAgentCommand, type AgentContext } from "./agents.js";
 

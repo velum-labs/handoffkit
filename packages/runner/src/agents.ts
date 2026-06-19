@@ -1,4 +1,4 @@
-import type { AgentKind } from "@warrant/protocol";
+import type { AgentKind } from "@fusionkit/protocol";
 
 export type AgentCommand = {
   cmd: string;

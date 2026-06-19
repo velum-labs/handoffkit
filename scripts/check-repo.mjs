@@ -322,7 +322,7 @@ function checkDeps(manifestPath, manifest) {
     ["devDependencies", manifest.devDependencies ?? {}]
   ]) {
     for (const [name, version] of Object.entries(deps)) {
-      if (name.startsWith("@warrant/")) {
+      if (name.startsWith("@fusionkit/")) {
         if (version !== "workspace:*") {
           fail(`${manifestPath} ${section} "${name}": internal packages must use workspace:*`);
         }

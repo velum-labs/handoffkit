@@ -1,6 +1,6 @@
-import type { RunContract, RunEvent, SessionIsolation } from "@warrant/protocol";
-import { collectOutput } from "@warrant/workspace";
-import type { WorkspaceOutput } from "@warrant/workspace";
+import type { RunContract, RunEvent, SessionIsolation } from "@fusionkit/protocol";
+import { collectOutput } from "@fusionkit/workspace";
+import type { WorkspaceOutput } from "@fusionkit/workspace";
 
 import type { SessionBackend } from "./backend.js";
 import { prepareExecution } from "./execution.js";

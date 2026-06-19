@@ -14,20 +14,20 @@ The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and com
 
 | Package | What it is |
 | --- | --- |
-| [`@warrant/protocol`](packages/protocol) | The open data contracts (`warrant.contract.v1`, `receipt.v1`, `event.v1`, `manifest.v1`, `policy.v1`, `checkpoint.v1`, `envelope.v1`), the wire API types, and the primitives to sign, hash-chain, and verify them offline. |
-| [`@warrant/workspace`](packages/workspace) | Git workspace capture (with provable secret-pattern denial), session materialization, output collection, and divergence-safe pull. |
-| [`@warrant/plane`](packages/plane) | Control plane: contracts, policy evaluation, role-based principal auth, IdP-backed approvals, receipt countersignature, secret broker, durable SQLite storage, rate limiting, retention/GC, metrics, audit export — and the control panel UI at `/ui/`. |
-| [`@warrant/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. Pluggable session-isolation backends. |
-| [`@warrant/session-hermetic`](packages/session-hermetic) | Hermetic session backend: a simulated bash interpreter ([just-bash](https://github.com/vercel-labs/just-bash)) with a virtual filesystem and interpreter-enforced egress. No real process or socket to escape with. |
-| [`@warrant/session-vercel-sandbox`](packages/session-vercel-sandbox) | Vercel Sandbox session backend: each session runs in a Firecracker microVM with VM-level isolation and domain egress policy. Experimental, integration-gated. |
-| [`@warrant/session-harness`](packages/session-harness) | AI SDK harness driver, binding-based: `claudeCodeBinding` runs claude-code through `@ai-sdk/harness` (`HarnessAgent`) in a Vercel Sandbox microVM, and `piBinding` runs the host-runtime Pi harness on a local [just-bash](https://github.com/vercel-labs/just-bash) sandbox driving a local model (the cheap swarm worker). Structured events become a JSONL transcript. Experimental, integration-gated. |
-| [`@warrant/sdk`](packages/sdk) | Thin client over the plane API plus offline receipt verification. |
-| [`@warrant/handoff`](packages/handoff) | The continuation SDK: `handoff(...)`, `checkpoint`, `continueIn`, `parallel`, `review`, `pull` — typed descriptors, fail-closed planning, full provenance. |
-| [`@warrant/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops and orchestrators: `remoteTools(...)` runs a model's tool calls as governed contracts; `swarmTools(...)` gives a cloud orchestrator harness governed dispatch/status/pull/escalate over a local worker swarm. Both return AI SDK-compatible tools that execute in governed sessions and return with receipts. |
-| [`@warrant/adapter-compute`](packages/adapter-compute) | ComputeSDK-shaped compute surface: `sandbox.create()`, `runCommand`, `filesystem` — every command a governed run with a receipt. |
-| [`@warrant/model-gateway`](packages/model-gateway) | Native local-model gateway: fronts an OpenAI-compatible local model (the owned `mlx_lm.server` fork by default) and exposes the wire dialects each agent harness needs — OpenAI Chat Completions (opencode, Cursor plan mode), Anthropic Messages (Claude Code), and OpenAI Responses (Codex) — so a local model can transparently back them. |
-| [`@warrant/cli`](packages/cli) | The `warrant` CLI: the primary product surface. |
-| [`@warrant/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
+| [`@fusionkit/protocol`](packages/protocol) | The open data contracts (`warrant.contract.v1`, `receipt.v1`, `event.v1`, `manifest.v1`, `policy.v1`, `checkpoint.v1`, `envelope.v1`), the wire API types, and the primitives to sign, hash-chain, and verify them offline. |
+| [`@fusionkit/workspace`](packages/workspace) | Git workspace capture (with provable secret-pattern denial), session materialization, output collection, and divergence-safe pull. |
+| [`@fusionkit/plane`](packages/plane) | Control plane: contracts, policy evaluation, role-based principal auth, IdP-backed approvals, receipt countersignature, secret broker, durable SQLite storage, rate limiting, retention/GC, metrics, audit export — and the control panel UI at `/ui/`. |
+| [`@fusionkit/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. Pluggable session-isolation backends. |
+| [`@fusionkit/session-hermetic`](packages/session-hermetic) | Hermetic session backend: a simulated bash interpreter ([just-bash](https://github.com/vercel-labs/just-bash)) with a virtual filesystem and interpreter-enforced egress. No real process or socket to escape with. |
+| [`@fusionkit/session-vercel-sandbox`](packages/session-vercel-sandbox) | Vercel Sandbox session backend: each session runs in a Firecracker microVM with VM-level isolation and domain egress policy. Experimental, integration-gated. |
+| [`@fusionkit/session-harness`](packages/session-harness) | AI SDK harness driver, binding-based: `claudeCodeBinding` runs claude-code through `@ai-sdk/harness` (`HarnessAgent`) in a Vercel Sandbox microVM, and `piBinding` runs the host-runtime Pi harness on a local [just-bash](https://github.com/vercel-labs/just-bash) sandbox driving a local model (the cheap swarm worker). Structured events become a JSONL transcript. Experimental, integration-gated. |
+| [`@fusionkit/sdk`](packages/sdk) | Thin client over the plane API plus offline receipt verification. |
+| [`@fusionkit/handoff`](packages/handoff) | The continuation SDK: `handoff(...)`, `checkpoint`, `continueIn`, `parallel`, `review`, `pull` — typed descriptors, fail-closed planning, full provenance. |
+| [`@fusionkit/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops and orchestrators: `remoteTools(...)` runs a model's tool calls as governed contracts; `swarmTools(...)` gives a cloud orchestrator harness governed dispatch/status/pull/escalate over a local worker swarm. Both return AI SDK-compatible tools that execute in governed sessions and return with receipts. |
+| [`@fusionkit/adapter-compute`](packages/adapter-compute) | ComputeSDK-shaped compute surface: `sandbox.create()`, `runCommand`, `filesystem` — every command a governed run with a receipt. |
+| [`@fusionkit/model-gateway`](packages/model-gateway) | Native local-model gateway: fronts an OpenAI-compatible local model (the owned `mlx_lm.server` fork by default) and exposes the wire dialects each agent harness needs — OpenAI Chat Completions (opencode, Cursor plan mode), Anthropic Messages (Claude Code), and OpenAI Responses (Codex) — so a local model can transparently back them. |
+| [`@fusionkit/cli`](packages/cli) | The `fusionkit` CLI: the primary product surface. |
+| [`@fusionkit/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
 | [`examples/*`](examples) | Standalone example projects for the runnable demos (below). |
 | [`uniroute`](python/uniroute) | Python (uv workspace member): UniRoute universal model routing, arXiv:2502.08773. |
 | [`uniroute-mlx`](python/uniroute-mlx) | Python (uv workspace member): evaluate and fit UniRoute routers over OpenAI-compatible endpoints (mlx-lm, Ollama, cloud), exporting portable router cards consumed by `routedModel`. |
@@ -47,13 +47,16 @@ uv run uniroute-demo                   # run a member's entry point
 - [FusionKit handoff executor](docs/fusionkit-handoff-executor.md): stdin/stdout record envelope for FusionKit coding-harness benchmark tasks.
 - [Fusion Harness Gateway](docs/fusion-harness-gateway.md): front door that lets unmodified Codex, Claude Code, and Cursor use model fusion as their backend over their native wire protocols.
 
-One-command quickstart (real local MLX panel, no mocks): back a coding agent with model fusion in a single command —
+One-command quickstart (real models, no mocks): install the `fusionkit` CLI globally and back a coding agent with model fusion in a single command —
 
 ```bash
-warrant fusion codex   # or: claude | cursor | serve
+pnpm add -g @fusionkit/cli           # public npm; installs the `fusionkit` command
+export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...
+cd your-git-repo
+fusionkit codex                      # or: claude | cursor | serve  (add --local for an Apple-Silicon MLX panel)
 ```
 
-See [Fusion Harness Gateway](docs/fusion-harness-gateway.md#quickstart-one-command) for details.
+The synthesizer (`fusionkit serve`) is fetched from PyPI via `uvx`, so only `uv` and your coding-agent CLI need to be installed. See [Fusion Harness Gateway](docs/fusion-harness-gateway.md#quickstart-one-command) for details.
 
 ## Quickstart
 
@@ -166,12 +169,12 @@ warrant run --agent claude-code --secret ANTHROPIC_API_KEY \
 
 ### Managed MLX: Warrant owns the model server
 
-On Apple Silicon, `mlxServer(...)` from `@warrant/adapter-ai-sdk` owns the whole local-model stack rather than pointing at a server you run by hand. It provisions a dedicated directory (default `~/.warrant/mlx`) containing a private Python venv with [mlx-lm](https://pypi.org/project/mlx-lm/), an env manifest, and a contained Hugging Face model cache — then boots `mlx_lm server` from that env's own interpreter on the first model call, and scales it to zero after an idle period. The next call transparently restarts it.
+On Apple Silicon, `mlxServer(...)` from `@fusionkit/adapter-ai-sdk` owns the whole local-model stack rather than pointing at a server you run by hand. It provisions a dedicated directory (default `~/.warrant/mlx`) containing a private Python venv with [mlx-lm](https://pypi.org/project/mlx-lm/), an env manifest, and a contained Hugging Face model cache — then boots `mlx_lm server` from that env's own interpreter on the first model call, and scales it to zero after an idle period. The next call transparently restarts it.
 
 Provisioning prefers [uv](https://docs.astral.sh/uv/) when available (an explicit path, `WARRANT_UV`, or PATH discovery): installs are an order of magnitude faster, and uv supplies its own managed CPython at a pinned version — removing even the system-python requirement — with its caches and interpreters contained inside the owned directory. Without uv it falls back to stdlib `python3 -m venv` + pip, so uv is an upgrade, never a dependency. The manifest records which toolchain built the env.
 
 ```ts
-import { handoffModel, mlxServer } from "@warrant/adapter-ai-sdk";
+import { handoffModel, mlxServer } from "@fusionkit/adapter-ai-sdk";
 
 const local = mlxServer({
   model: "mlx-community/Qwen3-4B-4bit",
@@ -212,7 +215,7 @@ pnpm mlx:stress
 Beyond the two-model `handoffModel` escalation, `routedModel(...)` routes each call across a *pool* of candidates by predicted correctness (UniRoute, [arXiv:2502.08773](https://arxiv.org/abs/2502.08773)). The router is fitted offline by the Python [`uniroute`](python/uniroute)/[`uniroute-mlx`](python/uniroute-mlx) workspace packages and frozen into a portable router card (`uniroute.router.v1` JSON); onboarding a new model is one validation pass, never a retrain.
 
 ```ts
-import { loadRouterCard, mlxServer, routedModel } from "@warrant/adapter-ai-sdk";
+import { loadRouterCard, mlxServer, routedModel } from "@fusionkit/adapter-ai-sdk";
 
 const card = loadRouterCard(JSON.parse(await readFile("router-card.json", "utf8")));
 const model = routedModel({
@@ -231,7 +234,7 @@ const model = routedModel({
 
 ## Local models behind agent harnesses
 
-`warrant local <tool>` backs a vendor agent — Claude Code, Codex, opencode, or Cursor — with a locally running model, without changing how you invoke the tool. It starts the [`@warrant/model-gateway`](packages/model-gateway), which fronts an OpenAI-compatible local model (the owned `mlx_lm.server` fork by default) and exposes the dialect each harness expects: OpenAI Chat Completions for opencode and the Cursor plan panel, the Anthropic Messages API for Claude Code, and the OpenAI Responses API for Codex. The launcher applies the tool's native config shim and then execs the real binary with your own arguments.
+`warrant local <tool>` backs a vendor agent — Claude Code, Codex, opencode, or Cursor — with a locally running model, without changing how you invoke the tool. It starts the [`@fusionkit/model-gateway`](packages/model-gateway), which fronts an OpenAI-compatible local model (the owned `mlx_lm.server` fork by default) and exposes the dialect each harness expects: OpenAI Chat Completions for opencode and the Cursor plan panel, the Anthropic Messages API for Claude Code, and the OpenAI Responses API for Codex. The launcher applies the tool's native config shim and then execs the real binary with your own arguments.
 
 ```sh
 # Default backend is the owned mlx fork; or point at any OpenAI-compatible server:
@@ -249,7 +252,7 @@ Cursor is supported in plan/chat mode only: its coding agent (Composer, inline e
 ## The handoff SDK
 
 ```ts
-import { agents, handoff, localFirst, reviewStrategies, targets } from "@warrant/handoff";
+import { agents, handoff, localFirst, reviewStrategies, targets } from "@fusionkit/handoff";
 
 const h = handoff({
   workspace: ".",
@@ -286,8 +289,8 @@ The predecessor spec's golden shape, implemented to the extent the current spec 
 
 ```ts
 import { generateText } from "ai";
-import { agents, handoff, localFirst, targets } from "@warrant/handoff";
-import { withCompute } from "@warrant/adapter-compute";
+import { agents, handoff, localFirst, targets } from "@fusionkit/handoff";
+import { withCompute } from "@fusionkit/adapter-compute";
 
 const h = withCompute(
   handoff({ workspace: ".", plane, agent: agents.claudeCode(), policy: localFirst({ allowPools: ["eng-prod"] }) }),
@@ -309,7 +312,7 @@ console.log(await h.summary());     // recomputed story: tools, checkpoints, run
 ```
 
 - `h.tools(...)` wraps any AI SDK-shaped toolset: calls execute locally and are journaled (`warrant.tooljournal.v1`); the journal travels as content-addressed semantic state in the next checkpoint, pinned via the envelope inside the signed contract.
-- `h.model` (via `withModel(h, { local, cloud })` from `@warrant/adapter-ai-sdk`) is an AI SDK-compatible model that starts local and escalates to cloud under deterministic, explainable conditions — a local failure, a classified context overflow, a prompt-size threshold — with every routing decision recorded as a `model.routed` trace event. Honest limits: escalation happens *between* calls; there is no mid-generation handoff.
+- `h.model` (via `withModel(h, { local, cloud })` from `@fusionkit/adapter-ai-sdk`) is an AI SDK-compatible model that starts local and escalates to cloud under deterministic, explainable conditions — a local failure, a classified context overflow, a prompt-size threshold — with every routing decision recorded as a `model.routed` trace event. Honest limits: escalation happens *between* calls; there is no mid-generation handoff.
 - `h.needs(target)` is a pure, deterministic check: the target must be allowed by policy, and — when the policy declares `continueWhen: [triggers.…]` — at least one trigger must fire against observable state (`triggers.userRequested()`, `toolFailed()`, `slowTools({ thresholdMs })`, `modelEscalated()`). `h.requestContinuation(reason)` is the explicit user gesture.
 - `h.stream(runs)` yields a live, typed event stream (status transitions, every hash-chained event, `artifact.ready`, terminals) across any set of runs.
 - `h.parallel(..., { isolate: branch() })` and `run.pull({ isolate: branch() })` force results onto dedicated branches; the default stays divergence-safe auto.
@@ -323,7 +326,7 @@ For applications that own their model loop, the adapters govern the execution bo
 
 ```ts
 import { generateText } from "ai";
-import { remoteTools } from "@warrant/adapter-ai-sdk";
+import { remoteTools } from "@fusionkit/adapter-ai-sdk";
 
 const rt = remoteTools({ workspace: ".", plane, pool: "eng-prod" });
 const result = await generateText({
@@ -335,7 +338,7 @@ rt.calls();                    // [{ runId, contractHash, receiptVerified: true,
 ```
 
 ```ts
-import { governedCompute } from "@warrant/adapter-compute";
+import { governedCompute } from "@fusionkit/adapter-compute";
 
 const compute = governedCompute({ workspace: ".", plane, pool: "eng-prod" });
 const sandbox = await compute.sandbox.create();
@@ -353,10 +356,10 @@ How the runner isolates the agent session is pluggable, requested per run (`--is
 | Tier | Backend | Isolation | Harnesses | Status |
 | --- | --- | --- | --- | --- |
 | `process` | built-in | child process, scrubbed env, egress proxy (process-level — a binary can ignore proxy vars; every attempt is still recorded) | all | default |
-| `hermetic` | `@warrant/session-hermetic` | simulated bash interpreter + virtual filesystem; egress enforced by the interpreter (no socket exists for denied hosts) | `command` only (no real OS) | implemented, tested |
-| `hermetic` | `@warrant/session-harness` (`piBinding`) | same just-bash tier, with the host-runtime Pi harness driving a local model; everything else delegates to `hermeticBackend()` | `pi` (plus the fallback's `command`) | experimental, integration-gated |
-| `vercel-sandbox` | `@warrant/session-vercel-sandbox` | Firecracker microVM, VM-level isolation, domain egress policy | all but the test mock | experimental, integration-gated |
-| `vercel-sandbox` | `@warrant/session-harness` (`claudeCodeBinding`) | same microVM tier, with claude-code driven through the AI SDK harness bridge (structured event transcript, in-sandbox runtime bootstrap); everything else delegates to the plain backend | all but the test mock | experimental, integration-gated |
+| `hermetic` | `@fusionkit/session-hermetic` | simulated bash interpreter + virtual filesystem; egress enforced by the interpreter (no socket exists for denied hosts) | `command` only (no real OS) | implemented, tested |
+| `hermetic` | `@fusionkit/session-harness` (`piBinding`) | same just-bash tier, with the host-runtime Pi harness driving a local model; everything else delegates to `hermeticBackend()` | `pi` (plus the fallback's `command`) | experimental, integration-gated |
+| `vercel-sandbox` | `@fusionkit/session-vercel-sandbox` | Firecracker microVM, VM-level isolation, domain egress policy | all but the test mock | experimental, integration-gated |
+| `vercel-sandbox` | `@fusionkit/session-harness` (`claudeCodeBinding`) | same microVM tier, with claude-code driven through the AI SDK harness bridge (structured event transcript, in-sandbox runtime bootstrap); everything else delegates to the plain backend | all but the test mock | experimental, integration-gated |
 
 ```sh
 warrant run --agent command --isolation hermetic "awk -F, 'NR>1{s+=$2}END{print s}' orders.csv > total.txt"
@@ -366,7 +369,7 @@ Compute callers can request the same tier without changing the ComputeSDK-shaped
 surface. Each `runCommand` is still a governed command with a receipt:
 
 ```ts
-import { governedCompute } from "@warrant/adapter-compute";
+import { governedCompute } from "@fusionkit/adapter-compute";
 
 const compute = governedCompute({
   workspace: ".",
@@ -382,9 +385,9 @@ sandbox.runs(); // [{ isolation: "vercel-sandbox", receiptVerified: true, ... }]
 The two stronger backends are injected into the runner so the trust-critical kernel stays dependency-free:
 
 ```ts
-import { Runner } from "@warrant/runner";
-import { hermeticBackend } from "@warrant/session-hermetic";
-import { vercelSandboxBackend } from "@warrant/session-vercel-sandbox";
+import { Runner } from "@fusionkit/runner";
+import { hermeticBackend } from "@fusionkit/session-hermetic";
+import { vercelSandboxBackend } from "@fusionkit/session-vercel-sandbox";
 
 new Runner({ planeUrl, pool, enrollToken, backends: [hermeticBackend(), vercelSandboxBackend()] });
 ```
@@ -393,10 +396,10 @@ This is the execution substrate the spec places *below* Warrant ("E2B, Modal, Da
 
 ### AI SDK harness driver: claude-code without a pre-baked CLI
 
-AI SDK 7 introduced an experimental [harness abstraction](https://vercel.com/changelog/program-agent-harnesses-with-ai-sdk) (`HarnessAgent` + adapters like [`@ai-sdk/harness-claude-code`](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/claude-code)): the adapter bootstraps the agent runtime *inside* a sandbox from pinned, lockfile-frozen bridge dependencies and streams structured events (tool calls, file changes, finish reasons) back to the host over a sandbox-exposed WebSocket. `@warrant/session-harness` wraps that, binding-based: a `HarnessBinding` names an agent kind, an isolation tier, an adapter factory, and a sandbox factory, and the generic backend owns staging, the transcript, mirror-back, and the boundary event once. `aiSdkHarnessBackend()` hosts the `claudeCodeBinding` for the `vercel-sandbox` tier:
+AI SDK 7 introduced an experimental [harness abstraction](https://vercel.com/changelog/program-agent-harnesses-with-ai-sdk) (`HarnessAgent` + adapters like [`@ai-sdk/harness-claude-code`](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/claude-code)): the adapter bootstraps the agent runtime *inside* a sandbox from pinned, lockfile-frozen bridge dependencies and streams structured events (tool calls, file changes, finish reasons) back to the host over a sandbox-exposed WebSocket. `@fusionkit/session-harness` wraps that, binding-based: a `HarnessBinding` names an agent kind, an isolation tier, an adapter factory, and a sandbox factory, and the generic backend owns staging, the transcript, mirror-back, and the boundary event once. `aiSdkHarnessBackend()` hosts the `claudeCodeBinding` for the `vercel-sandbox` tier:
 
 ```ts
-import { aiSdkHarnessBackend } from "@warrant/session-harness";
+import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
 
 new Runner({ planeUrl, pool, enrollToken, backends: [aiSdkHarnessBackend()] });
 ```
@@ -409,14 +412,14 @@ What changes versus the plain `vercel-sandbox` backend — and what deliberately
 - Egress policy is still the contract's, applied at the VM boundary. The bridge bootstrap and the model API are subject to it, so a deny-by-default run must allowlist the npm registry and `api.anthropic.com` (or the AI Gateway host) explicitly.
 - Non-claude-code executions (the `command` harness, custom argv/shell) are delegated unchanged to `vercelSandboxBackend()`, so this backend never narrows what the tier could already run.
 
-The `@ai-sdk/harness*` packages are canary releases; they are exact-pinned on the dependency allowlist like everything else, and the backend is integration-gated the same way `@warrant/session-vercel-sandbox` is (it constructs without credentials; the real path needs `VERCEL_TOKEN` plus a contract-released model credential). The package's test suite drives the real `HarnessAgent` orchestration end-to-end against an in-process harness adapter and a local-filesystem sandbox provider — contract to verified receipt, no cloud dependencies.
+The `@ai-sdk/harness*` packages are canary releases; they are exact-pinned on the dependency allowlist like everything else, and the backend is integration-gated the same way `@fusionkit/session-vercel-sandbox` is (it constructs without credentials; the real path needs `VERCEL_TOKEN` plus a contract-released model credential). The package's test suite drives the real `HarnessAgent` orchestration end-to-end against an in-process harness adapter and a local-filesystem sandbox provider — contract to verified receipt, no cloud dependencies.
 
 ### Cloud orchestrator, local swarm
 
 The second binding, `piBinding`, runs the host-runtime [Pi harness](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/pi) on a local [`@ai-sdk/sandbox-just-bash`](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses) sandbox — no microVM, no per-run image. Each Pi worker drives a cheap *local* model: the endpoint arrives as the broker-released secrets `OPENAI_BASE_URL` / `OPENAI_API_KEY`, mapped fail-closed into the adapter's explicit auth (`piAuthFromEnv`), never the host environment. `pi` is harness-only — the runner refuses to spawn it as a process — so there is exactly one way to run it.
 
 ```ts
-import { piHarnessBackend } from "@warrant/session-harness";
+import { piHarnessBackend } from "@fusionkit/session-harness";
 
 // concurrency lets one runner execute a worker fan-out in parallel
 new Runner({ planeUrl, pool, enrollToken, concurrency: 8, backends: [piHarnessBackend()] });
@@ -516,4 +519,4 @@ CI runs the suite, the standalone examples, the performance benchmark, and a Doc
 
 ## Superseded
 
-- [Local-first handoff platform SDK spec](spec/2026-06-11-local-first-handoff-platform-spec.md) — the predecessor "HandoffKit" artifact, retained for record. Its positioning ("The coordination layer for hybrid distributed AI compute.") is superseded: continuation and handoff are now demos of the primitives — implemented here as `@warrant/handoff` — not the product.
+- [Local-first handoff platform SDK spec](spec/2026-06-11-local-first-handoff-platform-spec.md) — the predecessor "HandoffKit" artifact, retained for record. Its positioning ("The coordination layer for hybrid distributed AI compute.") is superseded: continuation and handoff are now demos of the primitives — implemented here as `@fusionkit/handoff` — not the product.

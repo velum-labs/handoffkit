@@ -1,5 +1,5 @@
 /**
- * @warrant/session-harness — drives vendor agent harnesses through the AI SDK
+ * @fusionkit/session-harness — drives vendor agent harnesses through the AI SDK
  * harness abstraction (`HarnessAgent`) inside a sandbox, under the same
  * governed-session contract as every other backend: workspace staged in,
  * structured evidence in the receipt, secrets via the broker.

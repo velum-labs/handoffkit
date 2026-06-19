@@ -1,5 +1,5 @@
-import { canonicalize, PROTOCOL_VERSIONS, sha256Hex } from "@warrant/protocol";
-import type { ToolCallRecord, ToolExecutionResult, ToolJournal } from "@warrant/protocol";
+import { canonicalize, PROTOCOL_VERSIONS, sha256Hex } from "@fusionkit/protocol";
+import type { ToolCallRecord, ToolExecutionResult, ToolJournal } from "@fusionkit/protocol";
 
 export class HandoffToolJournal {
   private readonly entries: ToolCallRecord[] = [];

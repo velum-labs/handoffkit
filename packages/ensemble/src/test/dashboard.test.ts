@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { assertHarnessRunResultV1 } from "@warrant/protocol";
-import { gitText } from "@warrant/workspace";
+import { assertHarnessRunResultV1 } from "@fusionkit/protocol";
+import { gitText } from "@fusionkit/workspace";
 
 import {
   createHarnessCapabilityMatrix,

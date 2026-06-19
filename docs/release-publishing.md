@@ -1,15 +1,20 @@
 # Release publishing
 
-HandoffKit publishes internal TypeScript workspace packages to GitHub Packages
+HandoffKit publishes its TypeScript workspace packages to the public npm
+registry (the `fusionkit` CLI plus the `@fusionkit/*` libraries it depends on)
 only from the canonical repository.
 
 ## Triggers
 
 The release workflow is `.github/workflows/release-packages.yml`.
 
-- `handoffkit-v*` tags publish packages.
-- `v*` tags publish packages.
+- Publishing runs on a **published GitHub Release** (`release: published`), and
+  only when the release's tag matches `handoffkit-v*` or `v*`.
 - `workflow_dispatch` runs a dry-run pack only; it never publishes.
+
+Draft a GitHub Release against a `handoffkit-v<version>` tag, review the notes,
+and publishing happens when you click **Publish release**. A bare tag push does
+not publish.
 
 The workflow job is guarded with:
 
@@ -21,11 +26,12 @@ Forks and non-canonical mirrors cannot publish packages through this workflow.
 
 ## Published packages
 
-The publish list and order live in `release/npm-packages.json`. Packages are
-published to:
+The publish list and order live in `release/npm-packages.json`. The CLI
+publishes as `@fusionkit/cli` (its bin is `fusionkit`); its libraries publish
+under the `@fusionkit/*` scope. Packages are published to:
 
 ```text
-https://npm.pkg.github.com
+https://registry.npmjs.org
 ```
 
 Each publishable package must set:
@@ -34,8 +40,8 @@ Each publishable package must set:
 {
   "private": false,
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   }
 }
@@ -45,15 +51,14 @@ Packages not listed in `release/npm-packages.json` must remain `private: true`.
 
 ## Required credentials
 
-No repository secret is required for the npm path. The workflow uses the
-repository-scoped `GITHUB_TOKEN` with:
+The workflow needs an `NPM_TOKEN` repository secret (an npm automation token
+with publish rights to the `@fusionkit` scope). Permissions:
 
-- `packages: write` to publish to GitHub Packages.
-- `id-token: write` for npm provenance.
+- `id-token: write` for npm provenance (OIDC).
 - `contents: read` for checkout.
 
-Do not add public npm tokens to this workflow. Publishing to the public npm
-registry is intentionally not configured.
+`NPM_TOKEN` is written to `~/.npmrc` for `registry.npmjs.org` only on tag
+pushes; `workflow_dispatch` runs a dry-run pack and never needs it.
 
 ## Release validation
 
@@ -70,7 +75,7 @@ corepack pnpm test
 `scripts/check-release-publish.mjs` verifies:
 
 - canonical repository and tag patterns;
-- GitHub Packages registry, restricted access, and provenance settings;
+- public npm registry, public access, and provenance settings;
 - package metadata for every publishable workspace;
 - model-fusion OpenAPI snapshot hash and protocol package version;
 - generated TypeScript and Python OpenAPI client/model drift.

@@ -7,14 +7,14 @@
  * answer back into the tool's native wire format.
  *
  * The runner is injected (not imported) so this package stays free of a
- * dependency on `@warrant/ensemble`, which already depends on this package.
+ * dependency on `@fusionkit/ensemble`, which already depends on this package.
  */
 
 import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { newTraceId, TRACE_ID_HEADER } from "@warrant/protocol";
+import { newTraceId, TRACE_ID_HEADER } from "@fusionkit/protocol";
 
 import { chatToAnthropicMessage, openAiSseToAnthropic } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";

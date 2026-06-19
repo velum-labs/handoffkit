@@ -1,13 +1,13 @@
 {
-  "name": "@warrant/bench-example",
+  "name": "@fusionkit/bench-example",
   "private": true,
   "version": "0.1.0",
   "description": "Executable performance-budget benchmark for Warrant examples.",
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
-    "@warrant/protocol": "workspace:*",
-    "@warrant/testkit": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/testkit": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 /**
- * @warrant/session-vercel-sandbox — a session backend that runs each
+ * @fusionkit/session-vercel-sandbox — a session backend that runs each
  * governed session inside a Vercel Sandbox (a Firecracker microVM).
  *
  * This is the strongest isolation tier in the repo: VM-level separation
@@ -16,21 +16,21 @@
  *
  * This module also owns the sandbox-shaped helpers (file listing, shell
  * quoting, mirror-back writes, credential resolution) shared with
- * `@warrant/session-harness`, which drives the same microVM tier through
+ * `@fusionkit/session-harness`, which drives the same microVM tier through
  * the AI SDK harness bridge.
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
-import type { NetworkPolicy as WarrantNetworkPolicy } from "@warrant/protocol";
+import type { NetworkPolicy as WarrantNetworkPolicy } from "@fusionkit/protocol";
 import type {
   BackendExecutionKind,
   SessionBackend,
   SessionBackendResult,
   SessionExecution
-} from "@warrant/runner";
-import { CapabilityMismatchError, executionHash, resolveSessionEnv } from "@warrant/runner";
-import { parseWorkspaceRelativePath, resolveInsideWorkspace } from "@warrant/workspace";
+} from "@fusionkit/runner";
+import { CapabilityMismatchError, executionHash, resolveSessionEnv } from "@fusionkit/runner";
+import { parseWorkspaceRelativePath, resolveInsideWorkspace } from "@fusionkit/workspace";
 import { Sandbox } from "@vercel/sandbox";
 import type { NetworkPolicy as VercelNetworkPolicy } from "@vercel/sandbox";
 

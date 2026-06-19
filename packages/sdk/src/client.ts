@@ -11,7 +11,7 @@ import type {
   RunStatus,
   RunSummary,
   RunView
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 export class PlaneClientError extends Error {
   readonly status: number;

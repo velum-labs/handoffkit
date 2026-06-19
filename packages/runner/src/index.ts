@@ -1,5 +1,5 @@
 /**
- * @warrant/runner — outbound-only runner: claims signed contracts,
+ * @fusionkit/runner — outbound-only runner: claims signed contracts,
  * materializes workspaces, runs vendor agent harnesses inside governed
  * sessions, and signs receipts.
  *

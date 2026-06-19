@@ -1,5 +1,5 @@
 /**
- * @warrant/adapter-ai-sdk — the AI SDK side of Warrant for app-owned loops.
+ * @fusionkit/adapter-ai-sdk — the AI SDK side of Warrant for app-owned loops.
  *
  * The application keeps its own `generateText`/`streamText` loop and its own
  * model; Warrant governs the execution boundary. `remoteTools(...)` returns

@@ -1,4 +1,4 @@
-import { sha256Hex } from "@warrant/protocol";
+import { sha256Hex } from "@fusionkit/protocol";
 
 import type { PrincipalRecord, PrincipalRole } from "./store.js";
 

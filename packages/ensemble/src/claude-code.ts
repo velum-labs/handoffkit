@@ -1,9 +1,9 @@
-import { artifactHash } from "@warrant/protocol";
-import type { JsonValue, NetworkPolicy, RunContract, RunEvent } from "@warrant/protocol";
-import { CapabilityMismatchError, prepareExecution } from "@warrant/runner";
-import type { SessionBackend } from "@warrant/runner";
-import { aiSdkHarnessBackend } from "@warrant/session-harness";
-import type { ClaudeCodeBindingOptions } from "@warrant/session-harness";
+import { artifactHash } from "@fusionkit/protocol";
+import type { JsonValue, NetworkPolicy, RunContract, RunEvent } from "@fusionkit/protocol";
+import { CapabilityMismatchError, prepareExecution } from "@fusionkit/runner";
+import type { SessionBackend } from "@fusionkit/runner";
+import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
+import type { ClaudeCodeBindingOptions } from "@fusionkit/session-harness";
 
 import type {
   CandidateHardeningMetadata,

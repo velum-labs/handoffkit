@@ -43,21 +43,21 @@ CLI / SDK / handoff / adapters
 
 ## Layering
 
-- **Protocol layer** (`@warrant/protocol`) is dependency-light and auditable. It
+- **Protocol layer** (`@fusionkit/protocol`) is dependency-light and auditable. It
   owns canonical JSON, signing, hashing, schemas, event chains, receipts,
   checkpoints, handoff envelopes, and model-fusion records.
-- **Workspace layer** (`@warrant/workspace`) captures Git state, denies known
+- **Workspace layer** (`@fusionkit/workspace`) captures Git state, denies known
   secret patterns, materializes workspaces for runners, collects outputs, and
   protects local pull from divergence.
-- **Plane layer** (`@warrant/plane`) owns online authority: policy, approvals,
+- **Plane layer** (`@fusionkit/plane`) owns online authority: policy, approvals,
   principals, contract issuance, receipt countersignature, secret brokerage,
   retention, metrics, and UI.
-- **Runner layer** (`@warrant/runner`) owns execution: claim loop, capability
+- **Runner layer** (`@fusionkit/runner`) owns execution: claim loop, capability
   matching, session lifecycle, harness invocation, and runner-side receipts.
-- **Session layer** (`@warrant/session-*`) provides isolation backends with a
+- **Session layer** (`@fusionkit/session-*`) provides isolation backends with a
   common runner-facing shape.
-- **Developer surface layer** (`@warrant/sdk`, `@warrant/handoff`, adapters, and
-  `@warrant/cli`) turns product workflows into plane API calls.
+- **Developer surface layer** (`@fusionkit/sdk`, `@fusionkit/handoff`, adapters, and
+  `@fusionkit/cli`) turns product workflows into plane API calls.
 
 ## Trust boundaries
 
@@ -75,8 +75,8 @@ CLI / SDK / handoff / adapters
 
 - Add a session backend by implementing the runner backend interface in
   `packages/runner/src/backend.ts`.
-- Add a client workflow by using `@warrant/sdk` or composing the handoff SDK.
+- Add a client workflow by using `@fusionkit/sdk` or composing the handoff SDK.
 - Add new policy checks in `packages/plane/src/policy.ts` and keep receipts able
   to explain the decision.
-- Add protocol records in `@warrant/protocol` first, then consume them from
+- Add protocol records in `@fusionkit/protocol` first, then consume them from
   packages rather than duplicating shapes.

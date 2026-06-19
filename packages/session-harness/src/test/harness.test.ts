@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
-import type { RunContract } from "@warrant/protocol";
-import { verifyReceiptBundle } from "@warrant/protocol";
-import { CapabilityMismatchError, prepareExecution } from "@warrant/runner";
-import type { SessionBackend, SessionExecution } from "@warrant/runner";
-import { makeRepo, startStack } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import type { RunContract } from "@fusionkit/protocol";
+import { verifyReceiptBundle } from "@fusionkit/protocol";
+import { CapabilityMismatchError, prepareExecution } from "@fusionkit/runner";
+import type { SessionBackend, SessionExecution } from "@fusionkit/runner";
+import { makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
+import { captureWorkspace } from "@fusionkit/workspace";
 
 import {
   aiSdkHarnessBackend,

@@ -1,4 +1,4 @@
-import type { RunStatus } from "@warrant/protocol";
+import type { RunStatus } from "@fusionkit/protocol";
 
 import { conflict } from "./domain-errors.js";
 

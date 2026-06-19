@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { signData, verifyData } from "@warrant/protocol";
+import { signData, verifyData } from "@fusionkit/protocol";
 
 import { badRequest, unauthorized } from "./domain-errors.js";
 

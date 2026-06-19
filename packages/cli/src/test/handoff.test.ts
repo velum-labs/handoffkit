@@ -10,16 +10,16 @@ import {
   localFirst,
   reviewStrategies,
   targets
-} from "@warrant/handoff";
-import type { Handoff, HandoffStreamEvent } from "@warrant/handoff";
+} from "@fusionkit/handoff";
+import type { Handoff, HandoffStreamEvent } from "@fusionkit/handoff";
 import {
   hashCanonical,
   PolicyDeniedError,
   verifyReceiptBundle
-} from "@warrant/protocol";
-import type { HandoffEnvelope } from "@warrant/protocol";
-import { git, makeRepo, startStack } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
+} from "@fusionkit/protocol";
+import type { HandoffEnvelope } from "@fusionkit/protocol";
+import { git, makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
 
 const SECRET_VALUE = "handoff-secret-value-9876";
 const POOL = "eng-prod";

@@ -11,7 +11,7 @@
  *
  * For a local MLX server whose lifecycle (Python env, process, scale to
  * zero) is owned by Warrant instead of run by hand, see mlxServer() in
- * @warrant/adapter-ai-sdk.
+ * @fusionkit/adapter-ai-sdk.
  *
  *   Cloud (e.g. OpenAI, a gateway, OpenRouter):
  *     WARRANT_DEMO_CLOUD_URL     default https://api.openai.com/v1

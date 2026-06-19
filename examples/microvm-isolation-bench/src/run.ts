@@ -2,15 +2,15 @@ import { readdirSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { governedCompute } from "@warrant/adapter-compute";
+import { governedCompute } from "@fusionkit/adapter-compute";
 import {
   runCandidateCommandWithIsolation,
   secretAbsenceMetadata
-} from "@warrant/ensemble";
-import type { CandidateContainerDriver } from "@warrant/ensemble";
-import { makeRepo, startStack } from "@warrant/testkit";
-import type { Stack, StackOptions } from "@warrant/testkit";
-import { vercelSandboxBackend } from "@warrant/session-vercel-sandbox";
+} from "@fusionkit/ensemble";
+import type { CandidateContainerDriver } from "@fusionkit/ensemble";
+import { makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack, StackOptions } from "@fusionkit/testkit";
+import { vercelSandboxBackend } from "@fusionkit/session-vercel-sandbox";
 import { Sandbox } from "@vercel/sandbox";
 
 const FILE_COUNT = Number(process.env.WARRANT_MICROVM_BENCH_FILES ?? "100");

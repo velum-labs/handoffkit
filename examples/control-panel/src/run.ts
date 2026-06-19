@@ -1,9 +1,9 @@
 import { rmSync } from "node:fs";
 
-import { makeRepo, mockRunRequest, startStack, uploadWorkspace } from "@warrant/testkit";
+import { makeRepo, mockRunRequest, startStack, uploadWorkspace } from "@fusionkit/testkit";
 
-import { bold, demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
-import { seedShowcase } from "@warrant/seed-example";
+import { bold, demoBanner, detail, finale, ok, step } from "@fusionkit/example-utils";
+import { seedShowcase } from "@fusionkit/seed-example";
 
 // This demo intentionally binds the canonical Warrant port so the printed
 // URL matches the docs and docker-compose; override when 7172 is taken.

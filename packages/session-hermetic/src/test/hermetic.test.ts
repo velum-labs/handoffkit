@@ -3,10 +3,10 @@ import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
-import { verifyReceiptBundle } from "@warrant/protocol";
-import { git, makeRepo, startStack } from "@warrant/testkit";
-import type { Stack } from "@warrant/testkit";
-import { captureWorkspace } from "@warrant/workspace";
+import { verifyReceiptBundle } from "@fusionkit/protocol";
+import { git, makeRepo, startStack } from "@fusionkit/testkit";
+import type { Stack } from "@fusionkit/testkit";
+import { captureWorkspace } from "@fusionkit/workspace";
 
 import { hermeticBackend, toJustBashNetwork } from "../index.js";
 
@@ -111,7 +111,7 @@ test("the pull brings hermetic results back into the workspace", async () => {
   const diffHash = bundle.receipt.workspaceOut.diffHash;
   assert.ok(diffHash);
   const diff = await stack.client.getBlob(diffHash);
-  const { pullRun } = await import("@warrant/workspace");
+  const { pullRun } = await import("@fusionkit/workspace");
   git(repoDir, ["stash", "--include-untracked"]);
   const result = pullRun(repoDir, bundle.receipt.runId, bundle.contract.workspace.baseRef, diff);
   assert.equal(result.mode, "applied");

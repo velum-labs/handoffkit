@@ -1,7 +1,7 @@
-import { governedCompute } from "@warrant/adapter-compute";
-import { withStackAndRepo } from "@warrant/testkit";
+import { governedCompute } from "@fusionkit/adapter-compute";
+import { withStackAndRepo } from "@fusionkit/testkit";
 
-import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
+import { demoBanner, detail, finale, ok, step } from "@fusionkit/example-utils";
 
 async function main(): Promise<void> {
   demoBanner("10");

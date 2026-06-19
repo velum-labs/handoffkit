@@ -21,25 +21,25 @@ import { join } from "node:path";
 
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import type { HarnessAgentAdapter, HarnessAgentSettings } from "@ai-sdk/harness/agent";
-import type { AgentKind, RunContract, SessionIsolation } from "@warrant/protocol";
+import type { AgentKind, RunContract, SessionIsolation } from "@fusionkit/protocol";
 import {
   CapabilityMismatchError,
   executionHash,
   executionSpecFor,
   resolveSessionEnv
-} from "@warrant/runner";
+} from "@fusionkit/runner";
 import type {
   BackendExecutionKind,
   SessionBackend,
   SessionBackendResult,
   SessionExecution
-} from "@warrant/runner";
+} from "@fusionkit/runner";
 import {
   SANDBOX_IGNORED_DIRS,
   listWorkspaceFiles,
   shellQuote,
   writeMirroredFile
-} from "@warrant/session-vercel-sandbox";
+} from "@fusionkit/session-vercel-sandbox";
 
 import { TranscriptRecorder } from "./transcript.js";
 

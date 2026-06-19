@@ -1,5 +1,5 @@
 /**
- * @warrant/protocol — the open, versioned data contracts of the Warrant
+ * @fusionkit/protocol — the open, versioned data contracts of the Warrant
  * platform plus the primitives needed to create and verify them offline:
  *
  * - warrant.contract.v1   signed run authorization

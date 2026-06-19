@@ -1,14 +1,14 @@
 {
-  "name": "@warrant/example-dry-run",
+  "name": "@fusionkit/example-dry-run",
   "private": true,
   "version": "0.1.0",
   "description": "Standalone Warrant example: dry-run disclosure before anything moves.",
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
-    "@warrant/cli": "workspace:*",
-    "@warrant/example-utils": "workspace:*",
-    "@warrant/testkit": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/cli": "workspace:*",
+    "@fusionkit/example-utils": "workspace:*",
+    "@fusionkit/testkit": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   }
 }

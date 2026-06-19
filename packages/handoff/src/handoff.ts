@@ -10,7 +10,7 @@ import {
   PolicyDeniedError,
   PROTOCOL_VERSIONS,
   sha256Hex
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   ActorRef,
   AgentSpec,
@@ -25,10 +25,10 @@ import type {
   RunRequestInput,
   RunStatus,
   SessionIsolation
-} from "@warrant/protocol";
-import { PlaneClient } from "@warrant/sdk";
-import { captureWorkspace } from "@warrant/workspace";
-import type { CapturedWorkspace, PullResult } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import { PlaneClient } from "@fusionkit/sdk";
+import { captureWorkspace } from "@fusionkit/workspace";
+import type { CapturedWorkspace, PullResult } from "@fusionkit/workspace";
 
 import { agents } from "./agents.js";
 import { HandoffCheckpointManager } from "./checkpoint-manager.js";
@@ -235,7 +235,7 @@ export class Handoff {
    * in the next checkpoint, so a continuation carries what the loop's tools
    * saw and did. Tools still execute locally, in the caller's process —
    * this is capture, not orchestration. For governed *remote* execution,
-   * use @warrant/adapter-ai-sdk's remoteTools instead.
+   * use @fusionkit/adapter-ai-sdk's remoteTools instead.
    */
   tools<T extends Record<string, ToolLike>>(toolset: T): T {
     return wrapTools(
@@ -286,7 +286,7 @@ export class Handoff {
 
   /**
    * Report a model routing decision (wired up by withModel from
-   * @warrant/adapter-ai-sdk). Escalations feed triggers.modelEscalated().
+   * @fusionkit/adapter-ai-sdk). Escalations feed triggers.modelEscalated().
    */
   noteModelDecision(decision: ModelDecision): void {
     if (decision.escalated) this.modelEscalationCount++;

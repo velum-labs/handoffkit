@@ -10,7 +10,7 @@ Code, Codex, opencode, and Cursor in plan mode) — without changing how people
 already use those tools. It builds on the existing local-serving and routing
 core (`mlxServer`/`ManagedModelServer`, `routedModel`/uniroute, the owned
 `velum-labs/mlx-lm` fork) and is delivered as a new package,
-`@warrant/model-gateway`, plus a `warrant local` CLI surface.
+`@fusionkit/model-gateway`, plus a `warrant local` CLI surface.
 
 ## 1. Goal
 
@@ -87,7 +87,7 @@ needed dialect; thin launchers wire each tool to it.
 
 ```
  claude   ─Anthropic /v1/messages──▶┐
- codex    ─Responses /v1/responses─▶┤  @warrant/model-gateway (native TS)        backend (LanguageModelV3)
+ codex    ─Responses /v1/responses─▶┤  @fusionkit/model-gateway (native TS)        backend (LanguageModelV3)
  opencode ─OpenAI /v1/chat─────────▶┤   • dialect adapters ⇄ chat-completions  ┌─ mlxServer (velum-labs fork, owned)
  cursor   ─OpenAI /v1/chat (tunnel)─┤   • routedModel / uniroute selection  ───┼─ routedModel / uniroute
                                     │   • provenance hooks (model.called/cost) └─ any OpenAI-compatible (Ollama/vLLM)
@@ -111,7 +111,7 @@ emission that the Anthropic/Responses adapters depend on.
 
 ## 4. Components
 
-New package `@warrant/model-gateway`:
+New package `@fusionkit/model-gateway`:
 
 - `server.ts` — HTTP server (Node `node:http`), route table, bearer-token auth
   (deny-by-default), lifecycle reusing `ManagedModelServer` (lazy start,
@@ -127,7 +127,7 @@ New package `@warrant/model-gateway`:
 - `adapters/responses.ts` — `/v1/responses` (non-stream + stream); translation
   of reasoning items, `output_text`, function tools, `item.*`/`turn.*` events.
 - `provenance.ts` — event-hook interface emitting `model.called`, token/cost,
-  and tool events, reusing the `RunEvent` vocabulary in `@warrant/protocol`.
+  and tool events, reusing the `RunEvent` vocabulary in `@fusionkit/protocol`.
 - `tunnel.ts` — pluggable tunnel adapter (Cursor only).
 
 Touched:
@@ -237,7 +237,7 @@ connectivity milestones.
 
 ## 10. Milestones
 
-- M0 — Empirical verification matrix + `@warrant/model-gateway` skeleton
+- M0 — Empirical verification matrix + `@fusionkit/model-gateway` skeleton
   (lifecycle, auth, backend binding).
 - M1 — opencode: chat passthrough + launcher, end-to-end on the mlx fork.
 - M2 — Claude Code: Anthropic adapter + launcher + discovery.

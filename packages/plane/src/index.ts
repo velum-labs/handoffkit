@@ -1,5 +1,5 @@
 /**
- * @warrant/plane — control plane: contracts, policy evaluation, approvals,
+ * @fusionkit/plane — control plane: contracts, policy evaluation, approvals,
  * receipt countersignature, secret broker, audit export, durable SQLite
  * storage, identity/auth, rate limiting, retention, and the control panel UI.
  */

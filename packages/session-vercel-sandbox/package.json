@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/session-vercel-sandbox",
+  "name": "@fusionkit/session-vercel-sandbox",
   "private": false,
   "version": "0.1.0",
   "description": "Vercel Sandbox session backend for Warrant runners: each governed session runs in a Firecracker microVM with VM-level isolation and domain-based egress policy.",
@@ -13,15 +13,15 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
     "@vercel/sandbox": "2.2.0",
-    "@warrant/protocol": "workspace:*",
-    "@warrant/runner": "workspace:*",
-    "@warrant/workspace": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runner": "workspace:*",
+    "@fusionkit/workspace": "workspace:*",
     "ms": "2.1.3"
   }
 }

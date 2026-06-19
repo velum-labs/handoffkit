@@ -8,7 +8,7 @@ service types, or schema bundle hashes by hand.
 ## Current TypeScript consumption path
 
 - In this monorepo, import model-fusion records, validators, and constants from
-  `@warrant/protocol`.
+  `@fusionkit/protocol`.
 - Cross-repo TypeScript consumers should target the generated package name
   `@velum-labs/model-fusion-protocol` from GitHub Packages. HandoffKit pins
   `@velum-labs/model-fusion-protocol@0.1.0` at the root and CI verifies the

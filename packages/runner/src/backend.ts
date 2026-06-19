@@ -1,4 +1,4 @@
-import type { RunContract, RunEvent, SessionIsolation } from "@warrant/protocol";
+import type { RunContract, RunEvent, SessionIsolation } from "@fusionkit/protocol";
 
 import type { BackendExecutionKind, PreparedExecution } from "./execution.js";
 

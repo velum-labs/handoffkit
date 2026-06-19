@@ -6,7 +6,7 @@ import type {
   RunContract,
   RunRequest,
   RunStatus
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 export type { RunRequest };
 

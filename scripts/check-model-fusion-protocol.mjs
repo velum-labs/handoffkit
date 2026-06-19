@@ -71,7 +71,7 @@ if (sourceListing.status === 0 && schemaBundleHash !== undefined) {
     if (file.startsWith("packages/protocol/src/fixtures/model-fusion-contract/")) continue;
     const text = readFileSync(file, "utf8");
     if (text.includes(schemaBundleHash)) {
-      fail(`${file} copies the model-fusion schema bundle hash; import it from @warrant/protocol`);
+      fail(`${file} copies the model-fusion schema bundle hash; import it from @fusionkit/protocol`);
     }
   }
 }
@@ -177,7 +177,7 @@ if (protocolPackageManifest.version !== protocolPackage.version) {
   fail(`${protocolPackageManifestPath}: version must match installed package.json`);
 }
 if (protocolPackageManifest.schema_bundle_hash !== schemaBundleHash) {
-  fail(`${protocolPackageManifestPath}: schema bundle hash must match @warrant/protocol export`);
+  fail(`${protocolPackageManifestPath}: schema bundle hash must match @fusionkit/protocol export`);
 }
 if (protocolPackageManifest.openapi?.path !== "openapi/model-fusion.v1.openapi.json") {
   fail(`${protocolPackageManifestPath}: OpenAPI path must point at the installed package OpenAPI`);

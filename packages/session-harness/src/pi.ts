@@ -25,9 +25,9 @@
  * `hermeticBackend()`), so a runner can install this backend as its single
  * "hermetic" tier.
  */
-import type { RunContract } from "@warrant/protocol";
-import type { SessionBackend } from "@warrant/runner";
-import { hermeticBackend } from "@warrant/session-hermetic";
+import type { RunContract } from "@fusionkit/protocol";
+import type { SessionBackend } from "@fusionkit/runner";
+import { hermeticBackend } from "@fusionkit/session-hermetic";
 
 import { piAuthFromEnv } from "./auth.js";
 import { AiSdkHarnessBackend, isAgentRunFor } from "./backend.js";

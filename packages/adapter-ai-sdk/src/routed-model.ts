@@ -6,7 +6,7 @@ import type {
 } from "@ai-sdk/provider";
 import { z } from "zod";
 
-import type { Handoff } from "@warrant/handoff";
+import type { Handoff } from "@fusionkit/handoff";
 
 import { attachModel } from "./model.js";
 

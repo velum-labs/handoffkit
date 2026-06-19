@@ -51,5 +51,5 @@ documents live-model environment variables.
    source/test files following adjacent demos.
 2. Add the scenario to `examples/manifest.json` so `pnpm demo`, tests, and demo
    narration can discover it.
-3. Reuse `@warrant/example-utils` for banners, manifests, and live-model config.
+3. Reuse `@fusionkit/example-utils` for banners, manifests, and live-model config.
 4. Run `pnpm check`, `pnpm build`, and the relevant demo/test command.

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
 import { test } from "node:test";
 
-import { isTerminalStatus } from "@warrant/protocol";
-import type { ReceiptBundle } from "@warrant/protocol";
-import { PlaneClient } from "@warrant/sdk";
+import { isTerminalStatus } from "@fusionkit/protocol";
+import type { ReceiptBundle } from "@fusionkit/protocol";
+import { PlaneClient } from "@fusionkit/sdk";
 
 import { makeRepo, mockRunRequest, startStack, uploadWorkspace } from "../index.js";
 import type { Stack, StackOptions } from "../index.js";

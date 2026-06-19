@@ -10,7 +10,7 @@ import {
   keyIdFromPublicPem,
   PROTOCOL_VERSIONS,
   verifyChain
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 import type {
   ActorRef,
   ChainedEvent,
@@ -25,7 +25,7 @@ import type {
   RunnerSummary,
   RunSummary,
   SecretClaim
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import { hashToken, principalCan, toPrincipal } from "./auth.js";
 import type { Capability, Principal } from "./auth.js";

@@ -7,22 +7,22 @@ import {
   Handoff,
   scorecardFor,
   targets
-} from "@warrant/handoff";
+} from "@fusionkit/handoff";
 import type {
   ContinuationPolicy,
   HandoffRun,
   RuntimeTarget,
   Scorecard
-} from "@warrant/handoff";
-import { PolicyDeniedError, verifyReceiptBundle } from "@warrant/protocol";
+} from "@fusionkit/handoff";
+import { PolicyDeniedError, verifyReceiptBundle } from "@fusionkit/protocol";
 import type {
   ActorRef,
   AgentSpec,
   ReceiptBundle,
   RunStatus,
   SessionIsolation
-} from "@warrant/protocol";
-import { PlaneClient } from "@warrant/sdk";
+} from "@fusionkit/protocol";
+import { PlaneClient } from "@fusionkit/sdk";
 
 /**
  * `swarmTools()` gives a *cloud orchestrator harness* (Claude Code dynamic

@@ -10,7 +10,7 @@ const manifest = JSON.parse(
 );
 const DEMOS = manifest.demos;
 
-// Colors come from @warrant/example-utils once it is built; before the
+// Colors come from @fusionkit/example-utils once it is built; before the
 // first build (when only listing works anyway) fall back to plain text.
 let bold = (text) => text;
 let dim = (text) => text;

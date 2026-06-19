@@ -2,7 +2,7 @@
  * fusion-trace-event.v1 — fire-and-forget observability emitter.
  *
  * This is the canonical TypeScript implementation of the standalone fusion-trace
- * contract (see fusionkit `spec/fusion-trace`). It lives in `@warrant/protocol`
+ * contract (see fusionkit `spec/fusion-trace`). It lives in `@fusionkit/protocol`
  * (a dependency-free leaf) so the gateway, ensemble harness, the AI SDK worktree
  * agent, and the CLI can all emit against the same shape without import cycles.
  *

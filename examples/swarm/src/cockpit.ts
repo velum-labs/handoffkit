@@ -30,7 +30,7 @@ import { createVercelSandbox } from "@ai-sdk/sandbox-vercel";
 import { runAgentTUI } from "@ai-sdk/tui";
 import type { AgentTUIAgent } from "@ai-sdk/tui";
 
-import { swarmTools } from "@warrant/adapter-ai-sdk";
+import { swarmTools } from "@fusionkit/adapter-ai-sdk";
 
 const ORCHESTRATOR_INSTRUCTIONS = `You orchestrate a swarm of cheap local coding agents.
 Run the task as a workflow: use dispatch_workers to fan independent, file-disjoint

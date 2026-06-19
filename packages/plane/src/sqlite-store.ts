@@ -2,8 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { sha256Hex } from "@warrant/protocol";
-import type { ChainedEvent, Receipt, RunStatus } from "@warrant/protocol";
+import { sha256Hex } from "@fusionkit/protocol";
+import type { ChainedEvent, Receipt, RunStatus } from "@fusionkit/protocol";
 
 import { isPrincipalRole } from "./store.js";
 import type {

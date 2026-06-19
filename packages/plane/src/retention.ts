@@ -1,9 +1,9 @@
-import { TERMINAL_RUN_STATUSES } from "@warrant/protocol";
+import { TERMINAL_RUN_STATUSES } from "@fusionkit/protocol";
 import type {
   HandoffEnvelope,
   RetentionPolicy,
   WorkspaceManifest
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import type { Logger } from "./logging.js";
 import type { PlaneStore } from "./store.js";

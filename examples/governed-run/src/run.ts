@@ -1,8 +1,8 @@
-import { renderReceipt } from "@warrant/cli/render";
-import { verifyReceiptBundle } from "@warrant/protocol";
-import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@warrant/testkit";
+import { renderReceipt } from "@fusionkit/cli/render";
+import { verifyReceiptBundle } from "@fusionkit/protocol";
+import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@fusionkit/testkit";
 
-import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
+import { demoBanner, detail, finale, ok, step } from "@fusionkit/example-utils";
 
 async function main(): Promise<void> {
   demoBanner("01");

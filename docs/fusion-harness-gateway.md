@@ -1,6 +1,6 @@
 # Fusion Harness Gateway
 
-`warrant ensemble gateway` is a front door that lets unmodified coding agents
+The `fusionkit` CLI is a front door that lets unmodified coding agents
 (Codex, Claude Code, Cursor) use model fusion as their backend. Each incoming
 request is translated into a unified harness run — multiple panel models, each
 in its own git worktree, executing a real coding harness — and the
@@ -11,26 +11,43 @@ gets back a single synthesized answer.
 
 ## Quickstart: one command
 
-`warrant fusion <tool>` spawns everything and launches the agent for you — no
-manual gateway, no separate model servers, no juggling terminals:
+Install the CLI globally and launch your agent backed by fusion:
 
 ```bash
-warrant fusion codex      # or: claude | cursor | serve
+pnpm add -g @fusionkit/cli           # public npm; installs the `fusionkit` command
+export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...
+cd your-git-repo
+fusionkit codex                      # or: claude | cursor | serve
 ```
 
-Omit the tool on a TTY to pick interactively. In one command it:
+`fusionkit codex` spawns everything and launches the agent for you — no manual
+gateway, no separate model servers, no juggling terminals. Omit the tool on a
+TTY to pick interactively. In one command it:
 
-1. starts a real local MLX panel (the cached `Qwen3-1.7B` + `Gemma-3-1B` +
-   `Llama-3.2-1B` trio by default),
+1. starts the model panel — a **cloud** trio by default (one OpenAI + one
+   Anthropic model, fronted via `uvx fusionkit serve-endpoint`), or the local
+   MLX trio with `--local` on Apple Silicon,
 2. starts the Fusion Harness Gateway running the **agent harness** (each panel
    model drives a real tool loop — read/list/grep/write/run — in its own git
    worktree, producing a full **trajectory**),
-3. auto-spawns a `fusionkit serve` that fuses the trajectories
-   (`/v1/fusion/trajectories:fuse`) into one answer,
+3. auto-spawns a `fusionkit serve` (via `uvx`, no checkout) that fuses the
+   trajectories (`/v1/fusion/trajectories:fuse`) into one answer,
 4. launches the chosen agent pre-wired to the gateway.
 
 One Ctrl+C tears the whole stack (panel + synthesis + gateway + any Cursorkit
 bridge) down.
+
+### Prerequisites
+
+`fusionkit codex` runs a quick preflight and fails with guidance if anything is
+missing:
+
+- **`uv`/`uvx`** on PATH (runs the FusionKit synthesizer + cloud model shims):
+  <https://docs.astral.sh/uv/>
+- the **coding agent** you launch (`codex`, `claude`, or `cursor-agent`),
+- **API keys** for the default cloud panel (`OPENAI_API_KEY`,
+  `ANTHROPIC_API_KEY`) — not needed with `--local`,
+- a **git repository** (run inside it, or pass `--repo`).
 
 ### Trajectory-level fusion
 
@@ -44,19 +61,21 @@ the request's natural shape and **first person**:
 - a planning request gets a plan,
 - a code change gets the concrete edit (with tests run as verification),
 
-so every way you use the tool works — not just patch-shaped requests. The synthesis
-backend requires a FusionKit checkout (`--fusionkit-dir` / `WARRANT_FUSIONKIT_DIR`),
-which `warrant fusion` runs for you; pass `--synthesis-url` to reuse an already-running
+so every way you use the tool works — not just patch-shaped requests. The
+synthesis backend (`fusionkit serve`) is fetched from PyPI via `uvx` — no
+checkout needed. Pass `--fusionkit-dir` to run a local FusionKit checkout
+instead (a dev override), or `--synthesis-url` to reuse an already-running
 `fusionkit serve`.
 
-By default it materializes a real sample repo; point it at your own with
+It fuses over the current directory's git repo; point it at another with
 `--repo`. Useful flags:
 
 ```bash
-warrant fusion claude --repo /path/to/your/repo
-warrant fusion cursor --cursor-kit-dir /path/to/cursorkit   # or WARRANT_CURSORKIT_DIR
-warrant fusion codex --model a=mlx-community/Qwen3-1.7B-4bit --model b=...   # custom panel
-warrant fusion serve                                        # just run the gateway + print setup
+fusionkit claude --repo /path/to/your/repo
+fusionkit cursor --cursor-kit-dir /path/to/cursorkit        # or FUSIONKIT_CURSORKIT_DIR
+fusionkit codex --local                                     # local MLX panel (Apple Silicon)
+fusionkit codex --model gpt=openai:gpt-5.5 --model opus=anthropic:claude-opus-4-8   # custom panel
+fusionkit serve                                             # just run the gateway + print setup
 ```
 
 ### Cloud / SOTA panel
@@ -69,8 +88,7 @@ per-candidate coding harness):
 ```bash
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
-warrant fusion codex \
-  --fusionkit-dir /path/to/fusionkit \
+fusionkit codex \
   --model gpt=openai:gpt-5.5 \
   --model opus=anthropic:claude-opus-4-8 \
   --judge-model gpt-5.5
@@ -104,7 +122,7 @@ Notes:
   panel. The default is a fully real, local, zero-credential path.
 
 For full control over the gateway itself (custom backends, ACP, acceptance
-suite), use `warrant ensemble gateway` directly as described below.
+suite), use `fusionkit ensemble gateway` directly as described below.
 
 ## Data flow
 
@@ -183,7 +201,7 @@ requires_openai_auth = false
 ```
 
 `requires_openai_auth = false` lets Codex talk to the gateway with no API key.
-`warrant ensemble gateway codex-config` prints this snippet.
+`fusionkit ensemble gateway codex-config` prints this snippet.
 
 ## Claude Code provider wiring
 
@@ -230,7 +248,7 @@ Key points discovered:
 ## CLI
 
 ```
-warrant ensemble gateway [serve] [opts]   front door: tools drive the fusion ensemble
+fusionkit ensemble gateway [serve] [opts]   front door: tools drive the fusion ensemble
   --fusion-backend URL    FusionKit/OpenAI-compatible backend URL (judge synthesis)
   --harness TARGET        mock | command | codex | claude-code | cursor-acp | cursor-desktop (repeatable)
   --model ID=MODEL        panel model mapping (repeatable)
@@ -240,10 +258,10 @@ warrant ensemble gateway [serve] [opts]   front door: tools drive the fusion ens
   --host H / --port N     bind address
   --auth-token TOKEN      require a bearer token on the gateway
 
-warrant ensemble gateway acp [opts]            run the generic ACP stdio front door
-warrant ensemble gateway acp-registry install  install registry-backed ACP adapters
-warrant ensemble gateway codex-config          print a Codex Responses provider snippet
-warrant ensemble gateway test [opts]           run the unified front-door acceptance suite
+fusionkit ensemble gateway acp [opts]            run the generic ACP stdio front door
+fusionkit ensemble gateway acp-registry install  install registry-backed ACP adapters
+fusionkit ensemble gateway codex-config          print a Codex Responses provider snippet
+fusionkit ensemble gateway test [opts]           run the unified front-door acceptance suite
 ```
 
 ## Acceptance suite

@@ -5,9 +5,9 @@ import { MlxBackend } from "./mlx-backend.js";
 /**
  * Backend selection for the gateway. The default is the owned mlx fork
  * (`mlx_lm.server`) — "mlx_lm.server first". An explicit OpenAI-compatible URL
- * (`WARRANT_LOCAL_MODEL_URL`) overrides it, which covers an already-running mlx
+ * (`FUSIONKIT_LOCAL_MODEL_URL`) overrides it, which covers an already-running mlx
  * server or a different local server (Ollama, vLLM, LM Studio) on hosts where
- * the mlx provisioner cannot run.
+ * the mlx provisioner cannot run. Legacy `WARRANT_*` names are still honored.
  */
 
 /** Default mlx model, matching the examples/mlx default. */
@@ -20,21 +20,23 @@ export type BackendConfig =
 export function resolveBackendConfig(
   env: Record<string, string | undefined> = process.env
 ): BackendConfig {
-  const url = env.WARRANT_LOCAL_MODEL_URL;
+  const url = env.FUSIONKIT_LOCAL_MODEL_URL ?? env.WARRANT_LOCAL_MODEL_URL;
   if (url !== undefined && url.length > 0) {
+    const apiKey = env.FUSIONKIT_LOCAL_MODEL_KEY ?? env.WARRANT_LOCAL_MODEL_KEY;
+    const defaultModel = env.FUSIONKIT_LOCAL_MODEL ?? env.WARRANT_LOCAL_MODEL;
     return {
       kind: "openai",
       baseUrl: url,
-      ...(env.WARRANT_LOCAL_MODEL_KEY !== undefined ? { apiKey: env.WARRANT_LOCAL_MODEL_KEY } : {}),
-      ...(env.WARRANT_LOCAL_MODEL !== undefined ? { defaultModel: env.WARRANT_LOCAL_MODEL } : {})
+      ...(apiKey !== undefined ? { apiKey } : {}),
+      ...(defaultModel !== undefined ? { defaultModel } : {})
     };
   }
   return {
     kind: "mlx",
-    model: env.WARRANT_MLX_MODEL ?? DEFAULT_MLX_MODEL,
+    model: env.FUSIONKIT_MLX_MODEL ?? env.WARRANT_MLX_MODEL ?? DEFAULT_MLX_MODEL,
     // Structured decoding (the owned fork's reason for being) is on unless
     // explicitly disabled.
-    structured: env.WARRANT_MLX_STRUCTURED !== "0"
+    structured: (env.FUSIONKIT_MLX_STRUCTURED ?? env.WARRANT_MLX_STRUCTURED) !== "0"
   };
 }
 

@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 
-import { assertModelCallRecordV1 } from "@warrant/protocol";
+import { assertModelCallRecordV1 } from "@fusionkit/protocol";
 
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";

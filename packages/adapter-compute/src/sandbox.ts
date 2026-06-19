@@ -8,10 +8,10 @@ import {
   Handoff,
   targets,
   toGovernedRunRecord
-} from "@warrant/handoff";
-import type { CommandHarnessConfig, GovernedRunRecord } from "@warrant/handoff";
-import type { RunStatus, SessionIsolation } from "@warrant/protocol";
-import { gitText, resolveInsideWorkspace } from "@warrant/workspace";
+} from "@fusionkit/handoff";
+import type { CommandHarnessConfig, GovernedRunRecord } from "@fusionkit/handoff";
+import type { RunStatus, SessionIsolation } from "@fusionkit/protocol";
+import { gitText, resolveInsideWorkspace } from "@fusionkit/workspace";
 
 /**
  * The shared command-harness configuration, with one compute-specific

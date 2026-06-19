@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/protocol",
+  "name": "@fusionkit/protocol",
   "private": false,
   "version": "0.1.0",
   "description": "Warrant protocol schemas and primitives: contracts, receipts, event chains, manifests, checkpoints, and handoff envelopes. Zero runtime dependencies.",
@@ -13,8 +13,8 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   }
 }

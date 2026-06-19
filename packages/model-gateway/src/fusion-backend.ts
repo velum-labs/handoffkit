@@ -11,7 +11,7 @@
  * Per front-door turn it:
  *   1. derives a stable session key from the conversation prefix,
  *   2. runs the panel **once** per session (injected `runPanels`, so this
- *      package keeps no dependency on `@warrant/ensemble`) to produce the
+ *      package keeps no dependency on `@fusionkit/ensemble`) to produce the
  *      candidate trajectories,
  *   3. forwards the live conversation + the harness tools + the candidate
  *      trajectories to FusionKit's `trajectory:step`, whose response (an OpenAI
@@ -38,7 +38,7 @@ import {
   newSpanId,
   newTraceId,
   TRACE_ID_HEADER
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import type { Backend, BackendRequestOptions } from "./backend.js";
 

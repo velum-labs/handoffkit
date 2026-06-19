@@ -13,13 +13,13 @@
  */
 import { createClaudeCode } from "@ai-sdk/harness-claude-code";
 import { createVercelSandbox } from "@ai-sdk/sandbox-vercel";
-import type { RunContract } from "@warrant/protocol";
-import type { SessionBackend } from "@warrant/runner";
+import type { RunContract } from "@fusionkit/protocol";
+import type { SessionBackend } from "@fusionkit/runner";
 import {
   toVercelNetwork,
   vercelCredentialsFromEnv,
   vercelSandboxBackend
-} from "@warrant/session-vercel-sandbox";
+} from "@fusionkit/session-vercel-sandbox";
 
 import { claudeCodeAuthFromEnv } from "./auth.js";
 import { AiSdkHarnessBackend, isAgentRunFor } from "./backend.js";

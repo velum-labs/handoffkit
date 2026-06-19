@@ -18,7 +18,7 @@ import {
   defaultMlxDir,
   mlxServer,
   type ManagedServerEvent
-} from "@warrant/adapter-ai-sdk";
+} from "@fusionkit/adapter-ai-sdk";
 
 const DEFAULT_MODEL = "prism-ml/Ternary-Bonsai-4B-mlx-2bit";
 const DEFAULT_REQUESTS = 64;

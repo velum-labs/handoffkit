@@ -1,7 +1,7 @@
-import { renderReceipt } from "@warrant/cli/render";
-import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@warrant/testkit";
+import { renderReceipt } from "@fusionkit/cli/render";
+import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@fusionkit/testkit";
 
-import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
+import { demoBanner, detail, finale, ok, step } from "@fusionkit/example-utils";
 
 const SECRET_VALUE = "mock-secret-value-do-not-leak";
 

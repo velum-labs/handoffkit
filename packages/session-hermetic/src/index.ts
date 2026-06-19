@@ -1,5 +1,5 @@
 /**
- * @warrant/session-hermetic — a hermetic session backend built on
+ * @fusionkit/session-hermetic — a hermetic session backend built on
  * just-bash: a simulated bash interpreter with a virtual filesystem and
  * interpreter-enforced network allowlists.
  *
@@ -10,14 +10,14 @@
  * ignore. The trade-off, stated honestly: only the "command" harness runs
  * here — there is no real OS, so vendor CLIs and the node-based mock do not.
  */
-import type { NetworkPolicy } from "@warrant/protocol";
+import type { NetworkPolicy } from "@fusionkit/protocol";
 import type {
   BackendExecutionKind,
   SessionBackend,
   SessionBackendResult,
   SessionExecution
-} from "@warrant/runner";
-import { executionHash, requireShellExecution, resolveSessionEnv } from "@warrant/runner";
+} from "@fusionkit/runner";
+import { executionHash, requireShellExecution, resolveSessionEnv } from "@fusionkit/runner";
 import { Bash, ReadWriteFs } from "just-bash";
 
 type NetworkConfig =

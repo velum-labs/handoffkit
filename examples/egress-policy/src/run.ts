@@ -1,7 +1,7 @@
-import { PlaneClientError } from "@warrant/sdk";
-import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@warrant/testkit";
+import { PlaneClientError } from "@fusionkit/sdk";
+import { mockRunRequest, uploadWorkspace, withStackAndRepo } from "@fusionkit/testkit";
 
-import { demoBanner, detail, expectedFailure, finale, ok, step } from "@warrant/example-utils";
+import { demoBanner, detail, expectedFailure, finale, ok, step } from "@fusionkit/example-utils";
 
 async function main(): Promise<void> {
   demoBanner("04");

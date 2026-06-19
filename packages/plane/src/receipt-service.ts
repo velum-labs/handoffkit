@@ -4,7 +4,7 @@ import {
   type ChainedEvent,
   type Receipt,
   type RunContract
-} from "@warrant/protocol";
+} from "@fusionkit/protocol";
 
 import { badRequest } from "./domain-errors.js";
 

@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/adapter-compute",
+  "name": "@fusionkit/adapter-compute",
   "private": false,
   "version": "0.1.0",
   "description": "ComputeSDK-shaped compute surface over governed runner sessions: sandbox.create(), runCommand, and filesystem, where every operation is a signed contract with a receipt.",
@@ -13,17 +13,17 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/handoff": "workspace:*",
-    "@warrant/protocol": "workspace:*",
-    "@warrant/sdk": "workspace:*",
-    "@warrant/workspace": "workspace:*"
+    "@fusionkit/handoff": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
   },
   "devDependencies": {
-    "@warrant/testkit": "workspace:*"
+    "@fusionkit/testkit": "workspace:*"
   }
 }

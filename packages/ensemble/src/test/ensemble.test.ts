@@ -19,10 +19,10 @@ import {
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   requestHash,
   responseHash
-} from "@warrant/protocol";
-import type { ModelCallRecordV1 } from "@warrant/protocol";
-import type { SessionBackend } from "@warrant/runner";
-import { gitText } from "@warrant/workspace";
+} from "@fusionkit/protocol";
+import type { ModelCallRecordV1 } from "@fusionkit/protocol";
+import type { SessionBackend } from "@fusionkit/runner";
+import { gitText } from "@fusionkit/workspace";
 
 import {
   claudeCodeHarness,

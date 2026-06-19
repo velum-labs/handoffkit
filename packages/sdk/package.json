@@ -1,5 +1,5 @@
 {
-  "name": "@warrant/sdk",
+  "name": "@fusionkit/sdk",
   "private": false,
   "version": "0.1.0",
   "description": "Warrant SDK: a thin client over the plane API plus offline receipt verification.",
@@ -13,11 +13,11 @@
   },
   "files": ["dist"],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
     "provenance": true
   },
   "dependencies": {
-    "@warrant/protocol": "workspace:*"
+    "@fusionkit/protocol": "workspace:*"
   }
 }

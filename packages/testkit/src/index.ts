@@ -1,5 +1,5 @@
 /**
- * @warrant/testkit — in-process plane + runner stacks and git fixtures,
+ * @fusionkit/testkit — in-process plane + runner stacks and git fixtures,
  * shared by the integration tests and the demo series. Everything runs
  * locally with the built-in mock agent: no vendor CLIs, no API keys.
  */
@@ -14,14 +14,14 @@ import {
   Plane,
   SecretStore,
   startPlaneServer
-} from "@warrant/plane";
-import { generateEd25519KeyPair } from "@warrant/protocol";
-import type { Policy, RunRequestInput, WorkspaceManifest } from "@warrant/protocol";
-import { Runner } from "@warrant/runner";
-import type { SessionBackend } from "@warrant/runner";
-import { PlaneClient } from "@warrant/sdk";
-import { captureWorkspace, gitText } from "@warrant/workspace";
-import type { CapturedWorkspace } from "@warrant/workspace";
+} from "@fusionkit/plane";
+import { generateEd25519KeyPair } from "@fusionkit/protocol";
+import type { Policy, RunRequestInput, WorkspaceManifest } from "@fusionkit/protocol";
+import { Runner } from "@fusionkit/runner";
+import type { SessionBackend } from "@fusionkit/runner";
+import { PlaneClient } from "@fusionkit/sdk";
+import { captureWorkspace, gitText } from "@fusionkit/workspace";
+import type { CapturedWorkspace } from "@fusionkit/workspace";
 
 /** Re-exported shared git helper so fixtures and tests share one implementation. */
 export function git(cwd: string, args: string[]): string {

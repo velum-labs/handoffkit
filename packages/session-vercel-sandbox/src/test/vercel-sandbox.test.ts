@@ -9,12 +9,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import type { RunContract, RunEvent } from "@warrant/protocol";
+import type { RunContract, RunEvent } from "@fusionkit/protocol";
 import {
   CapabilityMismatchError,
   prepareExecution,
   type SessionExecution
-} from "@warrant/runner";
+} from "@fusionkit/runner";
 
 import {
   listWorkspaceFiles,

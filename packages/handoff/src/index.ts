@@ -1,5 +1,5 @@
 /**
- * @warrant/handoff — the continuation-first SDK. Start work wherever it
+ * @fusionkit/handoff — the continuation-first SDK. Start work wherever it
  * naturally begins, continue it on a governed runner when conditions
  * change, preserve state across the boundary, and prove what moved, why
  * it moved, who approved it, and how to resume.

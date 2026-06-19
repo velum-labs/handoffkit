@@ -1,7 +1,7 @@
-import { agents, handoff, localFirst, reviewStrategies, targets } from "@warrant/handoff";
-import { withStackAndRepo } from "@warrant/testkit";
+import { agents, handoff, localFirst, reviewStrategies, targets } from "@fusionkit/handoff";
+import { withStackAndRepo } from "@fusionkit/testkit";
 
-import { demoBanner, detail, finale, ok, step } from "@warrant/example-utils";
+import { demoBanner, detail, finale, ok, step } from "@fusionkit/example-utils";
 
 async function main(): Promise<void> {
   demoBanner("07");

@@ -1,5 +1,5 @@
-import { runWorktreeAgent } from "@warrant/adapter-ai-sdk";
-import { artifactHash, emitTrace, newSpanId } from "@warrant/protocol";
+import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
+import { artifactHash, emitTrace, newSpanId } from "@fusionkit/protocol";
 
 import type {
   HarnessAdapter,

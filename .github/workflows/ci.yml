@@ -52,6 +52,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: OOTB CLI shape smoke
+        run: node scripts/check-ootb-cli.mjs
+
       - name: Test
         run: pnpm test
 

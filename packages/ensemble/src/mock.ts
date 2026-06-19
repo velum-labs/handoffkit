@@ -1,4 +1,4 @@
-import { artifactHash } from "@warrant/protocol";
+import { artifactHash } from "@fusionkit/protocol";
 
 import type {
   HarnessAdapter,

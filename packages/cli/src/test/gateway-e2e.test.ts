@@ -15,8 +15,8 @@ import {
   FUSION_RUN_ID_HEADER,
   runAcpAgent,
   runFrontDoorAcceptance
-} from "@warrant/model-gateway";
-import type { FusionGateway } from "@warrant/model-gateway";
+} from "@fusionkit/model-gateway";
+import type { FusionGateway } from "@fusionkit/model-gateway";
 
 import { buildAcpRunner, startConfiguredGateway } from "../gateway.js";
 import type { GatewayRunnerConfig } from "../gateway.js";
