@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/session-hermetic",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/session-hermetic" },
   "description": "Hermetic session backend for Warrant runners: a simulated bash interpreter (just-bash) with a virtual filesystem and interpreter-enforced network allowlists. No real processes or sockets to escape with.",
   "license": "UNLICENSED",

@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/session-harness",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/session-harness" },
   "description": "AI SDK harness session backend for Warrant runners: drives vendor agent harnesses (Claude Code) through @ai-sdk/harness inside a Vercel Sandbox microVM, capturing the structured harness event stream as governed-session evidence.",
   "license": "UNLICENSED",
