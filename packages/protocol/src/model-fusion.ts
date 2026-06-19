@@ -13,7 +13,7 @@ export const MODEL_FUSION_SCHEMA_NAMES = [
   "ensemble-receipt.v1"
 ] as const;
 export const MODEL_FUSION_SCHEMA_BUNDLE_HASH =
-  "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3";
+  "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671";
 
 export type ModelFusionSchemaName = (typeof MODEL_FUSION_SCHEMA_NAMES)[number];
 export type ModelFusionStatus =

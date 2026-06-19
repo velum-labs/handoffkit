@@ -137,7 +137,7 @@ if (bindings.typescript?.packageName !== modelFusionTypescriptPackageName) {
 if (bindings.python?.packageName !== modelFusionPythonPackageName) {
   fail(`Python binding target must remain ${modelFusionPythonPackageName}`);
 }
-for (const registry of ["npm", "GitHub Packages"]) {
+for (const registry of ["npm"]) {
   if (!bindings.typescript?.registries?.includes(registry)) {
     fail(`TypeScript binding target missing registry: ${registry}`);
   }
@@ -158,8 +158,8 @@ const protocolPackage = JSON.parse(readFileSync(protocolPackageJsonPath, "utf8")
 const protocolPackageManifest = JSON.parse(readFileSync(protocolPackageManifestPath, "utf8"));
 const protocolPackageOpenApi = JSON.parse(readFileSync(protocolPackageOpenApiPath, "utf8"));
 
-if (rootPackage.devDependencies?.[modelFusionTypescriptPackageName] !== "0.1.0") {
-  fail(`${rootPackagePath}: devDependency ${modelFusionTypescriptPackageName} must be pinned to 0.1.0`);
+if (rootPackage.devDependencies?.[modelFusionTypescriptPackageName] !== "0.1.1") {
+  fail(`${rootPackagePath}: devDependency ${modelFusionTypescriptPackageName} must be pinned to 0.1.1`);
 }
 if (protocolPackage.name !== modelFusionTypescriptPackageName) {
   fail(`${protocolPackageJsonPath}: package name must be ${modelFusionTypescriptPackageName}`);
@@ -167,8 +167,8 @@ if (protocolPackage.name !== modelFusionTypescriptPackageName) {
 if (protocolPackage.version !== rootPackage.devDependencies?.[modelFusionTypescriptPackageName]) {
   fail(`${protocolPackageJsonPath}: package version must match the root devDependency pin`);
 }
-if (protocolPackage.publishConfig?.registry !== "https://npm.pkg.github.com") {
-  fail(`${protocolPackageJsonPath}: package must publish from GitHub Packages`);
+if (protocolPackage.publishConfig?.registry !== "https://registry.npmjs.org") {
+  fail(`${protocolPackageJsonPath}: package must publish to public npm`);
 }
 if (protocolPackageManifest.package_name !== modelFusionTypescriptPackageName) {
   fail(`${protocolPackageManifestPath}: package_name must be ${modelFusionTypescriptPackageName}`);

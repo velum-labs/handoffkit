@@ -18,8 +18,7 @@
     "openapiGenerated": "packages/protocol/src/generated/model-fusion-openapi.ts",
     "jsonSchemaValidators": "packages/protocol/src/model-fusion.ts",
     "registries": [
-      "npm",
-      "GitHub Packages"
+      "npm"
     ],
     "status": "openapi-generated-json-schema-validator-exported"
   },
@@ -42,7 +41,7 @@
     "typescriptPackageName": "@velum-labs/model-fusion-protocol",
     "pythonPackageName": "velum-model-fusion-protocol",
     "version": "0.1.4",
-    "schemaBundleHash": "sha256:75792f89c091b6ab4fd317a15fb03fd73438563dceff5ccf9f5d7c752dbf35f3",
+    "schemaBundleHash": "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671",
     "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb"
   }
 }

@@ -8,10 +8,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
-
-env:
-  PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
