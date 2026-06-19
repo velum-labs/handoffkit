@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/cli",
   "private": false,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/cli" },
   "description": "fusionkit — real model fusion behind your coding agent (codex, claude, cursor).",
   "license": "UNLICENSED",
@@ -19,7 +19,7 @@
       "default": "./dist/render.js"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "scope"],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",

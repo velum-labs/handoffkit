@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/runner",
   "private": false,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/runner" },
   "description": "Warrant runner: outbound-only execution of vendor agent harnesses inside governed sessions with deny-by-default egress.",
   "license": "UNLICENSED",

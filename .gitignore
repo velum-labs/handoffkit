@@ -2,6 +2,9 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+# Staged observability dashboard bundle (built from apps/scope, shipped inside
+# @fusionkit/cli at publish time). A build artifact — never tracked.
+/packages/cli/scope/
 coverage/
 .env
 .env.*

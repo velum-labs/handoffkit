@@ -41,6 +41,7 @@ import {
   waitForHttp,
   waitForOutput
 } from "./shared/proc.js";
+import type { LoggedChild } from "./shared/proc.js";
 
 export type FusionTool = "codex" | "claude" | "cursor" | "serve";
 
@@ -225,7 +226,8 @@ export const SCOPE_DASHBOARD_PORT = 4317;
 
 /**
  * Locate the isolated scope dashboard app (handoffkit/apps/scope) by walking up
- * from this module. Works from both the compiled dist and src layouts.
+ * from this module. Works from both the compiled dist and src layouts. Only the
+ * monorepo dev fallback uses this — published installs ship a prebuilt bundle.
  */
 export function findScopeAppDir(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -237,6 +239,18 @@ export function findScopeAppDir(): string {
     dir = parent;
   }
   throw new Error("could not locate apps/scope relative to the handoffkit CLI");
+}
+
+/**
+ * Path to the prebuilt, self-contained dashboard server staged into the CLI
+ * package (`scope/server.js`, a sibling of `dist/`), or undefined when it is
+ * absent — i.e. a monorepo dev checkout where the bundle was never staged. Both
+ * the compiled `dist/fusion-quickstart.js` and the `src/` layout resolve to the
+ * same `<cli-package>/scope/server.js`.
+ */
+export function bundledScopeServer(): string | undefined {
+  const serverJs = join(dirname(fileURLToPath(import.meta.url)), "..", "scope", "server.js");
+  return existsSync(serverJs) ? serverJs : undefined;
 }
 
 /** Best-effort: open a URL in the default browser (no-op on failure). */
@@ -260,39 +274,40 @@ export type Observability = {
 };
 
 /**
- * Build the scope dashboard once and `next start` it on the fixed port, backed
- * by a fresh per-run SQLite file and trace dir. Returns the URLs the caller
- * injects (as FUSION_TRACE_URL / FUSION_TRACE_DIR) into every spawned process.
+ * Spawn the prebuilt standalone dashboard server (`node scope/server.js`) on the
+ * fixed port. The Next standalone entrypoint reads PORT/HOSTNAME from the env
+ * (there is no `-p` flag). This is the path every npm-installed user takes.
  */
-export async function startObservability(input: {
-  log: (line: string) => void;
+function startBundledDashboard(input: {
+  serverJs: string;
+  env: Record<string, string | undefined>;
   logFile?: string;
-  report?: StackReporter;
-}): Promise<Observability> {
+}): LoggedChild {
+  return spawnLogged(process.execPath, [input.serverJs], {
+    cwd: dirname(input.serverJs),
+    ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
+    env: { ...input.env, PORT: String(SCOPE_DASHBOARD_PORT), HOSTNAME: "127.0.0.1" }
+  });
+}
+
+/**
+ * Monorepo dev fallback: build the scope app once (reusing a prior build) and
+ * `next start` it on the fixed port. Only reached in a handoffkit checkout where
+ * no bundle was staged; published installs always use {@link startBundledDashboard}.
+ */
+function startDevDashboard(input: {
+  env: Record<string, string | undefined>;
+  traceDir: string;
+  logFile?: string;
+}): LoggedChild {
   const scopeDir = findScopeAppDir();
   const nextBin = join(scopeDir, "node_modules", ".bin", "next");
   if (!existsSync(nextBin)) {
     throw new Error(
-      "the observability dashboard is not available in this install.\n" +
-        `  It is a separate app and is not bundled with the npm package.\n` +
-        `  To enable --observe, install its dependencies once: cd ${scopeDir} && pnpm install`
+      "the observability dashboard is not available in this checkout.\n" +
+        `  Install its dependencies once: cd ${scopeDir} && pnpm install`
     );
   }
-
-  const traceDir = mkdtempSync(join(tmpdir(), "fusion-trace-"));
-  const dbPath = join(traceDir, "scope.db");
-
-  // Child processes (next build / next start) load node:sqlite; keep their
-  // experimental warnings out of the log just like the parent CLI.
-  const childEnv = {
-    ...process.env,
-    NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
-    SCOPEKIT_DB: dbPath,
-    FUSION_TRACE_DIR: traceDir
-  };
-
-  if (input.report) input.report({ kind: "dashboard.start" });
-  else input.log("fusion: building observability dashboard (one-time)...");
 
   // Rebuilding every run is slow; reuse a prior build when present. The build
   // output is captured (never inherited) so it can't corrupt a live checklist.
@@ -301,7 +316,7 @@ export async function startObservability(input: {
     try {
       const buildOut = execFileSync(nextBin, ["build"], {
         cwd: scopeDir,
-        env: childEnv,
+        env: input.env,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"]
       });
@@ -313,7 +328,6 @@ export async function startObservability(input: {
           String((error as { stdout?: string }).stdout ?? "") + String((error as { stderr?: string }).stderr ?? "")
         );
       }
-      rmSync(traceDir, { recursive: true, force: true });
       throw new Error(
         "the observability dashboard failed to build. See the log for details" +
           (input.logFile ? `: ${input.logFile}` : "")
@@ -321,11 +335,60 @@ export async function startObservability(input: {
     }
   }
 
-  const proc = spawnLogged(nextBin, ["start", "-p", String(SCOPE_DASHBOARD_PORT)], {
+  return spawnLogged(nextBin, ["start", "-p", String(SCOPE_DASHBOARD_PORT)], {
     cwd: scopeDir,
     ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
-    env: childEnv
+    env: input.env
   });
+}
+
+/**
+ * Start the scope dashboard on the fixed port, backed by a fresh per-run SQLite
+ * file and trace dir, and return the URLs the caller injects (as
+ * FUSION_TRACE_URL / FUSION_TRACE_DIR) into every spawned process. Prefers the
+ * prebuilt bundle shipped inside the npm package; falls back to building the
+ * app from source in a monorepo dev checkout.
+ */
+export async function startObservability(input: {
+  log: (line: string) => void;
+  logFile?: string;
+  report?: StackReporter;
+}): Promise<Observability> {
+  const traceDir = mkdtempSync(join(tmpdir(), "fusion-trace-"));
+  const dbPath = join(traceDir, "scope.db");
+
+  // The dashboard server loads node:sqlite; keep its experimental warnings out
+  // of the log just like the parent CLI. The per-run db/trace dir isolate state.
+  const childEnv = {
+    ...process.env,
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
+    SCOPEKIT_DB: dbPath,
+    FUSION_TRACE_DIR: traceDir
+  };
+
+  const bundled = bundledScopeServer();
+  if (input.report) input.report({ kind: "dashboard.start" });
+  else if (bundled !== undefined) input.log("fusion: starting observability dashboard...");
+  else input.log("fusion: building observability dashboard (one-time)...");
+
+  let proc: LoggedChild;
+  try {
+    proc =
+      bundled !== undefined
+        ? startBundledDashboard({
+            serverJs: bundled,
+            env: childEnv,
+            ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
+          })
+        : startDevDashboard({
+            env: childEnv,
+            traceDir,
+            ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
+          });
+  } catch (error) {
+    rmSync(traceDir, { recursive: true, force: true });
+    throw error instanceof Error ? error : new Error(String(error));
+  }
 
   const url = `http://127.0.0.1:${SCOPE_DASHBOARD_PORT}`;
   try {
@@ -939,19 +1002,29 @@ export async function runFusion(
   let stack: FusionStack;
   try {
     if (options.observe === true) {
-      observability = await startObservability({
-        log,
-        logFile: join(logsDir, "dashboard.log"),
-        ...(report !== undefined ? { report } : {})
-      });
-      disposers.push(() => observability?.close() ?? Promise.resolve());
-      process.env.FUSION_TRACE_URL = observability.ingestUrl;
-      process.env.FUSION_TRACE_DIR = observability.traceDir;
-      if (boot === undefined) {
-        log(`fusion: observability dashboard at ${observability.url}`);
-        log(`fusion: trace events -> ${observability.ingestUrl} (jsonl fallback in ${observability.traceDir})`);
+      // The dashboard (apps/scope) is a dev/monorepo-only app and is NOT bundled
+      // with the npm package, so it is best-effort: a missing or unbuildable
+      // dashboard must never block the core fusion run.
+      try {
+        observability = await startObservability({
+          log,
+          logFile: join(logsDir, "dashboard.log"),
+          ...(report !== undefined ? { report } : {})
+        });
+        disposers.push(() => observability?.close() ?? Promise.resolve());
+        process.env.FUSION_TRACE_URL = observability.ingestUrl;
+        process.env.FUSION_TRACE_DIR = observability.traceDir;
+        if (boot === undefined) {
+          log(`fusion: observability dashboard at ${observability.url}`);
+          log(`fusion: trace events -> ${observability.ingestUrl} (jsonl fallback in ${observability.traceDir})`);
+        }
+        openUrl(observability.url);
+      } catch (error) {
+        observability = undefined;
+        const first = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+        if (report !== undefined) report({ kind: "dashboard.fail", detail: "unavailable — skipped" });
+        else log(`fusion: observability dashboard unavailable; continuing without it (${first})`);
       }
-      openUrl(observability.url);
     }
 
     stack = await startFusionStack({

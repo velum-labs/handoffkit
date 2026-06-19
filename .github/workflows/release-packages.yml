@@ -78,6 +78,19 @@ jobs:
       - name: Test
         run: corepack pnpm test
 
+      # The observability dashboard (apps/scope) is an isolated workspace with
+      # its own lockfile; install + build it, then stage the Next standalone
+      # output into packages/cli/scope/ so the published @fusionkit/cli ships a
+      # working `--observe` out of the box (cli files: ["dist", "scope"]).
+      - name: Build observability dashboard (apps/scope)
+        working-directory: apps/scope
+        run: |
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm build
+
+      - name: Stage dashboard into CLI package
+        run: node scripts/stage-scope.mjs
+
       - name: Configure npm registry auth
         if: github.event_name == 'release'
         env:
