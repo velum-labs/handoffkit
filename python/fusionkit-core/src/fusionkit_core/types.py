@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 ChatRole = Literal["system", "user", "assistant", "tool"]
 
@@ -19,6 +19,47 @@ class ChatMessage(BaseModel):
     name: str | None = None
     tool_call_id: str | None = None
     tool_calls: list[ToolCall] | None = None
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def _coerce_content(cls, value: Any) -> Any:
+        # OpenAI-shaped conversations (e.g. an agent tool loop) send `content: null`
+        # for tool-call-only assistant turns and a parts array for multimodal/agent
+        # messages; flatten both to plain text so the message validates.
+        if value is None:
+            return ""
+        if isinstance(value, list):
+            parts: list[str] = []
+            for part in value:
+                if isinstance(part, str):
+                    parts.append(part)
+                elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                    parts.append(part["text"])
+            return "".join(parts)
+        return value
+
+    @field_validator("tool_calls", mode="before")
+    @classmethod
+    def _flatten_tool_calls(cls, value: Any) -> Any:
+        # Accept OpenAI's nested ({id, type, function:{name, arguments}}) tool-call
+        # shape in addition to the flat ({id, name, arguments}) one, so a coding
+        # harness's assistant turns parse without a separate normalization pass.
+        if not value:
+            return value
+        flattened: list[Any] = []
+        for call in value:
+            if isinstance(call, dict) and "function" in call:
+                function = call.get("function") or {}
+                flattened.append(
+                    {
+                        "id": call.get("id", ""),
+                        "name": function.get("name", ""),
+                        "arguments": function.get("arguments", "{}") or "{}",
+                    }
+                )
+            else:
+                flattened.append(call)
+        return flattened
 
 
 class Usage(BaseModel):

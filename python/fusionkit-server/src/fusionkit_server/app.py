@@ -63,6 +63,10 @@ class FusionRequest(BaseModel):
     top_p: float | None = None
     max_tokens: int | None = None
     stream: bool = False
+    # Forwarded only on the per-model passthrough path (when `model` names a
+    # configured endpoint); the fusion path ignores them.
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | dict[str, Any] | None = None
     fusion: FusionOptions = Field(default_factory=FusionOptions)
 
 
@@ -126,7 +130,7 @@ def create_app(
     run_manager: FusionRunManager | None = None,
     run_store_path: Path | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="fusionkit", version="0.1.1")
+    app = FastAPI(title="fusionkit", version="0.2.0")
     model_clients = clients or build_clients(config)
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
@@ -206,6 +210,13 @@ def create_app(
     async def chat_completions(
         request: FusionRequest,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
+        # Per-model passthrough: when `model` names a configured endpoint, call
+        # that model directly (no fusion run) so a single `fusionkit serve` can
+        # front every panel model by id for an external coding harness. The
+        # reserved `fusionkit/{router,panel,single,self}` names keep the fusion
+        # path below.
+        if _is_endpoint_model(config, request.model):
+            return await _passthrough_chat(engine, config, request)
         resolved = await _resolve_native_chat(native_runs, request, config)
         if isinstance(resolved, JSONResponse):
             return resolved
@@ -332,6 +343,60 @@ def create_app(
         return _openai_step_response(request.model, response)
 
     return app
+
+
+def _is_endpoint_model(config: FusionConfig, model: str) -> bool:
+    try:
+        config.endpoint_for(model)
+        return True
+    except KeyError:
+        return False
+
+
+async def _passthrough_chat(
+    engine: FusionEngine,
+    config: FusionConfig,
+    request: FusionRequest,
+) -> dict[str, Any] | JSONResponse | StreamingResponse:
+    """Call a single configured endpoint directly, bypassing fusion.
+
+    This is the multi-model analogue of `serve-endpoint`: one server fronts every
+    endpoint in the config, routed by the request's `model` (the endpoint id), so
+    an OpenAI-compatible caller (e.g. a per-candidate coding harness) can drive any
+    panel model — including its tool-call loop — through the same base URL.
+    """
+    client = engine.clients[request.model]
+    sampling = config.sampling.model_copy(
+        update={
+            key: value
+            for key, value in {
+                "temperature": request.temperature,
+                "top_p": request.top_p,
+                "max_tokens": request.max_tokens,
+            }.items()
+            if value is not None
+        }
+    )
+    try:
+        response = await client.chat(
+            request.messages,
+            sampling,
+            tools=_normalize_tools(request.tools),
+            tool_choice=_normalize_tool_choice(request.tool_choice),
+        )
+    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+        traceback.print_exc()
+        return _openai_error_response(
+            exc.__class__.__name__,
+            f"passthrough chat failed: {exc}",
+            status_code=502,
+        )
+    if request.stream:
+        return StreamingResponse(
+            _step_completion_sse(request.model, response),
+            media_type="text/event-stream",
+        )
+    return _openai_step_response(request.model, response)
 
 
 async def _resolve_native_chat(

@@ -1,10 +1,10 @@
 [project]
 name = "fusionkit-evals"
-version = "0.1.1"
+version = "0.2.0"
 description = "Evaluation and Pareto analysis tools for fusionkit."
 requires-python = ">=3.11"
 dependencies = [
-  "fusionkit-core==0.1.1",
+  "fusionkit-core==0.2.0",
   "pydantic>=2.12.5",
 ]
 
