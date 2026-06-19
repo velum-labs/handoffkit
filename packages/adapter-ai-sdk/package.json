@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/adapter-ai-sdk",
   "private": false,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/adapter-ai-sdk" },
   "description": "AI SDK adapter for app-owned loops: tool calls execute in governed runner sessions and return with receipts. No durability claim attaches to the caller's loop.",
   "license": "UNLICENSED",

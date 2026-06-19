@@ -71,7 +71,7 @@ export type PanelModelSpec = {
  * synthesizer (`fusionkit serve`) and the single-model OpenAI shim
  * (`fusionkit serve-endpoint`). Pinned so `uvx` resolves a reproducible build.
  */
-export const FUSIONKIT_PYPI_VERSION = "0.1.0";
+export const FUSIONKIT_PYPI_VERSION = "0.1.1";
 
 /**
  * Default cloud panel — works cross-platform with only `OPENAI_API_KEY` and

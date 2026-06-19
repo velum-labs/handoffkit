@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/model-gateway",
   "private": false,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "repository": { "type": "git", "url": "git+https://github.com/velum-labs/handoffkit.git", "directory": "packages/model-gateway" },
   "description": "Native local-model gateway: fronts an OpenAI-compatible local model and exposes the wire dialects each agent harness needs (OpenAI chat, Anthropic Messages, OpenAI Responses) so a local model can transparently back Claude Code, Codex, opencode, and Cursor.",
   "license": "UNLICENSED",
