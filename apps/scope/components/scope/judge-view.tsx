@@ -1,6 +1,7 @@
+import { CodeBlock } from "@/components/scope/code-block";
+import { JsonView } from "@/components/scope/json-view";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -11,7 +12,8 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
-import type { JudgeView } from "@/lib/sessions";
+import { fmtNumber } from "@/lib/format";
+import type { JudgeStepView, JudgeView } from "@/lib/sessions";
 
 const ANALYSIS_SECTIONS: Array<{ key: string; label: string }> = [
   { key: "consensus", label: "Consensus" },
@@ -39,13 +41,53 @@ function UsageChip({ usage }: { usage: Record<string, unknown> | undefined }) {
   if (typeof tokens !== "number") return null;
   return (
     <Badge variant="outline" className="font-normal">
-      {tokens} tokens
+      {fmtNumber(tokens)} tokens
     </Badge>
   );
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-muted-foreground text-sm">{children}</p>;
+}
+
+function JudgePrompt({ prompt }: { prompt: JudgeView["prompt"] }) {
+  if (prompt === undefined) {
+    return <Empty>The judge prompt has not been captured yet.</Empty>;
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {prompt.judgeModel ? (
+          <Badge variant="secondary" className="mono font-normal">
+            {prompt.judgeModel}
+          </Badge>
+        ) : null}
+        {prompt.trajectoryIds && prompt.trajectoryIds.length > 0 ? (
+          <Badge variant="outline" className="font-normal">
+            {prompt.trajectoryIds.length} candidate trajectories
+          </Badge>
+        ) : null}
+      </div>
+      {prompt.messages !== undefined ? (
+        <div>
+          <div className="text-muted-foreground mb-1 text-xs">Conversation sent to the judge</div>
+          <JsonView data={prompt.messages} maxHeight="300px" />
+        </div>
+      ) : null}
+      {prompt.trajectories !== undefined ? (
+        <div>
+          <div className="text-muted-foreground mb-1 text-xs">Candidate trajectories the judge fuses</div>
+          <JsonView data={prompt.trajectories} maxHeight="300px" />
+        </div>
+      ) : null}
+      {prompt.tools !== undefined ? (
+        <div>
+          <div className="text-muted-foreground mb-1 text-xs">Tools offered to the judge</div>
+          <JsonView data={prompt.tools} maxHeight="240px" />
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function AnalysisSections({ analysis }: { analysis: Record<string, unknown> | undefined }) {
@@ -71,7 +113,76 @@ function AnalysisSections({ analysis }: { analysis: Record<string, unknown> | un
   );
 }
 
-export function JudgeViewPanel({ judge }: { judge: JudgeView }) {
+function groupByTurn(steps: JudgeStepView[]): Array<{ turn?: number; steps: JudgeStepView[] }> {
+  const groups: Array<{ turn?: number; steps: JudgeStepView[] }> = [];
+  for (const step of steps) {
+    const last = groups[groups.length - 1];
+    if (last !== undefined && last.turn === step.turn) last.steps.push(step);
+    else groups.push({ turn: step.turn, steps: [step] });
+  }
+  return groups;
+}
+
+function StepCard({ step }: { step: JudgeStepView }) {
+  const text = step.final?.finalOutput ?? step.final?.content ?? step.thinking?.raw;
+  const messages = step.prompt?.messages;
+  const trajectoryCount = step.prompt?.trajectoryIds?.length ?? 0;
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={step.kind === "final" ? "secondary" : "outline"} className="font-normal capitalize">
+          {step.kind}
+        </Badge>
+        {step.final?.decision ? (
+          <Badge variant="outline" className="font-normal capitalize">
+            {step.final.decision.replace(/_/g, " ")}
+          </Badge>
+        ) : null}
+        {trajectoryCount > 0 ? (
+          <Badge variant="outline" className="font-normal">
+            {trajectoryCount} trajectories
+          </Badge>
+        ) : null}
+        <UsageChip usage={step.final?.usage ?? step.thinking?.usage} />
+      </div>
+      {text ? (
+        <CodeBlock value={text} viewportClassName="max-h-[260px]" />
+      ) : (
+        <Empty>No output captured for this step.</Empty>
+      )}
+      {messages !== undefined ? (
+        <div>
+          <div className="text-muted-foreground mb-1 text-xs">Prompt sent this turn</div>
+          <JsonView data={messages} maxHeight="200px" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function JudgeTurns({ steps }: { steps: JudgeStepView[] }) {
+  if (steps.length === 0) {
+    return <Empty>No judge turns captured yet.</Empty>;
+  }
+  return (
+    <div className="space-y-5">
+      {groupByTurn(steps).map((group, index) => (
+        <div key={index} className="space-y-2">
+          <div className="text-muted-foreground text-xs">
+            Turn {index + 1}
+            {group.turn !== undefined ? ` · judge turn ${group.turn}` : ""} · {group.steps.length} step
+            {group.steps.length === 1 ? "" : "s"}
+          </div>
+          {group.steps.map((step) => (
+            <StepCard key={step.spanId} step={step} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function JudgeViewPanel({ judge, steps = [] }: { judge: JudgeView; steps?: JudgeStepView[] }) {
   const ranks = ranksOf(judge.scored?.metrics);
 
   return (
@@ -80,13 +191,23 @@ export function JudgeViewPanel({ judge }: { judge: JudgeView }) {
         <CardTitle className="text-base">Judge</CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="thinking">
+        <Tabs defaultValue="turns">
           <TabsList className="mb-4">
+            <TabsTrigger value="turns">Turns</TabsTrigger>
+            <TabsTrigger value="prompt">Prompt</TabsTrigger>
             <TabsTrigger value="thinking">Thinking</TabsTrigger>
             <TabsTrigger value="scored">Scored</TabsTrigger>
             <TabsTrigger value="synthesis">Synthesis</TabsTrigger>
             <TabsTrigger value="final">Final</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="turns" className="space-y-3">
+            <JudgeTurns steps={steps} />
+          </TabsContent>
+
+          <TabsContent value="prompt" className="space-y-3">
+            <JudgePrompt prompt={judge.prompt} />
+          </TabsContent>
 
           <TabsContent value="thinking" className="space-y-3">
             {judge.thinking?.raw ? (
@@ -99,9 +220,7 @@ export function JudgeViewPanel({ judge }: { judge: JudgeView }) {
                   ) : null}
                   <UsageChip usage={judge.thinking.usage} />
                 </div>
-                <ScrollArea viewportClassName="max-h-[440px] pr-3">
-                  <pre className="mono text-xs leading-relaxed">{judge.thinking.raw}</pre>
-                </ScrollArea>
+                <CodeBlock value={judge.thinking.raw} viewportClassName="max-h-[440px]" />
               </>
             ) : (
               <Empty>The judge has not produced its analysis yet.</Empty>
@@ -154,9 +273,7 @@ export function JudgeViewPanel({ judge }: { judge: JudgeView }) {
                   ) : null}
                   <UsageChip usage={judge.synthesis.usage} />
                 </div>
-                <ScrollArea viewportClassName="max-h-[440px] pr-3">
-                  <pre className="mono text-xs leading-relaxed">{judge.synthesis.raw}</pre>
-                </ScrollArea>
+                <CodeBlock value={judge.synthesis.raw} viewportClassName="max-h-[440px]" />
               </>
             ) : (
               <Empty>No synthesis reasoning captured yet.</Empty>
@@ -179,6 +296,7 @@ export function JudgeViewPanel({ judge }: { judge: JudgeView }) {
                       {judge.final.selectedCandidateId}
                     </Badge>
                   ) : null}
+                  <UsageChip usage={judge.final.usage} />
                 </div>
                 {judge.final.rationale ? (
                   <div>
@@ -186,14 +304,9 @@ export function JudgeViewPanel({ judge }: { judge: JudgeView }) {
                     <p className="text-sm leading-relaxed">{judge.final.rationale}</p>
                   </div>
                 ) : null}
-                {judge.final.finalOutput ? (
-                  <div>
-                    <div className="text-muted-foreground mb-1 text-xs">Final output</div>
-                    <pre className="bg-muted/40 mono rounded-md p-3 text-xs leading-relaxed">
-                      {judge.final.finalOutput}
-                    </pre>
-                  </div>
-                ) : null}
+                <p className="text-muted-foreground text-xs">
+                  The judge&apos;s final output is shown in the Final output panel below.
+                </p>
               </>
             )}
           </TabsContent>

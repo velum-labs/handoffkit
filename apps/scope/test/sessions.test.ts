@@ -54,6 +54,116 @@ test("deriveSession folds a full session into structured detail", () => {
   assert.ok(detail.durationMs > 0);
 });
 
+test("deriveSession surfaces the judge prompt and full panel prompts", () => {
+  const mk = (partial: Omit<StoredEvent, "schema" | "trace_id">): StoredEvent => ({
+    schema: "fusion-trace-event.v1",
+    trace_id: "trace_prompts",
+    ...partial
+  });
+  const events: StoredEvent[] = [
+    mk({
+      id: 1,
+      span_id: "s_call",
+      seq: 0,
+      ts: 1,
+      component: "panel-model",
+      event_type: "model.call.started",
+      candidate_id: "c1",
+      model_id: "m1",
+      payload: { model: "m1", system_prompt: "SYSTEM", prompt: "TASK", tools: ["run"] }
+    }),
+    mk({
+      id: 2,
+      span_id: "s_call",
+      seq: 1,
+      ts: 2,
+      component: "panel-model",
+      event_type: "model.call.finished",
+      candidate_id: "c1",
+      model_id: "m1",
+      payload: { model: "m1", final_output: "DONE", finish_reason: "stop", latency_s: 0.1, usage: { total_tokens: 10 } }
+    }),
+    mk({
+      id: 3,
+      span_id: "s_judge",
+      seq: 2,
+      ts: 3,
+      component: "judge",
+      event_type: "judge.request",
+      payload: {
+        judge_model: "j",
+        messages: [{ role: "user", content: "hi" }],
+        trajectories: [{ trajectory_id: "c1" }],
+        tools: [],
+        trajectory_ids: ["c1"]
+      }
+    }),
+    mk({
+      id: 4,
+      span_id: "s_judge",
+      seq: 3,
+      ts: 4,
+      component: "judge",
+      event_type: "judge.final",
+      payload: { content: "FUSED", usage: { total_tokens: 7 } }
+    })
+  ];
+
+  const detail = deriveSession("trace_prompts", events);
+  const candidate = detail.candidates.find((entry) => entry.candidateId === "c1");
+  assert.equal(candidate?.systemPrompt, "SYSTEM");
+  assert.equal(candidate?.prompt, "TASK");
+  assert.equal(candidate?.finalOutput, "DONE");
+  assert.equal(detail.modelCalls.find((entry) => entry.candidateId === "c1")?.status, "succeeded");
+  assert.equal(detail.judge.prompt?.judgeModel, "j");
+  assert.deepEqual(detail.judge.prompt?.trajectoryIds, ["c1"]);
+  assert.equal(detail.judge.final?.content, "FUSED");
+  assert.match(detail.finalOutput ?? "", /FUSED/);
+});
+
+test("deriveSession preserves per-step judge history across turns", () => {
+  const mk = (partial: Omit<StoredEvent, "schema" | "trace_id">): StoredEvent => ({
+    schema: "fusion-trace-event.v1",
+    trace_id: "trace_turns",
+    ...partial
+  });
+  const events: StoredEvent[] = [
+    mk({ id: 1, span_id: "j1", seq: 0, ts: 1, component: "judge", event_type: "judge.request", payload: { messages: [], trajectories: [], turn: 1 } }),
+    mk({ id: 2, span_id: "j1", seq: 1, ts: 2, component: "judge", event_type: "judge.thinking", payload: { raw_analysis: "calling a tool", tool_calls: [{ id: "t" }], turn: 1 } }),
+    mk({ id: 3, span_id: "j2", seq: 2, ts: 3, component: "judge", event_type: "judge.request", payload: { messages: [], trajectories: [], turn: 1 } }),
+    mk({ id: 4, span_id: "j2", seq: 3, ts: 4, component: "judge", event_type: "judge.final", payload: { content: "answer one", turn: 1 } }),
+    mk({ id: 5, span_id: "j3", seq: 4, ts: 5, component: "judge", event_type: "judge.request", payload: { messages: [], trajectories: [], turn: 2 } }),
+    mk({ id: 6, span_id: "j3", seq: 5, ts: 6, component: "judge", event_type: "judge.final", payload: { content: "answer two", turn: 2 } })
+  ];
+
+  const detail = deriveSession("trace_turns", events);
+  assert.equal(detail.judgeSteps.length, 3);
+  assert.equal(detail.judgeSteps[0].kind, "intermediate");
+  assert.equal(detail.judgeSteps[0].turn, 1);
+  assert.equal(detail.judgeSteps[1].kind, "final");
+  assert.equal(detail.judgeSteps[1].final?.content, "answer one");
+  assert.equal(detail.judgeSteps[2].turn, 2);
+  assert.equal(detail.judgeSteps[2].final?.content, "answer two");
+  // The last-wins summary still reflects the most recent turn.
+  assert.match(detail.finalOutput ?? "", /answer two/);
+});
+
+test("deriveSession attributes candidates to their user turn", () => {
+  const mk = (partial: Omit<StoredEvent, "schema" | "trace_id">): StoredEvent => ({
+    schema: "fusion-trace-event.v1",
+    trace_id: "trace_cand_turns",
+    ...partial
+  });
+  const events: StoredEvent[] = [
+    mk({ id: 1, span_id: "c1", seq: 0, ts: 1, component: "panel-model", event_type: "harness.candidate.started", candidate_id: "t1_gpt", model_id: "gpt", payload: { model: "gpt", turn: 1 } }),
+    mk({ id: 2, span_id: "c2", seq: 1, ts: 2, component: "panel-model", event_type: "harness.candidate.started", candidate_id: "t2_gpt", model_id: "gpt", payload: { model: "gpt", turn: 2 } })
+  ];
+
+  const detail = deriveSession("trace_cand_turns", events);
+  assert.equal(detail.candidates.find((c) => c.candidateId === "t1_gpt")?.turn, 1);
+  assert.equal(detail.candidates.find((c) => c.candidateId === "t2_gpt")?.turn, 2);
+});
+
 test("deriveSession is resilient to a partial (still-running) session", () => {
   const events = syntheticSession("trace_partial")
     .filter((event) => event.event_type !== "session.finished" && !event.event_type.startsWith("judge"))

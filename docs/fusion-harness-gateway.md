@@ -47,7 +47,7 @@ the request's natural shape and **first person**:
 so every way you use the tool works — not just patch-shaped requests. The synthesis
 backend requires a FusionKit checkout (`--fusionkit-dir` / `WARRANT_FUSIONKIT_DIR`),
 which `warrant fusion` runs for you; pass `--synthesis-url` to reuse an already-running
-`fusionkit serve`, or `--harness command` for the legacy one-shot solve agent.
+`fusionkit serve`.
 
 By default it materializes a real sample repo; point it at your own with
 `--repo`. Useful flags:

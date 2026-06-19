@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { CodeBlock } from "@/components/scope/code-block";
 import { EmptyState } from "@/components/scope/empty-state";
 import { EnvironmentCard } from "@/components/scope/environment-card";
 import { JudgeViewPanel } from "@/components/scope/judge-view";
@@ -75,7 +76,7 @@ export default function SessionDetailPage() {
 
             <TrajectoryViewer candidates={session.candidates} />
 
-            <JudgeViewPanel judge={session.judge} />
+            <JudgeViewPanel judge={session.judge} steps={session.judgeSteps} />
 
             {session.finalOutput ? (
               <Card>
@@ -83,9 +84,7 @@ export default function SessionDetailPage() {
                   <CardTitle className="text-base">Final output</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="bg-muted/40 mono rounded-md p-4 text-sm leading-relaxed">
-                    {session.finalOutput}
-                  </pre>
+                  <CodeBlock value={session.finalOutput} muted className="p-4" />
                 </CardContent>
               </Card>
             ) : null}

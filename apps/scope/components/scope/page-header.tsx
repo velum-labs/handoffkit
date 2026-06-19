@@ -36,7 +36,7 @@ export function LiveDot({ active, label = "live" }: { active: boolean; label?: s
     <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
       <span className="relative flex size-2">
         {active ? (
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60 motion-reduce:animate-none" />
         ) : null}
         <span
           className={cn(

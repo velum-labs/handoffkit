@@ -84,6 +84,11 @@ export class MlxBackend implements Backend {
     this.#startPromise = undefined;
   }
 
+  /** Backend lifecycle hook: a gateway owning this backend tears the server down. */
+  async close(): Promise<void> {
+    await this.stop();
+  }
+
   async #ready(): Promise<OpenAiBackend> {
     await this.start();
     if (this.#inner === undefined) {

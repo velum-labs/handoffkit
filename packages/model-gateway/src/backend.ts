@@ -18,6 +18,8 @@ export type Backend = {
   models(signal?: AbortSignal): Promise<Response>;
   /** POST <base>/embeddings. */
   embeddings(body: unknown, signal?: AbortSignal): Promise<Response>;
+  /** Release any owned resources (e.g. a managed model process). Optional. */
+  close?(): Promise<void> | void;
 };
 
 export type BackendRequestOptions = {

@@ -39,6 +39,7 @@ export type FusionTraceEventType =
   | "trajectory.step"
   | "model.call.started"
   | "model.call.finished"
+  | "judge.request"
   | "judge.thinking"
   | "judge.scored"
   | "judge.synthesis"
@@ -46,6 +47,35 @@ export type FusionTraceEventType =
   | "tool.execution"
   | "cursor.route"
   | "log";
+
+/** Runtime-iterable mirrors of the closed unions (used by the validator). */
+export const FUSION_TRACE_COMPONENTS: readonly FusionTraceComponent[] = [
+  "gateway",
+  "ensemble",
+  "agent",
+  "panel-model",
+  "judge",
+  "synthesis",
+  "cursor-bridge"
+];
+
+export const FUSION_TRACE_EVENT_TYPES: readonly FusionTraceEventType[] = [
+  "session.started",
+  "session.finished",
+  "harness.candidate.started",
+  "harness.candidate.finished",
+  "trajectory.step",
+  "model.call.started",
+  "model.call.finished",
+  "judge.request",
+  "judge.thinking",
+  "judge.scored",
+  "judge.synthesis",
+  "judge.final",
+  "tool.execution",
+  "cursor.route",
+  "log"
+];
 
 export type FusionTraceEvent = {
   schema: typeof FUSION_TRACE_EVENT_SCHEMA;
@@ -168,4 +198,157 @@ export function getTraceEmitter(): TraceEmitter {
 
 export function emitTrace(input: EmitInput): void {
   getTraceEmitter().emit(input);
+}
+
+// ---- runtime validation (the formalized fusion-trace-event.v1 contract) ----
+
+function fail(message: string): never {
+  throw new Error(`invalid fusion-trace-event.v1: ${message}`);
+}
+
+/**
+ * Assert that `value` is a well-formed wire `FusionTraceEvent`. Hand-written
+ * (Node-only, no deps) to match the `assertModelFusionRecord` style, so both the
+ * emitter side and the scope ingest boundary validate against one contract.
+ */
+export function assertFusionTraceEvent(value: unknown): asserts value is FusionTraceEvent {
+  if (typeof value !== "object" || value === null) fail("event must be an object");
+  const event = value as Record<string, unknown>;
+  if (event.schema !== FUSION_TRACE_EVENT_SCHEMA) fail(`schema must be "${FUSION_TRACE_EVENT_SCHEMA}"`);
+  if (typeof event.trace_id !== "string" || event.trace_id.length === 0) fail("trace_id must be a non-empty string");
+  if (typeof event.span_id !== "string" || event.span_id.length === 0) fail("span_id must be a non-empty string");
+  if (typeof event.seq !== "number" || !Number.isFinite(event.seq)) fail("seq must be a finite number");
+  if (typeof event.ts !== "number" || !Number.isFinite(event.ts)) fail("ts must be a finite number");
+  if (!FUSION_TRACE_COMPONENTS.includes(event.component as FusionTraceComponent)) {
+    fail(`unknown component "${String(event.component)}"`);
+  }
+  if (!FUSION_TRACE_EVENT_TYPES.includes(event.event_type as FusionTraceEventType)) {
+    fail(`unknown event_type "${String(event.event_type)}"`);
+  }
+  if (event.parent_span_id !== undefined && typeof event.parent_span_id !== "string") {
+    fail("parent_span_id must be a string when present");
+  }
+  for (const key of ["session_id", "candidate_id", "model_id"] as const) {
+    if (event[key] !== undefined && typeof event[key] !== "string") fail(`${key} must be a string when present`);
+  }
+  if (
+    event.payload !== undefined &&
+    (typeof event.payload !== "object" || event.payload === null || Array.isArray(event.payload))
+  ) {
+    fail("payload must be a plain object when present");
+  }
+}
+
+export function isFusionTraceEvent(value: unknown): value is FusionTraceEvent {
+  try {
+    assertFusionTraceEvent(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ---- typed per-event payload builders (snake_case wire shape) ----
+//
+// One builder per emitted event keeps payload field names consistent across
+// every emit site and documents exactly what each event carries. The scope
+// collector reads these field names directly.
+
+export function judgeRequestPayload(input: {
+  judgeModel?: string;
+  messages: unknown;
+  trajectories: unknown;
+  tools?: unknown;
+  toolChoice?: unknown;
+  trajectoryIds?: string[];
+  /** 1-based user-turn index (a follow-up message is a new turn). */
+  turn?: number;
+}): Record<string, unknown> {
+  return {
+    ...(input.judgeModel !== undefined ? { judge_model: input.judgeModel } : {}),
+    messages: input.messages,
+    trajectories: input.trajectories,
+    ...(input.tools !== undefined ? { tools: input.tools } : {}),
+    ...(input.toolChoice !== undefined ? { tool_choice: input.toolChoice } : {}),
+    ...(input.trajectoryIds !== undefined ? { trajectory_ids: input.trajectoryIds } : {}),
+    ...(input.turn !== undefined ? { turn: input.turn } : {})
+  };
+}
+
+/** An intermediate (tool-calling) judge step within a turn. */
+export function judgeThinkingPayload(input: {
+  rawAnalysis?: string;
+  toolCalls?: unknown;
+  usage?: unknown;
+  turn?: number;
+}): Record<string, unknown> {
+  return {
+    ...(input.rawAnalysis !== undefined ? { raw_analysis: input.rawAnalysis } : {}),
+    ...(input.toolCalls !== undefined ? { tool_calls: input.toolCalls } : {}),
+    ...(input.usage !== undefined ? { usage: input.usage } : {}),
+    ...(input.turn !== undefined ? { turn: input.turn } : {})
+  };
+}
+
+export function judgeFinalPayload(input: {
+  finalOutput?: string;
+  content?: string;
+  toolCalls?: unknown;
+  usage?: unknown;
+  httpStatus?: number;
+  error?: string;
+  turn?: number;
+}): Record<string, unknown> {
+  const finalOutput = input.finalOutput ?? input.content;
+  return {
+    ...(finalOutput !== undefined ? { final_output: finalOutput, record: { final_output: finalOutput } } : {}),
+    ...(input.content !== undefined ? { content: input.content } : {}),
+    ...(input.toolCalls !== undefined ? { tool_calls: input.toolCalls } : {}),
+    ...(input.usage !== undefined ? { usage: input.usage } : {}),
+    ...(input.httpStatus !== undefined ? { http_status: input.httpStatus } : {}),
+    ...(input.error !== undefined ? { error: input.error } : {}),
+    ...(input.turn !== undefined ? { turn: input.turn } : {})
+  };
+}
+
+export function modelCallStartedPayload(input: {
+  model: string;
+  systemPrompt?: string;
+  prompt?: string;
+  tools?: string[];
+  turn?: number;
+}): Record<string, unknown> {
+  return {
+    model: input.model,
+    ...(input.systemPrompt !== undefined ? { system_prompt: input.systemPrompt } : {}),
+    ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+    ...(input.tools !== undefined ? { tools: input.tools } : {}),
+    ...(input.turn !== undefined ? { turn: input.turn } : {})
+  };
+}
+
+export function modelCallFinishedPayload(input: {
+  model: string;
+  finalOutput?: string;
+  usage?: unknown;
+  finishReason?: string;
+  stepCount?: number;
+  toolCallCount?: number;
+  latencyS?: number;
+  error?: string;
+  turn?: number;
+}): Record<string, unknown> {
+  return {
+    model: input.model,
+    ...(input.finalOutput !== undefined
+      ? { final_output: input.finalOutput, content_preview: input.finalOutput.slice(0, 280) }
+      : {}),
+    ...(input.usage !== undefined ? { usage: input.usage } : {}),
+    ...(input.finishReason !== undefined ? { finish_reason: input.finishReason } : {}),
+    ...(input.stepCount !== undefined ? { step_count: input.stepCount } : {}),
+    ...(input.toolCallCount !== undefined ? { tool_call_count: input.toolCallCount } : {}),
+    ...(input.latencyS !== undefined ? { latency_s: input.latencyS } : {}),
+    ...(input.error !== undefined ? { error: input.error } : {}),
+    ...(input.turn !== undefined ? { turn: input.turn } : {})
+  };
 }

@@ -16,6 +16,9 @@ import type {
  * trajectories are directly comparable and only the model varies.
  */
 
+/** Wall-clock budget for a single panel model's agent run (model + tools). */
+const DEFAULT_MODEL_TIMEOUT_MS = 10 * 60 * 1000;
+
 export type AgentHarnessOptions = {
   id?: string;
   /** Per-candidate OpenAI-compatible base URL keyed by `EnsembleModel.id`. */
@@ -24,9 +27,16 @@ export type AgentHarnessOptions = {
   fallbackBaseUrl?: string;
   apiKey?: string;
   maxSteps?: number;
+  /** Per-`run` shell-command timeout (ms). */
   timeoutMs?: number;
+  /** Overall wall-clock budget for one model's agent run (ms). */
+  modelTimeoutMs?: number;
   /** Observability correlation id; when set, each candidate is traced. */
   traceId?: string;
+  /** Session root span; candidate spans parent under it for a correct tree. */
+  parentSpanId?: string;
+  /** User-turn index this panel run belongs to (stamped on candidate events). */
+  turn?: number;
 };
 
 /**
@@ -36,8 +46,11 @@ export type AgentHarnessOptions = {
 function deriveVerification(steps: TrajectoryStep[]): TrajectoryVerification | undefined {
   let lastExitCode: number | undefined;
   for (const step of steps) {
+    // The `run` tool always prefixes its observation with `exit_code=<n>`; anchor
+    // to the start so unrelated tool output that happens to contain the substring
+    // cannot be mistaken for a command result.
     if (step.type === "observation" && typeof step.text === "string") {
-      const match = step.text.match(/exit_code=(-?\d+)/);
+      const match = step.text.match(/^exit_code=(-?\d+)/);
       if (match) lastExitCode = Number(match[1]);
     }
   }
@@ -72,34 +85,43 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
       }
       const root = worktree?.path ?? process.cwd();
       const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
+      const executionId = `exec_${candidateId}`;
+      const planId = `plan_${candidateId}`;
       const traceId = options.traceId;
       const candidateSpan = newSpanId();
       if (traceId !== undefined) {
         emitTrace({
-          component: "ensemble",
+          component: "panel-model",
           event_type: "harness.candidate.started",
           traceId,
           spanId: candidateSpan,
+          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
           candidateId,
           modelId: model.id,
           payload: {
             model: model.model,
+            ...(options.turn !== undefined ? { turn: options.turn } : {}),
             ...(worktree ? { branch_name: worktree.branchName, worktree_path: worktree.path } : {})
           }
         });
       }
+      // Bound the whole agent run so a hung model HTTP call cannot wedge a
+      // candidate forever (the per-command timeout only bounds `run`).
+      const modelTimeoutMs = options.modelTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS;
       const result = await runWorktreeAgent({
         worktree: root,
         prompt: descriptor.prompt,
         baseUrl,
         model: model.model,
+        abortSignal: AbortSignal.timeout(modelTimeoutMs),
+        ...(options.turn !== undefined ? { turn: options.turn } : {}),
         ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
         ...(options.maxSteps !== undefined ? { maxSteps: options.maxSteps } : {}),
         ...(options.timeoutMs !== undefined ? { commandTimeoutMs: options.timeoutMs } : {}),
         ...(traceId !== undefined ? { traceId, candidateId, parentSpanId: candidateSpan } : {})
       });
 
-      const steps = result.steps as TrajectoryStep[];
+      const steps: TrajectoryStep[] = result.steps;
       const status: HarnessCandidateOutput["status"] = result.status === "failed" ? "failed" : "succeeded";
       const verification = deriveVerification(steps);
       const trajectory: HarnessTrajectory = {
@@ -118,7 +140,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
       const outputHash = artifactHash(transcript);
       if (traceId !== undefined) {
         emitTrace({
-          component: "ensemble",
+          component: "panel-model",
           event_type: "harness.candidate.finished",
           traceId,
           spanId: candidateSpan,
@@ -126,6 +148,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
           modelId: model.id,
           payload: {
             status,
+            ...(options.turn !== undefined ? { turn: options.turn } : {}),
             tool_call_count: result.toolCallCount,
             finish_reason: result.finishReason,
             step_count: steps.length,
@@ -134,16 +157,17 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
           }
         });
         emitTrace({
-          component: "ensemble",
+          component: "panel-model",
           event_type: "tool.execution",
           traceId,
           spanId: candidateSpan,
           candidateId,
           modelId: model.id,
           payload: {
-            execution_id: `exec_${descriptor.id}_${model.id}_${ordinal}`,
-            plan_id: `plan_${descriptor.id}_${model.id}_${ordinal}`,
+            execution_id: executionId,
+            plan_id: planId,
             status,
+            ...(options.turn !== undefined ? { turn: options.turn } : {}),
             output_hash: outputHash,
             tool_call_count: result.toolCallCount
           }
@@ -168,8 +192,8 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         ],
         toolRecords: [
           {
-            execution_id: `exec_${descriptor.id}_${model.id}_${ordinal}`,
-            plan_id: `plan_${descriptor.id}_${model.id}_${ordinal}`,
+            execution_id: executionId,
+            plan_id: planId,
             status,
             output_hash: outputHash
           }

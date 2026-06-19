@@ -1,238 +1,220 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 
-import { startGateway } from "../server.js";
 import { FusionBackend } from "../fusion-backend.js";
-import type { PanelRunInput, WireTrajectory } from "../fusion-backend.js";
+import type { WireTrajectory } from "../fusion-backend.js";
 
-/**
- * A stand-in FusionKit `trajectory:step`: it records every request and replies
- * with a scripted OpenAI chat completion. The script emits a tool call until it
- * sees a tool result in the conversation, then returns the final answer — so a
- * driver can run the full front-door agent loop deterministically.
- */
-async function startFakeStepServer(): Promise<{
-  url: string;
-  requests: Array<Record<string, unknown>>;
-  close: () => Promise<void>;
-}> {
-  const requests: Array<Record<string, unknown>> = [];
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.on("end", () => {
-      const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
-        messages?: Array<{ role: string }>;
-        trajectories?: unknown[];
-      };
-      requests.push(body as Record<string, unknown>);
-      const sawToolResult = (body.messages ?? []).some((message) => message.role === "tool");
-      const completion = sawToolResult
-        ? {
-            id: "chatcmpl-final",
-            object: "chat.completion",
-            created: 0,
-            model: "fusion-panel",
-            choices: [
-              { index: 0, message: { role: "assistant", content: "DONE: applied the fix" }, finish_reason: "stop" }
-            ],
-            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
-          }
-        : {
-            id: "chatcmpl-tool",
-            object: "chat.completion",
-            created: 0,
-            model: "fusion-panel",
-            choices: [
-              {
-                index: 0,
-                message: {
-                  role: "assistant",
-                  content: "",
-                  tool_calls: [
-                    {
-                      id: "call_1",
-                      type: "function",
-                      function: { name: "write_file", arguments: '{"path":"calculator.js"}' }
-                    }
-                  ]
-                },
-                finish_reason: "tool_calls"
-              }
-            ],
-            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
-          };
-      const payload = JSON.stringify(completion);
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(payload);
-    });
+function candidate(modelId: string, status = "succeeded"): WireTrajectory {
+  return { trajectory_id: `t_${modelId}`, model_id: modelId, status, final_output: "ok" };
+}
+
+const UNREACHABLE_STEP = "http://127.0.0.1:1/v1/fusion/trajectory:step";
+
+type StepServer = { url: string; calls: () => number; close: () => Promise<void> };
+
+async function startStepServer(
+  handler: (req: IncomingMessage, res: ServerResponse) => void
+): Promise<StepServer> {
+  let calls = 0;
+  const server = createServer((req, res) => {
+    calls += 1;
+    handler(req, res);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const port = (server.address() as AddressInfo).port;
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
   return {
-    url: `http://127.0.0.1:${port}`,
-    requests,
-    close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    url: `http://127.0.0.1:${port}/v1/fusion/trajectory:step`,
+    calls: () => calls,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve()))
   };
 }
 
-const CANDIDATES: WireTrajectory[] = [
-  { trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", final_output: "fixed via +" },
-  { trajectory_id: "t_opus", model_id: "opus", status: "succeeded", final_output: "fixed and added a test" }
-];
+const userTurn = { messages: [{ role: "user", content: "do the task" }] };
 
-/** A streaming `trajectory:step` stand-in that emits a keepalive comment + a tool_call chunk. */
-async function startStreamingStepServer(): Promise<{ url: string; close: () => Promise<void> }> {
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.on("end", () => {
-      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
-      res.write(": keepalive\n\n");
-      res.write(
-        'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_x","type":"function","function":{"name":"write_file","arguments":"{}"}}]},"finish_reason":null}]}\n\n'
-      );
-      res.write('data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n');
-      res.write("data: [DONE]\n\n");
-      res.end();
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const port = (server.address() as AddressInfo).port;
-  return {
-    url: `http://127.0.0.1:${port}`,
-    close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
-  };
-}
-
-test("fusion front door runs panels once and loops tool calls to a final answer", async () => {
-  const step = await startFakeStepServer();
-  let panelRuns = 0;
-  const panelInputs: PanelRunInput[] = [];
-
+test("non-streaming panel failure returns an error and does not cache the session", async () => {
+  let panelCalls = 0;
   const backend = new FusionBackend({
-    stepUrl: `${step.url}/v1/fusion/trajectory:step`,
-    defaultModel: "fusion-panel",
-    mintTraceId: () => "trace_test",
-    runPanels: async (input) => {
-      panelRuns += 1;
-      panelInputs.push(input);
-      return CANDIDATES;
+    stepUrl: UNREACHABLE_STEP,
+    runPanels: async () => {
+      panelCalls += 1;
+      throw new Error("panel boom");
     }
   });
+  const first = await backend.chat({ ...userTurn, stream: false });
+  assert.equal(first.status, 502);
+  const body = (await first.json()) as { error?: { message?: string } };
+  assert.match(body.error?.message ?? "", /panel boom/);
 
-  const gateway = await startGateway({ backend, host: "127.0.0.1", port: 0 });
-  const url = `${gateway.url()}/v1/chat/completions`;
-  const tools = [
-    { type: "function", function: { name: "write_file", parameters: { type: "object", properties: {} } } }
-  ];
+  // The failed session is evicted, so the next turn re-runs the panel.
+  const second = await backend.chat({ ...userTurn, stream: false });
+  assert.equal(second.status, 502);
+  assert.equal(panelCalls, 2);
+});
 
+test("non-streaming empty candidates is an error, not a blank success", async () => {
+  const backend = new FusionBackend({ stepUrl: UNREACHABLE_STEP, runPanels: async () => [] });
+  const res = await backend.chat({ ...userTurn, stream: false });
+  assert.equal(res.status, 502);
+});
+
+test("non-streaming all-failed candidates is an error", async () => {
+  const backend = new FusionBackend({
+    stepUrl: UNREACHABLE_STEP,
+    runPanels: async () => [candidate("a", "failed"), candidate("b", "failed")]
+  });
+  const res = await backend.chat({ ...userTurn, stream: false });
+  assert.equal(res.status, 502);
+});
+
+test("non-streaming success forwards the trajectory:step response and runs panels once", async () => {
+  const step = await startStepServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "fused" } }] }));
+  });
   try {
-    // Turn 1: initial task -> the judge proposes a tool call.
-    const first = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: "fusion-panel",
-        tools,
-        messages: [
-          { role: "system", content: "You are a coding agent." },
-          { role: "user", content: "Fix the add() bug in calculator.js" }
-        ]
-      })
+    let panelCalls = 0;
+    const backend = new FusionBackend({
+      stepUrl: step.url,
+      runPanels: async () => {
+        panelCalls += 1;
+        return [candidate("a")];
+      }
     });
-    assert.equal(first.status, 200);
-    const firstBody = (await first.json()) as {
-      choices: Array<{ message: { tool_calls?: Array<{ function: { name: string } }> }; finish_reason: string }>;
-    };
-    const firstChoice = firstBody.choices[0];
-    assert.ok(firstChoice);
-    assert.equal(firstChoice.finish_reason, "tool_calls");
-    assert.equal(firstChoice.message.tool_calls?.[0]?.function.name, "write_file");
+    const res = await backend.chat({ ...userTurn, stream: false });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { choices: Array<{ message: { content: string } }> };
+    assert.equal(body.choices[0]?.message.content, "fused");
 
-    // Turn 2: harness executed the tool and returns the result -> final answer.
-    const second = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: "fusion-panel",
-        tools,
-        messages: [
-          { role: "system", content: "You are a coding agent." },
-          { role: "user", content: "Fix the add() bug in calculator.js" },
-          {
-            role: "assistant",
-            content: "",
-            tool_calls: [
-              { id: "call_1", type: "function", function: { name: "write_file", arguments: '{"path":"calculator.js"}' } }
-            ]
-          },
-          { role: "tool", tool_call_id: "call_1", content: "exit_code=0\n1 passing" }
-        ]
-      })
-    });
-    assert.equal(second.status, 200);
-    const secondBody = (await second.json()) as {
-      choices: Array<{ message: { content: string }; finish_reason: string }>;
-    };
-    const secondChoice = secondBody.choices[0];
-    assert.ok(secondChoice);
-    assert.equal(secondChoice.finish_reason, "stop");
-    assert.match(secondChoice.message.content, /DONE/);
-
-    // Panels ran exactly once across both turns (session reuse by prefix).
-    assert.equal(panelRuns, 1);
-    const firstPanel = panelInputs[0];
-    assert.ok(firstPanel);
-    assert.equal(firstPanel.traceId, "trace_test");
-    assert.match(firstPanel.task, /add\(\) bug/);
-
-    // The judge step received the candidate trajectories and the harness tools.
-    const lastRequest = step.requests.at(-1) as { trajectories?: unknown[]; tools?: unknown[] };
-    assert.equal((lastRequest.trajectories ?? []).length, 2);
-    assert.ok(Array.isArray(lastRequest.tools) && lastRequest.tools.length === 1);
+    // A second turn with the same prefix reuses the cached panel run.
+    await (await backend.chat({ ...userTurn, stream: false })).json();
+    assert.equal(panelCalls, 1);
+    assert.equal(step.calls(), 2);
   } finally {
-    await gateway.close();
     await step.close();
   }
 });
 
-test("chat (cursor) front door streams tool_calls and keepalive through unchanged", async () => {
-  const step = await startStreamingStepServer();
-  const backend = new FusionBackend({
-    stepUrl: `${step.url}/v1/fusion/trajectory:step`,
-    defaultModel: "fusion-panel",
-    mintTraceId: () => "trace_chat",
-    runPanels: async () => CANDIDATES
+test("non-streaming surfaces a trajectory:step error status", async () => {
+  const step = await startStepServer((_req, res) => {
+    res.writeHead(500);
+    res.end("boom");
   });
-  const gateway = await startGateway({ backend, host: "127.0.0.1", port: 0 });
   try {
-    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: "fusion-panel",
-        stream: true,
-        tools: [{ type: "function", function: { name: "write_file", parameters: { type: "object", properties: {} } } }],
-        messages: [
-          { role: "system", content: "agent" },
-          { role: "user", content: "fix it" }
-        ]
-      })
-    });
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("content-type"), "text/event-stream");
-    const text = await response.text();
-    // The chat path is a pass-through, so the cursor bridge sees keepalive
-    // comments and tool_calls deltas exactly as produced.
-    assert.ok(text.includes(": keepalive"), "keepalive comments must pass through the chat path");
-    assert.ok(text.includes("write_file"), "tool_calls must pass through the chat path");
-    assert.ok(text.includes("[DONE]"));
+    const backend = new FusionBackend({ stepUrl: step.url, runPanels: async () => [candidate("a")] });
+    const res = await backend.chat({ ...userTurn, stream: false });
+    assert.equal(res.status, 500);
   } finally {
-    await gateway.close();
+    await step.close();
+  }
+});
+
+test("streaming panel failure emits a terminal error event and evicts the session", async () => {
+  let panelCalls = 0;
+  const backend = new FusionBackend({
+    stepUrl: UNREACHABLE_STEP,
+    runPanels: async () => {
+      panelCalls += 1;
+      throw new Error("panel boom");
+    }
+  });
+  const res = await backend.chat({ ...userTurn, stream: true });
+  assert.equal(res.status, 200);
+  const text = await res.text();
+  assert.match(text, /fusion error/);
+  assert.match(text, /"finish_reason":"error"/);
+  assert.match(text, /\[DONE\]/);
+
+  await (await backend.chat({ ...userTurn, stream: true })).text();
+  assert.equal(panelCalls, 2);
+});
+
+test("an already-aborted signal aborts the trajectory:step fetch", async () => {
+  const backend = new FusionBackend({ stepUrl: UNREACHABLE_STEP, runPanels: async () => [candidate("a")] });
+  await assert.rejects(() => backend.chat({ ...userTurn, stream: false }, AbortSignal.abort()));
+});
+
+test("expired sessions are evicted so panels re-run after the TTL", async () => {
+  const step = await startStepServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+  });
+  try {
+    let panelCalls = 0;
+    const backend = new FusionBackend({
+      stepUrl: step.url,
+      sessionTtlMs: 50,
+      runPanels: async () => {
+        panelCalls += 1;
+        return [candidate("a")];
+      }
+    });
+    await (await backend.chat({ ...userTurn, stream: false })).json();
+    await (await backend.chat({ ...userTurn, stream: false })).json();
+    assert.equal(panelCalls, 1, "within the TTL the panel run is cached");
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    await (await backend.chat({ ...userTurn, stream: false })).json();
+    assert.equal(panelCalls, 2, "after the TTL the session is evicted and panels re-run");
+  } finally {
+    await step.close();
+  }
+});
+
+test("the panel re-runs per user turn but is reused within a turn's tool loop", async () => {
+  const step = await startStepServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+  });
+  try {
+    let panelCalls = 0;
+    const turnsSeen: number[] = [];
+    const backend = new FusionBackend({
+      stepUrl: step.url,
+      runPanels: async (input) => {
+        panelCalls += 1;
+        turnsSeen.push(input.turn);
+        return [candidate(`c${input.turn}`)];
+      }
+    });
+    const system = { role: "system", content: "S" };
+    const first = { role: "user", content: "task one" };
+
+    // Turn 1: the first user message runs the panel.
+    await (await backend.chat({ messages: [system, first], stream: false })).json();
+    assert.equal(panelCalls, 1);
+
+    // Internal tool-loop continuation (same user-message count) reuses turn 1.
+    await (
+      await backend.chat({
+        messages: [
+          system,
+          first,
+          { role: "assistant", content: null, tool_calls: [{ id: "t", type: "function" }] },
+          { role: "tool", tool_call_id: "t", content: "tool result" }
+        ],
+        stream: false
+      })
+    ).json();
+    assert.equal(panelCalls, 1, "a tool-loop continuation reuses the turn's candidates");
+
+    // Follow-up user message: a new turn, so the panel runs again.
+    await (
+      await backend.chat({
+        messages: [
+          system,
+          first,
+          { role: "assistant", content: "answer one" },
+          { role: "user", content: "task two" }
+        ],
+        stream: false
+      })
+    ).json();
+    assert.equal(panelCalls, 2, "a follow-up user message re-runs the panel");
+    assert.deepEqual(turnsSeen, [1, 2], "each panel run is stamped with its user turn");
+  } finally {
     await step.close();
   }
 });

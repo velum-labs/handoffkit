@@ -177,9 +177,17 @@ export async function runJudgeSynthesis(input: RunSynthesisInput): Promise<Synth
   let finalPatchPath: string | null = null;
   let failureSummary: SynthesisFailureSummary | undefined;
   const repairAttempts: SynthesisRepairAttempt[] = [];
-  const worktree = createSynthesisWorktree(input);
+  // Create the synthesis worktree lazily: a capture-only synthesizer (the panel
+  // trajectory capture used by `runFusionPanels`) produces no patch and has no
+  // verify/repair, so it never touches a worktree — skip the git add/remove.
+  let worktree: string | undefined;
   try {
     const first = await synthesizer.synthesize(judgeInput);
+    const needsWorktree =
+      (first.patch?.content !== undefined && first.patch.content.length > 0) ||
+      synthesizer.verify !== undefined ||
+      synthesizer.repair !== undefined;
+    if (needsWorktree) worktree = createSynthesisWorktree(input);
     const applied = applyPatch(worktree, first.patch?.content);
     if (!applied) {
       const conflict = artifactRef(input.store.writeJson({

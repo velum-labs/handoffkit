@@ -14,8 +14,7 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
@@ -25,8 +24,17 @@ import type { EnsembleModel } from "@warrant/ensemble";
 import { MlxBackend, startGateway } from "@warrant/model-gateway";
 import type { Gateway } from "@warrant/model-gateway";
 
-import { gatewaySetupSnippets, startConfiguredGateway, startFusionStepGateway } from "./gateway.js";
+import { gatewaySetupSnippets, startFusionStepGateway } from "./gateway.js";
+import type { GatewayRunnerConfig } from "./gateway.js";
 import { claudeEnv, codexConfigToml } from "./local.js";
+import {
+  freePort,
+  spawnLogged,
+  spawnTool,
+  terminate,
+  waitForHttp,
+  waitForOutput
+} from "./shared/proc.js";
 
 export type FusionTool = "codex" | "claude" | "cursor" | "serve";
 
@@ -102,11 +110,6 @@ export function defaultKeyEnv(provider: PanelProvider): string | undefined {
   }
 }
 
-/** Absolute path to the compiled solve agent shipped alongside this module. */
-export function solveAgentPath(): string {
-  return fileURLToPath(new URL("./fusion-solve-agent.js", import.meta.url));
-}
-
 /** The git repository root containing `dir`, or undefined if it is not in a repo. */
 export function gitToplevel(dir: string): string | undefined {
   try {
@@ -139,23 +142,6 @@ export function findScopeAppDir(): string {
     dir = parent;
   }
   throw new Error("could not locate apps/scope relative to the handoffkit CLI");
-}
-
-/** Poll an HTTP endpoint until it answers (any status) or the child dies. */
-async function waitForHttpReady(url: string, child: ChildProcess, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastError = "";
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`dashboard exited (code ${child.exitCode}) before becoming ready`);
-    try {
-      await fetch(url);
-      return;
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 400));
-  }
-  throw new Error(`dashboard did not become ready within ${timeoutMs}ms (${lastError})`);
 }
 
 /** Best-effort: open a URL in the default browser (no-op on failure). */
@@ -199,21 +185,18 @@ export async function startObservability(input: { log: (line: string) => void })
   execFileSync(nextBin, ["build"], { cwd: scopeDir, stdio: "inherit", env: { ...process.env } });
 
   input.log("fusion: starting observability dashboard...");
-  const child = spawn(nextBin, ["start", "-p", String(SCOPE_DASHBOARD_PORT)], {
+  const proc = spawnLogged(nextBin, ["start", "-p", String(SCOPE_DASHBOARD_PORT)], {
     cwd: scopeDir,
-    env: { ...process.env, SCOPEKIT_DB: dbPath, FUSION_TRACE_DIR: traceDir },
-    stdio: ["ignore", "pipe", "pipe"]
+    env: { ...process.env, SCOPEKIT_DB: dbPath, FUSION_TRACE_DIR: traceDir }
   });
-  let output = "";
-  child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
-  child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
 
   const url = `http://127.0.0.1:${SCOPE_DASHBOARD_PORT}`;
   try {
-    await waitForHttpReady(url, child, 60_000);
+    await waitForHttp(url, proc, { timeoutMs: 60_000, label: "dashboard" });
   } catch (error) {
-    child.kill("SIGTERM");
-    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${output.slice(-500)}`);
+    terminate(proc.child);
+    rmSync(traceDir, { recursive: true, force: true });
+    throw error instanceof Error ? error : new Error(String(error));
   }
 
   return {
@@ -221,56 +204,10 @@ export async function startObservability(input: { log: (line: string) => void })
     ingestUrl: `${url}/api/ingest`,
     traceDir,
     close: async () => {
-      child.kill("SIGTERM");
+      terminate(proc.child);
+      rmSync(traceDir, { recursive: true, force: true });
     }
   };
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = typeof address === "object" && address !== null ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-}
-
-/**
- * Create a real git repo with a genuinely failing test, so each panel model has
- * a concrete coding task. Used when the caller does not pass their own --repo.
- */
-export function materializeSampleRepo(root: string): string {
-  mkdirSync(root, { recursive: true });
-  const git = (args: string[]): void => {
-    execFileSync("git", args, { cwd: root });
-  };
-  git(["init", "--quiet", "--initial-branch=main"]);
-  git(["config", "user.email", "fusion@warrant.local"]);
-  git(["config", "user.name", "warrant-fusion"]);
-  writeFileSync(
-    join(root, "package.json"),
-    JSON.stringify({ name: "fusion-sample", private: true, scripts: { test: "node --test" } }, null, 2) + "\n"
-  );
-  writeFileSync(join(root, "calculator.js"), "exports.add = (left, right) => left - right;\n");
-  writeFileSync(
-    join(root, "calculator.test.js"),
-    [
-      "const assert = require('node:assert/strict');",
-      "const { add } = require('./calculator.js');",
-      "assert.equal(add(2, 3), 5);",
-      ""
-    ].join("\n")
-  );
-  writeFileSync(
-    join(root, "README.md"),
-    "# fusion sample\n\n`add` is buggy (it subtracts); `npm test` fails until it is fixed.\n"
-  );
-  git(["add", "-A"]);
-  git(["commit", "--quiet", "-m", "failing calculator sample"]);
-  return root;
 }
 
 export type ModelServers = {
@@ -280,23 +217,6 @@ export type ModelServers = {
   models: EnsembleModel[];
   close: () => Promise<void>;
 };
-
-async function waitForEndpoint(url: string, label: string, child: ChildProcess, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastError = "";
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`${label} exited (code ${child.exitCode}) before becoming ready`);
-    try {
-      const response = await fetch(`${url}/v1/models`);
-      if (response.ok) return;
-      lastError = `status ${response.status}`;
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 400));
-  }
-  throw new Error(`${label} did not become ready within ${timeoutMs}ms (${lastError})`);
-}
 
 /**
  * Spawn FusionKit's single-endpoint OpenAI-compatible server for one cloud
@@ -331,19 +251,20 @@ async function spawnCloudServer(input: {
     ...(keyEnv !== undefined ? ["--api-key-env", keyEnv] : [])
   ];
   input.log(`fusion: starting ${input.spec.id} (${input.provider}:${input.spec.model})...`);
-  const child = spawn("uv", args, { cwd: input.fusionkitDir, env: input.env, stdio: ["ignore", "pipe", "pipe"] });
-  let log = "";
-  child.stdout?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
-  child.stderr?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
+  const proc = spawnLogged("uv", args, { cwd: input.fusionkitDir, env: input.env });
   const url = `http://127.0.0.1:${port}`;
   try {
-    await waitForEndpoint(url, `${input.spec.id} server`, child, 30_000);
+    await waitForHttp(`${url}/v1/models`, proc, {
+      timeoutMs: 30_000,
+      label: `${input.spec.id} server`,
+      requireOk: true
+    });
   } catch (error) {
-    child.kill("SIGTERM");
-    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${log.slice(-500)}`);
+    terminate(proc.child);
+    throw error instanceof Error ? error : new Error(String(error));
   }
   input.log(`fusion: ${input.spec.id} ready on ${url}`);
-  return { url, child };
+  return { url, child: proc.child };
 }
 
 /**
@@ -386,7 +307,7 @@ export async function startModelServers(options: {
   const children: ChildProcess[] = [];
   const endpoints: Record<string, string> = {};
   const closeAll = async (): Promise<void> => {
-    for (const child of children) child.kill("SIGTERM");
+    for (const child of children) terminate(child);
     await Promise.allSettled(gateways.map((gateway) => gateway.close()));
     await Promise.allSettled(backends.map((backend) => backend.stop()));
   };
@@ -426,7 +347,7 @@ export async function startModelServers(options: {
 
   return {
     endpoints,
-    judgeUrl: endpoints[judge.id] as string,
+    judgeUrl: endpoints[judge.id] ?? Object.values(endpoints)[0] ?? "",
     judgeModel: judge.model,
     models,
     close: closeAll
@@ -439,21 +360,15 @@ export type FusionStack = {
   close: () => Promise<void>;
 };
 
-/** The per-candidate harness: `agent` (trajectory fusion, default) or `command`. */
-export type FusionHarness = "agent" | "command";
-
 export type StartFusionStackOptions = {
   repo: string;
   outputRoot: string;
   models: PanelModelSpec[];
   endpoints?: Record<string, string>;
   fusionkitDir?: string;
-  harness?: FusionHarness;
   judgeModel?: string;
-  judgeUrl?: string;
   /** Pre-running fusionkit serve URL for trajectory synthesis (skips spawn). */
   synthesisUrl?: string;
-  command?: string;
   host?: string;
   port?: number;
   authToken?: string;
@@ -489,30 +404,33 @@ export async function startSynthesisServer(input: {
     "sampling: {temperature: 0.2, top_p: 0.9, max_tokens: 8192}",
     ""
   ].join("\n");
-  const configPath = join(mkdtempSync(join(tmpdir(), "fusion-synth-")), "synthesis.yaml");
+  const configDir = mkdtempSync(join(tmpdir(), "fusion-synth-"));
+  const configPath = join(configDir, "synthesis.yaml");
   writeFileSync(configPath, config);
   input.log("fusion: starting synthesis backend (fusionkit serve)...");
-  const child = spawn(
+  const proc = spawnLogged(
     "uv",
     ["run", "fusionkit", "serve", "--config", configPath, "--host", "127.0.0.1", "--port", String(port)],
-    { cwd: input.fusionkitDir, env: input.env, stdio: ["ignore", "pipe", "pipe"] }
+    { cwd: input.fusionkitDir, env: input.env }
   );
-  let log = "";
-  child.stdout?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
-  child.stderr?.on("data", (chunk: Buffer) => (log += chunk.toString("utf8")));
+  // The temp config is only read at startup; drop it once the server exits.
+  proc.child.once("exit", () => rmSync(configDir, { recursive: true, force: true }));
   const url = `http://127.0.0.1:${port}`;
   try {
-    await waitForEndpoint(url, "synthesis backend", child, 60_000);
+    await waitForHttp(`${url}/v1/models`, proc, {
+      timeoutMs: 60_000,
+      label: "synthesis backend",
+      requireOk: true
+    });
   } catch (error) {
-    child.kill("SIGTERM");
-    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${log.slice(-500)}`);
+    terminate(proc.child);
+    throw error instanceof Error ? error : new Error(String(error));
   }
   input.log(`fusion: synthesis backend ready on ${url}`);
-  return { child, url };
+  return { child: proc.child, url };
 }
 
 export async function startFusionStack(options: StartFusionStackOptions): Promise<FusionStack> {
-  const harness: FusionHarness = options.harness ?? "agent";
   const servers = await startModelServers({
     specs: options.models,
     ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
@@ -521,9 +439,11 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
   });
 
   let synthesisChild: ChildProcess | undefined;
-  let synthesisUrl = options.synthesisUrl ?? options.judgeUrl ?? servers.judgeUrl;
+  let synthesisUrl = options.synthesisUrl ?? servers.judgeUrl;
   try {
-    if (harness === "agent" && options.synthesisUrl === undefined) {
+    // Trajectory fusion needs a FusionKit synthesizer; spawn one unless the
+    // caller supplied a pre-running `fusionkit serve` via --synthesis-url.
+    if (options.synthesisUrl === undefined) {
       if (options.fusionkitDir === undefined) {
         throw new Error("trajectory synthesis requires --fusionkit-dir or WARRANT_FUSIONKIT_DIR");
       }
@@ -540,23 +460,19 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       synthesisUrl = synthesis.url;
     }
 
-    // The agent harness uses the judge-streamed-trajectory front door (the judge
-    // emits a trajectory the user's tool executes); the command harness keeps the
-    // one-shot synthesis front door.
-    const gatewayConfig = {
+    // The judge-streamed-trajectory front door: each panel model produces a
+    // trajectory and the judge emits the trajectory the user's tool executes.
+    const gatewayConfig: GatewayRunnerConfig = {
       fusionBackendUrl: synthesisUrl,
       repo: options.repo,
       outputRoot: options.outputRoot,
-      harnesses: [harness],
+      harnesses: ["agent"],
       models: servers.models,
-      ...(harness === "command" ? { command: options.command ?? `node ${solveAgentPath()}` } : {}),
       judgeModel: options.judgeModel ?? servers.judgeModel,
       modelEndpoints: servers.endpoints,
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
     };
-    const startGatewayForHarness =
-      harness === "agent" ? startFusionStepGateway : startConfiguredGateway;
-    const gateway = await startGatewayForHarness({
+    const gateway = await startFusionStepGateway({
       config: gatewayConfig,
       host: options.host ?? "127.0.0.1",
       port: options.port ?? 0,
@@ -567,32 +483,15 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       endpoints: servers.endpoints,
       close: async () => {
         await gateway.close();
-        if (synthesisChild !== undefined) synthesisChild.kill("SIGTERM");
+        if (synthesisChild !== undefined) terminate(synthesisChild);
         await servers.close();
       }
     };
   } catch (error) {
-    if (synthesisChild !== undefined) synthesisChild.kill("SIGTERM");
+    if (synthesisChild !== undefined) terminate(synthesisChild);
     await servers.close();
     throw error;
   }
-}
-
-function spawnTool(
-  command: string,
-  args: string[],
-  env: Record<string, string>,
-  cwd?: string
-): Promise<number> {
-  return new Promise((resolveExit, reject) => {
-    const child = spawn(command, args, {
-      stdio: "inherit",
-      env: { ...process.env, ...env },
-      ...(cwd !== undefined ? { cwd } : {})
-    });
-    child.on("error", reject);
-    child.on("exit", (code) => resolveExit(code ?? 0));
-  });
 }
 
 function scrubbedBridgeEnv(): Record<string, string> {
@@ -628,36 +527,26 @@ export async function startCursorBridge(input: {
     MODEL_PROVIDER_MODEL: FUSION_MODEL_LABEL,
     MODEL_CONTEXT_TOKEN_LIMIT: "128000"
   };
-  const child = spawn(process.execPath, ["dist/src/cli.js", "serve"], {
+  const proc = spawnLogged(process.execPath, ["dist/src/cli.js", "serve"], {
     cwd: input.cursorKitDir,
-    env,
-    stdio: ["ignore", "pipe", "pipe"]
+    env
   });
-  let output = "";
-  const ready = new Promise<void>((resolve, reject) => {
-    const onData = (chunk: Buffer): void => {
-      output += chunk.toString("utf8");
-      if (/bridge listening/.test(output)) resolve();
-    };
-    child.stdout?.on("data", onData);
-    child.stderr?.on("data", onData);
-    child.on("exit", () => reject(new Error(`Cursorkit bridge exited before listening:\n${output.slice(-500)}`)));
-    setTimeout(() => reject(new Error(`Cursorkit bridge did not start within 20s:\n${output.slice(-500)}`)), 20_000);
-  });
-  await ready;
+  try {
+    await waitForOutput(proc, /bridge listening/, { timeoutMs: 20_000, label: "Cursorkit bridge" });
+  } catch (error) {
+    terminate(proc.child);
+    throw error instanceof Error ? error : new Error(String(error));
+  }
   input.log(`fusion: Cursorkit bridge listening on http://127.0.0.1:${port}`);
-  return { child, port };
+  return { child: proc.child, port };
 }
 
 export type RunFusionOptions = {
   models?: PanelModelSpec[];
   endpoints?: Record<string, string>;
   fusionkitDir?: string;
-  harness?: FusionHarness;
   repo?: string;
-  command?: string;
   judgeModel?: string;
-  judgeEndpoint?: string;
   synthesisUrl?: string;
   cursorKitDir?: string;
   authToken?: string;
@@ -717,11 +606,8 @@ export async function runFusion(
       models,
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
-      ...(options.harness !== undefined ? { harness: options.harness } : {}),
       ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
-      ...(options.judgeEndpoint !== undefined ? { judgeUrl: options.judgeEndpoint } : {}),
       ...(options.synthesisUrl !== undefined ? { synthesisUrl: options.synthesisUrl } : {}),
-      ...(options.command !== undefined ? { command: options.command } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
@@ -738,17 +624,15 @@ export async function runFusion(
   const cleanup = async (): Promise<void> => {
     if (cleaned) return;
     cleaned = true;
-    if (bridge !== undefined) {
-      try {
-        bridge.kill("SIGTERM");
-      } catch {
-        // already gone
-      }
-    }
+    if (bridge !== undefined) terminate(bridge);
     await stack.close().catch(() => {});
     if (observability !== undefined) await observability.close().catch(() => {});
   };
   const onSignal = (): void => {
+    // Never wedge on shutdown: if cleanup stalls (a child ignoring SIGTERM),
+    // force-exit after a grace period.
+    const forced = setTimeout(() => process.exit(1), 10_000);
+    forced.unref();
     void cleanup().then(() => process.exit(0));
   };
   process.once("SIGINT", onSignal);

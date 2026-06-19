@@ -23,6 +23,25 @@ export function fmtDuration(ms: number): string {
   return `${minutes}m ${Math.round(seconds % 60)}s`;
 }
 
+/** Thousands-separated integer, e.g. 1234567 → "1,234,567". */
+export function fmtNumber(value: number): string {
+  return value.toLocaleString();
+}
+
+/** A compact relative timestamp ("just now", "2m ago", "3h ago"). */
+export function fmtRelative(ts: number, now: number = Date.now()): string {
+  if (!ts) return "—";
+  const deltaS = Math.max(0, Math.round((now - ts) / 1000));
+  if (deltaS < 5) return "just now";
+  if (deltaS < 60) return `${deltaS}s ago`;
+  const minutes = Math.floor(deltaS / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export function statusColor(status: string | undefined): string {
   switch (status) {
     case "succeeded":

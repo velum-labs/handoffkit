@@ -1,10 +1,11 @@
-import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createBackend, resolveBackendConfig, startGateway } from "@warrant/model-gateway";
 import type { BackendConfig } from "@warrant/model-gateway";
+
+import { spawnTool } from "./shared/proc.js";
 
 /**
  * `warrant local <tool>` — back a vendor agent harness with a locally running
@@ -105,17 +106,6 @@ async function startLocalGateway(config: BackendConfig, authToken?: string): Pro
     ...(authToken !== undefined ? { authToken } : {})
   });
   return { url: gateway.url(), close: () => gateway.close() };
-}
-
-function spawnTool(command: string, args: string[], env: Record<string, string>): Promise<number> {
-  return new Promise((resolveExit, reject) => {
-    const child = spawn(command, args, {
-      stdio: "inherit",
-      env: { ...process.env, ...env }
-    });
-    child.on("error", reject);
-    child.on("exit", (code) => resolveExit(code ?? 0));
-  });
 }
 
 export type RunLocalOptions = {

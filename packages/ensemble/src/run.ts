@@ -385,7 +385,10 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
   let cleanupWorktrees = worktreePlan?.worktrees ?? [];
   try {
     prepared = await descriptor.harness.prepare({ descriptor, request });
-    outputs = await Promise.all(
+    // Settle every candidate before continuing so a single failure cannot leave
+    // siblings running while we tear down their worktrees. A hard failure still
+    // aborts the run (re-thrown below) once all candidates have stopped.
+    const settled = await Promise.allSettled(
       descriptor.models.map((model, ordinal) =>
         descriptor.harness.run({
           descriptor,
@@ -396,6 +399,13 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
           worktree: worktreePlan?.worktrees[ordinal]
         })
       )
+    );
+    const rejection = settled.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    );
+    if (rejection !== undefined) throw rejection.reason;
+    outputs = settled.map(
+      (result) => (result as PromiseFulfilledResult<HarnessCandidateOutput>).value
     );
     const collectedArtifacts = await descriptor.harness.collectArtifacts({
       descriptor,

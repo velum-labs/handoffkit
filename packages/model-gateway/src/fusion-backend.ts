@@ -19,11 +19,26 @@
  *      returned verbatim for the server to translate into the caller's dialect.
  *
  * There is no apply/verify/repair here: iteration is the user's harness's job.
+ *
+ * Failures are surfaced, never swallowed: a panel run that throws or yields no
+ * usable candidate, or a `trajectory:step` that errors, produces an explicit
+ * error (a non-2xx response when nothing has streamed yet, or a terminal error
+ * event with `finish_reason: "error"` once the SSE has started) and the failed
+ * session is evicted so the next turn retries instead of replaying the failure.
  */
 
 import { createHash } from "node:crypto";
 
-import { newTraceId, TRACE_ID_HEADER } from "@warrant/protocol";
+import {
+  emitTrace,
+  getTraceEmitter,
+  judgeFinalPayload,
+  judgeRequestPayload,
+  judgeThinkingPayload,
+  newSpanId,
+  newTraceId,
+  TRACE_ID_HEADER
+} from "@warrant/protocol";
 
 import type { Backend, BackendRequestOptions } from "./backend.js";
 
@@ -57,8 +72,12 @@ export type PanelRunInput = {
   messages: ChatMessageLike[];
   /** The trace id minted for this fusion session. */
   traceId: string;
+  /** The session root span; panel/candidate events parent under it. */
+  sessionSpanId: string;
   /** Stable per-session key (hash of the conversation prefix). */
   sessionKey: string;
+  /** 1-based user-turn index this panel run belongs to. */
+  turn: number;
 };
 
 /** Runs the panel once for a session and returns its candidate trajectories. */
@@ -75,17 +94,25 @@ export type FusionBackendOptions = {
   judgeModel?: string;
   /** How long a session's candidate trajectories stay cached. */
   sessionTtlMs?: number;
+  /** Wall-clock budget for the panel phase before the turn fails. */
+  panelTimeoutMs?: number;
+  /** Wall-clock budget for a single `trajectory:step` call. */
+  stepTimeoutMs?: number;
   /** Mint a trace id (injectable for tests). */
   mintTraceId?: () => string;
 };
 
 type Session = {
   traceId: string;
-  candidates: Promise<WireTrajectory[]>;
+  sessionSpan: string;
+  /** Candidate trajectories cached per user turn (a follow-up is a new turn). */
+  turns: Map<number, Promise<WireTrajectory[]>>;
   createdAt: number;
 };
 
 const DEFAULT_SESSION_TTL_MS = 60 * 60 * 1000;
+const DEFAULT_PANEL_TIMEOUT_MS = 15 * 60 * 1000;
+const DEFAULT_STEP_TIMEOUT_MS = 10 * 60 * 1000;
 
 function textOfContent(content: unknown): string {
   if (typeof content === "string") return content;
@@ -103,6 +130,98 @@ function textOfContent(content: unknown): string {
   return "";
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** A candidate set is usable when at least one trajectory did not fail. */
+function hasUsableCandidates(candidates: WireTrajectory[]): boolean {
+  return candidates.some((candidate) => candidate.status !== "failed");
+}
+
+/** Combine an optional client-abort signal with a wall-clock timeout. */
+function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+}
+
+/** Reject if `promise` does not settle within `timeoutMs` (the work detaches). */
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function jsonError(status: number, message: string): Response {
+  return new Response(JSON.stringify({ error: { message, type: "fusion_error" } }), {
+    status,
+    headers: { "content-type": "application/json" }
+  });
+}
+
+type AssembledStep = {
+  content: string;
+  usage?: unknown;
+  toolCalls: unknown[];
+  finishReason?: string;
+};
+
+/** Best-effort reassembly of an OpenAI chat SSE stream into content, usage,
+ *  tool-call deltas, and finish reason (used to tell terminal from intermediate). */
+function assembleSseContent(buffer: string): AssembledStep {
+  let content = "";
+  let usage: unknown;
+  let finishReason: string | undefined;
+  const toolCalls: unknown[] = [];
+  for (const line of buffer.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const data = trimmed.slice(5).trim();
+    if (data.length === 0 || data === "[DONE]") continue;
+    try {
+      const json = JSON.parse(data) as {
+        choices?: Array<{ delta?: { content?: unknown; tool_calls?: unknown }; finish_reason?: unknown }>;
+        usage?: unknown;
+      };
+      const choice = json.choices?.[0];
+      const delta = choice?.delta?.content;
+      if (typeof delta === "string") content += delta;
+      if (Array.isArray(choice?.delta?.tool_calls)) toolCalls.push(...choice.delta.tool_calls);
+      if (typeof choice?.finish_reason === "string") finishReason = choice.finish_reason;
+      if (json.usage !== undefined && json.usage !== null) usage = json.usage;
+    } catch {
+      // ignore partial/non-JSON lines
+    }
+  }
+  return {
+    content,
+    toolCalls,
+    ...(usage !== undefined ? { usage } : {}),
+    ...(finishReason !== undefined ? { finishReason } : {})
+  };
+}
+
+/** A judge step is terminal (the real answer) only when it requests no tool calls. */
+function isTerminalJudgeStep(toolCalls: unknown, finishReason?: string): boolean {
+  const calls = Array.isArray(toolCalls) ? toolCalls : [];
+  return calls.length === 0 && finishReason !== "tool_calls";
+}
+
+/** A terminal SSE chunk that marks the turn as failed (not a normal stop). */
+function errorEvent(message: string): string {
+  return (
+    `data: ${JSON.stringify({
+      choices: [{ index: 0, delta: { content: message }, finish_reason: "error" }]
+    })}\n\n` + "data: [DONE]\n\n"
+  );
+}
+
 export class FusionBackend implements Backend {
   readonly defaultModel: string | undefined;
 
@@ -110,6 +229,8 @@ export class FusionBackend implements Backend {
   readonly #runPanels: PanelRunner;
   readonly #judgeModel: string | undefined;
   readonly #ttlMs: number;
+  readonly #panelTimeoutMs: number;
+  readonly #stepTimeoutMs: number;
   readonly #mintTraceId: () => string;
   readonly #sessions = new Map<string, Session>();
 
@@ -119,6 +240,8 @@ export class FusionBackend implements Backend {
     this.defaultModel = options.defaultModel;
     this.#judgeModel = options.judgeModel;
     this.#ttlMs = options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
+    this.#panelTimeoutMs = options.panelTimeoutMs ?? DEFAULT_PANEL_TIMEOUT_MS;
+    this.#stepTimeoutMs = options.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
     this.#mintTraceId = options.mintTraceId ?? newTraceId;
   }
 
@@ -132,7 +255,7 @@ export class FusionBackend implements Backend {
     };
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
     const sessionKey = this.#sessionKey(messages);
-    const session = this.#ensureSession(sessionKey, messages);
+    const session = this.#ensureSession(sessionKey);
     const streaming = chat.stream === true;
 
     const buildStepBody = (candidates: WireTrajectory[]): string => {
@@ -153,27 +276,161 @@ export class FusionBackend implements Backend {
     };
     if (options.modelCallId) headers["x-velum-model-call-id"] = options.modelCallId;
 
+    // The judge step is a child span of the session: emit the full prompt sent to
+    // the judge (the live conversation + candidate trajectories + tools) and the
+    // judge's final output, so the companion app can show exactly what the judge
+    // saw and produced.
+    const judgeSpan = newSpanId();
+    const traceEnabled = getTraceEmitter().isEnabled();
+    const sessionTraceId = session.traceId;
+    const sessionSpan = session.sessionSpan;
+    const judgeModel = this.#judgeModel;
+    // The user-turn index: a follow-up user message is a new turn, while the
+    // harness's internal tool-loop continuations (which append assistant/tool
+    // messages, not user ones) keep the same count and thus the same turn. The
+    // panel runs once per turn, so each new user request is fused over fresh
+    // candidates; the tool loop within a turn reuses them.
+    const turn = messages.filter((message) => message.role === "user").length;
+    const turnCandidates = this.#ensureTurnCandidates(session, sessionKey, turn, messages);
+    const emitJudgeRequest = (candidates: WireTrajectory[]): void => {
+      if (!traceEnabled) return;
+      emitTrace({
+        component: "judge",
+        event_type: "judge.request",
+        traceId: sessionTraceId,
+        spanId: judgeSpan,
+        parentSpanId: sessionSpan,
+        payload: judgeRequestPayload({
+          ...(judgeModel !== undefined ? { judgeModel } : {}),
+          messages,
+          trajectories: candidates,
+          ...(chat.tools !== undefined ? { tools: chat.tools } : {}),
+          ...(chat.tool_choice !== undefined ? { toolChoice: chat.tool_choice } : {}),
+          trajectoryIds: candidates.map((candidate) => candidate.trajectory_id),
+          turn
+        })
+      });
+    };
+    const emitJudgeFinal = (input: Parameters<typeof judgeFinalPayload>[0]): void => {
+      if (!traceEnabled) return;
+      emitTrace({
+        component: "judge",
+        event_type: "judge.final",
+        traceId: sessionTraceId,
+        spanId: judgeSpan,
+        parentSpanId: sessionSpan,
+        payload: judgeFinalPayload({ ...input, turn })
+      });
+    };
+    // An intermediate tool-calling turn is NOT the final answer: the harness will
+    // execute the tool calls and call back. Emit it as `judge.thinking` so the
+    // companion app shows it as in-progress instead of marking the session done.
+    const emitJudgeStep = (input: { content?: string; toolCalls?: unknown[]; usage?: unknown }): void => {
+      if (!traceEnabled) return;
+      const toolCallCount = input.toolCalls?.length ?? 0;
+      const rawAnalysis =
+        input.content !== undefined && input.content.length > 0
+          ? input.content
+          : `judge requested ${toolCallCount} tool call(s)`;
+      emitTrace({
+        component: "judge",
+        event_type: "judge.thinking",
+        traceId: sessionTraceId,
+        spanId: judgeSpan,
+        parentSpanId: sessionSpan,
+        payload: judgeThinkingPayload({
+          rawAnalysis,
+          ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
+          ...(input.usage !== undefined ? { usage: input.usage } : {}),
+          turn
+        })
+      });
+    };
+
+    // Resolve the panel candidates (bounded), failing loudly so a panel crash or
+    // an empty/all-failed candidate set never silently fuses into a blank answer.
+    const resolveCandidates = async (): Promise<WireTrajectory[]> => {
+      const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel");
+      if (!hasUsableCandidates(candidates)) {
+        throw new Error(
+          candidates.length === 0
+            ? "fusion panel produced no candidates"
+            : "fusion panel produced no usable candidates (every model failed)"
+        );
+      }
+      return candidates;
+    };
+
     // Non-streaming: the panel phase can block before the single JSON reply.
     if (!streaming) {
-      const candidates = await session.candidates;
-      return fetch(this.#stepUrl, {
+      let candidates: WireTrajectory[];
+      try {
+        candidates = await resolveCandidates();
+      } catch (error) {
+        this.#evictTurn(session, turn);
+        console.error(`fusion: panel phase failed: ${errorText(error)}`);
+        return jsonError(502, errorText(error));
+      }
+      emitJudgeRequest(candidates);
+      const response = await fetch(this.#stepUrl, {
         method: "POST",
         headers,
         body: buildStepBody(candidates),
-        ...(signal ? { signal } : {})
+        signal: withDeadline(signal, this.#stepTimeoutMs)
       });
+      if (traceEnabled) {
+        // Capture the judge's output without consuming the piped response.
+        const clone = response.clone();
+        void (async () => {
+          try {
+            if (!clone.ok) {
+              emitJudgeFinal({ httpStatus: clone.status, error: (await clone.text()).slice(0, 2000) });
+              return;
+            }
+            const judged = (await clone.json()) as {
+              choices?: Array<{ message?: { content?: string; tool_calls?: unknown }; finish_reason?: string }>;
+              usage?: unknown;
+            };
+            const choice = judged.choices?.[0];
+            const message = choice?.message;
+            const content = typeof message?.content === "string" ? message.content : undefined;
+            const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+            if (isTerminalJudgeStep(toolCalls, choice?.finish_reason)) {
+              emitJudgeFinal({
+                httpStatus: clone.status,
+                ...(content !== undefined ? { content } : {}),
+                ...(judged.usage !== undefined ? { usage: judged.usage } : {})
+              });
+            } else {
+              emitJudgeStep({
+                ...(content !== undefined ? { content } : {}),
+                toolCalls,
+                ...(judged.usage !== undefined ? { usage: judged.usage } : {})
+              });
+            }
+          } catch {
+            // best-effort judge.final
+          }
+        })();
+      }
+      return response;
     }
 
     // Streaming: return immediately with a live SSE stream so the caller's HTTP
     // client sees the response start right away. The (potentially slow) panel
     // phase runs inside the stream behind keepalive comments, then the judge
     // step's SSE is piped through. This avoids first-byte timeouts in real CLIs
-    // (e.g. codex) while the panel solves the task once.
+    // (e.g. codex) while the panel solves the task once. Because the 200 + SSE
+    // headers are already sent, failures surface as a terminal error event.
     const stepUrl = this.#stepUrl;
+    const stepSignal = withDeadline(signal, this.#stepTimeoutMs);
+    const evictOnFailure = (): void => this.#evictTurn(session, turn);
     const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
     const readable = new ReadableStream<Uint8Array>({
       async start(controller) {
         let alive = true;
+        let sseBuffer = "";
         const keepalive = setInterval(() => {
           if (alive) {
             try {
@@ -183,8 +440,20 @@ export class FusionBackend implements Backend {
             }
           }
         }, 3000);
+        const fail = (message: string): void => {
+          console.error(`fusion: ${message}`);
+          evictOnFailure();
+          controller.enqueue(encoder.encode(errorEvent(`fusion error: ${message}`)));
+        };
         try {
-          const candidates = await session.candidates;
+          let candidates: WireTrajectory[];
+          try {
+            candidates = await resolveCandidates();
+          } catch (error) {
+            fail(errorText(error));
+            return;
+          }
+          emitJudgeRequest(candidates);
           if (process.env.FUSION_DEBUG) {
             const toolNames = Array.isArray(chat.tools)
               ? chat.tools.map((t) => {
@@ -201,42 +470,42 @@ export class FusionBackend implements Backend {
             method: "POST",
             headers,
             body: buildStepBody(candidates),
-            ...(signal ? { signal } : {})
+            signal: stepSignal
           });
           if (!upstream.ok || upstream.body === null) {
             const detail = upstream.body === null ? "no stream" : (await upstream.text()).slice(0, 800);
-            if (process.env.FUSION_DEBUG) console.error(`[fusion-debug] step upstream ${upstream.status}: ${detail}`);
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  choices: [{ index: 0, delta: { content: `fusion step error: ${detail}` }, finish_reason: "stop" }]
-                })}\n\n`
-              )
-            );
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            emitJudgeFinal({ httpStatus: upstream.status, error: detail });
+            fail(`trajectory:step ${upstream.status}: ${detail}`);
             return;
           }
           const reader = upstream.body.getReader();
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
-            if (value !== undefined) controller.enqueue(value);
+            if (value !== undefined) {
+              controller.enqueue(value);
+              if (traceEnabled) sseBuffer += decoder.decode(value, { stream: true });
+            }
+          }
+          if (traceEnabled) {
+            const assembled = assembleSseContent(sseBuffer);
+            if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
+              emitJudgeFinal({
+                httpStatus: upstream.status,
+                ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
+                ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
+              });
+            } else {
+              emitJudgeStep({
+                ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
+                toolCalls: assembled.toolCalls,
+                ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
+              });
+            }
           }
         } catch (error) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                choices: [
-                  {
-                    index: 0,
-                    delta: { content: `fusion error: ${error instanceof Error ? error.message : String(error)}` },
-                    finish_reason: "stop"
-                  }
-                ]
-              })}\n\n`
-            )
-          );
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          emitJudgeFinal({ error: errorText(error) });
+          fail(errorText(error));
         } finally {
           alive = false;
           clearInterval(keepalive);
@@ -285,18 +554,18 @@ export class FusionBackend implements Backend {
   }
 
   #task(messages: ChatMessageLike[]): string {
-    // The panel task is the user's request. Real CLIs (codex/claude/cursor) put
-    // their large agent harness prompt in the system message (noise for the
-    // panel) and may prepend an <environment_context> user message before the
-    // real instruction — so join all user-turn text (which on the first turn is
-    // the context + the task) and fall back to system only if there is none.
+    // The panel task is the *current* request: the most recent user message.
+    // Real CLIs (codex/claude/cursor) put their large agent harness prompt in
+    // the system message and may prepend an <environment_context> user message,
+    // so take the latest user turn (the active instruction) and fall back to
+    // system text only if there is no user content at all. Using the latest
+    // user message means a follow-up turn's panel solves the follow-up request.
     const userText = messages
       .filter((message) => message.role === "user")
       .map((message) => textOfContent(message.content).trim())
-      .filter((text) => text.length > 0)
-      .join("\n\n")
-      .trim();
-    if (userText.length > 0) return userText;
+      .filter((text) => text.length > 0);
+    const latest = userText.at(-1);
+    if (latest !== undefined && latest.length > 0) return latest;
     return messages
       .filter((message) => message.role === "system")
       .map((message) => textOfContent(message.content))
@@ -304,19 +573,63 @@ export class FusionBackend implements Backend {
       .trim();
   }
 
-  #ensureSession(sessionKey: string, messages: ChatMessageLike[]): Session {
+  /** Drop a turn's cached candidates so the next call for that turn re-runs the panel. */
+  #evictTurn(session: Session, turn: number): void {
+    session.turns.delete(turn);
+  }
+
+  /** Remove expired sessions so a long-lived gateway does not grow unbounded. */
+  #sweepExpired(now: number): void {
+    for (const [key, session] of this.#sessions) {
+      if (now - session.createdAt >= this.#ttlMs) this.#sessions.delete(key);
+    }
+  }
+
+  /** Establish (or reuse) the per-conversation session identity. No panel runs here. */
+  #ensureSession(sessionKey: string): Session {
     const now = Date.now();
+    this.#sweepExpired(now);
     const existing = this.#sessions.get(sessionKey);
     if (existing !== undefined && now - existing.createdAt < this.#ttlMs) return existing;
 
-    const traceId = this.#mintTraceId();
-    const task = this.#task(messages);
     const session: Session = {
-      traceId,
-      createdAt: now,
-      candidates: this.#runPanels({ task, messages, traceId, sessionKey }).catch(() => [])
+      traceId: this.#mintTraceId(),
+      sessionSpan: newSpanId(),
+      turns: new Map(),
+      createdAt: now
     };
     this.#sessions.set(sessionKey, session);
     return session;
+  }
+
+  /**
+   * Run the panel once per user turn and cache its candidates on the session.
+   * Internal tool-loop continuations keep the same `turn` and reuse the result;
+   * a follow-up user message is a new `turn` and triggers a fresh panel run.
+   * A failed turn is evicted so a retry re-runs it (failures are never cached).
+   */
+  #ensureTurnCandidates(
+    session: Session,
+    sessionKey: string,
+    turn: number,
+    messages: ChatMessageLike[]
+  ): Promise<WireTrajectory[]> {
+    const existing = session.turns.get(turn);
+    if (existing !== undefined) return existing;
+
+    const candidates = this.#runPanels({
+      task: this.#task(messages),
+      messages,
+      traceId: session.traceId,
+      sessionSpanId: session.sessionSpan,
+      sessionKey,
+      turn
+    });
+    session.turns.set(turn, candidates);
+    candidates.catch((error: unknown) => {
+      console.error(`fusion: panel run failed for session ${sessionKey} turn ${turn}: ${errorText(error)}`);
+      if (session.turns.get(turn) === candidates) session.turns.delete(turn);
+    });
+    return candidates;
   }
 }

@@ -4,7 +4,6 @@ import type { Command } from "commander";
 
 import { FUSION_TOOLS, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
-import { fail } from "../shared/errors.js";
 import { collect, parseFusionTool, parseIdValue, parsePanelModelSpec, parsePort } from "../shared/options.js";
 
 type FusionOpts = {
@@ -14,12 +13,9 @@ type FusionOpts = {
   modelEndpoint?: string[];
   keyEnv?: string[];
   judgeModel?: string;
-  judgeEndpoint?: string;
   synthesisUrl?: string;
-  harness?: string;
   fusionkitDir?: string;
   repo?: string;
-  command?: string;
   cursorKitDir?: string;
   observe?: boolean;
   authToken?: string;
@@ -38,12 +34,9 @@ export function registerFusion(program: Command): void {
     .option("--model-endpoint <spec>", "pre-running OpenAI-compatible endpoint ID=URL (repeatable)", collect)
     .option("--key-env <spec>", "env var holding a model's API key ID=ENV (repeatable)", collect)
     .option("--judge-model <model>", "model used for judge synthesis")
-    .option("--judge-endpoint <url>", "OpenAI-compatible endpoint for judge synthesis")
     .option("--synthesis-url <url>", "pre-running fusionkit serve for synthesis")
-    .option("--harness <mode>", "per-candidate harness: agent | command")
     .option("--fusionkit-dir <dir>", "FusionKit checkout (or WARRANT_FUSIONKIT_DIR)")
     .option("--repo <dir>", "coding workspace the panel fuses over")
-    .option("--command <cmd>", "per-candidate solve command")
     .option("--cursor-kit-dir <dir>", "built Cursorkit checkout for the cursor tool")
     .option("--observe", "boot the local scope dashboard and stream live trace events")
     .option("--auth-token <token>", "require a bearer token on the gateway")
@@ -73,17 +66,9 @@ export function registerFusion(program: Command): void {
       }
 
       if (opts.judgeModel !== undefined) options.judgeModel = opts.judgeModel;
-      if (opts.judgeEndpoint !== undefined) options.judgeEndpoint = opts.judgeEndpoint;
       if (opts.synthesisUrl !== undefined) options.synthesisUrl = opts.synthesisUrl;
-      if (opts.harness !== undefined) {
-        if (opts.harness !== "agent" && opts.harness !== "command") {
-          fail('--harness must be "agent" or "command"');
-        }
-        options.harness = opts.harness;
-      }
       if (opts.fusionkitDir !== undefined) options.fusionkitDir = resolve(opts.fusionkitDir);
       if (opts.repo !== undefined) options.repo = resolve(opts.repo);
-      if (opts.command !== undefined) options.command = opts.command;
       if (opts.cursorKitDir !== undefined) options.cursorKitDir = resolve(opts.cursorKitDir);
       if (opts.observe === true) options.observe = true;
       if (opts.authToken !== undefined) options.authToken = opts.authToken;

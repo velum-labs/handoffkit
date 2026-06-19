@@ -98,6 +98,10 @@ export type UnifiedHarnessE2EOptions = {
    * trace so the companion app can reconstruct one session.
    */
   traceId?: string;
+  /** Session root span; panel candidate spans parent under it. */
+  parentSpanId?: string;
+  /** User-turn index this panel run belongs to (stamped on candidate events). */
+  turn?: number;
 };
 
 function normalizeFusionBackendUrl(value: string): string {
@@ -141,7 +145,9 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
         fallbackBaseUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
         ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
         ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-        ...(options.traceId !== undefined ? { traceId: options.traceId } : {})
+        ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+        ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+        ...(options.turn !== undefined ? { turn: options.turn } : {})
       });
     case "command": {
       if (!options.command) {
@@ -345,6 +351,10 @@ export type FusionPanelOptions = {
   fusionApiKey?: string;
   timeoutMs?: number;
   traceId?: string;
+  /** Session root span so panel candidate spans nest under the session. */
+  parentSpanId?: string;
+  /** User-turn index this panel run belongs to (for per-turn grouping). */
+  turn?: number;
 };
 
 /**
@@ -369,7 +379,9 @@ export async function runFusionPanels(
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
     ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-    ...(options.traceId !== undefined ? { traceId: options.traceId } : {})
+    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.turn !== undefined ? { turn: options.turn } : {})
   };
   const descriptor = descriptorFor("agent", e2eOptions);
   descriptor.judge = {

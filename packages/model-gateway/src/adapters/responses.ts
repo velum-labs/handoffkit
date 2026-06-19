@@ -487,11 +487,12 @@ function jsonResponse(status: number, value: unknown): Response {
 export async function handleResponses(
   backend: Backend,
   body: ResponsesRequest,
-  modelCallId?: string
+  modelCallId?: string,
+  signal?: AbortSignal
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const chat = responsesToChat(body, backend.defaultModel);
-  const upstream = await backend.chat(chat, undefined, { modelCallId });
+  const upstream = await backend.chat(chat, signal, { modelCallId });
 
   if (!upstream.ok) {
     const detail = await upstream.text();

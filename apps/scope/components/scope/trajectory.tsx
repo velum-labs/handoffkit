@@ -1,5 +1,6 @@
 import { AlertTriangle, GitBranch, Wrench } from "lucide-react";
 
+import { CodeBlock } from "@/components/scope/code-block";
 import { StatusBadge } from "@/components/scope/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,6 +71,24 @@ function CandidatePanel({ candidate }: { candidate: CandidateView }) {
         ) : null}
       </div>
 
+      {candidate.systemPrompt || candidate.prompt ? (
+        <div className="space-y-2">
+          {candidate.systemPrompt ? (
+            <div>
+              <div className="text-muted-foreground mb-1 text-xs">System prompt</div>
+              <CodeBlock value={candidate.systemPrompt} muted className="p-2" />
+            </div>
+          ) : null}
+          {candidate.prompt ? (
+            <div>
+              <div className="text-muted-foreground mb-1 text-xs">Task prompt</div>
+              <CodeBlock value={candidate.prompt} muted className="p-2" />
+            </div>
+          ) : null}
+          <Separator />
+        </div>
+      ) : null}
+
       {candidate.steps.length === 0 ? (
         <p className="text-muted-foreground text-sm">No trajectory steps captured yet.</p>
       ) : (
@@ -86,14 +105,12 @@ function CandidatePanel({ candidate }: { candidate: CandidateView }) {
         </ScrollArea>
       )}
 
-      {candidate.finalOutputPreview ? (
+      {candidate.finalOutput ?? candidate.finalOutputPreview ? (
         <>
           <Separator />
           <div>
             <div className="text-muted-foreground mb-1 text-xs">Final output</div>
-            <pre className="bg-muted/40 mono rounded-md p-3 text-xs leading-relaxed">
-              {candidate.finalOutputPreview}
-            </pre>
+            <CodeBlock value={candidate.finalOutput ?? candidate.finalOutputPreview ?? ""} muted className="p-3" />
           </div>
         </>
       ) : null}
@@ -101,7 +118,60 @@ function CandidatePanel({ candidate }: { candidate: CandidateView }) {
   );
 }
 
+/** Group candidates by user turn so follow-up panels render under their own turn. */
+function groupCandidatesByTurn(
+  candidates: CandidateView[]
+): Array<{ turn?: number; candidates: CandidateView[] }> {
+  const byTurn = new Map<number, CandidateView[]>();
+  const noTurn: CandidateView[] = [];
+  for (const candidate of candidates) {
+    if (candidate.turn === undefined) {
+      noTurn.push(candidate);
+      continue;
+    }
+    const list = byTurn.get(candidate.turn) ?? [];
+    list.push(candidate);
+    byTurn.set(candidate.turn, list);
+  }
+  const groups: Array<{ turn?: number; candidates: CandidateView[] }> = [...byTurn.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([turn, group]) => ({ turn, candidates: group }));
+  if (noTurn.length > 0) groups.push({ turn: undefined, candidates: noTurn });
+  return groups;
+}
+
+function CandidateTabs({ candidates }: { candidates: CandidateView[] }) {
+  return (
+    <Tabs defaultValue={candidates[0].candidateId}>
+      <TabsList className={cn("mb-4 flex w-full flex-wrap")}>
+        {candidates.map((candidate) => (
+          <TabsTrigger key={candidate.candidateId} value={candidate.candidateId} className="gap-1.5">
+            <span
+              className="size-1.5 rounded-full"
+              style={{
+                background:
+                  candidate.status === "succeeded"
+                    ? "#3fb950"
+                    : candidate.status === "failed"
+                      ? "#f85149"
+                      : "#d29922"
+              }}
+            />
+            {candidate.modelId ?? candidate.candidateId}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {candidates.map((candidate) => (
+        <TabsContent key={candidate.candidateId} value={candidate.candidateId}>
+          <CandidatePanel candidate={candidate} />
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+}
+
 export function TrajectoryViewer({ candidates }: { candidates: CandidateView[] }) {
+  const groups = groupCandidatesByTurn(candidates);
   return (
     <Card>
       <CardHeader>
@@ -110,32 +180,19 @@ export function TrajectoryViewer({ candidates }: { candidates: CandidateView[] }
       <CardContent>
         {candidates.length === 0 ? (
           <p className="text-muted-foreground text-sm">No candidates have started yet.</p>
+        ) : groups.length <= 1 ? (
+          <CandidateTabs candidates={candidates} />
         ) : (
-          <Tabs defaultValue={candidates[0].candidateId}>
-            <TabsList className={cn("mb-4 flex w-full flex-wrap")}>
-              {candidates.map((candidate) => (
-                <TabsTrigger key={candidate.candidateId} value={candidate.candidateId} className="gap-1.5">
-                  <span
-                    className="size-1.5 rounded-full"
-                    style={{
-                      background:
-                        candidate.status === "succeeded"
-                          ? "#3fb950"
-                          : candidate.status === "failed"
-                            ? "#f85149"
-                            : "#d29922"
-                    }}
-                  />
-                  {candidate.modelId ?? candidate.candidateId}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {candidates.map((candidate) => (
-              <TabsContent key={candidate.candidateId} value={candidate.candidateId}>
-                <CandidatePanel candidate={candidate} />
-              </TabsContent>
+          <div className="space-y-6">
+            {groups.map((group, index) => (
+              <div key={group.turn ?? `group-${index}`} className="space-y-2">
+                <div className="text-muted-foreground text-xs">
+                  {group.turn !== undefined ? `Turn ${group.turn}` : "Unattributed"}
+                </div>
+                <CandidateTabs candidates={group.candidates} />
+              </div>
             ))}
-          </Tabs>
+          </div>
         )}
       </CardContent>
     </Card>

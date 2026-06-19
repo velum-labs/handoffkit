@@ -485,11 +485,12 @@ function jsonResponse(status: number, value: unknown): Response {
 export async function handleAnthropicMessages(
   backend: Backend,
   body: AnthropicRequest,
-  modelCallId?: string
+  modelCallId?: string,
+  signal?: AbortSignal
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const chat = anthropicToChat(body, backend.defaultModel);
-  const upstream = await backend.chat(chat, undefined, { modelCallId });
+  const upstream = await backend.chat(chat, signal, { modelCallId });
 
   if (!upstream.ok) {
     const detail = await upstream.text();

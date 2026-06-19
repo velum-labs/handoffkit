@@ -210,6 +210,28 @@ export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string):
 }
 
 /**
+ * Validate the loosely-typed panel output before it crosses the wire to the
+ * synthesizer: keep only entries with the required string fields and drop the
+ * rest (with a warning) rather than forwarding malformed trajectories.
+ */
+function normalizeWireTrajectories(raw: Record<string, unknown>[]): WireTrajectory[] {
+  const out: WireTrajectory[] = [];
+  for (const entry of raw) {
+    if (
+      typeof entry.trajectory_id === "string" &&
+      typeof entry.model_id === "string" &&
+      typeof entry.status === "string" &&
+      typeof entry.final_output === "string"
+    ) {
+      out.push(entry as WireTrajectory);
+    } else {
+      console.error(`fusion: dropping malformed panel trajectory: ${JSON.stringify(entry).slice(0, 200)}`);
+    }
+  }
+  return out;
+}
+
+/**
  * The judge-streamed-trajectory front door: the panel runs once per session to
  * produce candidate trajectories, then the judge acts as a streaming tool-calling
  * agent (FusionKit `trajectory:step`) whose trajectory the user's harness executes.
@@ -228,12 +250,12 @@ export async function startFusionStepGateway(input: {
   const stepUrl = `${base}/v1/fusion/trajectory:step`;
   const defaultModel = input.defaultModel ?? "fusion-panel";
 
-  const runPanels: PanelRunner = async ({ task, traceId, sessionKey }) => {
+  const runPanels: PanelRunner = async ({ task, traceId, sessionSpanId, sessionKey, turn }) => {
     emitTrace({
       component: "gateway",
       event_type: "session.started",
       traceId,
-      spanId: newSpanId(),
+      spanId: sessionSpanId,
       payload: {
         dialect: "fusion-step",
         prompt_preview: task.slice(0, 600),
@@ -254,22 +276,25 @@ export async function startFusionStepGateway(input: {
     console.error(`fusion: running panel (${config.models.map((m) => m.id).join(", ")}) for session ${sessionKey}...`);
     try {
       const wire = await runFusionPanels({
-        id: `panels_${sessionKey}`,
+        id: `panels_${sessionKey}_t${turn}`,
         repo: config.repo,
-        outputRoot: join(config.outputRoot, sessionKey),
+        outputRoot: join(config.outputRoot, sessionKey, `t${turn}`),
         prompt: task,
         models: config.models,
         fusionBackendUrl: config.fusionBackendUrl,
         traceId,
+        parentSpanId: sessionSpanId,
+        turn,
         ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {})
       });
+      const trajectories = normalizeWireTrajectories(wire);
       console.error(
-        `fusion: panel produced ${wire.length} candidate trajectories ` +
-          `(${wire.map((t) => `${t.model_id}:${t.status}`).join(", ")})`
+        `fusion: panel produced ${trajectories.length} candidate trajectories ` +
+          `(${trajectories.map((t) => `${t.model_id}:${t.status}`).join(", ")})`
       );
-      return wire as WireTrajectory[];
+      return trajectories;
     } catch (error) {
       console.error(`fusion: panel run failed: ${error instanceof Error ? error.stack : String(error)}`);
       throw error;

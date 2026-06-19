@@ -50,22 +50,32 @@ export function createWorktreePlan(descriptor: EnsembleDescriptor): WorktreePlan
     descriptorId: descriptor.id,
     models: descriptor.models.map((model) => model.id)
   });
-  const worktrees = descriptor.models.map((model, ordinal) => {
-    const id = candidateId(descriptor, model, ordinal);
-    const path = join(root, id);
-    const branchName = `warrant/ensemble/${safeSegment(descriptor.id)}/${safeSegment(model.id)}`;
-    gitText(workspace, ["worktree", "add", "--detach", path, baseGitSha]);
-    return {
-      candidateId: id,
-      modelId: model.id,
-      branchName,
-      path,
-      baseGitSha,
-      snapshotHash,
-      sealed: false,
-      cleaned: false
-    };
-  });
+  const worktrees: CandidateWorktree[] = [];
+  try {
+    for (const [ordinal, model] of descriptor.models.entries()) {
+      const id = candidateId(descriptor, model, ordinal);
+      const path = join(root, id);
+      const branchName = `warrant/ensemble/${safeSegment(descriptor.id)}/${safeSegment(model.id)}`;
+      gitText(workspace, ["worktree", "add", "--detach", path, baseGitSha]);
+      worktrees.push({
+        candidateId: id,
+        modelId: model.id,
+        branchName,
+        path,
+        baseGitSha,
+        snapshotHash,
+        sealed: false,
+        cleaned: false
+      });
+    }
+  } catch (error) {
+    // A mid-loop failure must not leak the worktrees already added or the root.
+    for (const worktree of worktrees) {
+      gitText(workspace, ["worktree", "remove", "--force", worktree.path], { allowFail: true });
+    }
+    rmSync(root, { recursive: true, force: true });
+    throw error;
+  }
   return { workspace, baseGitSha, snapshotHash, root, worktrees };
 }
 

@@ -166,11 +166,13 @@ function updateSession(event: FusionTraceEvent): void {
       );
   }
 
-  if (event.event_type === "judge.final") {
+  if (event.event_type === "judge.final" && (payload as { tool_calls?: unknown }).tool_calls === undefined) {
     // In the judge-streamed-trajectory front door there is no single
     // session.finished (the harness simply stops calling); the judge's terminal
     // answer (judge.final) is the natural completion marker, so mark the session
     // succeeded and capture the final output unless an explicit finish set it.
+    // A judge.final that still carries tool_calls is an intermediate step (the
+    // harness will call back), so it must not mark the session done.
     const record = (payload as { record?: { final_output?: unknown } }).record;
     const full = asString(record?.final_output) ?? asString((payload as { final_output?: unknown }).final_output);
     handle

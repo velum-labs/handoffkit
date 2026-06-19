@@ -29,6 +29,15 @@ export type CandidateView = {
   finishReason?: string;
   verificationStatus?: string;
   finalOutputPreview?: string;
+  /** Full system prompt the panel model ran under (from model.call.started). */
+  systemPrompt?: string;
+  /** Full task prompt sent to the panel model (from model.call.started). */
+  prompt?: string;
+  /** Full final output of the panel model (from model.call.finished). */
+  finalOutput?: string;
+  usage?: Record<string, unknown>;
+  /** User-turn index this candidate belongs to (a follow-up is a new turn). */
+  turn?: number;
 };
 
 export type ModelCallView = {
@@ -47,6 +56,14 @@ export type ModelCallView = {
 };
 
 export type JudgeView = {
+  /** The full prompt sent to the judge (the trajectory:step request). */
+  prompt?: {
+    judgeModel?: string;
+    messages?: unknown;
+    trajectories?: unknown;
+    tools?: unknown;
+    trajectoryIds?: string[];
+  };
   thinking?: { fusionUnit?: string; raw?: string; usage?: Record<string, unknown> };
   scored?: { fusionUnit?: string; analysis?: Record<string, unknown>; metrics?: Record<string, unknown>; inputIds?: string[] };
   synthesis?: { raw?: string; empty?: boolean; usage?: Record<string, unknown> };
@@ -55,8 +72,33 @@ export type JudgeView = {
     decision?: string;
     rationale?: string;
     finalOutput?: string;
+    content?: string;
+    usage?: Record<string, unknown>;
     selectedCandidateId?: string;
     record?: Record<string, unknown>;
+  };
+};
+
+/**
+ * One judge step = one gateway call (one `judge` span): the prompt sent plus its
+ * outcome (an intermediate tool-calling turn or the terminal answer). Multiple
+ * steps share a `turn` when they belong to the same user message (the harness's
+ * internal tool loop); a follow-up user message is a new `turn`.
+ */
+export type JudgeStepView = {
+  spanId: string;
+  turn?: number;
+  ts: number;
+  kind: "intermediate" | "final" | "pending";
+  prompt?: JudgeView["prompt"];
+  thinking?: { raw?: string; toolCalls?: unknown; usage?: Record<string, unknown> };
+  final?: {
+    finalOutput?: string;
+    content?: string;
+    decision?: string;
+    rationale?: string;
+    selectedCandidateId?: string;
+    usage?: Record<string, unknown>;
   };
 };
 
@@ -80,6 +122,8 @@ export type SessionDetail = {
   candidates: CandidateView[];
   modelCalls: ModelCallView[];
   judge: JudgeView;
+  /** Per-step judge history (ordered), so multi-turn sessions don't collapse. */
+  judgeSteps: JudgeStepView[];
   finalOutput?: string;
   evidence?: string[];
   durationMs: number;
@@ -104,7 +148,17 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
   const candidates = new Map<string, CandidateView>();
   const modelCalls = new Map<string, ModelCallView>();
   const judge: JudgeView = {};
+  const judgeStepMap = new Map<string, JudgeStepView>();
   const eventCounts: Record<string, number> = {};
+
+  const ensureStep = (spanId: string, ts: number): JudgeStepView => {
+    let step = judgeStepMap.get(spanId);
+    if (step === undefined) {
+      step = { spanId, ts, kind: "pending" };
+      judgeStepMap.set(spanId, step);
+    }
+    return step;
+  };
 
   let status = "running";
   let dialect: string | undefined;
@@ -156,6 +210,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           const candidate = ensureCandidate(event.candidate_id);
           candidate.modelId = event.model_id ?? candidate.modelId;
           candidate.model = str(payload.model) ?? candidate.model;
+          candidate.turn = num(payload.turn) ?? candidate.turn;
           candidate.branchName = str(payload.branch_name) ?? candidate.branchName;
           candidate.worktreePath = str(payload.worktree_path) ?? candidate.worktreePath;
         }
@@ -165,6 +220,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
         if (event.candidate_id !== undefined) {
           const candidate = ensureCandidate(event.candidate_id);
           candidate.status = str(payload.status) ?? candidate.status;
+          candidate.turn = num(payload.turn) ?? candidate.turn;
           candidate.toolCallCount = num(payload.tool_call_count) ?? candidate.toolCallCount;
           candidate.finishReason = str(payload.finish_reason) ?? candidate.finishReason;
           candidate.verificationStatus = str(payload.verification_status) ?? candidate.verificationStatus;
@@ -193,6 +249,11 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           status: "running",
           ts: event.ts
         });
+        if (event.candidate_id !== undefined) {
+          const candidate = ensureCandidate(event.candidate_id);
+          candidate.systemPrompt = str(payload.system_prompt) ?? candidate.systemPrompt;
+          candidate.prompt = str(payload.prompt) ?? candidate.prompt;
+        }
         break;
       }
       case "model.call.finished": {
@@ -216,6 +277,28 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           contentPreview: str(payload.content_preview) ?? existing.contentPreview,
           error: str(payload.error) ?? existing.error
         });
+        if (event.candidate_id !== undefined) {
+          const candidate = ensureCandidate(event.candidate_id);
+          candidate.finalOutput = str(payload.final_output) ?? candidate.finalOutput;
+          if (typeof payload.usage === "object" && payload.usage !== null) {
+            candidate.usage = payload.usage as Record<string, unknown>;
+          }
+        }
+        break;
+      }
+      case "judge.request": {
+        judge.prompt = {
+          judgeModel: str(payload.judge_model),
+          messages: payload.messages,
+          trajectories: payload.trajectories,
+          tools: payload.tools,
+          trajectoryIds: Array.isArray(payload.trajectory_ids)
+            ? (payload.trajectory_ids as string[])
+            : undefined
+        };
+        const step = ensureStep(event.span_id, event.ts);
+        step.prompt = judge.prompt;
+        step.turn = num(payload.turn) ?? step.turn;
         break;
       }
       case "judge.thinking": {
@@ -223,6 +306,17 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           fusionUnit: str(payload.fusion_unit),
           raw: str(payload.raw_analysis),
           usage: typeof payload.usage === "object" && payload.usage !== null ? (payload.usage as Record<string, unknown>) : undefined
+        };
+        const step = ensureStep(event.span_id, event.ts);
+        step.kind = "intermediate";
+        step.turn = num(payload.turn) ?? step.turn;
+        step.thinking = {
+          raw: str(payload.raw_analysis),
+          toolCalls: payload.tool_calls,
+          usage:
+            typeof payload.usage === "object" && payload.usage !== null
+              ? (payload.usage as Record<string, unknown>)
+              : undefined
         };
         break;
       }
@@ -249,10 +343,29 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           decision: str(payload.decision),
           rationale: str(payload.rationale),
           finalOutput: str(payload.final_output),
+          content: str(payload.content),
+          usage: typeof payload.usage === "object" && payload.usage !== null
+            ? (payload.usage as Record<string, unknown>)
+            : undefined,
           selectedCandidateId: str(payload.selected_candidate_id),
           record: obj(payload.record)
         };
-        if (judge.final.finalOutput !== undefined) finalOutput = judge.final.finalOutput;
+        const judgeFinal = judge.final.finalOutput ?? judge.final.content;
+        if (judgeFinal !== undefined) finalOutput = judgeFinal;
+        const step = ensureStep(event.span_id, event.ts);
+        step.kind = "final";
+        step.turn = num(payload.turn) ?? step.turn;
+        step.final = {
+          finalOutput: str(payload.final_output),
+          content: str(payload.content),
+          decision: str(payload.decision),
+          rationale: str(payload.rationale),
+          selectedCandidateId: str(payload.selected_candidate_id),
+          usage:
+            typeof payload.usage === "object" && payload.usage !== null
+              ? (payload.usage as Record<string, unknown>)
+              : undefined
+        };
         break;
       }
       default:
@@ -278,6 +391,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
     candidates: [...candidates.values()],
     modelCalls: [...modelCalls.values()].sort((a, b) => a.ts - b.ts),
     judge,
+    judgeSteps: [...judgeStepMap.values()].sort((a, b) => a.ts - b.ts),
     ...(finalOutput !== undefined ? { finalOutput } : {}),
     ...(evidence !== undefined ? { evidence } : {}),
     durationMs: Math.max(0, lastTs - startedAt),

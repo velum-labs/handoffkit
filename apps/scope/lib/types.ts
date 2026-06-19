@@ -18,6 +18,7 @@ export type FusionTraceEventType =
   | "trajectory.step"
   | "model.call.started"
   | "model.call.finished"
+  | "judge.request"
   | "judge.thinking"
   | "judge.scored"
   | "judge.synthesis"
@@ -44,6 +45,7 @@ export const TRACE_EVENT_TYPES: FusionTraceEventType[] = [
   "trajectory.step",
   "model.call.started",
   "model.call.finished",
+  "judge.request",
   "judge.thinking",
   "judge.scored",
   "judge.synthesis",

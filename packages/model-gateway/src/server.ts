@@ -95,7 +95,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId) => backend.chat(body, undefined, { modelCallId: callId })
+        invoke: (callId, signal) => backend.chat(body, signal, { modelCallId: callId })
       });
       return;
     }
@@ -122,7 +122,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "anthropic-messages",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId) => handleAnthropicMessages(backend, body, callId)
+        invoke: (callId, signal) => handleAnthropicMessages(backend, body, callId, signal)
       });
       return;
     }
@@ -135,7 +135,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-responses",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId) => handleResponses(backend, body, callId)
+        invoke: (callId, signal) => handleResponses(backend, body, callId, signal)
       });
       return;
     }
@@ -158,10 +158,14 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   return {
     url: () => `http://${host}:${port}`,
     port: () => port,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
+    close: async () => {
+      await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
-      })
+      });
+      // Release a backend that owns a process (e.g. the MLX server) instead of
+      // leaking it when the gateway shuts down.
+      await backend.close?.();
+    }
   };
 }
 
@@ -203,7 +207,7 @@ type ModelCallRoute = {
   dialect: GatewayDialect;
   body: unknown;
   defaultModel: string | undefined;
-  invoke: (callId: string) => Promise<Response>;
+  invoke: (callId: string, signal: AbortSignal) => Promise<Response>;
 };
 
 async function handleModelCall(
@@ -225,8 +229,14 @@ async function handleModelCall(
     endpointId: route.defaultModel ?? route.dialect
   };
   res.setHeader(MODEL_CALL_ID_HEADER, callId);
+  // Cancel upstream work if the client hangs up before we finish responding.
+  const aborter = new AbortController();
+  const onClose = (): void => {
+    if (!res.writableEnded) aborter.abort();
+  };
+  res.once("close", onClose);
   try {
-    const upstream = await route.invoke(callId);
+    const upstream = await route.invoke(callId, aborter.signal);
     const body = await pipeUpstream(res, upstream);
     sink?.onModelCall?.(
       buildModelCallRecord(context, {
@@ -248,6 +258,8 @@ async function handleModelCall(
         error
       })
     );
+  } finally {
+    res.off("close", onClose);
   }
 }
 

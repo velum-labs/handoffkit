@@ -17,6 +17,7 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { useModels } from "@/lib/api";
+import { fmtNumber } from "@/lib/format";
 
 export default function ModelsPage() {
   const { models, loading, error } = useModels();
@@ -116,7 +117,7 @@ export default function ModelsPage() {
                         <TableCell className="mono text-right">
                           {typeof model.avgLatencyS === "number" ? `${model.avgLatencyS.toFixed(2)}s` : "—"}
                         </TableCell>
-                        <TableCell className="mono text-right">{model.totalTokens}</TableCell>
+                        <TableCell className="mono text-right">{fmtNumber(model.totalTokens)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -7,6 +7,8 @@ import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 
 import {
   emitTrace,
+  modelCallFinishedPayload,
+  modelCallStartedPayload,
   newSpanId,
   TRACE_CANDIDATE_HEADER,
   TRACE_ID_HEADER,
@@ -63,6 +65,8 @@ export type WorktreeAgentInput = {
   candidateId?: string;
   /** Parent span (e.g. the ensemble candidate span) for waterfall linking. */
   parentSpanId?: string;
+  /** User-turn index this run belongs to (stamped on model.call events). */
+  turn?: number;
 };
 
 type AgentContentPart = { type: string; [key: string]: unknown };
@@ -251,7 +255,7 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
   const emitStep = (step: TrajectoryStep): void => {
     if (input.traceId === undefined) return;
     emitTrace({
-      component: "agent",
+      component: "panel-model",
       event_type: "trajectory.step",
       traceId: input.traceId,
       spanId: agentSpan,
@@ -261,13 +265,39 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
       payload: { step }
     });
   };
+  const emitModelCall = (eventType: "model.call.started" | "model.call.finished", payload: Record<string, unknown>): void => {
+    if (input.traceId === undefined) return;
+    emitTrace({
+      component: "panel-model",
+      event_type: eventType,
+      traceId: input.traceId,
+      spanId: agentSpan,
+      ...(input.parentSpanId !== undefined ? { parentSpanId: input.parentSpanId } : {}),
+      ...(input.candidateId !== undefined ? { candidateId: input.candidateId } : {}),
+      modelId: input.model,
+      payload
+    });
+  };
+
+  const tools = worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000);
+  emitModelCall(
+    "model.call.started",
+    modelCallStartedPayload({
+      model: input.model,
+      systemPrompt: AGENT_SYSTEM_PROMPT,
+      prompt: input.prompt,
+      tools: Object.keys(tools),
+      ...(input.turn !== undefined ? { turn: input.turn } : {})
+    })
+  );
+  const startedAt = Date.now();
 
   try {
     const result = await generateText({
       model,
       system: AGENT_SYSTEM_PROMPT,
       prompt: input.prompt,
-      tools: worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000),
+      tools,
       stopWhen: stepCountIs(input.maxSteps ?? 12),
       onStepFinish: (step) => {
         for (const normalized of extractSteps(step.content as AgentContentPart[])) {
@@ -280,6 +310,19 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
     const toolCallCount = steps.filter((step) => step.type === "tool_call").length;
     const finalOutput = result.text ?? "";
     emitStep(push({ type: "output", text: finalOutput }));
+    emitModelCall(
+      "model.call.finished",
+      modelCallFinishedPayload({
+        model: input.model,
+        finalOutput,
+        finishReason: result.finishReason ?? "stop",
+        stepCount: steps.length,
+        toolCallCount,
+        latencyS: (Date.now() - startedAt) / 1000,
+        ...(input.turn !== undefined ? { turn: input.turn } : {}),
+        ...(normalizeUsage(result.usage) !== undefined ? { usage: normalizeUsage(result.usage) } : {})
+      })
+    );
     return {
       status: "succeeded",
       steps,
@@ -290,8 +333,38 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     emitStep(push({ type: "output", text: `agent failed: ${message}` }));
+    emitModelCall(
+      "model.call.finished",
+      modelCallFinishedPayload({
+        model: input.model,
+        finishReason: "error",
+        latencyS: (Date.now() - startedAt) / 1000,
+        error: message,
+        ...(input.turn !== undefined ? { turn: input.turn } : {})
+      })
+    );
     return { status: "failed", steps, finalOutput: `agent failed: ${message}`, finishReason: "error", toolCallCount: 0 };
   }
+}
+
+/** Map AI SDK usage (field names vary by version) to OpenAI-style token counts. */
+function normalizeUsage(usage: unknown): Record<string, number> | undefined {
+  if (typeof usage !== "object" || usage === null) return undefined;
+  const source = usage as Record<string, unknown>;
+  const pick = (...keys: string[]): number | undefined => {
+    for (const key of keys) {
+      if (typeof source[key] === "number") return source[key] as number;
+    }
+    return undefined;
+  };
+  const prompt = pick("promptTokens", "inputTokens", "prompt_tokens", "input_tokens");
+  const completion = pick("completionTokens", "outputTokens", "completion_tokens", "output_tokens");
+  const total = pick("totalTokens", "total_tokens") ?? (prompt ?? 0) + (completion ?? 0);
+  const out: Record<string, number> = {};
+  if (prompt !== undefined) out.prompt_tokens = prompt;
+  if (completion !== undefined) out.completion_tokens = completion;
+  if (total > 0 || prompt !== undefined || completion !== undefined) out.total_tokens = total;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** Compute the worktree's staged diff against a base ref (for patch evidence). */
