@@ -1,0 +1,14 @@
+{
+  "title": "Docs",
+  "pages": [
+    "index",
+    "installation",
+    "quickstart",
+    "configuration",
+    "cost-and-models",
+    "observability",
+    "troubleshooting",
+    "architecture",
+    "api-reference"
+  ]
+}

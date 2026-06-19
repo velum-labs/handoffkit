@@ -19,7 +19,7 @@ export function hasBinary(bin: string): boolean {
   }
 }
 
-const INSTALL_HINTS: Record<string, string> = {
+export const INSTALL_HINTS: Record<string, string> = {
   uv: "install uv: https://docs.astral.sh/uv/getting-started/installation/",
   uvx: "install uv (ships uvx): https://docs.astral.sh/uv/getting-started/installation/",
   codex: "install the Codex CLI: https://github.com/openai/codex",

@@ -48,6 +48,16 @@ export type GatewayRunnerConfig = {
   modelEndpoints?: Record<string, string>;
 };
 
+// Once an interactive coding agent owns the terminal, the per-turn panel chatter
+// would corrupt its full-screen TUI. The launcher flips this off before handing
+// over; trace events (for --observe) keep flowing regardless.
+let gatewayChatter = true;
+
+/** Enable/disable the gateway's per-turn stderr chatter (default on). */
+export function setGatewayChatter(enabled: boolean): void {
+  gatewayChatter = enabled;
+}
+
 function mapStatus(status: string): FrontDoorRunnerResult["status"] {
   if (status === "succeeded") return "succeeded";
   if (status === "skipped") return "skipped";
@@ -273,7 +283,9 @@ export async function startFusionStepGateway(input: {
         }
       }
     });
-    console.error(`fusion: running panel (${config.models.map((m) => m.id).join(", ")}) for session ${sessionKey}...`);
+    if (gatewayChatter) {
+      console.error(`fusion: running panel (${config.models.map((m) => m.id).join(", ")}) for session ${sessionKey}...`);
+    }
     try {
       const wire = await runFusionPanels({
         id: `panels_${sessionKey}_t${turn}`,
@@ -290,13 +302,15 @@ export async function startFusionStepGateway(input: {
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {})
       });
       const trajectories = normalizeWireTrajectories(wire);
-      console.error(
-        `fusion: panel produced ${trajectories.length} candidate trajectories ` +
-          `(${trajectories.map((t) => `${t.model_id}:${t.status}`).join(", ")})`
-      );
+      if (gatewayChatter) {
+        console.error(
+          `fusion: panel produced ${trajectories.length} candidate trajectories ` +
+            `(${trajectories.map((t) => `${t.model_id}:${t.status}`).join(", ")})`
+        );
+      }
       return trajectories;
     } catch (error) {
-      console.error(`fusion: panel run failed: ${error instanceof Error ? error.stack : String(error)}`);
+      console.error(`fusion: panel run failed: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   };

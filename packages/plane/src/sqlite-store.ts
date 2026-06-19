@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync as SqliteDatabase } from "node:sqlite";
 
 import { sha256Hex } from "@fusionkit/protocol";
 import type { ChainedEvent, Receipt, RunStatus } from "@fusionkit/protocol";
@@ -13,6 +14,8 @@ import type {
   RunRecord,
   RunnerRecord
 } from "./store.js";
+
+const nodeRequire = createRequire(import.meta.url);
 
 /**
  * node:sqlite-backed control-plane store. Single-file database with WAL
@@ -31,10 +34,15 @@ export type SqliteStoreOptions = {
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
 
 export class SqliteStore implements PlaneStore {
-  private readonly db: DatabaseSync;
+  private readonly db: SqliteDatabase;
 
   constructor(dbPath: string, options: SqliteStoreOptions = {}) {
     if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
+    // Lazy-load node:sqlite here (not as a top-level import) so that importing
+    // @fusionkit/plane — e.g. from the CLI's command registry — does not emit
+    // node:sqlite's ExperimentalWarning at startup for commands that never open a
+    // database. Documented exception to the no-inline-imports rule.
+    const { DatabaseSync } = nodeRequire("node:sqlite") as typeof import("node:sqlite");
     this.db = new DatabaseSync(dbPath);
     this.db.exec(`PRAGMA journal_mode = ${options.journalMode ?? "WAL"}`);
     this.db.exec("PRAGMA foreign_keys = ON");

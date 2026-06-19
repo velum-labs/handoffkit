@@ -1,0 +1,32 @@
+{
+  "name": "fusionkit-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Documentation site for fusionkit (the @fusionkit/cli coding-agent fusion CLI), built with Fumadocs.",
+  "scripts": {
+    "dev": "fumadocs-mdx && next dev -p 4318",
+    "build": "fumadocs-mdx && next build",
+    "start": "next start -p 4318",
+    "postinstall": "fumadocs-mdx",
+    "generate:openapi": "node --import tsx scripts/generate-openapi.ts",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "fumadocs-core": "^15.3.0",
+    "fumadocs-mdx": "^11.6.0",
+    "fumadocs-openapi": "^8.1.0",
+    "fumadocs-ui": "^15.3.0",
+    "next": "^15.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
+}

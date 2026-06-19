@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./quiet-warnings.js";
 import { PolicyDeniedError } from "@fusionkit/protocol";
 
 import { buildProgram } from "./cli.js";

@@ -1,0 +1,41 @@
+---
+title: Observability
+description: Watch sessions, trajectories, and the judge with --observe.
+---
+
+## The trace dashboard
+
+Pass `--observe` to boot a local dashboard that streams live fusion-trace events
+— sessions, environments, per-panel-model trajectories, and the judge's
+thinking-to-final flow:
+
+```bash
+fusionkit codex --observe
+```
+
+fusionkit exports the trace endpoint into every spawned process, opens the
+dashboard in your browser, and tears it down on exit.
+
+## Availability
+
+The dashboard is a separate app (it is not bundled inside the npm package). If it
+isn't available, fusionkit prints exactly how to enable it instead of failing
+with a filesystem error:
+
+```
+the observability dashboard is not available in this install.
+  It is a separate app and is not bundled with the npm package.
+  To enable --observe, install its dependencies once: cd <scope-app> && pnpm install
+```
+
+## Logs
+
+Every run writes per-process logs (panel servers, synthesizer, dashboard, cursor
+bridge) to a temporary run directory, and fusionkit prints the path:
+
+```
+fusion: logs in /tmp/fusionkit-fusion-XXXX/logs
+```
+
+On failure, the most diagnostic lines are surfaced inline and the full log path
+is included so you can dig in or share it.

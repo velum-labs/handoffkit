@@ -1,0 +1,21 @@
+{
+  "version": "fusionkit.fusion.v1",
+  "tool": "codex",
+  "panel": [
+    {
+      "id": "gpt",
+      "model": "gpt-5.5",
+      "provider": "openai",
+      "keyEnv": "OPENAI_API_KEY"
+    },
+    {
+      "id": "sonnet",
+      "model": "claude-sonnet-4-6",
+      "provider": "anthropic",
+      "keyEnv": "ANTHROPIC_API_KEY"
+    }
+  ],
+  "judgeModel": "gpt-5.5",
+  "local": false,
+  "observe": true
+}

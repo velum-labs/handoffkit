@@ -1,0 +1,57 @@
+---
+title: Installation & Prerequisites
+description: Install the CLI and the tools it orchestrates.
+---
+
+## Install the CLI
+
+```bash
+npm install -g @fusionkit/cli
+```
+
+This provides the `fusionkit` command.
+
+## Prerequisites
+
+fusionkit orchestrates other tools, so a few things must be available. Run
+`fusionkit doctor` at any time for a live checklist with fix hints.
+
+### uv / uvx (required)
+
+The synthesizer ships as the `fusionkit` distribution on PyPI and is run via
+[`uvx`](https://docs.astral.sh/uv/getting-started/installation/). Installing uv
+gives you `uvx`; no manual Python setup is needed.
+
+### A coding agent (required)
+
+At least one of:
+
+- [`codex`](https://github.com/openai/codex) — OpenAI Codex CLI
+- [`claude`](https://docs.anthropic.com/en/docs/claude-code/overview) — Claude Code
+- [`cursor-agent`](https://cursor.com/cli) — Cursor CLI (also needs a Cursorkit
+  checkout; see [Troubleshooting](/docs/troubleshooting))
+
+### Provider API keys (for the cloud panel)
+
+The default panel uses cloud models, so export the relevant keys:
+
+```bash
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
+```
+
+You can also put them in a project `.env` — fusionkit loads it automatically
+(already-exported values always win). The local MLX panel (`--local`, Apple
+Silicon) needs no keys.
+
+### A git repository (required)
+
+The panel fuses over the code in your current repo. Run fusionkit from inside
+your project, or pass `--repo <dir>`.
+
+## Verify
+
+```bash
+fusionkit doctor
+fusionkit --version   # prints the npm CLI and pinned PyPI synthesizer versions
+```

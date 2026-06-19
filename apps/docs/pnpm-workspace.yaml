@@ -1,0 +1,4 @@
+# Standalone app: not part of the root packages/* + examples/* workspace, so its
+# (heavier, UI-oriented) dependency tree stays out of the governed core's trust
+# surface and frozen lockfile. Mirrors apps/scope.
+packages: []

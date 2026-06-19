@@ -2,8 +2,12 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { FUSION_TOOLS, pickTool, runFusion } from "../fusion-quickstart.js";
+import { FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
+import { loadFusionConfig } from "../fusion-config.js";
+import type { FusionConfig } from "../fusion-config.js";
+import { runFusionInit } from "../fusion-init.js";
+import { fail } from "../shared/errors.js";
 import { collect, parseFusionTool, parseIdValue, parsePanelModelSpec, parsePort } from "../shared/options.js";
 
 type FusionOpts = {
@@ -19,6 +23,8 @@ type FusionOpts = {
   cursorKitDir?: string;
   local?: boolean;
   observe?: boolean;
+  yes?: boolean;
+  force?: boolean;
   authToken?: string;
   port?: string;
 };
@@ -36,14 +42,17 @@ function applyFusionOptions(command: Command): Command {
     .option("--repo <dir>", "coding workspace the panel fuses over")
     .option("--cursor-kit-dir <dir>", "built Cursorkit checkout for the cursor tool")
     .option("--local", "use the local MLX panel trio instead of the default cloud panel")
+    .option("--no-local", "override a fusionkit.json default of local=true")
     .option("--observe", "boot the local scope dashboard and stream live trace events")
+    .option("--no-observe", "override a fusionkit.json default of observe=true")
+    .option("--yes", "skip the interactive cloud-panel cost confirmation")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .option("--port <n>", "gateway port (default: ephemeral)")
     .allowUnknownOption()
     .passThroughOptions();
 }
 
-/** Build the `RunFusionOptions` shared by every entrypoint from parsed flags. */
+/** Build the flag-only `RunFusionOptions` (no config/defaults applied yet). */
 function resolveOptions(opts: FusionOpts): RunFusionOptions {
   const options: RunFusionOptions = {};
   const keyEnvs: Record<string, string> = {};
@@ -57,8 +66,11 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.fusionkitDir !== undefined) options.fusionkitDir = resolve(opts.fusionkitDir);
   if (opts.repo !== undefined) options.repo = resolve(opts.repo);
   if (opts.cursorKitDir !== undefined) options.cursorKitDir = resolve(opts.cursorKitDir);
-  if (opts.local === true) options.local = true;
-  if (opts.observe === true) options.observe = true;
+  // local/observe are tri-state: only set when the user passed --local/--no-local
+  // (or --observe/--no-observe), so an unset flag can fall through to the config.
+  if (opts.local !== undefined) options.local = opts.local;
+  if (opts.observe !== undefined) options.observe = opts.observe;
+  if (opts.yes === true) options.yes = true;
   if (opts.authToken !== undefined) options.authToken = opts.authToken;
   if (opts.port !== undefined) options.port = parsePort(opts.port, 0);
 
@@ -91,21 +103,67 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   return options;
 }
 
+/** Fill any option the user did not set explicitly from `fusionkit.json`. */
+function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
+  if (options.models === undefined && options.endpoints === undefined && config.panel !== undefined && config.panel.length > 0) {
+    options.models = config.panel.map((spec) => ({ ...spec }));
+  }
+  if (options.judgeModel === undefined && config.judgeModel !== undefined) options.judgeModel = config.judgeModel;
+  if (options.local === undefined && config.local !== undefined) options.local = config.local;
+  if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
+  if (options.cursorKitDir === undefined && config.cursorKitDir != null) options.cursorKitDir = config.cursorKitDir;
+  if (options.port === undefined && config.port != null) options.port = config.port;
+}
+
+/** The repo root used for config lookup: --repo if given, else the cwd's git root. */
+function configRepoRoot(options: RunFusionOptions): string | undefined {
+  return options.repo ?? gitToplevel(process.cwd());
+}
+
+/**
+ * Resolve options + the config-provided default tool. Flags always win over the
+ * file; the file wins over built-in defaults.
+ */
+function resolveContext(opts: FusionOpts): { options: RunFusionOptions; configTool?: FusionTool } {
+  const options = resolveOptions(opts);
+  const repoRoot = configRepoRoot(options);
+  let config: FusionConfig | undefined;
+  if (repoRoot !== undefined) {
+    try {
+      config = loadFusionConfig(repoRoot);
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (config !== undefined) mergeConfig(options, config);
+  return { options, ...(config?.tool !== undefined ? { configTool: config.tool } : {}) };
+}
+
 export function registerFusion(program: Command): void {
   // Generic `fusion [tool]` — keeps the original surface and interactive pick.
   applyFusionOptions(
     program
       .command("fusion")
       .description("one command: real model fusion backs a coding agent")
-      .argument("[tool]", `${FUSION_TOOLS.join(" | ")} (omit on a TTY to pick interactively)`)
+      .argument("[tool]", `${FUSION_TOOLS.join(" | ")} | init (omit on a TTY to pick interactively)`)
       .argument("[args...]", "arguments forwarded to the tool")
       .option("--tool <tool>", `coding agent to launch (${FUSION_TOOLS.join(" | ")})`)
+      .option("--force", "overwrite an existing fusionkit.json (with `fusion init`)")
   )
     .addHelpText(
       "after",
-      "\nfusionkit's own flags must precede the tool name; everything after the tool is forwarded to it."
+      "\nfusionkit's own flags must precede the tool name; everything after the tool is forwarded to it." +
+        "\nRun `fusionkit fusion init` to scaffold a committed fusionkit.json for this repo."
     )
     .action(async (positionalTool: string | undefined, args: string[], opts: FusionOpts) => {
+      // `fusion init` scaffolds the per-repo config instead of launching a tool.
+      if (positionalTool === "init") {
+        const repoRoot = configRepoRoot(resolveOptions(opts));
+        const code = await runFusionInit({ repoRoot, force: opts.force === true });
+        process.exit(code);
+      }
+
+      const { options, configTool } = resolveContext(opts);
       let tool: FusionTool | undefined = opts.tool ? parseFusionTool(opts.tool) : undefined;
       let toolArgs = [...args];
       if (positionalTool !== undefined) {
@@ -115,8 +173,7 @@ export function registerFusion(program: Command): void {
           toolArgs = [positionalTool, ...toolArgs];
         }
       }
-      const options = resolveOptions(opts);
-      const resolvedTool = tool ?? (process.stdin.isTTY ? await pickTool() : "codex");
+      const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
       const code = await runFusion(resolvedTool, toolArgs, options);
       process.exit(code);
     });
@@ -134,7 +191,7 @@ export function registerFusion(program: Command): void {
         `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
       )
       .action(async (args: string[], opts: FusionOpts) => {
-        const options = resolveOptions(opts);
+        const { options } = resolveContext(opts);
         const code = await runFusion(tool, args, options);
         process.exit(code);
       });

@@ -1,0 +1,56 @@
+---
+title: Getting Started
+description: What fusionkit is and how the pieces fit together.
+---
+
+## What is fusionkit?
+
+`fusionkit` (the `@fusionkit/cli` npm package) puts **real model fusion** behind
+your coding agent. On every prompt it:
+
+1. Spins up a **panel** of models (a cloud trio by default, or a local MLX trio).
+2. Has each panel model produce a **real candidate**.
+3. Runs a **judge** that synthesizes the answer your coding agent (Codex, Claude
+   Code, or Cursor) actually executes.
+
+You run one command — `fusionkit codex` — and your agent is transparently backed
+by the fused panel.
+
+## The 30-second version
+
+```bash
+npm install -g @fusionkit/cli
+cd your-project        # a git repo
+fusionkit doctor       # verify prerequisites
+fusionkit codex        # launch Codex backed by the panel
+```
+
+Want it to "just work" for your whole team? Commit a config:
+
+```bash
+fusionkit fusion init  # scaffolds fusionkit.json
+```
+
+## How the pieces fit
+
+fusionkit is a thin, fast orchestrator. The heavy lifting is split across a few
+processes it manages for you:
+
+- **The CLI** (`@fusionkit/cli`, npm) — the command you run. It boots and tears
+  down the stack and launches your coding agent.
+- **The synthesizer** (`fusionkit` on PyPI) — run automatically via `uvx`. It
+  fronts cloud models as OpenAI-compatible endpoints and performs judge
+  synthesis. You never install it manually.
+- **The gateway** — an in-process server your coding agent points at; it runs the
+  panel and streams the judge's chosen trajectory back to the agent.
+
+<Callout type="info">
+  Two packages share the name "fusionkit": the npm CLI (`@fusionkit/cli`) and the
+  Python distribution (`fusionkit` on PyPI). `fusionkit --version` prints both.
+</Callout>
+
+## Next steps
+
+- [Installation & prerequisites](/docs/installation)
+- [Quickstart](/docs/quickstart)
+- [Configuration (`fusionkit.json`)](/docs/configuration)

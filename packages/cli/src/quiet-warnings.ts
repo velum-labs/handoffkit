@@ -1,0 +1,35 @@
+/**
+ * Suppress Node's experimental-feature warnings (e.g. node:sqlite) so the CLI's
+ * output stays clean for end users. Only the ExperimentalWarning category is
+ * dropped; real warnings still surface. Imported first in index.ts so the patch
+ * is in place before any module that loads node:sqlite.
+ */
+type EmitWarning = typeof process.emitWarning;
+
+const original: EmitWarning = process.emitWarning.bind(process);
+
+function isExperimental(warning: string | Error, typeOrOptions: unknown): boolean {
+  if (warning instanceof Error && warning.name === "ExperimentalWarning") return true;
+  if (typeof typeOrOptions === "string") return typeOrOptions === "ExperimentalWarning";
+  if (typeOrOptions !== null && typeof typeOrOptions === "object" && "type" in typeOrOptions) {
+    return (typeOrOptions as { type?: unknown }).type === "ExperimentalWarning";
+  }
+  return false;
+}
+
+process.emitWarning = function patchedEmitWarning(
+  warning: string | Error,
+  typeOrOptions?: unknown,
+  ...rest: unknown[]
+): void {
+  if (isExperimental(warning, typeOrOptions)) return;
+  (original as (...args: unknown[]) => void)(warning, typeOrOptions, ...rest);
+} as EmitWarning;
+
+// Children inherit process.env, so make Node subprocesses (the launched coding
+// agent, the cursor bridge, the dashboard) start with experimental warnings
+// disabled too. Non-Node children (python via uv/uvx) ignore NODE_OPTIONS.
+const DISABLE_EXPERIMENTAL = "--disable-warning=ExperimentalWarning";
+if (!(process.env.NODE_OPTIONS ?? "").includes(DISABLE_EXPERIMENTAL)) {
+  process.env.NODE_OPTIONS = [process.env.NODE_OPTIONS, DISABLE_EXPERIMENTAL].filter(Boolean).join(" ");
+}

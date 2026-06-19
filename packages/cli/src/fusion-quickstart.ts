@@ -15,22 +15,26 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import type { EnsembleModel } from "@fusionkit/ensemble";
 import { MlxBackend, startGateway } from "@fusionkit/model-gateway";
 import type { Gateway } from "@fusionkit/model-gateway";
 
-import { gatewaySetupSnippets, startFusionStepGateway } from "./gateway.js";
+import { gatewaySetupSnippets, setGatewayChatter, startFusionStepGateway } from "./gateway.js";
 import type { GatewayRunnerConfig } from "./gateway.js";
 import { claudeEnv, codexConfigToml } from "./local.js";
 import { runPreflight } from "./shared/preflight.js";
+import { createBootView } from "./ui/boot.js";
+import { confirm, select } from "./ui/prompt.js";
+import { canPromptInteractively, isInteractive, uiStream } from "./ui/runtime.js";
+import { bold, brandHeader, dim, glyph, gray, green } from "./ui/theme.js";
 import {
   freePort,
+  sleep,
   spawnLogged,
   spawnTool,
   terminate,
@@ -260,25 +264,67 @@ export type Observability = {
  * by a fresh per-run SQLite file and trace dir. Returns the URLs the caller
  * injects (as FUSION_TRACE_URL / FUSION_TRACE_DIR) into every spawned process.
  */
-export async function startObservability(input: { log: (line: string) => void }): Promise<Observability> {
+export async function startObservability(input: {
+  log: (line: string) => void;
+  logFile?: string;
+  report?: StackReporter;
+}): Promise<Observability> {
   const scopeDir = findScopeAppDir();
   const nextBin = join(scopeDir, "node_modules", ".bin", "next");
   if (!existsSync(nextBin)) {
     throw new Error(
-      `scope dashboard dependencies are not installed.\n  Run: cd ${scopeDir} && pnpm install`
+      "the observability dashboard is not available in this install.\n" +
+        `  It is a separate app and is not bundled with the npm package.\n` +
+        `  To enable --observe, install its dependencies once: cd ${scopeDir} && pnpm install`
     );
   }
 
   const traceDir = mkdtempSync(join(tmpdir(), "fusion-trace-"));
   const dbPath = join(traceDir, "scope.db");
 
-  input.log("fusion: building observability dashboard (one-time)...");
-  execFileSync(nextBin, ["build"], { cwd: scopeDir, stdio: "inherit", env: { ...process.env } });
+  // Child processes (next build / next start) load node:sqlite; keep their
+  // experimental warnings out of the log just like the parent CLI.
+  const childEnv = {
+    ...process.env,
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
+    SCOPEKIT_DB: dbPath,
+    FUSION_TRACE_DIR: traceDir
+  };
 
-  input.log("fusion: starting observability dashboard...");
+  if (input.report) input.report({ kind: "dashboard.start" });
+  else input.log("fusion: building observability dashboard (one-time)...");
+
+  // Rebuilding every run is slow; reuse a prior build when present. The build
+  // output is captured (never inherited) so it can't corrupt a live checklist.
+  const alreadyBuilt = existsSync(join(scopeDir, ".next", "BUILD_ID"));
+  if (!alreadyBuilt) {
+    try {
+      const buildOut = execFileSync(nextBin, ["build"], {
+        cwd: scopeDir,
+        env: childEnv,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      if (input.logFile !== undefined) appendFileSync(input.logFile, buildOut);
+    } catch (error) {
+      if (input.logFile !== undefined) {
+        appendFileSync(
+          input.logFile,
+          String((error as { stdout?: string }).stdout ?? "") + String((error as { stderr?: string }).stderr ?? "")
+        );
+      }
+      rmSync(traceDir, { recursive: true, force: true });
+      throw new Error(
+        "the observability dashboard failed to build. See the log for details" +
+          (input.logFile ? `: ${input.logFile}` : "")
+      );
+    }
+  }
+
   const proc = spawnLogged(nextBin, ["start", "-p", String(SCOPE_DASHBOARD_PORT)], {
     cwd: scopeDir,
-    env: { ...process.env, SCOPEKIT_DB: dbPath, FUSION_TRACE_DIR: traceDir }
+    ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
+    env: childEnv
   });
 
   const url = `http://127.0.0.1:${SCOPE_DASHBOARD_PORT}`;
@@ -289,6 +335,9 @@ export async function startObservability(input: { log: (line: string) => void })
     rmSync(traceDir, { recursive: true, force: true });
     throw error instanceof Error ? error : new Error(String(error));
   }
+
+  if (input.report) input.report({ kind: "dashboard.ready", detail: url });
+  else input.log(`fusion: observability dashboard ready on ${url}`);
 
   return {
     url,
@@ -310,56 +359,113 @@ export type ModelServers = {
 };
 
 /**
+ * Structured boot progress. When a reporter is supplied the stack emits these
+ * events instead of the plain `fusion: ...` log lines, so a live TUI (or any
+ * other consumer) can render per-stage status. Without one, callers keep getting
+ * the existing line logs.
+ */
+export type StackEvent =
+  | { kind: "server.start"; id: string; label: string }
+  | { kind: "server.ready"; id: string; detail: string }
+  | { kind: "server.fail"; id: string; detail: string }
+  | { kind: "synth.start" }
+  | { kind: "synth.ready"; detail: string }
+  | { kind: "gateway.start" }
+  | { kind: "gateway.ready"; detail: string }
+  | { kind: "dashboard.start" }
+  | { kind: "dashboard.ready"; detail: string }
+  | { kind: "dashboard.fail"; detail: string };
+
+export type StackReporter = (event: StackEvent) => void;
+
+/**
  * Spawn FusionKit's single-endpoint OpenAI-compatible server for one cloud
  * model, so the per-candidate coding harness can call it like any other
  * OpenAI-compatible backend. Runs `fusionkit serve-endpoint` via `uvx` (or
  * `uv run` against a local checkout); Anthropic/OpenAI/Google calls go through
  * FusionKit's provider clients.
  */
+/**
+ * Heuristic: does the captured output indicate a permanent failure (bad key,
+ * inaccessible model) that a retry cannot fix? Used to fail fast with a clear
+ * message instead of burning the retry budget on a hopeless start.
+ */
+function looksPermanentFailure(log: string): boolean {
+  return /401|403|invalid[ _-]?api[ _-]?key|unauthorized|forbidden|authentication|permission|model[^\n]*(not found|does not exist)|no such model|model_not_found/i.test(
+    log
+  );
+}
+
 async function spawnCloudServer(input: {
   spec: PanelModelSpec;
   provider: Exclude<PanelProvider, "mlx">;
   fusionkitDir?: string;
   env: Record<string, string | undefined>;
+  logFile?: string;
   log: (line: string) => void;
 }): Promise<{ url: string; child: ChildProcess }> {
-  const port = await freePort();
   const keyEnv = input.spec.keyEnv ?? defaultKeyEnv(input.provider);
   const runner = fusionkitPyCommand(input.fusionkitDir);
-  const args = [
-    ...runner.prefix,
-    "serve-endpoint",
-    "--id",
-    input.spec.id,
-    "--model",
-    input.spec.model,
-    "--provider",
-    input.provider,
-    "--host",
-    "127.0.0.1",
-    "--port",
-    String(port),
-    ...(input.spec.baseUrl !== undefined ? ["--base-url", input.spec.baseUrl] : []),
-    ...(keyEnv !== undefined ? ["--api-key-env", keyEnv] : [])
-  ];
-  input.log(`fusion: starting ${input.spec.id} (${input.provider}:${input.spec.model})...`);
-  const proc = spawnLogged(runner.command, args, {
-    ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
-    env: input.env
-  });
-  const url = `http://127.0.0.1:${port}`;
-  try {
-    await waitForHttp(`${url}/v1/models`, proc, {
-      timeoutMs: 30_000,
-      label: `${input.spec.id} server`,
-      requireOk: true
+  const label = `${input.spec.id} (${input.provider}:${input.spec.model})`;
+  const maxAttempts = 3;
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const port = await freePort();
+    const args = [
+      ...runner.prefix,
+      "serve-endpoint",
+      "--id",
+      input.spec.id,
+      "--model",
+      input.spec.model,
+      "--provider",
+      input.provider,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      ...(input.spec.baseUrl !== undefined ? ["--base-url", input.spec.baseUrl] : []),
+      ...(keyEnv !== undefined ? ["--api-key-env", keyEnv] : [])
+    ];
+    input.log(
+      attempt === 1
+        ? `fusion: starting ${label}...`
+        : `fusion: retrying ${label} (attempt ${attempt}/${maxAttempts})...`
+    );
+    const proc = spawnLogged(runner.command, args, {
+      ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
+      ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
+      env: input.env
     });
-  } catch (error) {
-    terminate(proc.child);
-    throw error instanceof Error ? error : new Error(String(error));
+    const url = `http://127.0.0.1:${port}`;
+    try {
+      await waitForHttp(`${url}/v1/models`, proc, {
+        timeoutMs: 30_000,
+        label: `${input.spec.id} server`,
+        requireOk: true
+      });
+      input.log(`fusion: ${input.spec.id} ready on ${url}`);
+      return { url, child: proc.child };
+    } catch (error) {
+      terminate(proc.child);
+      lastError = error instanceof Error ? error : new Error(String(error));
+      // A missing runner binary or a provider-side rejection (bad key / model)
+      // will not be fixed by retrying — surface it immediately with guidance.
+      const permanent = proc.spawnError() !== undefined || looksPermanentFailure(proc.log());
+      if (permanent || attempt === maxAttempts) {
+        const keyHint = keyEnv !== undefined ? ` and that ${keyEnv} grants access` : "";
+        throw new Error(
+          `panel model "${input.spec.id}" (${input.provider}:${input.spec.model}) could not start.\n` +
+            `  Check the model name${keyHint}.\n` +
+            `  ${lastError.message}`
+        );
+      }
+      // Transient: brief backoff, then retry on a fresh port.
+      await sleep(500 * attempt);
+    }
   }
-  input.log(`fusion: ${input.spec.id} ready on ${url}`);
-  return { url, child: proc.child };
+  throw lastError ?? new Error(`panel model "${input.spec.id}" could not start`);
 }
 
 /**
@@ -372,12 +478,25 @@ export async function startModelServers(options: {
   specs: PanelModelSpec[];
   endpoints?: Record<string, string>;
   fusionkitDir?: string;
+  logsDir?: string;
+  report?: StackReporter;
   log: (line: string) => void;
 }): Promise<ModelServers> {
-  const { specs } = options;
+  const { specs, report } = options;
   const judge = specs[0];
   if (judge === undefined) throw new Error("at least one panel model is required");
   const models: EnsembleModel[] = specs.map((spec) => ({ id: spec.id, model: spec.model }));
+
+  // Prefer structured events when a reporter is present; otherwise keep the
+  // plain line logs that non-interactive callers and tests rely on.
+  const announceStart = (id: string, label: string): void => {
+    if (report) report({ kind: "server.start", id, label });
+    else options.log(`fusion: starting ${label}...`);
+  };
+  const announceReady = (id: string, detail: string): void => {
+    if (report) report({ kind: "server.ready", id, detail });
+    else options.log(`fusion: ${id} ready on ${detail}`);
+  };
 
   if (options.endpoints !== undefined) {
     return {
@@ -406,29 +525,60 @@ export async function startModelServers(options: {
     await Promise.allSettled(gateways.map((gateway) => gateway.close()));
     await Promise.allSettled(backends.map((backend) => backend.stop()));
   };
+
+  const logFileFor = (id: string): string | undefined =>
+    options.logsDir !== undefined ? join(options.logsDir, `${id}.log`) : undefined;
+
+  // MLX backends are memory-heavy (each loads a model into RAM), so they start
+  // sequentially. Cloud `serve-endpoint` servers are cheap and network-bound, so
+  // they start concurrently to cut perceived boot time.
+  const mlxSpecs = specs.filter((spec) => (spec.provider ?? "mlx") === "mlx");
+  const cloudSpecs = specs.filter((spec) => (spec.provider ?? "mlx") !== "mlx");
+
   try {
-    for (const spec of specs) {
-      const provider = spec.provider ?? "mlx";
-      if (provider === "mlx") {
-        options.log(`fusion: loading ${spec.id} (${spec.model})...`);
-        const backend = new MlxBackend({ model: spec.model });
-        await backend.start();
-        const gateway = await startGateway({ backend });
-        backends.push(backend);
-        gateways.push(gateway);
-        endpoints[spec.id] = gateway.url();
-        options.log(`fusion: ${spec.id} ready on ${gateway.url()}`);
-      } else {
-        const started = await spawnCloudServer({
+    for (const spec of mlxSpecs) {
+      announceStart(spec.id, `${spec.id} (${spec.model})`);
+      const backend = new MlxBackend({ model: spec.model });
+      await backend.start();
+      const gateway = await startGateway({ backend });
+      backends.push(backend);
+      gateways.push(gateway);
+      endpoints[spec.id] = gateway.url();
+      announceReady(spec.id, gateway.url());
+    }
+
+    for (const spec of cloudSpecs) {
+      announceStart(spec.id, `${spec.id} (${spec.provider}:${spec.model})`);
+    }
+    const cloudResults = await Promise.allSettled(
+      cloudSpecs.map((spec) =>
+        spawnCloudServer({
           spec,
-          provider,
+          provider: (spec.provider ?? "mlx") as Exclude<PanelProvider, "mlx">,
           ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
+          ...(logFileFor(spec.id) !== undefined ? { logFile: logFileFor(spec.id) as string } : {}),
           env: cloudEnv,
-          log: options.log
-        });
-        children.push(started.child);
-        endpoints[spec.id] = started.url;
+          log: () => {}
+        }).then((started) => ({ id: spec.id, started }))
+      )
+    );
+    const failures: string[] = [];
+    for (let index = 0; index < cloudResults.length; index++) {
+      const result = cloudResults[index];
+      const spec = cloudSpecs[index];
+      if (result === undefined || spec === undefined) continue;
+      if (result.status === "fulfilled") {
+        children.push(result.value.started.child);
+        endpoints[result.value.id] = result.value.started.url;
+        announceReady(result.value.id, result.value.started.url);
+      } else {
+        const detail = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        if (report) report({ kind: "server.fail", id: spec.id, detail });
+        failures.push(`${spec.id}: ${detail}`);
       }
+    }
+    if (failures.length > 0) {
+      throw new Error(`panel server(s) failed to start:\n${failures.join("\n")}`);
     }
   } catch (error) {
     await closeAll();
@@ -463,6 +613,8 @@ export type StartFusionStackOptions = {
   port?: number;
   authToken?: string;
   timeoutMs?: number;
+  logsDir?: string;
+  report?: StackReporter;
   log: (line: string) => void;
 };
 
@@ -476,6 +628,7 @@ export async function startSynthesisServer(input: {
   judgeModel: string;
   judgeBaseUrl: string;
   env: Record<string, string | undefined>;
+  logFile?: string;
   log: (line: string) => void;
 }): Promise<{ url: string; child: ChildProcess }> {
   const port = await freePort();
@@ -502,7 +655,11 @@ export async function startSynthesisServer(input: {
   const proc = spawnLogged(
     runner.command,
     [...runner.prefix, "serve", "--config", configPath, "--host", "127.0.0.1", "--port", String(port)],
-    { ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}), env: input.env }
+    {
+      ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
+      ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
+      env: input.env
+    }
   );
   // The temp config is only read at startup; drop it once the server exits.
   proc.child.once("exit", () => rmSync(configDir, { recursive: true, force: true }));
@@ -522,10 +679,13 @@ export async function startSynthesisServer(input: {
 }
 
 export async function startFusionStack(options: StartFusionStackOptions): Promise<FusionStack> {
+  const report = options.report;
   const servers = await startModelServers({
     specs: options.models,
     ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
     ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
+    ...(options.logsDir !== undefined ? { logsDir: options.logsDir } : {}),
+    ...(report !== undefined ? { report } : {}),
     log: options.log
   });
 
@@ -540,17 +700,21 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       if (options.fusionkitDir !== undefined) {
         loadEnvFileInto(join(options.fusionkitDir, ".env"), cloudEnv);
       }
+      if (report) report({ kind: "synth.start" });
       const synthesis = await startSynthesisServer({
         ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
+        ...(options.logsDir !== undefined ? { logFile: join(options.logsDir, "synthesis.log") } : {}),
         judgeModel: options.judgeModel ?? servers.judgeModel,
         judgeBaseUrl: servers.judgeUrl,
         env: cloudEnv,
-        log: options.log
+        log: report ? () => {} : options.log
       });
       synthesisChild = synthesis.child;
       synthesisUrl = synthesis.url;
+      if (report) report({ kind: "synth.ready", detail: synthesis.url });
     }
 
+    if (report) report({ kind: "gateway.start" });
     // The judge-streamed-trajectory front door: each panel model produces a
     // trajectory and the judge emits the trajectory the user's tool executes.
     const gatewayConfig: GatewayRunnerConfig = {
@@ -569,6 +733,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       port: options.port ?? 0,
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {})
     });
+    if (report) report({ kind: "gateway.ready", detail: gateway.url() });
     return {
       fusionUrl: gateway.url(),
       endpoints: servers.endpoints,
@@ -604,6 +769,7 @@ function scrubbedBridgeEnv(): Record<string, string> {
 export async function startCursorBridge(input: {
   cursorKitDir: string;
   fusionUrl: string;
+  logFile?: string;
   log: (line: string) => void;
 }): Promise<{ child: ChildProcess; port: number }> {
   const port = await freePort();
@@ -620,6 +786,7 @@ export async function startCursorBridge(input: {
   };
   const proc = spawnLogged(process.execPath, ["dist/src/cli.js", "serve"], {
     cwd: input.cursorKitDir,
+    ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
     env
   });
   try {
@@ -647,6 +814,8 @@ export type RunFusionOptions = {
   local?: boolean;
   /** Boot the local scope dashboard and stream trace events into it. */
   observe?: boolean;
+  /** Skip the interactive cost/scope confirmation for the cloud panel. */
+  yes?: boolean;
   log?: (line: string) => void;
 };
 
@@ -657,6 +826,8 @@ export async function runFusion(
 ): Promise<number> {
   const log = options.log ?? ((line: string) => console.error(line));
   const root = mkdtempSync(join(tmpdir(), "fusionkit-fusion-"));
+  const logsDir = join(root, "logs");
+  mkdirSync(logsDir, { recursive: true });
   // Default the fused repo to the current directory's git repo: the panel models
   // and the launched harness must operate on the SAME codebase, and the launched
   // tool runs in this repo (below). No hidden sample repo — if the user wants a
@@ -672,34 +843,123 @@ export async function runFusion(
     }
     repo = toplevel;
   }
+  // Load API keys from a project `.env` (cwd, then the repo root) so provider
+  // keys work without a manual `export`. Already-exported values always win, so
+  // an explicitly set (even empty) key is never overridden.
+  loadEnvFileInto(join(process.cwd(), ".env"), process.env);
+  if (repo !== process.cwd()) loadEnvFileInto(join(repo, ".env"), process.env);
   const models = options.models ?? (options.local === true ? [...DEFAULT_TRIO] : [...DEFAULT_CLOUD_PANEL]);
 
   // Fail fast on missing prerequisites before we start spawning a stack.
   runPreflight(preflightRequirements(tool, models, options));
 
-  log(`fusion: panel = ${models.map((model) => model.id).join(", ")}`);
-  log(`fusion: repo = ${repo}`);
+  const judgeLabel = options.judgeModel ?? models[0]?.model ?? "(first panel model)";
+  // The live boot checklist only renders on an interactive TTY when the caller
+  // did not supply its own log sink (tests/programmatic callers stay on the
+  // plain line-log path so their output is deterministic).
+  const useBootView = options.log === undefined && isInteractive();
+  if (useBootView) {
+    uiStream().write(`\n${brandHeader()}\n`);
+    uiStream().write(
+      `${dim("panel:")} ${models.map((model) => model.id).join(", ")}   ` +
+        `${dim("judge:")} ${judgeLabel}   ${dim("repo:")} ${repo}\n\n`
+    );
+  } else {
+    log(`fusion: panel = ${models.map((model) => model.id).join(", ")}`);
+    log(`fusion: repo = ${repo}`);
+  }
+
+  // Teardown wiring is registered BEFORE the first spawn so a Ctrl+C during the
+  // (potentially slow) boot tears down whatever has already started, instead of
+  // orphaning detached child process groups. Resources push their disposer as
+  // soon as they exist; cleanup runs them in reverse order, exactly once.
+  const disposers: Array<() => Promise<void> | void> = [];
+  let cleaned = false;
+  const cleanup = async (): Promise<void> => {
+    if (cleaned) return;
+    cleaned = true;
+    for (const dispose of disposers.reverse()) {
+      try {
+        await dispose();
+      } catch {
+        // best-effort teardown; never let one disposer block the rest
+      }
+    }
+  };
+  let signalled = false;
+  const onSignal = (): void => {
+    if (signalled) return;
+    signalled = true;
+    // Never wedge on shutdown: if cleanup stalls (a child ignoring SIGTERM),
+    // force-exit after a grace period.
+    const forced = setTimeout(() => process.exit(1), 10_000);
+    forced.unref();
+    void cleanup().then(() => process.exit(130));
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+
+  // Cost/scope confirmation: the default cloud panel fans every prompt out
+  // across multiple frontier models plus a judge. Make that explicit before we
+  // spend, unless --yes was passed or we are not on an interactive TTY.
+  const spawningCloud =
+    options.endpoints === undefined && models.some((model) => (model.provider ?? "mlx") !== "mlx");
+  if (useBootView && spawningCloud && options.yes !== true && canPromptInteractively()) {
+    const proceed = await confirm({
+      message: `Run the cloud panel? Each prompt fans out across ${models.length} model(s) + a judge (provider usage applies).`,
+      defaultValue: true
+    });
+    if (!proceed) {
+      uiStream().write(`${gray("aborted — nothing was started.")}\n`);
+      return 130;
+    }
+  }
+
+  // The live boot checklist, driven by structured stack events.
+  const boot = useBootView
+    ? createBootView({
+        servers:
+          options.endpoints === undefined
+            ? models.map((model) => ({ id: model.id, label: `${model.id} · ${model.model}` }))
+            : [],
+        includeSynth: options.synthesisUrl === undefined,
+        includeDashboard: options.observe === true,
+        title: dim("booting the fusion stack")
+      })
+    : undefined;
+  if (boot !== undefined) disposers.push(() => boot.stop());
+  const report: StackReporter | undefined = boot?.report;
 
   // When --observe is set, boot the dashboard and export the trace env BEFORE
   // anything starts, so the in-process gateway/ensemble/agent emitters and every
   // spawned child (panel servers, synthesis serve, cursor bridge) inherit it.
   // Without the flag, FUSION_TRACE_* stays unset and all emitters are no-ops.
   let observability: Observability | undefined;
-  if (options.observe === true) {
-    observability = await startObservability({ log });
-    process.env.FUSION_TRACE_URL = observability.ingestUrl;
-    process.env.FUSION_TRACE_DIR = observability.traceDir;
-    log(`fusion: observability dashboard at ${observability.url}`);
-    log(`fusion: trace events -> ${observability.ingestUrl} (jsonl fallback in ${observability.traceDir})`);
-    openUrl(observability.url);
-  }
-
+  let bridge: ChildProcess | undefined;
   let stack: FusionStack;
   try {
+    if (options.observe === true) {
+      observability = await startObservability({
+        log,
+        logFile: join(logsDir, "dashboard.log"),
+        ...(report !== undefined ? { report } : {})
+      });
+      disposers.push(() => observability?.close() ?? Promise.resolve());
+      process.env.FUSION_TRACE_URL = observability.ingestUrl;
+      process.env.FUSION_TRACE_DIR = observability.traceDir;
+      if (boot === undefined) {
+        log(`fusion: observability dashboard at ${observability.url}`);
+        log(`fusion: trace events -> ${observability.ingestUrl} (jsonl fallback in ${observability.traceDir})`);
+      }
+      openUrl(observability.url);
+    }
+
     stack = await startFusionStack({
       repo,
       outputRoot: join(root, "runs"),
       models,
+      logsDir,
+      ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
       ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
@@ -709,30 +969,36 @@ export async function runFusion(
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       log
     });
+    disposers.push(() => stack.close());
   } catch (error) {
-    if (observability !== undefined) await observability.close().catch(() => {});
+    if (boot !== undefined) boot.stop();
+    await cleanup();
     throw error;
   }
-  log(`fusion: gateway on ${stack.fusionUrl} (model: ${FUSION_MODEL_LABEL})`);
+  if (boot !== undefined) {
+    // Settle the checklist BEFORE the agent inherits the terminal: the launched
+    // coding tool owns the screen from here on, so no live UI may remain.
+    boot.stop();
+    uiStream().write(
+      `${green(glyph.tick())} ${bold("fusion ready")}  ${dim(stack.fusionUrl)} ${dim(`(model: ${FUSION_MODEL_LABEL})`)}\n`
+    );
+    uiStream().write(`${dim(`logs: ${logsDir}`)}\n`);
+    if (observability !== undefined) {
+      uiStream().write(`${dim(`dashboard: ${observability.url}`)}\n`);
+    }
+  } else {
+    log(`fusion: gateway on ${stack.fusionUrl} (model: ${FUSION_MODEL_LABEL})`);
+    log(`fusion: logs in ${logsDir}`);
+  }
 
-  let bridge: ChildProcess | undefined;
-  let cleaned = false;
-  const cleanup = async (): Promise<void> => {
-    if (cleaned) return;
-    cleaned = true;
-    if (bridge !== undefined) terminate(bridge);
-    await stack.close().catch(() => {});
-    if (observability !== undefined) await observability.close().catch(() => {});
+  // Hand the terminal to the coding agent cleanly: silence the per-turn gateway
+  // chatter (it would corrupt a full-screen agent TUI; trace events still flow
+  // to --observe) and make sure the cursor is restored.
+  const prepareForPassthrough = (): void => {
+    setGatewayChatter(false);
+    const stream = uiStream();
+    if (stream.isTTY) stream.write("\u001b[?25h");
   };
-  const onSignal = (): void => {
-    // Never wedge on shutdown: if cleanup stalls (a child ignoring SIGTERM),
-    // force-exit after a grace period.
-    const forced = setTimeout(() => process.exit(1), 10_000);
-    forced.unref();
-    void cleanup().then(() => process.exit(0));
-  };
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
 
   try {
     switch (tool) {
@@ -749,10 +1015,12 @@ export async function runFusion(
       case "codex": {
         const home = mkdtempSync(join(tmpdir(), "fusionkit-fusion-codex-"));
         writeFileSync(join(home, "config.toml"), codexConfigToml(stack.fusionUrl, FUSION_MODEL_LABEL));
+        prepareForPassthrough();
         log("fusion: launching codex (each prompt is a coding task fused across the panel)...");
         return await spawnTool("codex", toolArgs, { CODEX_HOME: home }, repo);
       }
       case "claude": {
+        prepareForPassthrough();
         log("fusion: launching claude...");
         return await spawnTool("claude", toolArgs, claudeEnv(stack.fusionUrl, options.authToken), repo);
       }
@@ -769,8 +1037,17 @@ export async function runFusion(
           log(`  cursor-agent --endpoint http://127.0.0.1:<bridge-port> --model ${FUSION_MODEL_LABEL}`);
           return 1;
         }
-        const started = await startCursorBridge({ cursorKitDir, fusionUrl: stack.fusionUrl, log });
+        const started = await startCursorBridge({
+          cursorKitDir,
+          fusionUrl: stack.fusionUrl,
+          logFile: join(logsDir, "cursor-bridge.log"),
+          log
+        });
         bridge = started.child;
+        disposers.push(() => {
+          if (bridge !== undefined) terminate(bridge);
+        });
+        prepareForPassthrough();
         log("fusion: launching cursor-agent...");
         return await spawnTool(
           "cursor-agent",
@@ -791,36 +1068,14 @@ export async function runFusion(
 
 /** Interactive tool picker for when no `--tool` was provided on a TTY. */
 export async function pickTool(): Promise<FusionTool> {
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  try {
-    process.stderr.write(
-      [
-        "Which coding agent should model fusion back?",
-        "  1) codex   — OpenAI Codex CLI",
-        "  2) claude  — Claude Code",
-        "  3) cursor  — cursor-agent (needs --cursor-kit-dir / FUSIONKIT_CURSORKIT_DIR)",
-        "  4) serve   — just run the gateway and print setup",
-        ""
-      ].join("\n")
-    );
-    const answer = (await new Promise<string>((resolve) => rl.question("Choose [1-4]: ", resolve))).trim().toLowerCase();
-    switch (answer) {
-      case "1":
-      case "codex":
-        return "codex";
-      case "2":
-      case "claude":
-        return "claude";
-      case "3":
-      case "cursor":
-        return "cursor";
-      case "4":
-      case "serve":
-        return "serve";
-      default:
-        return "codex";
-    }
-  } finally {
-    rl.close();
-  }
+  return select<FusionTool>({
+    message: "Which coding agent should model fusion back?",
+    options: [
+      { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
+      { value: "claude", label: "claude", hint: "Claude Code" },
+      { value: "cursor", label: "cursor", hint: "needs --cursor-kit-dir / FUSIONKIT_CURSORKIT_DIR" },
+      { value: "serve", label: "serve", hint: "just run the gateway and print setup" }
+    ],
+    defaultIndex: 0
+  });
 }

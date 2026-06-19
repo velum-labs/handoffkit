@@ -1,0 +1,77 @@
+---
+title: Configuration
+description: The fusionkit.json per-repo config reference.
+---
+
+## fusionkit.json
+
+`fusionkit.json` lives at your repo root and is **safe to commit** — it stores
+only the env-var *names* that hold API keys (`keyEnv`), never the secret values.
+Scaffold it interactively:
+
+```bash
+fusionkit fusion init
+```
+
+Inspect the effective configuration and a dry-run preview any time:
+
+```bash
+fusionkit status
+```
+
+## Precedence
+
+Settings resolve in this order (highest wins):
+
+```
+explicit CLI flags  >  fusionkit.json  >  built-in defaults
+```
+
+So the file is a default layer, not a lock — any flag overrides it for a single
+run. Use `--no-local` / `--no-observe` to override a `true` default from the file.
+
+## Schema
+
+```json
+{
+  "version": "fusionkit.fusion.v1",
+  "tool": "codex",
+  "panel": [
+    { "id": "gpt", "model": "gpt-5.5", "provider": "openai", "keyEnv": "OPENAI_API_KEY" },
+    { "id": "sonnet", "model": "claude-sonnet-4-6", "provider": "anthropic", "keyEnv": "ANTHROPIC_API_KEY" }
+  ],
+  "judgeModel": "gpt-5.5",
+  "local": false,
+  "observe": false,
+  "cursorKitDir": null,
+  "port": null
+}
+```
+
+### Fields
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `version` | string | Must be `"fusionkit.fusion.v1"`. |
+| `tool` | `codex` \| `claude` \| `cursor` \| `serve` | Default agent when none is passed. |
+| `panel` | array | Panel models (see below). |
+| `judgeModel` | string | Model used for judge synthesis. Defaults to the first panel model. |
+| `local` | boolean | Use the local MLX trio by default. |
+| `observe` | boolean | Boot the observability dashboard by default. |
+| `cursorKitDir` | string \| null | Built Cursorkit checkout for the `cursor` tool. |
+| `port` | number \| null | Fixed gateway port (otherwise ephemeral). |
+
+### Panel entries
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string | Stable identifier for the panel member. |
+| `model` | string | The model name. |
+| `provider` | `mlx` \| `openai` \| `anthropic` \| `google` \| `openai-compatible` | Defaults to `mlx`. |
+| `keyEnv` | string | Env var holding this model's API key (cloud only). |
+| `baseUrl` | string | Optional custom base URL. |
+
+<Callout type="warn">
+  Never put API key values in `fusionkit.json`. Store only the env-var name in
+  `keyEnv` and export the secret (or put it in `.env`).
+</Callout>

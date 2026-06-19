@@ -1,0 +1,76 @@
+---
+title: Quickstart
+description: From install to a fused coding session.
+---
+
+## 1. Check your environment
+
+```bash
+fusionkit doctor
+```
+
+Fix anything marked with a cross (missing `uv`/`uvx`, an agent binary, or
+provider keys).
+
+## 2. Launch a coding agent
+
+From inside your git repo:
+
+```bash
+fusionkit codex      # or: fusionkit claude
+```
+
+On a TTY you'll see a live boot checklist as the panel servers, synthesizer, and
+gateway come up, a one-line cost confirmation for the cloud panel, then your
+agent launches pre-wired to the gateway. One `Ctrl+C` tears the whole stack down.
+
+## 3. (Optional) Save per-repo defaults
+
+So your team can just run `fusionkit codex`:
+
+```bash
+fusionkit fusion init
+```
+
+This writes a committed `fusionkit.json`. See
+[Configuration](/docs/configuration).
+
+## Per-tool quickstarts
+
+### Codex
+
+```bash
+fusionkit codex
+```
+
+### Claude Code
+
+```bash
+fusionkit claude
+```
+
+### Cursor
+
+```bash
+fusionkit cursor --cursor-kit-dir /path/to/cursorkit
+# or set FUSIONKIT_CURSORKIT_DIR
+```
+
+### Just the gateway
+
+Run the gateway and print setup snippets for any OpenAI-compatible tool:
+
+```bash
+fusionkit serve
+```
+
+## Common flags
+
+- `--local` — use the on-device MLX panel instead of the cloud panel.
+- `--model ID=PROVIDER:MODEL` — define a custom panel (repeatable).
+- `--judge-model <model>` — pick the synthesis judge.
+- `--observe` — boot the local trace dashboard.
+- `--yes` — skip the cloud-panel cost confirmation.
+
+fusionkit's own flags must precede the tool name; everything after the tool is
+forwarded to it.
