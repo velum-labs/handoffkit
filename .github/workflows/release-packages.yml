@@ -10,7 +10,13 @@ on:
 
 permissions:
   contents: read
+  packages: read
   id-token: write
+
+# Mirrors ci.yml: lets pnpm read the repo .npmrc (the @velum-labs private
+# protocol devDep) so the resolved peer-dependency settings match the lockfile.
+env:
+  PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 
 concurrency:
   group: release-packages-${{ github.ref }}
