@@ -424,8 +424,8 @@ importers:
         specifier: workspace:*
         version: link:../workspace
       '@velum-labs/cursorkit':
-        specifier: 0.1.1
-        version: 0.1.1
+        specifier: 0.1.2
+        version: 0.1.2
 
   packages/example-utils:
     dependencies:
@@ -856,8 +856,8 @@ packages:
   '@types/node@22.19.20':
     resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
 
-  '@velum-labs/cursorkit@0.1.1':
-    resolution: {integrity: sha512-p8pIgL0DW7wyQkEWQfzKHwumSwEM+d6C4atbR31r2ZVAWsF3YDNadEWrypODYv8Dnj0cpOnqlclAFxhY7JOrSg==}
+  '@velum-labs/cursorkit@0.1.2':
+    resolution: {integrity: sha512-xbblHKSIQUzsXKttmqh415jgEN6UVA4K9Zpgl3i5jXrOWvhqNbFCNbgABVE/sgBG/1OhzYvlxQ391AUA7WZOwQ==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -1620,7 +1620,7 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@velum-labs/cursorkit@0.1.1':
+  '@velum-labs/cursorkit@0.1.2':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
       '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
