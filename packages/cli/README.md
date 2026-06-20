@@ -47,7 +47,7 @@ cloud panel (skip with `--yes`). Use `--local` for the on-device MLX panel, or
 Tired of long flag lines? Scaffold a committed `fusionkit.json`:
 
 ```bash
-fusionkit fusion init
+fusionkit init
 ```
 
 It records the panel, judge, default tool, and run defaults so the whole team
@@ -60,7 +60,7 @@ config and a dry-run preview with `fusionkit status`.
 - `fusionkit codex | claude | cursor` — launch that agent backed by the panel.
 - `fusionkit serve` — just run the gateway and print setup snippets for any tool.
 - `fusionkit fusion [tool]` — the generic launcher (interactive picker on a TTY).
-- `fusionkit fusion init` — scaffold `fusionkit.json` for this repo.
+- `fusionkit init` — scaffold `fusionkit.json` for this repo.
 - `fusionkit doctor` — check prerequisites with fix hints.
 - `fusionkit status` — show the effective config and what a run will do.
 

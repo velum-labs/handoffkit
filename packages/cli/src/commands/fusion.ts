@@ -146,30 +146,34 @@ function resolveContext(opts: FusionOpts): { options: RunFusionOptions; configTo
 }
 
 export function registerFusion(program: Command): void {
+  // Top-level `init` — scaffold a committed fusionkit.json for this repo.
+  program
+    .command("init")
+    .description("scaffold a committed fusionkit.json for this repo")
+    .option("--repo <dir>", "coding workspace the panel fuses over")
+    .option("--force", "overwrite an existing fusionkit.json")
+    .action(async (opts: FusionOpts) => {
+      const repoRoot = configRepoRoot(resolveOptions(opts));
+      const code = await runFusionInit({ repoRoot, force: opts.force === true });
+      process.exit(code);
+    });
+
   // Generic `fusion [tool]` — keeps the original surface and interactive pick.
   applyFusionOptions(
     program
       .command("fusion")
       .description("one command: real model fusion backs a coding agent")
-      .argument("[tool]", `${FUSION_TOOLS.join(" | ")} | init | stop (omit on a TTY to pick interactively)`)
+      .argument("[tool]", `${FUSION_TOOLS.join(" | ")} | stop (omit on a TTY to pick interactively)`)
       .argument("[args...]", "arguments forwarded to the tool")
       .option("--tool <tool>", `coding agent to launch (${FUSION_TOOLS.join(" | ")})`)
-      .option("--force", "overwrite an existing fusionkit.json (with `fusion init`)")
   )
     .addHelpText(
       "after",
       "\nfusionkit's own flags must precede the tool name; everything after the tool is forwarded to it." +
-        "\nRun `fusionkit fusion init` to scaffold a committed fusionkit.json for this repo." +
+        "\nRun `fusionkit init` to scaffold a committed fusionkit.json for this repo." +
         "\nRun `fusionkit fusion stop` to reap portless singleton services (router, dashboard, ...)."
     )
     .action(async (positionalTool: string | undefined, args: string[], opts: FusionOpts) => {
-      // `fusion init` scaffolds the per-repo config instead of launching a tool.
-      if (positionalTool === "init") {
-        const repoRoot = configRepoRoot(resolveOptions(opts));
-        const code = await runFusionInit({ repoRoot, force: opts.force === true });
-        process.exit(code);
-      }
-
       // `fusion stop` reaps persistent portless singletons left running by prior
       // runs (the router, dashboard, ...).
       if (positionalTool === "stop") {

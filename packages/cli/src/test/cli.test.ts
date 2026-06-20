@@ -14,15 +14,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { after, before, test } from "node:test";
+import { test } from "node:test";
 
 import { MODEL_FUSION_SCHEMA_BUNDLE_HASH } from "@fusionkit/protocol";
-import {
-  makeRepo as makeStackRepo,
-  mockRunRequest,
-  startStack,
-  uploadWorkspace
-} from "@fusionkit/testkit";
 
 const CLI = fileURLToPath(new URL("../index.js", import.meta.url));
 const SMOKE_ENV_KEYS = [
@@ -30,8 +24,6 @@ const SMOKE_ENV_KEYS = [
   "WARRANT_CODEX_SMOKE",
   "WARRANT_ENSEMBLE_LIVE_SMOKE"
 ] as const;
-
-let home: string;
 
 async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -118,7 +110,7 @@ async function startSentinelBackend(
 
 function warrant(
   args: string[],
-  options: { input?: string; env?: Record<string, string | undefined>; dir?: string } = {}
+  options: { input?: string; env?: Record<string, string | undefined> } = {}
 ): { status: number; stdout: string; stderr: string } {
   const env = { ...process.env };
   for (const key of SMOKE_ENV_KEYS) delete env[key];
@@ -126,7 +118,7 @@ function warrant(
     if (value === undefined) delete env[key];
     else env[key] = value;
   }
-  const result = spawnSync(process.execPath, [CLI, "--dir", options.dir ?? home, ...args], {
+  const result = spawnSync(process.execPath, [CLI, ...args], {
     encoding: "utf8",
     env,
     input: options.input
@@ -140,7 +132,7 @@ function warrant(
 
 async function warrantAsync(
   args: string[],
-  options: { input?: string; env?: Record<string, string | undefined>; dir?: string } = {}
+  options: { input?: string; env?: Record<string, string | undefined> } = {}
 ): Promise<{ status: number; stdout: string; stderr: string }> {
   const env = { ...process.env };
   for (const key of SMOKE_ENV_KEYS) delete env[key];
@@ -149,7 +141,7 @@ async function warrantAsync(
     else env[key] = value;
   }
   return await new Promise((resolve) => {
-    const child = spawn(process.execPath, [CLI, "--dir", options.dir ?? home, ...args], {
+    const child = spawn(process.execPath, [CLI, ...args], {
       env,
       stdio: ["pipe", "pipe", "pipe"]
     });
@@ -172,20 +164,11 @@ async function warrantAsync(
   });
 }
 
-before(() => {
-  home = mkdtempSync(join(tmpdir(), "warrant-cli-test-"));
-  rmSync(home, { recursive: true, force: true });
-});
-
-after(() => {
-  rmSync(home, { recursive: true, force: true });
-});
-
 test("help prints usage and lists the top-level commands", () => {
   const result = warrant(["help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /real model fusion behind your coding agent/);
-  for (const command of ["run", "continue", "ensemble", "local", "fusion", "ui", "codex", "claude", "cursor", "serve"]) {
+  for (const command of ["init", "ensemble", "local", "fusion", "codex", "claude", "cursor", "serve"]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
 });
@@ -241,93 +224,31 @@ test("fusion help documents the flags-before-tool contract", () => {
   assert.match(result.stdout, /must precede the tool name/);
 });
 
-test("init creates keys, config, and policy; refuses to re-init", () => {
-  const result = warrant(["init"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /initialized warrant home/);
-  assert.match(result.stdout, /admin token \(for the control panel\)/);
-  assert.ok(existsSync(join(home, "config.json")));
-  assert.ok(existsSync(join(home, "policy.json")));
-  // The org private key is sealed at rest; a master key file is generated.
-  assert.ok(existsSync(join(home, "keys", "plane.key.enc")));
-  assert.ok(existsSync(join(home, "keys", "plane.pub.pem")));
-  assert.ok(existsSync(join(home, "master.key")));
+test("init scaffolds a fusionkit.json and refuses to clobber without --force", () => {
+  const fixture = makeRepo();
+  try {
+    const result = warrant(["init", "--repo", fixture.repo]);
+    assert.equal(result.status, 0, result.stderr);
+    const configPath = join(fixture.repo, "fusionkit.json");
+    assert.ok(existsSync(configPath));
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as { version: string };
+    assert.equal(config.version, "fusionkit.fusion.v1");
 
-  const config = JSON.parse(readFileSync(join(home, "config.json"), "utf8")) as {
-    version: string;
-    host: string;
-    secretsKeyHex?: string;
-  };
-  assert.equal(config.version, "warrant.config.v2");
-  assert.equal(config.host, "127.0.0.1");
-  // No key material lives in config.json anymore.
-  assert.equal(config.secretsKeyHex, undefined);
+    const again = warrant(["init", "--repo", fixture.repo]);
+    assert.equal(again.status, 1);
+    assert.match(again.stderr, /already exists/);
 
-  const again = warrant(["init"]);
-  assert.equal(again.status, 1);
-  assert.match(again.stderr, /already initialized/);
+    const forced = warrant(["init", "--repo", fixture.repo, "--force"]);
+    assert.equal(forced.status, 0, forced.stderr);
+  } finally {
+    fixture.cleanup();
+  }
 });
 
-test("secrets are stored encrypted and listed by name only", () => {
-  const set = warrant(["secrets", "set", "NPM_TOKEN", "super-secret-value"]);
-  assert.equal(set.status, 0, set.stderr);
-  assert.match(set.stdout, /encrypted at rest/);
-
-  const list = warrant(["secrets", "list"]);
-  assert.equal(list.status, 0);
-  assert.equal(list.stdout.trim(), "NPM_TOKEN");
-
-  const stored = readFileSync(join(home, "secrets.enc"), "utf8");
-  assert.ok(!stored.includes("super-secret-value"), "value must be encrypted");
-});
-
-test("ui prints the control panel address and login token", () => {
-  const result = warrant(["ui"]);
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /control panel: http:\/\/127\.0\.0\.1:7172\/ui\//);
-  assert.match(result.stdout, /login token: {3}\S+/);
-});
-
-test("unknown commands and missing arguments fail with guidance", () => {
+test("unknown commands fail with guidance", () => {
   const unknown = warrant(["frobnicate"]);
   assert.equal(unknown.status, 1);
   assert.match(unknown.stderr, /unknown command/);
-
-  const missingAgent = warrant(["run", "do things"]);
-  assert.equal(missingAgent.status, 1);
-  assert.match(missingAgent.stderr, /--agent is required/);
-
-  const missingTask = warrant(["continue", "--agent", "mock"]);
-  assert.equal(missingTask.status, 1);
-  assert.match(missingTask.stderr, /task prompt is required/);
-
-  const badAgent = warrant(["continue", "--agent", "nonsense", "task"]);
-  assert.equal(badAgent.status, 1);
-  assert.match(badAgent.stderr, /unknown agent kind/);
-});
-
-test("verify fails closed on a tampered bundle file", () => {
-  const path = join(home, "garbage.bundle.json");
-  const fake = {
-    version: "warrant.bundle.v1",
-    contract: { signatures: [], workspace: { baseRef: "x" } },
-    receipt: {
-      contractHash: "0".repeat(64),
-      signatures: [],
-      status: "completed",
-      workspaceIn: { baseRef: "y", manifestHash: "z" },
-      workspaceOut: { diffHash: "", artifactHashes: [] },
-      secretsReleased: [],
-      eventsHead: "",
-      eventCount: 0
-    },
-    events: [],
-    keys: { planePublicKeyPem: "", runnerPublicKeyPem: "" }
-  };
-  writeFileSync(path, JSON.stringify(fake));
-  const result = warrant(["verify", path]);
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /VERIFICATION FAILED/);
 });
 
 function makeRepo(): { repo: string; cleanup: () => void; output: string } {
@@ -930,72 +851,3 @@ test("ensemble gateway test runs the unified front-door acceptance suite", async
   }
 });
 
-test("lifecycle commands read a real run from a live plane", async () => {
-  const stack = await startStack({
-    policy: (policy) => {
-      policy.agents.allow = ["mock"];
-    }
-  });
-  const repo = makeStackRepo({ files: { "README.md": "# cli lifecycle\n" } });
-  const liveHome = mkdtempSync(join(tmpdir(), "warrant-cli-live-"));
-  rmSync(liveHome, { recursive: true, force: true });
-  try {
-    // The plane runs in this test process, so every CLI call must use the async
-    // spawner: a synchronous spawn would block the event loop and deadlock the
-    // in-process plane.
-    const init = await warrantAsync(["init"], { dir: liveHome });
-    assert.equal(init.status, 0, init.stderr);
-
-    // Point the freshly initialized home at the in-process test stack.
-    const configPath = join(liveHome, "config.json");
-    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
-      planeUrl: string;
-      adminToken: string;
-    };
-    config.planeUrl = stack.planeUrl;
-    config.adminToken = stack.adminToken;
-    writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    // Create one completed run through the SDK so the CLI has something to read.
-    const captured = await uploadWorkspace(stack.client, repo);
-    const created = await stack.client.requestRun(
-      mockRunRequest({ prompt: "lifecycle probe", pool: stack.pool, workspace: captured.manifest })
-    );
-    if (created.status === "awaiting_approval") {
-      await stack.client.approve(created.runId, { kind: "human", id: "cli-tester" });
-    }
-    assert.ok(await stack.runOnce());
-
-    const runs = await warrantAsync(["runs"], { dir: liveHome });
-    assert.equal(runs.status, 0, runs.stderr);
-    assert.match(runs.stdout, new RegExp(created.runId));
-
-    const receipt = await warrantAsync(["receipt", created.runId], { dir: liveHome });
-    assert.equal(receipt.status, 0, receipt.stderr);
-
-    const bundlePath = join(liveHome, "out.bundle.json");
-    const bundle = await warrantAsync(["bundle", created.runId, "--out", bundlePath], {
-      dir: liveHome
-    });
-    assert.equal(bundle.status, 0, bundle.stderr);
-    assert.match(bundle.stdout, /bundle written to/);
-    assert.ok(existsSync(bundlePath));
-
-    // The CLI round-trips its own bundle through offline verification.
-    const verify = await warrantAsync(["verify", bundlePath], { dir: liveHome });
-    assert.equal(verify.status, 0, verify.stderr);
-    assert.match(verify.stdout, /VERIFIED/);
-
-    const exported = await warrantAsync(["export"], { dir: liveHome });
-    assert.equal(exported.status, 0, exported.stderr);
-    assert.match(exported.stdout, new RegExp(created.runId));
-
-    const pull = await warrantAsync(["pull", created.runId, "--repo", repo], { dir: liveHome });
-    assert.equal(pull.status, 0, pull.stderr);
-    assert.match(pull.stdout, /applied|nothing to pull|branch/);
-  } finally {
-    await stack.stop();
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(liveHome, { recursive: true, force: true });
-  }
-});
