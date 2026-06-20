@@ -6,12 +6,12 @@ import { test } from "node:test";
 
 import { assertHarnessRunResultV1 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
+import { createMockHarness } from "@fusionkit/ensemble";
 
 import {
   createHarnessCapabilityMatrix,
   runHarnessSmokeDashboard
 } from "../dashboard.js";
-import { createMockHarness } from "../mock.js";
 
 function makeRepo(): { repo: string; outputRoot: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "ensemble-dashboard-"));
@@ -34,7 +34,7 @@ test("capability matrix covers Cursor, Claude Code, Codex, command, and mock", (
   const matrix = createHarnessCapabilityMatrix({ env: {} });
   const harnessIds = matrix.rows.map((row) => row.harnessId);
 
-  assert.deepEqual(harnessIds, ["cursor", "claude-code", "codex", "command", "mock"]);
+  assert.deepEqual(harnessIds, ["codex", "claude-code", "cursor", "command", "mock"]);
   assert.ok(matrix.capabilities.includes("model_override"));
   assert.ok(matrix.capabilities.includes("transcript_capture"));
   assert.ok(matrix.capabilities.includes("diff_capture"));

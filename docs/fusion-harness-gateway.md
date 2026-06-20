@@ -80,7 +80,7 @@ It fuses over the current directory's git repo; point it at another with
 
 ```bash
 fusionkit claude --repo /path/to/your/repo
-fusionkit cursor --cursor-kit-dir /path/to/cursorkit        # or FUSIONKIT_CURSORKIT_DIR
+fusionkit cursor                                            # Cursorkit ships bundled; needs a logged-in cursor-agent
 fusionkit codex --local                                     # local MLX panel (Apple Silicon)
 fusionkit codex --model gpt=openai:gpt-5.5 --model opus=anthropic:claude-opus-4-8   # custom panel
 fusionkit serve                                             # just run the gateway + print setup
@@ -123,9 +123,8 @@ Notes:
 
 - First run loads three real models (the trio); later runs reuse them. Swap in a
   lighter real set with `--model`.
-- Cursor needs a built `cursorkit` checkout and a logged-in `cursor-agent`;
-  without `--cursor-kit-dir`/`WARRANT_CURSORKIT_DIR` the command prints manual
-  setup instead of launching.
+- Cursor only needs a logged-in `cursor-agent`; Cursorkit ships bundled as an
+  npm dependency, so no separate checkout is required.
 - Small local models produce imperfect patches; fusion quality scales with the
   panel. The default is a fully real, local, zero-credential path.
 
@@ -234,10 +233,14 @@ MODEL_BASE_URL=http://127.0.0.1:<gateway-port>/v1 \
 MODEL_NAME=local-fusion \
 MODEL_PROVIDER_MODEL=fusion-panel \
 MODEL_API_KEY=local \
-node dist/src/cli.js serve   # in the cursorkit checkout
+node "$(node -p "require.resolve('@velum-labs/cursorkit')")" serve   # bundled cursorkit
 
 cursor-agent --endpoint http://127.0.0.1:<bridge-port> --model local-fusion --mode ask acp
 ```
+
+`fusionkit cursor` does all of this for you (the bridge is spawned from the
+bundled `@velum-labs/cursorkit` dependency); the snippet above is only for manual
+wiring.
 
 Key points discovered:
 
@@ -311,10 +314,9 @@ ACP session lifecycle, and the acceptance suite.
 Env-gated live tests (opt-in; need credentials/tools, skipped by default):
 
 ```bash
-# Codex (ambient auth) + cursor-agent (logged in, needs a built cursorkit checkout)
+# Codex (ambient auth) + cursor-agent (logged in; Cursorkit ships bundled)
 WARRANT_GATEWAY_LIVE_CODEX=1 \
 WARRANT_GATEWAY_LIVE_CURSOR=1 \
-WARRANT_CURSORKIT_DIR=/path/to/cursorkit \
 node --test packages/cli/dist/test/gateway-e2e.test.js
 
 # Claude (needs Anthropic credits)

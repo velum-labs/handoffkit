@@ -15,6 +15,7 @@ import type {
 } from "@fusionkit/protocol";
 
 import { createArtifactStore } from "./artifacts.js";
+import { hardeningToJson } from "./harness.js";
 import type {
   CandidateHardeningMetadata,
   EnsembleCandidateSummary,
@@ -135,7 +136,7 @@ function candidateMetadata(
   }
   Object.assign(metadata, output.metadata ?? {});
   if (metadata.hardening === undefined) {
-    metadata.hardening = fallbackCandidateHardening(descriptor) as unknown as JsonValue;
+    metadata.hardening = hardeningToJson(fallbackCandidateHardening(descriptor));
   }
   if (descriptor.reviewEvidence !== undefined) {
     metadata.review_evidence_attached = true;

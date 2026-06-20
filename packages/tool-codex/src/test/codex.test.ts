@@ -6,14 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import {
-  codexConfigToml,
-  codexHarness
-} from "../codex.js";
-import type { CodexExecRunner } from "../codex.js";
-import type { EnsembleDescriptor } from "../harness.js";
-import { createMockHarness } from "../mock.js";
-import { ensemble } from "../run.js";
+import { createMockHarness, ensemble } from "@fusionkit/ensemble";
+import type { EnsembleDescriptor } from "@fusionkit/ensemble";
+
+import { codexConfigToml, codexHarness } from "../index.js";
+import type { CodexExecRunner } from "../index.js";
 
 function tempOutputRoot(): { outputRoot: string; cleanup: () => void } {
   const outputRoot = mkdtempSync(join(tmpdir(), "ensemble-codex-out-"));
@@ -120,8 +117,8 @@ test("codexConfigToml declares a Responses provider without requiring auth", () 
   });
 
   assert.ok(toml.includes('model = "local-model"'));
-  assert.ok(toml.includes('model_provider = "warrant-codex"'));
-  assert.ok(toml.includes("[model_providers.warrant-codex]"));
+  assert.ok(toml.includes('model_provider = "fusionkit-codex"'));
+  assert.ok(toml.includes("[model_providers.fusionkit-codex]"));
   assert.ok(toml.includes('base_url = "http://127.0.0.1:9000/v1"'));
   assert.ok(toml.includes('wire_api = "responses"'));
   assert.ok(toml.includes("requires_openai_auth = false"));

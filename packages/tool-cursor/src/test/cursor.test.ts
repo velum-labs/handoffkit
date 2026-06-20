@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { cursorHarness } from "../cursor.js";
-import type { CursorExecRunner } from "../cursor.js";
-import type { EnsembleDescriptor } from "../harness.js";
-import { createMockHarness } from "../mock.js";
-import { ensemble } from "../run.js";
+import { createMockHarness, ensemble } from "@fusionkit/ensemble";
+import type { EnsembleDescriptor } from "@fusionkit/ensemble";
+
+import { cursorHarness } from "../index.js";
+import type { CursorExecRunner } from "../index.js";
 
 function tempOutputRoot(): { outputRoot: string; cleanup: () => void } {
   const outputRoot = mkdtempSync(join(tmpdir(), "ensemble-cursor-out-"));
@@ -42,12 +42,12 @@ function descriptor(
   };
 }
 
-test("cursor adapter skips clearly when Cursorkit is not configured", async () => {
+test("cursor adapter skips clearly when the Cursor CLI is unavailable", async () => {
   const { outputRoot, cleanup } = tempOutputRoot();
   try {
     const result = await ensemble.run(
       descriptor(outputRoot, {
-        harness: cursorHarness({ env: {} })
+        harness: cursorHarness({ env: { PATH: "" } })
       })
     );
 
@@ -56,7 +56,7 @@ test("cursor adapter skips clearly when Cursorkit is not configured", async () =
     assert.equal(result.candidates[0]?.error?.kind, "capability_missing");
     assert.match(
       result.candidates[0]?.error?.message ?? "",
-      /Cursorkit checkout is not configured/
+      /Cursor CLI .* was not found on PATH/
     );
   } finally {
     cleanup();

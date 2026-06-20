@@ -1,15 +1,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  claudeCodeHarness,
-  claudeCodeHarnessCredentialSkipReason,
-  codexHarness,
-  codexHarnessCredentialSkipReason,
-  createCommandHarness,
-  createMockHarness
-} from "@fusionkit/ensemble";
-import type { EnsembleRunResult, HarnessAdapter, HarnessSmokeDashboard } from "@fusionkit/ensemble";
+import { createCommandHarness, createMockHarness } from "@fusionkit/ensemble";
+import type { EnsembleRunResult, HarnessAdapter } from "@fusionkit/ensemble";
+import { claudeCodeHarness, claudeCodeHarnessCredentialSkipReason } from "@fusionkit/tool-claude";
+import { codexHarness, codexHarnessCredentialSkipReason } from "@fusionkit/tool-codex";
+
+import type { HarnessSmokeDashboard } from "../dashboard.js";
 import {
   assertBenchmarkTaskRecordV1,
   assertHarnessCandidateRecordV1,

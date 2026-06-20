@@ -10,13 +10,13 @@ export function registerLocal(program: Command): void {
     .description("back a vendor agent with a local model")
     .argument("[tool]", `${LOCAL_TOOLS.join(" | ")}`)
     .argument("[args...]", "arguments forwarded to the tool")
-    .option("--public-url <url>", "public tunnel URL for Cursor (or WARRANT_PUBLIC_URL)")
+    .option("--public-url <url>", "public tunnel URL for Cursor (or FUSIONKIT_PUBLIC_URL)")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .allowUnknownOption()
     .passThroughOptions()
     .addHelpText(
       "after",
-      "\nwarrant's own flags must precede the tool name; everything after the tool is forwarded to it."
+      "\nfusionkit's own flags must precede the tool name; everything after the tool is forwarded to it."
     )
     .action(
       async (
@@ -25,7 +25,7 @@ export function registerLocal(program: Command): void {
         opts: { publicUrl?: string; authToken?: string }
       ) => {
         if (tool === undefined || !(LOCAL_TOOLS as readonly string[]).includes(tool)) {
-          fail(`usage: warrant local <${LOCAL_TOOLS.join(" | ")}> [args...]`);
+          fail(`usage: fusionkit local <${LOCAL_TOOLS.join(" | ")}> [args...]`);
         }
         const options: { publicUrl?: string; authToken?: string } = {
           ...(opts.publicUrl !== undefined ? { publicUrl: opts.publicUrl } : {}),

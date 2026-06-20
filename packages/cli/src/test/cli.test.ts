@@ -20,8 +20,13 @@ import { MODEL_FUSION_SCHEMA_BUNDLE_HASH } from "@fusionkit/protocol";
 
 const CLI = fileURLToPath(new URL("../index.js", import.meta.url));
 const SMOKE_ENV_KEYS = [
+  "FUSIONKIT_CLAUDE_SMOKE",
+  "FUSIONKIT_CODEX_SMOKE",
+  "FUSIONKIT_CURSOR_SMOKE",
+  "FUSIONKIT_ENSEMBLE_LIVE_SMOKE",
   "WARRANT_CLAUDE_SMOKE",
   "WARRANT_CODEX_SMOKE",
+  "WARRANT_CURSOR_SMOKE",
   "WARRANT_ENSEMBLE_LIVE_SMOKE"
 ] as const;
 
@@ -203,13 +208,13 @@ test("gateway acp-registry rejects an unknown action", () => {
 test("local without a tool prints usage and fails", () => {
   const result = warrant(["local"]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /usage: warrant local </);
+  assert.match(result.stderr, /usage: fusionkit local </);
 });
 
 test("local rejects an unknown tool", () => {
   const result = warrant(["local", "frobnicate"]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /usage: warrant local </);
+  assert.match(result.stderr, /usage: fusionkit local </);
 });
 
 test("local help documents the flags-before-tool contract", () => {
@@ -717,7 +722,7 @@ test("ensemble dashboard rejects unknown live-smoke targets", () => {
       "--out",
       fixture.output,
       "--live-smoke",
-      "cursor"
+      "bogus"
     ]);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /--live-smoke must be/);

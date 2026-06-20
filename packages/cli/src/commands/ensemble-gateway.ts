@@ -28,7 +28,6 @@ type GatewayOpts = {
   out?: string;
   model?: string[];
   judgeModel?: string;
-  cursorKitDir?: string;
   timeoutMs?: string;
   fusionApiKey?: string;
   host?: string;
@@ -46,7 +45,6 @@ function addCommonGatewayOptions(cmd: Command): Command {
     .option("--out <dir>", "output directory")
     .option("--model <spec>", "panel model mapping ID=MODEL (repeatable)", collect)
     .option("--judge-model <model>", "model used for judge synthesis")
-    .option("--cursor-kit-dir <dir>", "Cursorkit repo for cursor scenarios")
     .option("--timeout-ms <n>", "candidate timeout")
     .option("--fusion-api-key <key>", "API key for the fusion backend");
 }
@@ -64,7 +62,6 @@ function gatewayConfig(opts: GatewayOpts): GatewayRunnerConfig {
     timeoutMs,
     ...(opts.command !== undefined ? { command: opts.command } : {}),
     ...(opts.judgeModel !== undefined ? { judgeModel: opts.judgeModel } : {}),
-    ...(opts.cursorKitDir !== undefined ? { cursorKitDir: resolve(opts.cursorKitDir) } : {}),
     ...(opts.fusionApiKey !== undefined ? { fusionApiKey: opts.fusionApiKey } : {})
   };
 }

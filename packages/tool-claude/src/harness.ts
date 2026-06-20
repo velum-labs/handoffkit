@@ -1,17 +1,18 @@
 import { artifactHash } from "@fusionkit/protocol";
-import type { JsonValue, NetworkPolicy, RunContract, RunEvent } from "@fusionkit/protocol";
+import type { NetworkPolicy, RunContract, RunEvent } from "@fusionkit/protocol";
 import { CapabilityMismatchError, prepareExecution } from "@fusionkit/runner";
 import type { SessionBackend } from "@fusionkit/runner";
 import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
 import type { ClaudeCodeBindingOptions } from "@fusionkit/session-harness";
 
+import { hardeningToJson } from "@fusionkit/ensemble";
 import type {
   CandidateHardeningMetadata,
   EnsembleDescriptor,
   HarnessAdapter,
   HarnessCandidateOutput,
   HarnessRunInput
-} from "./harness.js";
+} from "@fusionkit/ensemble";
 
 const ZERO_HASH = "0".repeat(64);
 const ZERO_GIT_SHA = "0".repeat(40);
@@ -295,13 +296,15 @@ function skippedOutput(input: {
       adapter: "claude-code",
       credential_gate: "skipped",
       missing_credentials: [...input.missing],
-      hardening: hardeningFor({
-        descriptor: input.runInput.descriptor,
-        options: input.options,
-        repoDir,
-        authEnvNames: [],
-        finished: false
-      }) as unknown as JsonValue
+      hardening: hardeningToJson(
+        hardeningFor({
+          descriptor: input.runInput.descriptor,
+          options: input.options,
+          repoDir,
+          authEnvNames: [],
+          finished: false
+        })
+      )
     }
   };
 }
@@ -341,13 +344,15 @@ function failureOutput(input: {
       credential_gate: "available",
       event_count: 0,
       auth_env_names: [...input.authEnvNames],
-      hardening: hardeningFor({
-        descriptor: input.runInput.descriptor,
-        options: input.options,
-        repoDir,
-        authEnvNames: input.authEnvNames,
-        finished: false
-      }) as unknown as JsonValue
+      hardening: hardeningToJson(
+        hardeningFor({
+          descriptor: input.runInput.descriptor,
+          options: input.options,
+          repoDir,
+          authEnvNames: input.authEnvNames,
+          finished: false
+        })
+      )
     }
   };
 }
@@ -461,13 +466,15 @@ export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}):
             credential_gate: "available",
             event_count: events.length,
             auth_env_names: authEnvNames,
-            hardening: hardeningFor({
-              descriptor: runInput.descriptor,
-              options,
-              repoDir,
-              authEnvNames,
-              finished: true
-            }) as unknown as JsonValue
+            hardening: hardeningToJson(
+              hardeningFor({
+                descriptor: runInput.descriptor,
+                options,
+                repoDir,
+                authEnvNames,
+                finished: true
+              })
+            )
           }
         };
       } catch (error) {

@@ -8,13 +8,13 @@ import {
   createMockHarness,
   createMockJudgeSynthesizer,
   runEnsemble,
-  runHarnessSmokeDashboard,
   runUnifiedHarnessE2E
 } from "@fusionkit/ensemble";
 import type { EnsembleDescriptor } from "@fusionkit/ensemble";
 import { assertHarnessRunRequestV1, assertHarnessRunResultV1 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
 
+import { runHarnessSmokeDashboard } from "../dashboard.js";
 import { fail } from "../shared/errors.js";
 import {
   collect,
@@ -79,7 +79,6 @@ type EnsembleE2EOpts = {
   id?: string;
   model?: string[];
   judgeModel?: string;
-  cursorKitDir?: string;
   timeoutMs?: string;
   taskFile?: string;
 };
@@ -258,8 +257,7 @@ async function runEnsembleE2E(task: string[], opts: EnsembleE2EOpts): Promise<vo
     models,
     ...(opts.command !== undefined ? { command: opts.command } : {}),
     timeoutMs,
-    ...(opts.judgeModel !== undefined ? { judgeModel: opts.judgeModel } : {}),
-    ...(opts.cursorKitDir !== undefined ? { cursorKitDir: resolve(opts.cursorKitDir) } : {})
+    ...(opts.judgeModel !== undefined ? { judgeModel: opts.judgeModel } : {})
   });
   const counts = new Map<string, number>();
   for (const row of result.results) {
@@ -336,7 +334,6 @@ export function registerEnsemble(program: Command): void {
     .option("--id <id>", "descriptor id")
     .option("--model <spec>", "panel model mapping ID=MODEL (repeatable)", collect)
     .option("--judge-model <model>", "model used for judge synthesis")
-    .option("--cursor-kit-dir <dir>", "Cursorkit repo for cursor ACP/desktop scenarios")
     .option("--timeout-ms <n>", "candidate timeout")
     .option("--task-file <file>", "read task prompt from file")
     .action(runEnsembleE2E);

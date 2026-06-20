@@ -7,10 +7,8 @@ import { newSpanId, TRACE_ID_HEADER, TRACE_SPAN_HEADER } from "@fusionkit/protoc
 import { gitText } from "@fusionkit/workspace";
 
 import { createAgentHarness } from "./agent.js";
-import { claudeCodeHarness } from "./claude-code.js";
 import { createCommandHarness } from "./command.js";
-import { codexHarness } from "./codex.js";
-import { createCursorHarness } from "./cursor.js";
+import { resolveCursorkitCli } from "./cursorkit-path.js";
 import { createMockHarness } from "./mock.js";
 import { runEnsemble } from "./run.js";
 import type {
@@ -35,6 +33,60 @@ export type UnifiedHarnessKind =
   | "claude-code"
   | "cursor-acp"
   | "cursor-desktop";
+
+/**
+ * Options the unified runner passes to a tool's harness factory. The per-tool
+ * packages map these onto their own harness options (provider base URL, etc.).
+ */
+export type ToolHarnessResolveOptions = {
+  fusionBackendUrl: string;
+  fusionApiKey?: string;
+  timeoutMs?: number;
+};
+
+/**
+ * Provides everything ensemble needs about a tool-backed harness kind (codex,
+ * claude-code, cursor-*) without ensemble depending on any per-tool package. The
+ * fusionkit CLI registers one (built from its tool registry) via
+ * {@link setToolHarnessProvider}; without it, requesting a tool harness kind
+ * throws a clear error.
+ */
+export type ToolHarnessProvider = {
+  adapter(kind: UnifiedHarnessKind, options: ToolHarnessResolveOptions): HarnessAdapter;
+  sideEffects(kind: UnifiedHarnessKind): EnsembleDescriptor["policy"]["sideEffects"];
+  responseShape(kind: UnifiedHarnessKind): string;
+};
+
+let toolHarnessProvider: ToolHarnessProvider | undefined;
+
+/**
+ * Register the provider that resolves tool-backed harness kinds. The fusionkit
+ * CLI wires this at startup from its tool registry.
+ */
+export function setToolHarnessProvider(provider: ToolHarnessProvider | undefined): void {
+  toolHarnessProvider = provider;
+}
+
+function requireToolHarnessProvider(kind: UnifiedHarnessKind): ToolHarnessProvider {
+  if (toolHarnessProvider === undefined) {
+    throw new Error(
+      `no tool harness provider registered for harness kind "${kind}"; ` +
+        "the fusionkit CLI wires this via setToolHarnessProvider (build the tool registry first)."
+    );
+  }
+  return toolHarnessProvider;
+}
+
+function resolveToolAdapter(
+  kind: UnifiedHarnessKind,
+  options: UnifiedHarnessE2EOptions
+): HarnessAdapter {
+  return requireToolHarnessProvider(kind).adapter(kind, {
+    fusionBackendUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
+    ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+  });
+}
 
 export type UnifiedHarnessMatrixResult = {
   harness: UnifiedHarnessKind;
@@ -62,7 +114,6 @@ export type CursorHarnessRunnerInput = {
   repo: string;
   outDir: string;
   timeoutMs?: number;
-  cursorKitDir?: string;
 };
 
 export type CursorHarnessRunnerResult = {
@@ -84,7 +135,6 @@ export type UnifiedHarnessE2EOptions = {
   command?: string;
   timeoutMs?: number;
   judgeModel?: string;
-  cursorKitDir?: string;
   cursorRunner?: (input: CursorHarnessRunnerInput) => Promise<CursorHarnessRunnerResult>;
   /**
    * Per-candidate model backend URLs keyed by `EnsembleModel.id`. When a
@@ -128,7 +178,7 @@ function sideEffectsForHarness(kind: UnifiedHarnessKind): EnsembleDescriptor["po
     case "claude-code":
     case "cursor-acp":
     case "cursor-desktop":
-      return "writes_workspace";
+      return requireToolHarnessProvider(kind).sideEffects(kind);
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported unified harness: ${String(exhausted)}`);
@@ -171,25 +221,10 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
       });
     }
     case "codex":
-      return codexHarness({
-        timeoutMs: options.timeoutMs,
-        provider: {
-          kind: "openai-compatible",
-          baseUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
-          ...(options.fusionApiKey ? { apiKey: options.fusionApiKey } : {})
-        }
-      });
     case "claude-code":
-      return claudeCodeHarness({ timeoutMs: options.timeoutMs });
     case "cursor-acp":
     case "cursor-desktop":
-      return createCursorHarness({
-        id: kind,
-        fusionBackendUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
-        ...(options.fusionApiKey ? { apiKey: options.fusionApiKey } : {}),
-        ...(options.cursorKitDir !== undefined ? { cursorKitDir: options.cursorKitDir } : {}),
-        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
-      });
+      return resolveToolAdapter(kind, options);
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported unified harness: ${String(exhausted)}`);
@@ -208,12 +243,10 @@ function responseShapeFor(kind: UnifiedHarnessKind): string {
         "a plan, or the concrete code change. Reply in first person as the assistant."
       );
     case "codex":
-      return "Return a Codex-style result summary with patch and verification evidence.";
     case "claude-code":
-      return "Return a Claude Code-style transcript summary with patch/worktree evidence.";
     case "cursor-acp":
     case "cursor-desktop":
-      return "Return text suitable for Cursor ACP session/update plus route evidence notes.";
+      return requireToolHarnessProvider(kind).responseShape(kind);
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported unified harness: ${String(exhausted)}`);
@@ -454,17 +487,10 @@ function statusForResult(result: EnsembleRunResult): ModelFusionStatus {
 }
 
 async function defaultCursorRunner(input: CursorHarnessRunnerInput): Promise<CursorHarnessRunnerResult> {
-  if (!input.cursorKitDir) {
-    return {
-      status: "skipped",
-      message: "Cursorkit directory not configured",
-      details: { reason: "cursor_kit_dir_missing" }
-    };
-  }
+  const { harnessCli } = resolveCursorkitCli();
   const suite = input.kind === "cursor-acp" ? "acp" : "desktop-route";
   const args = [
-    "test:harness",
-    "--",
+    harnessCli,
     "--suite",
     suite,
     "--base-url",
@@ -478,8 +504,8 @@ async function defaultCursorRunner(input: CursorHarnessRunnerInput): Promise<Cur
   ];
   mkdirSync(input.outDir, { recursive: true });
   return await new Promise((resolveResult) => {
-    const child = spawn("pnpm", args, {
-      cwd: input.cursorKitDir,
+    const child = spawn(process.execPath, args, {
+      cwd: input.outDir,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -516,8 +542,7 @@ async function runCursorHarness(
         fusionBackendUrl: options.fusionBackendUrl,
         repo: options.repo,
         outDir: join(options.outputRoot, `${kind}-${model.id}`),
-        timeoutMs: options.timeoutMs,
-        cursorKitDir: options.cursorKitDir
+        timeoutMs: options.timeoutMs
       })
     )
   );

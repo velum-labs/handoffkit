@@ -6,19 +6,20 @@ import { join } from "node:path";
 import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
 import { OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
+import { readEnv } from "@fusionkit/tools";
 
 import type {
   EnsembleDescriptor,
   EnsembleModel,
   HarnessAdapter,
   HarnessCandidateOutput
-} from "./harness.js";
+} from "@fusionkit/ensemble";
 
 const DEFAULT_CODEX_COMMAND = "codex";
-const DEFAULT_PROVIDER_ID = "warrant-codex";
-const DEFAULT_PROVIDER_NAME = "Warrant Codex";
+const DEFAULT_PROVIDER_ID = "fusionkit-codex";
+const DEFAULT_PROVIDER_NAME = "FusionKit Codex";
 const DEFAULT_CREDENTIAL_ENV_NAMES = ["CODEX_API_KEY", "OPENAI_API_KEY"] as const;
-const INLINE_PROVIDER_API_KEY_ENV = "WARRANT_CODEX_PROVIDER_API_KEY";
+const INLINE_PROVIDER_API_KEY_ENV = "FUSIONKIT_CODEX_PROVIDER_API_KEY";
 const CODEX_AUTH_FILE = "auth.json";
 
 export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
@@ -163,9 +164,11 @@ function codexAuthFile(env: Record<string, string>): string | undefined {
 }
 
 function providerFromEnv(env: Record<string, string>): CodexProvider {
-  const responsesBaseUrl = env.WARRANT_CODEX_RESPONSES_BASE_URL ?? env.CODEX_RESPONSES_BASE_URL;
+  const responsesBaseUrl =
+    readEnv(env, "FUSIONKIT_CODEX_RESPONSES_BASE_URL") ?? env.CODEX_RESPONSES_BASE_URL;
   if (responsesBaseUrl !== undefined && responsesBaseUrl.length > 0) {
     const apiKeyEnvName = firstPresentEnv(env, [
+      "FUSIONKIT_CODEX_API_KEY",
       "WARRANT_CODEX_API_KEY",
       "CODEX_API_KEY",
       "OPENAI_API_KEY"
@@ -178,9 +181,10 @@ function providerFromEnv(env: Record<string, string>): CodexProvider {
     };
   }
 
-  const openAiBaseUrl = env.WARRANT_CODEX_OPENAI_BASE_URL ?? env.OPENAI_BASE_URL;
+  const openAiBaseUrl = readEnv(env, "FUSIONKIT_CODEX_OPENAI_BASE_URL") ?? env.OPENAI_BASE_URL;
   if (openAiBaseUrl !== undefined && openAiBaseUrl.length > 0) {
     const apiKeyEnvName = firstPresentEnv(env, [
+      "FUSIONKIT_CODEX_OPENAI_API_KEY",
       "WARRANT_CODEX_OPENAI_API_KEY",
       "OPENAI_API_KEY"
     ]);

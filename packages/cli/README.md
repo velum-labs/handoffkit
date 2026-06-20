@@ -73,5 +73,27 @@ tool name; everything after the tool is forwarded to it.
 - `--observe` boots a local dashboard that streams live trace events. It is a
   separate app and is not bundled in the npm package; fusionkit prints how to
   enable it if it isn't available.
-- `cursor` needs a built Cursorkit checkout (`--cursor-kit-dir` or
-  `FUSIONKIT_CURSORKIT_DIR`); fusionkit prints setup guidance if it's missing.
+- `cursor` only needs a logged-in `cursor-agent` CLI; Cursorkit ships bundled
+  with this package, so no separate checkout is required.
+
+## Adding a new tool
+
+Each coding tool is its own workspace package implementing a single
+`ToolIntegration` (the adapter), so supporting a new tool is additive:
+
+1. Create `packages/tool-<name>/` (copy `packages/tool-codex` as a template). It
+   depends on `@fusionkit/tools` for the `ToolIntegration` / `ToolLaunchContext`
+   contract, and on `@fusionkit/ensemble` if it also ships a harness adapter.
+2. Export a `const <name>Tool: ToolIntegration` with:
+   - `launch(ctx)` — boot the tool's binary against `ctx.gatewayUrl` (the host
+     injects `spawnTool`, portless, teardown, etc. via the context; tool packages
+     never import the CLI).
+   - `modes` — `"fusion"`, `"local"`, or both.
+   - `createHarness` + `harnessKinds` — optional, only if the tool also runs as
+     an ensemble harness in the gateway/e2e matrix.
+3. Register it in [`packages/cli/src/tools.ts`](src/tools.ts) by adding it to the
+   `createToolRegistry([...])` list.
+
+That single registry entry wires the tool into the `fusionkit <tool>` launcher,
+`fusionkit local <tool>`, the interactive picker, preflight, and (when it has a
+harness) the ensemble gateway — no other switch statements to update.

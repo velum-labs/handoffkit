@@ -1,10 +1,9 @@
-import type {
-  EnsembleModel,
-  HarnessLiveSmokeTarget,
-  UnifiedHarnessKind
-} from "@fusionkit/ensemble";
+import type { EnsembleModel, UnifiedHarnessKind } from "@fusionkit/ensemble";
 import { SESSION_ISOLATIONS } from "@fusionkit/protocol";
 import type { SessionIsolation } from "@fusionkit/protocol";
+
+import type { HarnessLiveSmokeTarget } from "../dashboard.js";
+import { toolRegistry } from "../tools.js";
 
 import type { FusionTool, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
 import { FUSION_TOOLS } from "../fusion-quickstart.js";
@@ -42,35 +41,26 @@ export function ensembleModels(model: string[] | undefined, harness?: string): E
 }
 
 export function liveSmokeTargets(targets: string[] | undefined): HarnessLiveSmokeTarget[] {
-  return (targets ?? []).map((target) => {
-    switch (target) {
-      case "claude-code":
-      case "codex":
-        return target;
-      default:
-        fail('--live-smoke must be "claude-code" or "codex"');
-    }
+  const valid = new Set(
+    toolRegistry
+      .dashboardTools()
+      .filter((tool) => tool.liveSmoke !== undefined)
+      .map((tool) => tool.id)
+  );
+  return (targets ?? []).map((target): HarnessLiveSmokeTarget => {
+    if (valid.has(target)) return target;
+    return fail(`--live-smoke must be one of ${[...valid].join(", ")}`);
   });
 }
 
 export function unifiedHarnessKinds(targets: string[] | undefined): UnifiedHarnessKind[] {
+  const generic: UnifiedHarnessKind[] = ["mock", "command", "agent"];
+  const valid = new Set<UnifiedHarnessKind>([...generic, ...toolRegistry.harnessKinds()]);
   return (targets ?? ["mock", "command"])
     .flatMap((target) => target.split(","))
     .map((target): UnifiedHarnessKind => {
-      switch (target) {
-        case "mock":
-        case "command":
-        case "agent":
-        case "codex":
-        case "claude-code":
-        case "cursor-acp":
-        case "cursor-desktop":
-          return target;
-        default:
-          fail(
-            `--harness must be mock, command, agent, codex, claude-code, cursor-acp, or cursor-desktop; got "${target}"`
-          );
-      }
+      if (valid.has(target as UnifiedHarnessKind)) return target as UnifiedHarnessKind;
+      return fail(`--harness must be one of ${[...valid].join(", ")}; got "${target}"`);
     });
 }
 

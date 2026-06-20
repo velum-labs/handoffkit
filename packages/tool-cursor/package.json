@@ -1,0 +1,32 @@
+{
+  "name": "@fusionkit/tool-cursor",
+  "private": false,
+  "version": "0.1.5",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/tool-cursor"
+  },
+  "description": "Cursor tool integration for fusionkit: Cursorkit bridge launcher plus the ensemble Cursor harness adapter.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@fusionkit/ensemble": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/tools": "workspace:*"
+  }
+}

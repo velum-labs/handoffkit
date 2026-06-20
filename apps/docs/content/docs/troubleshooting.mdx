@@ -41,11 +41,11 @@ Transient startup failures are retried automatically with backoff.
 The dashboard ships separately from the npm package. Follow the printed
 instructions to install its dependencies once. See [Observability](/docs/observability).
 
-## Cursor needs extra setup
+## Cursor needs a logged-in CLI
 
-The `cursor` tool requires a built Cursorkit checkout. Pass `--cursor-kit-dir
-<dir>` or set `FUSIONKIT_CURSORKIT_DIR`. fusionkit prints manual setup steps if
-it's missing.
+The `cursor` tool spawns the bundled Cursorkit bridge, so no separate checkout is
+required. It only needs a logged-in `cursor-agent` CLI
+([install](https://cursor.com/cli)) on your PATH.
 
 ## Where are the logs?
 

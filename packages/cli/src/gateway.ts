@@ -45,7 +45,6 @@ export type GatewayRunnerConfig = {
   command?: string;
   timeoutMs?: number;
   judgeModel?: string;
-  cursorKitDir?: string;
   fusionApiKey?: string;
   modelEndpoints?: Record<string, string>;
 };
@@ -131,7 +130,6 @@ export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunn
         ...(config.command !== undefined ? { command: config.command } : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
         ...(config.judgeModel !== undefined ? { judgeModel: config.judgeModel } : {}),
-        ...(config.cursorKitDir !== undefined ? { cursorKitDir: config.cursorKitDir } : {}),
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
         ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {})
       });
@@ -355,7 +353,6 @@ export type GatewayAcceptanceInput = {
   sentinel: string;
   host: string;
   outPath: string;
-  cursorKitUrl?: string;
 };
 
 export async function runGatewayAcceptance(input: GatewayAcceptanceInput): Promise<{
@@ -369,7 +366,6 @@ export async function runGatewayAcceptance(input: GatewayAcceptanceInput): Promi
   });
   try {
     const cursorAcp = buildCursorAcpProducer({
-      cursorKitDir: input.config.cursorKitDir,
       gatewayUrl: gateway.url(),
       sentinel: input.sentinel,
       repo: input.config.repo,

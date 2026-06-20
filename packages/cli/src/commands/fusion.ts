@@ -21,7 +21,6 @@ type FusionOpts = {
   synthesisUrl?: string;
   fusionkitDir?: string;
   repo?: string;
-  cursorKitDir?: string;
   local?: boolean;
   observe?: boolean;
   yes?: boolean;
@@ -42,7 +41,6 @@ function applyFusionOptions(command: Command): Command {
     .option("--synthesis-url <url>", "pre-running fusionkit serve for synthesis")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for the uvx synthesizer)")
     .option("--repo <dir>", "coding workspace the panel fuses over")
-    .option("--cursor-kit-dir <dir>", "built Cursorkit checkout for the cursor tool")
     .option("--local", "use the local MLX panel trio instead of the default cloud panel")
     .option("--no-local", "override a fusionkit.json default of local=true")
     .option("--observe", "boot the local scope dashboard and stream live trace events")
@@ -69,7 +67,6 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.synthesisUrl !== undefined) options.synthesisUrl = opts.synthesisUrl;
   if (opts.fusionkitDir !== undefined) options.fusionkitDir = resolve(opts.fusionkitDir);
   if (opts.repo !== undefined) options.repo = resolve(opts.repo);
-  if (opts.cursorKitDir !== undefined) options.cursorKitDir = resolve(opts.cursorKitDir);
   // local/observe are tri-state: only set when the user passed --local/--no-local
   // (or --observe/--no-observe), so an unset flag can fall through to the config.
   if (opts.local !== undefined) options.local = opts.local;
@@ -117,7 +114,6 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   if (options.local === undefined && config.local !== undefined) options.local = config.local;
   if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
   if (options.portless === undefined && config.portless !== undefined) options.portless = config.portless;
-  if (options.cursorKitDir === undefined && config.cursorKitDir != null) options.cursorKitDir = config.cursorKitDir;
   if (options.port === undefined && config.port != null) options.port = config.port;
 }
 

@@ -1,51 +1,9 @@
 export { createCommandHarness } from "./command.js";
 export type { CommandHarnessOptions } from "./command.js";
-export {
-  claudeCodeHarness,
-  claudeCodeHarnessCredentialSkipReason,
-  createClaudeCodeHarness
-} from "./claude-code.js";
-export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./claude-code.js";
-export {
-  codexConfigToml,
-  codexHarnessCredentialSkipReason,
-  codexHarness,
-  createCodexHarness
-} from "./codex.js";
-export type {
-  CodexAmbientProvider,
-  CodexApprovalPolicy,
-  CodexConfigTomlInput,
-  CodexExecInput,
-  CodexExecResult,
-  CodexExecRunner,
-  CodexHarnessEnv,
-  CodexHarnessOptions,
-  CodexOpenAiCompatibleProvider,
-  CodexProvider,
-  CodexResponsesProvider,
-  CodexSandboxMode
-} from "./codex.js";
+export { resolveCursorkitCli } from "./cursorkit-path.js";
+export type { CursorkitCli } from "./cursorkit-path.js";
 export { createArtifactStore } from "./artifacts.js";
 export type { ArtifactStore } from "./artifacts.js";
-export {
-  createHarnessCapabilityMatrix,
-  harnessDashboard,
-  runHarnessSmokeDashboard
-} from "./dashboard.js";
-export type {
-  HarnessAdapterReadiness,
-  HarnessAvailability,
-  HarnessCapabilityMatrix,
-  HarnessCapabilityMatrixRow,
-  HarnessCapabilityTarget,
-  HarnessLiveSmokeTarget,
-  HarnessSmokeDashboard,
-  HarnessSmokeDashboardOptions,
-  HarnessSmokeOutcome,
-  HarnessSmokePurpose,
-  HarnessSmokeRecord
-} from "./dashboard.js";
 export { createMockJudgeSynthesizer } from "./judge.js";
 export type {
   JudgeCandidateEvidence,
@@ -67,12 +25,15 @@ export {
 export {
   createFusionKitJudgeSynthesizer,
   runFusionPanels,
-  runUnifiedHarnessE2E
+  runUnifiedHarnessE2E,
+  setToolHarnessProvider
 } from "./unified.js";
 export type {
   CursorHarnessRunnerInput,
   CursorHarnessRunnerResult,
   FusionPanelOptions,
+  ToolHarnessProvider,
+  ToolHarnessResolveOptions,
   UnifiedHarnessE2EOptions,
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind,
@@ -143,6 +104,7 @@ export {
   sealCandidateWorktree
 } from "./worktree.js";
 export type { CandidateWorktree, WorktreePlan } from "./worktree.js";
+export { hardeningToJson } from "./harness.js";
 export type {
   EnsembleCandidateSummary,
   EnsembleDescriptor,

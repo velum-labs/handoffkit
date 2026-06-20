@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { Command } from "commander";
 
+import "./tools.js";
 import { FUSIONKIT_PYPI_VERSION } from "./fusion-quickstart.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerEnsemble } from "./commands/ensemble.js";

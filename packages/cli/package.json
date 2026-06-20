@@ -40,6 +40,11 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runner": "workspace:*",
     "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/tool-claude": "workspace:*",
+    "@fusionkit/tool-codex": "workspace:*",
+    "@fusionkit/tool-cursor": "workspace:*",
+    "@fusionkit/tool-opencode": "workspace:*",
+    "@fusionkit/tools": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
     "commander": "14.0.3"
   },

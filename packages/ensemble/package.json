@@ -30,6 +30,7 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runner": "workspace:*",
     "@fusionkit/session-harness": "workspace:*",
-    "@fusionkit/workspace": "workspace:*"
+    "@fusionkit/workspace": "workspace:*",
+    "@velum-labs/cursorkit": "0.1.1"
   }
 }

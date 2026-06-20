@@ -5,16 +5,18 @@ import { delimiter, join } from "node:path";
 import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue } from "@fusionkit/protocol";
 
+import { resolveCursorkitCli } from "@fusionkit/ensemble";
 import type {
   EnsembleDescriptor,
   EnsembleModel,
   HarnessAdapter,
   HarnessCandidateOutput
-} from "./harness.js";
+} from "@fusionkit/ensemble";
+import { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL } from "@fusionkit/tools";
 
 const DEFAULT_CURSOR_COMMAND = "cursor-agent";
-const DEFAULT_BRIDGE_MODEL_NAME = "local-fusion";
-const DEFAULT_BRIDGE_PROVIDER_MODEL = "fusion-panel";
+const DEFAULT_BRIDGE_MODEL_NAME = CURSOR_BRIDGE_MODEL_NAME;
+const DEFAULT_BRIDGE_PROVIDER_MODEL = FUSION_PANEL_MODEL;
 const BRIDGE_START_TIMEOUT_MS = 20_000;
 
 export type CursorRunMode = "ask" | "agent";
@@ -25,7 +27,6 @@ export type CursorExecInput = {
   fusionBackendUrl: string;
   apiKey?: string;
   model: EnsembleModel;
-  cursorKitDir: string;
   command: string;
   modelName: string;
   providerModel: string;
@@ -50,7 +51,6 @@ export type CursorExecRunner = (
 export type CursorHarnessOptions = {
   id?: string;
   command?: string;
-  cursorKitDir?: string;
   fusionBackendUrl?: string;
   apiKey?: string;
   modelName?: string;
@@ -63,7 +63,7 @@ export type CursorHarnessOptions = {
 };
 
 type CursorAvailability =
-  | { available: true; cursorKitDir: string; command: string }
+  | { available: true; command: string }
   | { available: false; reason: string };
 
 type PreparedCursorHarness = {
@@ -100,55 +100,28 @@ function commandOnPath(
     .some((dir) => existsSync(join(dir, command)));
 }
 
-function resolveCursorKitDir(
-  options: CursorHarnessOptions,
-  env: Record<string, string>
-): string | undefined {
-  return (
-    options.cursorKitDir ??
-    env.WARRANT_CURSORKIT_DIR ??
-    env.FUSIONKIT_CURSORKIT_DIR
-  );
-}
-
 function resolveAvailability(
   options: CursorHarnessOptions,
   env: Record<string, string>
 ): CursorAvailability {
   const command = options.command ?? DEFAULT_CURSOR_COMMAND;
   if (options.runner !== undefined) {
-    return {
-      available: true,
-      cursorKitDir: resolveCursorKitDir(options, env) ?? ".",
-      command
-    };
+    return { available: true, command };
   }
-  const cursorKitDir = resolveCursorKitDir(options, env);
-  if (cursorKitDir === undefined) {
-    return {
-      available: false,
-      reason:
-        "Cursorkit checkout is not configured; set WARRANT_CURSORKIT_DIR or pass cursorKitDir."
-    };
-  }
-  if (!existsSync(join(cursorKitDir, "dist/src/cli.js"))) {
-    return {
-      available: false,
-      reason: `Cursorkit bridge build was not found at ${join(cursorKitDir, "dist/src/cli.js")}; run pnpm build in the Cursorkit checkout.`
-    };
-  }
+  // Cursorkit ships as a bundled dependency, so only the Cursor CLI itself is a
+  // runtime prerequisite.
   if (!commandOnPath(command, env)) {
     return {
       available: false,
       reason: `Cursor CLI "${command}" was not found on PATH; install the Cursor CLI (https://cursor.com/cli) and log in.`
     };
   }
-  return { available: true, cursorKitDir, command };
+  return { available: true, command };
 }
 
 export function cursorHarnessUnavailableReason(
   env: Record<string, string | undefined> = process.env,
-  options: Pick<CursorHarnessOptions, "command" | "cursorKitDir"> = {}
+  options: Pick<CursorHarnessOptions, "command"> = {}
 ): string | undefined {
   const availability = resolveAvailability(options, definedEnv(env));
   return availability.available ? undefined : availability.reason;
@@ -246,9 +219,10 @@ async function defaultCursorRunner(
     MODEL_CONTEXT_TOKEN_LIMIT: "128000"
   });
 
+  const { serveCli } = resolveCursorkitCli();
   let bridgeOut = "";
-  const bridge = spawn(process.execPath, ["dist/src/cli.js", "serve"], {
-    cwd: input.cursorKitDir,
+  const bridge = spawn(process.execPath, [serveCli, "serve"], {
+    cwd: input.cwd,
     env: bridgeEnv,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -465,7 +439,6 @@ export function createCursorHarness(
           fusionBackendUrl,
           ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
           model,
-          cursorKitDir: state.availability.cursorKitDir,
           command: state.availability.command,
           modelName: options.modelName ?? DEFAULT_BRIDGE_MODEL_NAME,
           providerModel:

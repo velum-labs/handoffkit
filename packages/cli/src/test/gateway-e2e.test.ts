@@ -17,6 +17,7 @@ import {
   runFrontDoorAcceptance
 } from "@fusionkit/model-gateway";
 import type { FusionGateway } from "@fusionkit/model-gateway";
+import { resolveCursorkitCli } from "@fusionkit/ensemble";
 
 import { buildAcpRunner, startConfiguredGateway } from "../gateway.js";
 import type { GatewayRunnerConfig } from "../gateway.js";
@@ -482,7 +483,9 @@ test("unified acceptance suite passes every reachable front door against the rea
 });
 
 const LIVE_CLAUDE =
-  process.env.WARRANT_GATEWAY_LIVE_CLAUDE === "1" ? false : "set WARRANT_GATEWAY_LIVE_CLAUDE=1 with a working claude CLI";
+  (process.env.FUSIONKIT_GATEWAY_LIVE_CLAUDE ?? process.env.WARRANT_GATEWAY_LIVE_CLAUDE) === "1"
+    ? false
+    : "set FUSIONKIT_GATEWAY_LIVE_CLAUDE=1 with a working claude CLI";
 
 test(
   "live: real Claude Code CLI drives the gateway fusion run and receives the synthesized answer",
@@ -537,7 +540,9 @@ test(
 );
 
 const LIVE_CODEX =
-  process.env.WARRANT_GATEWAY_LIVE_CODEX === "1" ? false : "set WARRANT_GATEWAY_LIVE_CODEX=1 with a working codex CLI";
+  (process.env.FUSIONKIT_GATEWAY_LIVE_CODEX ?? process.env.WARRANT_GATEWAY_LIVE_CODEX) === "1"
+    ? false
+    : "set FUSIONKIT_GATEWAY_LIVE_CODEX=1 with a working codex CLI";
 
 test(
   "live: real Codex CLI drives the gateway fusion run and receives the synthesized answer",
@@ -604,20 +609,19 @@ test(
   }
 );
 
-// Drives the real cursor-agent CLI in ACP mode through the real Cursorkit
+// Drives the real cursor-agent CLI in ACP mode through the bundled Cursorkit
 // bridge, whose local model backend is pointed at this gateway. Requires a
-// logged-in cursor-agent and a built Cursorkit checkout (WARRANT_CURSORKIT_DIR).
-const CURSORKIT_DIR = process.env.WARRANT_CURSORKIT_DIR;
+// logged-in cursor-agent (Cursorkit is bundled as an npm dependency).
 const LIVE_CURSOR =
-  process.env.WARRANT_GATEWAY_LIVE_CURSOR === "1" && CURSORKIT_DIR !== undefined
+  (process.env.FUSIONKIT_GATEWAY_LIVE_CURSOR ?? process.env.WARRANT_GATEWAY_LIVE_CURSOR) === "1"
     ? false
-    : "set WARRANT_GATEWAY_LIVE_CURSOR=1 and WARRANT_CURSORKIT_DIR=<built cursorkit checkout> with a logged-in cursor-agent";
+    : "set FUSIONKIT_GATEWAY_LIVE_CURSOR=1 with a logged-in cursor-agent";
 
 test(
   "live: real cursor-agent (ACP) drives the Cursorkit bridge into the gateway fusion run",
   { skip: LIVE_CURSOR },
   async () => {
-    const cursorkitDir = CURSORKIT_DIR as string;
+    const { serveCli } = resolveCursorkitCli();
     const liveGateway = await startConfiguredGateway({
       config: { ...config, models: [{ id: "cursor-panel", model: "fusion-cursor" }] },
       host: "127.0.0.1",
@@ -645,8 +649,7 @@ test(
       MODEL_PROVIDER_MODEL: "fusion-panel",
       MODEL_CONTEXT_TOKEN_LIMIT: "128000"
     });
-    const bridge = spawn(process.execPath, ["dist/src/cli.js", "serve"], {
-      cwd: cursorkitDir,
+    const bridge = spawn(process.execPath, [serveCli, "serve"], {
       env: bridgeEnv,
       stdio: ["ignore", "pipe", "pipe"]
     });

@@ -66,6 +66,26 @@
       "name": "@fusionkit/ensemble"
     },
     {
+      "path": "packages/tools",
+      "name": "@fusionkit/tools"
+    },
+    {
+      "path": "packages/tool-codex",
+      "name": "@fusionkit/tool-codex"
+    },
+    {
+      "path": "packages/tool-claude",
+      "name": "@fusionkit/tool-claude"
+    },
+    {
+      "path": "packages/tool-cursor",
+      "name": "@fusionkit/tool-cursor"
+    },
+    {
+      "path": "packages/tool-opencode",
+      "name": "@fusionkit/tool-opencode"
+    },
+    {
       "path": "packages/cli",
       "name": "@fusionkit/cli"
     }

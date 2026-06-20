@@ -236,6 +236,58 @@ export type CandidateHardeningMetadata = {
   };
 };
 
+/**
+ * Serialize hardening metadata as a `JsonValue`. The shape is JSON-compatible by
+ * construction, but TypeScript cannot prove an object type with optional members
+ * satisfies the `JsonValue` index signature, so this typed mapper does the
+ * conversion explicitly (omitting absent optionals) instead of an unchecked cast.
+ */
+export function hardeningToJson(hardening: CandidateHardeningMetadata): JsonValue {
+  return {
+    requested_isolation: hardening.requested_isolation,
+    actual_isolation: hardening.actual_isolation,
+    runtime: {
+      ...(hardening.runtime.image !== undefined ? { image: hardening.runtime.image } : {}),
+      ...(hardening.runtime.driver !== undefined ? { driver: hardening.runtime.driver } : {}),
+      ...(hardening.runtime.provider !== undefined ? { provider: hardening.runtime.provider } : {}),
+      ...(hardening.runtime.runtime !== undefined ? { runtime: hardening.runtime.runtime } : {}),
+      ...(hardening.runtime.snapshot_id !== undefined ? { snapshot_id: hardening.runtime.snapshot_id } : {}),
+      ...(hardening.runtime.sandbox_id !== undefined ? { sandbox_id: hardening.runtime.sandbox_id } : {}),
+      ...(hardening.runtime.image_digest !== undefined ? { image_digest: hardening.runtime.image_digest } : {}),
+      ...(hardening.runtime.runtime_digest !== undefined
+        ? { runtime_digest: hardening.runtime.runtime_digest }
+        : {}),
+      workdir: hardening.runtime.workdir
+    },
+    mount_policy: {
+      worktree_writable: hardening.mount_policy.worktree_writable,
+      read_only_caches: [...hardening.mount_policy.read_only_caches],
+      ignored_dirs: [...hardening.mount_policy.ignored_dirs]
+    },
+    network_policy: {
+      default_deny: hardening.network_policy.default_deny,
+      allow_hosts: [...hardening.network_policy.allow_hosts],
+      enforced: hardening.network_policy.enforced
+    },
+    cleanup: {
+      attempted: hardening.cleanup.attempted,
+      succeeded: hardening.cleanup.succeeded,
+      status: hardening.cleanup.status,
+      ...(hardening.cleanup.timed_out !== undefined ? { timed_out: hardening.cleanup.timed_out } : {}),
+      ...(hardening.cleanup.error !== undefined ? { error: hardening.cleanup.error } : {})
+    },
+    secret_absence: {
+      secret_names: [...hardening.secret_absence.secret_names],
+      secret_value_hashes: [...hardening.secret_absence.secret_value_hashes],
+      injected_env_names: [...hardening.secret_absence.injected_env_names],
+      scanned: hardening.secret_absence.scanned,
+      leaks_found: hardening.secret_absence.leaks_found,
+      scan_scope: [...hardening.secret_absence.scan_scope],
+      leak_count: hardening.secret_absence.leak_count
+    }
+  };
+}
+
 export type EnsembleRuntime = {
   id: string;
   environmentId?: string;

@@ -68,7 +68,7 @@ export async function runFusionInit(input: { repoRoot?: string; force?: boolean 
     options: [
       { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
       { value: "claude", label: "claude", hint: "Claude Code" },
-      { value: "cursor", label: "cursor", hint: "cursor-agent (needs a Cursorkit checkout)" },
+      { value: "cursor", label: "cursor", hint: "cursor-agent (logged-in CLI)" },
       { value: "serve", label: "serve", hint: "just run the gateway and print setup" }
     ],
     defaultIndex: 0
@@ -104,14 +104,6 @@ export async function runFusionInit(input: { repoRoot?: string; force?: boolean 
   const judgeDefault = panel[0]?.model ?? "";
   const judgeModel = await text({ message: "Judge model (for synthesis)", defaultValue: judgeDefault });
 
-  let cursorKitDir: string | undefined;
-  if (tool === "cursor") {
-    const answer = await text({
-      message: "Cursorkit checkout dir (optional, can set FUSIONKIT_CURSORKIT_DIR later)"
-    });
-    if (answer.length > 0) cursorKitDir = answer;
-  }
-
   const observe = await confirm({ message: "Enable the observability dashboard by default?", defaultValue: false });
 
   const config: FusionConfig = {
@@ -120,8 +112,7 @@ export async function runFusionInit(input: { repoRoot?: string; force?: boolean 
     panel,
     ...(judgeModel.length > 0 ? { judgeModel } : {}),
     local: preset === "local",
-    observe,
-    ...(cursorKitDir !== undefined ? { cursorKitDir } : {})
+    observe
   };
 
   let path: string;

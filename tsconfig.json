@@ -41,6 +41,21 @@
       "path": "packages/ensemble"
     },
     {
+      "path": "packages/tools"
+    },
+    {
+      "path": "packages/tool-codex"
+    },
+    {
+      "path": "packages/tool-claude"
+    },
+    {
+      "path": "packages/tool-cursor"
+    },
+    {
+      "path": "packages/tool-opencode"
+    },
+    {
       "path": "packages/testkit"
     },
     {

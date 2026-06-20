@@ -1,11 +1,10 @@
 /**
- * Real Cursor ACP front-door producer. Spawns the Cursorkit bridge (its
+ * Real Cursor ACP front-door producer. Spawns the bundled Cursorkit bridge (its
  * local-model backend pointed at the running Fusion Harness Gateway) and drives
  * the real cursor-agent CLI in ACP mode, asserting the fusion-synthesized
  * sentinel reaches Cursor via session/update. Returns undefined when the
- * Cursorkit checkout or the cursor-agent CLI are unavailable, so the acceptance
- * suite records the explicit `blocked` / `cursorkit_backend_not_running`
- * outcome instead of a silent pass.
+ * cursor-agent CLI is unavailable, so the acceptance suite records the explicit
+ * `blocked` / `cursorkit_backend_not_running` outcome instead of a silent pass.
  */
 
 import { spawn } from "node:child_process";
@@ -13,10 +12,11 @@ import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline";
 
+import { resolveCursorkitCli } from "@fusionkit/ensemble";
+import { readEnv } from "@fusionkit/tools";
 import type { FrontDoorOutcome, FrontDoorOutcomeProducer } from "@fusionkit/model-gateway";
 
 export type CursorAcpProducerInput = {
-  cursorKitDir: string | undefined;
   gatewayUrl: string;
   sentinel: string;
   repo: string;
@@ -43,10 +43,11 @@ export function buildCursorAcpProducer(
   input: CursorAcpProducerInput
 ): FrontDoorOutcomeProducer | undefined {
   const command = input.command ?? "cursor-agent";
-  if (input.cursorKitDir === undefined || input.cursorKitDir.length === 0) {
-    return undefined;
-  }
-  if (!existsSync(join(input.cursorKitDir, "dist/src/cli.js"))) {
+  // The live Cursor ACP probe drives the real cursor-agent CLI through the
+  // bundled Cursorkit bridge, so it stays opt-in: without the live flag the
+  // acceptance suite reports this door as `blocked` rather than spawning live
+  // tooling (keeping deterministic runs free of credential/CLI dependencies).
+  if (readEnv(process.env, "FUSIONKIT_GATEWAY_LIVE_CURSOR") !== "1") {
     return undefined;
   }
   if (!commandOnPath(command)) {
@@ -58,7 +59,6 @@ export function buildCursorAcpProducer(
 async function runCursorAcpOutcome(
   input: Required<Pick<CursorAcpProducerInput, "command">> & CursorAcpProducerInput
 ): Promise<FrontDoorOutcome> {
-  const cursorKitDir = input.cursorKitDir as string;
   const modelName = input.modelName ?? "local-fusion";
   const bridgePort = 9700 + Math.floor(Math.random() * 250);
   const bridgeEnv: Record<string, string> = {};
@@ -80,9 +80,9 @@ async function runCursorAcpOutcome(
     MODEL_CONTEXT_TOKEN_LIMIT: "128000"
   });
 
+  const { serveCli } = resolveCursorkitCli();
   let bridgeOut = "";
-  const bridge = spawn(process.execPath, ["dist/src/cli.js", "serve"], {
-    cwd: cursorKitDir,
+  const bridge = spawn(process.execPath, [serveCli, "serve"], {
     env: bridgeEnv,
     stdio: ["ignore", "pipe", "pipe"]
   });

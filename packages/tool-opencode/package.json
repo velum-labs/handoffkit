@@ -1,0 +1,30 @@
+{
+  "name": "@fusionkit/tool-opencode",
+  "private": false,
+  "version": "0.1.5",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/tool-opencode"
+  },
+  "description": "opencode tool integration for fusionkit: local-model launcher config shim (no ensemble harness).",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@fusionkit/tools": "workspace:*"
+  }
+}
