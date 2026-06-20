@@ -1,0 +1,108 @@
+---
+title: Operating the Plane & Runners
+description: Deploy and operate the control plane and runners.
+---
+
+This page summarizes how the control plane and runner are meant to be operated
+locally or in a small deployment.
+
+## Deployment shapes
+
+- **Local development** runs the plane and a runner in separate terminals with
+  local config and encrypted secret state.
+- **Docker compose** starts the plane, a runner, and seeded showcase data for the
+  control panel:
+
+  ```bash
+  docker compose up --build
+  # open the control panel at http://localhost:7172/ui/
+  ```
+
+- **Outbound runner pools** keep runners behind firewalls or on controlled hosts;
+  runners poll the plane and claim compatible contracts. No inbound exposure is
+  needed.
+
+## Plane responsibilities
+
+The plane (`@fusionkit/plane`) owns online authority:
+
+- Principal authentication, roles, rotation, revocation, and optional IdP-backed
+  approval assertions.
+- Contract issuance, atomic claims, lifecycle transitions, cancellation, and
+  approval waits.
+- Policy evaluation for agent kind, runner pool, capabilities, egress, secrets,
+  approvals, and retention.
+- Secret storage and release brokering with encrypted at-rest state.
+- Receipt countersignature, audit export, metrics, structured logs, and the
+  dependency-free control panel at `/ui/`.
+
+## Runner responsibilities
+
+Runners (`@fusionkit/runner`) own execution, not authorization:
+
+- Poll the plane outbound and claim only compatible contracts.
+- Materialize the signed workspace manifest.
+- Run the requested harness in the configured session backend.
+- Enforce or delegate egress restrictions according to backend capability.
+- Record event evidence, collect outputs, sign runner receipts, and return them
+  to the plane for countersignature.
+
+## Hardening
+
+The control plane is built for a single-node production deployment, with the
+security-critical paths hardened:
+
+- **Durable, transactional storage** (`node:sqlite`, WAL). Run claims are an
+  atomic compare-and-set, and the claim-completion nonce ledger is durable, so
+  replay protection survives restarts.
+- **Role-based identity**: principals with roles (`admin` / `requester` /
+  `approver` / `enroller`), per-principal API keys that can be issued, rotated,
+  and revoked, and capability-gated routes. Runner enrollment uses single-use
+  expiring tokens.
+- **IdP-backed approvals**: an approval can carry an IdP-issued JWT, verified
+  against configured JWKS, so consent is attributable to a real subject.
+- **Boundary validation** with structured 400s, plus per-principal/per-IP
+  token-bucket rate limiting and auth-failure backoff.
+- **At-rest encryption**: the org signing key and the secret store are sealed
+  (scrypt + AES-256-GCM) with a master key supplied via `FUSIONKIT_MASTER_KEY`
+  (or a generated `0600` key file). No key material lives in `config.json`.
+- **Retention and GC**: a sweeper enforces the retention policy and
+  reference-counted blob GC; structured logging (set `LOG_LEVEL`), metrics
+  counters, and `/v1/ready` + `/v1/metrics`.
+
+<Callout type="warn">
+  Set `FUSIONKIT_MASTER_KEY` (e.g. `openssl rand -hex 32`) in any real
+  deployment. The same value must be present wherever the plane or a CLI loads
+  the home directory (the runner shares it to read the home config). The
+  `docker compose` setup injects a labeled dev default you should override.
+</Callout>
+
+## Storage and retention
+
+The current durable store is SQLite. The `PlaneStore` interface is the seam for
+replacing SQLite with a multi-node store such as Postgres. What remains
+explicitly out of scope: true multi-node HA, real TEE attestation (still labeled
+`mock`), and a full OIDC login UI (only IdP assertion verification is
+implemented).
+
+## Dependency policy
+
+Third-party dependencies are allowed in any package, but only trusted,
+exact-pinned versions on an explicit allowlist. Trust comes from pinning reviewed
+versions plus `.npmrc` supply-chain controls (`save-exact`, `ignore-scripts`,
+`verify-store-integrity`, frozen-lockfile installs, and a 24-hour
+`minimum-release-age` against fresh-release attacks) — not from the absence of
+dependencies. Bumping a dependency means updating the allowlist pin, which is the
+review checkpoint.
+
+## Maintenance commands
+
+```bash
+pnpm check
+pnpm build
+pnpm test
+pnpm verify     # check + build + test
+```
+
+Release-package workflow details live in
+[Release publishing](/docs/operations/release-publishing).

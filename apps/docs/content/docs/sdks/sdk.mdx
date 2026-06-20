@@ -1,0 +1,41 @@
+---
+title: Plane SDK
+description: A thin client over the plane API plus offline receipt verification.
+---
+
+`@fusionkit/sdk` is a thin TypeScript client for the control plane API, plus the
+helpers to verify receipts offline. It is the lowest-level developer surface: the
+[handoff SDK](/docs/sdks/handoff-sdk) and the [adapters](/docs/sdks/adapters) are
+built on top of it.
+
+## What it covers
+
+- Submitting run requests and reading run lifecycle state from the plane.
+- Fetching receipt bundles and verifying their signatures, hashes, and event
+  chains **offline** — without trusting the online plane.
+- The wire types shared with `@fusionkit/protocol` (contracts, receipts, events,
+  manifests, policies).
+
+## Offline verification
+
+The verification path uses only Node built-ins, keeping it maximally auditable. A
+receipt bundle answers the [five receipt questions](/docs/concepts/overview#the-five-receipt-questions)
+and can be checked anywhere — in CI, on another machine, or long after the run —
+because every signature and hash chain travels with the bundle.
+
+```ts
+import { PlaneClient, verifyBundle } from "@fusionkit/sdk";
+
+const client = new PlaneClient({ url: planeUrl, token });
+const run = await client.submitRun({ task: "run the suite", agent: "mock" });
+const bundle = await client.bundle(run.runId);
+
+const result = verifyBundle(bundle);   // signatures + hash chain, no network
+if (!result.ok) throw new Error(`receipt failed verification: ${result.reason}`);
+```
+
+<Callout type="info">
+  The protocol, SDK, and workspace packages happen to use only Node built-ins.
+  That keeps the offline verifier maximally auditable — a property, not a hard
+  rule; see the dependency policy in [Self-Hosting](/docs/operations/self-hosting).
+</Callout>

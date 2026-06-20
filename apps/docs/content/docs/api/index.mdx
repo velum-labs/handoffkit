@@ -1,0 +1,33 @@
+---
+title: API Reference
+description: The model-fusion HTTP/service contract.
+---
+
+The model-fusion service surface is defined by an **OpenAPI 3.1 contract** that
+lives with the protocol package
+(`packages/protocol/openapi/model-fusion-harness-executor.openapi.json`). It is
+the single source of truth, so the reference pages in this section are generated
+from it rather than written by hand.
+
+## What it covers
+
+The contract describes the HTTP/JSON harness-executor seam: FusionKit calls it to
+ask the executor to run a coding-harness task and return persisted JSON Schema
+audit records.
+
+- **[Execute a model-fusion harness task](/docs/api/v1/harness-executions)** —
+  `POST /v1/harness-executions`
+
+## Why generated?
+
+- The contract is versioned and validated in CI; copying it into prose would
+  immediately drift.
+- The renderer produces request/response schemas, examples, and a try-it panel
+  directly from the spec.
+
+<Callout type="info">
+  The durable record shapes (rows, receipts, candidates, judge syntheses) are
+  defined as JSON Schema in the same protocol package; the OpenAPI document
+  references those records rather than re-declaring them. Regenerate the MDX with
+  `pnpm generate:openapi` whenever the contract changes.
+</Callout>

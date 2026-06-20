@@ -5,9 +5,9 @@ description: Watch sessions, trajectories, and the judge with --observe.
 
 ## The trace dashboard
 
-Pass `--observe` to boot a local dashboard that streams live fusion-trace events
-— sessions, environments, per-panel-model trajectories, and the judge's
-thinking-to-final flow:
+Pass `--observe` to boot a local dashboard (the **scope** app) that streams live
+fusion-trace events — sessions, environments, per-panel-model trajectories, and
+the judge's thinking-to-final flow:
 
 ```bash
 fusionkit codex --observe
@@ -15,6 +15,21 @@ fusionkit codex --observe
 
 fusionkit exports the trace endpoint into every spawned process, opens the
 dashboard in your browser, and tears it down on exit.
+
+## What gets traced
+
+Every component emits `fusion-trace-event.v1` events correlated by one
+`trace_id`:
+
+- `session.started` (with an environment snapshot)
+- `harness.candidate.started` / `harness.candidate.finished`
+- `trajectory.step`
+- `model.call.started` / `model.call.finished`
+- `tool.execution`
+- the judge's `judge.thinking` (each tool-call step) → `judge.final` (terminal)
+
+The terminal `judge.final` carries the final answer and marks the session
+succeeded in the collector.
 
 ## Availability
 

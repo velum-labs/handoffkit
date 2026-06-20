@@ -5,6 +5,13 @@ developer or application run vendor agents and model-driven tools on controlled
 runtimes, under policy, then receive signed receipts that can be verified
 offline.
 
+> **The canonical, user-facing documentation now lives in the Fumadocs site at
+> [`apps/docs`](../apps/docs)** (published at `fusionkit.velum-labs.com`). It covers
+> both the fusionkit CLI and the platform (concepts, architecture, SDKs,
+> self-hosting, API reference). The Markdown pages in this directory are retained
+> as an internal maintainer/contributor layer; when they overlap with the site,
+> the site is the source of truth.
+
 Use this directory as the maintainable documentation layer for the codebase. The
 root [`README.md`](../README.md) remains the product narrative and quick tour;
 the pages here explain how the implementation is organized and operated.

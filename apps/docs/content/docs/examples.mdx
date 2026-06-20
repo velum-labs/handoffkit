@@ -1,0 +1,58 @@
+---
+title: Examples
+description: The runnable demo suite and what each scenario proves.
+---
+
+The demo suite is the fastest way to understand how the platform packages fit
+together. Each demo is its own self-contained workspace project under
+`examples/`, driven by `examples/manifest.json` and shared helpers in
+`@fusionkit/example-utils`. Most run with an in-process plane + runner and a
+built-in mock agent — no vendor CLIs or API keys.
+
+## Running demos
+
+```bash
+pnpm build
+pnpm demo        # list demos
+pnpm demo 01     # run a specific demo
+pnpm demo all    # run every non-interactive demo
+```
+
+Some demos are interactive or require local services, Docker, live model keys, or
+Apple Silicon MLX. The manifest labels interactive demos.
+
+## Core demo path
+
+| # | Demo | What it proves |
+| --- | --- | --- |
+| 01 | Governed run | Signed contract → governed session → receipt answering the five questions, verified offline. |
+| 02 | Dry run | The complete disclosure report — including provably denied `.env`/key captures — with nothing moved. |
+| 03 | Consent + secrets | A secret-releasing run blocks on human approval; the value is injected at runtime and appears in no artifact. |
+| 04 | Egress policy | Fail-closed network policy at contract time, deny-by-default enforcement and evidence at the session boundary. |
+| 05 | Offline verification | Tampered event chains and forged receipts are detected with no trust in the plane. |
+| 06 | Handoff | Checkpoint, envelope, governed run, trace, receipt, and divergence-safe pull. |
+| 07 | Parallel fan-out | One checkpoint forked into isolated attempts, reviewed with typed deterministic strategies. |
+| 08 | Control panel | Boots a seeded plane + runner and leaves the UI up to explore (interactive). |
+| 09 | AI SDK loop | An ordinary `generateText` loop whose tool calls execute in governed sessions and return verified receipts. |
+| 10 | Compute sandbox | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions. |
+| 11 | Golden interface | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context. |
+| 12 | Model escalation | Local-to-cloud model routing and escalation traces. |
+| 13 | Hermetic session | The `command` harness runs in a bash interpreter with interpreter-enforced egress; the receipt records `isolation: hermetic`. |
+| 14 | Cloud orchestrator, local swarm | A cloud orchestrator drives a governed swarm via `swarmTools`. |
+
+## Infrastructure demos
+
+- `examples/bench` checks performance budgets with `pnpm bench`.
+- `examples/microvm-isolation-bench` measures the Vercel Sandbox microVM path
+  with `pnpm microvm:bench` when integration-gated env vars are set.
+- `examples/mlx` exercises managed MLX local serving with `pnpm mlx`.
+- `examples/seed` provides showcase data for Docker compose and the control panel.
+
+## Adding a demo
+
+1. Create `examples/<name>` with its own `package.json`, `tsconfig.json`, and
+   source/test files following adjacent demos.
+2. Add the scenario to `examples/manifest.json` so `pnpm demo`, tests, and demo
+   narration can discover it.
+3. Reuse `@fusionkit/example-utils` for banners, manifests, and live-model config.
+4. Run `pnpm check`, `pnpm build`, and the relevant demo/test command.

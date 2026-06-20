@@ -1,22 +1,19 @@
 ---
-title: Getting Started
-description: What fusionkit is and how the pieces fit together.
+title: Introduction
+description: What fusionkit is, the platform it runs on, and how to find your way around these docs.
 ---
 
 ## What is fusionkit?
 
-`fusionkit` (the `@fusionkit/cli` npm package) puts **real model fusion** behind
-your coding agent. On every prompt it:
+`fusionkit` puts **real model fusion** behind your coding agent. On every prompt it:
 
 1. Spins up a **panel** of models (a cloud trio by default, or a local MLX trio).
-2. Has each panel model produce a **real candidate**.
+2. Has each panel model produce a **real candidate** by running a coding harness
+   over your repo.
 3. Runs a **judge** that synthesizes the answer your coding agent (Codex, Claude
    Code, or Cursor) actually executes.
 
-You run one command — `fusionkit codex` — and your agent is transparently backed
-by the fused panel.
-
-## The 30-second version
+You run one command and your agent is transparently backed by the fused panel:
 
 ```bash
 npm install -g @fusionkit/cli
@@ -25,32 +22,50 @@ fusionkit doctor       # verify prerequisites
 fusionkit codex        # launch Codex backed by the panel
 ```
 
-Want it to "just work" for your whole team? Commit a config:
+## Two ways to use it
 
-```bash
-fusionkit fusion init  # scaffolds fusionkit.json
-```
+fusionkit ships as a single CLI on top of a governed execution platform. Most
+people start with the CLI; teams building their own agent products reach for the
+platform packages.
 
-## How the pieces fit
+<Cards>
+  <Card title="The fusionkit CLI" href="/docs/getting-started/installation">
+    Back Codex, Claude Code, or Cursor with a fused model panel from one command.
+    Start here if you want better answers in your existing coding agent.
+  </Card>
+  <Card title="The platform & SDKs" href="/docs/concepts/overview">
+    Run vendor agents under policy on runtimes you control, with signed,
+    offline-verifiable receipts. Build on `@fusionkit/handoff`, the SDK, and the
+    AI SDK / compute adapters.
+  </Card>
+</Cards>
 
-fusionkit is a thin, fast orchestrator. The heavy lifting is split across a few
-processes it manages for you:
+## The platform underneath
 
-- **The CLI** (`@fusionkit/cli`, npm) — the command you run. It boots and tears
-  down the stack and launches your coding agent.
-- **The synthesizer** (`fusionkit` on PyPI) — run automatically via `uvx`. It
-  fronts cloud models as OpenAI-compatible endpoints and performs judge
-  synthesis. You never install it manually.
-- **The gateway** — an in-process server your coding agent points at; it runs the
-  panel and streams the judge's chosen trajectory back to the agent.
+Both surfaces sit on the same governed execution and provenance plane (the
+project's internal name is **Warrant**). Its two core objects are the **run
+contract** (a signed authorization to execute under stated conditions) and the
+**receipt** (a signed, offline-verifiable record of what actually happened).
+Continuation — handing local work to a governed runner and pulling it back — is
+built from those same primitives and shipped as the [handoff
+SDK](/docs/sdks/handoff-sdk).
 
 <Callout type="info">
   Two packages share the name "fusionkit": the npm CLI (`@fusionkit/cli`) and the
-  Python distribution (`fusionkit` on PyPI). `fusionkit --version` prints both.
+  Python synthesizer (`fusionkit` on PyPI), which is fetched automatically via
+  `uvx`. `fusionkit --version` prints both.
 </Callout>
 
-## Next steps
+## Find your way around
 
-- [Installation & prerequisites](/docs/installation)
-- [Quickstart](/docs/quickstart)
-- [Configuration (`fusionkit.json`)](/docs/configuration)
+- **[Get Started](/docs/getting-started/installation)** — install the CLI, meet
+  the prerequisites, and run your first fused session.
+- **[fusionkit CLI](/docs/cli/commands)** — the full command and flag reference,
+  cost control, observability, and troubleshooting.
+- **[Concepts](/docs/concepts/overview)** — contracts, receipts, the plane and
+  runners, and how model fusion works.
+- **[SDKs & Packages](/docs/sdks/handoff-sdk)** — the handoff SDK, the plane
+  client, the AI SDK / compute adapters, and the package map.
+- **[Self-Hosting](/docs/operations/self-hosting)** — operate the plane and
+  runners, and publish releases.
+- **[API Reference](/docs/api)** — the model-fusion HTTP contract.

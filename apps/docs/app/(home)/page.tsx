@@ -1,31 +1,89 @@
 import Link from "next/link";
 
+const features = [
+  {
+    title: "Real model fusion",
+    body: "A panel of models each produces a real candidate over your repo; a judge synthesizes the answer your agent runs."
+  },
+  {
+    title: "Bring your own agent",
+    body: "Back Codex, Claude Code, or Cursor unchanged. They speak their native protocol and never learn fusion happened."
+  },
+  {
+    title: "Local or cloud",
+    body: "Run a frontier cloud trio, or an on-device MLX panel on Apple Silicon with zero API spend."
+  },
+  {
+    title: "Governed execution",
+    body: "The platform underneath runs vendor agents under policy and emits signed, offline-verifiable receipts."
+  }
+];
+
+const sections = [
+  { title: "Get Started", href: "/docs/getting-started/installation", body: "Install the CLI and run your first fused session." },
+  { title: "CLI Reference", href: "/docs/cli/commands", body: "Every command, flag, and cost control." },
+  { title: "Concepts", href: "/docs/concepts/overview", body: "Contracts, receipts, and how fusion works." },
+  { title: "SDKs & Packages", href: "/docs/sdks/handoff-sdk", body: "Handoff SDK, the plane client, and adapters." }
+];
+
 export default function HomePage() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-24 text-center">
-      <h1 className="text-3xl font-bold sm:text-5xl">real model fusion behind your coding agent</h1>
-      <p className="max-w-2xl text-fd-muted-foreground">
-        fusionkit spins up a panel of models, has each produce a real candidate, and lets a judge
-        synthesize the answer your coding agent (Codex, Claude Code, or Cursor) actually runs — from
-        one command.
-      </p>
-      <pre className="rounded-lg bg-fd-secondary px-4 py-3 text-sm">
-        npm install -g @fusionkit/cli && fusionkit codex
-      </pre>
-      <div className="flex gap-3">
-        <Link
-          href="/docs"
-          className="rounded-lg bg-fd-primary px-4 py-2 text-sm font-medium text-fd-primary-foreground"
-        >
-          Read the docs
-        </Link>
-        <Link
-          href="/docs/quickstart"
-          className="rounded-lg border px-4 py-2 text-sm font-medium"
-        >
-          Quickstart
-        </Link>
-      </div>
+    <main className="flex flex-1 flex-col">
+      <section className="flex flex-col items-center gap-6 px-4 py-24 text-center">
+        <span className="rounded-full border px-3 py-1 text-xs font-medium text-fd-muted-foreground">
+          @fusionkit/cli
+        </span>
+        <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-6xl">
+          Real model fusion behind your coding agent
+        </h1>
+        <p className="max-w-2xl text-lg text-fd-muted-foreground">
+          fusionkit spins up a panel of models, has each produce a real candidate, and lets a judge
+          synthesize the answer your coding agent (Codex, Claude Code, or Cursor) actually runs — from
+          one command.
+        </p>
+        <pre className="rounded-lg bg-fd-secondary px-4 py-3 text-sm">
+          npm install -g @fusionkit/cli && fusionkit codex
+        </pre>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Link
+            href="/docs"
+            className="rounded-lg bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground"
+          >
+            Read the docs
+          </Link>
+          <Link
+            href="/docs/getting-started/quickstart"
+            className="rounded-lg border px-5 py-2.5 text-sm font-medium"
+          >
+            Quickstart
+          </Link>
+        </div>
+      </section>
+
+      <section className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 px-4 pb-12 sm:grid-cols-2">
+        {features.map((feature) => (
+          <div key={feature.title} className="rounded-xl border p-6">
+            <h2 className="mb-2 text-lg font-semibold">{feature.title}</h2>
+            <p className="text-sm text-fd-muted-foreground">{feature.body}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="mx-auto w-full max-w-5xl px-4 pb-24">
+        <h2 className="mb-6 text-center text-2xl font-semibold">Explore the docs</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {sections.map((section) => (
+            <Link
+              key={section.href}
+              href={section.href}
+              className="rounded-xl border p-5 transition-colors hover:bg-fd-accent"
+            >
+              <h3 className="mb-1 font-medium">{section.title}</h3>
+              <p className="text-sm text-fd-muted-foreground">{section.body}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

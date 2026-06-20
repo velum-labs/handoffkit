@@ -1,14 +1,13 @@
 {
-  "title": "Docs",
+  "title": "Documentation",
   "pages": [
     "index",
-    "installation",
-    "quickstart",
-    "configuration",
-    "cost-and-models",
-    "observability",
-    "troubleshooting",
-    "architecture",
-    "api-reference"
+    "getting-started",
+    "cli",
+    "concepts",
+    "sdks",
+    "operations",
+    "examples",
+    "api"
   ]
 }

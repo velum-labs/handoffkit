@@ -28,8 +28,9 @@ At least one of:
 
 - [`codex`](https://github.com/openai/codex) — OpenAI Codex CLI
 - [`claude`](https://docs.anthropic.com/en/docs/claude-code/overview) — Claude Code
-- [`cursor-agent`](https://cursor.com/cli) — Cursor CLI (also needs a Cursorkit
-  checkout; see [Troubleshooting](/docs/troubleshooting))
+- [`cursor-agent`](https://cursor.com/cli) — Cursor CLI (Cursorkit ships bundled
+  with the npm package, so no separate checkout is needed; see
+  [Troubleshooting](/docs/cli/troubleshooting))
 
 ### Provider API keys (for the cloud panel)
 
@@ -55,3 +56,21 @@ your project, or pass `--repo <dir>`.
 fusionkit doctor
 fusionkit --version   # prints the npm CLI and pinned PyPI synthesizer versions
 ```
+
+## Optional: stable named URLs with portless
+
+Every service the stack starts — the panel servers, the gateway your agent
+connects to, and the observability dashboard — can be registered with
+[portless](https://github.com/vercel-labs/portless) so it is reachable at a
+stable HTTPS name (for example `https://gateway.fusion.localhost`) instead of a
+raw port, and reused across runs.
+
+```bash
+npm install -g portless    # needs Node >=24
+portless service install   # run the HTTPS proxy at OS startup
+portless trust             # add the local CA to your system trust store
+```
+
+When portless is not installed, the stack transparently falls back to loopback
+ports. Pass `--no-portless` (or set `PORTLESS=0`) to force ports for a single
+run, for example in CI.

@@ -1,0 +1,70 @@
+---
+title: Package Map
+description: What each workspace package owns and where to start reading.
+---
+
+The platform is a pnpm + TypeScript monorepo. Every package publishes under the
+`@fusionkit/*` scope; the CLI publishes as `@fusionkit/cli` with the `fusionkit`
+binary.
+
+## Core packages
+
+| Package | Responsibility |
+| --- | --- |
+| `@fusionkit/protocol` | Contract, receipt, event, manifest, checkpoint, handoff, signing, hashing, and model-fusion protocol primitives. Dependency-light. |
+| `@fusionkit/workspace` | Git capture, secret-pattern denial, session materialization, output collection, and divergence-safe pull. |
+| `@fusionkit/plane` | Control plane, policy, approvals, principals, secrets, receipt countersignature, SQLite store, metrics, audit export, and the control panel UI. |
+| `@fusionkit/runner` | Outbound claim loop, governed session execution, harness dispatch, egress enforcement, and runner receipts. |
+| `@fusionkit/sdk` | Thin client for the plane API plus offline receipt verification helpers. |
+
+## Developer surfaces
+
+| Package | Responsibility |
+| --- | --- |
+| `@fusionkit/cli` | The `fusionkit` command line — the primary product surface. |
+| `@fusionkit/handoff` | Continuation SDK: checkpoints, `continueIn`, parallel fan-out, review, pull, tools, and trace logs. |
+| `@fusionkit/adapter-ai-sdk` | Governed remote tools, swarm tools, local/cloud model handoff, routed models, and managed MLX. |
+| `@fusionkit/adapter-compute` | ComputeSDK-shaped sandbox surface backed by governed runner sessions. |
+| `@fusionkit/model-gateway` | Local-model gateway exposing harness wire dialects over OpenAI-compatible local models. |
+
+## Session & fusion packages
+
+| Package | Responsibility |
+| --- | --- |
+| `@fusionkit/session-hermetic` | just-bash virtual-filesystem backend with interpreter-enforced egress. |
+| `@fusionkit/session-vercel-sandbox` | Firecracker microVM backend through Vercel Sandbox with domain egress policy. |
+| `@fusionkit/session-harness` | AI SDK harness bindings for vendor coding agents in governed sessions. |
+| `@fusionkit/ensemble` | Harness-agnostic model-fusion runner, worktrees, judge synthesis, and protocol records. |
+
+## Tool integrations
+
+| Package | Responsibility |
+| --- | --- |
+| `@fusionkit/tools` | The tool integration contract (launcher + harness adapter) and the registry the CLI wires per-tool packages into. |
+| `@fusionkit/tool-codex` / `tool-claude` / `tool-cursor` / `tool-opencode` | Per-tool launcher shims and (where applicable) ensemble harness adapters. |
+
+## Support & Python
+
+| Package | Responsibility |
+| --- | --- |
+| `@fusionkit/testkit` | In-process plane + runner stacks and git fixtures for tests and demos. |
+| `@fusionkit/example-utils` | Shared demo manifest parsing, narration, and live-model helpers. |
+| `uniroute` (PyPI/uv) | NumPy implementation of dynamic-pool UniRoute model routing. |
+| `uniroute-mlx` (PyPI/uv) | OpenAI-compatible / MLX bridge for evaluating and serving routed local models. |
+
+## Adding a new tool
+
+Each coding tool is its own workspace package implementing a single
+`ToolIntegration`, so supporting a new tool is additive:
+
+1. Create `packages/tool-<name>/` (copy `packages/tool-codex` as a template). It
+   depends on `@fusionkit/tools` for the `ToolIntegration` contract, and on
+   `@fusionkit/ensemble` if it also ships a harness adapter.
+2. Export a `const <name>Tool: ToolIntegration` with a `launch(ctx)` that boots
+   the tool against `ctx.gatewayUrl`, its supported `modes`, and an optional
+   `createHarness` + `harnessKinds`.
+3. Register it in the CLI's tool registry.
+
+That single registry entry wires the tool into the launcher, the local-model
+path, the interactive picker, preflight, and (when it has a harness) the ensemble
+gateway.

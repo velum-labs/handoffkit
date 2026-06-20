@@ -1,0 +1,97 @@
+---
+title: Command Reference
+description: Every fusionkit command and the flags that shape a fused run.
+---
+
+The `fusionkit` CLI is a thin, fast orchestrator: it boots the panel, the
+synthesizer, and the gateway, then launches your coding agent pre-wired to them.
+Run `fusionkit --help` for the live command tree, or `fusionkit <command> --help`
+for any command's flags.
+
+## Launch commands
+
+These boot the full fusion stack and hand the terminal to a coding agent.
+
+| Command | What it does |
+| --- | --- |
+| `fusionkit codex [args...]` | Launch OpenAI Codex backed by the panel. |
+| `fusionkit claude [args...]` | Launch Claude Code backed by the panel. |
+| `fusionkit cursor [args...]` | Launch Cursor (via the bundled Cursorkit bridge) backed by the panel. |
+| `fusionkit serve [args...]` | Run only the gateway and print setup snippets for any OpenAI-compatible tool. |
+| `fusionkit fusion [tool] [args...]` | Generic launcher; omit `tool` on a TTY to pick interactively. |
+
+Anything after the tool name is forwarded to the tool. fusionkit's own flags
+must come **before** the tool name.
+
+```bash
+fusionkit codex --local                 # local MLX panel
+fusionkit claude --repo /path/to/repo    # fuse over another repo
+fusionkit codex --yes -- "fix the build" # everything after -- goes to codex
+```
+
+## Setup & inspection
+
+| Command | What it does |
+| --- | --- |
+| `fusionkit init` | Scaffold a committed `fusionkit.json` for this repo (`--force` to overwrite). |
+| `fusionkit doctor` | Check prerequisites (uv/uvx, agent binaries, provider keys, git) with fix hints. |
+| `fusionkit status` | Show the effective config and a dry-run preview of what a run will do. |
+| `fusionkit fusion stop` | Reap persistent portless singleton services (router, dashboard) left running by prior runs. |
+
+## Local-model commands
+
+Back a vendor agent with a locally running model instead of the fusion panel.
+
+| Command | What it does |
+| --- | --- |
+| `fusionkit local codex \| claude \| cursor \| serve [args...]` | Run the agent against a local OpenAI-compatible model through the model gateway. |
+
+```bash
+# Default backend is the owned MLX server; or point at any OpenAI-compatible server:
+export FUSIONKIT_LOCAL_MODEL_URL=http://localhost:11434/v1   # Ollama, vLLM, LM Studio, ...
+export FUSIONKIT_LOCAL_MODEL=qwen3:8b
+
+fusionkit local claude "fix the flaky auth test"
+fusionkit local serve     # just run the gateway (all dialects)
+```
+
+Cursor's coding agent is locked to Cursor's own backend, so `fusionkit local
+cursor` supports plan/chat mode only and prints the Settings values to paste
+(expects a public tunnel URL via `--public-url` or `FUSIONKIT_PUBLIC_URL`).
+
+## Ensemble / gateway commands
+
+For direct control of the fusion gateway (custom backends, ACP, the acceptance
+suite). See [Model fusion](/docs/concepts/model-fusion) for the architecture.
+
+| Command | What it does |
+| --- | --- |
+| `fusionkit ensemble gateway [serve]` | Run the Fusion Harness Gateway directly with explicit backends and harnesses. |
+| `fusionkit ensemble gateway acp` | Run the generic ACP stdio front door. |
+| `fusionkit ensemble gateway codex-config` | Print a Codex Responses provider snippet. |
+| `fusionkit ensemble gateway test` | Run the unified front-door acceptance suite. |
+
+## Common flags
+
+These apply to the launch commands (`codex`, `claude`, `cursor`, `serve`,
+`fusion`):
+
+| Flag | Effect |
+| --- | --- |
+| `--local` / `--no-local` | Use the on-device MLX panel (or override a `local: true` config default). |
+| `--model ID=PROVIDER:MODEL` | Define a panel member (repeatable). `PROVIDER` is `openai`, `anthropic`, `google`, or `mlx`. |
+| `--model-endpoint ID=URL` | Use a pre-running OpenAI-compatible endpoint as a panel member (repeatable). |
+| `--judge-model <model>` | Model used for judge synthesis. |
+| `--key-env ID=ENV` | Env var holding a panel member's API key. |
+| `--synthesis-url <url>` | Reuse an already-running `fusionkit serve` for synthesis. |
+| `--repo <dir>` | The coding workspace the panel fuses over (default: current git repo). |
+| `--observe` / `--no-observe` | Boot (or skip) the local trace dashboard. |
+| `--yes` | Skip the interactive cloud-panel cost confirmation. |
+| `--port <n>` | Fixed gateway port (default: ephemeral). |
+| `--portless` / `--no-portless` | Route services through portless stable URLs, or force raw loopback ports. |
+| `--auth-token <token>` | Require a bearer token on the gateway. |
+
+<Callout type="info">
+  `fusionkit --version` (`-v`) prints both the npm CLI version and the pinned
+  PyPI synthesizer version it will fetch via `uvx`.
+</Callout>

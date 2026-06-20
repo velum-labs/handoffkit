@@ -29,42 +29,41 @@ agent launches pre-wired to the gateway. One `Ctrl+C` tears the whole stack down
 So your team can just run `fusionkit codex`:
 
 ```bash
-fusionkit fusion init
+fusionkit init
 ```
 
 This writes a committed `fusionkit.json`. See
-[Configuration](/docs/configuration).
+[Configuration](/docs/getting-started/configuration).
 
 ## Per-tool quickstarts
 
-### Codex
-
+<Tabs items={["Codex", "Claude Code", "Cursor", "Just the gateway"]}>
+  <Tab value="Codex">
 ```bash
 fusionkit codex
 ```
-
-### Claude Code
-
+  </Tab>
+  <Tab value="Claude Code">
 ```bash
 fusionkit claude
 ```
-
-### Cursor
-
+  </Tab>
+  <Tab value="Cursor">
 ```bash
 fusionkit cursor
 ```
 
 Cursorkit ships bundled with the npm package; you only need a logged-in
 `cursor-agent` CLI.
-
-### Just the gateway
-
+  </Tab>
+  <Tab value="Just the gateway">
 Run the gateway and print setup snippets for any OpenAI-compatible tool:
 
 ```bash
 fusionkit serve
 ```
+  </Tab>
+</Tabs>
 
 ## Common flags
 
@@ -75,4 +74,4 @@ fusionkit serve
 - `--yes` — skip the cloud-panel cost confirmation.
 
 fusionkit's own flags must precede the tool name; everything after the tool is
-forwarded to it.
+forwarded to it. See the full [command reference](/docs/cli/commands).

@@ -1,7 +1,10 @@
 # fusionkit docs
 
-The documentation site for `@fusionkit/cli`, built with [Fumadocs](https://fumadocs.dev)
-(Next.js App Router).
+The production documentation site for fusionkit, built with
+[Fumadocs](https://fumadocs.dev) (Next.js App Router). It covers both the
+`@fusionkit/cli` product and the governed execution platform underneath it
+(plane, runner, SDKs, handoff, protocol). It is published at
+`fusionkit.velum-labs.com`.
 
 This is a **standalone app**: like `apps/scope`, it is not part of the root
 `packages/*` + `examples/*` pnpm workspace, so its UI dependency tree stays out
@@ -13,7 +16,7 @@ of the governed core's frozen lockfile and trust surface. It has its own
 ```bash
 cd apps/docs
 pnpm install
-pnpm dev        # http://localhost:4318
+pnpm dev:app    # http://localhost:4318  (or `pnpm dev` for the portless proxy)
 ```
 
 `fumadocs-mdx` runs on install/dev/build to generate the `.source` content index.
@@ -25,6 +28,21 @@ pnpm build
 pnpm start
 ```
 
+## Content
+
+Docs live in `content/docs/**/*.mdx`, grouped into folder-based sidebar sections,
+each ordered by its own `meta.json` (and the root `content/docs/meta.json`):
+
+- **Get Started** — installation, quickstart, configuration (`fusionkit.json`)
+- **fusionkit CLI** — command reference, cost & models, observability, troubleshooting
+- **Concepts** — core concepts, architecture, model fusion
+- **SDKs & Packages** — handoff SDK, plane SDK, adapters, package map
+- **Self-Hosting** — operating the plane/runners, release publishing
+- **Examples** and the generated **API Reference**
+
+Mermaid code blocks render as diagrams (via `remarkMdxMermaid` plus the
+client-side `components/mermaid.tsx`).
+
 ## API reference (OpenAPI)
 
 The API reference is generated from the model-fusion OpenAPI contract:
@@ -35,11 +53,37 @@ pnpm generate:openapi   # emits MDX into content/docs/api from
 ```
 
 Commit the generated MDX and rebuild. Regenerate whenever the contract changes.
+The pages render through `APIPage` (wired in `mdx-components.tsx` via
+`lib/openapi.ts`).
 
-## Content
+## Deploy (Vercel)
 
-Docs live in `content/docs/*.mdx`, ordered by `content/docs/meta.json`:
+The site deploys as its own Vercel project:
 
-- Getting Started, Installation, Quickstart
-- Configuration (`fusionkit.json`), Cost & Models
-- Observability, Troubleshooting, Architecture, API Reference
+- **Root Directory**: `apps/docs` (Vercel checks out the full repo, so the
+  OpenAPI source path resolves; the generated MDX is committed, so the build does
+  not depend on regeneration).
+- **Framework preset**: Next.js. Install/build commands and security headers are
+  declared in [`vercel.json`](./vercel.json) (`pnpm install` / `pnpm build`).
+- **Node**: 22 (pinned via `engines` in `package.json`).
+- **Previews**: every PR gets an automatic preview deployment once the repo is
+  linked.
+- **Custom domain**: `fusionkit.velum-labs.com`, configured in the Vercel
+  project (also update `metadataBase` in `app/layout.tsx` if the domain changes).
+
+First-time setup:
+
+```bash
+npm i -g vercel
+cd apps/docs
+vercel link          # create/link the project (set Root Directory to apps/docs)
+vercel --prod        # or push to the default branch once Git is connected
+```
+
+## Version pinning note
+
+The fumadocs packages are pinned to exact versions (`fumadocs-core`,
+`fumadocs-mdx`, `fumadocs-ui`, `fumadocs-openapi`) for reproducible builds.
+`lib/source.ts` resolves fumadocs-mdx's lazy `files()` factory into the array
+shape fumadocs-core 15.x expects; revisit that shim if you upgrade to fumadocs
+v16.

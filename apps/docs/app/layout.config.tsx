@@ -12,6 +12,21 @@ export const baseOptions: BaseLayoutProps = {
       active: "nested-url"
     },
     {
+      text: "CLI",
+      url: "/docs/cli/commands",
+      active: "nested-url"
+    },
+    {
+      text: "Concepts",
+      url: "/docs/concepts/overview",
+      active: "nested-url"
+    },
+    {
+      text: "API",
+      url: "/docs/api",
+      active: "nested-url"
+    },
+    {
       text: "GitHub",
       url: "https://github.com/velum-labs/handoffkit"
     }

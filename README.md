@@ -6,6 +6,8 @@ Run any vendor's agent — Claude Code, Codex, Cursor CLI — on a runtime you c
 
 The two core objects are the **run contract** (a signed authorization to execute under stated conditions) and the **receipt** (a signed, offline-verifiable record of what actually happened). Continuation — handing local work to a governed runner and pulling it back — is built from those same primitives and shipped here as the **handoff SDK**.
 
+> **Documentation:** the full, user-facing docs (fusionkit CLI + platform concepts, architecture, SDKs, self-hosting, and the API reference) live in the Fumadocs site under [`apps/docs`](apps/docs), published at `fusionkit.velum-labs.com`. This README is the product narrative and quick tour.
+
 ## Status
 
 The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and compute adapters, CLI, demo series, and Docker deployment are implemented. The control plane is hardened: durable transactional SQLite storage, atomic run claims, durable replay protection, role-based principal auth with rotation/revocation, IdP-backed approvals, request validation, rate limiting, master-key at-rest encryption, retention/GC, and structured logging + metrics (see "Hardening and operations" below). The protocol/verifier packages still use only Node built-ins, keeping the offline verifier maximally auditable; other packages use trusted, exact-pinned third-party dependencies (see "Dependency policy"). The validation gate in the spec (design-partner interviews) still governs go-to-market.

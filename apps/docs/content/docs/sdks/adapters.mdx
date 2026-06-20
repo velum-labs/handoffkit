@@ -1,0 +1,86 @@
+---
+title: AI SDK & Compute Adapters
+description: Govern the execution boundary inside your own model loop.
+---
+
+For applications that own their model loop, the adapters govern the **execution
+boundary** instead of taking over the loop. They are supported and honestly
+labeled: no durability claim attaches to the caller's loop, and there is no
+mid-generation continuation.
+
+## AI SDK adapter
+
+`@fusionkit/adapter-ai-sdk` turns a model's tool calls into governed contracts.
+`remoteTools(...)` returns AI SDK-compatible tools that execute in governed
+sessions and come back with receipts:
+
+```ts
+import { generateText } from "ai";
+import { remoteTools } from "@fusionkit/adapter-ai-sdk";
+
+const rt = remoteTools({ workspace: ".", plane, pool: "eng-prod" });
+const result = await generateText({
+  model: yourModel,            // your model, your loop
+  tools: rt.tools,             // tool calls become signed contracts with receipts
+  prompt: "run the tests and summarize the failures"
+});
+rt.calls();                    // [{ runId, contractHash, receiptVerified: true, ... }]
+```
+
+`swarmTools(...)` gives a cloud orchestrator harness governed dispatch, status,
+pull, and escalate over a local worker swarm — each worker a signed governed run.
+
+### Managed local models
+
+On Apple Silicon, `mlxServer(...)` owns the whole local-model stack: it
+provisions a private venv with `mlx-lm`, boots the server on first call, and
+scales it to zero after an idle period. `handoffModel({ local, cloud })` starts
+local and escalates to cloud under deterministic, explainable conditions, and
+`routedModel(...)` routes each call across a pool of candidates by predicted
+correctness (UniRoute).
+
+```ts
+import { handoffModel, mlxServer } from "@fusionkit/adapter-ai-sdk";
+
+const local = mlxServer({
+  model: "mlx-community/Qwen3-4B-4bit",
+  idleShutdownMs: 5 * 60 * 1000   // scale to zero after 5 idle minutes
+});
+const model = handoffModel({ local, cloud: openai("gpt-5.5") });
+// Idle: the process is stopped. Crash or wrong platform: the call escalates to
+// cloud, honestly recorded in the routing trace.
+```
+
+## Compute adapter
+
+`@fusionkit/adapter-compute` exposes a ComputeSDK-shaped surface where every
+command is a governed run with a receipt:
+
+```ts
+import { governedCompute } from "@fusionkit/adapter-compute";
+
+const compute = governedCompute({ workspace: ".", plane, pool: "eng-prod" });
+const sandbox = await compute.sandbox.create();
+await sandbox.filesystem.writeFile("task.md", task);
+await sandbox.runCommand("npm test");   // a governed run with a receipt
+sandbox.runs();                          // evidence for every command
+```
+
+Each command runs in a fresh governed session materialized from the current
+workspace; continuity flows through the workspace's git history, and the receipts
+— not a long-lived remote process — are what persists.
+
+## Session isolation
+
+How the runner isolates a session is pluggable, requested per run, and recorded
+honestly in every receipt (`runner.isolation`):
+
+| Tier | Backend | Isolation | Status |
+| --- | --- | --- | --- |
+| `process` | built-in | child process, scrubbed env, egress proxy | default |
+| `hermetic` | `@fusionkit/session-hermetic` | simulated bash interpreter + virtual filesystem; egress enforced by the interpreter | implemented, tested |
+| `vercel-sandbox` | `@fusionkit/session-vercel-sandbox` | Firecracker microVM, VM-level isolation, domain egress policy | experimental, integration-gated |
+| `vercel-sandbox` / `hermetic` | `@fusionkit/session-harness` | AI SDK harness bindings (claude-code in a microVM; Pi on local just-bash) | experimental, integration-gated |
+
+The stronger backends are injected into the runner so the trust-critical kernel
+stays dependency-light.
