@@ -10,7 +10,14 @@ from fusionkit_core.types import Usage
 
 def resolve_api_key(endpoint: ModelEndpoint) -> str:
     if endpoint.api_key_env:
-        return os.environ.get(endpoint.api_key_env, endpoint.api_key)
+        value = os.environ.get(endpoint.api_key_env)
+        if not value:
+            raise ValueError(
+                f"Endpoint {endpoint.id!r} sets api_key_env="
+                f"{endpoint.api_key_env!r} but that environment variable is "
+                "unset or empty."
+            )
+        return value
     return endpoint.api_key
 
 

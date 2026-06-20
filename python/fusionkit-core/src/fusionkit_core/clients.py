@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -42,6 +43,10 @@ class ChatClient(Protocol):
         extra: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """Stream a chat completion as incremental chunks."""
+        ...
+
+    async def aclose(self) -> None:
+        """Release any underlying network resources (HTTP connection pool)."""
         ...
 
 
@@ -158,6 +163,9 @@ class OpenAICompatibleClient:
                 usage=usage,
             )
 
+    async def aclose(self) -> None:
+        await self._client.close()
+
 
 class AnthropicModelClient:
     """Native Anthropic Messages API client."""
@@ -266,6 +274,9 @@ class AnthropicModelClient:
                     usage = Usage(completion_tokens=event.usage.output_tokens)
                 yield StreamChunk(finish_reason=finish_reason, usage=usage)
 
+    async def aclose(self) -> None:
+        await self._client.close()
+
 
 class GoogleModelClient:
     """Native Google Gemini (google-genai) client."""
@@ -364,6 +375,17 @@ class GoogleModelClient:
                 finish_reason=finish_reason,
             )
 
+    async def aclose(self) -> None:
+        # google-genai manages its own transport and exposes no stable public
+        # close hook across versions; close the underlying async httpx client if
+        # one is reachable, otherwise rely on GC. Best-effort by design.
+        api_client = getattr(self._client, "_api_client", None)
+        httpx_client = getattr(api_client, "_async_httpx_client", None)
+        aclose = getattr(httpx_client, "aclose", None)
+        if aclose is not None:
+            with contextlib.suppress(Exception):
+                await aclose()
+
 
 class FakeModelClient:
     def __init__(self, model_id: str, responses: Sequence[str] | None = None) -> None:
@@ -420,6 +442,9 @@ class FakeModelClient:
             finish_reason="stop",
             usage=Usage(prompt_tokens=0, completion_tokens=len(content.split())),
         )
+
+    async def aclose(self) -> None:
+        return None
 
 
 # Backwards-compatible alias: the original name used before native cloud

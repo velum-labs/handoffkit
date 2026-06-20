@@ -61,6 +61,19 @@ def test_provider_config_supports_required_families(monkeypatch) -> None:
     assert resolve_api_key(config.endpoint_for("secret")) == "synthetic-openai-key"
 
 
+def test_resolve_api_key_raises_when_env_var_missing(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    endpoint = ModelEndpoint(
+        id="secret",
+        provider="openai",
+        model="gpt",
+        base_url="https://api.openai.com",
+        api_key_env="OPENAI_API_KEY",
+    )
+    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+        resolve_api_key(endpoint)
+
+
 def test_api_compatibility_maps_providers_within_contract_enum() -> None:
     def compatibility(provider: ProviderKind) -> str:
         endpoint = ModelEndpoint(

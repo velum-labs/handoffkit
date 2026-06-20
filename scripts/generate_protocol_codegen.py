@@ -306,6 +306,7 @@ def _python_openapi_client(openapi: dict[str, Any]) -> str:
             "        *,",
             "        body: dict[str, Any] | None = None,",
             "        path_params: dict[str, str] | None = None,",
+            "        timeout_s: float = 30.0,",
             "    ) -> Any:",
             "        method, path = OPERATION_PATHS[operation_id]",
             "        for key, value in (path_params or {}).items():",
@@ -317,7 +318,7 @@ def _python_openapi_client(openapi: dict[str, Any]) -> str:
             "            method=method.upper(),",
             "            headers={\"Content-Type\": \"application/json\"},",
             "        )",
-            "        with urllib.request.urlopen(request) as response:",
+            "        with urllib.request.urlopen(request, timeout=timeout_s) as response:",
             "            return json.loads(response.read().decode())",
             "",
         ]

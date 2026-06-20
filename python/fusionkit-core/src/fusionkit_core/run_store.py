@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import json
 from pathlib import Path
 from typing import Any
@@ -39,10 +40,28 @@ class FileSystemRunStore:
         run_dir = self._run_dir(event.run_id)
         run_dir.mkdir(parents=True, exist_ok=True)
         event_path = self._event_path(event.run_id)
-        event_seq = self._next_event_seq(event.run_id)
-        sequenced_event = event.model_copy(update={"event_seq": event_seq})
-        with event_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(sequenced_event.model_dump(mode="json")) + "\n")
+        seq_path = self._seq_path(event.run_id)
+        # Serialize the read-max-then-append across coroutines, threadpool
+        # workers, and separate processes. flock is associated with the open
+        # file description, so two independent open() calls contend even within
+        # one process. The next sequence number is tracked in an O(1) counter
+        # file so appends do not re-parse the whole event log (was O(n^2)).
+        with self._lock_path(event.run_id).open("a", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle, fcntl.LOCK_EX)
+            try:
+                last_seq = self._read_seq(seq_path)
+                if last_seq is None:
+                    # Migrate a run created before the counter file existed.
+                    last_seq = self._next_event_seq(event.run_id) - 1
+                event_seq = last_seq + 1
+                sequenced_event = event.model_copy(update={"event_seq": event_seq})
+                with event_path.open("a", encoding="utf-8") as handle:
+                    handle.write(
+                        json.dumps(sequenced_event.model_dump(mode="json")) + "\n"
+                    )
+                self._write_seq(seq_path, event_seq)
+            finally:
+                fcntl.flock(lock_handle, fcntl.LOCK_UN)
         return sequenced_event
 
     def list_events(self, run_id: str, after: int | None = None) -> list[FusionRunEvent]:
@@ -196,11 +215,26 @@ class FileSystemRunStore:
         events = self.list_events(run_id)
         return events[-1].event_seq + 1 if events else 1
 
+    def _read_seq(self, seq_path: Path) -> int | None:
+        try:
+            return int(seq_path.read_text(encoding="utf-8").strip())
+        except (FileNotFoundError, ValueError):
+            return None
+
+    def _write_seq(self, seq_path: Path, value: int) -> None:
+        seq_path.write_text(str(value), encoding="utf-8")
+
     def _run_dir(self, run_id: str) -> Path:
         return self.root / run_id
 
     def _event_path(self, run_id: str) -> Path:
         return self._run_dir(run_id) / "events.jsonl"
+
+    def _seq_path(self, run_id: str) -> Path:
+        return self._run_dir(run_id) / "events.seq"
+
+    def _lock_path(self, run_id: str) -> Path:
+        return self._run_dir(run_id) / "events.lock"
 
     def _summary_path(self, run_id: str) -> Path:
         return self._run_dir(run_id) / "summary.json"

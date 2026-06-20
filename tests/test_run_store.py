@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from fusionkit_core.contracts import status_for_run_state
 from fusionkit_core.run import FusionRunEvent, IdempotencyRecord, NativeRunError, make_id
 from fusionkit_core.run_store import FileSystemRunStore
@@ -36,6 +38,33 @@ def test_run_store_appends_events_and_replays_after_cursor(tmp_path) -> None:
     page = store.event_page(run_id, after=1)
     assert [event.event_seq for event in page.events] == [2]
     assert page.next_event_cursor == 2
+
+
+def test_run_store_assigns_unique_sequences_under_concurrency(tmp_path) -> None:
+    store = FileSystemRunStore(tmp_path / "runs")
+    run_id = "run_concurrent"
+    trace_id = make_id("trace")
+    count = 50
+
+    def append(_: int) -> int:
+        sequenced = store.append_event(
+            FusionRunEvent(
+                event_seq=1,
+                run_id=run_id,
+                trace_id=trace_id,
+                state="generating",
+                status=status_for_run_state("generating"),
+                event_type="state_changed",
+            )
+        )
+        return sequenced.event_seq
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        seqs = list(pool.map(append, range(count)))
+
+    assert sorted(seqs) == list(range(1, count + 1))
+    page = store.event_page(run_id)
+    assert sorted(event.event_seq for event in page.events) == list(range(1, count + 1))
 
 
 def test_run_store_reconstructs_summary_from_terminal_error(tmp_path) -> None:

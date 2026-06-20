@@ -405,12 +405,18 @@ def candidate_evidence(candidate: Candidate, artifact_id: str | None = None) -> 
     )
 
 
+# Sentinel consensus written when the judge response is not valid JSON. Shared
+# between the producer (parse_analysis) and the detector (_judge_parse_failed)
+# so the two cannot silently drift apart.
+_PARSE_FAILURE_CONSENSUS = "Judge did not return valid structured JSON."
+
+
 def parse_analysis(content: str) -> FusionAnalysis:
     try:
         return FusionAnalysis.model_validate_json(_extract_json(content))
     except (ValueError, TypeError, json.JSONDecodeError):
         return FusionAnalysis(
-            consensus=["Judge did not return valid structured JSON."],
+            consensus=[_PARSE_FAILURE_CONSENSUS],
             likely_errors=[content[:500]],
         )
 
@@ -529,7 +535,7 @@ def _judge_parse_status(analysis: FusionAnalysis) -> str:
 
 
 def _judge_parse_failed(analysis: FusionAnalysis) -> bool:
-    return analysis.consensus == ["Judge did not return valid structured JSON."]
+    return analysis.consensus == [_PARSE_FAILURE_CONSENSUS]
 
 
 def _synthesis_id() -> str:

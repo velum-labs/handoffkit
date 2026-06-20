@@ -24,15 +24,17 @@ from fusionkit_evals.fusion_bench import (
     HandoffKitExecutorError,
     HandoffKitExecutorUnavailable,
     build_fusion_bench_report,
-    format_fusion_bench_html_report,
-    format_fusion_bench_markdown_report,
     join_handoffkit_records,
     load_benchmark_tasks,
     load_fusion_bench_jsonl,
     parse_handoffkit_records,
     score_fusion_bench_row,
-    write_fusion_bench_html_report,
     write_fusion_bench_jsonl,
+)
+from fusionkit_evals.fusion_reports import (
+    format_fusion_bench_html_report,
+    format_fusion_bench_markdown_report,
+    write_fusion_bench_html_report,
     write_fusion_bench_markdown_report,
     write_fusion_bench_report_jsonl,
 )

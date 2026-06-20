@@ -19,8 +19,10 @@ from fusionkit_evals.fusion_bench import (
     build_fusion_bench_report,
     load_benchmark_tasks,
     load_fusion_bench_jsonl,
-    write_fusion_bench_html_report,
     write_fusion_bench_jsonl,
+)
+from fusionkit_evals.fusion_reports import (
+    write_fusion_bench_html_report,
     write_fusion_bench_markdown_report,
     write_fusion_bench_report_jsonl,
 )
@@ -75,8 +77,8 @@ def serve_endpoint(
     serve_single_endpoint(endpoint, host=host, port=port)
 
 
-@app.command()
-def eval(
+@app.command("eval")
+def run_eval(
     config: Annotated[Path, typer.Option("--config", "-c")],
     samples: Annotated[Path, typer.Option("--samples", "-s")],
     output: Annotated[Path, typer.Option("--output", "-o")],

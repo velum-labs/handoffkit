@@ -153,13 +153,19 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                 )
 
                 async def run() -> Any:
+                    # Build and close the client within this request's event
+                    # loop so the SDK's HTTP connection pool is released instead
+                    # of leaking a socket/file descriptor per request.
                     client = build_client(endpoint)
-                    return await client.chat(
-                        messages,
-                        sampling,
-                        tools=tools,
-                        tool_choice=tool_choice if isinstance(tool_choice, str) else None,
-                    )
+                    try:
+                        return await client.chat(
+                            messages,
+                            sampling,
+                            tools=tools,
+                            tool_choice=tool_choice if isinstance(tool_choice, str) else None,
+                        )
+                    finally:
+                        await client.aclose()
 
                 started = time.perf_counter()
                 response = asyncio.run(run())
