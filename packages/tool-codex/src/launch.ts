@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,6 +27,7 @@ export function codexLaunchConfigToml(gatewayUrl: string, model: string): string
 /** Boot the Codex CLI against the gateway via an ephemeral CODEX_HOME. */
 export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   const home = mkdtempSync(join(tmpdir(), "fusionkit-codex-"));
+  ctx.registerDisposer(() => rmSync(home, { recursive: true, force: true }));
   writeFileSync(join(home, "config.toml"), codexLaunchConfigToml(ctx.gatewayUrl, ctx.modelLabel));
   ctx.prepareForPassthrough();
   if (ctx.mode === "fusion") {

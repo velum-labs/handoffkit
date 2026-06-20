@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { createMockHarness, ensemble } from "@fusionkit/ensemble";
 import type { EnsembleDescriptor } from "@fusionkit/ensemble";
 
-import { cursorHarness } from "../index.js";
+import { cursorHarness, defaultCursorRunner } from "../index.js";
 import type { CursorExecRunner } from "../index.js";
 
 function tempOutputRoot(): { outputRoot: string; cleanup: () => void } {
@@ -102,6 +102,90 @@ test("cursor adapter produces a real candidate with a diff via the injected runn
     );
   } finally {
     cleanup();
+  }
+});
+
+test("defaultCursorRunner spawns the bridge, drives the agent, and tears it down", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "cursor-runner-"));
+  // Stub `cursorkit serve`: announce readiness, then idle until terminated.
+  const stubServe = join(workdir, "serve.cjs");
+  writeFileSync(
+    stubServe,
+    [
+      'process.stdout.write("bridge listening on 127.0.0.1\\n");',
+      "const timer = setInterval(() => {}, 1000);",
+      'process.on("SIGTERM", () => { clearInterval(timer); process.exit(0); });'
+    ].join("\n")
+  );
+  // Stub `cursor-agent`: print a deterministic transcript and exit 0.
+  const stubAgent = join(workdir, "cursor-agent");
+  writeFileSync(stubAgent, '#!/bin/sh\necho "CURSOR_STUB_OK"\nexit 0\n');
+  chmodSync(stubAgent, 0o755);
+
+  const previousOverride = process.env.FUSIONKIT_CURSORKIT_SERVE_CLI;
+  process.env.FUSIONKIT_CURSORKIT_SERVE_CLI = stubServe;
+  try {
+    const result = await defaultCursorRunner({
+      prompt: "say hello",
+      cwd: workdir,
+      fusionBackendUrl: "http://127.0.0.1:9999",
+      model: { id: "cursor", model: "fusion-panel" },
+      command: stubAgent,
+      modelName: "cursor-bridge",
+      providerModel: "fusion-panel",
+      mode: "agent",
+      timeoutMs: 10_000,
+      env: { PATH: process.env.PATH ?? "" }
+    });
+
+    assert.equal(result.status, "succeeded");
+    assert.match(result.transcript, /CURSOR_STUB_OK/);
+    assert.equal(result.exitCode, 0);
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.FUSIONKIT_CURSORKIT_SERVE_CLI;
+    } else {
+      process.env.FUSIONKIT_CURSORKIT_SERVE_CLI = previousOverride;
+    }
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("defaultCursorRunner reports a clear failure when the bridge never starts", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "cursor-runner-fail-"));
+  // Stub serve that exits immediately without announcing readiness.
+  const stubServe = join(workdir, "serve.cjs");
+  writeFileSync(stubServe, 'process.exit(1);\n');
+  const stubAgent = join(workdir, "cursor-agent");
+  writeFileSync(stubAgent, '#!/bin/sh\necho "unused"\n');
+  chmodSync(stubAgent, 0o755);
+
+  const previousOverride = process.env.FUSIONKIT_CURSORKIT_SERVE_CLI;
+  process.env.FUSIONKIT_CURSORKIT_SERVE_CLI = stubServe;
+  try {
+    const result = await defaultCursorRunner({
+      prompt: "say hello",
+      cwd: workdir,
+      fusionBackendUrl: "http://127.0.0.1:9999",
+      model: { id: "cursor", model: "fusion-panel" },
+      command: stubAgent,
+      modelName: "cursor-bridge",
+      providerModel: "fusion-panel",
+      mode: "agent",
+      timeoutMs: 10_000,
+      env: { PATH: process.env.PATH ?? "" }
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.toolEvents, 0);
+    assert.ok((result.reason ?? "").length > 0);
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.FUSIONKIT_CURSORKIT_SERVE_CLI;
+    } else {
+      process.env.FUSIONKIT_CURSORKIT_SERVE_CLI = previousOverride;
+    }
+    rmSync(workdir, { recursive: true, force: true });
   }
 });
 

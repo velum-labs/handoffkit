@@ -12,7 +12,18 @@ import type {
   HarnessAdapter,
   HarnessCandidateOutput
 } from "@fusionkit/ensemble";
-import { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import {
+  CURSOR_BRIDGE_MODEL_NAME,
+  FUSION_PANEL_MODEL,
+  buildSkippedCandidate,
+  definedEnv,
+  freePort,
+  normalizeApiBaseUrl,
+  scrubBridgeEnv,
+  spawnLogged,
+  terminate,
+  waitForOutput
+} from "@fusionkit/tools";
 
 const DEFAULT_CURSOR_COMMAND = "cursor-agent";
 const DEFAULT_BRIDGE_MODEL_NAME = CURSOR_BRIDGE_MODEL_NAME;
@@ -70,21 +81,6 @@ type PreparedCursorHarness = {
   env: Record<string, string>;
   availability: CursorAvailability;
 };
-
-function definedEnv(
-  env: Record<string, string | undefined>
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined) result[key] = value;
-  }
-  return result;
-}
-
-function normalizeModelBaseUrl(fusionBackendUrl: string): string {
-  const trimmed = fusionBackendUrl.replace(/\/+$/, "");
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
-}
 
 function commandOnPath(
   command: string,
@@ -154,36 +150,11 @@ function skippedCandidate(input: {
   ordinal: number;
   reason: string;
 }): HarnessCandidateOutput {
-  const transcript = `Cursor adapter skipped: ${input.reason}`;
-  const hash = artifactHash(transcript);
-  return {
-    candidateId: `${input.descriptor.id}_${input.model.id}_${input.ordinal}`,
-    model: input.model,
-    status: "skipped",
-    transcript,
-    log: transcript,
-    artifacts: [
-      {
-        artifact_id: `artifact_${input.descriptor.id}_${input.model.id}_cursor_skip`,
-        kind: "log",
-        hash,
-        redaction_status: "synthetic"
-      }
-    ],
-    verification: {
-      status: "skipped",
-      evidence: [input.reason]
-    },
-    error: {
-      kind: "capability_missing",
-      message: input.reason,
-      retryable: false
-    },
-    metadata: {
-      adapter: "cursor",
-      skip_reason: input.reason
-    }
-  };
+  return buildSkippedCandidate({
+    ...input,
+    adapter: "cursor",
+    transcript: `Cursor adapter skipped: ${input.reason}`
+  });
 }
 
 /**
@@ -192,27 +163,20 @@ function skippedCandidate(input: {
  * The bridge runs with BRIDGE_AGENT_TOOL_POLICY=all so Cursor can read, edit
  * (apply_patch/write_file), and run shell commands inside the worktree.
  */
-async function defaultCursorRunner(
+export async function defaultCursorRunner(
   input: CursorExecInput
 ): Promise<CursorExecResult> {
-  const bridgePort = 9700 + Math.floor(Math.random() * 250);
-  const bridgeEnv: Record<string, string> = { ...input.env };
-  for (const key of Object.keys(bridgeEnv)) {
-    if (
-      key.startsWith("BRIDGE_") ||
-      key.startsWith("MODEL_") ||
-      key.startsWith("CURSOR_UPSTREAM")
-    ) {
-      delete bridgeEnv[key];
-    }
-  }
+  // Reserve a real free loopback port instead of a random guess so parallel
+  // candidates cannot collide on the same bridge port.
+  const bridgePort = await freePort();
+  const bridgeEnv: Record<string, string> = scrubBridgeEnv(input.env);
   Object.assign(bridgeEnv, {
     BRIDGE_PORT: String(bridgePort),
     BRIDGE_ROUTE_INVENTORY: "true",
     BRIDGE_AGENT_TOOL_POLICY: "all",
     BRIDGE_AGENT_TOOL_MAX_ITERATIONS: "24",
     CURSOR_UPSTREAM_BASE_URL: "https://api2.cursor.sh",
-    MODEL_BASE_URL: normalizeModelBaseUrl(input.fusionBackendUrl),
+    MODEL_BASE_URL: normalizeApiBaseUrl(input.fusionBackendUrl),
     MODEL_API_KEY: input.apiKey ?? "local",
     MODEL_NAME: input.modelName,
     MODEL_PROVIDER_MODEL: input.providerModel,
@@ -220,31 +184,24 @@ async function defaultCursorRunner(
   });
 
   const { serveCli } = resolveCursorkitCli();
-  let bridgeOut = "";
-  const bridge = spawn(process.execPath, [serveCli, "serve"], {
+  const bridge = spawnLogged(process.execPath, [serveCli, "serve"], {
     cwd: input.cwd,
-    env: bridgeEnv,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  bridge.stdout.on("data", (chunk: Buffer) => {
-    bridgeOut += chunk.toString("utf8");
-  });
-  bridge.stderr.on("data", (chunk: Buffer) => {
-    bridgeOut += chunk.toString("utf8");
+    env: bridgeEnv
   });
 
   const timeoutMs = input.timeoutMs ?? 180_000;
   try {
-    const deadline = Date.now() + BRIDGE_START_TIMEOUT_MS;
-    while (!/bridge listening/.test(bridgeOut) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    if (!/bridge listening/.test(bridgeOut)) {
+    try {
+      await waitForOutput(bridge, /bridge listening/, {
+        timeoutMs: BRIDGE_START_TIMEOUT_MS,
+        label: "Cursorkit bridge"
+      });
+    } catch (error) {
       return {
         status: "failed",
-        transcript: bridgeOut,
+        transcript: bridge.log(),
         toolEvents: 0,
-        reason: "Cursorkit bridge did not start in time."
+        reason: error instanceof Error ? error.message : String(error)
       };
     }
 
@@ -268,7 +225,10 @@ async function defaultCursorRunner(
       ...(printResult.reason !== undefined ? { reason: printResult.reason } : {})
     };
   } finally {
-    bridge.kill("SIGTERM");
+    // Tear down the whole bridge process group (serve may spawn children),
+    // escalating to SIGKILL if it ignores the grace period.
+    terminate(bridge.child);
+    bridge.closeLog();
   }
 }
 

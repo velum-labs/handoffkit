@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -292,9 +293,19 @@ async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<Bu
 
 function authorized(req: IncomingMessage, token: string): boolean {
   const auth = req.headers.authorization;
-  if (typeof auth === "string" && auth === `Bearer ${token}`) return true;
+  if (typeof auth === "string" && constantTimeEquals(auth, `Bearer ${token}`)) {
+    return true;
+  }
   const apiKey = req.headers["x-api-key"];
-  return typeof apiKey === "string" && apiKey === token;
+  return typeof apiKey === "string" && constantTimeEquals(apiKey, token);
+}
+
+/** Length-independent constant-time string comparison (avoids timing leaks). */
+function constantTimeEquals(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
 }
 
 function errorMessage(error: unknown): string {

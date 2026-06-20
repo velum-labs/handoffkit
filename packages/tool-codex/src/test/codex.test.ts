@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { createMockHarness, ensemble } from "@fusionkit/ensemble";
 import type { EnsembleDescriptor } from "@fusionkit/ensemble";
 
-import { codexConfigToml, codexHarness } from "../index.js";
+import { codexConfigToml, codexHarness, defaultCodexRunner } from "../index.js";
 import type { CodexExecRunner } from "../index.js";
 
 function tempOutputRoot(): { outputRoot: string; cleanup: () => void } {
@@ -211,6 +211,54 @@ test("generic ensemble descriptor swaps mock harness for Codex harness", async (
     assert.equal(codex.candidates[0]?.metadata?.provider_kind, "ambient");
   } finally {
     cleanup();
+  }
+});
+
+test("defaultCodexRunner captures stdout/stderr and exit code from a real process", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "codex-runner-"));
+  const stubCli = join(workdir, "codex-stub");
+  writeFileSync(
+    stubCli,
+    '#!/bin/sh\necho "codex-stdout-ok"\necho "codex-stderr-ok" 1>&2\nexit 0\n'
+  );
+  chmodSync(stubCli, 0o755);
+
+  try {
+    const result = await defaultCodexRunner({
+      command: stubCli,
+      args: ["exec", "hello"],
+      cwd: workdir,
+      env: { PATH: process.env.PATH ?? "" },
+      timeoutMs: 10_000
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /codex-stdout-ok/);
+    assert.match(result.stderr, /codex-stderr-ok/);
+    assert.notEqual(result.timedOut, true);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("defaultCodexRunner reports a non-zero exit code from the process", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "codex-runner-fail-"));
+  const stubCli = join(workdir, "codex-stub");
+  writeFileSync(stubCli, '#!/bin/sh\necho "boom" 1>&2\nexit 3\n');
+  chmodSync(stubCli, 0o755);
+
+  try {
+    const result = await defaultCodexRunner({
+      command: stubCli,
+      args: ["exec"],
+      cwd: workdir,
+      env: { PATH: process.env.PATH ?? "" }
+    });
+
+    assert.equal(result.exitCode, 3);
+    assert.match(result.stderr, /boom/);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
   }
 });
 

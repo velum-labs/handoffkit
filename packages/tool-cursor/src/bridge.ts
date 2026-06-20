@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
-import { freePort, spawnLogged, terminate, waitForOutput } from "@fusionkit/tools";
+import { freePort, scrubBridgeEnv, spawnLogged, terminate, waitForOutput } from "@fusionkit/tools";
 
 /**
  * Inject the portless CA so spawned Node children (the cursor bridge) trust the
@@ -21,20 +21,12 @@ function withCaEnv<T extends Record<string, string | undefined>>(
 
 /** Drop bridge/model/e2e env so a parent's leftover config never leaks in. */
 function scrubbedBridgeEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-    if (
-      key.startsWith("BRIDGE_") ||
-      key.startsWith("MODEL_") ||
-      key.startsWith("E2E_") ||
-      key.startsWith("CURSOR_UPSTREAM")
-    ) {
-      continue;
-    }
-    env[key] = value;
-  }
-  return env;
+  return scrubBridgeEnv(process.env, [
+    "BRIDGE_",
+    "MODEL_",
+    "E2E_",
+    "CURSOR_UPSTREAM"
+  ]);
 }
 
 /**

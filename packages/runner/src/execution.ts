@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import {
   defaultExecutionSpec,
   hashCanonical,
@@ -6,6 +8,11 @@ import {
 } from "@fusionkit/protocol";
 
 import { buildAgentCommand, type AgentContext } from "./agents.js";
+
+/** Bundled mock-agent entrypoint used when no explicit script path is supplied. */
+const DEFAULT_MOCK_SCRIPT = fileURLToPath(
+  new URL("./mock-agent.js", import.meta.url)
+);
 
 export type PreparedExecution =
   | {
@@ -33,7 +40,12 @@ export type BackendExecutionKind = PreparedExecution["kind"];
 
 export type PrepareExecutionInput = {
   contract: RunContract;
-  mockScriptPath: string;
+  /**
+   * Path to the mock-agent script used only when the contract resolves to the
+   * `mock` agent kind. Defaults to the bundled mock-agent so callers driving
+   * real agents (claude-code, codex, ...) never need a placeholder path.
+   */
+  mockScriptPath?: string;
 };
 
 /** Session wall-clock ceiling when neither execution nor contract sets a timeout. */
@@ -130,7 +142,8 @@ function prepareAgentExecution(
 }
 
 export function prepareExecution(input: PrepareExecutionInput): PreparedExecution {
-  const { contract, mockScriptPath } = input;
+  const { contract } = input;
+  const mockScriptPath = input.mockScriptPath ?? DEFAULT_MOCK_SCRIPT;
   const spec = executionSpecFor(contract);
   switch (spec.kind) {
     case "agent":

@@ -15,9 +15,17 @@ export type CursorkitCli = {
  * package exports `"."` -> `dist/src/cli.js`; the harness CLI lives next to it
  * at `dist/src/testing/cli.js` (not exposed via the exports map, so it is
  * derived from the resolved `"."` entry rather than resolved directly).
+ *
+ * `FUSIONKIT_CURSORKIT_SERVE_CLI` overrides the resolved `serveCli` entry. This
+ * lets a custom build (or an integration test) point the bridge at an alternate
+ * entrypoint; the harness CLI is still derived relative to it.
  */
 export function resolveCursorkitCli(): CursorkitCli {
-  const serveCli = require.resolve("@velum-labs/cursorkit");
+  const override = process.env.FUSIONKIT_CURSORKIT_SERVE_CLI;
+  const serveCli =
+    override !== undefined && override.length > 0
+      ? override
+      : require.resolve("@velum-labs/cursorkit");
   const harnessCli = join(dirname(serveCli), "testing", "cli.js");
   return { serveCli, harnessCli };
 }

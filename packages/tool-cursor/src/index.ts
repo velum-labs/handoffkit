@@ -65,7 +65,8 @@ export const cursorTool: ToolIntegration = {
 export {
   createCursorHarness,
   cursorHarness,
-  cursorHarnessUnavailableReason
+  cursorHarnessUnavailableReason,
+  defaultCursorRunner
 } from "./harness.js";
 export type {
   CursorExecInput,

@@ -418,7 +418,7 @@ export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}):
           contract,
           repoDir,
           secrets: options.secrets ?? [],
-          execution: prepareExecution({ contract, mockScriptPath: "/tmp/mock-agent.js" }),
+          execution: prepareExecution({ contract }),
           emit: (event: RunEvent) => {
             events.push(event);
           }

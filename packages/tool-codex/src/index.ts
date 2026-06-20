@@ -69,7 +69,8 @@ export {
   codexConfigToml,
   codexHarness,
   codexHarnessCredentialSkipReason,
-  createCodexHarness
+  createCodexHarness,
+  defaultCodexRunner
 } from "./harness.js";
 export type {
   CodexAmbientProvider,

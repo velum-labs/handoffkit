@@ -127,6 +127,7 @@ const requiredFiles = [
   "packages/tool-codex/src/test/codex.test.ts",
   "packages/tool-cursor/src/test/cursor.test.ts",
   "packages/tool-claude/src/test/claude-code.test.ts",
+  "packages/tool-opencode/src/test/opencode.test.ts",
   "packages/cli/src/test/dashboard.test.ts",
   "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/minimal.json",
   "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/realistic.json",

@@ -6,7 +6,12 @@ import { join } from "node:path";
 import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
 import { OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
-import { readEnv } from "@fusionkit/tools";
+import {
+  buildSkippedCandidate,
+  definedEnv,
+  normalizeApiBaseUrl,
+  readEnv
+} from "@fusionkit/tools";
 
 import type {
   EnsembleDescriptor,
@@ -119,11 +124,6 @@ function tomlString(value: string): string {
   return JSON.stringify(value);
 }
 
-function normalizeApiBaseUrl(baseUrl: string): string {
-  const trimmed = baseUrl.replace(/\/+$/, "");
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
-}
-
 function stripResponsesRoute(baseUrl: string): string {
   return baseUrl.replace(/\/responses\/?$/, "");
 }
@@ -135,14 +135,6 @@ function isLoopbackUrl(baseUrl: string): boolean {
   } catch {
     return false;
   }
-}
-
-function definedEnv(env: Record<string, string | undefined>): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined) result[key] = value;
-  }
-  return result;
 }
 
 function firstPresentEnv(
@@ -344,7 +336,7 @@ function writeCodexHome(input: {
   return codexHome;
 }
 
-async function defaultCodexRunner(input: CodexExecInput): Promise<CodexExecResult> {
+export async function defaultCodexRunner(input: CodexExecInput): Promise<CodexExecResult> {
   return await new Promise<CodexExecResult>((resolve, reject) => {
     const child = spawn(input.command, input.args, {
       cwd: input.cwd,
@@ -450,37 +442,15 @@ function skippedCandidate(input: {
   reason: string;
   provider: CodexProvider;
 }): HarnessCandidateOutput {
-  const transcript = `Codex adapter skipped: ${input.reason}`;
-  const hash = artifactHash(transcript);
-  return {
-    candidateId: `${input.descriptor.id}_${input.model.id}_${input.ordinal}`,
+  return buildSkippedCandidate({
+    descriptor: input.descriptor,
     model: input.model,
-    status: "skipped",
-    transcript,
-    log: transcript,
-    artifacts: [
-      {
-        artifact_id: `artifact_${input.descriptor.id}_${input.model.id}_codex_skip`,
-        kind: "log",
-        hash,
-        redaction_status: "synthetic"
-      }
-    ],
-    verification: {
-      status: "skipped",
-      evidence: [input.reason]
-    },
-    error: {
-      kind: "capability_missing",
-      message: input.reason,
-      retryable: false
-    },
-    metadata: {
-      adapter: "codex",
-      provider_kind: input.provider.kind,
-      skip_reason: input.reason
-    }
-  };
+    ordinal: input.ordinal,
+    reason: input.reason,
+    adapter: "codex",
+    transcript: `Codex adapter skipped: ${input.reason}`,
+    metadata: { provider_kind: input.provider.kind }
+  });
 }
 
 function failedToSpawnCandidate(input: {

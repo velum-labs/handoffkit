@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,6 +28,7 @@ export function opencodeModelArg(model: string): string {
 /** Boot opencode against the gateway via an ephemeral OPENCODE_CONFIG. */
 export async function launchOpencode(ctx: ToolLaunchContext): Promise<number> {
   const dir = mkdtempSync(join(tmpdir(), "fusionkit-opencode-"));
+  ctx.registerDisposer(() => rmSync(dir, { recursive: true, force: true }));
   const configPath = join(dir, "opencode.json");
   writeFileSync(configPath, JSON.stringify(opencodeConfig(ctx.gatewayUrl, ctx.modelLabel), null, 2));
   const args = ctx.toolArgs.includes("--model")
