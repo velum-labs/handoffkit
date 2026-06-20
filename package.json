@@ -20,7 +20,12 @@
     "mlx:stress": "node examples/mlx/dist/stress.js",
     "bench": "node examples/bench/dist/run.js",
     "microvm:bench": "node examples/microvm-isolation-bench/dist/run.js",
-    "verify": "pnpm check && pnpm build && pnpm test"
+    "verify": "pnpm check && pnpm build && pnpm test",
+    "release:plan": "node scripts/release.mjs plan",
+    "release:apply": "node scripts/release.mjs apply",
+    "release:graph": "node scripts/release.mjs graph",
+    "release:refresh": "node scripts/release.mjs refresh",
+    "mono": "node scripts/monorepo.mjs"
   },
   "devDependencies": {
     "@types/node": "22.19.20",

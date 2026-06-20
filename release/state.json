@@ -1,0 +1,36 @@
+{
+  "$comment": "Last-applied release state, written by `release apply` and reconciled by `release refresh`. Treated as a cache: refresh always trusts registries + git tags over this file.",
+  "lastApply": null,
+  "units": {
+    "fusionkit-protocol": {
+      "declared": "0.1.1",
+      "published": "0.1.1",
+      "latestTag": "model-fusion-protocol-v0.1.1",
+      "refreshedAt": "2026-06-20T05:00:08.565Z"
+    },
+    "cursorkit": {
+      "declared": "0.1.2",
+      "published": "0.1.2",
+      "latestTag": "cursorkit-v0.1.2",
+      "refreshedAt": "2026-06-20T05:00:08.998Z"
+    },
+    "fusionkit-pypi": {
+      "declared": "0.2.0",
+      "published": "0.2.0",
+      "latestTag": "fusionkit-v0.2.0",
+      "refreshedAt": "2026-06-20T05:00:09.088Z"
+    },
+    "handoffkit": {
+      "declared": "0.1.6",
+      "published": "0.1.6",
+      "latestTag": "handoffkit-v0.1.6",
+      "refreshedAt": "2026-06-20T05:00:09.408Z"
+    },
+    "mlx-lm": {
+      "declared": "0.31.3+structured.3",
+      "published": null,
+      "latestTag": null,
+      "refreshedAt": "2026-06-20T05:00:09.423Z"
+    }
+  }
+}

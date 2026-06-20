@@ -15,3 +15,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .venv/
+# Transient release plan artifacts written by scripts/release.mjs plan.
+/release/.plans/
+# Packed tarballs produced by scripts/publish-npm-workspaces.mjs.
+/release-artifacts/

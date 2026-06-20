@@ -1,0 +1,109 @@
+{
+  "$comment": "Static topology for the cross-repo release coordinator (Terraform-style providers + resource graph). Edit desired versions in release/desired.json, not here. Paths are relative to the workspace root (the parent directory of this repo).",
+  "workspaceRoot": "..",
+  "units": [
+    {
+      "key": "fusionkit-protocol",
+      "repo": "fusionkit",
+      "ecosystem": "protocol-dual",
+      "description": "@velum-labs/model-fusion-protocol (npm) + velum-model-fusion-protocol (PyPI), the contract consumed by handoffkit and cursorkit.",
+      "branch": "main",
+      "tagPattern": "model-fusion-protocol-v{version}",
+      "releaseTrigger": "tag-push",
+      "publishWorkflow": "model-fusion-protocol-release.yml",
+      "registries": [
+        { "kind": "npm", "package": "@velum-labs/model-fusion-protocol" },
+        { "kind": "pypi", "package": "velum-model-fusion-protocol" }
+      ],
+      "versionSources": [
+        "spec/model-fusion-contract/package.json#version",
+        "spec/model-fusion-contract/python/pyproject.toml#project.version"
+      ],
+      "preflight": ["npm", "--prefix", "spec/model-fusion-contract", "run", "check:generated"],
+      "dependsOn": []
+    },
+    {
+      "key": "fusionkit-pypi",
+      "repo": "fusionkit",
+      "ecosystem": "uv-monorepo",
+      "description": "The 5 fusionkit PyPI packages (fusionkit, fusionkit-core, fusionkit-evals, fusionkit-mlx, fusionkit-server) published in lockstep.",
+      "branch": "main",
+      "tagPattern": "fusionkit-v{version}",
+      "releaseTrigger": "github-release",
+      "publishWorkflow": "pypi-release.yml",
+      "registries": [{ "kind": "pypi", "package": "fusionkit" }],
+      "versionSources": [
+        "packages/fusionkit-core/pyproject.toml#project.version",
+        "packages/fusionkit-cli/pyproject.toml#project.version",
+        "packages/fusionkit-evals/pyproject.toml#project.version",
+        "packages/fusionkit-mlx/pyproject.toml#project.version",
+        "packages/fusionkit-server/pyproject.toml#project.version"
+      ],
+      "preflight": ["uv", "build", "--all-packages"],
+      "dependsOn": ["fusionkit-protocol"]
+    },
+    {
+      "key": "cursorkit",
+      "repo": "cursorkit",
+      "ecosystem": "npm-single",
+      "description": "@velum-labs/cursorkit single npm package.",
+      "branch": "main",
+      "tagPattern": "cursorkit-v{version}",
+      "releaseTrigger": "github-release",
+      "publishWorkflow": "release-packages.yml",
+      "registries": [{ "kind": "npm", "package": "@velum-labs/cursorkit" }],
+      "versionSources": ["package.json#version"],
+      "preflight": ["pnpm", "release:check"],
+      "consumesProtocol": "package.json#devDependencies.@velum-labs/model-fusion-protocol",
+      "dependsOn": ["fusionkit-protocol"]
+    },
+    {
+      "key": "handoffkit",
+      "repo": "handoffkit",
+      "ecosystem": "pnpm-monorepo",
+      "description": "The 19 publishable @fusionkit/* npm packages, versioned in lockstep with the root and release/npm-packages.json protocol.version.",
+      "branch": "main",
+      "tagPattern": "handoffkit-v{version}",
+      "releaseTrigger": "github-release",
+      "publishWorkflow": "release-packages.yml",
+      "registries": [{ "kind": "npm", "package": "@fusionkit/cli" }],
+      "versionSources": ["package.json#version"],
+      "preflight": ["pnpm", "check"],
+      "dependsOn": ["fusionkit-protocol"]
+    },
+    {
+      "key": "mlx-lm",
+      "repo": "mlx-lm",
+      "ecosystem": "python-single",
+      "description": "velum-labs fork of mlx-lm, published to a private PyPI-compatible registry.",
+      "branch": "main",
+      "tagPattern": "velum-mlx-lm-v{version}",
+      "releaseTrigger": "github-release",
+      "publishWorkflow": "velum-private-release.yml",
+      "registries": [{ "kind": "private-pypi", "package": "mlx-lm" }],
+      "versionSources": ["mlx_lm/_version.py#__version__"],
+      "preflight": ["python", "-c", "import mlx_lm"],
+      "dependsOn": ["fusionkit-pypi"]
+    }
+  ],
+  "tracked": [
+    {
+      "key": "uniroute",
+      "repo": "handoffkit",
+      "description": "Python uv packages (uniroute, uniroute-mlx). Built and tested in CI; not published anywhere yet.",
+      "versionSources": ["python/uniroute/pyproject.toml#project.version"]
+    },
+    {
+      "key": "apps",
+      "repo": "handoffkit",
+      "description": "apps/scope (staged into @fusionkit/cli) and apps/docs (local only). Not deployed.",
+      "versionSources": ["apps/scope/package.json#version"]
+    },
+    {
+      "key": "docker",
+      "repo": "handoffkit",
+      "description": "Warrant multi-role image. Built + smoke-tested in CI; never pushed to a registry.",
+      "versionSources": []
+    }
+  ]
+}

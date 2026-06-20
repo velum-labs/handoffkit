@@ -4,6 +4,11 @@ HandoffKit publishes its TypeScript workspace packages to the public npm
 registry (the `fusionkit` CLI plus the `@fusionkit/*` libraries it depends on)
 only from the canonical repository.
 
+> For cutting releases across the whole velum-labs workspace (handoffkit,
+> cursorkit, fusionkit, mlx-lm) with the Terraform-style `plan`/`apply`
+> coordinator, see [releasing.md](releasing.md). This document covers
+> handoffkit's own npm publish workflow, which that coordinator triggers.
+
 ## Triggers
 
 The release workflow is `.github/workflows/release-packages.yml`.
