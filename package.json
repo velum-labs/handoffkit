@@ -26,5 +26,10 @@
     "@types/node": "22.19.20",
     "@velum-labs/model-fusion-protocol": "0.1.1",
     "typescript": "5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "undici@>=7.0.0 <7.28.0": ">=7.28.0 <8"
+    }
   }
 }
