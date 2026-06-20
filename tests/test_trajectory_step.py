@@ -98,6 +98,9 @@ class _ToolCallClient:
     ) -> AsyncIterator[StreamChunk]:
         raise NotImplementedError
 
+    async def aclose(self) -> None:
+        return None
+
 
 def test_step_emits_tool_calls_and_injects_candidate_context(tmp_path) -> None:
     judge = _ToolCallClient()

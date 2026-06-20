@@ -49,6 +49,7 @@ def test_local_artifact_store_writes_and_returns_ref(tmp_path) -> None:
     assert ref.artifact_id == "artifact_1"
     assert ref.kind == "transcript"
     assert ref.hash == hash_text("hello world")
+    assert ref.uri is not None
     assert Path(ref.uri).read_text(encoding="utf-8") == "hello world"
 
 
