@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 import pytest
@@ -14,7 +14,7 @@ from fusionkit_core.prompts import (
     TRAJECTORY_STEP_SYSTEM_PROMPT,
     TRAJECTORY_SYNTHESIZER_SYSTEM_PROMPT,
 )
-from fusionkit_core.types import Candidate, ChatMessage, ModelResponse
+from fusionkit_core.types import Candidate, ChatMessage, ModelResponse, StreamChunk
 
 
 class RecordingClient:
@@ -41,6 +41,25 @@ class RecordingClient:
         content = self._responses[self._calls % len(self._responses)]
         self._calls += 1
         return ModelResponse(model_id=self.model_id, content=content)
+
+    async def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        extra: Mapping[str, Any] | None = None,
+    ) -> AsyncIterator[StreamChunk]:
+        del sampling, tools, tool_choice, extra
+        for message in messages:
+            if message.role == "system":
+                self.system_prompts.append(message.content)
+        content = self._responses[self._calls % len(self._responses)]
+        self._calls += 1
+        yield StreamChunk(delta=content)
+
+    async def aclose(self) -> None:
+        return None
 
 
 def _trajectory(trajectory_id: str, model_id: str, final_output: str) -> HarnessTrajectoryV1:
