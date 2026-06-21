@@ -82,14 +82,20 @@ function runDoctor(): number {
     console.log("");
     console.log(bold("repo config"));
     try {
-      const config = loadFusionConfig(repoRoot);
+      const config = loadFusionConfig(repoRoot, (message) =>
+        console.log(`  ${gray(glyph.bullet())} ${dim(message)}`)
+      );
       if (config === undefined) {
         console.log(
-          `  ${gray(glyph.bullet())} no ${cyan("fusionkit.json")} yet — run ${bold("fusionkit fusion init")}`
+          `  ${gray(glyph.bullet())} no ${cyan(".fusionkit/")} yet — run ${bold("fusionkit fusion init")}`
         );
       } else {
+        const overrides = Object.keys(config.prompts ?? {});
         console.log(`  ${green(glyph.tick())} ${cyan(fusionConfigPath(repoRoot))}`);
         console.log(`    ${dim(`tool: ${config.tool ?? "(unset)"}  panel: ${(config.panel ?? []).map((s) => s.id).join(", ") || "(unset)"}`)}`);
+        console.log(
+          `    ${dim(`prompt overrides: ${overrides.length > 0 ? overrides.join(", ") : "(none — built-in defaults)"}`)}`
+        );
       }
     } catch (error) {
       const message = error instanceof FusionConfigError ? error.message : String(error);
@@ -124,7 +130,7 @@ function runStatus(): number {
 
   let config: FusionConfig | undefined;
   try {
-    config = loadFusionConfig(repoRoot);
+    config = loadFusionConfig(repoRoot, (message) => console.log(dim(message)));
   } catch (error) {
     console.log(`${red("config error:")} ${error instanceof Error ? error.message : String(error)}`);
     return 1;
@@ -141,6 +147,8 @@ function runStatus(): number {
   console.log(`${dim("tool:")}   ${bold(tool)}`);
   console.log(`${dim("judge:")}  ${judge}`);
   console.log(`${dim("observe:")} ${config?.observe === true ? "on" : "off"}`);
+  const overrides = Object.keys(config?.prompts ?? {});
+  console.log(`${dim("prompts:")} ${overrides.length > 0 ? overrides.join(", ") : dim("(built-in defaults)")}`);
   console.log(bold("\npanel"));
   for (const spec of panel) console.log(`  ${glyph.bullet()} ${panelLabel(spec)}`);
 

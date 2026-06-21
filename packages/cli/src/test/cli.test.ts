@@ -229,15 +229,15 @@ test("fusion help documents the flags-before-tool contract", () => {
   assert.match(result.stdout, /must precede the tool name/);
 });
 
-test("init scaffolds a fusionkit.json and refuses to clobber without --force", () => {
+test("init scaffolds a .fusionkit/fusion.json and refuses to clobber without --force", () => {
   const fixture = makeRepo();
   try {
     const result = warrant(["init", "--repo", fixture.repo]);
     assert.equal(result.status, 0, result.stderr);
-    const configPath = join(fixture.repo, "fusionkit.json");
+    const configPath = join(fixture.repo, ".fusionkit", "fusion.json");
     assert.ok(existsSync(configPath));
     const config = JSON.parse(readFileSync(configPath, "utf8")) as { version: string };
-    assert.equal(config.version, "fusionkit.fusion.v1");
+    assert.equal(config.version, "fusionkit.fusion.v2");
 
     const again = warrant(["init", "--repo", fixture.repo]);
     assert.equal(again.status, 1);

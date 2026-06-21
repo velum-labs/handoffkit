@@ -6,6 +6,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
+import type { PromptOverrides } from "../fusion-config.js";
+
 /** A launchable tool id from the registry, or the `serve` pseudo-tool. */
 export type FusionTool = string;
 
@@ -43,6 +45,8 @@ export type RunFusionOptions = {
   yes?: boolean;
   /** Route services through portless (stable named URLs + singletons). Default on. */
   portless?: boolean;
+  /** System-prompt overrides forwarded to the synthesizer's router config. */
+  prompts?: PromptOverrides;
   log?: (line: string) => void;
 };
 
@@ -71,7 +75,7 @@ export type StackReporter = (event: StackEvent) => void;
  * synthesizer (`fusionkit serve`) and the single-model OpenAI shim
  * (`fusionkit serve-endpoint`). Pinned so `uvx` resolves a reproducible build.
  */
-export const FUSIONKIT_PYPI_VERSION = "0.2.0";
+export const FUSIONKIT_PYPI_VERSION = "0.3.0";
 
 /**
  * Default cloud panel — works cross-platform with only `OPENAI_API_KEY` and

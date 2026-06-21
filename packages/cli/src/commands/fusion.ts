@@ -42,9 +42,9 @@ function applyFusionOptions(command: Command): Command {
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for the uvx synthesizer)")
     .option("--repo <dir>", "coding workspace the panel fuses over")
     .option("--local", "use the local MLX panel trio instead of the default cloud panel")
-    .option("--no-local", "override a fusionkit.json default of local=true")
+    .option("--no-local", "override a .fusionkit default of local=true")
     .option("--observe", "boot the local scope dashboard and stream live trace events")
-    .option("--no-observe", "override a fusionkit.json default of observe=true")
+    .option("--no-observe", "override a .fusionkit default of observe=true")
     .option("--yes", "skip the interactive cloud-panel cost confirmation")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .option("--port <n>", "gateway port (default: ephemeral)")
@@ -115,6 +115,7 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
   if (options.portless === undefined && config.portless !== undefined) options.portless = config.portless;
   if (options.port === undefined && config.port != null) options.port = config.port;
+  if (options.prompts === undefined && config.prompts !== undefined) options.prompts = config.prompts;
 }
 
 /** The repo root used for config lookup: --repo if given, else the cwd's git root. */
@@ -142,15 +143,21 @@ function resolveContext(opts: FusionOpts): { options: RunFusionOptions; configTo
 }
 
 export function registerFusion(program: Command): void {
-  // Top-level `init` — scaffold a committed fusionkit.json for this repo.
+  // Top-level `init` — scaffold a committed .fusionkit/ folder for this repo.
   program
     .command("init")
-    .description("scaffold a committed fusionkit.json for this repo")
+    .description("scaffold a committed .fusionkit/ folder for this repo")
     .option("--repo <dir>", "coding workspace the panel fuses over")
-    .option("--force", "overwrite an existing fusionkit.json")
+    .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
+    .option("--force", "overwrite an existing .fusionkit/ config and prompts")
     .action(async (opts: FusionOpts) => {
-      const repoRoot = configRepoRoot(resolveOptions(opts));
-      const code = await runFusionInit({ repoRoot, force: opts.force === true });
+      const options = resolveOptions(opts);
+      const repoRoot = configRepoRoot(options);
+      const code = await runFusionInit({
+        repoRoot,
+        force: opts.force === true,
+        ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
+      });
       process.exit(code);
     });
 
@@ -166,7 +173,7 @@ export function registerFusion(program: Command): void {
     .addHelpText(
       "after",
       "\nfusionkit's own flags must precede the tool name; everything after the tool is forwarded to it." +
-        "\nRun `fusionkit init` to scaffold a committed fusionkit.json for this repo." +
+        "\nRun `fusionkit init` to scaffold a committed .fusionkit/ folder for this repo." +
         "\nRun `fusionkit fusion stop` to reap portless singleton services (router, dashboard, ...)."
     )
     .action(async (positionalTool: string | undefined, args: string[], opts: FusionOpts) => {

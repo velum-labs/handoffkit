@@ -17,6 +17,9 @@ import { createPortlessSession } from "../shared/portless.js";
 import type { PortlessSession } from "../shared/portless.js";
 import { freePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
 
+import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
+import type { PromptOverrides } from "../fusion-config.js";
+
 import { defaultKeyEnv, fusionkitPyCommand, loadEnvFileInto } from "./env.js";
 import type { PanelModelSpec, PanelProvider, StackReporter } from "./env.js";
 
@@ -93,6 +96,7 @@ function routerConfigYaml(input: {
   specs: PanelModelSpec[];
   mlxUrls: Record<string, string>;
   judgeId: string;
+  prompts?: PromptOverrides;
 }): string {
   const lines = ["endpoints:"];
   for (const spec of input.specs) {
@@ -119,6 +123,19 @@ function routerConfigYaml(input: {
   // Generous budget: reasoning models (gpt-5.x) spend tokens on reasoning before
   // producing content, so a small cap can yield an empty answer.
   lines.push("sampling: {temperature: 0.2, top_p: 0.9, max_tokens: 8192}");
+  // Committed `.fusionkit/prompts/*.md` overrides flow into the synthesizer's
+  // PromptOverrides here. JSON.stringify yields a valid YAML double-quoted
+  // scalar, so multi-line prompts are escaped safely.
+  const promptEntries = PROMPT_IDS.flatMap((id) => {
+    const value = input.prompts?.[id];
+    return value !== undefined ? [[PROMPT_CONFIG_KEY[id], value] as const] : [];
+  });
+  if (promptEntries.length > 0) {
+    lines.push("prompts:");
+    for (const [key, value] of promptEntries) {
+      lines.push(`  ${key}: ${JSON.stringify(value)}`);
+    }
+  }
   lines.push("");
   return lines.join("\n");
 }
@@ -134,6 +151,7 @@ export async function startRouter(options: {
   specs: PanelModelSpec[];
   judgeModel?: string;
   fusionkitDir?: string;
+  prompts?: PromptOverrides;
   logsDir?: string;
   report?: StackReporter;
   log: (line: string) => void;
@@ -185,7 +203,12 @@ export async function startRouter(options: {
       mlxUrls[spec.id] = gateway.url();
     }
 
-    const config = routerConfigYaml({ specs, mlxUrls, judgeId: judgeSpec.id });
+    const config = routerConfigYaml({
+      specs,
+      mlxUrls,
+      judgeId: judgeSpec.id,
+      ...(options.prompts !== undefined ? { prompts: options.prompts } : {})
+    });
     const configDir = mkdtempSync(join(tmpdir(), "fusion-router-"));
     const configPath = join(configDir, "router.yaml");
     writeFileSync(configPath, config);
@@ -249,6 +272,8 @@ export type StartFusionStackOptions = {
   models: PanelModelSpec[];
   endpoints?: Record<string, string>;
   fusionkitDir?: string;
+  /** System-prompt overrides emitted into the router's synthesizer config. */
+  prompts?: PromptOverrides;
   judgeModel?: string;
   /** Pre-running fusionkit serve URL for trajectory synthesis (skips spawn). */
   synthesisUrl?: string;
@@ -307,6 +332,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
           specs: options.models,
           ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
           ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
+          ...(options.prompts !== undefined ? { prompts: options.prompts } : {}),
           ...(options.logsDir !== undefined ? { logsDir: options.logsDir } : {}),
           ...(report !== undefined ? { report } : {}),
           log: options.log

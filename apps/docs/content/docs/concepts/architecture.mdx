@@ -13,7 +13,7 @@ the SDKs.
 flowchart TD
   user["you"] --> cli["@fusionkit/cli (the 'fusionkit' command)"]
   cli --> boot["boot TUI + cost confirm"]
-  cli --> cfg["fusionkit.json"]
+  cli --> cfg[".fusionkit/ (config + prompts)"]
   cli --> stack["fusion stack"]
   stack --> panel["panel servers (uvx fusionkit serve-endpoint / local MLX)"]
   stack --> synth["synthesizer (uvx fusionkit serve)"]

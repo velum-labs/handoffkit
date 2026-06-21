@@ -3,20 +3,25 @@
  * per-repo `fusionkit.json`. On a non-interactive stdin the prompts fall back to
  * their defaults, so `fusion init` still produces a sensible config in CI.
  */
+import { execFileSync } from "node:child_process";
+
 import {
   DEFAULT_CLOUD_PANEL,
   DEFAULT_TRIO,
   defaultKeyEnv,
-  FUSION_TOOLS
+  fusionkitPyCommand
 } from "./fusion-quickstart.js";
 import type { FusionTool, PanelModelSpec } from "./fusion-quickstart.js";
 import {
   FUSION_CONFIG_VERSION,
   FusionConfigError,
   fusionConfigPath,
-  writeFusionConfig
+  fusionPromptsDir,
+  PROMPT_IDS,
+  writeFusionConfig,
+  writeFusionPrompts
 } from "./fusion-config.js";
-import type { FusionConfig } from "./fusion-config.js";
+import type { FusionConfig, PromptOverrides } from "./fusion-config.js";
 import { parsePanelModelSpec } from "./shared/options.js";
 import { confirm, done, note, select, text } from "./ui/prompt.js";
 import { uiStream } from "./ui/runtime.js";
@@ -30,6 +35,34 @@ function withKeyEnv(spec: PanelModelSpec): PanelModelSpec {
   if (spec.keyEnv !== undefined || provider === "mlx") return { ...spec };
   const keyEnv = defaultKeyEnv(provider);
   return keyEnv !== undefined ? { ...spec, keyEnv } : { ...spec };
+}
+
+/**
+ * Pull the built-in default prompts from the Python `fusionkit` CLI
+ * (`fusionkit prompts dump`) so the scaffolded `.fusionkit/prompts/*.md` files
+ * match the synthesizer's source of truth. Returns `undefined` if the CLI is
+ * unreachable (e.g. offline) — callers fall back to leaving prompts unset, in
+ * which case the built-in defaults are used at run time.
+ */
+function fetchDefaultPrompts(fusionkitDir?: string): PromptOverrides | undefined {
+  const runner = fusionkitPyCommand(fusionkitDir);
+  try {
+    const stdout = execFileSync(runner.command, [...runner.prefix, "prompts", "dump"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 120_000,
+      ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {})
+    });
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    const prompts: PromptOverrides = {};
+    for (const id of PROMPT_IDS) {
+      const value = parsed[id];
+      if (typeof value === "string" && value.length > 0) prompts[id] = value;
+    }
+    return Object.keys(prompts).length > 0 ? prompts : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function buildCustomPanel(): Promise<PanelModelSpec[]> {
@@ -52,11 +85,15 @@ async function buildCustomPanel(): Promise<PanelModelSpec[]> {
   return specs;
 }
 
-export async function runFusionInit(input: { repoRoot?: string; force?: boolean }): Promise<number> {
+export async function runFusionInit(input: {
+  repoRoot?: string;
+  force?: boolean;
+  fusionkitDir?: string;
+}): Promise<number> {
   if (input.repoRoot === undefined) {
     out.write(
       `${red("error:")} not inside a git repository.\n` +
-        "  cd into your project (or run from a repo) so fusionkit.json lands at the repo root.\n"
+        "  cd into your project (or run from a repo) so .fusionkit/ lands at the repo root.\n"
     );
     return 1;
   }
@@ -126,8 +163,23 @@ export async function runFusionInit(input: { repoRoot?: string; force?: boolean 
     throw error;
   }
 
+  // Scaffold editable prompt overrides from the synthesizer's built-in defaults.
+  // If the Python CLI is unreachable, skip silently — unset prompts use the
+  // built-in defaults at run time, and the user can eject them later with
+  // `fusionkit prompts dump --dir .fusionkit/prompts`.
+  const defaultPrompts = fetchDefaultPrompts(input.fusionkitDir);
+  const wrotePrompts =
+    defaultPrompts !== undefined
+      ? writeFusionPrompts(input.repoRoot, defaultPrompts, { force: input.force === true })
+      : [];
+
   out.write("\n");
   done(`wrote ${cyan(fusionConfigPath(input.repoRoot))}`);
-  note(`commit it, then just run: ${bold(`fusionkit ${tool === "serve" ? "serve" : tool}`)}`);
+  if (wrotePrompts.length > 0) {
+    note(`editable prompts in ${cyan(fusionPromptsDir(input.repoRoot))} (empty file = built-in default)`);
+  } else if (defaultPrompts === undefined) {
+    note(`prompts use built-in defaults; run ${bold("fusionkit prompts dump --dir .fusionkit/prompts")} to customize`);
+  }
+  note(`commit ${cyan(".fusionkit/")}, then just run: ${bold(`fusionkit ${tool === "serve" ? "serve" : tool}`)}`);
   return 0;
 }

@@ -226,6 +226,7 @@ export async function runFusion(
       ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
+      ...(options.prompts !== undefined ? { prompts: options.prompts } : {}),
       ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
       ...(options.synthesisUrl !== undefined ? { synthesisUrl: options.synthesisUrl } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),

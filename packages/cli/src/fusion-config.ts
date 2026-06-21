@@ -1,23 +1,68 @@
 /**
- * Per-repo fusion configuration (`fusionkit.json`, committed at the repo root).
+ * Per-repo fusion configuration, stored in a committed `.fusionkit/` folder at
+ * the repo root:
  *
- * Captures the panel, judge, default tool, and run defaults so a contributor can
- * just run `fusionkit codex` instead of retyping a long flag line. The file is
- * safe to commit: it stores only the env-var *names* that hold API keys
- * (`keyEnv`), never the secret values.
+ *   .fusionkit/
+ *     fusion.json        - all settings (panel, judge, default tool, run defaults)
+ *     prompts/<id>.md    - optional system-prompt overrides (one file per prompt)
  *
- * Precedence at run time is: explicit CLI flags > fusionkit.json > built-in
- * defaults. CLI flags always win, so the file is a default layer, not a lock.
+ * The folder is safe to commit: it stores only the env-var *names* that hold API
+ * keys (`keyEnv`), never the secret values. A prompt file that exists and is
+ * non-empty overrides the matching built-in synthesizer prompt; absent/empty
+ * falls back to the built-in default.
+ *
+ * Precedence at run time is: explicit CLI flags > .fusionkit > built-in
+ * defaults. CLI flags always win, so the folder is a default layer, not a lock.
+ *
+ * Legacy `fusionkit.json` files at the repo root are auto-migrated into
+ * `.fusionkit/fusion.json` on first load (the original is left intact as a
+ * back-compat fallback).
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { FUSION_TOOLS } from "./fusion-quickstart.js";
 import type { FusionTool, PanelModelSpec, PanelProvider } from "./fusion-quickstart.js";
 import { PANEL_PROVIDERS } from "./shared/options.js";
 
+export const FUSION_CONFIG_DIRNAME = ".fusionkit";
+// `fusion.json` (not `config.json`) so the fusion settings never collide with
+// the plane home's `.fusionkit/config.json` (`warrant.config.v2`).
+export const FUSION_CONFIG_BASENAME = "fusion.json";
+export const FUSION_PROMPTS_DIRNAME = "prompts";
+/** Legacy single-file config at the repo root (pre-`.fusionkit/`). */
 export const FUSION_CONFIG_FILENAME = "fusionkit.json";
-export const FUSION_CONFIG_VERSION = "fusionkit.fusion.v1";
+
+export const FUSION_CONFIG_VERSION = "fusionkit.fusion.v2";
+/** Versions `parseFusionConfig` will load; `v1` is upgraded to `v2` in memory. */
+const SUPPORTED_CONFIG_VERSIONS = ["fusionkit.fusion.v1", "fusionkit.fusion.v2"] as const;
+
+/**
+ * The committable system-prompt override ids. Each maps to a
+ * `.fusionkit/prompts/<id>.md` file and to a `FusionConfig.prompts` key in the
+ * Python synthesizer (see {@link PROMPT_CONFIG_KEY}).
+ */
+export const PROMPT_IDS = [
+  "judge",
+  "synthesizer",
+  "trajectory-synthesizer",
+  "trajectory-step",
+  "verifier",
+  "panel"
+] as const;
+export type PromptId = (typeof PROMPT_IDS)[number];
+
+/** Map each prompt override id to the `prompts:` key fusionkit's config expects. */
+export const PROMPT_CONFIG_KEY: Record<PromptId, string> = {
+  judge: "judge_system",
+  synthesizer: "synthesizer_system",
+  "trajectory-synthesizer": "trajectory_synthesizer_system",
+  "trajectory-step": "trajectory_step_system",
+  verifier: "verifier_system",
+  panel: "panel_system"
+};
+
+export type PromptOverrides = Partial<Record<PromptId, string>>;
 
 export type FusionConfig = {
   version: typeof FUSION_CONFIG_VERSION;
@@ -28,6 +73,11 @@ export type FusionConfig = {
   observe?: boolean;
   portless?: boolean;
   port?: number | null;
+  /**
+   * System-prompt overrides, loaded from `.fusionkit/prompts/*.md`. Not stored
+   * inline in `config.json` — it is hydrated from the prompt files on load.
+   */
+  prompts?: PromptOverrides;
 };
 
 export class FusionConfigError extends Error {
@@ -37,8 +87,29 @@ export class FusionConfigError extends Error {
   }
 }
 
+/** The `.fusionkit/` directory at the repo root. */
+export function fusionConfigDir(repoRoot: string): string {
+  return join(repoRoot, FUSION_CONFIG_DIRNAME);
+}
+
+/** The `.fusionkit/fusion.json` settings file. */
 export function fusionConfigPath(repoRoot: string): string {
+  return join(fusionConfigDir(repoRoot), FUSION_CONFIG_BASENAME);
+}
+
+/** The legacy `fusionkit.json` at the repo root (pre-`.fusionkit/`). */
+export function legacyFusionConfigPath(repoRoot: string): string {
   return join(repoRoot, FUSION_CONFIG_FILENAME);
+}
+
+/** The `.fusionkit/prompts/` directory holding the override files. */
+export function fusionPromptsDir(repoRoot: string): string {
+  return join(fusionConfigDir(repoRoot), FUSION_PROMPTS_DIRNAME);
+}
+
+/** The `.fusionkit/prompts/<id>.md` file for a single prompt override. */
+export function fusionPromptPath(repoRoot: string, id: PromptId): string {
+  return join(fusionPromptsDir(repoRoot), `${id}.md`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -76,12 +147,16 @@ function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
   return spec;
 }
 
-/** Validate a parsed object as a {@link FusionConfig}, throwing on any problem. */
+/**
+ * Validate a parsed settings object as a {@link FusionConfig}, throwing on any
+ * problem. Prompt overrides are loaded separately from `.fusionkit/prompts/`,
+ * not from this object. A `v1` version is accepted and upgraded to `v2`.
+ */
 export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
   if (!isRecord(raw)) throw new FusionConfigError(`${source}: must be a JSON object`);
-  if (raw.version !== FUSION_CONFIG_VERSION) {
+  if (typeof raw.version !== "string" || !(SUPPORTED_CONFIG_VERSIONS as readonly string[]).includes(raw.version)) {
     throw new FusionConfigError(
-      `${source}: unsupported version ${JSON.stringify(raw.version)} (expected "${FUSION_CONFIG_VERSION}")`
+      `${source}: unsupported version ${JSON.stringify(raw.version)} (expected one of ${SUPPORTED_CONFIG_VERSIONS.join(", ")})`
     );
   }
   const config: FusionConfig = { version: FUSION_CONFIG_VERSION };
@@ -121,13 +196,7 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
   return config;
 }
 
-/**
- * Load `<repoRoot>/fusionkit.json` if present. Returns `undefined` when the file
- * does not exist; throws {@link FusionConfigError} on malformed content.
- */
-export function loadFusionConfig(repoRoot: string): FusionConfig | undefined {
-  const path = fusionConfigPath(repoRoot);
-  if (!existsSync(path)) return undefined;
+function readAndParse(path: string): FusionConfig {
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
@@ -139,12 +208,98 @@ export function loadFusionConfig(repoRoot: string): FusionConfig | undefined {
   return parseFusionConfig(raw, path);
 }
 
-/** Write `fusionkit.json` at the repo root, refusing to clobber unless `force`. */
-export function writeFusionConfig(repoRoot: string, config: FusionConfig, options: { force?: boolean } = {}): string {
+/**
+ * Read the committed prompt overrides from `.fusionkit/prompts/*.md`. Only files
+ * that exist and are non-empty (after trimming) become overrides.
+ */
+export function readFusionPrompts(repoRoot: string): PromptOverrides {
+  const dir = fusionPromptsDir(repoRoot);
+  const prompts: PromptOverrides = {};
+  if (!existsSync(dir)) return prompts;
+  for (const id of PROMPT_IDS) {
+    const path = fusionPromptPath(repoRoot, id);
+    if (!existsSync(path)) continue;
+    const text = readFileSync(path, "utf8").trim();
+    if (text.length > 0) prompts[id] = text;
+  }
+  return prompts;
+}
+
+function withPrompts(repoRoot: string, config: FusionConfig): FusionConfig {
+  const prompts = readFusionPrompts(repoRoot);
+  if (Object.keys(prompts).length === 0) return config;
+  return { ...config, prompts };
+}
+
+/**
+ * Load the per-repo config. Prefers `.fusionkit/config.json`; if it is absent
+ * but a legacy `fusionkit.json` exists, auto-migrates it into the folder (the
+ * original is left intact) and loads from there. Returns `undefined` when no
+ * config exists; throws {@link FusionConfigError} on malformed content.
+ *
+ * `onNotice` receives a one-line message when a migration happens.
+ */
+export function loadFusionConfig(
+  repoRoot: string,
+  onNotice?: (message: string) => void
+): FusionConfig | undefined {
+  const newPath = fusionConfigPath(repoRoot);
+  if (existsSync(newPath)) {
+    return withPrompts(repoRoot, readAndParse(newPath));
+  }
+
+  const legacyPath = legacyFusionConfigPath(repoRoot);
+  if (!existsSync(legacyPath)) return undefined;
+
+  const config = readAndParse(legacyPath);
+  try {
+    writeFusionConfig(repoRoot, config);
+    onNotice?.(`migrated ${legacyPath} into ${newPath}`);
+  } catch {
+    // Could not write the migrated copy (e.g. read-only FS); use the legacy
+    // file in place for this run rather than failing.
+  }
+  return withPrompts(repoRoot, config);
+}
+
+/**
+ * Write `.fusionkit/config.json` (creating the folder), refusing to clobber
+ * unless `force`. Prompt overrides are stored as files, not inline, so any
+ * `prompts` on the config object is omitted here.
+ */
+export function writeFusionConfig(
+  repoRoot: string,
+  config: FusionConfig,
+  options: { force?: boolean } = {}
+): string {
   const path = fusionConfigPath(repoRoot);
   if (existsSync(path) && options.force !== true) {
     throw new FusionConfigError(`${path} already exists (pass --force to overwrite)`);
   }
-  writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+  mkdirSync(fusionConfigDir(repoRoot), { recursive: true });
+  const { prompts: _prompts, ...persisted } = config;
+  writeFileSync(path, JSON.stringify(persisted, null, 2) + "\n");
   return path;
+}
+
+/**
+ * Write prompt override files into `.fusionkit/prompts/`. Existing files are
+ * left untouched unless `force`. Returns the paths actually written.
+ */
+export function writeFusionPrompts(
+  repoRoot: string,
+  prompts: PromptOverrides,
+  options: { force?: boolean } = {}
+): string[] {
+  mkdirSync(fusionPromptsDir(repoRoot), { recursive: true });
+  const written: string[] = [];
+  for (const id of PROMPT_IDS) {
+    const text = prompts[id];
+    if (text === undefined) continue;
+    const path = fusionPromptPath(repoRoot, id);
+    if (existsSync(path) && options.force !== true) continue;
+    writeFileSync(path, text.endsWith("\n") ? text : `${text}\n`);
+    written.push(path);
+  }
+  return written;
 }

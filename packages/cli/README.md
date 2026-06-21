@@ -44,23 +44,25 @@ cloud panel (skip with `--yes`). Use `--local` for the on-device MLX panel, or
 
 ## Per-repo config
 
-Tired of long flag lines? Scaffold a committed `fusionkit.json`:
+Tired of long flag lines? Scaffold a committed `.fusionkit/` folder:
 
 ```bash
 fusionkit init
 ```
 
-It records the panel, judge, default tool, and run defaults so the whole team
-can just run `fusionkit codex`. Only env-var *names* for keys are stored, never
-secrets. Explicit CLI flags always override the file. Inspect the effective
-config and a dry-run preview with `fusionkit status`.
+It writes `.fusionkit/fusion.json` (the panel, judge, default tool, and run
+defaults) plus editable system-prompt overrides in `.fusionkit/prompts/*.md`, so
+the whole team can just run `fusionkit codex`. Only env-var *names* for keys are
+stored, never secrets. Explicit CLI flags always override the folder. A legacy
+`fusionkit.json` is auto-migrated on first run. Inspect the effective config and
+a dry-run preview with `fusionkit status`.
 
 ## Commands
 
 - `fusionkit codex | claude | cursor` — launch that agent backed by the panel.
 - `fusionkit serve` — just run the gateway and print setup snippets for any tool.
 - `fusionkit fusion [tool]` — the generic launcher (interactive picker on a TTY).
-- `fusionkit init` — scaffold `fusionkit.json` for this repo.
+- `fusionkit init` — scaffold the committed `.fusionkit/` folder for this repo.
 - `fusionkit doctor` — check prerequisites with fix hints.
 - `fusionkit status` — show the effective config and what a run will do.
 

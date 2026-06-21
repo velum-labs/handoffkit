@@ -1,40 +1,63 @@
 ---
 title: Configuration
-description: The fusionkit.json per-repo config reference.
+description: The committed .fusionkit/ per-repo config reference.
 ---
 
-## fusionkit.json
+## The `.fusionkit/` folder
 
-`fusionkit.json` lives at your repo root and is **safe to commit** — it stores
-only the env-var *names* that hold API keys (`keyEnv`), never the secret values.
+Fusion settings live in a committed `.fusionkit/` folder at your repo root. It is
+**safe to commit** — it stores only the env-var *names* that hold API keys
+(`keyEnv`), never the secret values.
+
+```
+.fusionkit/
+  fusion.json        # all settings (panel, judge, default tool, run defaults)
+  prompts/
+    judge.md                    # judge analysis system prompt
+    synthesizer.md              # candidate synthesizer system prompt
+    trajectory-synthesizer.md   # trajectory synthesizer system prompt
+    trajectory-step.md          # streaming agent (front-door) system prompt
+    verifier.md                 # verifier system prompt
+    panel.md                    # panel member system prompt
+```
+
 Scaffold it interactively:
 
 ```bash
 fusionkit init
 ```
 
-Inspect the effective configuration and a dry-run preview any time:
+`init` writes `.fusionkit/fusion.json` and ejects the synthesizer's built-in
+prompts into `.fusionkit/prompts/*.md` so you can edit them. Inspect the
+effective configuration and a dry-run preview any time:
 
 ```bash
 fusionkit status
 ```
+
+<Callout type="info">
+  A legacy `fusionkit.json` at the repo root is **auto-migrated** into
+  `.fusionkit/fusion.json` on first run (the original is left in place as a
+  fallback). You can delete it once the folder is committed.
+</Callout>
 
 ## Precedence
 
 Settings resolve in this order (highest wins):
 
 ```
-explicit CLI flags  >  fusionkit.json  >  built-in defaults
+explicit CLI flags  >  .fusionkit  >  built-in defaults
 ```
 
-So the file is a default layer, not a lock — any flag overrides it for a single
-run. Use `--no-local` / `--no-observe` to override a `true` default from the file.
+So the folder is a default layer, not a lock — any flag overrides it for a
+single run. Use `--no-local` / `--no-observe` to override a `true` default from
+the file.
 
-## Schema
+## Settings (`fusion.json`)
 
 ```json
 {
-  "version": "fusionkit.fusion.v1",
+  "version": "fusionkit.fusion.v2",
   "tool": "codex",
   "panel": [
     { "id": "gpt", "model": "gpt-5.5", "provider": "openai", "keyEnv": "OPENAI_API_KEY" },
@@ -51,7 +74,7 @@ run. Use `--no-local` / `--no-observe` to override a `true` default from the fil
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `version` | string | Must be `"fusionkit.fusion.v1"`. |
+| `version` | string | Must be `"fusionkit.fusion.v2"`. A `"fusionkit.fusion.v1"` file is still accepted and upgraded. |
 | `tool` | `codex` \| `claude` \| `cursor` \| `serve` | Default agent when none is passed. |
 | `panel` | array | Panel models (see below). |
 | `judgeModel` | string | Model used for judge synthesis. Defaults to the first panel model. |
@@ -69,7 +92,29 @@ run. Use `--no-local` / `--no-observe` to override a `true` default from the fil
 | `keyEnv` | string | Env var holding this model's API key (cloud only). |
 | `baseUrl` | string | Optional custom base URL. |
 
+## Prompt overrides (`prompts/`)
+
+Each `.fusionkit/prompts/<id>.md` file overrides one built-in system prompt used
+by the synthesizer. A file that exists and is **non-empty** replaces the
+default; an empty or missing file falls back to the built-in.
+
+| File | Overrides |
+| --- | --- |
+| `judge.md` | The judge analysis prompt (compares candidates/trajectories). |
+| `synthesizer.md` | The candidate synthesizer prompt. |
+| `trajectory-synthesizer.md` | The trajectory synthesizer prompt (the default fusion path). |
+| `trajectory-step.md` | The streaming front-door agent prompt (the default fusion path). |
+| `verifier.md` | The optional verifier prompt. |
+| `panel.md` | The panel member prompt. |
+
+To regenerate the built-in defaults at any time (e.g. after upgrading), dump
+them from the synthesizer package:
+
+```bash
+uvx fusionkit prompts dump --dir .fusionkit/prompts
+```
+
 <Callout type="warn">
-  Never put API key values in `fusionkit.json`. Store only the env-var name in
+  Never put API key values in `.fusionkit/`. Store only the env-var name in
   `keyEnv` and export the secret (or put it in `.env`).
 </Callout>
