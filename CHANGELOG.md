@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7 - 2026-06-21
+
+- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+
 Release notes for the handoffkit release units, maintained by the cross-repo
 release coordinator (`scripts/release.mjs`). See `docs/releasing.md` for the
 plan/apply workflow.
