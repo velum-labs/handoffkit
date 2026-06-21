@@ -11,6 +11,7 @@ import uvicorn
 from fusionkit_core.clients import build_clients
 from fusionkit_core.config import FusionMode, load_config
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.prompts import SYSTEM_PROMPT_DEFAULTS
 from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
 from fusionkit_evals.fusion_bench import (
     CommandHandoffKitExecutor,
@@ -37,6 +38,32 @@ from fusionkit_server.app import create_app
 from fusionkit_server.openai_endpoint import build_endpoint, serve_single_endpoint
 
 app = typer.Typer(help="Local model fusion toolkit.")
+
+prompts_app = typer.Typer(help="Inspect and export the built-in fusion prompts.")
+app.add_typer(prompts_app, name="prompts")
+
+
+@prompts_app.command("dump")
+def prompts_dump(
+    dir: Annotated[
+        Path | None,
+        typer.Option("--dir", help="write each default prompt to <dir>/<id>.md instead of stdout"),
+    ] = None,
+) -> None:
+    """Emit the built-in system prompts so a consumer can scaffold editable overrides.
+
+    With no options this prints a JSON object mapping each prompt id (e.g.
+    ``judge``, ``trajectory-step``) to its default text. With ``--dir`` it writes
+    one ``<id>.md`` file per prompt. This keeps the CLI's scaffolded
+    ``.fusionkit/prompts`` defaults in lockstep with this package's source.
+    """
+    if dir is not None:
+        dir.mkdir(parents=True, exist_ok=True)
+        for prompt_id, text in SYSTEM_PROMPT_DEFAULTS.items():
+            (dir / f"{prompt_id}.md").write_text(text + "\n")
+        typer.echo(json.dumps({"dir": str(dir), "count": len(SYSTEM_PROMPT_DEFAULTS)}))
+        return
+    typer.echo(json.dumps(SYSTEM_PROMPT_DEFAULTS, indent=2))
 
 
 @app.command()

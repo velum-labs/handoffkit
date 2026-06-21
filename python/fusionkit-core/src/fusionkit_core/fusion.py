@@ -42,7 +42,7 @@ class FusionEngine:
         self.panel_runner = PanelRunner(self.clients)
         self.router = router or HeuristicRouter()
         self.ranker = CandidateRanker()
-        self.judge_synthesizer = JudgeSynthesizer()
+        self.judge_synthesizer = JudgeSynthesizer(config.prompts)
 
     async def run(
         self,
@@ -161,7 +161,10 @@ class FusionEngine:
         verifier = self._client(self.config.resolved_judge_model)
         response = await verifier.chat(
             [
-                ChatMessage(role="system", content=VERIFIER_SYSTEM_PROMPT),
+                ChatMessage(
+                    role="system",
+                    content=self.config.prompts.verifier_system or VERIFIER_SYSTEM_PROMPT,
+                ),
                 ChatMessage(
                     role="user",
                     content=build_verifier_prompt(_last_user_text(messages), answer, candidates),

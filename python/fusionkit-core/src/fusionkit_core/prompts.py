@@ -154,17 +154,22 @@ candidate's edits already exist here. Do not mention the panels, the candidate t
 fusion process."""
 
 
-def build_trajectory_step_system(trajectories: Sequence[HarnessTrajectoryV1]) -> str:
+def build_trajectory_step_system(
+    trajectories: Sequence[HarnessTrajectoryV1],
+    system: str | None = None,
+) -> str:
     """System prompt for the judge acting as a streaming agent on the front door.
 
     Injects the candidate trajectories as reference so the judge can synthesize
     its own next step (a tool call or the final answer) grounded in what the
-    panel actually tried.
+    panel actually tried. ``system`` overrides the built-in base prompt when a
+    config-supplied override is present.
     """
+    base = system or TRAJECTORY_STEP_SYSTEM_PROMPT
     if not trajectories:
-        return TRAJECTORY_STEP_SYSTEM_PROMPT
+        return base
     return (
-        f"{TRAJECTORY_STEP_SYSTEM_PROMPT}\n\n"
+        f"{base}\n\n"
         "Candidate agent trajectories (reference only — produced in separate scratch copies):\n"
         f"{format_trajectories(trajectories)}"
     )
@@ -180,3 +185,16 @@ def build_verifier_prompt(user_request: str, answer: str, candidates: Sequence[C
         f"{format_candidates(candidates)}\n\n"
         "Verify correctness and instruction-following."
     )
+
+
+# The built-in system prompts, keyed by the stable id used for the committed
+# `.fusionkit/prompts/<id>.md` override files. `fusionkit prompts dump` emits
+# this map so the CLI scaffolds editable defaults that never drift from source.
+SYSTEM_PROMPT_DEFAULTS: dict[str, str] = {
+    "judge": JUDGE_SYSTEM_PROMPT,
+    "synthesizer": SYNTHESIZER_SYSTEM_PROMPT,
+    "trajectory-synthesizer": TRAJECTORY_SYNTHESIZER_SYSTEM_PROMPT,
+    "trajectory-step": TRAJECTORY_STEP_SYSTEM_PROMPT,
+    "verifier": VERIFIER_SYSTEM_PROMPT,
+    "panel": PANEL_SYSTEM_PROMPT,
+}

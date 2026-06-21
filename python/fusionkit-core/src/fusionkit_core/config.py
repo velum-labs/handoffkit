@@ -37,6 +37,23 @@ class SamplingConfig(BaseModel):
     seed: int | None = None
 
 
+class PromptOverrides(BaseModel):
+    """Optional overrides for the built-in fusion system prompts.
+
+    Each field defaults to ``None``, which means "use the built-in constant in
+    ``prompts.py``". A non-null value fully replaces that system prompt. This is
+    the surface that lets a committed ``.fusionkit/prompts/*.md`` file flow all
+    the way into the synthesizer via the router config the CLI generates.
+    """
+
+    judge_system: str | None = None
+    synthesizer_system: str | None = None
+    trajectory_synthesizer_system: str | None = None
+    trajectory_step_system: str | None = None
+    verifier_system: str | None = None
+    panel_system: str | None = None
+
+
 class ModelEndpoint(BaseModel):
     id: str
     model: str
@@ -68,6 +85,7 @@ class FusionConfig(BaseModel):
     panel_models: list[str] = Field(default_factory=list)
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
     budget: RunBudget = Field(default_factory=RunBudget)
+    prompts: PromptOverrides = Field(default_factory=PromptOverrides)
 
     def endpoint_for(self, model_id: str) -> ModelEndpoint:
         for endpoint in self.endpoints:

@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from fusionkit_core.clients import ChatClient
-from fusionkit_core.config import SamplingConfig
+from fusionkit_core.config import PromptOverrides, SamplingConfig
 from fusionkit_core.contracts import (
     HarnessTrajectoryV1,
     JudgeSynthesisRecordV1,
@@ -18,6 +18,7 @@ from fusionkit_core.contracts import (
 from fusionkit_core.prompts import (
     JUDGE_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
+    TRAJECTORY_STEP_SYSTEM_PROMPT,
     TRAJECTORY_SYNTHESIZER_SYSTEM_PROMPT,
     build_judge_prompt,
     build_synthesis_prompt,
@@ -60,6 +61,17 @@ class TrajectorySynthesisResult(BaseModel):
 
 
 class JudgeSynthesizer:
+    def __init__(self, prompts: PromptOverrides | None = None) -> None:
+        overrides = prompts or PromptOverrides()
+        self._judge_system = overrides.judge_system or JUDGE_SYSTEM_PROMPT
+        self._synthesizer_system = overrides.synthesizer_system or SYNTHESIZER_SYSTEM_PROMPT
+        self._trajectory_synthesizer_system = (
+            overrides.trajectory_synthesizer_system or TRAJECTORY_SYNTHESIZER_SYSTEM_PROMPT
+        )
+        self._trajectory_step_system = (
+            overrides.trajectory_step_system or TRAJECTORY_STEP_SYSTEM_PROMPT
+        )
+
     async def step(
         self,
         messages: Sequence[ChatMessage],
@@ -82,7 +94,7 @@ class JudgeSynthesizer:
         method performs no apply/verify/repair of its own.
         """
         judge_span = span_id or new_span_id()
-        system = build_trajectory_step_system(trajectories)
+        system = build_trajectory_step_system(trajectories, system=self._trajectory_step_system)
         conversation = [ChatMessage(role="system", content=system), *messages]
         response = await judge_client.chat(
             conversation,
@@ -156,7 +168,7 @@ class JudgeSynthesizer:
         )
         synthesis_response = await synthesizer_client.chat(
             [
-                ChatMessage(role="system", content=TRAJECTORY_SYNTHESIZER_SYSTEM_PROMPT),
+                ChatMessage(role="system", content=self._trajectory_synthesizer_system),
                 ChatMessage(
                     role="user",
                     content=build_trajectory_synthesis_prompt(user_request, trajectories, analysis),
@@ -221,7 +233,7 @@ class JudgeSynthesizer:
     ) -> FusionAnalysis:
         response = await judge_client.chat(
             [
-                ChatMessage(role="system", content=JUDGE_SYSTEM_PROMPT),
+                ChatMessage(role="system", content=self._judge_system),
                 ChatMessage(
                     role="user",
                     content=build_trajectory_judge_prompt(user_request, trajectories),
@@ -340,7 +352,7 @@ class JudgeSynthesizer:
     ) -> FusionAnalysis:
         response = await judge_client.chat(
             [
-                ChatMessage(role="system", content=JUDGE_SYSTEM_PROMPT),
+                ChatMessage(role="system", content=self._judge_system),
                 ChatMessage(
                     role="user",
                     content=build_judge_prompt(_last_user_text(messages), candidates),
@@ -373,7 +385,7 @@ class JudgeSynthesizer:
     ) -> str:
         response = await synthesizer_client.chat(
             [
-                ChatMessage(role="system", content=SYNTHESIZER_SYSTEM_PROMPT),
+                ChatMessage(role="system", content=self._synthesizer_system),
                 ChatMessage(
                     role="user",
                     content=build_synthesis_prompt(_last_user_text(messages), candidates, analysis),
