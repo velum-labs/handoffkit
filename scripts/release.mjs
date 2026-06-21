@@ -951,18 +951,36 @@ function bumpPnpmMonorepo(unit, version) {
     writeJson(manifestPath, manifest);
     touched.push("release/npm-packages.json");
   }
+  // check-model-fusion-protocol.mjs requires publishedProtocolMetadata.version
+  // to equal the root package version, so keep it in lockstep on every bump.
+  const bindingsPath = join(unit.absRepo, "packages", "protocol", "model-fusion-bindings.json");
+  if (existsSync(bindingsPath)) {
+    const bindings = readJson(bindingsPath);
+    if (bindings.publishedProtocolMetadata?.version !== undefined) {
+      bindings.publishedProtocolMetadata.version = version;
+      writeJson(bindingsPath, bindings);
+      touched.push("packages/protocol/model-fusion-bindings.json");
+    }
+  }
   return touched;
 }
 
-// fusionkit-pypi: keep the fusionkit-cli internal `name==X` pins in lockstep.
+// fusionkit-pypi: keep every member's internal `fusionkit-*==X` pins in lockstep
+// (not just fusionkit-cli's) so the published wheels resolve against each other.
 function repinUvInternalDeps(unit, version) {
-  const rel = "packages/fusionkit-cli/pyproject.toml";
-  const cliPyproject = join(unit.absRepo, rel);
-  if (!existsSync(cliPyproject)) return [];
-  let text = readFileSync(cliPyproject, "utf8");
-  text = text.replace(/("(?:fusionkit(?:-[a-z]+)?)==)[^"]+(")/g, `$1${version}$2`);
-  writeFileSync(cliPyproject, text);
-  return [rel];
+  const touched = [];
+  const rels = new Set((unit.versionSources ?? []).map((source) => parseSource(source).file));
+  for (const rel of rels) {
+    const pyproject = join(unit.absRepo, rel);
+    if (!existsSync(pyproject)) continue;
+    const text = readFileSync(pyproject, "utf8");
+    const updated = text.replace(/("(?:fusionkit(?:-[a-z]+)?)==)[^"]+(")/g, `$1${version}$2`);
+    if (updated !== text) {
+      writeFileSync(pyproject, updated);
+      touched.push(rel);
+    }
+  }
+  return touched;
 }
 
 // --- protocol pin propagation into consumers ------------------------------
