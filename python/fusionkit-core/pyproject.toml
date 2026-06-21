@@ -1,6 +1,6 @@
 [project]
 name = "fusionkit-core"
-version = "0.3.0"
+version = "0.3.1"
 description = "Core local model fusion primitives."
 requires-python = ">=3.11"
 dependencies = [
