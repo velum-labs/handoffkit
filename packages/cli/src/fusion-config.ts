@@ -22,8 +22,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { FUSION_TOOLS } from "./fusion-quickstart.js";
-import type { FusionTool, PanelModelSpec, PanelProvider } from "./fusion-quickstart.js";
-import { PANEL_PROVIDERS } from "./shared/options.js";
+import type { FusionTool, PanelAuthMode, PanelModelSpec, PanelProvider } from "./fusion-quickstart.js";
+import { PANEL_AUTH_MODES, PANEL_PROVIDERS } from "./shared/options.js";
 
 export const FUSION_CONFIG_DIRNAME = ".fusionkit";
 // `fusion.json` (not `config.json`) so the fusion settings never collide with
@@ -120,7 +120,7 @@ function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
   if (!isRecord(entry)) {
     throw new FusionConfigError(`panel[${index}] must be an object`);
   }
-  const { id, model, provider, baseUrl, keyEnv } = entry;
+  const { id, model, provider, baseUrl, keyEnv, auth } = entry;
   if (typeof id !== "string" || id.length === 0) {
     throw new FusionConfigError(`panel[${index}].id must be a non-empty string`);
   }
@@ -143,6 +143,14 @@ function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
   if (keyEnv !== undefined) {
     if (typeof keyEnv !== "string") throw new FusionConfigError(`panel[${index}].keyEnv must be a string`);
     spec.keyEnv = keyEnv;
+  }
+  if (auth !== undefined) {
+    if (typeof auth !== "string" || !(PANEL_AUTH_MODES as readonly string[]).includes(auth)) {
+      throw new FusionConfigError(
+        `panel[${index}].auth must be one of ${PANEL_AUTH_MODES.join(", ")}`
+      );
+    }
+    spec.auth = auth as PanelAuthMode;
   }
   return spec;
 }

@@ -157,8 +157,12 @@ export async function runFusion(
   const spawningCloud =
     options.endpoints === undefined && models.some((model) => (model.provider ?? "mlx") !== "mlx");
   if (useBootView && spawningCloud && options.yes !== true && canPromptInteractively()) {
+    // Subscription members are billed by the subscription (and subject to its
+    // rate limits); API-key members incur per-token provider usage.
+    const usesSubscription = models.some((model) => model.auth !== undefined);
+    const cost = usesSubscription ? "provider usage / subscription limits apply" : "provider usage applies";
     const proceed = await confirm({
-      message: `Run the cloud panel? Each prompt fans out across ${models.length} model(s) + a judge (provider usage applies).`,
+      message: `Run the cloud panel? Each prompt fans out across ${models.length} model(s) + a judge (${cost}).`,
       defaultValue: true
     });
     if (!proceed) {

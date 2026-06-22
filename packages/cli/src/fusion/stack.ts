@@ -92,7 +92,7 @@ function judgeSpecFor(specs: PanelModelSpec[], judgeModel: string | undefined): 
  * pointing at their in-process gateway loopback URL. The judge endpoint doubles
  * as the synthesizer. Values are JSON-quoted (valid YAML flow scalars).
  */
-function routerConfigYaml(input: {
+export function routerConfigYaml(input: {
   specs: PanelModelSpec[];
   mlxUrls: Record<string, string>;
   judgeId: string;
@@ -103,7 +103,14 @@ function routerConfigYaml(input: {
     const provider = spec.provider ?? "mlx";
     lines.push(`  - id: ${JSON.stringify(spec.id)}`);
     lines.push(`    model: ${JSON.stringify(spec.model)}`);
-    if (provider === "mlx") {
+    if (spec.auth !== undefined) {
+      // Subscription endpoint: FusionKit reuses the local CLI login read-only.
+      // `claude-code` speaks the anthropic provider; `codex` has its own provider.
+      // base_url / api_key are intentionally omitted (fusionkit defaults them).
+      lines.push(`    provider: ${spec.auth === "codex" ? "codex" : "anthropic"}`);
+      lines.push("    auth:");
+      lines.push(`      mode: ${spec.auth}`);
+    } else if (provider === "mlx") {
       lines.push("    provider: openai-compatible");
       lines.push(`    base_url: ${JSON.stringify(input.mlxUrls[spec.id] ?? "")}`);
       lines.push("    api_key: not-needed");

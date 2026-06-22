@@ -47,6 +47,32 @@ test("parseFusionConfig accepts a valid config", () => {
   assert.equal(config.port, 1234);
 });
 
+test("parseFusionConfig accepts subscription panel entries with auth", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      panel: [
+        { id: "claude-code", model: "claude-sonnet-4-5", provider: "anthropic", auth: "claude-code" },
+        { id: "codex", model: "gpt-5.5", auth: "codex" }
+      ]
+    },
+    "test"
+  );
+  assert.equal(config.panel?.[0]?.auth, "claude-code");
+  assert.equal(config.panel?.[1]?.auth, "codex");
+});
+
+test("parseFusionConfig rejects an unknown auth mode", () => {
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        { version: FUSION_CONFIG_VERSION, panel: [{ id: "x", model: "m", auth: "nope" }] },
+        "test"
+      ),
+    FusionConfigError
+  );
+});
+
 test("parseFusionConfig upgrades a legacy v1 version in memory", () => {
   const config = parseFusionConfig(
     { version: "fusionkit.fusion.v1", tool: "claude" },

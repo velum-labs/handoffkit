@@ -39,8 +39,10 @@ export function preflightRequirements(
   if (agent !== undefined) requiredBins.push(agent);
 
   // Cloud panel members need their provider key when we front them ourselves.
+  // Subscription members (auth set) reuse a local CLI login, not an env key.
   if (spawnsServers) {
     for (const spec of models) {
+      if (spec.auth !== undefined) continue;
       const provider = spec.provider ?? "mlx";
       if (provider === "mlx") continue;
       const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);

@@ -5,7 +5,7 @@ import type { SessionIsolation } from "@fusionkit/protocol";
 import type { HarnessLiveSmokeTarget } from "../dashboard.js";
 import { toolRegistry } from "../tools.js";
 
-import type { FusionTool, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
+import type { FusionTool, PanelAuthMode, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
 import { FUSION_TOOLS } from "../fusion-quickstart.js";
 
 import { fail } from "./errors.js";
@@ -92,6 +92,9 @@ export const PANEL_PROVIDERS: readonly PanelProvider[] = [
   "openai-compatible"
 ];
 
+/** Subscription auth modes accepted in `id=MODE:MODEL` panel specs and configs. */
+export const PANEL_AUTH_MODES: readonly PanelAuthMode[] = ["claude-code", "codex"];
+
 export function parseFusionTool(value: string | undefined): FusionTool {
   if (value === undefined || !(FUSION_TOOLS as readonly string[]).includes(value)) {
     fail(`--tool must be one of ${FUSION_TOOLS.join(" | ")}`);
@@ -99,18 +102,34 @@ export function parseFusionTool(value: string | undefined): FusionTool {
   return value as FusionTool;
 }
 
-/** Parse `id=provider:model` (or `id=model`, defaulting to the local mlx provider). */
+/**
+ * Parse `id=provider:model` (or `id=model`, defaulting to the local mlx
+ * provider). The prefix may also be a subscription auth mode: `id=claude-code:model`
+ * reuses the Claude Code login (provider anthropic), `id=codex:model` reuses the
+ * Codex login (provider codex). Subscription specs carry no `keyEnv`.
+ */
 export function parsePanelModelSpec(spec: string, keyEnvs: Record<string, string>): PanelModelSpec {
   const { id, value } = parseIdValue("--model", spec);
   const colon = value.indexOf(":");
-  let provider: PanelProvider = "mlx";
-  let model = value;
   if (colon > 0) {
     const maybe = value.slice(0, colon);
+    const model = value.slice(colon + 1);
+    if ((PANEL_AUTH_MODES as readonly string[]).includes(maybe)) {
+      const auth = maybe as PanelAuthMode;
+      // claude-code maps to the anthropic provider; codex has its own provider
+      // (derived in routerConfigYaml from `auth`).
+      return auth === "claude-code"
+        ? { id, model, provider: "anthropic", auth }
+        : { id, model, auth };
+    }
     if ((PANEL_PROVIDERS as readonly string[]).includes(maybe)) {
-      provider = maybe as PanelProvider;
-      model = value.slice(colon + 1);
+      return {
+        id,
+        model,
+        provider: maybe as PanelProvider,
+        ...(keyEnvs[id] !== undefined ? { keyEnv: keyEnvs[id] } : {})
+      };
     }
   }
-  return { id, model, provider, ...(keyEnvs[id] !== undefined ? { keyEnv: keyEnvs[id] } : {}) };
+  return { id, model: value, provider: "mlx", ...(keyEnvs[id] !== undefined ? { keyEnv: keyEnvs[id] } : {}) };
 }

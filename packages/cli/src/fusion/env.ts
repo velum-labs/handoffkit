@@ -14,10 +14,18 @@ export type FusionTool = string;
 export type PanelProvider = "mlx" | "openai" | "anthropic" | "google" | "openai-compatible";
 
 /**
+ * Subscription auth modes: instead of an API key, reuse the user's local Claude
+ * Code / Codex CLI login (read-only) on the FusionKit side. See FusionKit's
+ * `EndpointAuth`.
+ */
+export type PanelAuthMode = "claude-code" | "codex";
+
+/**
  * One panel model. `mlx` models run locally via the in-repo provisioner; cloud
  * providers (openai/anthropic/google/openai-compatible) are fronted as
  * OpenAI-compatible endpoints by FusionKit's `serve-endpoint` command, run via
- * `uvx fusionkit` (no checkout required).
+ * `uvx fusionkit` (no checkout required). When `auth` is set, the model reuses
+ * the matching subscription login instead of an API key (no `keyEnv`).
  */
 export type PanelModelSpec = {
   id: string;
@@ -25,6 +33,7 @@ export type PanelModelSpec = {
   provider?: PanelProvider;
   baseUrl?: string;
   keyEnv?: string;
+  auth?: PanelAuthMode;
 };
 
 export type RunFusionOptions = {
@@ -75,7 +84,7 @@ export type StackReporter = (event: StackEvent) => void;
  * synthesizer (`fusionkit serve`) and the single-model OpenAI shim
  * (`fusionkit serve-endpoint`). Pinned so `uvx` resolves a reproducible build.
  */
-export const FUSIONKIT_PYPI_VERSION = "0.3.1";
+export const FUSIONKIT_PYPI_VERSION = "0.5.1";
 
 /**
  * Default cloud panel — works cross-platform with only `OPENAI_API_KEY` and

@@ -22,6 +22,12 @@ import {
   writeFusionPrompts
 } from "./fusion-config.js";
 import type { FusionConfig, PromptOverrides } from "./fusion-config.js";
+import {
+  DEFAULT_CLAUDE_SUB_MODEL,
+  detectCodexModel,
+  detectSubscription
+} from "./fusion/subscriptions.js";
+import type { SubscriptionStatus } from "./fusion/subscriptions.js";
 import { parsePanelModelSpec } from "./shared/options.js";
 import { confirm, done, note, select, text } from "./ui/prompt.js";
 import { uiStream } from "./ui/runtime.js";
@@ -32,9 +38,22 @@ const out = uiStream();
 /** Ensure each cloud spec records the env var holding its key (self-documenting). */
 function withKeyEnv(spec: PanelModelSpec): PanelModelSpec {
   const provider = spec.provider ?? "mlx";
-  if (spec.keyEnv !== undefined || provider === "mlx") return { ...spec };
+  // Subscription specs reuse a CLI login, not an env key.
+  if (spec.auth !== undefined || spec.keyEnv !== undefined || provider === "mlx") return { ...spec };
   const keyEnv = defaultKeyEnv(provider);
   return keyEnv !== undefined ? { ...spec, keyEnv } : { ...spec };
+}
+
+/** Build a panel from the locally detected subscription logins. */
+function subscriptionPanel(claude: SubscriptionStatus, codex: SubscriptionStatus): PanelModelSpec[] {
+  const specs: PanelModelSpec[] = [];
+  if (claude.available) {
+    specs.push({ id: "claude-code", model: DEFAULT_CLAUDE_SUB_MODEL, provider: "anthropic", auth: "claude-code" });
+  }
+  if (codex.available) {
+    specs.push({ id: "codex", model: detectCodexModel(), auth: "codex" });
+  }
+  return specs;
 }
 
 /**
@@ -66,7 +85,12 @@ function fetchDefaultPrompts(fusionkitDir?: string): PromptOverrides | undefined
 }
 
 async function buildCustomPanel(): Promise<PanelModelSpec[]> {
-  out.write(dim("Add panel models as ID=PROVIDER:MODEL (e.g. gpt=openai:gpt-5.5). Blank line to finish.\n"));
+  out.write(
+    dim(
+      "Add panel models as ID=PROVIDER:MODEL (e.g. gpt=openai:gpt-5.5), or a subscription " +
+        "as ID=claude-code:MODEL / ID=codex:MODEL. Blank line to finish.\n"
+    )
+  );
   const specs: PanelModelSpec[] = [];
   for (let index = 0; index < 16; index++) {
     const entry = await text({ message: `model ${index + 1}` });
@@ -111,18 +135,43 @@ export async function runFusionInit(input: {
     defaultIndex: 0
   });
 
-  const preset = await select<"cloud" | "local" | "custom">({
-    message: "Panel",
-    options: [
-      { value: "cloud", label: "cloud (default)", hint: DEFAULT_CLOUD_PANEL.map((s) => s.id).join(" + ") },
-      { value: "local", label: "local MLX trio", hint: "Apple Silicon, no API keys" },
-      { value: "custom", label: "custom", hint: "pick your own models" }
-    ],
-    defaultIndex: 0
-  });
+  // Detect local subscription logins so we can offer them as a panel (no API
+  // keys needed — FusionKit reuses the `claude` / `codex` CLI login read-only).
+  const claudeSub = detectSubscription("claude-code");
+  const codexSub = detectSubscription("codex");
+  const detectedSubs = [
+    claudeSub.available ? "claude-code" : undefined,
+    codexSub.available ? "codex" : undefined
+  ].filter((value): value is string => value !== undefined);
+
+  type Preset = "subscriptions" | "cloud" | "local" | "custom";
+  const presetOptions: Array<{ value: Preset; label: string; hint: string }> = [];
+  if (detectedSubs.length > 0) {
+    presetOptions.push({
+      value: "subscriptions",
+      label: "subscriptions",
+      hint: `reuse your ${detectedSubs.join(" + ")} login (no API keys)`
+    });
+  }
+  presetOptions.push(
+    { value: "cloud", label: "cloud", hint: DEFAULT_CLOUD_PANEL.map((s) => s.id).join(" + ") },
+    { value: "local", label: "local MLX trio", hint: "Apple Silicon, no API keys" },
+    { value: "custom", label: "custom", hint: "pick your own models" }
+  );
+
+  const preset = await select<Preset>({ message: "Panel", options: presetOptions, defaultIndex: 0 });
 
   let panel: PanelModelSpec[];
   switch (preset) {
+    case "subscriptions":
+      panel = subscriptionPanel(claudeSub, codexSub);
+      for (const sub of [claudeSub, codexSub]) {
+        if (sub.available && sub.expired) {
+          const cmd = sub.mode === "claude-code" ? "claude" : "codex login";
+          out.write(`${red("!")} ${sub.mode} login is expired — run ${bold(cmd)} to refresh.\n`);
+        }
+      }
+      break;
     case "cloud":
       panel = DEFAULT_CLOUD_PANEL.map((spec) => withKeyEnv(spec));
       break;
