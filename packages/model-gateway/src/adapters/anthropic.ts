@@ -8,7 +8,7 @@
  * server pipes straight to the client (JSON or SSE).
  */
 
-import type { Backend } from "../backend.js";
+import type { Backend, BackendRequestOptions } from "../backend.js";
 
 const ENCODER = new TextEncoder();
 
@@ -489,9 +489,21 @@ export async function handleAnthropicMessages(
   signal?: AbortSignal
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
-  const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
-  const chat = anthropicToChat(body, upstreamModel);
-  const upstream = await backend.chat(chat, signal, { modelCallId });
+  const routingBackend = backend as Backend & {
+    chatAnthropic?: (
+      request: AnthropicRequest,
+      abortSignal?: AbortSignal,
+      options?: BackendRequestOptions
+    ) => Promise<Response>;
+  };
+  const upstream =
+    routingBackend.chatAnthropic !== undefined
+      ? await routingBackend.chatAnthropic(body, signal, { modelCallId })
+      : await (async () => {
+          const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
+          const chat = anthropicToChat(body, upstreamModel);
+          return await backend.chat(chat, signal, { modelCallId });
+        })();
 
   if (!upstream.ok) {
     const detail = await upstream.text();

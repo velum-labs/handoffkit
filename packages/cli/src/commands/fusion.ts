@@ -7,6 +7,7 @@ import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
 import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { runFusionInit } from "../fusion-init.js";
+import { runClaudeRoute } from "../fusion/claude-route.js";
 import { fail } from "../shared/errors.js";
 import { collect, parseFusionTool, parseIdValue, parsePanelModelSpec, parsePort } from "../shared/options.js";
 import { reapFusionServices } from "../shared/portless.js";
@@ -28,6 +29,9 @@ type FusionOpts = {
   authToken?: string;
   port?: string;
   portless?: boolean;
+  route?: boolean;
+  routeDryRun?: boolean;
+  routePreview?: string;
 };
 
 /** Attach the panel/gateway flags shared by `fusion` and the per-tool launchers. */
@@ -50,6 +54,9 @@ function applyFusionOptions(command: Command): Command {
     .option("--port <n>", "gateway port (default: ephemeral)")
     .option("--portless", "route services through portless stable URLs (default; needs the proxy)")
     .option("--no-portless", "disable portless; use raw loopback ports (same as PORTLESS=0)")
+    .option("--route", "enable Claude Code smart routing (scenario-based model selection)")
+    .option("--route-dry-run", "with --route: print the routing decision and exit")
+    .option("--route-preview <text>", "with --route-dry-run: sample prompt for scenario detection")
     .allowUnknownOption()
     .passThroughOptions();
 }
@@ -196,6 +203,14 @@ export function registerFusion(program: Command): void {
         }
       }
       const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
+      if (resolvedTool === "claude" && (opts.route === true || opts.routeDryRun === true)) {
+        const code = await runClaudeRoute(toolArgs, {
+          ...options,
+          dryRun: opts.routeDryRun === true,
+          ...(opts.routePreview !== undefined ? { previewText: opts.routePreview } : {})
+        });
+        process.exit(code);
+      }
       const code = await runFusion(resolvedTool, toolArgs, options);
       process.exit(code);
     });
@@ -210,10 +225,22 @@ export function registerFusion(program: Command): void {
     )
       .addHelpText(
         "after",
-        `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
+        tool === "claude"
+          ? `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.` +
+              "\nUse --route for Claude Code smart routing (scenario-based model selection)." +
+              "\nUse --route-dry-run to preview the routing decision without starting Claude."
+          : `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
       )
       .action(async (args: string[], opts: FusionOpts) => {
         const { options } = resolveContext(opts);
+        if (tool === "claude" && (opts.route === true || opts.routeDryRun === true)) {
+          const code = await runClaudeRoute(args, {
+            ...options,
+            dryRun: opts.routeDryRun === true,
+            ...(opts.routePreview !== undefined ? { previewText: opts.routePreview } : {})
+          });
+          process.exit(code);
+        }
         const code = await runFusion(tool, args, options);
         process.exit(code);
       });

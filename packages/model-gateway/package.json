@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
-    "@fusionkit/protocol": "workspace:*"
+    "@fusionkit/protocol": "workspace:*",
+    "js-tiktoken": "1.0.21"
   }
 }

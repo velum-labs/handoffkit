@@ -108,6 +108,34 @@ test("parseFusionConfig rejects a non-object", () => {
   assert.throws(() => parseFusionConfig(["not", "an", "object"], "test"), FusionConfigError);
 });
 
+test("parseFusionConfig accepts routing config", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      routing: {
+        default: "anthropic,claude-sonnet-4-5",
+        longContextThreshold: 50000,
+        providers: [{ id: "anthropic", provider: "anthropic", keyEnv: "ANTHROPIC_API_KEY" }]
+      }
+    },
+    "test"
+  );
+  assert.equal(config.routing?.routes.default, "anthropic,claude-sonnet-4-5");
+  assert.equal(config.routing?.routes.longContextThreshold, 50000);
+  assert.equal(config.routing?.providers.length, 1);
+});
+
+test("parseFusionConfig rejects routing without providers", () => {
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        { version: FUSION_CONFIG_VERSION, routing: { default: "a,m", providers: [] } },
+        "test"
+      ),
+    FusionConfigError
+  );
+});
+
 test("loadFusionConfig returns undefined when no config exists", () => {
   assert.equal(loadFusionConfig(freshDir()), undefined);
 });

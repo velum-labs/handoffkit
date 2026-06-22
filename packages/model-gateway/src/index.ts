@@ -111,3 +111,32 @@ export type {
   ModelGatewayCallResult,
   ProvenanceSink
 } from "./provenance.js";
+export {
+  RoutingBackend,
+  countAnthropicTokens,
+  countRoutableTokens,
+  detectRoutingScenario,
+  formatRoutingDecision,
+  parseRouteTarget,
+  parseRoutingProviderSpec,
+  parseScenarioRoutes,
+  previewRoutingForAnthropic,
+  previewRoutingForChat,
+  resolveRoutingDecision,
+  RoutingConfigError,
+  RoutingProviderError,
+  DEFAULT_LONG_CONTEXT_THRESHOLD,
+  ROUTING_PROVIDER_KINDS,
+  ROUTING_SCENARIOS
+} from "./routing/index.js";
+export type {
+  ParsedRouteTarget,
+  ResolvedRoutingProvider,
+  RouteTargetSpec,
+  RoutingBackendOptions,
+  RoutingDecision,
+  RoutingProviderKind,
+  RoutingProviderSpec,
+  RoutingScenario,
+  ScenarioRoutes
+} from "./routing/index.js";

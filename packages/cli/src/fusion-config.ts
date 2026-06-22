@@ -24,6 +24,8 @@ import { join } from "node:path";
 import { FUSION_TOOLS } from "./fusion-quickstart.js";
 import type { FusionTool, PanelAuthMode, PanelModelSpec, PanelProvider } from "./fusion-quickstart.js";
 import { PANEL_AUTH_MODES, PANEL_PROVIDERS } from "./shared/options.js";
+import type { RoutingProviderSpec, ScenarioRoutes } from "@fusionkit/model-gateway";
+import { parseRoutingProviderSpec, parseScenarioRoutes, RoutingConfigError, RoutingProviderError } from "@fusionkit/model-gateway";
 
 export const FUSION_CONFIG_DIRNAME = ".fusionkit";
 // `fusion.json` (not `config.json`) so the fusion settings never collide with
@@ -64,6 +66,13 @@ export const PROMPT_CONFIG_KEY: Record<PromptId, string> = {
 
 export type PromptOverrides = Partial<Record<PromptId, string>>;
 
+export type FusionRoutingConfig = {
+  /** Per-scenario route table. */
+  routes: ScenarioRoutes;
+  /** Provider backends referenced by route targets. */
+  providers: RoutingProviderSpec[];
+};
+
 export type FusionConfig = {
   version: typeof FUSION_CONFIG_VERSION;
   tool?: FusionTool;
@@ -73,6 +82,12 @@ export type FusionConfig = {
   observe?: boolean;
   portless?: boolean;
   port?: number | null;
+  /**
+   * Claude Code smart routing (claude-code-router semantics). When present,
+   * `fusionkit claude --route` starts a routing gateway instead of the fusion
+   * panel gateway.
+   */
+  routing?: FusionRoutingConfig;
   /**
    * System-prompt overrides, loaded from `.fusionkit/prompts/*.md`. Not stored
    * inline in `config.json` — it is hydrated from the prompt files on load.
@@ -155,6 +170,24 @@ function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
   return spec;
 }
 
+function validateRouting(raw: unknown, source: string): FusionRoutingConfig {
+  if (!isRecord(raw)) throw new FusionConfigError(`${source}: routing must be an object`);
+  try {
+    const routes = parseScenarioRoutes(isRecord(raw.routes) ? raw.routes : raw, source);
+    const providerRaw = raw.providers;
+    if (!Array.isArray(providerRaw) || providerRaw.length === 0) {
+      throw new FusionConfigError(`${source}: routing.providers must be a non-empty array`);
+    }
+    const providers = providerRaw.map((entry, index) => parseRoutingProviderSpec(entry, index));
+    return { routes, providers };
+  } catch (error) {
+    if (error instanceof RoutingConfigError || error instanceof RoutingProviderError) {
+      throw new FusionConfigError(error.message);
+    }
+    throw error;
+  }
+}
+
 /**
  * Validate a parsed settings object as a {@link FusionConfig}, throwing on any
  * problem. Prompt overrides are loaded separately from `.fusionkit/prompts/`,
@@ -200,6 +233,9 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
       throw new FusionConfigError(`${source}: port must be a non-negative integer or null`);
     }
     config.port = raw.port;
+  }
+  if (raw.routing !== undefined) {
+    config.routing = validateRouting(raw.routing, source);
   }
   return config;
 }
