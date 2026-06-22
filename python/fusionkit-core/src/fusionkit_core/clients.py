@@ -214,6 +214,27 @@ class AnthropicModelClient:
                 timeout=endpoint.timeout_s,
             )
 
+    def _system_param(self, system_text: str) -> str | list[dict[str, Any]] | None:
+        """Build the Anthropic ``system`` parameter.
+
+        For the default ``api_key`` path a plain string is fine. For the
+        ``claude-code`` (OAuth subscription) path, Anthropic routes the request
+        into the high-capacity Claude Code rate-limit lane only when the FIRST
+        ``system`` block is *exactly* the Claude Code identity string. A single
+        concatenated block (identity + the real system prompt merged together)
+        is not recognized and falls back to the overage lane, which returns a
+        persistent ``429 rate_limit_error`` (no ``retry-after``) for Sonnet/Opus.
+        So the identity must be its own discrete first block.
+        """
+        if self._auth_mode != "claude-code":
+            return system_text or None
+        blocks: list[dict[str, Any]] = [
+            {"type": "text", "text": CLAUDE_CODE_SPOOF_SYSTEM}
+        ]
+        if system_text:
+            blocks.append({"type": "text", "text": system_text})
+        return blocks
+
     def _kwargs(
         self,
         messages: Sequence[ChatMessage],
@@ -223,12 +244,6 @@ class AnthropicModelClient:
         extra: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
         system_text, conversation = _anthropic_messages(messages)
-        if self._auth_mode == "claude-code":
-            system_text = (
-                f"{CLAUDE_CODE_SPOOF_SYSTEM}\n\n{system_text}"
-                if system_text
-                else CLAUDE_CODE_SPOOF_SYSTEM
-            )
         # Sampling knobs are omitted by default: newer Anthropic models (e.g.
         # claude-opus-4-8) reject `temperature` outright ("deprecated for this
         # model"), and several reject setting both temperature and top_p. The
@@ -239,8 +254,9 @@ class AnthropicModelClient:
             "messages": conversation,
             "max_tokens": sampling.max_tokens,
         }
-        if system_text:
-            kwargs["system"] = system_text
+        system = self._system_param(system_text)
+        if system is not None:
+            kwargs["system"] = system
         if tools:
             kwargs["tools"] = _anthropic_tools(tools)
         if tool_choice is not None:
@@ -331,9 +347,14 @@ class CodexResponsesClient:
     Codex-family models are served only by the stream-only Responses endpoint at
     ``https://chatgpt.com/backend-api/codex/responses`` (not Chat Completions),
     authenticated with the local Codex OAuth token (``Authorization: Bearer`` +
-    ``chatgpt-account-id``). The token is resolved per request. Tool calls over
-    the Responses API are out of scope: this client returns text output and
-    aggregates the stream for the non-streaming ``chat`` path.
+    ``chatgpt-account-id``). The token is resolved per request.
+
+    Tool calling is supported via the Responses API's native function-tool
+    protocol: tools are forwarded as flat function definitions, assistant tool
+    calls and their results round-trip as ``function_call`` / ``function_call_output``
+    input items, and streamed function-call events are aggregated into
+    :class:`ToolCall` results. This lets the codex model both drive the agent
+    harness loop and act as the trajectory-step judge.
     """
 
     def __init__(self, endpoint: ModelEndpoint) -> None:
@@ -349,6 +370,8 @@ class CodexResponsesClient:
     def _request_kwargs(
         self,
         messages: Sequence[ChatMessage],
+        tools: Sequence[ToolDefinition] | None,
+        tool_choice: ToolChoice | None,
         extra: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
         instructions, input_items = _codex_input(messages)
@@ -370,6 +393,10 @@ class CodexResponsesClient:
             "store": False,
             "extra_headers": extra_headers,
         }
+        if tools:
+            kwargs["tools"] = _codex_tools(tools)
+        if tool_choice is not None:
+            kwargs["tool_choice"] = _codex_tool_choice(tool_choice)
         if extra:
             kwargs.update(extra)
         return kwargs
@@ -382,23 +409,45 @@ class CodexResponsesClient:
         tool_choice: ToolChoice | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> ModelResponse:
-        del tools, tool_choice, sampling
+        del sampling
         started = time.perf_counter()
         text_parts: list[str] = []
         usage = Usage()
         finish_reason: str | None = None
-        async for chunk in self._stream(messages, extra):
+        # Aggregate streamed function-call fragments by call id, preserving the
+        # order the model emitted them so parallel tool calls round-trip intact.
+        tool_fragments: dict[str, dict[str, str]] = {}
+        tool_order: list[str] = []
+        async for chunk in self._stream(messages, tools, tool_choice, extra):
             text_parts.append(chunk.delta)
+            if chunk.tool_call_delta is not None:
+                fragment = tool_fragments.get(chunk.tool_call_delta.id)
+                if fragment is None:
+                    fragment = {"name": "", "arguments": ""}
+                    tool_fragments[chunk.tool_call_delta.id] = fragment
+                    tool_order.append(chunk.tool_call_delta.id)
+                if chunk.tool_call_delta.name:
+                    fragment["name"] = chunk.tool_call_delta.name
+                fragment["arguments"] += chunk.tool_call_delta.arguments
             if chunk.usage is not None:
                 usage = chunk.usage
             if chunk.finish_reason is not None:
                 finish_reason = chunk.finish_reason
+        tool_calls = [
+            ToolCall(
+                id=call_id,
+                name=tool_fragments[call_id]["name"],
+                arguments=tool_fragments[call_id]["arguments"] or "{}",
+            )
+            for call_id in tool_order
+        ]
         return ModelResponse(
             model_id=self.model_id,
             content="".join(text_parts),
             finish_reason=finish_reason or "stop",
             usage=usage,
             latency_s=time.perf_counter() - started,
+            tool_calls=tool_calls,
         )
 
     async def stream_chat(
@@ -409,21 +458,47 @@ class CodexResponsesClient:
         tool_choice: ToolChoice | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        del tools, tool_choice, sampling
-        async for chunk in self._stream(messages, extra):
+        del sampling
+        async for chunk in self._stream(messages, tools, tool_choice, extra):
             yield chunk
 
     async def _stream(
         self,
         messages: Sequence[ChatMessage],
+        tools: Sequence[ToolDefinition] | None,
+        tool_choice: ToolChoice | None,
         extra: Mapping[str, Any] | None,
     ) -> AsyncIterator[StreamChunk]:
-        kwargs = self._request_kwargs(messages, extra)
+        kwargs = self._request_kwargs(messages, tools, tool_choice, extra)
         stream = await self._client.responses.create(**kwargs)
+        # Argument deltas key off the output item id, but tool results must pair
+        # back via the function `call_id`; map one to the other as items open.
+        call_id_by_item: dict[str, str] = {}
         async for event in stream:
             event_type = getattr(event, "type", None)
             if event_type == "response.output_text.delta":
                 yield StreamChunk(delta=getattr(event, "delta", "") or "")
+            elif event_type == "response.output_item.added":
+                item = getattr(event, "item", None)
+                if getattr(item, "type", None) == "function_call":
+                    call_id = getattr(item, "call_id", None) or ""
+                    item_id = getattr(item, "id", None)
+                    if item_id is not None:
+                        call_id_by_item[item_id] = call_id
+                    # Open the call with its name; arguments stream in separately.
+                    yield StreamChunk(
+                        tool_call_delta=ToolCall(
+                            id=call_id, name=getattr(item, "name", "") or "", arguments=""
+                        )
+                    )
+            elif event_type == "response.function_call_arguments.delta":
+                item_id = str(getattr(event, "item_id", "") or "")
+                call_id = call_id_by_item.get(item_id, item_id)
+                yield StreamChunk(
+                    tool_call_delta=ToolCall(
+                        id=call_id, name="", arguments=getattr(event, "delta", "") or ""
+                    )
+                )
             elif event_type in ("response.completed", "response.incomplete"):
                 response = getattr(event, "response", None)
                 usage = _codex_usage(getattr(response, "usage", None))
@@ -746,8 +821,11 @@ def _anthropic_messages(
 def _codex_input(messages: Sequence[ChatMessage]) -> tuple[str, list[dict[str, Any]]]:
     """Translate chat messages into Responses-API `instructions` + `input` items.
 
-    System messages collapse into `instructions`; user/tool turns become
-    `input_text` items and assistant turns become `output_text` items.
+    System messages collapse into `instructions`. User turns become `input_text`
+    items and assistant text becomes `output_text`. Tool calls round-trip through
+    the Responses function-tool protocol: an assistant turn's tool calls emit
+    `function_call` items and a `tool` turn emits a `function_call_output` item
+    paired back to the originating call via `call_id`.
     """
     instruction_parts: list[str] = []
     items: list[dict[str, Any]] = []
@@ -756,16 +834,57 @@ def _codex_input(messages: Sequence[ChatMessage]) -> tuple[str, list[dict[str, A
             if message.content:
                 instruction_parts.append(message.content)
             continue
+        if message.role == "tool":
+            items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": message.tool_call_id or "",
+                    "output": message.content,
+                }
+            )
+            continue
         if message.role == "assistant":
-            content_type = "output_text"
-            role = "assistant"
-        else:
-            content_type = "input_text"
-            role = "user"
+            if message.content:
+                items.append(
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": message.content}],
+                    }
+                )
+            for call in message.tool_calls or []:
+                items.append(
+                    {
+                        "type": "function_call",
+                        "call_id": call.id,
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    }
+                )
+            continue
         items.append(
-            {"role": role, "content": [{"type": content_type, "text": message.content}]}
+            {"role": "user", "content": [{"type": "input_text", "text": message.content}]}
         )
     return "\n".join(instruction_parts), items
+
+
+def _codex_tools(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
+    # Responses-API function tools are flat (name/description/parameters at the
+    # top level alongside `type`), unlike Chat Completions' nested `function` key.
+    return [
+        {
+            "type": "function",
+            "name": tool["name"],
+            "description": tool.get("description", ""),
+            "parameters": tool.get("parameters", {"type": "object", "properties": {}}),
+        }
+        for tool in tools
+    ]
+
+
+def _codex_tool_choice(tool_choice: ToolChoice) -> Any:
+    if isinstance(tool_choice, str):
+        return tool_choice
+    return {"type": "function", "name": tool_choice["name"]}
 
 
 def _codex_usage(usage: Any) -> Usage | None:
