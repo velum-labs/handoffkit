@@ -32,6 +32,7 @@ type FusionOpts = {
   route?: boolean;
   routeDryRun?: boolean;
   routePreview?: string;
+  aiRouting?: boolean;
 };
 
 type ExtractedRouteFlags = {
@@ -249,12 +250,17 @@ export function registerFusion(program: Command): void {
     .option("--repo <dir>", "coding workspace the panel fuses over")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
     .option("--force", "overwrite an existing .fusionkit/ config and prompts")
+    .option(
+      "--ai-routing",
+      "enable smart routing setup during init (uses local MLX on Apple Silicon when available)"
+    )
     .action(async (opts: FusionOpts) => {
       const options = resolveOptions(opts);
       const repoRoot = configRepoRoot(options);
       const code = await runFusionInit({
         repoRoot,
         force: opts.force === true,
+        ...(opts.aiRouting === true ? { aiRouting: true } : {}),
         ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
       });
       process.exit(code);
