@@ -1,13 +1,13 @@
 [project]
 name = "fusionkit"
-version = "0.5.0"
+version = "0.5.1"
 description = "Command line interface for fusionkit: local response-level model fusion."
 requires-python = ">=3.11"
 dependencies = [
-  "fusionkit-core==0.5.0",
-  "fusionkit-evals==0.5.0",
-  "fusionkit-mlx==0.5.0",
-  "fusionkit-server==0.5.0",
+  "fusionkit-core==0.5.1",
+  "fusionkit-evals==0.5.1",
+  "fusionkit-mlx==0.5.1",
+  "fusionkit-server==0.5.1",
   "typer>=0.20.0",
 ]
 

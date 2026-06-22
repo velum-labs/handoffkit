@@ -1,10 +1,10 @@
 [project]
 name = "fusionkit-mlx"
-version = "0.5.0"
+version = "0.5.1"
 description = "Optional MLX helper utilities for fusionkit."
 requires-python = ">=3.11"
 dependencies = [
-  "fusionkit-core==0.5.0",
+  "fusionkit-core==0.5.1",
 ]
 
 [project.optional-dependencies]
