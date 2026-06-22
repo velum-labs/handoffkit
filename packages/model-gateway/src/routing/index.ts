@@ -4,7 +4,8 @@ export {
   formatRoutingDecision,
   previewRoutingForAnthropic,
   previewRoutingForChat,
-  countRequestTokens
+  countRequestTokens,
+  resolveModelForProviderId
 } from "./routing-backend.js";
 export type { RoutingBackendOptions } from "./routing-backend.js";
 
@@ -26,6 +27,7 @@ export {
 
 export {
   classifyProviderError,
+  disposeRoutingMlxBackends,
   parseRoutingProviderSpec,
   requireProvider,
   resolveProviderBaseUrl,

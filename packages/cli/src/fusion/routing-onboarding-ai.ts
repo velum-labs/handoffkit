@@ -76,31 +76,50 @@ export function buildRoutingPrompt(detection: RoutingOnboardingDetection): strin
   const keyLines = Object.entries(detection.apiKeys).map(
     ([env, present]) => `${env}: ${present ? "present" : "absent"}`
   );
+  const localLines: string[] = [];
+  if (detection.localPanelModels !== undefined && detection.localPanelModels.length > 0) {
+    localLines.push(`local MLX panel models: ${detection.localPanelModels.join(", ")}`);
+  }
+  if (detection.ollama !== undefined) {
+    localLines.push(
+      detection.ollama.reachable
+        ? `Ollama on :11434: ${detection.ollama.models.join(", ") || "(no models pulled)"}`
+        : "Ollama on :11434: not reachable"
+    );
+  }
   const scenarioLines = Object.entries(ROUTING_SCENARIO_DESCRIPTIONS).map(
     ([key, description]) => `- ${key}: ${description}`
   );
-  const providerLines = Object.entries(ROUTING_PROVIDER_KEY_ENVS)
-    .filter(([, keyEnv]) => keyEnv !== undefined)
-    .map(([kind, keyEnv]) => `- ${kind} (env: ${keyEnv})`);
+  const providerLines = [
+    ...Object.entries(ROUTING_PROVIDER_KEY_ENVS)
+      .filter(([, keyEnv]) => keyEnv !== undefined)
+      .map(([kind, keyEnv]) => `- ${kind} (env: ${keyEnv})`),
+    "- mlx (local Apple Silicon; requires model HF repo id, no API key)",
+    "- ollama (local OpenAI-compat on http://127.0.0.1:11434/v1, no API key)"
+  ];
 
   return [
     "You are a configuration assistant for FusionKit Claude Code smart routing.",
     "Given the user's detected auth below, output ONLY a JSON object matching this shape:",
     '{ "routes": { "default": "providerId,modelId", "background": "...", "longContext": "...", "longContextThreshold": 60000, "reasoning": "...", "webSearch": "..." },',
-    '  "providers": [{ "id": "providerId", "provider": "anthropic|openai|openrouter|deepseek|groq|google-gemini", "keyEnv": "ENV_VAR" }] }',
+    '  "providers": [{ "id": "providerId", "provider": "anthropic|openai|openrouter|deepseek|groq|google-gemini|mlx|ollama", "keyEnv": "ENV_VAR", "model": "HF_REPO_FOR_MLX" }] }',
     "",
     "Rules:",
     "- Route values are providerId,modelId (comma-separated).",
     "- Omit keyEnv for subscription-backed anthropic/openai providers (Claude Code / Codex login).",
+    "- Omit keyEnv for mlx and ollama (local, no API key).",
+    "- Include model (HF repo id) for mlx providers.",
     "- Include keyEnv for API-key providers. Never include secret values.",
     "- Only propose providers the user can actually use (subscriptions or present env vars).",
     "- Prefer claude-sonnet-4-5 for default when Claude auth exists.",
+    "- If local models are available (MLX panel or Ollama), prefer them for background tasks (cheap, private, fast for small queries).",
     "",
     "Detected subscriptions:",
     ...subscriptionLines,
     "",
     "API keys (presence only):",
     ...keyLines,
+    ...(localLines.length > 0 ? ["", "Local models:", ...localLines] : []),
     "",
     "Routing scenarios:",
     ...scenarioLines,

@@ -17,13 +17,14 @@ const PANEL_TO_ROUTING: Record<string, RoutingProviderSpec["provider"]> = {
   openrouter: "openrouter",
   deepseek: "deepseek",
   groq: "groq",
-  "google-gemini": "google-gemini"
+  "google-gemini": "google-gemini",
+  mlx: "mlx"
 };
 
 /** Map a panel model spec to a routing provider when the provider kind is supported. */
 export function panelSpecToRoutingProvider(spec: PanelModelSpec): RoutingProviderSpec | undefined {
   const provider = spec.provider;
-  if (provider === undefined || provider === "mlx") return undefined;
+  if (provider === undefined) return undefined;
   const kind = PANEL_TO_ROUTING[provider];
   if (kind === undefined || !(ROUTING_PROVIDER_KINDS as readonly string[]).includes(kind)) {
     return undefined;
@@ -31,6 +32,7 @@ export function panelSpecToRoutingProvider(spec: PanelModelSpec): RoutingProvide
   return {
     id: spec.id,
     provider: kind,
+    ...(kind === "mlx" ? { model: spec.model } : {}),
     ...(spec.baseUrl !== undefined ? { baseUrl: spec.baseUrl } : {}),
     ...(spec.keyEnv !== undefined ? { keyEnv: spec.keyEnv } : {})
   };

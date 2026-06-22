@@ -59,6 +59,13 @@ export type RoutingOnboardingDetection = {
     codex: SubscriptionStatus;
   };
   apiKeys: Record<RoutingApiKeyEnv, boolean>;
+  /** Local MLX panel model repo ids when configured. */
+  localPanelModels?: string[];
+  /** Ollama probe result from init preflight. */
+  ollama?: {
+    reachable: boolean;
+    models: string[];
+  };
 };
 
 /** Thrown when onboarding cannot build or validate a routing config. */
@@ -213,6 +220,24 @@ export function proposeDeterministicRouting(
 
   const backgroundPick = pickScenarioTarget(
     [
+      ...(detection.localPanelModels?.[0] !== undefined
+        ? [
+            {
+              target: `local-mlx,${detection.localPanelModels[0]}`,
+              provider: { id: "local-mlx", provider: "mlx" as const, model: detection.localPanelModels[0] },
+              available: () => true
+            }
+          ]
+        : []),
+      ...(detection.ollama?.reachable === true && detection.ollama.models[0] !== undefined
+        ? [
+            {
+              target: `local-ollama,${detection.ollama.models[0]}`,
+              provider: { id: "local-ollama", provider: "ollama" as const },
+              available: () => true
+            }
+          ]
+        : []),
       {
         target: `groq,llama-3.1-8b-instant`,
         provider: keyedProvider("groq", "groq", "GROQ_API_KEY", detection),
@@ -399,6 +424,12 @@ export function validateRoutingProposal(raw: unknown, source: string): FusionRou
         throw new RoutingOnboardingError(`${source}: routing.providers[${index}].keyEnv must be a non-empty string`);
       }
       spec.keyEnv = entry.keyEnv;
+    }
+    if (entry.model !== undefined) {
+      if (typeof entry.model !== "string" || entry.model.length === 0) {
+        throw new RoutingOnboardingError(`${source}: routing.providers[${index}].model must be a non-empty string`);
+      }
+      spec.model = entry.model;
     }
     providers.push(spec);
   }

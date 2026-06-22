@@ -6,9 +6,11 @@
 import type { Backend, BackendRequestOptions } from "../backend.js";
 import type { AnthropicRequest } from "../adapters/anthropic.js";
 import { anthropicToChat } from "../adapters/anthropic.js";
+import { readSessionModelOverride } from "../session-override.js";
 
 import {
   classifyProviderError,
+  disposeRoutingMlxBackends,
   requireProvider,
   resolveRoutingProviders,
   RoutingProviderError
@@ -23,6 +25,7 @@ import {
   resolveRoutingFallback
 } from "./routing.js";
 import type { RoutingDecision, ScenarioRoutes } from "./types.js";
+import { ROUTING_SCENARIOS } from "./types.js";
 
 export type RoutingBackendOptions = {
   routes: ScenarioRoutes;
@@ -35,21 +38,27 @@ export type RoutingBackendOptions = {
   onDecision?: (decision: RoutingDecision) => void;
   /** Process env for provider key resolution (defaults to `process.env`). */
   env?: NodeJS.ProcessEnv;
+  /** Home directory for session override reads (defaults to `os.homedir()`). */
+  homeDir?: string;
 };
 
 export class RoutingBackend implements Backend {
   readonly defaultModel: string | undefined;
   readonly #routes: ScenarioRoutes;
+  readonly #providerSpecs: readonly RoutingProviderSpec[];
   readonly #providers: Map<string, ResolvedRoutingProvider>;
   readonly #headers: Record<string, string | string[] | undefined>;
   readonly #onDecision: ((decision: RoutingDecision) => void) | undefined;
+  readonly #homeDir: string | undefined;
 
   constructor(options: RoutingBackendOptions) {
     this.#routes = options.routes;
+    this.#providerSpecs = options.providers;
     this.#providers = resolveRoutingProviders(options.providers, options.env);
     this.defaultModel = options.defaultModel ?? parseRouteTarget(options.routes.default).model;
     this.#headers = options.requestHeaders ?? {};
     this.#onDecision = options.onDecision;
+    this.#homeDir = options.homeDir;
   }
 
   /** All configured route targets (for model discovery). */
@@ -73,9 +82,8 @@ export class RoutingBackend implements Backend {
     options: BackendRequestOptions = {}
   ): Promise<Response> {
     const chat = (body ?? {}) as Record<string, unknown>;
-    const decision = resolveRoutingDecision(
+    const decision = this.#resolveDecision(
       chat as Parameters<typeof resolveRoutingDecision>[0],
-      this.#routes,
       { headers: this.#headers }
     );
     this.#onDecision?.(decision);
@@ -88,9 +96,31 @@ export class RoutingBackend implements Backend {
     options: BackendRequestOptions = {}
   ): Promise<Response> {
     const chat = anthropicToChat(body, body.model);
-    const decision = resolveRoutingDecision(body, this.#routes, { headers: this.#headers });
+    const decision = this.#resolveDecision(body, { headers: this.#headers });
     this.#onDecision?.(decision);
     return await this.#invokeWithFallbacks(decision, chat, signal, options);
+  }
+
+  async close(): Promise<void> {
+    await disposeRoutingMlxBackends();
+  }
+
+  #resolveDecision(
+    request: Parameters<typeof resolveRoutingDecision>[0],
+    options: { headers?: Record<string, string | string[] | undefined> }
+  ): RoutingDecision {
+    const override = readSessionModelOverride(this.#homeDir);
+    if (override !== undefined && override.modelId !== null) {
+      const model = resolveModelForProviderId(override.modelId, this.#routes, this.#providerSpecs);
+      return {
+        scenario: "default",
+        target: { providerId: override.modelId, model },
+        tokenCount: countRequestTokens(request),
+        reason: "session model override",
+        fallbackIndex: 0
+      };
+    }
+    return resolveRoutingDecision(request, this.#routes, options);
   }
 
   async #invokeWithFallbacks(
@@ -166,6 +196,30 @@ export class RoutingBackend implements Backend {
       })
     );
   }
+}
+
+/**
+ * Resolve the upstream model id for a provider when session override is active.
+ *
+ * @throws {@link RoutingProviderError} when no model can be inferred.
+ */
+export function resolveModelForProviderId(
+  providerId: string,
+  routes: ScenarioRoutes,
+  providerSpecs: readonly RoutingProviderSpec[]
+): string {
+  for (const scenario of ROUTING_SCENARIOS) {
+    const routeSpec =
+      scenario === "default" ? routes.default : routes[scenario as keyof ScenarioRoutes];
+    if (typeof routeSpec !== "string") continue;
+    const target = parseRouteTarget(routeSpec);
+    if (target.providerId === providerId) return target.model;
+  }
+  const spec = providerSpecs.find((entry) => entry.id === providerId);
+  if (spec?.model !== undefined) return spec.model;
+  throw new RoutingProviderError(
+    `session override provider "${providerId}" has no model in routes or provider spec`
+  );
 }
 
 /** Whether a classified provider error should advance the scenario fallback chain. */

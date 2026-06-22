@@ -467,6 +467,7 @@ export async function runFusionInit(input: {
 
   const routingStep = await runRoutingOnboardingStep({
     host,
+    localPanelModels: localReposIn(panel),
     ...(input.aiRouting === true ? { aiRouting: true } : {})
   });
 
