@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 
 import { buildAuthOptions, defaultModelForAuthChoice, specForAuthChoice } from "../fusion/panel-auth.js";
+import { defaultMemberId, judgeOptions } from "../fusion-init.js";
 
 const tmpRoots: string[] = [];
 const originalHome = process.env.HOME;
@@ -81,6 +82,28 @@ test("buildAuthOptions hint reflects whether the API key env is set", () => {
   const unset = buildAuthOptions({}).find((o) => o.value === "openai");
   assert.match(set?.hint ?? "", /is set/);
   assert.match(unset?.hint ?? "", /set OPENAI_API_KEY/);
+});
+
+// --- judge + member-id helpers ---------------------------------------------
+
+test("judgeOptions yields one entry per member, value=model, deduped by model", () => {
+  const options = judgeOptions([
+    { id: "claude-code", model: "claude-sonnet-4-5", provider: "anthropic", auth: "claude-code" },
+    { id: "gpt", model: "gpt-5.5", provider: "openai" },
+    { id: "gpt-dup", model: "gpt-5.5", provider: "openai" }
+  ]);
+  assert.equal(options.length, 2);
+  assert.deepEqual(options[0], { value: "claude-sonnet-4-5", label: "claude-code (claude-sonnet-4-5)" });
+  assert.equal(options[1]?.value, "gpt-5.5");
+});
+
+test("defaultMemberId derives the base from the choice and unique-ifies", () => {
+  const taken = new Set<string>();
+  const first = defaultMemberId("openai", taken);
+  assert.equal(first, "openai");
+  taken.add(first);
+  assert.equal(defaultMemberId("openai", taken), "openai-2");
+  assert.equal(defaultMemberId("claude-code", taken), "claude-code");
 });
 
 test("buildAuthOptions includes codex only when a login is detected", () => {

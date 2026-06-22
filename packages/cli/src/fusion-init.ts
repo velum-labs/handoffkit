@@ -47,6 +47,28 @@ function isAllLocal(panel: PanelModelSpec[]): boolean {
 
 const CUSTOM_MODEL = "__custom__";
 
+/** Judge picker options: one per panel member (value = model), deduped by model. */
+export function judgeOptions(panel: PanelModelSpec[]): Array<{ value: string; label: string }> {
+  const seen = new Set<string>();
+  const options: Array<{ value: string; label: string }> = [];
+  for (const spec of panel) {
+    if (seen.has(spec.model)) continue;
+    seen.add(spec.model);
+    options.push({ value: spec.model, label: `${spec.id} (${spec.model})` });
+  }
+  return options;
+}
+
+/** A readable, unique default id for a new panel member, derived from its auth choice. */
+export function defaultMemberId(choice: AuthChoice, taken: Set<string>): string {
+  const base = choice;
+  if (!taken.has(base)) return base;
+  for (let suffix = 2; ; suffix++) {
+    const candidate = `${base}-${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
 /** Env var that unlocks live discovery for an API-key auth choice (for hinting). */
 const LIVE_KEY_ENV: Partial<Record<AuthChoice, string>> = {
   openai: "OPENAI_API_KEY",
@@ -105,15 +127,17 @@ async function buildPanel(): Promise<PanelModelSpec[]> {
   );
   const authOptions = buildAuthOptions();
   const modelCache = new Map<AuthChoice, ModelListResult>();
+  const taken = new Set<string>();
   const specs: PanelModelSpec[] = [];
   for (let index = 0; index < 16; index++) {
-    const id = await text({ message: `Model ${index + 1} id`, defaultValue: `m${index + 1}` });
     const choice = await select<AuthChoice>({
-      message: "Authenticate this model with",
+      message: `Model ${index + 1}: authenticate with`,
       options: authOptions,
       defaultIndex: 0
     });
     const model = await pickModel(choice, modelCache);
+    const id = await text({ message: "Name for this panel member", defaultValue: defaultMemberId(choice, taken) });
+    taken.add(id);
     specs.push(specForAuthChoice(choice, id, model));
     const more = await confirm({ message: "Add another model?", defaultValue: index === 0 });
     if (!more) break;
@@ -178,8 +202,17 @@ export async function runFusionInit(input: {
 
   const panel = await buildPanel();
 
-  const judgeDefault = panel[0]?.model ?? "";
-  const judgeModel = await text({ message: "Judge model (for synthesis)", defaultValue: judgeDefault });
+  // The judge must be one of the panel models (the runtime matches by model and
+  // falls back to the first member otherwise), so pick from the members.
+  const judgeChoices = judgeOptions(panel);
+  const judgeModel =
+    judgeChoices.length <= 1
+      ? (panel[0]?.model ?? "")
+      : await select<string>({
+          message: "Judge model (synthesizes the panel)",
+          options: judgeChoices,
+          defaultIndex: 0
+        });
 
   const observe = await confirm({ message: "Enable the observability dashboard by default?", defaultValue: false });
 
