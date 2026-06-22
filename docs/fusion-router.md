@@ -159,4 +159,40 @@ Optional `.fusionkit/routing.override.json` shallow-merges route tables over `fu
 
 ## Phase scope
 
-Phase 1 covers config integration, model-gateway routing, and the `fusionkit fusion claude --route` CLI. Phase 2 adds OpenRouter, DeepSeek, Groq, and Google Gemini as first-class routing provider kinds (all via the existing OpenAI-compat backend). The Scope dashboard UI is planned for Phase 3.
+Phase 1 covers config integration, model-gateway routing, and the `fusionkit fusion claude --route` CLI. Phase 2 adds OpenRouter, DeepSeek, Groq, and Google Gemini as first-class routing provider kinds (all via the existing OpenAI-compat backend). Phase 3A adds the Scope dashboard routing UI.
+
+## Dashboard
+
+The local **scope** observability app (`apps/scope`) includes a read-only **Routing** section at `/routing`:
+
+| Page | URL | Contents |
+| --- | --- | --- |
+| Overview | `/routing` | `fusion.json` routing summary + live decision stream (SSE) |
+| Providers | `/routing/providers` | Provider table (kind, base URL, key env, connectivity ping) |
+| Scenarios | `/routing/scenarios` | Five-scenario route table with primary targets and fallbacks |
+
+### Commands
+
+```bash
+# Monorepo dev (from repo root)
+cd apps/scope && pnpm install && pnpm dev
+
+# Or via fusion observe (boots scope on port 4317)
+fusionkit fusion --observe
+
+# API smoke checks
+curl -sf http://localhost:4317/api/routing/config
+curl -sfN http://localhost:4317/api/routing/decisions   # event: routing.decision
+```
+
+Set `SCOPE_REPO_ROOT` when the dashboard cwd is not your git repo root (scope walks up for `.fusionkit/fusion.json` by default).
+
+### Live decision stream
+
+`GET /api/routing/decisions` is an SSE feed (`event: routing.decision`) backed by an in-process pub/sub ring buffer inside the scope server. Publish decisions with `POST /api/routing/decisions` (JSON `RoutingDecision` body) until the Claude router process emits structured trace events — e.g. from a sidecar or a future `onDecision` → ingest hook.
+
+**Screenshot (overview):** sticky header “Routing”, left nav highlight on Routing, config summary card with JSON tree of `routing.providers` + `routing.routes`, right column “Live decisions” showing a card with scenario badge `default`, target `claude-sub,claude-sonnet-4-5`, token count, and reason line.
+
+**Screenshot (providers):** table with five rows (`claude-sub`, `openrouter`, `deepseek`, `groq`, `google-gemini`) — kind badges, base URLs, key env names, key-present pills, connectivity column with ping latency or “key missing”.
+
+**Screenshot (scenarios):** five-row table (`default`, `background`, `longContext`, `reasoning`, `webSearch`) with mono primary targets and fallback badges; longContext row notes the 60k token threshold.

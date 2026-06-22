@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/", label: "Sessions" },
   { href: "/models", label: "Models" },
-  { href: "/environments", label: "Environments" }
+  { href: "/environments", label: "Environments" },
+  { href: "/routing", label: "Routing" }
 ];
 
 function isActive(pathname: string, href: string): boolean {
