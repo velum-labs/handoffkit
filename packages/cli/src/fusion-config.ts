@@ -182,7 +182,7 @@ function validateRouting(raw: unknown, source: string): FusionRoutingConfig {
     return { routes, providers };
   } catch (error) {
     if (error instanceof RoutingConfigError || error instanceof RoutingProviderError) {
-      throw new FusionConfigError(error.message);
+      throw new FusionConfigError(error instanceof Error ? error.message : String(error));
     }
     throw error;
   }

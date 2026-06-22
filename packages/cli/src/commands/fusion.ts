@@ -34,6 +34,98 @@ type FusionOpts = {
   routePreview?: string;
 };
 
+type ExtractedRouteFlags = {
+  route: boolean;
+  routeDryRun: boolean;
+  routePreview?: string;
+  repo?: string;
+  remainingArgs: string[];
+};
+
+/**
+ * Peel `--route*` and select fusion flags from forwarded tool args. With
+ * `passThroughOptions`, flags after `fusion claude` land in `[args...]` rather
+ * than parsed opts.
+ */
+function extractRouteFlags(args: readonly string[]): ExtractedRouteFlags {
+  const remainingArgs: string[] = [];
+  let route = false;
+  let routeDryRun = false;
+  let routePreview: string | undefined;
+  let repo: string | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === undefined) continue;
+    if (arg === "--route") {
+      route = true;
+      continue;
+    }
+    if (arg === "--route-dry-run") {
+      routeDryRun = true;
+      continue;
+    }
+    if (arg === "--route-preview") {
+      const next = args[index + 1];
+      if (next !== undefined) {
+        routePreview = next;
+        index += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith("--route-preview=")) {
+      routePreview = arg.slice("--route-preview=".length);
+      continue;
+    }
+    if (arg === "--repo") {
+      const next = args[index + 1];
+      if (next !== undefined) {
+        repo = next;
+        index += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith("--repo=")) {
+      repo = arg.slice("--repo=".length);
+      continue;
+    }
+    remainingArgs.push(arg);
+  }
+
+  return {
+    route,
+    routeDryRun,
+    ...(routePreview !== undefined ? { routePreview } : {}),
+    ...(repo !== undefined ? { repo } : {}),
+    remainingArgs
+  };
+}
+
+function resolveRouteInvocation(
+  opts: FusionOpts,
+  options: RunFusionOptions,
+  toolArgs: readonly string[]
+): {
+  enabled: boolean;
+  dryRun: boolean;
+  routePreview?: string;
+  options: RunFusionOptions;
+  toolArgs: string[];
+} {
+  const fromArgs = extractRouteFlags(toolArgs);
+  const enabled = opts.route === true || opts.routeDryRun === true || fromArgs.route || fromArgs.routeDryRun;
+  const dryRun = opts.routeDryRun === true || fromArgs.routeDryRun;
+  const routePreview = opts.routePreview ?? fromArgs.routePreview;
+  const repo = opts.repo !== undefined ? resolve(opts.repo) : fromArgs.repo;
+  return {
+    enabled,
+    dryRun,
+    ...(routePreview !== undefined ? { routePreview } : {}),
+    options: repo !== undefined ? { ...options, repo } : options,
+    toolArgs: fromArgs.remainingArgs
+  };
+}
+
 /** Attach the panel/gateway flags shared by `fusion` and the per-tool launchers. */
 function applyFusionOptions(command: Command): Command {
   return command
@@ -203,11 +295,12 @@ export function registerFusion(program: Command): void {
         }
       }
       const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
-      if (resolvedTool === "claude" && (opts.route === true || opts.routeDryRun === true)) {
-        const code = await runClaudeRoute(toolArgs, {
-          ...options,
-          dryRun: opts.routeDryRun === true,
-          ...(opts.routePreview !== undefined ? { previewText: opts.routePreview } : {})
+      const route = resolveRouteInvocation(opts, options, toolArgs);
+      if (resolvedTool === "claude" && route.enabled) {
+        const code = await runClaudeRoute(route.toolArgs, {
+          ...route.options,
+          dryRun: route.dryRun,
+          ...(route.routePreview !== undefined ? { previewText: route.routePreview } : {})
         });
         process.exit(code);
       }
@@ -233,11 +326,12 @@ export function registerFusion(program: Command): void {
       )
       .action(async (args: string[], opts: FusionOpts) => {
         const { options } = resolveContext(opts);
-        if (tool === "claude" && (opts.route === true || opts.routeDryRun === true)) {
-          const code = await runClaudeRoute(args, {
-            ...options,
-            dryRun: opts.routeDryRun === true,
-            ...(opts.routePreview !== undefined ? { previewText: opts.routePreview } : {})
+        const route = resolveRouteInvocation(opts, options, args);
+        if (tool === "claude" && route.enabled) {
+          const code = await runClaudeRoute(route.toolArgs, {
+            ...route.options,
+            dryRun: route.dryRun,
+            ...(route.routePreview !== undefined ? { previewText: route.routePreview } : {})
           });
           process.exit(code);
         }

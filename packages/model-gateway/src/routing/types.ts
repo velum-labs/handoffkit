@@ -58,15 +58,25 @@ export type RoutingDecision = {
   fallbackIndex: number;
 };
 
+/** Tool definition shared by chat and Anthropic routing shapes. */
+export type RoutableTool = {
+  type?: string;
+  name?: string;
+  function?: { name?: string };
+};
+
+/** Message block used for token counting and scenario detection. */
+export type RoutableMessage = {
+  role?: string;
+  content?: unknown;
+  tool_calls?: unknown;
+};
+
 /** Minimal chat request shape used for scenario detection. */
 export type RoutableChatRequest = {
   model?: string;
-  messages?: Array<{
-    role?: string;
-    content?: unknown;
-    tool_calls?: unknown;
-  }>;
-  tools?: Array<{ type?: string; function?: { name?: string }; name?: string }>;
+  messages?: RoutableMessage[];
+  tools?: RoutableTool[];
   /** Extended thinking / reasoning budget (Anthropic or OpenAI o-series). */
   thinking?: { type?: string; budget_tokens?: number };
   /** OpenAI reasoning effort hint. */
@@ -77,7 +87,7 @@ export type RoutableChatRequest = {
 export type RoutableAnthropicRequest = {
   model?: string;
   system?: string | Array<{ type?: string; text?: string }>;
-  messages?: Array<{ role?: string; content?: unknown }>;
-  tools?: Array<{ name?: string }>;
+  messages?: RoutableMessage[];
+  tools?: RoutableTool[];
   thinking?: { type?: string; budget_tokens?: number };
 };

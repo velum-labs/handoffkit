@@ -5,8 +5,8 @@ export {
   previewRoutingForAnthropic,
   previewRoutingForChat,
   countRequestTokens
-} from "./routing/routing-backend.js";
-export type { RoutingBackendOptions } from "./routing/routing-backend.js";
+} from "./routing-backend.js";
+export type { RoutingBackendOptions } from "./routing-backend.js";
 
 export {
   countAnthropicTokens,
@@ -22,21 +22,21 @@ export {
   resolveRoutingDecision,
   resolveRoutingFallback,
   RoutingConfigError
-} from "./routing/routing.js";
+} from "./routing.js";
 
 export {
   parseRoutingProviderSpec,
   requireProvider,
   resolveRoutingProviders,
-  RoutingProviderError
-} from "./routing/providers.js";
-export type { ResolvedRoutingProvider, RoutingProviderKind, RoutingProviderSpec } from "./routing/providers.js";
+  RoutingProviderError,
+  ROUTING_PROVIDER_KINDS
+} from "./providers.js";
+export type { ResolvedRoutingProvider, RoutingProviderKind, RoutingProviderSpec } from "./providers.js";
 
 export {
   DEFAULT_LONG_CONTEXT_THRESHOLD,
-  ROUTING_PROVIDER_KINDS,
   ROUTING_SCENARIOS
-} from "./routing/types.js";
+} from "./types.js";
 export type {
   ParsedRouteTarget,
   RouteTargetSpec,
@@ -45,4 +45,4 @@ export type {
   RoutingDecision,
   RoutingScenario,
   ScenarioRoutes
-} from "./routing/types.js";
+} from "./types.js";

@@ -106,8 +106,7 @@ export async function runClaudeRoute(
   });
   disposers.push(() => gateway.close());
 
-  const registered = await portless.register("claude-router", gateway.port());
-  const gatewayUrl = registered.url;
+  const gatewayUrl = portless.register("claude-router", gateway.port());
   disposers.push(() => portless.unregister("claude-router"));
 
   if (uiStream().isTTY) {
