@@ -8,6 +8,9 @@ import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { runClaudeRoute } from "../fusion/claude-route.js";
+import { parseDashboardPort, runFusionDashboard } from "./fusion-dashboard.js";
+import { runFusionModel } from "./fusion-model.js";
+import { runFusionStatus } from "./fusion-status.js";
 import { fail } from "../shared/errors.js";
 import { collect, parseFusionTool, parseIdValue, parsePanelModelSpec, parsePort } from "../shared/options.js";
 import { reapFusionServices } from "../shared/portless.js";
@@ -267,19 +270,57 @@ export function registerFusion(program: Command): void {
     });
 
   // Generic `fusion [tool]` — keeps the original surface and interactive pick.
-  applyFusionOptions(
+  const fusionCmd = applyFusionOptions(
     program
       .command("fusion")
       .description("one command: real model fusion backs a coding agent")
       .argument("[tool]", `${FUSION_TOOLS.join(" | ")} | stop (omit on a TTY to pick interactively)`)
       .argument("[args...]", "arguments forwarded to the tool")
       .option("--tool <tool>", `coding agent to launch (${FUSION_TOOLS.join(" | ")})`)
-  )
+  );
+
+  fusionCmd
+    .command("status")
+    .description("print smart routing status (config, subscriptions, last-24h stats)")
+    .option("--repo <dir>", "coding workspace the panel fuses over")
+    .action(async (opts: FusionOpts) => {
+      const code = await runFusionStatus({
+        ...(opts.repo !== undefined ? { repo: resolve(opts.repo) } : {})
+      });
+      process.exit(code);
+    });
+
+  fusionCmd
+    .command("model")
+    .description("pick the active model for this session (writes ~/.fusionkit/session-override.json)")
+    .option("--repo <dir>", "coding workspace the panel fuses over")
+    .action(async (opts: FusionOpts) => {
+      const code = await runFusionModel({
+        ...(opts.repo !== undefined ? { repo: resolve(opts.repo) } : {})
+      });
+      process.exit(code);
+    });
+
+  fusionCmd
+    .command("dashboard")
+    .description("open the scope routing dashboard (starts apps/scope when needed)")
+    .option("--no-open", "skip opening a browser (CI-friendly)")
+    .option("--port <n>", "override the scope dashboard port")
+    .action(async (opts: FusionOpts & { noOpen?: boolean }) => {
+      const code = await runFusionDashboard({
+        ...(opts.noOpen === true ? { noOpen: true } : {}),
+        ...(opts.port !== undefined ? { port: parseDashboardPort(opts.port) } : {})
+      });
+      process.exit(code);
+    });
+
+  fusionCmd
     .addHelpText(
       "after",
       "\nfusionkit's own flags must precede the tool name; everything after the tool is forwarded to it." +
         "\nRun `fusionkit init` to scaffold a committed .fusionkit/ folder for this repo." +
-        "\nRun `fusionkit fusion stop` to reap portless singleton services (router, dashboard, ...)."
+        "\nRun `fusionkit fusion stop` to reap portless singleton services (router, dashboard, ...)." +
+        "\nRun `fusionkit fusion status`, `fusion model`, or `fusion dashboard` for smart routing controls."
     )
     .action(async (positionalTool: string | undefined, args: string[], opts: FusionOpts) => {
       // `fusion stop` reaps persistent portless singletons left running by prior

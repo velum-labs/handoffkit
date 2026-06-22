@@ -135,6 +135,20 @@ export function detectSubscription(mode: PanelAuthMode): SubscriptionStatus {
   return mode === "claude-code" ? detectClaudeCode() : detectCodex();
 }
 
+/** Snapshot of Claude Code and Codex subscription status for status dashboards. */
+export type DetectedSubscriptions = {
+  "claude-code": SubscriptionStatus;
+  codex: SubscriptionStatus;
+};
+
+/** Detect both Claude Code and Codex subscriptions (read-only). */
+export function detectSubscriptions(): DetectedSubscriptions {
+  return {
+    "claude-code": detectSubscription("claude-code"),
+    codex: detectSubscription("codex")
+  };
+}
+
 /** Best-effort read of the model the Codex CLI is pinned to (`~/.codex/config.toml`). */
 export function detectCodexModel(): string {
   const path = codexConfigPath();

@@ -33,15 +33,38 @@ export function isRoutingScopePublishEnabled(env: NodeJS.ProcessEnv = process.en
 }
 
 /**
+ * Resolve the scope dashboard base URL from env (optional port override).
+ */
+export function resolveRoutingScopeBaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+  port?: number
+): string {
+  const override = env[ROUTING_SCOPE_URL_ENV]?.trim();
+  if (override !== undefined && override.length > 0) {
+    return override.replace(/\/$/, "");
+  }
+  const resolvedPort = port ?? SCOPE_DASHBOARD_PORT;
+  return `http://127.0.0.1:${resolvedPort}`;
+}
+
+/**
  * Resolve the scope dashboard decisions ingest URL from env.
  */
-export function resolveRoutingScopeIngestUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const override = env[ROUTING_SCOPE_URL_ENV]?.trim();
-  const base =
-    override !== undefined && override.length > 0
-      ? override.replace(/\/$/, "")
-      : `http://127.0.0.1:${SCOPE_DASHBOARD_PORT}`;
-  return `${base}/api/routing/decisions`;
+export function resolveRoutingScopeIngestUrl(
+  env: NodeJS.ProcessEnv = process.env,
+  port?: number
+): string {
+  return `${resolveRoutingScopeBaseUrl(env, port)}/api/routing/decisions`;
+}
+
+/**
+ * Resolve the scope routing dashboard page URL from env.
+ */
+export function resolveRoutingDashboardUrl(
+  env: NodeJS.ProcessEnv = process.env,
+  port?: number
+): string {
+  return `${resolveRoutingScopeBaseUrl(env, port)}/routing`;
 }
 
 /**
