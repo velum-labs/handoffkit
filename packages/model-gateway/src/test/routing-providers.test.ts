@@ -174,7 +174,8 @@ test("classifyProviderError maps HTTP statuses per fallback design", () => {
   assert.equal(classifyProviderError(429), "fallback");
   assert.equal(classifyProviderError(402), "fallback");
   assert.equal(classifyProviderError(498), "fallback");
-  assert.equal(classifyProviderError(401), "fallback");
+  assert.equal(classifyProviderError(401), "fatal");
+  assert.equal(classifyProviderError(403), "fatal");
   assert.equal(classifyProviderError(503), "retry");
   assert.equal(classifyProviderError(400), "fatal");
   assert.equal(classifyProviderError(404), "fatal");

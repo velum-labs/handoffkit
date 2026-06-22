@@ -56,20 +56,6 @@ export function sanitizeDeepSeekRequest(body: Record<string, unknown>): Record<s
   return next;
 }
 
-/** Preserve `reasoning_content` on assistant messages when re-serializing chat bodies. */
-export function preserveDeepSeekReasoningContent(body: Record<string, unknown>): Record<string, unknown> {
-  if (!Array.isArray(body.messages)) return body;
-  const next = deepClone(body);
-  next.messages = (next.messages as unknown[]).map((message) => {
-    if (!isRecord(message) || message.role !== "assistant") return message;
-    if (typeof message.reasoning_content === "string" && message.reasoning_content.length > 0) {
-      return message;
-    }
-    return message;
-  });
-  return next;
-}
-
 /**
  * Apply provider-specific outbound mutations to an OpenAI Chat Completions body.
  */
@@ -84,7 +70,7 @@ export function sanitizeProviderRequest(
     case "groq":
       return sanitizeGroqRequest(body);
     case "deepseek":
-      return sanitizeDeepSeekRequest(preserveDeepSeekReasoningContent(body));
+      return sanitizeDeepSeekRequest(body);
     default:
       return body;
   }

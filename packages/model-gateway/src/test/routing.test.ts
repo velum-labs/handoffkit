@@ -319,6 +319,96 @@ test("RoutingBackend lists configured models", () => {
   assert.deepEqual([...backend.listModelIds()].sort(), ["m1", "m2"]);
 });
 
+test("RoutingBackend does not fall back on primary HTTP 400", async () => {
+  const primary = await startStatusMock({ "gpt-4o": 400 });
+  const fallback = await startStatusMock({ "claude-haiku": 200 });
+  const backend = new RoutingBackend({
+    routes: parseScenarioRoutes(
+      {
+        default: "primary,gpt-4o",
+        fallbacks: { default: ["fallback,claude-haiku"] }
+      },
+      "test"
+    ),
+    providers: [
+      { id: "primary", provider: "openai", baseUrl: `${primary.url}/v1`, keyEnv: "OPENAI_API_KEY" },
+      { id: "fallback", provider: "anthropic", baseUrl: `${fallback.url}/v1`, keyEnv: "ANTHROPIC_API_KEY" }
+    ],
+    env: { OPENAI_API_KEY: "a", ANTHROPIC_API_KEY: "b" }
+  });
+  try {
+    const response = await backend.chat({
+      messages: [{ role: "user", content: "hi" }]
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(primary.models(), ["gpt-4o"]);
+    assert.deepEqual(fallback.models(), []);
+  } finally {
+    await primary.close();
+    await fallback.close();
+  }
+});
+
+test("RoutingBackend falls back on primary HTTP 429", async () => {
+  const primary = await startStatusMock({ "gpt-4o": 429 });
+  const fallback = await startStatusMock({ "claude-haiku": 200 });
+  const backend = new RoutingBackend({
+    routes: parseScenarioRoutes(
+      {
+        default: "primary,gpt-4o",
+        fallbacks: { default: ["fallback,claude-haiku"] }
+      },
+      "test"
+    ),
+    providers: [
+      { id: "primary", provider: "openai", baseUrl: `${primary.url}/v1`, keyEnv: "OPENAI_API_KEY" },
+      { id: "fallback", provider: "anthropic", baseUrl: `${fallback.url}/v1`, keyEnv: "ANTHROPIC_API_KEY" }
+    ],
+    env: { OPENAI_API_KEY: "a", ANTHROPIC_API_KEY: "b" }
+  });
+  try {
+    const response = await backend.chat({
+      messages: [{ role: "user", content: "hi" }]
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(primary.models(), ["gpt-4o"]);
+    assert.deepEqual(fallback.models(), ["claude-haiku"]);
+  } finally {
+    await primary.close();
+    await fallback.close();
+  }
+});
+
+test("RoutingBackend falls back on primary HTTP 502", async () => {
+  const primary = await startStatusMock({ "gpt-4o": 502 });
+  const fallback = await startStatusMock({ "claude-haiku": 200 });
+  const backend = new RoutingBackend({
+    routes: parseScenarioRoutes(
+      {
+        default: "primary,gpt-4o",
+        fallbacks: { default: ["fallback,claude-haiku"] }
+      },
+      "test"
+    ),
+    providers: [
+      { id: "primary", provider: "openai", baseUrl: `${primary.url}/v1`, keyEnv: "OPENAI_API_KEY" },
+      { id: "fallback", provider: "anthropic", baseUrl: `${fallback.url}/v1`, keyEnv: "ANTHROPIC_API_KEY" }
+    ],
+    env: { OPENAI_API_KEY: "a", ANTHROPIC_API_KEY: "b" }
+  });
+  try {
+    const response = await backend.chat({
+      messages: [{ role: "user", content: "hi" }]
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(primary.models(), ["gpt-4o"]);
+    assert.deepEqual(fallback.models(), ["claude-haiku"]);
+  } finally {
+    await primary.close();
+    await fallback.close();
+  }
+});
+
 test("RoutingBackend falls back when primary returns non-2xx", async () => {
   const primary = await startStatusMock({ "gpt-4o": 500 });
   const fallback = await startStatusMock({ "claude-haiku": 200 });

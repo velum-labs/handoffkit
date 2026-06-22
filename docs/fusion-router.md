@@ -111,6 +111,8 @@ When `routing.providers` is omitted, FusionKit can derive providers from the com
 - **Rate limits:** concurrency-based; **429** when exceeded ([Rate Limit](https://api-docs.deepseek.com/quick_start/rate_limit))
 - **Context window:** 1M tokens on `deepseek-v4-flash` and `deepseek-v4-pro` ([Models & Pricing](https://api-docs.deepseek.com/quick_start/pricing))
 
+DeepSeek outbound requests disable thinking mode by default (`extra_body.thinking.type: "disabled"`) so multi-turn tool loops do not require `reasoning_content` round-trips. Enable thinking explicitly in provider overrides only when you have verified end-to-end tool behavior.
+
 #### Groq
 
 ```json
@@ -159,7 +161,11 @@ Optional `.fusionkit/routing.override.json` shallow-merges route tables over `fu
 
 ## Phase scope
 
-Phase 1 covers config integration, model-gateway routing, and the `fusionkit fusion claude --route` CLI. Phase 2 adds OpenRouter, DeepSeek, Groq, and Google Gemini as first-class routing provider kinds (all via the existing OpenAI-compat backend). Phase 3A adds the Scope dashboard routing UI. Phase 3B adds AI-assisted routing onboarding in `fusionkit init`.
+Phase 1 covers config integration, model-gateway routing, and the `fusionkit fusion claude --route` CLI. Phase 2 adds OpenRouter, DeepSeek, Groq, and Google Gemini as first-class routing provider kinds (all via the existing OpenAI-compat backend). Phase 3A adds the Scope dashboard routing UI. Phase 3B adds AI-assisted routing onboarding in `fusionkit init`. Phase 4 wires provider error classification into the fallback loop, automatic scope decision publishing, and DeepSeek thinking-mode defaults.
+
+### Fallback behavior
+
+The routing gateway uses `classifyProviderError` before advancing the scenario fallback chain. HTTP **400** and **401** (client / auth errors) return immediately without trying fallbacks. **429**, **402**, **498**, **5xx**, and network failures advance to the next configured target when one exists.
 
 ## Dashboard
 
@@ -189,7 +195,9 @@ Set `SCOPE_REPO_ROOT` when the dashboard cwd is not your git repo root (scope wa
 
 ### Live decision stream
 
-`GET /api/routing/decisions` is an SSE feed (`event: routing.decision`) backed by an in-process pub/sub ring buffer inside the scope server. Publish decisions with `POST /api/routing/decisions` (JSON `RoutingDecision` body) until the Claude router process emits structured trace events — e.g. from a sidecar or a future `onDecision` → ingest hook.
+`GET /api/routing/decisions` is an SSE feed (`event: routing.decision`) backed by an in-process pub/sub ring buffer inside the scope server. When you run `fusionkit fusion claude --route`, each routing decision is best-effort POSTed to `http://127.0.0.1:4317/api/routing/decisions` so the dashboard live stream updates automatically.
+
+Set `FUSION_ROUTING_SCOPE_PUBLISH=0` (or `false` / `off`) to disable publishing. Override the dashboard base URL with `FUSION_ROUTING_SCOPE_URL` (for example when scope runs on a non-default host). Publish failures are swallowed when the dashboard is not running — routing and the gateway keep working.
 
 **Screenshot (overview):** sticky header “Routing”, left nav highlight on Routing, config summary card with JSON tree of `routing.providers` + `routing.routes`, right column “Live decisions” showing a card with scenario badge `default`, target `claude-sub,claude-sonnet-4-5`, token count, and reason line.
 
