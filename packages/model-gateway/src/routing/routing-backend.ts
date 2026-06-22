@@ -8,10 +8,12 @@ import type { AnthropicRequest } from "../adapters/anthropic.js";
 import { anthropicToChat } from "../adapters/anthropic.js";
 
 import {
+  classifyProviderError,
   requireProvider,
   resolveRoutingProviders,
   RoutingProviderError
 } from "./providers.js";
+import type { ProviderErrorAction } from "./providers.js";
 import type { ResolvedRoutingProvider, RoutingProviderSpec } from "./providers.js";
 import {
   countRequestTokens,
@@ -102,8 +104,12 @@ export class RoutingBackend implements Backend {
     for (;;) {
       try {
         const response = await this.#invoke(decision, chat, signal, options);
-        if (response.ok || decision.fallbackIndex > 0) return response;
-        // Primary failed — try fallbacks on non-2xx.
+        if (response.ok) return response;
+        if (decision.fallbackIndex > 0) return response;
+
+        const action = await classifyResponseError(response);
+        if (!shouldAdvanceFallback(action)) return response;
+
         const next = resolveRoutingFallback(decision, this.#routes, decision.fallbackIndex + 1);
         if (next === undefined) return response;
         decision = next;
@@ -160,6 +166,22 @@ export class RoutingBackend implements Backend {
       })
     );
   }
+}
+
+/** Whether a classified provider error should advance the scenario fallback chain. */
+function shouldAdvanceFallback(action: ProviderErrorAction): boolean {
+  return action === "retry" || action === "fallback";
+}
+
+async function classifyResponseError(response: Response): Promise<ProviderErrorAction> {
+  let body: unknown;
+  try {
+    const text = await response.clone().text();
+    body = text.length > 0 ? (JSON.parse(text) as unknown) : undefined;
+  } catch {
+    body = undefined;
+  }
+  return classifyProviderError(response.status, body);
 }
 
 /** Format a routing decision for CLI output. */

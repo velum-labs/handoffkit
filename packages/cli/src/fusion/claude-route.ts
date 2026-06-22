@@ -25,6 +25,7 @@ import {
   sampleRoutingBody,
   startClaudeRoutingGateway
 } from "./routing.js";
+import { createRoutingDecisionPublisher } from "./routing-decision-publisher.js";
 
 export type RunClaudeRouteOptions = RunFusionOptions & {
   /** Print routing decision without starting the gateway or Claude. */
@@ -98,11 +99,15 @@ export async function runClaudeRoute(
 
   log(`fusion: claude router (${routing.providers.map((p) => p.id).join(", ")})`);
 
+  const publishDecision = createRoutingDecisionPublisher({ debug: (line) => log(line) });
   const gateway = await startClaudeRoutingGateway({
     routing,
     port: options.port,
     ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-    onDecision: (decision) => log(`routing: ${decision.scenario} -> ${decision.target.providerId},${decision.target.model}`)
+    onDecision: (decision) => {
+      log(`routing: ${decision.scenario} -> ${decision.target.providerId},${decision.target.model}`);
+      publishDecision(decision);
+    }
   });
   disposers.push(() => gateway.close());
 

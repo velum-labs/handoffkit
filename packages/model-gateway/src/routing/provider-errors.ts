@@ -31,7 +31,7 @@ function errorMessage(body: unknown): string {
  */
 export function classifyProviderError(status: number, body: unknown = undefined): ProviderErrorAction {
   if (status === 429 || status === 402 || status === 498) return "fallback";
-  if (status === 401 || status === 403) return "fallback";
+  if (status === 401 || status === 403) return "fatal";
   if (status === 500 || status === 502 || status === 503 || status === 504) return "retry";
   if (status === 413 || status === 422) {
     if (CONTEXT_LENGTH_PATTERN.test(errorMessage(body))) return "fallback";
