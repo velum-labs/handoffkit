@@ -59,7 +59,7 @@ def validate_protocol_package(contract_root: Path = CONTRACT_ROOT) -> ProtocolPa
     python_package = _load_toml(contract_root / "python" / "pyproject.toml")
 
     _validate_package_json(package_json)
-    _validate_protocol_package_json(protocol_package, contract_root)
+    _validate_protocol_package_json(protocol_package, contract_root, package_json["version"])
     _validate_python_package(python_package, protocol_package, package_json, openapi)
     services, paths = _validate_openapi(openapi, contract_root, package_json)
     _validate_generated_outputs(contract_root)
@@ -125,8 +125,8 @@ def _require_file(path: Path) -> None:
 def _validate_package_json(package_json: dict[str, Any]) -> None:
     if package_json.get("name") != "@velum-labs/model-fusion-protocol":
         raise ValueError("package.json must publish @velum-labs/model-fusion-protocol")
-    if package_json.get("version") != "0.1.1":
-        raise ValueError("package.json version must match protocol package version")
+    if not isinstance(package_json.get("version"), str) or not package_json["version"]:
+        raise ValueError("package.json must declare a version")
     publish_config = package_json.get("publishConfig")
     if not isinstance(publish_config, dict):
         raise ValueError("package.json must include publishConfig")
@@ -162,13 +162,14 @@ def _validate_package_json(package_json: dict[str, Any]) -> None:
 def _validate_protocol_package_json(
     protocol_package: dict[str, Any],
     contract_root: Path,
+    expected_version: str,
 ) -> None:
     expected_hash = compute_schema_bundle_hash(contract_root / "schema")
     if protocol_package.get("schema_bundle_hash") != expected_hash:
         raise ValueError("protocol-package.json schema_bundle_hash is out of date")
     if protocol_package.get("package_name") != "@velum-labs/model-fusion-protocol":
         raise ValueError("protocol-package.json package_name is incorrect")
-    if protocol_package.get("version") != "0.1.1":
+    if protocol_package.get("version") != expected_version:
         raise ValueError("protocol-package.json version is incorrect")
     if protocol_package.get("json_schema_format") != "persisted-record-audit-format":
         raise ValueError("protocol-package.json must keep JSON Schema as audit format")

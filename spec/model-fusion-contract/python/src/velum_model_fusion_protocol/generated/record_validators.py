@@ -22,12 +22,12 @@ RECORD_SCHEMA_FILES = {
     "harness-candidate-record.v1": "harness-candidate-record.v1.schema.json",
     "harness-run-request.v1": "harness-run-request.v1.schema.json",
     "harness-run-result.v1": "harness-run-result.v1.schema.json",
-    "trajectory.v1": "trajectory.v1.schema.json",
     "judge-synthesis-record.v1": "judge-synthesis-record.v1.schema.json",
     "model-call-record.v1": "model-call-record.v1.schema.json",
     "model_endpoint.v1": "model-endpoint.v1.schema.json",
     "tool-call-plan.v1": "tool-call-plan.v1.schema.json",
     "tool-execution-record.v1": "tool-execution-record.v1.schema.json",
+    "trajectory.v1": "trajectory.v1.schema.json",
 }
 
 
