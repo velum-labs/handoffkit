@@ -24,8 +24,6 @@ export type FusionTraceEventType =
   | "model.call.started"
   | "model.call.finished"
   | "judge.thinking"
-  | "judge.scored"
-  | "judge.synthesis"
   | "judge.final"
   | "tool.execution"
   | "cursor.route"
