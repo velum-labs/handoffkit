@@ -75,7 +75,8 @@ def test_resolve_config_path_prefers_explicit_then_env_then_project(tmp_path, mo
     assert resolve_config_path(None) is None  # nothing present
 
     (tmp_path / "fusionkit.yaml").write_text("endpoints: []\ndefault_model: x\n")
-    assert resolve_config_path(None).name == "fusionkit.yaml"
+    project = resolve_config_path(None)
+    assert project is not None and project.name == "fusionkit.yaml"
 
     env_target = tmp_path / "from-env.yaml"
     env_target.write_text("x")

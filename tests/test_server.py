@@ -4,7 +4,7 @@ import json
 
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint
+from fusionkit_core.config import EndpointAuth, FusionConfig, FusionMode, ModelEndpoint
 from fusionkit_server import create_app
 
 
@@ -191,7 +191,7 @@ def test_subscription_endpoint_is_first_class_in_unified_server(tmp_path) -> Non
                 id="claude-code-subscription",
                 provider="anthropic",
                 model="claude-sonnet-4-5",
-                auth={"mode": "claude-code"},
+                auth=EndpointAuth(mode="claude-code"),
             ),
         ],
         default_model="fast",
