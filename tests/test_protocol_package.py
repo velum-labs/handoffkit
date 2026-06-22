@@ -12,10 +12,10 @@ def test_protocol_package_metadata_and_idl_are_drift_checked() -> None:
     summary = module.validate_protocol_package()
 
     assert summary.schema_bundle_hash == (
-        "sha256:aae33b89a771fd5916e21bfffc5993d2d7ef98ecfc8542ba9570a8c99074d541"
+        "sha256:3e8388595aefc8e82962d76e822c514db6552f6ee65e62d487534ef825ad87b8"
     )
     assert summary.package_name == "@velum-labs/model-fusion-protocol"
-    assert summary.package_version == "0.2.0"
+    assert summary.package_version == "0.3.0"
     assert summary.python_package_name == "velum-model-fusion-protocol"
     assert summary.services == (
         "HarnessExecutorService",

@@ -1,7 +1,7 @@
 {
   "schema": "cursor-run-request.v1",
   "schema_version": "v1",
-  "schema_bundle_hash": "sha256:aae33b89a771fd5916e21bfffc5993d2d7ef98ecfc8542ba9570a8c99074d541",
+  "schema_bundle_hash": "sha256:3e8388595aefc8e82962d76e822c514db6552f6ee65e62d487534ef825ad87b8",
   "producer": "fusionkit-contract-seed",
   "producer_version": "0.1.0",
   "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

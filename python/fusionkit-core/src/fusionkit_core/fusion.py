@@ -6,10 +6,6 @@ from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
 from fusionkit_core.judge import JudgeSynthesisResult, JudgeSynthesizer
 from fusionkit_core.producers import ChatTrajectoryProducer
-from fusionkit_core.prompts import (
-    VERIFIER_SYSTEM_PROMPT,
-    build_verifier_prompt,
-)
 from fusionkit_core.router import HeuristicRouter
 from fusionkit_core.types import ChatMessage, FusionResult, Trajectory
 
@@ -59,7 +55,6 @@ class FusionEngine:
         sampling: SamplingConfig | None = None,
         panel_models: Sequence[str] | None = None,
         sample_count: int | None = None,
-        verify: bool = False,
     ) -> FusionResult:
         selected_mode = mode or self.config.default_mode
         selected_sampling = sampling or self.config.sampling
@@ -71,7 +66,6 @@ class FusionEngine:
                 sampling=selected_sampling,
                 panel_models=panel_models,
                 sample_count=sample_count,
-                verify=verify,
             )
             result.route = decision.route
             result.metrics["router_reasons"] = list(decision.reasons)
@@ -99,15 +93,6 @@ class FusionEngine:
         ranked = self.ranker.rank(trajectories)
         synthesis = await self._judge_synthesize(messages, ranked)
         answer = synthesis.final_output
-        repair_metadata: dict[str, object] = {"repair_attempted": False, "repair_rounds": 0}
-        if verify:
-            answer = await self._verify(messages, answer, ranked)
-            repair_metadata = {
-                "repair_attempted": True,
-                "repair_rounds": 1,
-                "repair_reason": "verify_requested",
-            }
-            synthesis = _with_repair_metadata(synthesis, repair_metadata, answer)
         return FusionResult(
             mode=selected_mode,
             content=answer,
@@ -117,7 +102,6 @@ class FusionEngine:
                 **_trajectory_metrics(ranked),
                 "judge_synthesis_id": synthesis.record.synthesis_id,
                 "judge_synthesis_record": synthesis.record.model_dump(mode="json"),
-                **repair_metadata,
             },
         )
 
@@ -160,28 +144,6 @@ class FusionEngine:
             synthesis_sampling=self.config.sampling,
         )
 
-    async def _verify(
-        self,
-        messages: Sequence[ChatMessage],
-        answer: str,
-        trajectories: Sequence[Trajectory],
-    ) -> str:
-        verifier = self._client(self.config.resolved_judge_model)
-        response = await verifier.chat(
-            [
-                ChatMessage(
-                    role="system",
-                    content=self.config.prompts.verifier_system or VERIFIER_SYSTEM_PROMPT,
-                ),
-                ChatMessage(
-                    role="user",
-                    content=build_verifier_prompt(_last_user_text(messages), answer, trajectories),
-                ),
-            ],
-            self.config.sampling.model_copy(update={"temperature": 0.0}),
-        )
-        return response.content
-
     def _client(self, model_id: str) -> ChatClient:
         try:
             return self.clients[model_id]
@@ -197,13 +159,6 @@ def normalize_messages(messages: Sequence[ChatMessage | Mapping[str, str]]) -> l
         else:
             normalized.append(ChatMessage.model_validate(message))
     return normalized
-
-
-def _last_user_text(messages: Sequence[ChatMessage]) -> str:
-    for message in reversed(messages):
-        if message.role == "user":
-            return message.content
-    return ""
 
 
 def _verification_rank(trajectory: Trajectory) -> int:
@@ -249,20 +204,3 @@ def _optional_int(value: object) -> int:
     if isinstance(value, int):
         return value
     return 0
-
-
-def _with_repair_metadata(
-    synthesis: JudgeSynthesisResult,
-    repair_metadata: dict[str, object],
-    answer: str,
-) -> JudgeSynthesisResult:
-    record = synthesis.record.model_copy(
-        update={
-            "final_output": answer,
-            "metrics": {
-                **(synthesis.record.metrics or {}),
-                **repair_metadata,
-            },
-        }
-    )
-    return synthesis.model_copy(update={"record": record, "final_output": answer})

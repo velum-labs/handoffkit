@@ -110,7 +110,6 @@ FusionRunState: TypeAlias = Literal[
     "requires_action",
     "judging",
     "synthesizing",
-    "verifying",
     "completed",
     "failed",
     "cancelled",
@@ -236,7 +235,6 @@ class FusionRunRequestV1(ContractRecord):
     mode: FusionMode
     messages: list[ContractChatMessage] = Field(min_length=1)
     sampling: ContractSampling
-    verify: bool
     requested_models: list[str] | None = None
     sample_count: int | None = Field(default=None, ge=1)
     tool_policy: ToolPolicy | None = None
@@ -427,7 +425,6 @@ FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
     "requires_action": "requires_action",
     "judging": "running",
     "synthesizing": "running",
-    "verifying": "running",
     "completed": "succeeded",
     "failed": "failed",
     "cancelled": "canceled",
@@ -441,7 +438,7 @@ FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
 # We fall back to this constant there; a source checkout still recomputes from the
 # files. tests/ assert the two agree, so this can never silently drift from the
 # schema source. (Mirrors handoffkit's pinned MODEL_FUSION_SCHEMA_BUNDLE_HASH.)
-SCHEMA_BUNDLE_HASH = "sha256:aae33b89a771fd5916e21bfffc5993d2d7ef98ecfc8542ba9570a8c99074d541"
+SCHEMA_BUNDLE_HASH = "sha256:3e8388595aefc8e82962d76e822c514db6552f6ee65e62d487534ef825ad87b8"
 
 
 def schema_bundle_hash(schema_dir: Path | None = None) -> str:

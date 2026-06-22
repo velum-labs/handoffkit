@@ -496,7 +496,6 @@ def test_join_run_records_does_not_require_raw_transcripts(tmp_path) -> None:
             "mode": "single",
             "messages": [{"role": "user", "content": task.record.prompt or ""}],
             "sampling": {},
-            "verify": False,
         }
     )
 

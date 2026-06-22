@@ -140,7 +140,6 @@ def _request_payload(request_id: str, mode: str = "panel") -> dict:
                 )
             ],
             "sampling": {},
-            "verify": False,
             "requested_models": ["fast"] if mode == "panel" else None,
         }
     )

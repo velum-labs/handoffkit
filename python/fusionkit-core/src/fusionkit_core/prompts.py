@@ -31,9 +31,6 @@ unsupported facts. Ground the response only in what the trajectories actually ob
 Do NOT describe the candidates, the trajectories, or the fusion process; just respond to the user as
 the assistant."""
 
-VERIFIER_SYSTEM_PROMPT = """You verify a fused answer against the request and candidate evidence.
-Return a concise corrected answer if needed. If the answer is already sound, return it unchanged."""
-
 
 def _truncate(text: str, limit: int = 1200) -> str:
     text = text or ""
@@ -136,20 +133,6 @@ def build_trajectory_step_system(
     )
 
 
-def build_verifier_prompt(
-    user_request: str, answer: str, trajectories: Sequence[Trajectory]
-) -> str:
-    return (
-        "Original request:\n"
-        f"{user_request}\n\n"
-        "Fused answer:\n"
-        f"{answer}\n\n"
-        "Candidate evidence:\n"
-        f"{format_trajectories(trajectories)}\n\n"
-        "Verify correctness and instruction-following."
-    )
-
-
 # The built-in system prompts, keyed by the stable id used for the committed
 # `.fusionkit/prompts/<id>.md` override files. `fusionkit prompts dump` emits
 # this map so the CLI scaffolds editable defaults that never drift from source.
@@ -157,6 +140,5 @@ SYSTEM_PROMPT_DEFAULTS: dict[str, str] = {
     "judge": JUDGE_SYSTEM_PROMPT,
     "synthesizer": SYNTHESIZER_SYSTEM_PROMPT,
     "trajectory-step": TRAJECTORY_STEP_SYSTEM_PROMPT,
-    "verifier": VERIFIER_SYSTEM_PROMPT,
     "panel": PANEL_SYSTEM_PROMPT,
 }

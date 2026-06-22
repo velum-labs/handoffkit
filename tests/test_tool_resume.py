@@ -337,7 +337,6 @@ def _request(request_id: str) -> FusionRunRequestV1:
             "mode": "single",
             "messages": [{"role": "user", "content": "Use a tool"}],
             "sampling": {},
-            "verify": False,
             "tool_policy": "external_pause",
         }
     )

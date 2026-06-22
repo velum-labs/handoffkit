@@ -12,8 +12,7 @@
         "request_id",
         "mode",
         "messages",
-        "sampling",
-        "verify"
+        "sampling"
       ],
       "properties": {
         "schema": {
@@ -51,9 +50,6 @@
         "sample_count": {
           "type": "integer",
           "minimum": 1
-        },
-        "verify": {
-          "type": "boolean"
         },
         "tool_policy": {
           "type": "string",

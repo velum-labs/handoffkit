@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Model Fusion Protocol HTTP API",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "V1 HTTP/JSON service surfaces for model-fusion integrations. Durable records are JSON Schema payloads from ../schema.",
-    "x-schema-bundle-hash": "sha256:aae33b89a771fd5916e21bfffc5993d2d7ef98ecfc8542ba9570a8c99074d541"
+    "x-schema-bundle-hash": "sha256:3e8388595aefc8e82962d76e822c514db6552f6ee65e62d487534ef825ad87b8"
   },
   "paths": {
     "/v1/harness/execute-coding-task": {

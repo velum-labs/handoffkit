@@ -274,7 +274,6 @@ def _request(
             "mode": mode,
             "messages": [{"role": "user", "content": "hello"}],
             "sampling": {},
-            "verify": False,
             "requested_models": requested_models,
         }
     )

@@ -388,7 +388,6 @@ class FusionBenchRunner:
                 "mode": self.mode,
                 "messages": [{"role": "user", "content": task.record.prompt or ""}],
                 "sampling": {},
-                "verify": False,
             }
         )
         result = await manager.create_and_run(request)

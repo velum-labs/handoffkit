@@ -106,7 +106,6 @@ class JudgeSynthesizer:
         synthesis_sampling: SamplingConfig,
         analysis: FusionAnalysis | None = None,
         final_output_artifact_id: str | None = None,
-        repair_metadata: dict[str, Any] | None = None,
         trace_id: str | None = None,
         span_id: str | None = None,
     ) -> JudgeSynthesisResult:
@@ -133,7 +132,6 @@ class JudgeSynthesizer:
             trajectories,
             resolved_analysis,
             final_output_artifact_id=final_output_artifact_id,
-            repair_metadata=repair_metadata,
         )
         _emit_judge(
             trace_id,
@@ -284,7 +282,6 @@ def _synthesis_metrics(
     analysis: FusionAnalysis,
     *,
     final_output_artifact_id: str | None,
-    repair_metadata: dict[str, Any] | None,
 ) -> dict[str, Any]:
     contributions = [
         {
@@ -319,8 +316,6 @@ def _synthesis_metrics(
         metrics["judge_structured_parse_error"] = "invalid_json"
     if final_output_artifact_id is not None:
         metrics["final_output_artifact_id"] = final_output_artifact_id
-    if repair_metadata is not None:
-        metrics.update(repair_metadata)
     return metrics
 
 

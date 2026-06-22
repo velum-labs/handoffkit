@@ -176,7 +176,6 @@ def _request(mode: str, request_id: str) -> FusionRunRequestV1:
                 )
             ],
             "sampling": {},
-            "verify": False,
             "requested_models": ["fast"] if mode == "panel" else None,
         }
     )

@@ -2,7 +2,7 @@
 
 Selects the judge-decidable subset (candidates disagree), splits it into a dev set
 the optimizer sees and a held-out val set used only for promotion, replays just
-judge+synth(+verify) over cached candidates for each prompt variant, verifies by
+judge+synth over cached candidates for each prompt variant, verifies by
 execution, and gates acceptance with a paired McNemar test. The LLM optimizer is
 pluggable (a stub proposer is used in tests).
 """
@@ -20,7 +20,6 @@ from typing import Protocol
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import PromptOverrides, SamplingConfig
 from fusionkit_core.judge import JudgeSynthesizer
-from fusionkit_core.prompts import VERIFIER_SYSTEM_PROMPT, build_verifier_prompt
 from fusionkit_core.types import ChatMessage, Trajectory
 from pydantic import BaseModel, Field
 
@@ -31,19 +30,17 @@ from fusionkit_evals.checkers import CheckerMode
 from fusionkit_evals.code_extract import extract_code
 from fusionkit_evals.sandbox import Sandbox
 
-TunableRole = str  # one of: "synthesizer_system", "judge_system", "verifier_system"
+TunableRole = str  # one of: "synthesizer_system", "judge_system"
 
 
 class PromptVariant(BaseModel):
     judge_system: str | None = None
     synthesizer_system: str | None = None
-    verifier_system: str | None = None
 
     def to_overrides(self) -> PromptOverrides:
         return PromptOverrides(
             judge_system=self.judge_system,
             synthesizer_system=self.synthesizer_system,
-            verifier_system=self.verifier_system,
         )
 
     def with_role(self, role: TunableRole, text: str) -> PromptVariant:
@@ -153,7 +150,6 @@ class TunerRuntime:
         synth_sampling: SamplingConfig,
         checker_mode: CheckerMode = "exact",
         test_timeout_s: float = 8.0,
-        verify: bool = False,
         concurrency: int = 4,
     ) -> None:
         self.clients = dict(clients)
@@ -166,7 +162,6 @@ class TunerRuntime:
         self.synth_sampling = synth_sampling
         self.checker_mode: CheckerMode = checker_mode
         self.test_timeout_s = test_timeout_s
-        self.verify = verify
         self.semaphore = asyncio.Semaphore(max(1, concurrency))
 
     def _sampling_hash(self) -> str:
@@ -177,7 +172,6 @@ class TunerRuntime:
             "synth_id": self.synth_id,
             "checker": self.checker_mode,
             "timeout": self.test_timeout_s,
-            "verify": self.verify,
         }
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
@@ -209,8 +203,6 @@ async def replay_task(
         synthesis_sampling=runtime.synth_sampling,
     )
     answer = result.final_output
-    if runtime.verify:
-        answer = await _verify_answer(runtime, task, candidates, variant, answer)
     code = extract_code(answer).code
     run = await asyncio.to_thread(
         verify_solution,
@@ -221,29 +213,6 @@ async def replay_task(
         checker_mode=runtime.checker_mode,
     )
     return PerTaskResult(passed=run.passed, fused_output=answer[:4000])
-
-
-async def _verify_answer(
-    runtime: TunerRuntime,
-    task: BankTask,
-    candidates: Sequence[Trajectory],
-    variant: PromptVariant,
-    answer: str,
-) -> str:
-    response = await runtime.clients[runtime.judge_id].chat(
-        [
-            ChatMessage(
-                role="system",
-                content=variant.verifier_system or VERIFIER_SYSTEM_PROMPT,
-            ),
-            ChatMessage(
-                role="user",
-                content=build_verifier_prompt(task.prompt, answer, candidates),
-            ),
-        ],
-        runtime.judge_sampling.model_copy(update={"temperature": 0.0}),
-    )
-    return response.content
 
 
 async def evaluate_variant(

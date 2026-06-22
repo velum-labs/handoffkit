@@ -51,7 +51,6 @@ class FusionOptions(BaseModel):
     mode: FusionMode | None = None
     panel_models: list[str] | None = None
     sample_count: int | None = Field(default=None, ge=1)
-    verify: bool = False
     tool_execution: FusionToolExecutionOptions = Field(
         default_factory=FusionToolExecutionOptions
     )
@@ -512,7 +511,6 @@ def _fusion_request_to_run_request(
         ],
         "sampling": sampling.model_dump(mode="json"),
         "sample_count": request.fusion.sample_count,
-        "verify": request.fusion.verify,
         "requested_models": request.fusion.panel_models,
         "tool_policy": _tool_policy_from_options(request.fusion.tool_execution),
     }

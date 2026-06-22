@@ -232,39 +232,6 @@ class FusionRunManager:
                 analysis = synthesis.analysis
                 synthesis_record = synthesis.record
 
-            verification_artifact: ContractArtifactRef | None = None
-            if request.verify:
-                self._append_state(summary, "verifying")
-                answer = await self.engine._verify(
-                    _runtime_messages(request.messages),
-                    answer,
-                    trajectories,
-                )
-                if synthesis_record is not None:
-                    synthesis_record = synthesis_record.model_copy(
-                        update={
-                            "final_output": answer,
-                            "metrics": {
-                                **(synthesis_record.metrics or {}),
-                                "repair_attempted": True,
-                                "repair_rounds": 1,
-                                "repair_reason": "verify_requested",
-                            },
-                        }
-                    )
-                verification_artifact = self.artifacts.write_text(
-                    run_id,
-                    make_id("artifact_verification"),
-                    "metrics",
-                    answer,
-                )
-                self._append_artifact_event(
-                    run_id,
-                    summary.trace_id,
-                    "verifying",
-                    verification_artifact,
-                )
-
             final_artifact = self.artifacts.write_text(
                 run_id,
                 make_id("artifact_final"),
@@ -273,8 +240,6 @@ class FusionRunManager:
             )
             self._append_artifact_event(run_id, summary.trace_id, "synthesizing", final_artifact)
             artifacts = [*trajectory_artifacts, final_artifact]
-            if verification_artifact is not None:
-                artifacts.append(verification_artifact)
             if synthesis_record is not None:
                 synthesis_record = synthesis_record.model_copy(
                     update={

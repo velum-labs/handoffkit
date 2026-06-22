@@ -91,7 +91,7 @@ def test_prompt_overrides_parsed_from_config_mapping() -> None:
     assert config.prompts.judge_system == "CUSTOM JUDGE"
     assert config.prompts.synthesizer_system == "CUSTOM SYNTH"
     # Unset fields stay None so the built-in default is used.
-    assert config.prompts.verifier_system is None
+    assert config.prompts.panel_system is None
 
 
 @pytest.mark.asyncio
@@ -195,7 +195,6 @@ def test_system_prompt_defaults_cover_every_override_id() -> None:
         "judge",
         "synthesizer",
         "trajectory-step",
-        "verifier",
         "panel",
     }
     assert SYSTEM_PROMPT_DEFAULTS["judge"] == JUDGE_SYSTEM_PROMPT

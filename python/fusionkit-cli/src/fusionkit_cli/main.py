@@ -414,7 +414,6 @@ def public_bench_baselines(
 _ROLE_PROMPT_FILE = {
     "judge_system": "judge.md",
     "synthesizer_system": "synthesizer.md",
-    "verifier_system": "verifier.md",
 }
 
 
@@ -436,7 +435,6 @@ def tune_prompts(
     patience: Annotated[int, typer.Option("--patience", min=1)] = 3,
     val_fraction: Annotated[float, typer.Option("--val-fraction", min=0.1, max=0.9)] = 0.4,
     seed: Annotated[int, typer.Option("--seed")] = 0,
-    verify: Annotated[bool, typer.Option("--verify/--no-verify")] = False,
     test_timeout_s: Annotated[float, typer.Option("--test-timeout-s", min=1.0)] = 8.0,
     concurrency: Annotated[int, typer.Option("--concurrency", min=1)] = 4,
     prompts_out: Annotated[Path, typer.Option("--prompts-out")] = Path(".fusionkit/prompts"),
@@ -444,7 +442,7 @@ def tune_prompts(
     report: Annotated[Path | None, typer.Option("--report", "-r")] = None,
     ledger: Annotated[Path | None, typer.Option("--ledger")] = None,
 ) -> None:
-    """Automated LLM-driven tuning of judge/synth/verifier prompts over a frozen bank."""
+    """Automated LLM-driven tuning of judge/synth prompts over a frozen bank."""
 
     if role not in _ROLE_PROMPT_FILE:
         raise typer.BadParameter(f"role must be one of {sorted(_ROLE_PROMPT_FILE)}")
@@ -506,7 +504,6 @@ def tune_prompts(
         judge_sampling=fusion_config.sampling.model_copy(update={"temperature": 0.0}),
         synth_sampling=fusion_config.sampling,
         test_timeout_s=test_timeout_s,
-        verify=verify,
         concurrency=concurrency,
     )
     proposer = LLMProposer(
