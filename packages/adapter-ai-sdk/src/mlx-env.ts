@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -10,6 +10,8 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
+
+import { MLX_HELPER_PY } from "./mlx-helper-source.js";
 
 /**
  * Warrant-owned MLX environment.
@@ -89,6 +91,37 @@ export type SpawnSpec = {
   /** Append server output here (inside the owned dir). */
   logFile?: string;
 };
+
+/** A locally cached MLX model, as discovered in the owned HF cache. */
+export type LocalModelInfo = {
+  /** Hugging Face repo id (e.g. mlx-community/Qwen3-1.7B-4bit). */
+  repo: string;
+  /** Bytes the repo occupies on disk. */
+  sizeBytes: number;
+  /** Number of files in the cached snapshot. */
+  files: number;
+  /** Unix seconds the repo was last modified, when known. */
+  lastModified?: number;
+};
+
+/** Byte-level progress for an in-flight model download. */
+export type DownloadProgress = {
+  /** Bytes downloaded so far across all in-flight files. */
+  downloaded: number;
+  /** Total bytes when known (absent => indeterminate, e.g. Xet transfers). */
+  total?: number;
+  /** The most recently started file, when reported. */
+  file?: string;
+};
+
+/**
+ * Provisioning progress. Emitted by `ensureProvisioned({ onEvent })` so a live
+ * UI can show the venv/install/verify phases and a tail of toolchain output.
+ */
+export type ProvisionEvent =
+  | { type: "phase"; phase: "venv" | "install" | "verify"; label: string }
+  | { type: "log"; line: string }
+  | { type: "done" };
 
 /** A capability the current host cannot satisfy (wrong OS, no Python). */
 export class MlxCapabilityError extends Error {
@@ -174,6 +207,49 @@ function run(
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? ""
   };
+}
+
+/**
+ * Run a command, streaming combined stdout/stderr to `onLine` (split on
+ * newlines) as it arrives. Resolves with the exit status and captured output.
+ * Used for the provisioning toolchain so a live UI can show a log tail; the
+ * sync `run` above stays for fast probes and the offline install hook.
+ */
+function runStreaming(
+  cmd: string,
+  args: string[],
+  extraEnv: Record<string, string> | undefined,
+  onLine: (line: string) => void
+): Promise<RunResult> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, {
+      ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {})
+    });
+    let stdout = "";
+    let stderr = "";
+    let pending = "";
+    const pump = (chunk: Buffer, sink: "out" | "err"): void => {
+      const text = chunk.toString("utf8");
+      if (sink === "out") stdout += text;
+      else stderr += text;
+      pending += text;
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trimEnd();
+        if (trimmed.length > 0) onLine(trimmed);
+      }
+    };
+    child.stdout?.on("data", (chunk: Buffer) => pump(chunk, "out"));
+    child.stderr?.on("data", (chunk: Buffer) => pump(chunk, "err"));
+    child.on("error", (error) => {
+      resolve({ status: 127, stdout, stderr: stderr + error.message });
+    });
+    child.on("close", (code) => {
+      if (pending.trim().length > 0) onLine(pending.trim());
+      resolve({ status: code ?? 1, stdout, stderr });
+    });
+  });
 }
 
 function directorySizeBytes(dir: string): number {
@@ -397,21 +473,25 @@ export class MlxEnv {
    * Idempotently provision the env. A matching manifest plus a passing
    * import check is a no-op; anything else (fresh host, pin bump, broken
    * venv) provisions in place. Concurrent callers share one provision run.
+   *
+   * Pass `onEvent` to observe phases (venv/install/verify) and a tail of the
+   * toolchain output for a live UI; omit it for the original silent behavior.
    */
-  ensureProvisioned(): Promise<MlxEnvManifest> {
+  ensureProvisioned(options: { onEvent?: (event: ProvisionEvent) => void } = {}): Promise<MlxEnvManifest> {
     const existing = this.readManifest();
     if (existing && this.verify()) return Promise.resolve(existing);
     if (!this.provisionPromise) {
-      this.provisionPromise = this.provision().finally(() => {
+      this.provisionPromise = this.provision(options.onEvent).finally(() => {
         this.provisionPromise = undefined;
       });
     }
     return this.provisionPromise;
   }
 
-  private async provision(): Promise<MlxEnvManifest> {
+  private async provision(onEvent?: (event: ProvisionEvent) => void): Promise<MlxEnvManifest> {
     this.assertPlatform();
     const toolchain = this.resolveToolchain();
+    const onLog = onEvent ? (line: string) => onEvent({ type: "log", line }) : undefined;
 
     mkdirSync(this.dir, { recursive: true });
     mkdirSync(this.hfCacheDir, { recursive: true });
@@ -422,14 +502,17 @@ export class MlxEnv {
     if (existsSync(this.venvDir)) {
       rmSync(this.venvDir, { recursive: true, force: true });
     }
-    this.createVenv(toolchain);
+    onEvent?.({ type: "phase", phase: "venv", label: "creating an isolated Python environment" });
+    await this.createVenv(toolchain, onLog);
 
     if (this.installHook) {
       this.installHook(this.venvPython, this.packageSpec, this.extraPackageSpecs);
     } else {
-      this.installPackages(toolchain);
+      onEvent?.({ type: "phase", phase: "install", label: `installing ${this.packageSpec}` });
+      await this.installPackages(toolchain, onLog);
     }
 
+    onEvent?.({ type: "phase", phase: "verify", label: "verifying the install" });
     if (!this.importWorks()) {
       const imports = [this.importName, ...this.extraImportNames].join(", ");
       throw new Error(
@@ -455,17 +538,30 @@ export class MlxEnv {
       createdAt: new Date().toISOString()
     };
     writeFileSync(this.manifestPath, JSON.stringify(manifest, null, 2));
+    onEvent?.({ type: "done" });
     return manifest;
   }
 
-  private createVenv(toolchain: Toolchain): void {
+  /** Run a toolchain step, streaming output to `onLog` when a UI is watching. */
+  private async runStep(
+    cmd: string,
+    args: string[],
+    extraEnv: Record<string, string> | undefined,
+    onLog: ((line: string) => void) | undefined
+  ): Promise<RunResult> {
+    if (onLog) return runStreaming(cmd, args, extraEnv, onLog);
+    return run(cmd, args, extraEnv);
+  }
+
+  private async createVenv(toolchain: Toolchain, onLog?: (line: string) => void): Promise<void> {
     if (toolchain.kind === "uv") {
       // uv resolves the pinned Python from the system or downloads a
       // managed CPython into the owned dir — no system-python requirement.
-      const result = run(
+      const result = await this.runStep(
         toolchain.bin,
         ["venv", "--python", this.pythonVersion, this.venvDir],
-        this.uvEnv
+        this.uvEnv,
+        onLog
       );
       if (result.status !== 0) {
         throw new MlxCapabilityError(
@@ -474,7 +570,7 @@ export class MlxEnv {
       }
       return;
     }
-    const result = run(toolchain.python, ["-m", "venv", this.venvDir]);
+    const result = await this.runStep(toolchain.python, ["-m", "venv", this.venvDir], undefined, onLog);
     if (result.status !== 0) {
       throw new MlxCapabilityError(
         `failed to create venv with ${toolchain.python} -m venv: ${result.stderr.trim() || result.stdout.trim()}`
@@ -482,23 +578,22 @@ export class MlxEnv {
     }
   }
 
-  private installPackages(toolchain: Toolchain): void {
+  private async installPackages(toolchain: Toolchain, onLog?: (line: string) => void): Promise<void> {
     const specs = [this.packageSpec, ...this.extraPackageSpecs];
     const result =
       toolchain.kind === "uv"
-        ? run(
+        ? await this.runStep(
             toolchain.bin,
             ["pip", "install", "--python", this.venvPython, ...specs],
-            this.uvEnv
+            this.uvEnv,
+            onLog
           )
-        : run(this.venvPython, [
-            "-m",
-            "pip",
-            "install",
-            "--no-input",
-            "--disable-pip-version-check",
-            ...specs
-          ]);
+        : await this.runStep(
+            this.venvPython,
+            ["-m", "pip", "install", "--no-input", "--disable-pip-version-check", ...specs],
+            undefined,
+            onLog
+          );
     if (result.status !== 0) {
       throw new Error(
         `installing ${specs.join(", ")} failed: ${result.stderr.trim().slice(-2000)}`
@@ -544,5 +639,164 @@ export class MlxEnv {
       cwd: this.dir,
       logFile: join(this.logsDir, "server.log")
     };
+  }
+
+  /** The model-ops helper path inside the owned dir (rewritten to stay in sync). */
+  private get helperPath(): string {
+    return join(this.dir, "mlx-helper.py");
+  }
+
+  /** Minimal, owned-cache environment for helper/server spawns. */
+  private helperEnv(): Record<string, string> {
+    return {
+      PATH: [dirname(this.venvPython), "/usr/bin", "/bin"].join(delimiter),
+      HOME: homedir(),
+      HF_HOME: this.hfCacheDir,
+      HF_HUB_DISABLE_TELEMETRY: "1",
+      VIRTUAL_ENV: this.venvDir
+    };
+  }
+
+  /** Materialize the embedded helper into the owned dir and return its path. */
+  private writeHelper(): string {
+    mkdirSync(this.dir, { recursive: true });
+    writeFileSync(this.helperPath, MLX_HELPER_PY);
+    return this.helperPath;
+  }
+
+  /**
+   * Run the helper, parsing each stdout line as JSON and forwarding it to
+   * `onEvent`. Resolves with the exit status; non-JSON lines are ignored
+   * (tqdm draws to stderr, so stdout stays pure NDJSON).
+   */
+  private runHelper(
+    args: string[],
+    onEvent: (event: Record<string, unknown>) => void,
+    signal?: AbortSignal
+  ): Promise<number> {
+    const helper = this.writeHelper();
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error("aborted"));
+        return;
+      }
+      const child = spawn(this.venvPython, [helper, ...args], { env: this.helperEnv() });
+      let pending = "";
+      const onAbort = (): void => {
+        child.kill("SIGTERM");
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      const handleLine = (line: string): void => {
+        const trimmed = line.trim();
+        if (trimmed.length === 0) return;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          return;
+        }
+        if (parsed !== null && typeof parsed === "object") {
+          onEvent(parsed as Record<string, unknown>);
+        }
+      };
+      child.stdout?.on("data", (chunk: Buffer) => {
+        pending += chunk.toString("utf8");
+        const lines = pending.split("\n");
+        pending = lines.pop() ?? "";
+        for (const line of lines) handleLine(line);
+      });
+      child.on("error", (error) => {
+        signal?.removeEventListener("abort", onAbort);
+        reject(error);
+      });
+      child.on("close", (code) => {
+        signal?.removeEventListener("abort", onAbort);
+        if (pending.length > 0) handleLine(pending);
+        if (signal?.aborted) {
+          reject(new Error("aborted"));
+          return;
+        }
+        resolve(code ?? 1);
+      });
+    });
+  }
+
+  /**
+   * Discover MLX models already in the owned HF cache. Returns [] when the env
+   * is not provisioned yet (the cache is then empty by construction). Reuses
+   * mlx-lm's pinned `huggingface_hub` via the owned interpreter.
+   */
+  async scanModels(): Promise<LocalModelInfo[]> {
+    if (!existsSync(this.venvPython)) return [];
+    const models: LocalModelInfo[] = [];
+    let errored: string | undefined;
+    await this.runHelper(["scan"], (event) => {
+      if (event.type === "model" && typeof event.repo === "string") {
+        models.push({
+          repo: event.repo,
+          sizeBytes: typeof event.sizeBytes === "number" ? event.sizeBytes : 0,
+          files: typeof event.files === "number" ? event.files : 0,
+          ...(typeof event.lastModified === "number" ? { lastModified: event.lastModified } : {})
+        });
+      } else if (event.type === "error" && typeof event.message === "string") {
+        errored = event.message;
+      }
+    });
+    // A broken/missing huggingface_hub is reported, not silently empty.
+    if (errored !== undefined && models.length === 0) return [];
+    return models.sort((a, b) => a.repo.localeCompare(b.repo));
+  }
+
+  /**
+   * Download a model's weights into the owned cache, provisioning the env first
+   * if needed. Progress is reported via `onProgress`; the download is resumable
+   * (HF skips files already on disk) and an aborted `signal` leaves resumable
+   * partials in place. Resolves to the on-disk snapshot path.
+   */
+  async downloadModel(
+    repo: string,
+    options: { onProgress?: (progress: DownloadProgress) => void; signal?: AbortSignal } = {}
+  ): Promise<string> {
+    await this.ensureProvisioned();
+    let path: string | undefined;
+    let errored: string | undefined;
+    let lastFile: string | undefined;
+    const code = await this.runHelper(
+      ["download", repo],
+      (event) => {
+        if (event.type === "file" && typeof event.name === "string") {
+          lastFile = event.name;
+        } else if (event.type === "progress" && typeof event.downloaded === "number") {
+          options.onProgress?.({
+            downloaded: event.downloaded,
+            ...(typeof event.total === "number" ? { total: event.total } : {}),
+            ...(lastFile !== undefined ? { file: lastFile } : {})
+          });
+        } else if (event.type === "download_done" && typeof event.path === "string") {
+          path = event.path;
+        } else if (event.type === "error" && typeof event.message === "string") {
+          errored = event.message;
+        }
+      },
+      options.signal
+    );
+    if (errored !== undefined) throw new Error(`download failed for ${repo}: ${errored}`);
+    if (code !== 0 || path === undefined) {
+      throw new Error(`download failed for ${repo} (exit ${code})`);
+    }
+    return path;
+  }
+
+  /**
+   * Remove a single model's weights from the owned HF cache (the standard
+   * `hub/models--org--name` directory under `HF_HOME`). Returns whether the
+   * model was present. The venv and other models are left untouched.
+   */
+  removeModel(repo: string): boolean {
+    const dirName = `models--${repo.replace(/\//g, "--")}`;
+    const target = join(this.hfCacheDir, "hub", dirName);
+    if (!existsSync(target)) return false;
+    rmSync(target, { recursive: true, force: true });
+    return true;
   }
 }

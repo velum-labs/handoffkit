@@ -12,6 +12,21 @@
 export type Backend = {
   /** Model id sent to the backend when a request omits one. */
   readonly defaultModel: string | undefined;
+  /**
+   * All model ids the backend advertises for discovery: the default model
+   * first, then any native passthrough models. When present, the gateway lists
+   * these in `/v1/models` (both OpenAI and Anthropic shapes) so they appear in
+   * the tool's picker. Absent means single-model (just `defaultModel`).
+   */
+  listModelIds?(): readonly string[];
+  /**
+   * Resolve a client-requested model id to the upstream id the backend should
+   * actually run. When absent the gateway falls back to `defaultModel` (the
+   * historical single-model behaviour). A multi-model backend returns the
+   * requested id when it recognises a native passthrough model so the gateway
+   * can route it to its real provider instead of fusing it.
+   */
+  resolveModel?(requested: string | undefined): string | undefined;
   /** POST <base>/chat/completions — supports streaming (SSE) upstream. */
   chat(body: unknown, signal?: AbortSignal, options?: BackendRequestOptions): Promise<Response>;
   /** GET <base>/models. */

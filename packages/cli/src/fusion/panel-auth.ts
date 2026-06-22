@@ -6,6 +6,8 @@
  * authenticates - a Claude Code / Codex subscription, an API key, or a local
  * model - and any of these can be mixed in one panel.
  */
+import { detectHost } from "./local-catalog.js";
+import type { HostInfo } from "./local-catalog.js";
 import { DEFAULT_CLAUDE_SUB_MODEL, detectCodexModel, detectSubscription } from "./subscriptions.js";
 import type { PanelModelSpec } from "./env.js";
 
@@ -69,7 +71,10 @@ export type AuthOption = { value: AuthChoice; label: string; hint: string };
  * login is detected), then the API-key providers, then local. Hints note login
  * expiry and whether each API key env is set.
  */
-export function buildAuthOptions(env: Record<string, string | undefined> = process.env): AuthOption[] {
+export function buildAuthOptions(
+  env: Record<string, string | undefined> = process.env,
+  host: HostInfo = detectHost()
+): AuthOption[] {
   const options: AuthOption[] = [];
 
   const claude = detectSubscription("claude-code");
@@ -99,6 +104,9 @@ export function buildAuthOptions(env: Record<string, string | undefined> = proce
     });
   }
 
-  options.push({ value: "local", label: "local MLX", hint: "Apple Silicon, no keys" });
+  const localHint = host.appleSilicon
+    ? `${Math.round(host.totalRamGB)}GB RAM, no keys`
+    : "Apple Silicon only — unavailable on this host";
+  options.push({ value: "local", label: "local MLX", hint: localHint });
   return options;
 }

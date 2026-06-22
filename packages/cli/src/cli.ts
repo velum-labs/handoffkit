@@ -9,6 +9,7 @@ import { registerDoctor } from "./commands/doctor.js";
 import { registerEnsemble } from "./commands/ensemble.js";
 import { registerFusion } from "./commands/fusion.js";
 import { registerLocal } from "./commands/local.js";
+import { registerModels } from "./commands/models.js";
 
 /**
  * Build the `fusionkit` command tree. `enablePositionalOptions` keeps the
@@ -42,6 +43,7 @@ export function buildProgram(): Command {
   registerEnsemble(program);
   registerLocal(program);
   registerFusion(program);
+  registerModels(program);
   registerDoctor(program);
 
   return program;

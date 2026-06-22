@@ -31,6 +31,7 @@ import type {
   FusionGateway,
   Gateway,
   PanelRunner,
+  PassthroughModel,
   WireTrajectory
 } from "@fusionkit/model-gateway";
 
@@ -315,10 +316,25 @@ export async function startFusionStepGateway(input: {
     }
   };
 
+  // Expose every panel model as a native passthrough alongside the fused model,
+  // so the tool's picker can switch to a vendor model (and back to fusion). Each
+  // routes to its `fusionkit serve` router endpoint, which already calls the
+  // real provider with the reused subscription/API credentials.
+  const passthrough: PassthroughModel[] =
+    config.modelEndpoints === undefined
+      ? []
+      : config.models.flatMap((model) => {
+          const endpointUrl = config.modelEndpoints?.[model.id];
+          return endpointUrl === undefined
+            ? []
+            : [{ modelId: model.model, endpointId: model.id, endpointUrl }];
+        });
+
   const backend = new FusionBackend({
     stepUrl,
     runPanels,
-    defaultModel
+    defaultModel,
+    passthrough
   });
   return await startGateway({
     backend,

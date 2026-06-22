@@ -7,6 +7,7 @@
  * catalog. Any failure (missing key, network/timeout, empty list) falls back to
  * the curated list, so onboarding always has something to pick.
  */
+import { LOCAL_CATALOG_REPOS } from "./local-catalog.js";
 import { defaultModelForAuthChoice } from "./panel-auth.js";
 import type { AuthChoice } from "./panel-auth.js";
 
@@ -36,11 +37,9 @@ const CURATED: Record<AuthChoice, string[]> = {
   codex: ["gpt-5.5", "gpt-5.5-codex", "gpt-5.3-codex", "gpt-5.1-codex"],
   openai: ["gpt-5.5", "gpt-5.1", "gpt-5", "o4-mini", "gpt-4.1", "gpt-4.1-mini"],
   google: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-  local: [
-    "mlx-community/Qwen3-1.7B-4bit",
-    "mlx-community/Llama-3.2-1B-Instruct-4bit",
-    "mlx-community/gemma-3-1b-it-4bit"
-  ]
+  // Local models come from the hardware-aware curated catalog; the interactive
+  // picker enriches these with download status + RAM fit (see fusion-init).
+  local: [...LOCAL_CATALOG_REPOS]
 };
 
 // OpenAI's /v1/models returns far more than chat models; drop the obvious

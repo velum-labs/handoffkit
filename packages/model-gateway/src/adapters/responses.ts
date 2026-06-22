@@ -491,7 +491,8 @@ export async function handleResponses(
   signal?: AbortSignal
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
-  const chat = responsesToChat(body, backend.defaultModel);
+  const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
+  const chat = responsesToChat(body, upstreamModel);
   const upstream = await backend.chat(chat, signal, { modelCallId });
 
   if (!upstream.ok) {

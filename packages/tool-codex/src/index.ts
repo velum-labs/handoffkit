@@ -86,4 +86,9 @@ export type {
   CodexResponsesProvider,
   CodexSandboxMode
 } from "./harness.js";
-export { codexLaunchConfigToml, launchCodex } from "./launch.js";
+export {
+  codexLaunchConfigToml,
+  codexModelCatalogJson,
+  launchCodex,
+  readCodexCatalogTemplate
+} from "./launch.js";

@@ -2,10 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "esModuleInterop": true
   },
   "include": ["src/**/*.ts"],
   "references": [
+    { "path": "../adapter-ai-sdk" },
     { "path": "../ensemble" },
     { "path": "../handoff" },
     { "path": "../model-gateway" },

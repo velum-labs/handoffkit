@@ -81,7 +81,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // Claude Code's discovery probe carries `anthropic-version` and expects
       // the Anthropic-shaped model list; everyone else gets the OpenAI shape.
       if (req.headers["anthropic-version"] !== undefined) {
-        await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel));
+        await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel, backend.listModelIds?.()));
         return;
       }
       await pipeUpstream(res, await backend.models());

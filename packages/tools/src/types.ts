@@ -28,6 +28,13 @@ export type ToolLaunchContext = {
   gatewayUrl: string;
   /** The model name/label the launched tool advertises in its own UI. */
   modelLabel: string;
+  /**
+   * Native panel model ids exposed alongside the fused model, so a tool that
+   * must enumerate models in its config (e.g. opencode) can list them in its
+   * picker. The gateway routes each to its real provider; the fused
+   * {@link modelLabel} stays the default. Empty in single-model/local launches.
+   */
+  nativeModels?: readonly string[];
   /** Arguments forwarded verbatim to the tool binary. */
   toolArgs: string[];
   /** The repository the tool runs in (defaults to the process cwd). */

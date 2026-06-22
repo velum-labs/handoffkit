@@ -352,6 +352,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@fusionkit/adapter-ai-sdk':
+        specifier: workspace:*
+        version: link:../adapter-ai-sdk
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
@@ -394,10 +397,16 @@ importers:
       commander:
         specifier: 14.0.3
         version: 14.0.3
+      figlet:
+        specifier: 1.11.0
+        version: 1.11.0
     devDependencies:
       '@fusionkit/testkit':
         specifier: workspace:*
         version: link:../testkit
+      '@types/figlet':
+        specifier: 1.7.0
+        version: 1.7.0
     optionalDependencies:
       portless:
         specifier: 0.14.0
@@ -853,6 +862,9 @@ packages:
   '@tokenizer/token@0.3.0':
     resolution: {integrity: sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A==}
 
+  '@types/figlet@1.7.0':
+    resolution: {integrity: sha512-KwrT7p/8Eo3Op/HBSIwGXOsTZKYiM9NpWRBJ5sVjWP/SmlS+oxxRvJht/FNAtliJvja44N3ul1yATgohnVBV0Q==}
+
   '@types/node@22.19.20':
     resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
 
@@ -998,6 +1010,11 @@ packages:
 
   fast-xml-parser@5.8.0:
     resolution: {integrity: sha512-6bIM7fsJxeo3uXv7OncQYsBAMPJ7V16Slahl/6M98C/i2q+vB1+4a0MtrvYwDFEUrwDSbAmeLDRXsOBwrL7yAg==}
+    hasBin: true
+
+  figlet@1.11.0:
+    resolution: {integrity: sha512-EEx3OS/l2bFqcUNN2NM9FPJp8vAMrgbCxsbl2hbcJNNxOEwVe3mEzrhan7TbJQViZa8mMqhihlbCaqD+LyYKTQ==}
+    engines: {node: '>= 17.0.0'}
     hasBin: true
 
   file-type@21.3.4:
@@ -1616,6 +1633,8 @@ snapshots:
 
   '@tokenizer/token@0.3.0': {}
 
+  '@types/figlet@1.7.0': {}
+
   '@types/node@22.19.20':
     dependencies:
       undici-types: 6.21.0
@@ -1773,6 +1792,10 @@ snapshots:
       path-expression-matcher: 1.5.0
       strnum: 2.4.0
       xml-naming: 0.1.0
+
+  figlet@1.11.0:
+    dependencies:
+      commander: 14.0.3
 
   file-type@21.3.4:
     dependencies:

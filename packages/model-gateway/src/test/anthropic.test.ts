@@ -4,8 +4,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 
 import {
+  anthropicModelsResponse,
   anthropicToChat,
   chatToAnthropicMessage,
+  claudeModelAlias,
   mapStopReason,
   openAiSseToAnthropic
 } from "../adapters/anthropic.js";
@@ -18,6 +20,29 @@ import { startGateway } from "../server.js";
  * Verifies request translation (system, tools, tool results), non-streaming
  * and streaming response shapes, count_tokens, and discovery.
  */
+
+test("anthropicModelsResponse aliases every model past Claude Code's claude/anthropic filter", async () => {
+  const res = anthropicModelsResponse("fusion-panel", [
+    "fusion-panel",
+    "claude-opus-4-8",
+    "gpt-5.5",
+    "mlx-community/Qwen3-1.7B-4bit"
+  ]);
+  const body = (await res.json()) as { data: Array<{ id: string; display_name: string }> };
+  // Every id begins with claude/anthropic so Claude Code lists them all...
+  assert.ok(body.data.every((model) => model.id.startsWith("claude") || model.id.startsWith("anthropic")));
+  // ...non-Anthropic ids are aliased, Anthropic-family ids pass through as-is.
+  assert.deepEqual(body.data.map((model) => model.id), [
+    "claude-fusion-panel",
+    "claude-opus-4-8",
+    "claude-gpt-5.5",
+    "claude-mlx-community/Qwen3-1.7B-4bit"
+  ]);
+  // The picker shows the real id via display_name.
+  const gpt = body.data.find((model) => model.id === "claude-gpt-5.5");
+  assert.equal(gpt?.display_name, "gpt-5.5");
+  assert.equal(claudeModelAlias("claude-opus-4-8"), "claude-opus-4-8");
+});
 
 type Mock = {
   url: string;

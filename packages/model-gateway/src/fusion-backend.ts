@@ -40,7 +40,25 @@ import {
   TRACE_ID_HEADER
 } from "@fusionkit/protocol";
 
+import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
+import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
+
+/**
+ * A native (non-fused) model the gateway also exposes in the tool's picker.
+ * Selecting it proxies the request to its real provider via the `fusionkit
+ * serve` router (which already holds the reused subscription/API credentials),
+ * rather than running the panel + judge. This is the "use the vendor model
+ * directly, fall back to fusion when rate-limited" path.
+ */
+export type PassthroughModel = {
+  /** Advertised model id the tool sees and selects (e.g. "gpt-5.5"). */
+  modelId: string;
+  /** Router endpoint id the request's `model` is rewritten to (e.g. "codex"). */
+  endpointId: string;
+  /** Router base URL (e.g. http://127.0.0.1:PORT) fronting the real provider. */
+  endpointUrl: string;
+};
 
 /** A candidate trajectory in the wire shape FusionKit's `trajectory:step` accepts. */
 export type WireTrajectory = {
@@ -100,6 +118,13 @@ export type FusionBackendOptions = {
   stepTimeoutMs?: number;
   /** Mint a trace id (injectable for tests). */
   mintTraceId?: () => string;
+  /**
+   * Native models exposed alongside the fused model. A request whose `model`
+   * matches one of these is proxied to its real provider (via the router)
+   * instead of being fused, so the user can switch to a vendor model — or back
+   * to fusion — from the tool's own picker.
+   */
+  passthrough?: readonly PassthroughModel[];
 };
 
 type Session = {
@@ -233,6 +258,7 @@ export class FusionBackend implements Backend {
   readonly #stepTimeoutMs: number;
   readonly #mintTraceId: () => string;
   readonly #sessions = new Map<string, Session>();
+  readonly #passthrough: readonly PassthroughModel[];
 
   constructor(options: FusionBackendOptions) {
     this.#stepUrl = options.stepUrl;
@@ -243,6 +269,100 @@ export class FusionBackend implements Backend {
     this.#panelTimeoutMs = options.panelTimeoutMs ?? DEFAULT_PANEL_TIMEOUT_MS;
     this.#stepTimeoutMs = options.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
     this.#mintTraceId = options.mintTraceId ?? newTraceId;
+    this.#passthrough = options.passthrough ?? [];
+  }
+
+  /**
+   * The native model (if any) a requested id selects — by advertised id, router
+   * endpoint id, or the `claude-`prefixed alias Claude Code's picker sends (see
+   * `claudeModelAlias`), so a vendor model chosen inside Claude routes correctly.
+   */
+  #passthroughFor(requested: string | undefined): PassthroughModel | undefined {
+    if (requested === undefined || requested.length === 0) return undefined;
+    const direct = this.#passthrough.find(
+      (entry) => entry.modelId === requested || entry.endpointId === requested
+    );
+    if (direct !== undefined) return direct;
+    if (requested.startsWith(CLAUDE_ALIAS_PREFIX)) {
+      const stripped = requested.slice(CLAUDE_ALIAS_PREFIX.length);
+      return this.#passthrough.find(
+        (entry) => entry.modelId === stripped || entry.endpointId === stripped
+      );
+    }
+    return undefined;
+  }
+
+  /** Discovery list: the fused model first, then each native passthrough model. */
+  listModelIds(): readonly string[] {
+    const fusion = this.defaultModel ?? "fusion-panel";
+    const ids = [fusion];
+    for (const entry of this.#passthrough) {
+      if (!ids.includes(entry.modelId)) ids.push(entry.modelId);
+    }
+    return ids;
+  }
+
+  /**
+   * Map a requested model to the upstream id the backend runs. A native model
+   * keeps its own id (so {@link chat} proxies it to the real provider); anything
+   * else — including the fused model and unrecognised ids — resolves to the
+   * fused default so the panel + judge handle it.
+   */
+  resolveModel(requested: string | undefined): string | undefined {
+    const native = this.#passthroughFor(requested);
+    if (native !== undefined) return native.modelId;
+    return this.defaultModel;
+  }
+
+  /**
+   * Proxy a chat request to a native model's real provider via the router,
+   * preserving streaming and tool-calling. Emits a trace marker so the call is
+   * visible on the dashboard like a fusion turn.
+   */
+  async #proxyNative(
+    target: PassthroughModel,
+    chat: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+    options: BackendRequestOptions
+  ): Promise<Response> {
+    const traceId = this.#mintTraceId();
+    const spanId = newSpanId();
+    const traceEnabled = getTraceEmitter().isEnabled();
+    if (traceEnabled) {
+      emitTrace({
+        component: "gateway",
+        event_type: "session.started",
+        traceId,
+        spanId,
+        payload: { dialect: "native-passthrough", model: target.modelId, endpoint_id: target.endpointId }
+      });
+    }
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (options.modelCallId) headers["x-velum-model-call-id"] = options.modelCallId;
+    // The router routes by endpoint id, so rewrite `model` to it; everything
+    // else (messages, tools, tool results, stream flag) passes through verbatim.
+    const body = JSON.stringify({ ...chat, model: target.endpointId });
+    const response = await fetch(joinPath(target.endpointUrl, "/v1/chat/completions"), {
+      method: "POST",
+      headers,
+      body,
+      ...(signal ? { signal } : {})
+    });
+    if (traceEnabled) {
+      emitTrace({
+        component: "gateway",
+        event_type: "session.finished",
+        traceId,
+        spanId,
+        payload: {
+          status: response.ok ? "succeeded" : "failed",
+          model: target.modelId,
+          endpoint_id: target.endpointId,
+          http_status: response.status
+        }
+      });
+    }
+    return response;
   }
 
   async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
@@ -253,6 +373,13 @@ export class FusionBackend implements Backend {
       tool_choice?: unknown;
       stream?: boolean;
     };
+    // Native model selected from the picker: proxy straight to its real provider
+    // (the fusion panel + judge are skipped). Falling back to fusion is just
+    // selecting the fused model again.
+    const native = this.#passthroughFor(chat.model);
+    if (native !== undefined) {
+      return this.#proxyNative(native, chat as Record<string, unknown>, signal, options);
+    }
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
     const sessionKey = this.#sessionKey(messages);
     const session = this.#ensureSession(sessionKey);
@@ -524,12 +651,16 @@ export class FusionBackend implements Backend {
   }
 
   models(): Promise<Response> {
-    const model = this.defaultModel ?? "fusion-panel";
+    const data = this.listModelIds().map((id) => ({
+      id,
+      object: "model",
+      owned_by: "fusion-gateway"
+    }));
     return Promise.resolve(
-      new Response(
-        JSON.stringify({ object: "list", data: [{ id: model, object: "model", owned_by: "fusion-gateway" }] }),
-        { status: 200, headers: { "content-type": "application/json" } }
-      )
+      new Response(JSON.stringify({ object: "list", data }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
     );
   }
 

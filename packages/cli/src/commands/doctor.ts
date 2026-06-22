@@ -12,8 +12,49 @@ import {
 import type { PanelModelSpec } from "../fusion-quickstart.js";
 import { loadFusionConfig, fusionConfigPath, FusionConfigError } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
+import { detectHost } from "../fusion/local-catalog.js";
+import { ownedMlxEnv } from "../fusion/mlx.js";
 import { hasBinary, INSTALL_HINTS } from "../shared/preflight.js";
-import { bold, brandHeader, cyan, dim, glyph, gray, green, red, yellow } from "../ui/theme.js";
+import { formatBytes } from "../ui/progress.js";
+import { bold, brandBanner, brandHeader, cyan, dim, glyph, gray, green, red, yellow } from "../ui/theme.js";
+
+/** Report on the local MLX runtime and any downloaded models (best-effort). */
+async function reportLocalMlx(): Promise<void> {
+  const host = detectHost();
+  console.log("");
+  console.log(bold("local MLX (Apple Silicon)"));
+  if (!host.appleSilicon) {
+    console.log(
+      `  ${gray(glyph.bullet())} ${dim(`not available on ${host.platform}/${host.arch} — cloud panel only`)}`
+    );
+    return;
+  }
+
+  const env = ownedMlxEnv();
+  const info = env.info();
+  if (info.provisioned) {
+    console.log(`  ${green(glyph.tick())} runtime provisioned ${dim(`(${info.manifest?.packageSpec ?? "mlx-lm"})`)}`);
+  } else {
+    console.log(
+      `  ${gray(glyph.bullet())} runtime not provisioned yet ${dim("(set up on first run or via `fusionkit models download`)")}`
+    );
+  }
+
+  let downloaded: { repo: string; sizeBytes: number }[] = [];
+  try {
+    downloaded = await env.scanModels();
+  } catch {
+    // best-effort
+  }
+  if (downloaded.length === 0) {
+    console.log(`  ${gray(glyph.bullet())} ${dim("no models downloaded — run `fusionkit models` to browse")}`);
+  } else {
+    for (const model of downloaded) {
+      console.log(`  ${green(glyph.tick())} ${model.repo} ${dim(formatBytes(model.sizeBytes))}`);
+    }
+  }
+  console.log(`  ${dim(`${Math.round(host.totalRamGB)}GB RAM · cache ${env.dir} · ${formatBytes(info.diskBytes)} on disk`)}`);
+}
 
 type Check = { label: string; ok: boolean; detail?: string; hint?: string };
 
@@ -30,11 +71,11 @@ function keyPresent(name: string): boolean {
 }
 
 /** `fusionkit doctor` — a proactive environment checklist with fix hints. */
-function runDoctor(): number {
+async function runDoctor(): Promise<number> {
   // Match runtime: a project .env makes provider keys available without export.
   loadEnvFileInto(join(process.cwd(), ".env"), process.env);
 
-  console.log(`\n${brandHeader("environment check")}\n`);
+  console.log(`\n${brandBanner("environment check")}\n`);
 
   const runner = hasBinary("uvx") || hasBinary("uv");
   const checks: Check[] = [];
@@ -76,6 +117,8 @@ function runDoctor(): number {
       `  ${line({ label: name, ok, detail: ok ? "set" : "not set", ...(ok ? {} : { hint: `export ${name}=... (or add it to .env)` })})}`
     );
   }
+
+  await reportLocalMlx();
 
   // Config status, if any.
   if (repoRoot !== undefined) {
@@ -163,8 +206,8 @@ export function registerDoctor(program: Command): void {
   program
     .command("doctor")
     .description("check that prerequisites (uv, agents, keys, git) are ready")
-    .action(() => {
-      process.exit(runDoctor());
+    .action(async () => {
+      process.exit(await runDoctor());
     });
 
   program

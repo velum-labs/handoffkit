@@ -33,6 +33,7 @@
     "provenance": true
   },
   "dependencies": {
+    "@fusionkit/adapter-ai-sdk": "workspace:*",
     "@fusionkit/ensemble": "workspace:*",
     "@fusionkit/handoff": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
@@ -46,12 +47,14 @@
     "@fusionkit/tool-opencode": "workspace:*",
     "@fusionkit/tools": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
-    "commander": "14.0.3"
+    "commander": "14.0.3",
+    "figlet": "1.11.0"
   },
   "optionalDependencies": {
     "portless": "0.14.0"
   },
   "devDependencies": {
-    "@fusionkit/testkit": "workspace:*"
+    "@fusionkit/testkit": "workspace:*",
+    "@types/figlet": "1.7.0"
   }
 }

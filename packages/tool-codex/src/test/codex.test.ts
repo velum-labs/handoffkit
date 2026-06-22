@@ -9,7 +9,13 @@ import { test } from "node:test";
 import { createMockHarness, ensemble } from "@fusionkit/ensemble";
 import type { EnsembleDescriptor } from "@fusionkit/ensemble";
 
-import { codexConfigToml, codexHarness, defaultCodexRunner } from "../index.js";
+import {
+  codexConfigToml,
+  codexHarness,
+  codexLaunchConfigToml,
+  codexModelCatalogJson,
+  defaultCodexRunner
+} from "../index.js";
 import type { CodexExecRunner } from "../index.js";
 
 function tempOutputRoot(): { outputRoot: string; cleanup: () => void } {
@@ -122,6 +128,59 @@ test("codexConfigToml declares a Responses provider without requiring auth", () 
   assert.ok(toml.includes('base_url = "http://127.0.0.1:9000/v1"'));
   assert.ok(toml.includes('wire_api = "responses"'));
   assert.ok(toml.includes("requires_openai_auth = false"));
+});
+
+test("codexLaunchConfigToml pins fusion as default and adds a profile per native model", () => {
+  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", [
+    "gpt-5.5",
+    "mlx-community/Qwen3-1.7B-4bit"
+  ]);
+  // Default model + provider is fusion.
+  assert.ok(toml.includes('model = "fusion-panel"'));
+  assert.ok(toml.includes("[model_providers.fusionkit-local]"));
+  // Each model is a profile; fusion first (bare key), then the natives.
+  assert.ok(toml.includes("[profiles.fusion-panel]"));
+  // Model ids with non-bare-key characters (a dot or a slash) are quoted keys.
+  assert.ok(toml.includes('[profiles."gpt-5.5"]'));
+  assert.ok(toml.includes('[profiles."mlx-community/Qwen3-1.7B-4bit"]'));
+  // No catalog is wired unless a path is passed.
+  assert.ok(!toml.includes("model_catalog_json"));
+});
+
+test("codexLaunchConfigToml wires model_catalog_json when a catalog path is given", () => {
+  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", ["gpt-5.5"], "/tmp/cat.json");
+  assert.ok(toml.includes('model_catalog_json = "/tmp/cat.json"'));
+});
+
+test("codexModelCatalogJson clones the installed template and overrides identity per model", () => {
+  // A stand-in for an entry from ~/.codex/models_cache.json (real schema varies
+  // by Codex version; we only override identity fields and keep the rest).
+  const template = {
+    slug: "gpt-5.5",
+    display_name: "GPT-5.5",
+    description: "stock",
+    default_reasoning_level: "medium",
+    supported_reasoning_levels: [{ effort: "medium", description: "Medium" }],
+    shell_type: "shell_command",
+    visibility: "list",
+    supported_in_api: true,
+    priority: 0,
+    context_window: 272000
+  };
+  const catalog = JSON.parse(codexModelCatalogJson("fusion-panel", ["gpt-5.5", "claude-opus-4-8"], template)) as {
+    models: Array<Record<string, unknown>>;
+  };
+  assert.deepEqual(
+    catalog.models.map((entry) => entry.slug),
+    ["fusion-panel", "gpt-5.5", "claude-opus-4-8"]
+  );
+  // Fusion is first (priority 0 = default-ish); identity overridden, schema kept.
+  assert.equal(catalog.models[0]?.priority, 0);
+  assert.equal(catalog.models[0]?.display_name, "fusion-panel (fusion)");
+  // Version-specific schema fields from the template survive untouched.
+  assert.ok(catalog.models.every((entry) => entry.context_window === 272000));
+  assert.ok(catalog.models.every((entry) => entry.visibility === "list"));
+  assert.ok(catalog.models.every((entry) => Array.isArray(entry.supported_reasoning_levels)));
 });
 
 test("codex adapter skips clearly when credentials are absent", async () => {

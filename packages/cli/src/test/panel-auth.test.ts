@@ -106,6 +106,21 @@ test("defaultMemberId derives the base from the choice and unique-ifies", () => 
   assert.equal(defaultMemberId("claude-code", taken), "claude-code");
 });
 
+test("buildAuthOptions local hint reflects the host", () => {
+  process.env.HOME = freshHome();
+  const apple = buildAuthOptions(
+    {},
+    { platform: "darwin", arch: "arm64", totalRamGB: 32, appleSilicon: true }
+  ).find((option) => option.value === "local");
+  assert.match(apple?.hint ?? "", /32GB RAM/);
+
+  const other = buildAuthOptions(
+    {},
+    { platform: "linux", arch: "x64", totalRamGB: 64, appleSilicon: false }
+  ).find((option) => option.value === "local");
+  assert.match(other?.hint ?? "", /Apple Silicon only/);
+});
+
 test("buildAuthOptions includes codex only when a login is detected", () => {
   const home = freshHome();
   process.env.HOME = home;

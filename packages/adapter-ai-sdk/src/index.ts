@@ -45,6 +45,7 @@ export type {
   WorktreeAgentResult
 } from "./worktree-agent.js";
 export { defaultMlxDir, MlxCapabilityError, MlxEnv } from "./mlx-env.js";
+export type { DownloadProgress, LocalModelInfo, ProvisionEvent } from "./mlx-env.js";
 export { managedModelServer, mlxServer } from "./managed-server.js";
 export type {
   ManagedModelServerOptions,

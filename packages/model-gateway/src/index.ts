@@ -23,6 +23,7 @@ export type {
   FusionBackendOptions,
   PanelRunInput,
   PanelRunner,
+  PassthroughModel,
   WireTrajectory
 } from "./fusion-backend.js";
 export { MlxBackend } from "./mlx-backend.js";

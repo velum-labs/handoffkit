@@ -489,7 +489,8 @@ export async function handleAnthropicMessages(
   signal?: AbortSignal
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
-  const chat = anthropicToChat(body, backend.defaultModel);
+  const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
+  const chat = anthropicToChat(body, upstreamModel);
   const upstream = await backend.chat(chat, signal, { modelCallId });
 
   if (!upstream.ok) {
@@ -517,27 +518,58 @@ export function handleCountTokens(body: AnthropicRequest): Response {
   return jsonResponse(200, { input_tokens: countTokensEstimate(body) });
 }
 
+/** Claude Code only lists models whose id begins with `claude` or `anthropic`. */
+function isAnthropicFamilyId(id: string): boolean {
+  return id.startsWith("claude") || id.startsWith("anthropic");
+}
+
+/** The `claude-` prefix used to alias non-Anthropic models past Claude's filter. */
+export const CLAUDE_ALIAS_PREFIX = "claude-";
+
 /**
- * Anthropic-shaped `/v1/models` discovery response. Claude Code only adds
- * models whose id begins with `claude` or `anthropic`, so the local model is
- * surfaced under a `claude`-prefixed id with the real model id as its
- * display name.
+ * The id a model is advertised under in Claude Code's `/model` picker. Claude
+ * only lists ids beginning with `claude`/`anthropic`, so non-Anthropic models
+ * are aliased with a `claude-` prefix; the gateway maps the alias back when
+ * routing (see `resolveAlias`), and the picker shows the real id via
+ * `display_name`. This is the claude-code-router trick: the `model` field is an
+ * identifier we control end-to-end, so any model can be made selectable.
  */
-export function anthropicModelsResponse(backendModel: string | undefined): Response {
-  const id = "claude-warrant-local";
+export function claudeModelAlias(id: string): string {
+  return isAnthropicFamilyId(id) ? id : `${CLAUDE_ALIAS_PREFIX}${id}`;
+}
+
+/**
+ * Anthropic-shaped `/v1/models` discovery response. Every advertised model is
+ * listed so it appears in Claude Code's `/model` picker: Anthropic-family ids
+ * as-is, others under a `claude-`prefixed alias with the real id as
+ * `display_name`. `modelIds` is the full advertised set (fused model first);
+ * when absent we fall back to the single backend default.
+ */
+export function anthropicModelsResponse(
+  backendModel: string | undefined,
+  modelIds?: readonly string[]
+): Response {
+  const source =
+    modelIds !== undefined && modelIds.length > 0
+      ? modelIds
+      : backendModel !== undefined
+        ? [backendModel]
+        : [];
+  const seen = new Set<string>();
+  const models: Array<{ type: "model"; id: string; display_name: string; created_at: string }> = [];
+  for (const realId of source) {
+    const id = claudeModelAlias(realId);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    models.push({ type: "model", id, display_name: realId, created_at: new Date(0).toISOString() });
+  }
+  const ids = models.map((model) => model.id);
   return new Response(
     JSON.stringify({
-      data: [
-        {
-          type: "model",
-          id,
-          display_name: backendModel ?? "warrant local model",
-          created_at: new Date(0).toISOString()
-        }
-      ],
+      data: models,
       has_more: false,
-      first_id: id,
-      last_id: id
+      first_id: ids[0],
+      last_id: ids[ids.length - 1]
     }),
     { status: 200, headers: { "content-type": "application/json" } }
   );

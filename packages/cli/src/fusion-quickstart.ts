@@ -30,7 +30,7 @@ import { runPreflight } from "./shared/preflight.js";
 import { createBootView } from "./ui/boot.js";
 import { confirm, select } from "./ui/prompt.js";
 import { canPromptInteractively, isInteractive, uiStream } from "./ui/runtime.js";
-import { bold, brandHeader, dim, glyph, gray, green } from "./ui/theme.js";
+import { bold, brandBanner, dim, glyph, gray, green } from "./ui/theme.js";
 
 import {
   DEFAULT_CLOUD_PANEL,
@@ -111,7 +111,7 @@ export async function runFusion(
   // plain line-log path so their output is deterministic).
   const useBootView = options.log === undefined && isInteractive();
   if (useBootView) {
-    uiStream().write(`\n${brandHeader()}\n`);
+    uiStream().write(`\n${brandBanner()}\n`);
     uiStream().write(
       `${dim("panel:")} ${models.map((model) => model.id).join(", ")}   ` +
         `${dim("judge:")} ${judgeLabel}   ${dim("repo:")} ${repo}\n\n`
@@ -288,6 +288,7 @@ export async function runFusion(
       mode: "fusion",
       gatewayUrl: stack.fusionUrl,
       modelLabel: FUSION_MODEL_LABEL,
+      nativeModels: models.map((spec) => spec.model),
       toolArgs,
       repo,
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),

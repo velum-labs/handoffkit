@@ -5,8 +5,21 @@ import { join } from "node:path";
 import { LOCAL_MODEL_LABEL, spawnTool } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
-/** opencode config registering the gateway as an OpenAI-compatible provider. */
-export function opencodeConfig(gatewayUrl: string, model: string): Record<string, unknown> {
+/**
+ * opencode config registering the gateway as an OpenAI-compatible provider.
+ * The fused model is listed first (the default) followed by each native panel
+ * model, so opencode's picker offers both — the gateway routes a native pick to
+ * its real provider and a fused pick to the panel + judge.
+ */
+export function opencodeConfig(
+  gatewayUrl: string,
+  model: string,
+  nativeModels: readonly string[] = []
+): Record<string, unknown> {
+  const models: Record<string, { name: string }> = { [model]: { name: model } };
+  for (const native of nativeModels) {
+    if (native !== model) models[native] = { name: native };
+  }
   return {
     $schema: "https://opencode.ai/config.json",
     provider: {
@@ -14,7 +27,7 @@ export function opencodeConfig(gatewayUrl: string, model: string): Record<string
         npm: "@ai-sdk/openai-compatible",
         name: "FusionKit local",
         options: { baseURL: `${gatewayUrl}/v1` },
-        models: { [model]: { name: model } }
+        models
       }
     }
   };
@@ -30,7 +43,10 @@ export async function launchOpencode(ctx: ToolLaunchContext): Promise<number> {
   const dir = mkdtempSync(join(tmpdir(), "fusionkit-opencode-"));
   ctx.registerDisposer(() => rmSync(dir, { recursive: true, force: true }));
   const configPath = join(dir, "opencode.json");
-  writeFileSync(configPath, JSON.stringify(opencodeConfig(ctx.gatewayUrl, ctx.modelLabel), null, 2));
+  writeFileSync(
+    configPath,
+    JSON.stringify(opencodeConfig(ctx.gatewayUrl, ctx.modelLabel, ctx.nativeModels ?? []), null, 2)
+  );
   const args = ctx.toolArgs.includes("--model")
     ? ctx.toolArgs
     : ["--model", opencodeModelArg(ctx.modelLabel), ...ctx.toolArgs];
