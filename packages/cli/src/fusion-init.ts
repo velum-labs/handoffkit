@@ -23,6 +23,8 @@ import {
   specForAuthChoice
 } from "./fusion/panel-auth.js";
 import type { AuthChoice } from "./fusion/panel-auth.js";
+import { listModelsForAuth } from "./fusion/model-catalog.js";
+import type { ModelListResult } from "./fusion/model-catalog.js";
 import { confirm, done, note, select, text } from "./ui/prompt.js";
 import { canPromptInteractively, uiStream } from "./ui/runtime.js";
 import { bold, brandHeader, cyan, dim, red } from "./ui/theme.js";
@@ -43,6 +45,51 @@ function isAllLocal(panel: PanelModelSpec[]): boolean {
   return panel.length > 0 && panel.every((spec) => (spec.provider ?? "mlx") === "mlx" && spec.auth === undefined);
 }
 
+const CUSTOM_MODEL = "__custom__";
+
+/** Env var that unlocks live discovery for an API-key auth choice (for hinting). */
+const LIVE_KEY_ENV: Partial<Record<AuthChoice, string>> = {
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+  google: "GEMINI_API_KEY"
+};
+
+/**
+ * Offer a model picker for an auth choice: a live list from the provider when a
+ * key is present, curated otherwise, plus an "other" custom entry. Results are
+ * cached per choice for the session so repeat members do not refetch.
+ */
+async function pickModel(
+  choice: AuthChoice,
+  cache: Map<AuthChoice, ModelListResult>
+): Promise<string> {
+  let result = cache.get(choice);
+  if (result === undefined) {
+    out.write(dim("  fetching available models...\n"));
+    result = await listModelsForAuth(choice, { env: process.env });
+    cache.set(choice, result);
+  }
+  const keyEnv = LIVE_KEY_ENV[choice];
+  const sourceNote =
+    result.source === "live"
+      ? `${choice} live`
+      : keyEnv !== undefined
+        ? `curated — set ${keyEnv} for the live list`
+        : "curated";
+  const chosen = await select<string>({
+    message: `Model (${sourceNote})`,
+    options: [
+      ...result.models.map((model) => ({ value: model, label: model })),
+      { value: CUSTOM_MODEL, label: "other (type a model name)" }
+    ],
+    defaultIndex: 0
+  });
+  if (chosen === CUSTOM_MODEL) {
+    return text({ message: "Model name", defaultValue: defaultModelForAuthChoice(choice) });
+  }
+  return chosen;
+}
+
 /**
  * Build the panel member-by-member. Each member picks a model and, independently,
  * how to authenticate it (subscription / API key / local) - so one panel can
@@ -57,6 +104,7 @@ async function buildPanel(): Promise<PanelModelSpec[]> {
     dim("Build your panel — add one or more models, choosing how each one authenticates.\n")
   );
   const authOptions = buildAuthOptions();
+  const modelCache = new Map<AuthChoice, ModelListResult>();
   const specs: PanelModelSpec[] = [];
   for (let index = 0; index < 16; index++) {
     const id = await text({ message: `Model ${index + 1} id`, defaultValue: `m${index + 1}` });
@@ -65,10 +113,7 @@ async function buildPanel(): Promise<PanelModelSpec[]> {
       options: authOptions,
       defaultIndex: 0
     });
-    const model = await text({
-      message: "Model name",
-      defaultValue: defaultModelForAuthChoice(choice)
-    });
+    const model = await pickModel(choice, modelCache);
     specs.push(specForAuthChoice(choice, id, model));
     const more = await confirm({ message: "Add another model?", defaultValue: index === 0 });
     if (!more) break;
