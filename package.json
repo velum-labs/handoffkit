@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "22.19.20",
-    "@velum-labs/model-fusion-protocol": "0.1.1",
+    "@velum-labs/model-fusion-protocol": "0.2.0",
     "typescript": "5.9.3"
   },
   "pnpm": {

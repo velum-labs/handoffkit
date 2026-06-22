@@ -158,8 +158,11 @@ const protocolPackage = JSON.parse(readFileSync(protocolPackageJsonPath, "utf8")
 const protocolPackageManifest = JSON.parse(readFileSync(protocolPackageManifestPath, "utf8"));
 const protocolPackageOpenApi = JSON.parse(readFileSync(protocolPackageOpenApiPath, "utf8"));
 
-if (rootPackage.devDependencies?.[modelFusionTypescriptPackageName] !== "0.1.1") {
-  fail(`${rootPackagePath}: devDependency ${modelFusionTypescriptPackageName} must be pinned to 0.1.1`);
+const modelFusionPin = rootPackage.devDependencies?.[modelFusionTypescriptPackageName];
+if (typeof modelFusionPin !== "string" || !/^\d+\.\d+\.\d+$/.test(modelFusionPin)) {
+  fail(
+    `${rootPackagePath}: devDependency ${modelFusionTypescriptPackageName} must be pinned to an exact version`
+  );
 }
 if (protocolPackage.name !== modelFusionTypescriptPackageName) {
   fail(`${protocolPackageJsonPath}: package name must be ${modelFusionTypescriptPackageName}`);

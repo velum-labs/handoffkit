@@ -318,7 +318,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@ai-sdk/tui", "1.0.0-canary.6"],
   ["@types/node", "22.19.20"],
   ["@velum-labs/cursorkit", "0.1.2"],
-  ["@velum-labs/model-fusion-protocol", "0.1.1"],
+  ["@velum-labs/model-fusion-protocol", "0.2.0"],
   ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
   ["commander", "14.0.3"],
