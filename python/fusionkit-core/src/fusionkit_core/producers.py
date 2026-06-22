@@ -272,7 +272,11 @@ class AgentTrajectoryProducer:
                 final = response.content
                 break
             conversation.append(
-                ChatMessage(role="assistant", content=response.content, tool_calls=response.tool_calls)
+                ChatMessage(
+                    role="assistant",
+                    content=response.content,
+                    tool_calls=response.tool_calls,
+                )
             )
             for call in response.tool_calls:
                 steps.append(

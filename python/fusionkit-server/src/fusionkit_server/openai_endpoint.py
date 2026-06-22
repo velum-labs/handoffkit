@@ -25,9 +25,9 @@ from typing import Any, cast
 from fusionkit_core.clients import build_client
 from fusionkit_core.config import ModelEndpoint, ProviderKind, SamplingConfig
 from fusionkit_core.trace import (
-    TRACE_TRAJECTORY_HEADER,
     TRACE_ID_HEADER,
     TRACE_SPAN_HEADER,
+    TRACE_TRAJECTORY_HEADER,
     new_span_id,
 )
 from fusionkit_core.trace import emit as trace_emit
