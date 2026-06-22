@@ -10,7 +10,7 @@
       "type": "object",
       "required": [
         "synthesis_id",
-        "input_candidate_ids",
+        "input_trajectory_ids",
         "status",
         "decision",
         "final_output"
@@ -26,7 +26,7 @@
         "judge_model_call_id": {
           "type": "string"
         },
-        "input_candidate_ids": {
+        "input_trajectory_ids": {
           "type": "array",
           "items": {
             "type": "string"
@@ -40,12 +40,12 @@
           "type": "string",
           "enum": [
             "synthesize",
-            "select_candidate",
+            "select_trajectory",
             "repair_required",
             "failed"
           ]
         },
-        "selected_candidate_id": {
+        "selected_trajectory_id": {
           "type": "string"
         },
         "rationale": {

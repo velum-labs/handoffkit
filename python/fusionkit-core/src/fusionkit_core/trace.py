@@ -31,7 +31,7 @@ FUSION_TRACE_EVENT_VERSION = "1.0.0"
 TRACE_ID_HEADER = "x-fusion-trace-id"
 TRACE_SPAN_HEADER = "x-fusion-span-id"
 TRACE_PARENT_SPAN_HEADER = "x-fusion-parent-span-id"
-TRACE_CANDIDATE_HEADER = "x-fusion-candidate-id"
+TRACE_TRAJECTORY_HEADER = "x-fusion-trajectory-id"
 
 _QUEUE_MAX = 4096
 _POST_TIMEOUT_S = 2.0
@@ -96,7 +96,7 @@ class TraceEmitter:
         trace_id: str | None = None,
         span_id: str | None = None,
         parent_span_id: str | None = None,
-        candidate_id: str | None = None,
+        trajectory_id: str | None = None,
         model_id: str | None = None,
         session_id: str | None = None,
         payload: dict[str, Any] | None = None,
@@ -120,8 +120,8 @@ class TraceEmitter:
             event["parent_span_id"] = parent_span_id
         if session_id:
             event["session_id"] = session_id
-        if candidate_id:
-            event["candidate_id"] = candidate_id
+        if trajectory_id:
+            event["trajectory_id"] = trajectory_id
         if model_id:
             event["model_id"] = model_id
         if payload is not None:
@@ -194,7 +194,7 @@ def emit(
     trace_id: str | None = None,
     span_id: str | None = None,
     parent_span_id: str | None = None,
-    candidate_id: str | None = None,
+    trajectory_id: str | None = None,
     model_id: str | None = None,
     session_id: str | None = None,
     payload: dict[str, Any] | None = None,
@@ -206,7 +206,7 @@ def emit(
         trace_id=trace_id,
         span_id=span_id,
         parent_span_id=parent_span_id,
-        candidate_id=candidate_id,
+        trajectory_id=trajectory_id,
         model_id=model_id,
         session_id=session_id,
         payload=payload,

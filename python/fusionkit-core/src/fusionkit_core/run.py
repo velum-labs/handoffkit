@@ -28,7 +28,6 @@ from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.providers import provider_metadata
 from fusionkit_core.run_models import (
     ArtifactWriter,
-    CandidateInspection,
     CreateRunResult,
     FusionRunEvent,
     IdempotencyOutcome,
@@ -43,12 +42,12 @@ from fusionkit_core.run_models import (
     ToolExecutionPolicy,
     ToolPausePlaceholder,
     ToolResultSubmission,
+    TrajectoryInspection,
 )
-from fusionkit_core.types import Candidate, ChatMessage, FusionAnalysis
+from fusionkit_core.types import ChatMessage, FusionAnalysis, Trajectory
 
 __all__ = [
     "ArtifactWriter",
-    "CandidateInspection",
     "CreateRunResult",
     "FusionRunEvent",
     "FusionRunManager",
@@ -64,6 +63,7 @@ __all__ = [
     "ToolExecutionPolicy",
     "ToolPausePlaceholder",
     "ToolResultSubmission",
+    "TrajectoryInspection",
     "canonical_json",
     "hash_json",
     "make_id",
@@ -197,14 +197,14 @@ class FusionRunManager:
             budget_error = self._check_wall_clock_budget(started)
             if budget_error is not None:
                 return self._fail_run(summary, budget_error)
-            candidates = await self._generate_candidates(request, selected_mode, sampling)
+            trajectories = await self._generate_trajectories(request, selected_mode, sampling)
             if selected_mode != "single":
-                candidates = self.engine.ranker.rank(candidates)
-            candidate_infos, model_call_ids, candidate_artifacts = self._record_candidates(
+                trajectories = self.engine.ranker.rank(trajectories)
+            trajectory_infos, model_call_ids, trajectory_artifacts = self._record_trajectories(
                 run_id,
                 summary.trace_id,
                 request,
-                candidates,
+                trajectories,
             )
             budget_error = self._check_cost_budget(run_id)
             if budget_error is not None:
@@ -213,18 +213,20 @@ class FusionRunManager:
             analysis: FusionAnalysis | None = None
             answer: str
             synthesis_record = None
-            selected_candidate_id = (
-                candidate_infos[0].candidate_id if candidate_infos else None
+            selected_trajectory_id = (
+                trajectory_infos[0].trajectory_id if trajectory_infos else None
             )
             if selected_mode == "single":
-                answer = candidates[0].content if candidates else ""
+                answer = trajectories[0].content if trajectories else ""
             else:
-                selected_candidate_id = _candidate_id_for_source(candidate_infos, candidates[0].id)
+                selected_trajectory_id = _trajectory_id_for_source(
+                    trajectory_infos, trajectories[0].id
+                )
                 self._append_state(summary, "judging")
                 self._append_state(summary, "synthesizing")
                 synthesis = await self.engine._judge_synthesize(
                     _runtime_messages(request.messages),
-                    candidates,
+                    trajectories,
                 )
                 answer = synthesis.final_output
                 analysis = synthesis.analysis
@@ -236,7 +238,7 @@ class FusionRunManager:
                 answer = await self.engine._verify(
                     _runtime_messages(request.messages),
                     answer,
-                    candidates,
+                    trajectories,
                 )
                 if synthesis_record is not None:
                     synthesis_record = synthesis_record.model_copy(
@@ -270,7 +272,7 @@ class FusionRunManager:
                 answer,
             )
             self._append_artifact_event(run_id, summary.trace_id, "synthesizing", final_artifact)
-            artifacts = [*candidate_artifacts, final_artifact]
+            artifacts = [*trajectory_artifacts, final_artifact]
             if verification_artifact is not None:
                 artifacts.append(verification_artifact)
             if synthesis_record is not None:
@@ -303,9 +305,11 @@ class FusionRunManager:
                     "request_id": request.request_id,
                     "mode": selected_mode,
                     "status": "succeeded",
-                    "candidate_ids": [candidate.candidate_id for candidate in candidate_infos],
+                    "trajectory_ids": [
+                        trajectory.trajectory_id for trajectory in trajectory_infos
+                    ],
                     "model_call_ids": model_call_ids,
-                    "selected_candidate_id": selected_candidate_id,
+                    "selected_trajectory_id": selected_trajectory_id,
                     "synthesis_record_id": (
                         synthesis_record.synthesis_id if synthesis_record is not None else None
                     ),
@@ -313,7 +317,7 @@ class FusionRunManager:
                     "started_at": summary.event_cursor and events[0].created_at,
                     "finished_at": datetime.now(UTC),
                     "metrics": {
-                        **_run_metrics(candidates, selected_mode, analysis),
+                        **_run_metrics(trajectories, selected_mode, analysis),
                         "cost_estimate": _run_cost_estimate(self.store.list_events(run_id)),
                     },
                     "artifacts": [artifact.model_dump(mode="json") for artifact in artifacts],
@@ -414,7 +418,7 @@ class FusionRunManager:
         self,
         run_id: str,
         *,
-        candidate_id: str,
+        trajectory_id: str,
         tool_call_id: str | None = None,
         plan: Mapping[str, Any] | None = None,
     ) -> ToolPausePlaceholder:
@@ -431,7 +435,7 @@ class FusionRunManager:
             )
         return self._pause_for_tool_action(
             run_id,
-            candidate_id=candidate_id,
+            trajectory_id=trajectory_id,
             tool_call_id=tool_call_id,
             plan=tool_plan,
             policy_cache_key=None,
@@ -441,7 +445,7 @@ class FusionRunManager:
         self,
         run_id: str,
         *,
-        candidate_id: str,
+        trajectory_id: str,
         tool_name: str,
         arguments: Mapping[str, Any] | None = None,
         side_effects: SideEffects = "read_only",
@@ -476,7 +480,7 @@ class FusionRunManager:
                 state=summary.state,
                 status=summary.status,
                 event_type="tool_call_planned",
-                candidate_id=candidate_id,
+                trajectory_id=trajectory_id,
                 tool_call_id=tool_call_id,
                 payload={
                     "tool_call_plan": plan.model_dump(mode="json"),
@@ -486,7 +490,7 @@ class FusionRunManager:
         )
         return self._pause_for_tool_action(
             run_id,
-            candidate_id=candidate_id,
+            trajectory_id=trajectory_id,
             tool_call_id=tool_call_id,
             plan=plan,
             policy_cache_key=policy_cache_key,
@@ -516,13 +520,13 @@ class FusionRunManager:
                 owner="fusionkit",
                 terminal_reason="tool_result_for_wrong_tool_call",
             )
-        if pending.candidate_id != submission.candidate_id:
+        if pending.trajectory_id != submission.trajectory_id:
             return NativeRunError(
                 error_kind="validation_error",
-                error_code="tool_candidate_mismatch",
+                error_code="tool_trajectory_mismatch",
                 retryable=False,
                 owner="fusionkit",
-                terminal_reason="tool_result_for_wrong_candidate",
+                terminal_reason="tool_result_for_wrong_trajectory",
             )
         if pending.plan is not None and pending.plan.tool_name != submission.tool_name:
             return NativeRunError(
@@ -552,7 +556,7 @@ class FusionRunManager:
                 state="requires_action",
                 status=status_for_run_state("requires_action"),
                 event_type="tool_execution_recorded",
-                candidate_id=submission.candidate_id,
+                trajectory_id=submission.trajectory_id,
                 tool_call_id=submission.tool_call_id,
                 payload={"tool_execution_record": execution_record.model_dump(mode="json")},
             )
@@ -567,10 +571,10 @@ class FusionRunManager:
                 state=resumed_state,
                 status=status_for_run_state(resumed_state),
                 event_type="run_resumed",
-                candidate_id=submission.candidate_id,
+                trajectory_id=submission.trajectory_id,
                 tool_call_id=submission.tool_call_id,
                 payload={
-                    "resumed_candidate_id": submission.candidate_id,
+                    "resumed_trajectory_id": submission.trajectory_id,
                     "remaining_pending_tool_calls": remaining_pending,
                 },
             )
@@ -590,14 +594,14 @@ class FusionRunManager:
         self,
         run_id: str,
         *,
-        candidate_id: str,
+        trajectory_id: str,
         tool_call_id: str | None,
         plan: ToolCallPlanV1 | None,
         policy_cache_key: str | None,
     ) -> ToolPausePlaceholder:
         summary = self.store.read_summary(run_id)
         pause = ToolPausePlaceholder(
-            candidate_id=candidate_id,
+            trajectory_id=trajectory_id,
             tool_call_id=tool_call_id or make_id("tool_call"),
             plan=plan,
             policy_cache_key=policy_cache_key,
@@ -610,7 +614,7 @@ class FusionRunManager:
                 state="requires_action",
                 status=status_for_run_state("requires_action"),
                 event_type="requires_action",
-                candidate_id=candidate_id,
+                trajectory_id=trajectory_id,
                 tool_call_id=pause.tool_call_id,
                 payload={"requires_action": pause.model_dump(mode="json")},
             )
@@ -647,22 +651,22 @@ class FusionRunManager:
             }
         )
 
-    async def _generate_candidates(
+    async def _generate_trajectories(
         self,
         request: FusionRunRequestV1,
         selected_mode: FusionMode,
         sampling: SamplingConfig,
-    ) -> list[Candidate]:
+    ) -> list[Trajectory]:
         messages = _runtime_messages(request.messages)
         if selected_mode == "single":
             return [
-                await self.engine.panel_runner.generate_single(
+                await self.engine.producer.generate_single(
                     self.engine.config.default_model,
                     messages,
                     sampling,
                 )
             ]
-        return await self.engine._generate_candidates(
+        return await self.engine._generate_trajectories(
             mode=selected_mode,
             messages=messages,
             sampling=sampling,
@@ -670,30 +674,30 @@ class FusionRunManager:
             sample_count=request.sample_count,
         )
 
-    def _record_candidates(
+    def _record_trajectories(
         self,
         run_id: str,
         trace_id: str,
         request: FusionRunRequestV1,
-        candidates: Sequence[Candidate],
-    ) -> tuple[list[CandidateInspection], list[str], list[ContractArtifactRef]]:
-        candidate_infos = []
+        trajectories: Sequence[Trajectory],
+    ) -> tuple[list[TrajectoryInspection], list[str], list[ContractArtifactRef]]:
+        trajectory_infos = []
         model_call_ids = []
         artifacts = []
-        for index, candidate in enumerate(candidates):
-            candidate_id = make_id("candidate")
+        for index, trajectory in enumerate(trajectories):
+            trajectory_id = make_id("trajectory")
             model_call_id = make_id("model_call")
             artifact = self.artifacts.write_text(
                 run_id,
-                make_id("artifact_candidate"),
+                make_id("artifact_trajectory"),
                 "transcript",
-                candidate.content,
+                trajectory.content,
             )
             artifacts.append(artifact)
             model_call = _model_call_record(
                 self.engine.config,
                 request=request,
-                candidate=candidate,
+                trajectory=trajectory,
                 model_call_id=model_call_id,
             )
             self.store.append_event(
@@ -704,7 +708,7 @@ class FusionRunManager:
                     state="generating",
                     status=status_for_run_state("generating"),
                     event_type="model_call_recorded",
-                    candidate_id=candidate_id,
+                    trajectory_id=trajectory_id,
                     model_call_id=model_call_id,
                     payload={"model_call_record": model_call.model_dump(mode="json")},
                 )
@@ -716,36 +720,36 @@ class FusionRunManager:
                     trace_id=trace_id,
                     state="generating",
                     status=status_for_run_state("generating"),
-                    event_type="candidate_recorded",
-                    candidate_id=candidate_id,
+                    event_type="trajectory_recorded",
+                    trajectory_id=trajectory_id,
                     model_call_id=model_call_id,
                     artifact_id=artifact.artifact_id,
                     payload={
-                        "candidate": {
-                            "candidate_id": candidate_id,
-                            "source_candidate_id": candidate.id,
-                            "model_id": candidate.model_id,
-                            "rank": candidate.rank,
-                            "score": candidate.score,
+                        "trajectory": {
+                            "trajectory_id": trajectory_id,
+                            "source_trajectory_id": trajectory.id,
+                            "model_id": trajectory.model_id,
+                            "rank": trajectory.rank,
+                            "score": trajectory.score,
                             "artifact": artifact.model_dump(mode="json"),
                             "ordinal": index,
                         }
                     },
                 )
             )
-            candidate_infos.append(
-                CandidateInspection(
-                    candidate_id=candidate_id,
-                    model_id=candidate.model_id,
-                    source_candidate_id=candidate.id,
+            trajectory_infos.append(
+                TrajectoryInspection(
+                    trajectory_id=trajectory_id,
+                    model_id=trajectory.model_id,
+                    source_trajectory_id=trajectory.id,
                     model_call_id=model_call_id,
                     artifact=artifact,
-                    score=candidate.score,
-                    rank=candidate.rank,
+                    score=trajectory.score,
+                    rank=trajectory.rank,
                 )
             )
             model_call_ids.append(model_call_id)
-        return candidate_infos, model_call_ids, artifacts
+        return trajectory_infos, model_call_ids, artifacts
 
     def _append_state(self, summary: RunStateSummary, state: FusionRunState) -> FusionRunEvent:
         event = self.store.append_event(
@@ -907,31 +911,31 @@ def _model_call_record(
     config,
     *,
     request: FusionRunRequestV1,
-    candidate: Candidate,
+    trajectory: Trajectory,
     model_call_id: str,
 ) -> ModelCallRecordV1:
-    latency_s = candidate.metadata.get("latency_s")
-    usage = candidate.metadata.get("usage")
+    latency_s = trajectory.metadata.get("latency_s")
+    usage = trajectory.metadata.get("usage")
     latency_ms = latency_s * 1000 if isinstance(latency_s, int | float) else None
-    endpoint = _endpoint_for_candidate(config, candidate.model_id)
+    endpoint = _endpoint_for_trajectory(config, trajectory.model_id)
     metadata = {
         **provider_metadata(endpoint, usage if isinstance(usage, dict) else None),
-        "finish_reason": candidate.metadata.get("finish_reason"),
+        "finish_reason": trajectory.metadata.get("finish_reason"),
     }
     return ModelCallRecordV1.model_validate(
         {
             **contract_metadata("model-call-record.v1"),
             "call_id": model_call_id,
-            "endpoint_id": candidate.model_id,
-            "model": candidate.model_id,
+            "endpoint_id": trajectory.model_id,
+            "model": trajectory.model_id,
             "request_hash": hash_json(
                 {
                     "request_id": request.request_id,
-                    "model_id": candidate.model_id,
+                    "model_id": trajectory.model_id,
                     "messages": [message.model_dump(mode="json") for message in request.messages],
                 }
             ),
-            "response_hash": hash_text(candidate.content),
+            "response_hash": hash_text(trajectory.content),
             "status": "succeeded",
             "messages": [message.model_dump(mode="json") for message in request.messages],
             "side_effects": "none",
@@ -939,6 +943,7 @@ def _model_call_record(
             "finished_at": datetime.now(UTC),
             "latency_ms": latency_ms,
             "usage": usage if isinstance(usage, dict) else None,
+            "output_text": trajectory.content,
             "metadata": metadata,
         }
     )
@@ -959,7 +964,7 @@ def _pending_tool_actions_from_events(
     return pending
 
 
-def _endpoint_for_candidate(config: FusionConfig, model_id: str) -> ModelEndpoint | None:
+def _endpoint_for_trajectory(config: FusionConfig, model_id: str) -> ModelEndpoint | None:
     try:
         return config.endpoint_for(model_id)
     except KeyError:
@@ -1063,24 +1068,24 @@ def _policy_cache_key(
     )
 
 
-def _candidate_id_for_source(
-    candidate_infos: Sequence[CandidateInspection],
-    source_candidate_id: str,
+def _trajectory_id_for_source(
+    trajectory_infos: Sequence[TrajectoryInspection],
+    source_trajectory_id: str,
 ) -> str | None:
-    for candidate_info in candidate_infos:
-        if candidate_info.source_candidate_id == source_candidate_id:
-            return candidate_info.candidate_id
-    return candidate_infos[0].candidate_id if candidate_infos else None
+    for trajectory_info in trajectory_infos:
+        if trajectory_info.source_trajectory_id == source_trajectory_id:
+            return trajectory_info.trajectory_id
+    return trajectory_infos[0].trajectory_id if trajectory_infos else None
 
 
 def _run_metrics(
-    candidates: Sequence[Candidate],
+    trajectories: Sequence[Trajectory],
     selected_mode: FusionMode,
     analysis: FusionAnalysis | None,
 ) -> dict[str, Any]:
     metrics: dict[str, Any] = {
-        "candidate_count": len(candidates),
-        "candidate_model_ids": [candidate.model_id for candidate in candidates],
+        "trajectory_count": len(trajectories),
+        "trajectory_model_ids": [trajectory.model_id for trajectory in trajectories],
         "mode": selected_mode,
     }
     if analysis is not None:
@@ -1089,7 +1094,6 @@ def _run_metrics(
 
 
 __all__ = [
-    "CandidateInspection",
     "CreateRunResult",
     "FusionRunEvent",
     "FusionRunManager",
@@ -1104,6 +1108,7 @@ __all__ = [
     "ToolExecutionMode",
     "ToolExecutionPolicy",
     "ToolResultSubmission",
+    "TrajectoryInspection",
     "canonical_json",
     "hash_json",
     "make_id",

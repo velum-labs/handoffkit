@@ -8,7 +8,6 @@ from typing import Any
 from fusionkit_core.artifacts import hash_text
 from fusionkit_core.contracts import ContractArtifactRef
 from fusionkit_core.run import (
-    CandidateInspection,
     FusionRunEvent,
     IdempotencyRecord,
     NativeRunError,
@@ -16,6 +15,7 @@ from fusionkit_core.run import (
     RunInspection,
     RunStateSummary,
     ToolPausePlaceholder,
+    TrajectoryInspection,
 )
 
 
@@ -98,7 +98,7 @@ class FileSystemRunStore:
     def inspect_run(self, run_id: str) -> RunInspection:
         events = self.list_events(run_id)
         summary = self.read_summary(run_id)
-        candidates: list[CandidateInspection] = []
+        trajectories: list[TrajectoryInspection] = []
         artifacts: list[ContractArtifactRef] = []
         model_call_ids = []
         final_output = summary.final_output
@@ -108,23 +108,23 @@ class FileSystemRunStore:
         provider_metadata = []
 
         for event in events:
-            if event.event_type == "candidate_recorded":
-                candidate_payload = event.payload.get("candidate")
-                if isinstance(candidate_payload, dict):
-                    artifact = _artifact_from_payload(candidate_payload.get("artifact"))
+            if event.event_type == "trajectory_recorded":
+                trajectory_payload = event.payload.get("trajectory")
+                if isinstance(trajectory_payload, dict):
+                    artifact = _artifact_from_payload(trajectory_payload.get("artifact"))
                     if artifact is not None:
                         artifacts.append(artifact)
-                    candidates.append(
-                        CandidateInspection(
-                            candidate_id=str(candidate_payload["candidate_id"]),
-                            model_id=str(candidate_payload["model_id"]),
-                            source_candidate_id=_optional_str(
-                                candidate_payload.get("source_candidate_id")
+                    trajectories.append(
+                        TrajectoryInspection(
+                            trajectory_id=str(trajectory_payload["trajectory_id"]),
+                            model_id=str(trajectory_payload["model_id"]),
+                            source_trajectory_id=_optional_str(
+                                trajectory_payload.get("source_trajectory_id")
                             ),
                             model_call_id=event.model_call_id,
                             artifact=artifact,
-                            score=candidate_payload.get("score"),
-                            rank=candidate_payload.get("rank"),
+                            score=trajectory_payload.get("score"),
+                            rank=trajectory_payload.get("rank"),
                         )
                     )
             elif event.event_type == "model_call_recorded":
@@ -168,7 +168,7 @@ class FileSystemRunStore:
             state=summary.state,
             status=summary.status,
             event_cursor=summary.event_cursor,
-            candidates=candidates,
+            trajectories=trajectories,
             artifacts=_dedupe_artifacts(artifacts),
             model_call_ids=model_call_ids,
             final_output=final_output,

@@ -14,7 +14,7 @@
         "harness-run-request.v1",
         "harness-run-result.v1",
         "harness-candidate-record.v1",
-        "harness-trajectory.v1",
+        "trajectory.v1",
         "judge-synthesis-record.v1",
         "cursor-run-request.v1",
         "cursor-run-result.v1",

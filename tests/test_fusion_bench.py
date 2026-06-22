@@ -116,6 +116,8 @@ async def test_fusion_bench_runs_native_task_and_joins_records(tmp_path) -> None
     assert row.trace_id
     assert row.fusion_record is not None
     assert row.model_call_records
+    assert all(record.get("output_text") for record in row.model_call_records)
+    assert score_fusion_bench_row(row).best_single_success is not None
     assert row.judge_synthesis_record is None
     assert row.artifact_records
     assert row.provider_metadata
@@ -901,12 +903,12 @@ def _handoff_records(task) -> list[dict[str, object]]:
         {
             **judge_metadata,
             "synthesis_id": f"synthesis_{task.record.task_id}",
-            "input_candidate_ids": [f"harness_candidate_{task.record.task_id}"],
+            "input_trajectory_ids": [f"harness_candidate_{task.record.task_id}"],
             "status": "succeeded",
-            "decision": "select_candidate",
+            "decision": "select_trajectory",
             "final_output": "harness final output",
             "judge_model_call_id": f"call_{task.record.task_id}",
-            "selected_candidate_id": f"harness_candidate_{task.record.task_id}",
+            "selected_trajectory_id": f"harness_candidate_{task.record.task_id}",
             "metrics": {"judge_structured_parse_status": "parsed"},
         },
         {

@@ -103,7 +103,7 @@ async def run_tiny_benchmark(
             fusion_result.content,
             latency_s=latency_s,
             candidate_outputs=[
-                candidate.content for candidate in fusion_result.candidates
+                trajectory.content for trajectory in fusion_result.trajectories
             ],
             cost_estimate=_optional_float(fusion_result.metrics.get("cost_estimate")),
         )

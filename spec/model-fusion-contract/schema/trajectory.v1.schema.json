@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/harness-trajectory.v1.schema.json",
-  "title": "harness-trajectory.v1",
-  "description": "An agent trajectory produced by one panel model: an ordered sequence of reasoning, tool calls, observations, and the final output. Trajectory-level fusion synthesizes a final answer from several of these.",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/trajectory.v1.schema.json",
+  "title": "trajectory.v1",
+  "description": "The canonical fusion unit: one model's attempt at the request. A plain sampled answer is a zero-step trajectory (empty steps, no verification); an agent run is a full trajectory with reasoning, tool calls, observations, and a verification result. Fusion synthesizes a final answer from several of these.",
   "allOf": [
     {
       "$ref": "common.schema.json#/$defs/contractMetadata"
@@ -18,7 +18,7 @@
       ],
       "properties": {
         "schema": {
-          "const": "harness-trajectory.v1"
+          "const": "trajectory.v1"
         },
         "trajectory_id": {
           "type": "string",

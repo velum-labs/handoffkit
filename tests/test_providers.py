@@ -211,7 +211,7 @@ def test_tool_call_budget_violation_is_rejected(tmp_path) -> None:
 
     denied = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="trajectory_a",
         tool_name="read_file",
     )
 

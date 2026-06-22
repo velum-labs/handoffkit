@@ -29,12 +29,12 @@ from fusionkit_core.contracts import (
     FusionRunState,
     HarnessCandidateRecordV1,
     HarnessRunResultV1,
-    HarnessTrajectoryV1,
     JudgeSynthesisRecordV1,
     ModelCallRecordV1,
     ModelEndpointV1,
     ToolCallPlanV1,
     ToolExecutionRecordV1,
+    TrajectoryV1,
     contract_metadata,
     contract_model_for_schema,
     producer,
@@ -44,7 +44,17 @@ from fusionkit_core.contracts import (
     status_for_run_state,
 )
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import CandidateEvidence, JudgeSynthesisResult, JudgeSynthesizer
+from fusionkit_core.judge import JudgeSynthesisResult, JudgeSynthesizer
+from fusionkit_core.producers import (
+    AgentTrajectoryProducer,
+    ChatTrajectoryProducer,
+    ExternalTrajectoryProducer,
+    ToolExecutor,
+    TrajectoryProducer,
+    trajectory_from_contract,
+    trajectory_from_response,
+    trajectory_to_contract,
+)
 from fusionkit_core.providers import (
     endpoint_to_contract,
     estimate_cost,
@@ -54,7 +64,6 @@ from fusionkit_core.providers import (
 )
 from fusionkit_core.router import HeuristicRouter
 from fusionkit_core.run import (
-    CandidateInspection,
     CreateRunResult,
     FusionRunEvent,
     FusionRunManager,
@@ -67,16 +76,17 @@ from fusionkit_core.run import (
     ToolExecutionPolicy,
     ToolPausePlaceholder,
     ToolResultSubmission,
+    TrajectoryInspection,
     canonical_json,
     hash_json,
     make_id,
 )
 from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.trace import (
-    TRACE_CANDIDATE_HEADER,
     TRACE_ID_HEADER,
     TRACE_PARENT_SPAN_HEADER,
     TRACE_SPAN_HEADER,
+    TRACE_TRAJECTORY_HEADER,
     TraceEmitter,
     ambient_trace_id,
     emit,
@@ -85,28 +95,28 @@ from fusionkit_core.trace import (
     new_trace_id,
 )
 from fusionkit_core.types import (
-    Candidate,
     ChatMessage,
     ModelResponse,
     StreamChunk,
     ToolCall,
+    Trajectory,
     Usage,
 )
 
 __all__ = [
+    "AgentTrajectoryProducer",
     "AnthropicModelClient",
     "ArtifactRefV1",
     "BenchmarkTaskRecordV1",
-    "Candidate",
-    "CandidateEvidence",
-    "CandidateInspection",
     "ChatMessage",
+    "ChatTrajectoryProducer",
     "ContractMetadata",
     "ContractRecord",
     "CostMetadata",
     "CreateRunResult",
     "EndpointCapabilities",
     "EnsembleReceiptV1",
+    "ExternalTrajectoryProducer",
     "FakeModelClient",
     "FileSystemRunStore",
     "FusionConfig",
@@ -119,7 +129,6 @@ __all__ = [
     "FusionRunState",
     "GoogleModelClient",
     "HarnessCandidateRecordV1",
-    "HarnessTrajectoryV1",
     "HarnessRunResultV1",
     "HeuristicRouter",
     "IdempotencyRecord",
@@ -141,18 +150,23 @@ __all__ = [
     "RunStateSummary",
     "SamplingConfig",
     "StreamChunk",
-    "TRACE_CANDIDATE_HEADER",
     "TRACE_ID_HEADER",
     "TRACE_PARENT_SPAN_HEADER",
     "TRACE_SPAN_HEADER",
+    "TRACE_TRAJECTORY_HEADER",
     "TraceEmitter",
     "ToolCall",
     "ToolExecutionMode",
     "ToolExecutionPolicy",
+    "ToolExecutor",
     "ToolPausePlaceholder",
     "ToolResultSubmission",
     "ToolCallPlanV1",
     "ToolExecutionRecordV1",
+    "Trajectory",
+    "TrajectoryInspection",
+    "TrajectoryProducer",
+    "TrajectoryV1",
     "Usage",
     "ambient_trace_id",
     "build_client",
@@ -178,4 +192,7 @@ __all__ = [
     "resolve_api_key",
     "schema_bundle_hash",
     "status_for_run_state",
+    "trajectory_from_contract",
+    "trajectory_from_response",
+    "trajectory_to_contract",
 ]

@@ -124,7 +124,7 @@ export interface components {
             joined_records: components["schemas"]["ContractRecord"][];
         };
         /** @enum {string} */
-        schemaName: "model_endpoint.v1" | "model-call-record.v1" | "fusion-run-request.v1" | "fusion-record.v1" | "harness-run-request.v1" | "harness-run-result.v1" | "harness-candidate-record.v1" | "harness-trajectory.v1" | "judge-synthesis-record.v1" | "cursor-run-request.v1" | "cursor-run-result.v1" | "benchmark-task-record.v1" | "artifact-ref.v1" | "tool-call-plan.v1" | "tool-execution-record.v1" | "ensemble-receipt.v1";
+        schemaName: "model_endpoint.v1" | "model-call-record.v1" | "fusion-run-request.v1" | "fusion-record.v1" | "harness-run-request.v1" | "harness-run-result.v1" | "harness-candidate-record.v1" | "trajectory.v1" | "judge-synthesis-record.v1" | "cursor-run-request.v1" | "cursor-run-result.v1" | "benchmark-task-record.v1" | "artifact-ref.v1" | "tool-call-plan.v1" | "tool-execution-record.v1" | "ensemble-receipt.v1";
         hash: string;
         gitSha: string;
         contractMetadata: {
@@ -301,9 +301,9 @@ export interface components {
             /** @enum {string} */
             mode: "single" | "self" | "panel" | "router";
             status: components["schemas"]["status"];
-            candidate_ids: string[];
+            trajectory_ids: string[];
             model_call_ids: string[];
-            selected_candidate_id?: string;
+            selected_trajectory_id?: string;
             synthesis_record_id?: string;
             final_output?: string;
             /** Format: date-time */
@@ -323,11 +323,11 @@ export interface components {
             schema?: "judge-synthesis-record.v1";
             synthesis_id: string;
             judge_model_call_id?: string;
-            input_candidate_ids: string[];
+            input_trajectory_ids: string[];
             status: components["schemas"]["status"];
             /** @enum {string} */
-            decision: "synthesize" | "select_candidate" | "repair_required" | "failed";
-            selected_candidate_id?: string;
+            decision: "synthesize" | "select_trajectory" | "repair_required" | "failed";
+            selected_trajectory_id?: string;
             rationale?: string;
             final_output: string;
             score?: number;

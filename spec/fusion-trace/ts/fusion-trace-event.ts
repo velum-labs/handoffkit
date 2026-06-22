@@ -42,7 +42,7 @@ export type FusionTraceEvent = {
   component: FusionTraceComponent;
   event_type: FusionTraceEventType;
   session_id?: string;
-  candidate_id?: string;
+  trajectory_id?: string;
   model_id?: string;
   payload?: Record<string, unknown>;
 };
@@ -51,4 +51,4 @@ export type FusionTraceEvent = {
 export const TRACE_ID_HEADER = "x-fusion-trace-id";
 export const TRACE_SPAN_HEADER = "x-fusion-span-id";
 export const TRACE_PARENT_SPAN_HEADER = "x-fusion-parent-span-id";
-export const TRACE_CANDIDATE_HEADER = "x-fusion-candidate-id";
+export const TRACE_TRAJECTORY_HEADER = "x-fusion-trajectory-id";

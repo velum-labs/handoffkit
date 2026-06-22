@@ -16,10 +16,11 @@ from fusionkit_core.clients import ChatClient, build_clients
 from fusionkit_core.config import FusionConfig, FusionMode
 from fusionkit_core.contracts import (
     FusionRunRequestV1,
-    HarnessTrajectoryV1,
+    TrajectoryV1,
     contract_metadata,
 )
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.producers import trajectory_from_contract
 from fusionkit_core.run import (
     CreateRunResult,
     FusionRunManager,
@@ -252,11 +253,13 @@ def create_app(
                 status_code=400,
             )
         trajectories = [
-            HarnessTrajectoryV1.model_validate(
-                {
-                    **contract_metadata("harness-trajectory.v1"),
-                    **trajectory.model_dump(exclude_none=True),
-                }
+            trajectory_from_contract(
+                TrajectoryV1.model_validate(
+                    {
+                        **contract_metadata("trajectory.v1"),
+                        **trajectory.model_dump(exclude_none=True),
+                    }
+                )
             )
             for trajectory in request.trajectories
         ]
@@ -271,11 +274,11 @@ def create_app(
                 "message": "trajectories:fuse received",
                 "judge_model": judge_model,
                 "synthesizer_model": synthesizer_model,
-                "input_trajectory_ids": [trajectory.trajectory_id for trajectory in trajectories],
+                "input_trajectory_ids": [trajectory.id for trajectory in trajectories],
                 "input_model_ids": [trajectory.model_id for trajectory in trajectories],
             },
         )
-        result = await engine.judge_synthesizer.synthesize_trajectories(
+        result = await engine.judge_synthesizer.synthesize(
             request.messages,
             trajectories,
             judge_client=judge_client,
@@ -309,11 +312,13 @@ def create_app(
                 status_code=400,
             )
         trajectories = [
-            HarnessTrajectoryV1.model_validate(
-                {
-                    **contract_metadata("harness-trajectory.v1"),
-                    **trajectory.model_dump(exclude_none=True),
-                }
+            trajectory_from_contract(
+                TrajectoryV1.model_validate(
+                    {
+                        **contract_metadata("trajectory.v1"),
+                        **trajectory.model_dump(exclude_none=True),
+                    }
+                )
             )
             for trajectory in request.trajectories
         ]
@@ -549,8 +554,10 @@ def _chat_fusion_metadata(inspection: RunInspection) -> dict[str, Any]:
         "state": inspection.state,
         "status": inspection.status,
         "event_cursor": inspection.event_cursor,
-        "candidate_count": len(inspection.candidates),
-        "candidate_model_ids": [candidate.model_id for candidate in inspection.candidates],
+        "trajectory_count": len(inspection.trajectories),
+        "trajectory_model_ids": [
+            trajectory.model_id for trajectory in inspection.trajectories
+        ],
     }
 
 

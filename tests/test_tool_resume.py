@@ -29,14 +29,14 @@ def test_two_candidates_can_pause_for_different_read_only_tools(tmp_path) -> Non
 
     first = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=policy,
     )
     second = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_b",
+        trajectory_id="candidate_b",
         tool_name="list_files",
         arguments={"path": "packages"},
         policy=policy,
@@ -44,8 +44,8 @@ def test_two_candidates_can_pause_for_different_read_only_tools(tmp_path) -> Non
 
     assert not isinstance(first, NativeRunError)
     assert not isinstance(second, NativeRunError)
-    assert first.candidate_id == "candidate_a"
-    assert second.candidate_id == "candidate_b"
+    assert first.trajectory_id == "candidate_a"
+    assert second.trajectory_id == "candidate_b"
     assert first.plan is not None
     ToolCallPlanV1.model_validate(first.plan.model_dump(mode="json"))
     planned = [
@@ -64,14 +64,14 @@ def test_read_only_tool_calls_expose_dedupe_key(tmp_path) -> None:
 
     first = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=policy,
     )
     second = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_b",
+        trajectory_id="candidate_b",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=policy,
@@ -90,7 +90,7 @@ def test_unsafe_side_effects_require_policy_and_environment(tmp_path) -> None:
 
     denied = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="write_file",
         arguments={"path": "README.md"},
         side_effects="writes_workspace",
@@ -108,7 +108,7 @@ def test_executor_mode_is_explicitly_not_implemented(tmp_path) -> None:
 
     denied = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=ToolExecutionPolicy(mode="executor"),
@@ -124,7 +124,7 @@ def test_tool_result_resume_records_execution_for_matching_candidate(tmp_path) -
     assert created.run_id is not None
     pause = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=ToolExecutionPolicy(mode="external"),
@@ -134,7 +134,7 @@ def test_tool_result_resume_records_execution_for_matching_candidate(tmp_path) -
     result = manager.submit_tool_result(
         created.run_id,
         ToolResultSubmission(
-            candidate_id="candidate_a",
+            trajectory_id="candidate_a",
             tool_call_id=pause.tool_call_id,
             tool_name="read_file",
             output="synthetic contents",
@@ -162,14 +162,14 @@ def test_tool_result_can_resume_first_of_two_pending_candidate_tools(tmp_path) -
     assert created.run_id is not None
     first = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=ToolExecutionPolicy(mode="external"),
     )
     second = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_b",
+        trajectory_id="candidate_b",
         tool_name="list_files",
         arguments={"path": "packages"},
         policy=ToolExecutionPolicy(mode="external"),
@@ -180,7 +180,7 @@ def test_tool_result_can_resume_first_of_two_pending_candidate_tools(tmp_path) -
     result = manager.submit_tool_result(
         created.run_id,
         ToolResultSubmission(
-            candidate_id="candidate_a",
+            trajectory_id="candidate_a",
             tool_call_id=first.tool_call_id,
             tool_name="read_file",
             output="synthetic contents",
@@ -200,7 +200,7 @@ def test_tool_result_wrong_candidate_is_rejected(tmp_path) -> None:
     assert created.run_id is not None
     pause = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=ToolExecutionPolicy(mode="external"),
@@ -210,7 +210,7 @@ def test_tool_result_wrong_candidate_is_rejected(tmp_path) -> None:
     result = manager.submit_tool_result(
         created.run_id,
         ToolResultSubmission(
-            candidate_id="candidate_b",
+            trajectory_id="candidate_b",
             tool_call_id=pause.tool_call_id,
             tool_name="read_file",
             output="synthetic contents",
@@ -218,7 +218,7 @@ def test_tool_result_wrong_candidate_is_rejected(tmp_path) -> None:
     )
 
     assert isinstance(result, NativeRunError)
-    assert result.error_code == "tool_candidate_mismatch"
+    assert result.error_code == "tool_trajectory_mismatch"
 
 
 def test_tool_result_wrong_tool_name_is_rejected(tmp_path) -> None:
@@ -227,7 +227,7 @@ def test_tool_result_wrong_tool_name_is_rejected(tmp_path) -> None:
     assert created.run_id is not None
     pause = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=ToolExecutionPolicy(mode="external"),
@@ -237,7 +237,7 @@ def test_tool_result_wrong_tool_name_is_rejected(tmp_path) -> None:
     result = manager.submit_tool_result(
         created.run_id,
         ToolResultSubmission(
-            candidate_id="candidate_a",
+            trajectory_id="candidate_a",
             tool_call_id=pause.tool_call_id,
             tool_name="list_files",
             output="synthetic contents",
@@ -254,7 +254,7 @@ def test_tool_results_api_resumes_candidate_scoped_tool_call(tmp_path) -> None:
     assert created.run_id is not None
     pause = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=ToolExecutionPolicy(mode="external"),
@@ -265,7 +265,7 @@ def test_tool_results_api_resumes_candidate_scoped_tool_call(tmp_path) -> None:
     response = client.post(
         f"/v1/fusion/runs/{created.run_id}/tool-results",
         json={
-            "candidate_id": "candidate_a",
+            "trajectory_id": "candidate_a",
             "tool_call_id": pause.tool_call_id,
             "tool_name": "read_file",
             "output": "synthetic contents",
@@ -283,7 +283,7 @@ def test_tool_results_api_rejects_wrong_tool_call(tmp_path) -> None:
     assert created.run_id is not None
     pause = manager.request_tool_action(
         created.run_id,
-        candidate_id="candidate_a",
+        trajectory_id="candidate_a",
         tool_name="read_file",
         arguments={"path": "README.md"},
         policy=ToolExecutionPolicy(mode="external"),
@@ -294,7 +294,7 @@ def test_tool_results_api_rejects_wrong_tool_call(tmp_path) -> None:
     response = client.post(
         f"/v1/fusion/runs/{created.run_id}/tool-results",
         json={
-            "candidate_id": "candidate_a",
+            "trajectory_id": "candidate_a",
             "tool_call_id": "tool_call_wrong",
             "tool_name": "read_file",
             "output": "synthetic contents",

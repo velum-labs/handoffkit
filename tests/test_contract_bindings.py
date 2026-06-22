@@ -16,13 +16,13 @@ from fusionkit_core.contracts import (
     HarnessCandidateRecordV1,
     HarnessRunRequestV1,
     HarnessRunResultV1,
-    HarnessTrajectoryV1,
     JudgeSynthesisRecordV1,
     ModelCallRecordV1,
     ModelEndpointV1,
     SchemaName,
     ToolCallPlanV1,
     ToolExecutionRecordV1,
+    TrajectoryV1,
     contract_metadata,
     producer,
     schema_bundle_hash,
@@ -41,7 +41,7 @@ FUSIONKIT_CONTRACT_SCHEMAS: dict[SchemaName, type] = {
     "harness-run-request.v1": HarnessRunRequestV1,
     "harness-run-result.v1": HarnessRunResultV1,
     "harness-candidate-record.v1": HarnessCandidateRecordV1,
-    "harness-trajectory.v1": HarnessTrajectoryV1,
+    "trajectory.v1": TrajectoryV1,
     "judge-synthesis-record.v1": JudgeSynthesisRecordV1,
     "benchmark-task-record.v1": BenchmarkTaskRecordV1,
     "artifact-ref.v1": ArtifactRefV1,
@@ -84,7 +84,7 @@ def test_schema_bundle_hash_falls_back_to_pinned_constant_without_schema_dir(
     # 500'd `/v1/fusion/trajectory:step` under `uvx fusionkit`).
     monkeypatch.setattr("fusionkit_core.contracts._find_schema_dir", lambda: None)
     assert schema_bundle_hash() == SCHEMA_BUNDLE_HASH
-    assert contract_metadata("harness-trajectory.v1")["schema_bundle_hash"] == SCHEMA_BUNDLE_HASH
+    assert contract_metadata("trajectory.v1")["schema_bundle_hash"] == SCHEMA_BUNDLE_HASH
 
 
 def test_contract_model_registry_covers_downstream_fusionkit_tickets() -> None:
@@ -120,7 +120,7 @@ def test_contract_metadata_helpers_match_fixture_contract() -> None:
             "request_id": "fusion_req_helper_001",
             "mode": "single",
             "status": "succeeded",
-            "candidate_ids": [],
+            "trajectory_ids": [],
             "model_call_ids": [],
             "started_at": metadata["created_at"],
         }

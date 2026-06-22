@@ -27,7 +27,7 @@ async def test_tracked_fusion_run_completes_and_is_inspectable(tmp_path) -> None
     assert isinstance(result, RunInspection)
     assert result.state == "completed"
     assert result.final_output == "fused final answer"
-    assert len(result.candidates) == 1
+    assert len(result.trajectories) == 1
     assert result.model_call_ids
     assert result.judge_synthesis_record is not None
     assert result.judge_synthesis_record["schema"] == "judge-synthesis-record.v1"
@@ -36,7 +36,7 @@ async def test_tracked_fusion_run_completes_and_is_inspectable(tmp_path) -> None
 
     summary = store.read_summary(result.run_id)
     assert summary.state == "completed"
-    assert store.inspect_run(result.run_id).candidates[0].artifact is not None
+    assert store.inspect_run(result.run_id).trajectories[0].artifact is not None
 
     model_call_events = [
         event
@@ -122,7 +122,7 @@ def test_tracked_fusion_run_requires_action_placeholder_is_inspectable(tmp_path)
 
     pause = manager.record_requires_action(
         created.run_id,
-        candidate_id="candidate_tool_001",
+        trajectory_id="trajectory_tool_001",
         tool_call_id="tool_call_read_001",
         plan={"schema": "tool-call-plan.v1", "plan_id": "tool_plan_read_001"},
     )

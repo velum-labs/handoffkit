@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from fusionkit_core.contracts import Status, TrajectoryStep, TrajectoryVerification
+
 ChatRole = Literal["system", "user", "assistant", "tool"]
 
 
@@ -92,10 +94,23 @@ class StreamChunk(BaseModel):
     usage: Usage | None = None
 
 
-class Candidate(BaseModel):
+class Trajectory(BaseModel):
+    """The canonical fusion unit.
+
+    A trajectory is one attempt at the request. A plain sampled answer is a
+    zero-step trajectory (``steps == []``, ``verification is None``); a coding
+    agent's run is a full trajectory with reasoning/tool/observation steps and a
+    verification result. ``content`` is the final output text. ``rank``/``score``
+    are engine-internal ranking fields and are not part of the wire contract
+    (see :class:`fusionkit_core.contracts.TrajectoryV1`).
+    """
+
     id: str
     model_id: str
     content: str
+    steps: list[TrajectoryStep] = Field(default_factory=list)
+    verification: TrajectoryVerification | None = None
+    status: Status = "succeeded"
     rank: int | None = None
     score: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -113,7 +128,7 @@ class FusionAnalysis(BaseModel):
 class FusionResult(BaseModel):
     mode: str
     content: str
-    candidates: list[Candidate] = Field(default_factory=list)
+    trajectories: list[Trajectory] = Field(default_factory=list)
     analysis: FusionAnalysis | None = None
     route: str | None = None
     metrics: dict[str, Any] = Field(default_factory=dict)

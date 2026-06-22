@@ -34,7 +34,7 @@ def test_chat_completions_single_mode(tmp_path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["choices"][0]["message"]["content"] == "hello from fake"
-    assert body["fusionkit"]["candidate_count"] == 1
+    assert body["fusionkit"]["trajectory_count"] == 1
     assert body["fusionkit"]["run_id"]
     assert body["fusionkit"]["trace_id"]
     assert body["fusionkit"]["state"] == "completed"
@@ -142,7 +142,7 @@ def test_chat_completions_preserves_self_fusion_sample_count(tmp_path) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["fusionkit"]["candidate_count"] == 2
+    assert body["fusionkit"]["trajectory_count"] == 2
 
 
 def test_chat_completions_passthrough_by_endpoint_id(tmp_path) -> None:

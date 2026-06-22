@@ -48,7 +48,6 @@ class PromptOverrides(BaseModel):
 
     judge_system: str | None = None
     synthesizer_system: str | None = None
-    trajectory_synthesizer_system: str | None = None
     trajectory_step_system: str | None = None
     verifier_system: str | None = None
     panel_system: str | None = None

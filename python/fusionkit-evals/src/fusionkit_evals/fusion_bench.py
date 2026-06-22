@@ -482,7 +482,7 @@ def join_run_records(
         artifact_records=artifact_records,
         tool_records=tool_records,
         provider_metadata=inspection.provider_metadata,
-        model_ids=[candidate.model_id for candidate in inspection.candidates],
+        model_ids=[trajectory.model_id for trajectory in inspection.trajectories],
         cost_estimate=_cost_from_provider_metadata(inspection.provider_metadata),
         latency_s=_latency_from_model_calls(model_call_records),
     )

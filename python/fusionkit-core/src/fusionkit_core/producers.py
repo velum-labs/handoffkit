@@ -1,0 +1,327 @@
+"""Pluggable trajectory generation.
+
+The fusion engine consumes a list of :class:`~fusionkit_core.types.Trajectory`
+regardless of how they were produced. A :class:`TrajectoryProducer` is the seam
+that produces them:
+
+- :class:`ChatTrajectoryProducer` - in-process, one chat call per attempt ->
+  zero-step trajectories (the old ``PanelRunner``).
+- :class:`AgentTrajectoryProducer` - in-process bounded agent loop using the
+  model's tool calls, delegating tool *execution* to an injected
+  :class:`ToolExecutor` so core never embeds a sandbox.
+- :class:`ExternalTrajectoryProducer` - wraps trajectories produced by an
+  external harness (cursorkit/handoffkit) and submitted over the wire.
+
+Tool execution is delegated through the :class:`ToolExecutor` protocol; core owns
+the control flow, the harness/sandbox owns execution.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Mapping, Sequence
+from typing import Any, Protocol
+
+from fusionkit_core.clients import ChatClient
+from fusionkit_core.config import SamplingConfig
+from fusionkit_core.contracts import (
+    ContractUsage,
+    TrajectoryStep,
+    TrajectoryV1,
+    TrajectoryVerification,
+    contract_metadata,
+)
+from fusionkit_core.types import ChatMessage, ModelResponse, Trajectory
+
+
+def trajectory_from_response(
+    model_id: str,
+    response: ModelResponse,
+    *,
+    ordinal: int = 0,
+    sampling: SamplingConfig | None = None,
+) -> Trajectory:
+    """Single chokepoint that lifts a chat response into a zero-step trajectory.
+
+    Every internally generated trajectory flows through here so the runtime
+    ``Trajectory`` shape is constructed in exactly one place.
+    """
+    metadata: dict[str, Any] = {
+        "latency_s": response.latency_s,
+        "usage": response.usage.model_dump(),
+        "finish_reason": response.finish_reason,
+    }
+    if sampling is not None:
+        metadata["temperature"] = sampling.temperature
+        metadata["seed"] = sampling.seed
+    return Trajectory(
+        id=f"{model_id}:{ordinal}",
+        model_id=model_id,
+        content=response.content,
+        steps=[],
+        verification=None,
+        status="succeeded",
+        metadata=metadata,
+    )
+
+
+def trajectory_to_contract(
+    trajectory: Trajectory,
+    *,
+    trajectory_id: str | None = None,
+) -> TrajectoryV1:
+    """Convert a runtime trajectory into the wire contract record."""
+    usage = trajectory.metadata.get("usage")
+    contract_usage = None
+    if isinstance(usage, Mapping):
+        contract_usage = ContractUsage.model_validate(
+            {
+                "prompt_tokens": usage.get("prompt_tokens"),
+                "completion_tokens": usage.get("completion_tokens"),
+                "total_tokens": usage.get("total_tokens"),
+            }
+        )
+    return TrajectoryV1.model_validate(
+        {
+            **contract_metadata("trajectory.v1"),
+            "trajectory_id": trajectory_id or trajectory.id,
+            "model_id": trajectory.model_id,
+            "status": trajectory.status,
+            "steps": [step.model_dump() for step in trajectory.steps],
+            "final_output": trajectory.content,
+            "verification": (
+                trajectory.verification.model_dump()
+                if trajectory.verification is not None
+                else None
+            ),
+            "usage": contract_usage.model_dump() if contract_usage is not None else None,
+            "metadata": trajectory.metadata or None,
+        }
+    )
+
+
+def trajectory_from_contract(record: TrajectoryV1) -> Trajectory:
+    """Convert a wire contract record into a runtime trajectory."""
+    return Trajectory(
+        id=record.trajectory_id,
+        model_id=record.model_id,
+        content=record.final_output,
+        steps=list(record.steps),
+        verification=record.verification,
+        status=record.status,
+        metadata=dict(record.metadata or {}),
+    )
+
+
+class ToolExecutor(Protocol):
+    """Executes a single tool call and returns its output.
+
+    Implemented by the harness/sandbox (handoffkit, cursorkit). Core only calls
+    it; it never embeds execution.
+    """
+
+    async def execute(
+        self,
+        tool_name: str,
+        arguments: str,
+        *,
+        tool_call_id: str | None = None,
+    ) -> str: ...
+
+
+class TrajectoryProducer(Protocol):
+    async def produce(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig,
+    ) -> list[Trajectory]: ...
+
+
+class ChatTrajectoryProducer:
+    """In-process producer: one chat call per attempt -> zero-step trajectories."""
+
+    def __init__(self, clients: Mapping[str, ChatClient]) -> None:
+        self._clients = dict(clients)
+
+    async def generate_single(
+        self,
+        model_id: str,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig,
+    ) -> Trajectory:
+        client = self._client(model_id)
+        response = await client.chat(messages, sampling)
+        return trajectory_from_response(model_id, response, ordinal=0)
+
+    async def generate_self_fusion(
+        self,
+        model_id: str,
+        messages: Sequence[ChatMessage],
+        base_sampling: SamplingConfig,
+        temperatures: Sequence[float],
+        sample_count: int,
+    ) -> list[Trajectory]:
+        selected_temperatures = list(temperatures)[:sample_count]
+        if len(selected_temperatures) < sample_count:
+            missing_count = sample_count - len(selected_temperatures)
+            selected_temperatures.extend([base_sampling.temperature] * missing_count)
+
+        tasks = []
+        for index, temperature in enumerate(selected_temperatures):
+            sampling = base_sampling.model_copy(
+                update={
+                    "temperature": temperature,
+                    "seed": None if base_sampling.seed is None else base_sampling.seed + index,
+                }
+            )
+            tasks.append(self._generate(model_id, index, messages, sampling))
+        return list(await asyncio.gather(*tasks))
+
+    async def generate_panel(
+        self,
+        model_ids: Sequence[str],
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig,
+    ) -> list[Trajectory]:
+        tasks = [
+            self._generate(model_id, index, messages, sampling)
+            for index, model_id in enumerate(model_ids)
+        ]
+        return list(await asyncio.gather(*tasks))
+
+    async def _generate(
+        self,
+        model_id: str,
+        index: int,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig,
+    ) -> Trajectory:
+        client = self._client(model_id)
+        response = await client.chat(messages, sampling)
+        return trajectory_from_response(model_id, response, ordinal=index, sampling=sampling)
+
+    def _client(self, model_id: str) -> ChatClient:
+        try:
+            return self._clients[model_id]
+        except KeyError as exc:
+            raise KeyError(f"No client configured for model: {model_id}") from exc
+
+
+class ExternalTrajectoryProducer:
+    """Wraps trajectories produced elsewhere (an external coding harness)."""
+
+    def __init__(self, trajectories: Sequence[Trajectory]) -> None:
+        self._trajectories = list(trajectories)
+
+    async def produce(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig,
+    ) -> list[Trajectory]:
+        return list(self._trajectories)
+
+
+class AgentTrajectoryProducer:
+    """In-process bounded agent loop for one model.
+
+    Drives the model's tool-call loop, delegating execution to a
+    :class:`ToolExecutor`, and records each reasoning/tool/observation step. The
+    loop is bounded by ``max_tool_rounds``; tool execution lives in the injected
+    executor so core never grows a sandbox.
+    """
+
+    def __init__(
+        self,
+        clients: Mapping[str, ChatClient],
+        executor: ToolExecutor,
+        *,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        max_tool_rounds: int = 4,
+    ) -> None:
+        self._clients = dict(clients)
+        self._executor = executor
+        self._tools = list(tools) if tools is not None else None
+        self._max_tool_rounds = max_tool_rounds
+
+    async def generate(
+        self,
+        model_id: str,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig,
+        *,
+        ordinal: int = 0,
+    ) -> Trajectory:
+        client = self._client(model_id)
+        conversation = list(messages)
+        steps: list[TrajectoryStep] = []
+        step_index = 0
+        final = ""
+        status = "succeeded"
+        for _ in range(self._max_tool_rounds + 1):
+            response = await client.chat(
+                conversation,
+                sampling,
+                tools=self._tools,
+            )
+            if response.content.strip():
+                steps.append(
+                    TrajectoryStep(index=step_index, type="reasoning", text=response.content)
+                )
+                step_index += 1
+            if not response.tool_calls:
+                final = response.content
+                break
+            conversation.append(
+                ChatMessage(role="assistant", content=response.content, tool_calls=response.tool_calls)
+            )
+            for call in response.tool_calls:
+                steps.append(
+                    TrajectoryStep(
+                        index=step_index,
+                        type="tool_call",
+                        tool_name=call.name,
+                        tool_call_id=call.id,
+                        tool_input=call.arguments,
+                    )
+                )
+                step_index += 1
+                output = await self._executor.execute(
+                    call.name, call.arguments, tool_call_id=call.id
+                )
+                steps.append(
+                    TrajectoryStep(index=step_index, type="observation", text=output)
+                )
+                step_index += 1
+                conversation.append(
+                    ChatMessage(role="tool", content=output, tool_call_id=call.id)
+                )
+        else:
+            status = "failed"
+        return Trajectory(
+            id=f"{model_id}:{ordinal}",
+            model_id=model_id,
+            content=final,
+            steps=steps,
+            verification=None,
+            status=status,
+            metadata={},
+        )
+
+    def _client(self, model_id: str) -> ChatClient:
+        try:
+            return self._clients[model_id]
+        except KeyError as exc:
+            raise KeyError(f"No client configured for model: {model_id}") from exc
+
+
+__all__ = [
+    "AgentTrajectoryProducer",
+    "ChatTrajectoryProducer",
+    "ExternalTrajectoryProducer",
+    "ToolExecutor",
+    "TrajectoryProducer",
+    "TrajectoryVerification",
+    "trajectory_from_contract",
+    "trajectory_from_response",
+    "trajectory_to_contract",
+]

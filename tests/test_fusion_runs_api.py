@@ -32,7 +32,7 @@ def test_native_fusion_run_create_state_inspect_and_events(tmp_path) -> None:
     inspect_response = client.get(f"/v1/fusion/runs/{run_id}/inspect")
     assert inspect_response.status_code == 200
     inspection = inspect_response.json()
-    assert inspection["candidates"]
+    assert inspection["trajectories"]
     assert inspection["model_call_ids"]
     assert inspection["final_output"] == "fused final answer"
     assert inspection["judge_synthesis_record"]["schema"] == "judge-synthesis-record.v1"

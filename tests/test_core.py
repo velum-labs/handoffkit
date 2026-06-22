@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
-from fusionkit_core.fusion import CandidateRanker, FusionEngine
-from fusionkit_core.panel import PanelRunner
-from fusionkit_core.types import Candidate, ChatMessage
+from fusionkit_core.fusion import FusionEngine, TrajectoryRanker
+from fusionkit_core.producers import ChatTrajectoryProducer
+from fusionkit_core.types import ChatMessage, Trajectory
 
 
 def test_config_resolves_default_models() -> None:
@@ -18,7 +18,7 @@ def test_config_resolves_default_models() -> None:
 
 @pytest.mark.asyncio
 async def test_panel_runner_generates_self_fusion_candidates() -> None:
-    runner = PanelRunner({"fast": FakeModelClient("fast")})
+    runner = ChatTrajectoryProducer({"fast": FakeModelClient("fast")})
 
     candidates = await runner.generate_self_fusion(
         "fast",
@@ -82,20 +82,20 @@ async def test_fusion_engine_final_output_is_not_ranker_selection() -> None:
 
     result = await engine.run([ChatMessage(role="user", content="Compare options with evidence")])
 
-    assert result.candidates[0].content == "ranker likes this because it has evidence"
+    assert result.trajectories[0].content == "ranker likes this because it has evidence"
     assert result.content == "synthesized final answer from judge"
-    assert result.content != result.candidates[0].content
+    assert result.content != result.trajectories[0].content
     synthesis_record = result.metrics["judge_synthesis_record"]
     assert synthesis_record["decision"] == "synthesize"
-    assert synthesis_record["metrics"]["candidate_contributions"]
-    assert synthesis_record["metrics"]["candidate_rejections"]
+    assert synthesis_record["metrics"]["trajectory_contributions"]
+    assert synthesis_record["metrics"]["trajectory_rejections"]
 
 
 def test_candidate_ranker_adversarial_keyword_bait_documents_mvp_limitation() -> None:
-    ranked = CandidateRanker().rank(
+    ranked = TrajectoryRanker().rank(
         [
-            Candidate(id="correct", model_id="terse", content="4"),
-            Candidate(
+            Trajectory(id="correct", model_id="terse", content="4"),
+            Trajectory(
                 id="keyword_bait",
                 model_id="verbose",
                 content="Because there is evidence, therefore the answer is 5.",

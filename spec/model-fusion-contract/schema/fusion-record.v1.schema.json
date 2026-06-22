@@ -13,7 +13,7 @@
         "request_id",
         "mode",
         "status",
-        "candidate_ids",
+        "trajectory_ids",
         "model_call_ids",
         "started_at"
       ],
@@ -41,7 +41,7 @@
         "status": {
           "$ref": "common.schema.json#/$defs/status"
         },
-        "candidate_ids": {
+        "trajectory_ids": {
           "type": "array",
           "items": {
             "type": "string"
@@ -53,7 +53,7 @@
             "type": "string"
           }
         },
-        "selected_candidate_id": {
+        "selected_trajectory_id": {
           "type": "string"
         },
         "synthesis_record_id": {

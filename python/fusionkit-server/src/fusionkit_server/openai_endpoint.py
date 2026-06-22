@@ -25,7 +25,7 @@ from typing import Any, cast
 from fusionkit_core.clients import build_client
 from fusionkit_core.config import ModelEndpoint, ProviderKind, SamplingConfig
 from fusionkit_core.trace import (
-    TRACE_CANDIDATE_HEADER,
+    TRACE_TRAJECTORY_HEADER,
     TRACE_ID_HEADER,
     TRACE_SPAN_HEADER,
     new_span_id,
@@ -120,7 +120,7 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                 self._send_json(404, {"error": {"message": "not found"}})
                 return
             trace_id = self.headers.get(TRACE_ID_HEADER)
-            candidate_id = self.headers.get(TRACE_CANDIDATE_HEADER)
+            trajectory_id = self.headers.get(TRACE_TRAJECTORY_HEADER)
             parent_span = self.headers.get(TRACE_SPAN_HEADER)
             call_span = new_span_id()
             try:
@@ -142,7 +142,7 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                     trace_id=trace_id,
                     span_id=call_span,
                     parent_span_id=parent_span,
-                    candidate_id=candidate_id,
+                    trajectory_id=trajectory_id,
                     model_id=endpoint.id,
                     payload={
                         "model": endpoint.model,
@@ -180,7 +180,7 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                     trace_id=trace_id,
                     span_id=call_span,
                     parent_span_id=parent_span,
-                    candidate_id=candidate_id,
+                    trajectory_id=trajectory_id,
                     model_id=endpoint.id,
                     payload={
                         "model": endpoint.model,
@@ -246,7 +246,7 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                     trace_id=trace_id,
                     span_id=call_span,
                     parent_span_id=parent_span,
-                    candidate_id=candidate_id,
+                    trajectory_id=trajectory_id,
                     model_id=endpoint.id,
                     payload={
                         "model": endpoint.model,

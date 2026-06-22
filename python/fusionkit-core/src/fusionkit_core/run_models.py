@@ -30,7 +30,7 @@ ToolExecutionMode = Literal["disabled", "external", "executor"]
 RunEventType = Literal[
     "run_queued",
     "state_changed",
-    "candidate_recorded",
+    "trajectory_recorded",
     "model_call_recorded",
     "artifact_recorded",
     "judge_synthesis_recorded",
@@ -66,14 +66,14 @@ class ToolExecutionPolicy(RunBaseModel):
 
 
 class ToolPausePlaceholder(RunBaseModel):
-    candidate_id: str
+    trajectory_id: str
     tool_call_id: str
     plan: ToolCallPlanV1 | None = None
     policy_cache_key: str | None = None
 
 
 class ToolResultSubmission(RunBaseModel):
-    candidate_id: str
+    trajectory_id: str
     tool_call_id: str
     tool_name: str
     output_hash: Sha256 | None = None
@@ -90,7 +90,7 @@ class FusionRunEvent(RunBaseModel):
     status: Status
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     event_type: RunEventType
-    candidate_id: str | None = None
+    trajectory_id: str | None = None
     model_call_id: str | None = None
     artifact_id: str | None = None
     tool_call_id: str | None = None
@@ -129,10 +129,10 @@ class RunStateSummary(RunBaseModel):
     final_output: str | None = None
 
 
-class CandidateInspection(RunBaseModel):
-    candidate_id: str
+class TrajectoryInspection(RunBaseModel):
+    trajectory_id: str
     model_id: str
-    source_candidate_id: str | None = None
+    source_trajectory_id: str | None = None
     model_call_id: str | None = None
     artifact: ContractArtifactRef | None = None
     score: float | None = None
@@ -145,7 +145,7 @@ class RunInspection(RunBaseModel):
     state: FusionRunState
     status: Status
     event_cursor: int
-    candidates: list[CandidateInspection] = Field(default_factory=list)
+    trajectories: list[TrajectoryInspection] = Field(default_factory=list)
     artifacts: list[ContractArtifactRef] = Field(default_factory=list)
     model_call_ids: list[str] = Field(default_factory=list)
     final_output: str | None = None

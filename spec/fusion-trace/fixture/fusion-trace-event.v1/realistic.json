@@ -12,7 +12,7 @@
   "model_id": "judge:gpt-5.5",
   "payload": {
     "decision": "synthesize",
-    "selected_candidate_id": "unified_e2e_agent_gpt_0",
+    "selected_trajectory_id": "unified_e2e_agent_gpt_0",
     "analysis": {
       "consensus": ["both candidates fix the add() sign bug"],
       "contradictions": [],
@@ -20,11 +20,11 @@
       "coverage_gaps": [],
       "likely_errors": []
     },
-    "candidate_ranks": {
+    "trajectory_ranks": {
       "unified_e2e_agent_gpt_0": 1,
       "unified_e2e_agent_opus_0": 2
     },
-    "candidate_contributions": {
+    "trajectory_contributions": {
       "unified_e2e_agent_opus_0": ["regression test"]
     }
   }

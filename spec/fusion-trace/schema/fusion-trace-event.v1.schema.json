@@ -79,7 +79,7 @@
       "type": "string",
       "description": "Optional alias used when a host already has a session identifier distinct from trace_id."
     },
-    "candidate_id": {
+    "trajectory_id": {
       "type": "string"
     },
     "model_id": {

@@ -5,28 +5,36 @@ from collections.abc import Mapping, Sequence
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
 from fusionkit_core.judge import JudgeSynthesisResult, JudgeSynthesizer
-from fusionkit_core.panel import PanelRunner
+from fusionkit_core.producers import ChatTrajectoryProducer
 from fusionkit_core.prompts import (
     VERIFIER_SYSTEM_PROMPT,
     build_verifier_prompt,
 )
 from fusionkit_core.router import HeuristicRouter
-from fusionkit_core.types import Candidate, ChatMessage, FusionResult
+from fusionkit_core.types import ChatMessage, FusionResult, Trajectory
 
 
-class CandidateRanker:
-    def rank(self, candidates: Sequence[Candidate]) -> list[Candidate]:
+class TrajectoryRanker:
+    """Heuristic pre-ranker over trajectories.
+
+    Ranks by verification status first (a passed verification dominates), then by
+    a cheap reasoning-signal/length heuristic on the final output. This only
+    orders the evidence handed to the judge; it never picks the winner.
+    """
+
+    def rank(self, trajectories: Sequence[Trajectory]) -> list[Trajectory]:
         ranked = sorted(
-            candidates,
-            key=lambda candidate: (
-                _candidate_signal(candidate),
-                len(candidate.content),
+            trajectories,
+            key=lambda trajectory: (
+                _verification_rank(trajectory),
+                _trajectory_signal(trajectory),
+                len(trajectory.content),
             ),
             reverse=True,
         )
         return [
-            candidate.model_copy(update={"rank": index + 1, "score": float(len(ranked) - index)})
-            for index, candidate in enumerate(ranked)
+            trajectory.model_copy(update={"rank": index + 1, "score": float(len(ranked) - index)})
+            for index, trajectory in enumerate(ranked)
         ]
 
 
@@ -39,9 +47,9 @@ class FusionEngine:
     ) -> None:
         self.config = config
         self.clients = dict(clients)
-        self.panel_runner = PanelRunner(self.clients)
+        self.producer = ChatTrajectoryProducer(self.clients)
         self.router = router or HeuristicRouter()
-        self.ranker = CandidateRanker()
+        self.ranker = TrajectoryRanker()
         self.judge_synthesizer = JudgeSynthesizer(config.prompts)
 
     async def run(
@@ -69,26 +77,26 @@ class FusionEngine:
             result.metrics["router_reasons"] = list(decision.reasons)
             return result
         if selected_mode == "single":
-            candidate = await self.panel_runner.generate_single(
+            trajectory = await self.producer.generate_single(
                 self.config.default_model,
                 messages,
                 selected_sampling,
             )
             return FusionResult(
                 mode="single",
-                content=candidate.content,
-                candidates=[candidate],
-                metrics=_candidate_metrics([candidate]),
+                content=trajectory.content,
+                trajectories=[trajectory],
+                metrics=_trajectory_metrics([trajectory]),
             )
 
-        candidates = await self._generate_candidates(
+        trajectories = await self._generate_trajectories(
             mode=selected_mode,
             messages=messages,
             sampling=selected_sampling,
             panel_models=panel_models,
             sample_count=sample_count,
         )
-        ranked = self.ranker.rank(candidates)
+        ranked = self.ranker.rank(trajectories)
         synthesis = await self._judge_synthesize(messages, ranked)
         answer = synthesis.final_output
         repair_metadata: dict[str, object] = {"repair_attempted": False, "repair_rounds": 0}
@@ -103,26 +111,26 @@ class FusionEngine:
         return FusionResult(
             mode=selected_mode,
             content=answer,
-            candidates=ranked,
+            trajectories=ranked,
             analysis=synthesis.analysis,
             metrics={
-                **_candidate_metrics(ranked),
+                **_trajectory_metrics(ranked),
                 "judge_synthesis_id": synthesis.record.synthesis_id,
                 "judge_synthesis_record": synthesis.record.model_dump(mode="json"),
                 **repair_metadata,
             },
         )
 
-    async def _generate_candidates(
+    async def _generate_trajectories(
         self,
         mode: FusionMode,
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
         panel_models: Sequence[str] | None,
         sample_count: int | None,
-    ) -> list[Candidate]:
+    ) -> list[Trajectory]:
         if mode == "self":
-            return await self.panel_runner.generate_self_fusion(
+            return await self.producer.generate_self_fusion(
                 self.config.default_model,
                 messages,
                 sampling,
@@ -133,19 +141,19 @@ class FusionEngine:
             models = list(panel_models or self.config.panel_models)
             if not models:
                 models = [endpoint.id for endpoint in self.config.endpoints]
-            return await self.panel_runner.generate_panel(models, messages, sampling)
+            return await self.producer.generate_panel(models, messages, sampling)
         raise ValueError(f"Unsupported fusion generation mode: {mode}")
 
     async def _judge_synthesize(
         self,
         messages: Sequence[ChatMessage],
-        candidates: Sequence[Candidate],
+        trajectories: Sequence[Trajectory],
     ) -> JudgeSynthesisResult:
         judge = self._client(self.config.resolved_judge_model)
         synthesizer = self._client(self.config.resolved_synthesizer_model)
         return await self.judge_synthesizer.synthesize(
             messages,
-            candidates,
+            trajectories,
             judge_client=judge,
             synthesizer_client=synthesizer,
             judge_sampling=self.config.sampling.model_copy(update={"temperature": 0.0}),
@@ -156,7 +164,7 @@ class FusionEngine:
         self,
         messages: Sequence[ChatMessage],
         answer: str,
-        candidates: Sequence[Candidate],
+        trajectories: Sequence[Trajectory],
     ) -> str:
         verifier = self._client(self.config.resolved_judge_model)
         response = await verifier.chat(
@@ -167,7 +175,7 @@ class FusionEngine:
                 ),
                 ChatMessage(
                     role="user",
-                    content=build_verifier_prompt(_last_user_text(messages), answer, candidates),
+                    content=build_verifier_prompt(_last_user_text(messages), answer, trajectories),
                 ),
             ],
             self.config.sampling.model_copy(update={"temperature": 0.0}),
@@ -198,33 +206,42 @@ def _last_user_text(messages: Sequence[ChatMessage]) -> str:
     return ""
 
 
-def _candidate_signal(candidate: Candidate) -> int:
-    lower = candidate.content.lower()
+def _verification_rank(trajectory: Trajectory) -> int:
+    verification = trajectory.verification
+    if verification is None:
+        return 0
+    if verification.status == "succeeded":
+        return 2
+    return -1
+
+
+def _trajectory_signal(trajectory: Trajectory) -> int:
+    lower = trajectory.content.lower()
     signal_words = ("because", "therefore", "however", "evidence", "tradeoff", "verify")
     return sum(1 for word in signal_words if word in lower)
 
 
-def _candidate_metrics(candidates: Sequence[Candidate]) -> dict[str, object]:
+def _trajectory_metrics(trajectories: Sequence[Trajectory]) -> dict[str, object]:
     latencies = [
         latency
-        for candidate in candidates
-        if isinstance(latency := candidate.metadata.get("latency_s"), int | float)
+        for trajectory in trajectories
+        if isinstance(latency := trajectory.metadata.get("latency_s"), int | float)
     ]
     completion_tokens = 0
     prompt_tokens = 0
-    for candidate in candidates:
-        usage = candidate.metadata.get("usage")
+    for trajectory in trajectories:
+        usage = trajectory.metadata.get("usage")
         if not isinstance(usage, dict):
             continue
         completion_tokens += _optional_int(usage.get("completion_tokens"))
         prompt_tokens += _optional_int(usage.get("prompt_tokens"))
     return {
-        "candidate_count": len(candidates),
-        "candidate_model_ids": [candidate.model_id for candidate in candidates],
-        "candidate_latency_s_max": max(latencies, default=0.0),
-        "candidate_latency_s_sum": sum(latencies),
-        "candidate_prompt_tokens": prompt_tokens,
-        "candidate_completion_tokens": completion_tokens,
+        "trajectory_count": len(trajectories),
+        "trajectory_model_ids": [trajectory.model_id for trajectory in trajectories],
+        "trajectory_latency_s_max": max(latencies, default=0.0),
+        "trajectory_latency_s_sum": sum(latencies),
+        "trajectory_prompt_tokens": prompt_tokens,
+        "trajectory_completion_tokens": completion_tokens,
     }
 
 

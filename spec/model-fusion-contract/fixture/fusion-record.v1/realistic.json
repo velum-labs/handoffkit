@@ -1,7 +1,7 @@
 {
   "schema": "fusion-record.v1",
   "schema_version": "v1",
-  "schema_bundle_hash": "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671",
+  "schema_bundle_hash": "sha256:aae33b89a771fd5916e21bfffc5993d2d7ef98ecfc8542ba9570a8c99074d541",
   "producer": "fusionkit-contract-seed",
   "producer_version": "0.1.0",
   "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -10,22 +10,22 @@
   "request_id": "fusion_req_panel_001",
   "mode": "panel",
   "status": "succeeded",
-  "candidate_ids": [
-    "candidate_fast_001",
-    "candidate_writer_001"
+  "trajectory_ids": [
+    "trajectory_fast_001",
+    "trajectory_writer_001"
   ],
   "model_call_ids": [
     "call_panel_fast_001",
     "call_panel_writer_001"
   ],
-  "selected_candidate_id": "candidate_writer_001",
+  "selected_trajectory_id": "trajectory_writer_001",
   "synthesis_record_id": "synthesis_panel_001",
   "final_output": "Use language-neutral schemas first, then validate fixtures from each repo.",
   "started_at": "2026-06-15T22:03:01Z",
   "finished_at": "2026-06-15T22:03:07Z",
   "latency_ms": 6120.0,
   "metrics": {
-    "candidate_count": 2,
+    "trajectory_count": 2,
     "judge_regret": 0.0
   },
   "artifacts": [

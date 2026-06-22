@@ -166,7 +166,7 @@ messages = [
 request = {
     "schema": "fusion-run-request.v1",
     "schema_version": "v1",
-    "schema_bundle_hash": "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671",
+    "schema_bundle_hash": "sha256:aae33b89a771fd5916e21bfffc5993d2d7ef98ecfc8542ba9570a8c99074d541",
     "producer": "fusionkit-local-mlx-panel-demo",
     "producer_version": "0.1.0",
     "producer_git_sha": os.environ["GIT_SHA"],
