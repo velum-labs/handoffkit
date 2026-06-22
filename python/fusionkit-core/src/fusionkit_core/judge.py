@@ -287,8 +287,6 @@ def _synthesis_metrics(
         {
             "trajectory_id": trajectory.id,
             "model_id": trajectory.model_id,
-            "rank": trajectory.rank,
-            "score": trajectory.score,
             "status": trajectory.status,
             "verification_status": (
                 trajectory.verification.status if trajectory.verification is not None else None
@@ -305,10 +303,6 @@ def _synthesis_metrics(
     metrics: dict[str, Any] = {
         "trajectory_contributions": contributions,
         "trajectory_rejections": rejections,
-        "trajectory_ranks": [
-            {"trajectory_id": trajectory.id, "rank": trajectory.rank, "score": trajectory.score}
-            for trajectory in trajectories
-        ],
         "judge_structured_parse_status": _judge_parse_status(analysis),
         "fusion_unit": "trajectory",
     }

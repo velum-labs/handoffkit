@@ -100,9 +100,9 @@ class Trajectory(BaseModel):
     A trajectory is one attempt at the request. A plain sampled answer is a
     zero-step trajectory (``steps == []``, ``verification is None``); a coding
     agent's run is a full trajectory with reasoning/tool/observation steps and a
-    verification result. ``content`` is the final output text. ``rank``/``score``
-    are engine-internal ranking fields and are not part of the wire contract
-    (see :class:`fusionkit_core.contracts.TrajectoryV1`).
+    verification result. ``content`` is the final output text. Trajectories flow
+    to the judge in generation order (see
+    :class:`fusionkit_core.contracts.TrajectoryV1` for the wire contract).
     """
 
     id: str
@@ -111,8 +111,6 @@ class Trajectory(BaseModel):
     steps: list[TrajectoryStep] = Field(default_factory=list)
     verification: TrajectoryVerification | None = None
     status: Status = "succeeded"
-    rank: int | None = None
-    score: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

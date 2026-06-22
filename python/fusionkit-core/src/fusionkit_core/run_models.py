@@ -135,8 +135,6 @@ class TrajectoryInspection(RunBaseModel):
     source_trajectory_id: str | None = None
     model_call_id: str | None = None
     artifact: ContractArtifactRef | None = None
-    score: float | None = None
-    rank: int | None = None
 
 
 class RunInspection(RunBaseModel):

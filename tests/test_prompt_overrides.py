@@ -154,7 +154,7 @@ async def test_candidate_synthesis_uses_prompt_overrides() -> None:
 
     await synthesizer.synthesize(
         [ChatMessage(role="user", content="Compare")],
-        [Trajectory(id="c1", model_id="m", content="answer", rank=1, score=1.0)],
+        [Trajectory(id="c1", model_id="m", content="answer")],
         judge_client=judge,
         synthesizer_client=synth_client,
         judge_sampling=SamplingConfig(temperature=0.0),

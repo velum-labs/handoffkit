@@ -198,8 +198,6 @@ class FusionRunManager:
             if budget_error is not None:
                 return self._fail_run(summary, budget_error)
             trajectories = await self._generate_trajectories(request, selected_mode, sampling)
-            if selected_mode != "single":
-                trajectories = self.engine.ranker.rank(trajectories)
             trajectory_infos, model_call_ids, trajectory_artifacts = self._record_trajectories(
                 run_id,
                 summary.trace_id,
@@ -694,8 +692,6 @@ class FusionRunManager:
                             "trajectory_id": trajectory_id,
                             "source_trajectory_id": trajectory.id,
                             "model_id": trajectory.model_id,
-                            "rank": trajectory.rank,
-                            "score": trajectory.score,
                             "artifact": artifact.model_dump(mode="json"),
                             "ordinal": index,
                         }
@@ -709,8 +705,6 @@ class FusionRunManager:
                     source_trajectory_id=trajectory.id,
                     model_call_id=model_call_id,
                     artifact=artifact,
-                    score=trajectory.score,
-                    rank=trajectory.rank,
                 )
             )
             model_call_ids.append(model_call_id)

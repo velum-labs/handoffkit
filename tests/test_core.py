@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
-from fusionkit_core.fusion import FusionEngine, TrajectoryRanker
+from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.producers import ChatTrajectoryProducer
-from fusionkit_core.types import ChatMessage, Trajectory
+from fusionkit_core.types import ChatMessage
 
 
 def test_config_resolves_default_models() -> None:
@@ -62,7 +62,7 @@ async def test_fusion_engine_runs_router_to_panel() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fusion_engine_final_output_is_not_ranker_selection() -> None:
+async def test_fusion_engine_final_output_is_synthesized_not_top_trajectory() -> None:
     config = _config(default_mode="panel")
     config.panel_models = ["fast", "writer"]
     clients = {
@@ -89,22 +89,6 @@ async def test_fusion_engine_final_output_is_not_ranker_selection() -> None:
     assert synthesis_record["decision"] == "synthesize"
     assert synthesis_record["metrics"]["trajectory_contributions"]
     assert synthesis_record["metrics"]["trajectory_rejections"]
-
-
-def test_candidate_ranker_adversarial_keyword_bait_documents_mvp_limitation() -> None:
-    ranked = TrajectoryRanker().rank(
-        [
-            Trajectory(id="correct", model_id="terse", content="4"),
-            Trajectory(
-                id="keyword_bait",
-                model_id="verbose",
-                content="Because there is evidence, therefore the answer is 5.",
-            ),
-        ]
-    )
-
-    assert ranked[0].id == "keyword_bait"
-    assert ranked[1].id == "correct"
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:

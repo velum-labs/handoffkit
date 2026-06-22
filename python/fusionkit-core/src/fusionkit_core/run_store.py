@@ -123,8 +123,6 @@ class FileSystemRunStore:
                             ),
                             model_call_id=event.model_call_id,
                             artifact=artifact,
-                            score=trajectory_payload.get("score"),
-                            rank=trajectory_payload.get("rank"),
                         )
                     )
             elif event.event_type == "model_call_recorded":

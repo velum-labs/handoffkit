@@ -87,10 +87,8 @@ async def test_judge_synthesizer_emits_contract_record_with_candidate_metadata()
             id="candidate_1",
             model_id="fast",
             content="grounded answer because evidence",
-            rank=1,
-            score=2.0,
         ),
-        Trajectory(id="candidate_2", model_id="writer", content="terse", rank=2, score=1.0),
+        Trajectory(id="candidate_2", model_id="writer", content="terse"),
     ]
 
     result = await synthesizer.synthesize(
@@ -105,7 +103,7 @@ async def test_judge_synthesizer_emits_contract_record_with_candidate_metadata()
     assert result.record.schema_name == "judge-synthesis-record.v1"
     assert result.record.final_output == "combined answer"
     assert result.record.metrics is not None
-    assert result.record.metrics["trajectory_ranks"][0]["trajectory_id"] == "candidate_1"
+    assert result.record.metrics["trajectory_contributions"][0]["trajectory_id"] == "candidate_1"
     assert result.record.metrics["trajectory_rejections"][0]["trajectory_id"] == "candidate_2"
     assert result.record.metrics["judge_structured_parse_status"] == "parsed"
 
@@ -119,8 +117,6 @@ async def test_judge_synthesizer_marks_invalid_structured_json() -> None:
             id="candidate_1",
             model_id="fast",
             content="grounded answer because evidence",
-            rank=1,
-            score=1.0,
         ),
     ]
 

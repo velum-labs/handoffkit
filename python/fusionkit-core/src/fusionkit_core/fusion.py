@@ -10,30 +10,6 @@ from fusionkit_core.router import HeuristicRouter
 from fusionkit_core.types import ChatMessage, FusionResult, Trajectory
 
 
-class TrajectoryRanker:
-    """Heuristic pre-ranker over trajectories.
-
-    Ranks by verification status first (a passed verification dominates), then by
-    a cheap reasoning-signal/length heuristic on the final output. This only
-    orders the evidence handed to the judge; it never picks the winner.
-    """
-
-    def rank(self, trajectories: Sequence[Trajectory]) -> list[Trajectory]:
-        ranked = sorted(
-            trajectories,
-            key=lambda trajectory: (
-                _verification_rank(trajectory),
-                _trajectory_signal(trajectory),
-                len(trajectory.content),
-            ),
-            reverse=True,
-        )
-        return [
-            trajectory.model_copy(update={"rank": index + 1, "score": float(len(ranked) - index)})
-            for index, trajectory in enumerate(ranked)
-        ]
-
-
 class FusionEngine:
     def __init__(
         self,
@@ -45,7 +21,6 @@ class FusionEngine:
         self.clients = dict(clients)
         self.producer = ChatTrajectoryProducer(self.clients)
         self.router = router or HeuristicRouter()
-        self.ranker = TrajectoryRanker()
         self.judge_synthesizer = JudgeSynthesizer(config.prompts)
 
     async def run(
@@ -90,16 +65,15 @@ class FusionEngine:
             panel_models=panel_models,
             sample_count=sample_count,
         )
-        ranked = self.ranker.rank(trajectories)
-        synthesis = await self._judge_synthesize(messages, ranked)
+        synthesis = await self._judge_synthesize(messages, trajectories)
         answer = synthesis.final_output
         return FusionResult(
             mode=selected_mode,
             content=answer,
-            trajectories=ranked,
+            trajectories=trajectories,
             analysis=synthesis.analysis,
             metrics={
-                **_trajectory_metrics(ranked),
+                **_trajectory_metrics(trajectories),
                 "judge_synthesis_id": synthesis.record.synthesis_id,
                 "judge_synthesis_record": synthesis.record.model_dump(mode="json"),
             },
@@ -159,21 +133,6 @@ def normalize_messages(messages: Sequence[ChatMessage | Mapping[str, str]]) -> l
         else:
             normalized.append(ChatMessage.model_validate(message))
     return normalized
-
-
-def _verification_rank(trajectory: Trajectory) -> int:
-    verification = trajectory.verification
-    if verification is None:
-        return 0
-    if verification.status == "succeeded":
-        return 2
-    return -1
-
-
-def _trajectory_signal(trajectory: Trajectory) -> int:
-    lower = trajectory.content.lower()
-    signal_words = ("because", "therefore", "however", "evidence", "tradeoff", "verify")
-    return sum(1 for word in signal_words if word in lower)
 
 
 def _trajectory_metrics(trajectories: Sequence[Trajectory]) -> dict[str, object]:
