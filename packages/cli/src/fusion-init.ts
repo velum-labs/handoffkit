@@ -38,6 +38,7 @@ import {
 import type { AuthChoice } from "./fusion/panel-auth.js";
 import { listModelsForAuth } from "./fusion/model-catalog.js";
 import type { ModelListResult } from "./fusion/model-catalog.js";
+import { runRoutingOnboardingStep } from "./fusion/routing-onboarding-step.js";
 import { ProgressBar, formatBytes } from "./ui/progress.js";
 import { confirm, done, note, select, text } from "./ui/prompt.js";
 import { Spinner } from "./ui/spinner.js";
@@ -422,6 +423,8 @@ export async function runFusionInit(input: {
   repoRoot?: string;
   force?: boolean;
   fusionkitDir?: string;
+  /** Enable smart routing setup; prefer local MLX when available. */
+  aiRouting?: boolean;
 }): Promise<number> {
   if (input.repoRoot === undefined) {
     out.write(
@@ -462,13 +465,19 @@ export async function runFusionInit(input: {
 
   const observe = await confirm({ message: "Enable the observability dashboard by default?", defaultValue: false });
 
+  const routingStep = await runRoutingOnboardingStep({
+    host,
+    ...(input.aiRouting === true ? { aiRouting: true } : {})
+  });
+
   const config: FusionConfig = {
     version: FUSION_CONFIG_VERSION,
     tool,
     panel,
     ...(judgeModel.length > 0 ? { judgeModel } : {}),
     local: isAllLocal(panel),
-    observe
+    observe,
+    ...(routingStep.routing !== undefined ? { routing: routingStep.routing } : {})
   };
 
   let path: string;

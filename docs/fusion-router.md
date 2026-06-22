@@ -159,7 +159,7 @@ Optional `.fusionkit/routing.override.json` shallow-merges route tables over `fu
 
 ## Phase scope
 
-Phase 1 covers config integration, model-gateway routing, and the `fusionkit fusion claude --route` CLI. Phase 2 adds OpenRouter, DeepSeek, Groq, and Google Gemini as first-class routing provider kinds (all via the existing OpenAI-compat backend). Phase 3A adds the Scope dashboard routing UI.
+Phase 1 covers config integration, model-gateway routing, and the `fusionkit fusion claude --route` CLI. Phase 2 adds OpenRouter, DeepSeek, Groq, and Google Gemini as first-class routing provider kinds (all via the existing OpenAI-compat backend). Phase 3A adds the Scope dashboard routing UI. Phase 3B adds AI-assisted routing onboarding in `fusionkit init`.
 
 ## Dashboard
 
@@ -196,3 +196,35 @@ Set `SCOPE_REPO_ROOT` when the dashboard cwd is not your git repo root (scope wa
 **Screenshot (providers):** table with five rows (`claude-sub`, `openrouter`, `deepseek`, `groq`, `google-gemini`) — kind badges, base URLs, key env names, key-present pills, connectivity column with ping latency or “key missing”.
 
 **Screenshot (scenarios):** five-row table (`default`, `background`, `longContext`, `reasoning`, `webSearch`) with mono primary targets and fallback badges; longContext row notes the 60k token threshold.
+
+## Onboarding
+
+`fusionkit init` can scaffold a `routing` section in `.fusionkit/fusion.json` based on what is already on your machine.
+
+### Trigger
+
+During an interactive init, FusionKit asks:
+
+1. **Add smart routing for Claude Code?** — opt-in (default: no). Skipping leaves `fusion.json` without a `routing` section.
+2. When local MLX is available (Apple Silicon + provisioned runtime), **Use local AI assistant to propose routing?** — default: no. Choosing yes runs `mlx-community/Llama-3.2-1B-Instruct-4bit` locally to draft routes and providers from detected auth.
+
+Pass **`--ai-routing`** to enable the routing step non-interactively and prefer the AI assistant when MLX is ready; otherwise deterministic defaults are written.
+
+```bash
+fusionkit init --ai-routing
+```
+
+### What gets detected (no secrets)
+
+| Signal | Source |
+| --- | --- |
+| Claude Code subscription | `detectSubscription("claude-code")` |
+| Codex subscription | `detectSubscription("codex")` |
+| API keys | env presence only: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` |
+| Local MLX | same readiness probe as init's MLX onboarding (`ensureProvisioned` on Apple Silicon) |
+
+### Deterministic fallback
+
+When MLX is unavailable, the user declines the AI step, or the model returns invalid JSON twice, FusionKit proposes defaults from `docs/phase-2-providers.md` §3 — for example Claude Code subscription → `default: claude-sub,claude-sonnet-4-5` with `{ id: claude-sub, provider: anthropic }` (no `keyEnv`), or the first available API-key provider otherwise.
+
+The proposal is shown before write; accept, edit the JSON, or skip. Init never blocks when routing setup fails.
