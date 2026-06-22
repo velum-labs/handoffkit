@@ -646,7 +646,7 @@ export class MlxEnv {
     return join(this.dir, "mlx-helper.py");
   }
 
-  /** Minimal, owned-cache environment for helper/server spawns. */
+  /** Minimal, owned-cache environment for helper (scan/download) spawns. */
   private helperEnv(): Record<string, string> {
     return {
       PATH: [dirname(this.venvPython), "/usr/bin", "/bin"].join(delimiter),
