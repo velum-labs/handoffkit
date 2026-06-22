@@ -254,6 +254,7 @@ export async function runFusionStatus(options: FusionStatusOptions = {}): Promis
 
   const subs = detectSubscriptions();
   const configPath = formatConfigPath(repoRoot, cwd);
+  const configExists = config !== undefined;
 
   const ingestUrl = resolveRoutingScopeIngestUrl(env);
   const stats = await fetchLast24hRoutingStats(ingestUrl, {
@@ -262,7 +263,7 @@ export async function runFusionStatus(options: FusionStatusOptions = {}): Promis
   });
 
   const payload = buildFusionStatusPayload({
-    configPath,
+    configPath: configExists ? configPath : "(none — run `fusionkit init`)",
     subscriptions: subs,
     nowSec,
     routes: config?.routing,
@@ -275,7 +276,7 @@ export async function runFusionStatus(options: FusionStatusOptions = {}): Promis
   }
 
   const report = renderFusionStatusReport({
-    configPath,
+    configPath: configExists ? configPath : "(none — run `fusionkit init`)",
     subscriptionsLine: [payload.subscriptions.claudeCode, payload.subscriptions.codex].join(", "),
     routes: config?.routing,
     ...(stats !== undefined ? { stats } : { dashboardDown: true })

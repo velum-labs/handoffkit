@@ -121,6 +121,11 @@ function resolveRouteInvocation(
   const enabled = opts.route === true || opts.routeDryRun === true || fromArgs.route || fromArgs.routeDryRun;
   const dryRun = opts.routeDryRun === true || fromArgs.routeDryRun;
   const routePreview = opts.routePreview ?? fromArgs.routePreview;
+  // --route-preview is only meaningful with --route-dry-run; surface this early
+  // so users don't see a preflight error from the (unintended) live path.
+  if (routePreview !== undefined && !dryRun) {
+    fail("--route-preview requires --route-dry-run");
+  }
   const repo = opts.repo !== undefined ? resolve(opts.repo) : fromArgs.repo;
   return {
     enabled,
