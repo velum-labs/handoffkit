@@ -25,13 +25,23 @@ export {
 } from "./routing.js";
 
 export {
+  classifyProviderError,
   parseRoutingProviderSpec,
   requireProvider,
+  resolveProviderBaseUrl,
   resolveRoutingProviders,
   RoutingProviderError,
-  ROUTING_PROVIDER_KINDS
+  ROUTING_PROVIDER_KINDS,
+  sanitizeDeepSeekRequest,
+  sanitizeGroqRequest,
+  sanitizeProviderRequest
 } from "./providers.js";
-export type { ResolvedRoutingProvider, RoutingProviderKind, RoutingProviderSpec } from "./providers.js";
+export type {
+  ProviderErrorAction,
+  ResolvedRoutingProvider,
+  RoutingProviderKind,
+  RoutingProviderSpec
+} from "./providers.js";
 
 export {
   DEFAULT_LONG_CONTEXT_THRESHOLD,
