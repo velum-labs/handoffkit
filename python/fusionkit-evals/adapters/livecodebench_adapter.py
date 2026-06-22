@@ -168,7 +168,7 @@ async def evaluate_problem(
         _score_result, sandbox, result, tests, test_timeout, checker_mode
     )
     cost = 0.0
-    for cand in result.candidates:
+    for cand in result.trajectories:
         est = _candidate_cost(engine, cand.model_id, cand.metadata.get("usage"))
         if est is not None:
             cost += est

@@ -16,14 +16,14 @@ from mlx_lm.sample_utils import make_sampler  # type: ignore[import-not-found]
 
 try:  # Trace emission is optional: this server may run in an MLX-only venv.
     from fusionkit_core.trace import (
-        TRACE_CANDIDATE_HEADER,
         TRACE_ID_HEADER,
         TRACE_SPAN_HEADER,
+        TRACE_TRAJECTORY_HEADER,
         new_span_id,
     )
     from fusionkit_core.trace import emit as trace_emit  # type: ignore[assignment]
 except Exception:  # noqa: BLE001 - degrade gracefully without fusionkit_core
-    TRACE_CANDIDATE_HEADER = "x-fusion-candidate-id"
+    TRACE_TRAJECTORY_HEADER = "x-fusion-trajectory-id"
     TRACE_ID_HEADER = "x-fusion-trace-id"
     TRACE_SPAN_HEADER = "x-fusion-span-id"
 
@@ -101,7 +101,7 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                 self._send_json(404, {"error": {"message": "not found"}})
                 return
             trace_id = self.headers.get(TRACE_ID_HEADER)
-            candidate_id = self.headers.get(TRACE_CANDIDATE_HEADER)
+            trajectory_id = self.headers.get(TRACE_TRAJECTORY_HEADER)
             parent_span = self.headers.get(TRACE_SPAN_HEADER)
             call_span = new_span_id()
             try:
@@ -121,7 +121,7 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                     trace_id=trace_id,
                     span_id=call_span,
                     parent_span_id=parent_span,
-                    candidate_id=candidate_id,
+                    trajectory_id=trajectory_id,
                     model_id=model_id,
                     payload={
                         "model": model_id,
@@ -151,7 +151,7 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                     trace_id=trace_id,
                     span_id=call_span,
                     parent_span_id=parent_span,
-                    candidate_id=candidate_id,
+                    trajectory_id=trajectory_id,
                     model_id=model_id,
                     payload={
                         "model": model_id,

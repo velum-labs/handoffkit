@@ -49,7 +49,7 @@ def _migrate(value: Any) -> Any:
     if isinstance(value, dict):
         migrated: dict[str, Any] = {}
         for key, item in value.items():
-            new_key = _KEY_RENAMES.get(key, key)
+            new_key = str(_KEY_RENAMES.get(key, key))
             # The candidate_recorded event nested its payload under "candidate".
             if key == "candidate" and isinstance(item, dict):
                 new_key = "trajectory"
