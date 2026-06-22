@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "velum-model-fusion-protocol"
-version = "0.1.1"
+version = "0.2.0"
 description = "Model fusion JSON Schema records and OpenAPI 3.1 HTTP contracts."
 requires-python = ">=3.11"
 readme = "README.md"
