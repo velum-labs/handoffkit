@@ -1,7 +1,7 @@
 {
   "name": "warrant",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "The governed execution and provenance plane for AI agents.",
   "license": "UNLICENSED",
   "type": "module",
