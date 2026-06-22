@@ -65,6 +65,44 @@ def trajectory_from_response(
     )
 
 
+def failed_trajectory(
+    model_id: str,
+    exc: BaseException,
+    *,
+    ordinal: int = 0,
+    sampling: SamplingConfig | None = None,
+) -> Trajectory:
+    """Lift a failed model call into a ``status="failed"`` trajectory.
+
+    The exception is recorded in ``metadata`` so the failure stays visible in
+    the result and metrics rather than aborting the whole panel.
+    """
+    metadata: dict[str, Any] = {
+        "error_code": exc.__class__.__name__,
+        "error_message": str(exc),
+    }
+    if sampling is not None:
+        metadata["temperature"] = sampling.temperature
+        metadata["seed"] = sampling.seed
+    return Trajectory(
+        id=f"{model_id}:{ordinal}",
+        model_id=model_id,
+        content="",
+        steps=[],
+        verification=None,
+        status="failed",
+        metadata=metadata,
+    )
+
+
+class PanelExhaustedError(RuntimeError):
+    """Raised when every model in a panel/self-fusion attempt failed.
+
+    A panel tolerates individual model failures, but if there are zero
+    survivors there is nothing to fuse, so the whole run must fail.
+    """
+
+
 def trajectory_to_contract(
     trajectory: Trajectory,
     *,
@@ -166,7 +204,7 @@ class ChatTrajectoryProducer:
             missing_count = sample_count - len(selected_temperatures)
             selected_temperatures.extend([base_sampling.temperature] * missing_count)
 
-        tasks = []
+        specs: list[tuple[str, int, SamplingConfig]] = []
         for index, temperature in enumerate(selected_temperatures):
             sampling = base_sampling.model_copy(
                 update={
@@ -174,8 +212,8 @@ class ChatTrajectoryProducer:
                     "seed": None if base_sampling.seed is None else base_sampling.seed + index,
                 }
             )
-            tasks.append(self._generate(model_id, index, messages, sampling))
-        return list(await asyncio.gather(*tasks))
+            specs.append((model_id, index, sampling))
+        return await self._settle(specs, messages)
 
     async def generate_panel(
         self,
@@ -183,11 +221,43 @@ class ChatTrajectoryProducer:
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
     ) -> list[Trajectory]:
-        tasks = [
-            self._generate(model_id, index, messages, sampling)
-            for index, model_id in enumerate(model_ids)
+        specs = [
+            (model_id, index, sampling) for index, model_id in enumerate(model_ids)
         ]
-        return list(await asyncio.gather(*tasks))
+        return await self._settle(specs, messages)
+
+    async def _settle(
+        self,
+        specs: Sequence[tuple[str, int, SamplingConfig]],
+        messages: Sequence[ChatMessage],
+    ) -> list[Trajectory]:
+        """Run every attempt, tolerating individual failures.
+
+        Exceptions become ``status="failed"`` trajectories so survivors can
+        still be fused. If there are zero survivors, raise
+        :class:`PanelExhaustedError`.
+        """
+        results = await asyncio.gather(
+            *(self._generate(model_id, index, messages, sampling)
+              for model_id, index, sampling in specs),
+            return_exceptions=True,
+        )
+        trajectories: list[Trajectory] = []
+        for (model_id, index, sampling), result in zip(specs, results, strict=True):
+            if isinstance(result, BaseException):
+                trajectories.append(
+                    failed_trajectory(model_id, result, ordinal=index, sampling=sampling)
+                )
+            else:
+                trajectories.append(result)
+        if not any(trajectory.status == "succeeded" for trajectory in trajectories):
+            errors = ", ".join(
+                f"{trajectory.model_id}: "
+                f"{trajectory.metadata.get('error_message', 'unknown error')}"
+                for trajectory in trajectories
+            )
+            raise PanelExhaustedError(f"All models failed ({errors})")
+        return trajectories
 
     async def _generate(
         self,

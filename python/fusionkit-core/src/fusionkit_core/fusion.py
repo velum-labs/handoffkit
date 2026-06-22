@@ -109,9 +109,10 @@ class FusionEngine:
     ) -> JudgeSynthesisResult:
         judge = self._client(self.config.resolved_judge_model)
         synthesizer = self._client(self.config.resolved_synthesizer_model)
+        survivors = [t for t in trajectories if t.status == "succeeded"] or list(trajectories)
         return await self.judge_synthesizer.synthesize(
             messages,
-            trajectories,
+            survivors,
             judge_client=judge,
             synthesizer_client=synthesizer,
             judge_sampling=self.config.sampling.model_copy(update={"temperature": 0.0}),
@@ -149,8 +150,11 @@ def _trajectory_metrics(trajectories: Sequence[Trajectory]) -> dict[str, object]
             continue
         completion_tokens += _optional_int(usage.get("completion_tokens"))
         prompt_tokens += _optional_int(usage.get("prompt_tokens"))
+    succeeded_count = sum(1 for trajectory in trajectories if trajectory.status == "succeeded")
     return {
         "trajectory_count": len(trajectories),
+        "succeeded_trajectory_count": succeeded_count,
+        "failed_trajectory_count": len(trajectories) - succeeded_count,
         "trajectory_model_ids": [trajectory.model_id for trajectory in trajectories],
         "trajectory_latency_s_max": max(latencies, default=0.0),
         "trajectory_latency_s_sum": sum(latencies),

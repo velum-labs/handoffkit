@@ -13,6 +13,7 @@ from fusionkit_core.artifacts import hash_text
 from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
 from fusionkit_core.contracts import (
     ContractArtifactRef,
+    ContractError,
     FusionMode,
     FusionRecordV1,
     FusionRunRequestV1,
@@ -25,6 +26,7 @@ from fusionkit_core.contracts import (
     status_for_run_state,
 )
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.producers import PanelExhaustedError
 from fusionkit_core.providers import provider_metadata
 from fusionkit_core.run_models import (
     ArtifactWriter,
@@ -217,9 +219,14 @@ class FusionRunManager:
             if selected_mode == "single":
                 answer = trajectories[0].content if trajectories else ""
             else:
-                selected_trajectory_id = _trajectory_id_for_source(
-                    trajectory_infos, trajectories[0].id
+                first_succeeded = next(
+                    (t for t in trajectories if t.status == "succeeded"),
+                    trajectories[0] if trajectories else None,
                 )
+                if first_succeeded is not None:
+                    selected_trajectory_id = _trajectory_id_for_source(
+                        trajectory_infos, first_succeeded.id
+                    )
                 self._append_state(summary, "judging")
                 self._append_state(summary, "synthesizing")
                 synthesis = await self.engine._judge_synthesize(
@@ -310,6 +317,16 @@ class FusionRunManager:
                 )
             )
             return self.store.inspect_run(run_id)
+        except PanelExhaustedError as exc:
+            error = NativeRunError(
+                error_kind="provider_error",
+                error_code=exc.__class__.__name__,
+                retryable=True,
+                owner="fusionkit",
+                terminal_reason="all_models_failed",
+                message=str(exc),
+            )
+            return self._fail_run(summary, error)
         except Exception as exc:
             error = NativeRunError(
                 error_kind="internal_error",
@@ -881,6 +898,14 @@ def _model_call_record(
         **provider_metadata(endpoint, usage if isinstance(usage, dict) else None),
         "finish_reason": trajectory.metadata.get("finish_reason"),
     }
+    failed = trajectory.status == "failed"
+    error = None
+    if failed:
+        error = ContractError(
+            kind="provider_error",
+            message=trajectory.metadata.get("error_message"),
+            retryable=True,
+        )
     return ModelCallRecordV1.model_validate(
         {
             **contract_metadata("model-call-record.v1"),
@@ -895,7 +920,7 @@ def _model_call_record(
                 }
             ),
             "response_hash": hash_text(trajectory.content),
-            "status": "succeeded",
+            "status": "failed" if failed else "succeeded",
             "messages": [message.model_dump(mode="json") for message in request.messages],
             "side_effects": "none",
             "started_at": datetime.now(UTC),
@@ -903,6 +928,7 @@ def _model_call_record(
             "latency_ms": latency_ms,
             "usage": usage if isinstance(usage, dict) else None,
             "output_text": trajectory.content,
+            "error": error.model_dump(mode="json") if error is not None else None,
             "metadata": metadata,
         }
     )
@@ -1042,8 +1068,11 @@ def _run_metrics(
     selected_mode: FusionMode,
     analysis: FusionAnalysis | None,
 ) -> dict[str, Any]:
+    succeeded_count = sum(1 for trajectory in trajectories if trajectory.status == "succeeded")
     metrics: dict[str, Any] = {
         "trajectory_count": len(trajectories),
+        "succeeded_trajectory_count": succeeded_count,
+        "failed_trajectory_count": len(trajectories) - succeeded_count,
         "trajectory_model_ids": [trajectory.model_id for trajectory in trajectories],
         "mode": selected_mode,
     }

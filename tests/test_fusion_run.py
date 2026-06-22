@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
 from fusionkit_core.contracts import (
     FusionRunRequestV1,
     ModelCallRecordV1,
@@ -14,7 +16,28 @@ from fusionkit_core.contracts import (
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.run import CreateRunResult, FusionRunManager, RunInspection
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.types import ChatMessage
+from fusionkit_core.types import ChatMessage, ModelResponse
+
+
+class _FailingChatClient:
+    def __init__(self, model_id: str) -> None:
+        self.model_id = model_id
+
+    async def chat(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig | None = None,
+        tools: Sequence[Any] | None = None,
+        tool_choice: Any | None = None,
+        extra: Mapping[str, Any] | None = None,
+    ) -> ModelResponse:
+        raise RuntimeError("provider exploded")
+
+    def stream_chat(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("provider exploded")
+
+    async def aclose(self) -> None:
+        return None
 
 
 @pytest.mark.asyncio
@@ -64,6 +87,110 @@ async def test_tracked_fusion_run_records_failure(tmp_path) -> None:
     assert result.state == "failed"
     assert result.terminal_error is not None
     assert result.terminal_error.terminal_reason == "run_execution_failed"
+
+
+@pytest.mark.asyncio
+async def test_tracked_panel_run_completes_with_failed_model_call(tmp_path) -> None:
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
+            ModelEndpoint(id="broken", model="fake-broken", base_url="http://localhost:8103"),
+            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8102"),
+        ],
+        default_model="fast",
+        judge_model="judge",
+        default_mode="panel",
+        panel_models=["fast", "broken"],
+    )
+    clients = {
+        "fast": FakeModelClient("fast", ["fast candidate with evidence"]),
+        "broken": _FailingChatClient("broken"),
+        "judge": FakeModelClient(
+            "judge",
+            [
+                '{"consensus":["candidate has evidence"],"contradictions":[],'
+                '"unique_insights":[],"coverage_gaps":[],"likely_errors":[],'
+                '"recommended_final_structure":["short"]}',
+                "fused final answer",
+            ],
+        ),
+    }
+    engine = FusionEngine(config=config, clients=clients)
+    store = FileSystemRunStore(tmp_path / "runs")
+    manager = FusionRunManager(engine, store, LocalArtifactStore(tmp_path / "runs"))
+    request = FusionRunRequestV1.model_validate(
+        {
+            **contract_metadata("fusion-run-request.v1"),
+            "request_id": "fusion_req_partial_001",
+            "mode": "panel",
+            "messages": [
+                ChatMessage(role="user", content="Explain model fusion").model_dump(
+                    mode="json", include={"role", "content"}
+                )
+            ],
+            "sampling": {},
+            "requested_models": ["fast", "broken"],
+        }
+    )
+
+    result = await manager.create_and_run(request, idempotency_key="partial-key")
+
+    assert isinstance(result, RunInspection)
+    assert result.state == "completed"
+    assert result.final_output == "fused final answer"
+
+    records = [
+        ModelCallRecordV1.model_validate(event.payload["model_call_record"])
+        for event in store.list_events(result.run_id)
+        if event.event_type == "model_call_recorded"
+    ]
+    statuses = {record.model: record.status for record in records}
+    assert statuses == {"fast": "succeeded", "broken": "failed"}
+    broken_record = next(record for record in records if record.model == "broken")
+    assert broken_record.error is not None
+    assert broken_record.error.kind == "provider_error"
+
+
+@pytest.mark.asyncio
+async def test_tracked_panel_run_fails_when_all_models_fail(tmp_path) -> None:
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="broken", model="fake-broken", base_url="http://localhost:8103"),
+            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8102"),
+        ],
+        default_model="broken",
+        judge_model="judge",
+        default_mode="panel",
+        panel_models=["broken"],
+    )
+    clients = {
+        "broken": _FailingChatClient("broken"),
+        "judge": FakeModelClient("judge", ["unused"]),
+    }
+    engine = FusionEngine(config=config, clients=clients)
+    store = FileSystemRunStore(tmp_path / "runs")
+    manager = FusionRunManager(engine, store, LocalArtifactStore(tmp_path / "runs"))
+    request = FusionRunRequestV1.model_validate(
+        {
+            **contract_metadata("fusion-run-request.v1"),
+            "request_id": "fusion_req_allfail_001",
+            "mode": "panel",
+            "messages": [
+                ChatMessage(role="user", content="Explain model fusion").model_dump(
+                    mode="json", include={"role", "content"}
+                )
+            ],
+            "sampling": {},
+            "requested_models": ["broken"],
+        }
+    )
+
+    result = await manager.create_and_run(request)
+
+    assert isinstance(result, RunInspection)
+    assert result.state == "failed"
+    assert result.terminal_error is not None
+    assert result.terminal_error.terminal_reason == "all_models_failed"
 
 
 @pytest.mark.asyncio
