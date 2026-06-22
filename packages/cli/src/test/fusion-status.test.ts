@@ -7,6 +7,7 @@ import { after, test } from "node:test";
 import { gitText } from "@fusionkit/workspace";
 
 import {
+  buildFusionStatusPayload,
   fetchLast24hRoutingStats,
   formatSubscriptionEntry,
   parseRoutingDecisionSse,
@@ -154,4 +155,51 @@ test("runFusionStatus renders against a sample config with dashboard down", asyn
   const report = lines.join("\n");
   assert.match(report, /Smart Routing Status/);
   assert.match(report, /dashboard not running/);
+});
+
+test("runFusionStatus --json emits valid structured payload", async () => {
+  const repo = freshRepo();
+  writeFusionConfig(repo, {
+    version: FUSION_CONFIG_VERSION,
+    routing: {
+      routes: { default: "claude-sub,claude-sonnet-4-5" },
+      providers: [{ id: "claude-sub", provider: "anthropic" }]
+    }
+  });
+  const lines: string[] = [];
+  const code = await runFusionStatus({
+    repo,
+    cwd: repo,
+    json: true,
+    fetchImpl: async () => {
+      throw new Error("dashboard down");
+    },
+    log: (line) => lines.push(line)
+  });
+  assert.equal(code, 0);
+  const payload = JSON.parse(lines.join("\n")) as Record<string, unknown>;
+  assert.equal(typeof payload.activeConfig, "string");
+  assert.deepEqual(Object.keys(payload.subscriptions as object).sort(), ["claudeCode", "codex"]);
+  assert.ok(payload.routing);
+  assert.deepEqual(payload.last24h, { dashboardDown: true });
+  assert.equal(payload.costTracking, "deferred-to-v0.6");
+});
+
+test("buildFusionStatusPayload contains expected keys", () => {
+  const payload = buildFusionStatusPayload({
+    configPath: "./.fusionkit/fusion.json",
+    subscriptions: {
+      "claude-code": { mode: "claude-code", available: true, expired: false },
+      codex: { mode: "codex", available: false, expired: false }
+    },
+    nowSec: 1_700_000_000,
+    routes: {
+      routes: { default: "claude-sub,claude-sonnet-4-5" },
+      providers: [{ id: "claude-sub", provider: "anthropic" }]
+    },
+    dashboardDown: true
+  });
+  assert.equal(payload.activeConfig, "./.fusionkit/fusion.json");
+  assert.equal(payload.costTracking, "deferred-to-v0.6");
+  assert.deepEqual(payload.last24h, { dashboardDown: true });
 });

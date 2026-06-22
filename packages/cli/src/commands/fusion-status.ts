@@ -21,6 +21,7 @@ import { fail } from "../shared/errors.js";
 
 export type FusionStatusOptions = {
   repo?: string;
+  json?: boolean;
   env?: NodeJS.ProcessEnv;
   cwd?: string;
   fetchImpl?: typeof fetch;
@@ -37,6 +38,18 @@ type Last24hStats = {
   count: number;
   topScenario: string;
   topCount: number;
+};
+
+/** JSON payload emitted by `fusion status --json`. */
+export type FusionStatusJson = {
+  activeConfig: string;
+  subscriptions: {
+    claudeCode: string;
+    codex: string;
+  };
+  routing: FusionConfig["routing"];
+  last24h: Last24hStats | { dashboardDown: true };
+  costTracking: "deferred-to-v0.6";
 };
 
 const SMART_ROUTING_LABEL = "Smart routing (recommended)";
@@ -191,6 +204,32 @@ export function renderFusionStatusReport(input: {
 }
 
 /**
+ * Build the structured status payload shared by formatted and JSON output.
+ */
+export function buildFusionStatusPayload(input: {
+  configPath: string;
+  subscriptions: ReturnType<typeof detectSubscriptions>;
+  nowSec: number;
+  routes: FusionConfig["routing"];
+  stats?: Last24hStats;
+  dashboardDown?: boolean;
+}): FusionStatusJson {
+  return {
+    activeConfig: input.configPath,
+    subscriptions: {
+      claudeCode: formatSubscriptionEntry("Claude Code", input.subscriptions["claude-code"], input.nowSec),
+      codex: formatSubscriptionEntry("Codex", input.subscriptions.codex, input.nowSec)
+    },
+    routing: input.routes,
+    last24h:
+      input.dashboardDown === true
+        ? { dashboardDown: true }
+        : (input.stats ?? { count: 0, topScenario: "—", topCount: 0 }),
+    costTracking: "deferred-to-v0.6"
+  };
+}
+
+/**
  * Run `fusionkit fusion status`.
  */
 export async function runFusionStatus(options: FusionStatusOptions = {}): Promise<number> {
@@ -214,10 +253,7 @@ export async function runFusionStatus(options: FusionStatusOptions = {}): Promis
   }
 
   const subs = detectSubscriptions();
-  const subscriptionsLine = [
-    formatSubscriptionEntry("Claude Code", subs["claude-code"], nowSec),
-    formatSubscriptionEntry("Codex", subs.codex, nowSec)
-  ].join(", ");
+  const configPath = formatConfigPath(repoRoot, cwd);
 
   const ingestUrl = resolveRoutingScopeIngestUrl(env);
   const stats = await fetchLast24hRoutingStats(ingestUrl, {
@@ -225,9 +261,22 @@ export async function runFusionStatus(options: FusionStatusOptions = {}): Promis
     now: () => nowMs
   });
 
+  const payload = buildFusionStatusPayload({
+    configPath,
+    subscriptions: subs,
+    nowSec,
+    routes: config?.routing,
+    ...(stats !== undefined ? { stats } : { dashboardDown: true })
+  });
+
+  if (options.json === true) {
+    log(JSON.stringify(payload, null, 2));
+    return 0;
+  }
+
   const report = renderFusionStatusReport({
-    configPath: formatConfigPath(repoRoot, cwd),
-    subscriptionsLine,
+    configPath,
+    subscriptionsLine: [payload.subscriptions.claudeCode, payload.subscriptions.codex].join(", "),
     routes: config?.routing,
     ...(stats !== undefined ? { stats } : { dashboardDown: true })
   });

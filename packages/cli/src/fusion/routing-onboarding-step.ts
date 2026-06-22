@@ -37,6 +37,11 @@ export type RoutingOnboardingStepInput = {
     preferAi?: boolean;
     action?: "accept" | "edit" | "skip";
   };
+  /**
+   * Test hook invoked after the proposal is rendered and before accept/edit/skip.
+   * Used to assert on-disk config is unchanged until the user accepts.
+   */
+  onProposalReady?: () => void;
 };
 
 export type RoutingOnboardingStepResult = {
@@ -115,9 +120,15 @@ export async function runRoutingOnboardingStep(
   }
 
   out.write(`\n${box("proposed routing", formatRoutingSection(proposal).split("\n"))}\n`);
+  input.onProposalReady?.();
 
-  if (canPromptInteractively() && input.promptOverrides?.action === undefined) {
-    const action = await select<"accept" | "edit" | "skip">({
+  let action: "accept" | "edit" | "skip";
+  if (input.promptOverrides?.action !== undefined) {
+    action = input.promptOverrides.action;
+  } else if (input.aiRouting === true && !canPromptInteractively()) {
+    action = "accept";
+  } else if (canPromptInteractively()) {
+    action = await select<"accept" | "edit" | "skip">({
       message: "Routing setup",
       options: [
         { value: "accept", label: "accept proposal", hint: "write routing to fusion.json" },
@@ -126,12 +137,16 @@ export async function runRoutingOnboardingStep(
       ],
       defaultIndex: 0
     });
+  } else {
+    action = "accept";
+  }
 
-    if (action === "skip") {
-      return { usedAi, fellBackToDefaults };
-    }
+  if (action === "skip") {
+    return { usedAi, fellBackToDefaults };
+  }
 
-    if (action === "edit") {
+  if (action === "edit") {
+    if (canPromptInteractively() && input.promptOverrides?.action === undefined) {
       const edited = await text({
         message: "Routing JSON (routes + providers)",
         defaultValue: JSON.stringify(proposal, null, 2)
@@ -144,10 +159,6 @@ export async function runRoutingOnboardingStep(
         );
       }
     }
-  } else if (input.promptOverrides?.action === "skip") {
-    return { usedAi, fellBackToDefaults };
-  } else if (input.promptOverrides?.action === "edit") {
-    // Non-interactive edit override keeps the proposal as-is (used only in tests).
   }
 
   note(`routing will be saved under ${cyan("routing")} in fusion.json`);
