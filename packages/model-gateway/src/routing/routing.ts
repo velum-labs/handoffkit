@@ -70,8 +70,10 @@ function toolNames(tools: RoutableChatRequest["tools"] | RoutableAnthropicReques
     .map((tool) => {
       if (!isRecord(tool)) return undefined;
       if (typeof tool.name === "string") return tool.name;
-      const fn = tool.function;
-      if (isRecord(fn) && typeof fn.name === "string") return fn.name;
+      if ("function" in tool) {
+        const fn = tool.function;
+        if (isRecord(fn) && typeof fn.name === "string") return fn.name;
+      }
       return undefined;
     })
     .filter((name): name is string => name !== undefined);
@@ -135,7 +137,7 @@ export function extractRequestText(
   parts.push(systemText(anthropic.system));
   for (const message of request.messages ?? []) {
     parts.push(textOfContent(message.content));
-    if (isRecord(message) && Array.isArray(message.tool_calls)) {
+    if (Array.isArray(message.tool_calls)) {
       parts.push(JSON.stringify(message.tool_calls));
     }
   }

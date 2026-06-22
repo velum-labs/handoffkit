@@ -34,6 +34,7 @@ the pages here explain how the implementation is organized and operated.
 These focused notes document model-fusion and release workflows:
 
 - [Fusion Harness Gateway](fusion-harness-gateway.md)
+- [Fusion Claude Router](fusion-router.md)
 - [Fusion Judge Trajectory](fusion-judge-trajectory.md)
 - [FusionKit handoff executor](fusionkit-handoff-executor.md)
 - [Release publishing](release-publishing.md)
