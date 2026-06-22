@@ -266,6 +266,27 @@ test("parseRoutingProviderSpec validates provider entries", () => {
   assert.throws(() => parseRoutingProviderSpec({ id: "", provider: "openai" }, 0), RoutingProviderError);
 });
 
+test("parseRoutingProviderSpec accepts Phase 2 provider kinds", () => {
+  const openrouter = parseRoutingProviderSpec({ id: "or", provider: "openrouter" }, 0);
+  assert.equal(openrouter.keyEnv, "OPENROUTER_API_KEY");
+
+  const deepseek = parseRoutingProviderSpec({ id: "ds", provider: "deepseek" }, 0);
+  assert.equal(deepseek.keyEnv, "DEEPSEEK_API_KEY");
+
+  const groq = parseRoutingProviderSpec({ id: "gq", provider: "groq" }, 0);
+  assert.equal(groq.keyEnv, "GROQ_API_KEY");
+
+  const gemini = parseRoutingProviderSpec({ id: "gg", provider: "google-gemini" }, 0);
+  assert.equal(gemini.keyEnv, "GEMINI_API_KEY");
+});
+
+test("parseRoutingProviderSpec rejects unknown provider kind", () => {
+  assert.throws(
+    () => parseRoutingProviderSpec({ id: "bad", provider: "not-a-provider" }, 0),
+    RoutingProviderError
+  );
+});
+
 test("resolveRoutingProviders rejects duplicate ids and missing keys", () => {
   const providers = resolveRoutingProviders(
     [{ id: "p1", provider: "openai", keyEnv: "OPENAI_API_KEY" }],
