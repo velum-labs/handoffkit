@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
+import time
+
 import pytest
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import (
     CostMetadata,
+    EndpointAuth,
     EndpointCapabilities,
     FusionConfig,
     ModelEndpoint,
@@ -12,6 +16,11 @@ from fusionkit_core.config import (
     RunBudget,
 )
 from fusionkit_core.contracts import FusionRunRequestV1, contract_metadata
+from fusionkit_core.credentials import (
+    SubscriptionAuthError,
+    clear_credential_cache,
+    resolve_credential,
+)
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.providers import (
     endpoint_to_contract,
@@ -84,10 +93,117 @@ def test_api_compatibility_maps_providers_within_contract_enum() -> None:
     assert compatibility("openai") == "openai-chat-completions"
     assert compatibility("openai-compatible") == "openai-chat-completions"
     assert compatibility("mlx-lm") == "mlx-lm-server"
+    assert compatibility("codex") == "openai-responses"
     # The model_endpoint.v1 enum has no native cloud value, so Anthropic and
     # Google map to the generic "custom" wire format.
     assert compatibility("anthropic") == "custom"
     assert compatibility("google") == "custom"
+
+
+# --- subscription credentials ----------------------------------------------
+
+
+def _claude_endpoint(path: str) -> ModelEndpoint:
+    return ModelEndpoint(
+        id="claude-sub",
+        provider="anthropic",
+        model="claude-sonnet-4-5",
+        auth=EndpointAuth(mode="claude-code", credentials_path=path),
+    )
+
+
+def _write_claude_creds(path, access_token: str, expires_at_ms: float) -> None:
+    path.write_text(
+        json.dumps(
+            {"claudeAiOauth": {"accessToken": access_token, "expiresAt": expires_at_ms}}
+        )
+    )
+
+
+def _write_codex_creds(path, access_token: str, account_id: str) -> None:
+    path.write_text(
+        json.dumps({"tokens": {"access_token": access_token, "account_id": account_id}})
+    )
+
+
+def test_resolve_claude_code_credential_reads_file(tmp_path) -> None:
+    clear_credential_cache()
+    creds = tmp_path / "credentials.json"
+    _write_claude_creds(creds, "sk-ant-oat01-abc", (time.time() + 3600) * 1000)
+
+    token = resolve_credential(_claude_endpoint(str(creds)))
+
+    assert token.token == "sk-ant-oat01-abc"
+    assert token.expires_at is not None and token.expires_at > time.time()
+
+
+def test_resolve_credential_raises_on_expired_token(tmp_path) -> None:
+    clear_credential_cache()
+    creds = tmp_path / "credentials.json"
+    _write_claude_creds(creds, "sk-ant-oat01-stale", (time.time() - 60) * 1000)
+
+    with pytest.raises(SubscriptionAuthError, match="re-authenticate"):
+        resolve_credential(_claude_endpoint(str(creds)))
+
+
+def test_resolve_credential_caches_then_re_reads_after_clear(tmp_path) -> None:
+    clear_credential_cache()
+    creds = tmp_path / "credentials.json"
+    future_ms = (time.time() + 3600) * 1000
+    _write_claude_creds(creds, "token-a", future_ms)
+
+    endpoint = _claude_endpoint(str(creds))
+    assert resolve_credential(endpoint).token == "token-a"
+
+    # A fresh (not near-expiry) token is cached, so an overwrite is not seen yet.
+    _write_claude_creds(creds, "token-b", future_ms)
+    assert resolve_credential(endpoint).token == "token-a"
+
+    clear_credential_cache()
+    assert resolve_credential(endpoint).token == "token-b"
+
+
+def test_resolve_credential_re_reads_when_near_expiry(tmp_path) -> None:
+    clear_credential_cache()
+    creds = tmp_path / "credentials.json"
+    # Expires within the skew window (but not yet expired): every call re-reads.
+    near_ms = (time.time() + 10) * 1000
+    _write_claude_creds(creds, "token-a", near_ms)
+
+    endpoint = _claude_endpoint(str(creds))
+    assert resolve_credential(endpoint).token == "token-a"
+
+    _write_claude_creds(creds, "token-b", near_ms)
+    assert resolve_credential(endpoint).token == "token-b"
+
+
+def test_resolve_codex_credential_extracts_account_id(tmp_path) -> None:
+    clear_credential_cache()
+    creds = tmp_path / "auth.json"
+    _write_codex_creds(creds, "header.payload.sig", "acct_123")
+
+    endpoint = ModelEndpoint(
+        id="codex-sub",
+        provider="codex",
+        model="gpt-5.5-codex",
+        auth=EndpointAuth(mode="codex", credentials_path=str(creds)),
+    )
+    token = resolve_credential(endpoint)
+
+    assert token.token == "header.payload.sig"
+    assert token.account_id == "acct_123"
+
+
+def test_resolve_codex_credential_missing_file_raises(tmp_path) -> None:
+    clear_credential_cache()
+    endpoint = ModelEndpoint(
+        id="codex-sub",
+        provider="codex",
+        model="gpt-5.5-codex",
+        auth=EndpointAuth(mode="codex", credentials_path=str(tmp_path / "absent.json")),
+    )
+    with pytest.raises(SubscriptionAuthError, match="codex login"):
+        resolve_credential(endpoint)
 
 
 def test_endpoint_metadata_converts_to_contract_capabilities() -> None:

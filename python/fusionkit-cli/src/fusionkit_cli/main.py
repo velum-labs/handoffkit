@@ -10,7 +10,16 @@ from typing import Annotated, cast
 import typer
 import uvicorn
 from fusionkit_core.clients import build_clients
-from fusionkit_core.config import FusionMode, load_config
+from fusionkit_core.config import (
+    EndpointAuth,
+    FusionConfig,
+    FusionMode,
+    ModelEndpoint,
+    ProviderKind,
+    SubscriptionAuthMode,
+    load_config,
+)
+from fusionkit_core.credentials import SubscriptionStatus, subscription_status
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.prompts import SYSTEM_PROMPT_DEFAULTS
 from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous
@@ -75,12 +84,31 @@ from fusionkit_evals.tiny import (
     write_tiny_jsonl,
 )
 from fusionkit_server.app import create_app
-from fusionkit_server.openai_endpoint import build_endpoint, serve_single_endpoint
+from fusionkit_server.openai_endpoint import (
+    PROVIDER_DEFAULT_BASE_URL,
+    build_endpoint,
+    serve_single_endpoint,
+)
+from rich.console import Console
+from rich.table import Table
+
+from fusionkit_cli.onboarding import (
+    API_KEY_ENVS,
+    api_key_endpoint,
+    default_write_path,
+    detect_api_keys,
+    resolve_config_path,
+    subscription_endpoint,
+    write_config,
+)
 
 app = typer.Typer(help="Local model fusion toolkit.")
 
 prompts_app = typer.Typer(help="Inspect and export the built-in fusion prompts.")
 app.add_typer(prompts_app, name="prompts")
+
+auth_app = typer.Typer(help="Inspect and switch model authentication (API key / subscription).")
+app.add_typer(auth_app, name="auth")
 
 
 @prompts_app.command("dump")
@@ -108,13 +136,244 @@ def prompts_dump(
 
 @app.command()
 def serve(
-    config: Annotated[Path, typer.Option("--config", "-c")],
+    config: Annotated[Path | None, typer.Option("--config", "-c")] = None,
     host: str = "127.0.0.1",
     port: int = 8080,
 ) -> None:
-    fusion_config = load_config(config)
+    resolved = resolve_config_path(config)
+    if resolved is None:
+        typer.secho(
+            "No config found. Run `fusionkit init` to create one, or pass --config.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    fusion_config = load_config(resolved)
     api = create_app(fusion_config)
     uvicorn.run(api, host=host, port=port)
+
+
+def _status_label(status: SubscriptionStatus) -> str:
+    if not status.available:
+        return "not logged in"
+    hours = status.hours_to_expiry
+    if status.expired:
+        return "expired (re-login)"
+    if hours is not None:
+        return f"logged in (expires in {hours:.1f}h)"
+    return "logged in"
+
+
+@app.command()
+def init(
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="config path to write")
+    ] = None,
+    global_: Annotated[
+        bool, typer.Option("--global", help="write to ~/.config/fusionkit/models.yaml")
+    ] = False,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="accept all detected sources non-interactively")
+    ] = False,
+    force: Annotated[bool, typer.Option("--force", help="overwrite an existing config")] = False,
+) -> None:
+    """Detect logged-in subscriptions + API keys and scaffold a config."""
+    target = output or default_write_path(global_)
+    if target.exists() and not force:
+        typer.secho(
+            f"{target} already exists; pass --force to overwrite or -o to choose another path.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    claude = subscription_status("claude-code")
+    codex = subscription_status("codex")
+    api_keys = detect_api_keys()
+
+    typer.echo("Detected:")
+    typer.echo(f"  Claude Code subscription : {_status_label(claude)}")
+    typer.echo(f"  Codex subscription       : {_status_label(codex)}")
+    typer.echo(f"  API keys                 : {', '.join(api_keys.values()) or 'none'}")
+    typer.echo("")
+
+    def want(label: str) -> bool:
+        return True if yes else typer.confirm(f"Add {label}?", default=True)
+
+    endpoints: list[ModelEndpoint] = []
+    if claude.available and want("Claude Code subscription (claude-code)"):
+        endpoints.append(subscription_endpoint("claude-code"))
+    if codex.available and want("Codex subscription (codex)"):
+        endpoints.append(subscription_endpoint("codex"))
+    for provider, env_var in api_keys.items():
+        if want(f"{provider} via {env_var}"):
+            endpoints.append(api_key_endpoint(provider))
+
+    if not endpoints:
+        typer.secho(
+            "Nothing selected. Log in with `claude` / `codex login`, or set "
+            "OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY, then re-run `fusionkit init`.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    choices = [endpoint.id for endpoint in endpoints]
+    default_model = choices[0]
+    mode: str = "router"
+    if not yes:
+        default_model = typer.prompt("Default model id", default=default_model)
+        if default_model not in choices:
+            raise typer.BadParameter(f"default model must be one of {choices}")
+        mode = typer.prompt("Default mode (single/self/panel/router)", default="router")
+
+    try:
+        config = FusionConfig(
+            endpoints=endpoints,
+            default_model=default_model,
+            default_mode=cast(FusionMode, mode),
+            panel_models=choices,
+        )
+    except Exception as exc:  # noqa: BLE001 - surface pydantic validation as a CLI error
+        raise typer.BadParameter(str(exc)) from exc
+
+    write_config(config, target)
+    typer.secho(f"Wrote {target} with {len(endpoints)} endpoint(s).", fg=typer.colors.GREEN)
+    discovered = resolve_config_path(None)
+    serve_hint = "fusionkit serve" if discovered == target else f"fusionkit serve --config {target}"
+    typer.echo(f"Next: {serve_hint}")
+
+
+@auth_app.command("status")
+def auth_status(
+    config: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+) -> None:
+    """Show subscription logins, API keys, and how the config authenticates."""
+    console = Console()
+    subs = Table(title="Subscriptions")
+    subs.add_column("mode")
+    subs.add_column("state")
+    subs.add_column("account")
+    for status in (subscription_status("claude-code"), subscription_status("codex")):
+        subs.add_row(status.mode, _status_label(status), status.account_id or "-")
+    console.print(subs)
+
+    api_keys = detect_api_keys()
+    console.print(
+        "API keys: "
+        + (", ".join(f"{p} ({env})" for p, env in api_keys.items()) if api_keys else "none")
+    )
+
+    resolved = resolve_config_path(config)
+    if resolved is None:
+        console.print("Config: none found (run `fusionkit init`).")
+        return
+    cfg = load_config(resolved)
+    endpoints_table = Table(title=f"Config endpoints ({resolved})")
+    endpoints_table.add_column("id")
+    endpoints_table.add_column("provider")
+    endpoints_table.add_column("model")
+    endpoints_table.add_column("auth")
+    for endpoint in cfg.endpoints:
+        marker = " (default)" if endpoint.id == cfg.default_model else ""
+        endpoints_table.add_row(
+            endpoint.id + marker, endpoint.provider, endpoint.model, endpoint.auth.mode
+        )
+    console.print(endpoints_table)
+
+
+def _switch_endpoint(
+    endpoint: ModelEndpoint, mode: SubscriptionAuthMode, api_key_env: str | None
+) -> ModelEndpoint:
+    """Return a copy of an endpoint with its auth mode changed (keeping provider coherent)."""
+    provider: ProviderKind = endpoint.provider
+    base_url = endpoint.base_url
+    resolved_key_env = endpoint.api_key_env
+    if mode == "claude-code":
+        provider = "anthropic"
+    elif mode == "codex":
+        provider = "codex"
+    else:  # api_key
+        if provider == "codex":
+            # The codex provider only speaks the subscription Responses API; an
+            # API key means standard OpenAI chat completions.
+            provider = "openai"
+        resolved_key_env = api_key_env or endpoint.api_key_env or API_KEY_ENVS.get(provider)
+        if not base_url:
+            base_url = PROVIDER_DEFAULT_BASE_URL.get(provider, base_url)
+    return endpoint.model_copy(
+        update={
+            "provider": provider,
+            "base_url": base_url,
+            "api_key_env": resolved_key_env,
+            "auth": EndpointAuth(mode=mode),
+        }
+    )
+
+
+@auth_app.command("switch")
+def auth_switch(
+    endpoint_id: Annotated[str, typer.Argument(help="endpoint id to change")],
+    mode: Annotated[
+        str, typer.Option("--mode", help="api_key, claude-code, or codex")
+    ],
+    api_key_env: Annotated[
+        str | None, typer.Option("--api-key-env", help="env var for api_key mode")
+    ] = None,
+    config: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+) -> None:
+    """Switch one endpoint between API key and a subscription."""
+    if mode not in ("api_key", "claude-code", "codex"):
+        raise typer.BadParameter("mode must be api_key, claude-code, or codex")
+    resolved = resolve_config_path(config)
+    if resolved is None:
+        raise typer.BadParameter("No config found; run `fusionkit init` or pass --config.")
+    cfg = load_config(resolved)
+    try:
+        endpoint = cfg.endpoint_for(endpoint_id)
+    except KeyError:
+        raise typer.BadParameter(
+            f"unknown endpoint {endpoint_id!r}; known: {[e.id for e in cfg.endpoints]}"
+        ) from None
+    updated = _switch_endpoint(endpoint, cast(SubscriptionAuthMode, mode), api_key_env)
+    new_endpoints = [updated if e.id == endpoint_id else e for e in cfg.endpoints]
+    write_config(cfg.model_copy(update={"endpoints": new_endpoints}), resolved)
+    typer.secho(
+        f"{endpoint_id}: auth -> {mode} (provider {updated.provider}) in {resolved}",
+        fg=typer.colors.GREEN,
+    )
+
+
+@auth_app.command("set-default")
+def auth_set_default(
+    endpoint_id: Annotated[str, typer.Argument(help="endpoint id to make the default model")],
+    config: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+) -> None:
+    """Change the config's default_model."""
+    resolved = resolve_config_path(config)
+    if resolved is None:
+        raise typer.BadParameter("No config found; run `fusionkit init` or pass --config.")
+    cfg = load_config(resolved)
+    if endpoint_id not in {endpoint.id for endpoint in cfg.endpoints}:
+        raise typer.BadParameter(
+            f"unknown endpoint {endpoint_id!r}; known: {[e.id for e in cfg.endpoints]}"
+        )
+    write_config(cfg.model_copy(update={"default_model": endpoint_id}), resolved)
+    typer.secho(f"default_model -> {endpoint_id} in {resolved}", fg=typer.colors.GREEN)
+
+
+@auth_app.command("login")
+def auth_login(
+    provider: Annotated[str, typer.Argument(help="claude-code or codex")],
+) -> None:
+    """Show how to log in (FusionKit reuses the official CLI logins; it does not own OAuth)."""
+    if provider not in ("claude-code", "codex"):
+        raise typer.BadParameter("provider must be claude-code or codex")
+    command = "claude" if provider == "claude-code" else "codex login"
+    typer.echo(f"FusionKit reuses the {provider} CLI login read-only. To (re)authenticate, run:")
+    typer.secho(f"  {command}", fg=typer.colors.CYAN)
+    status = subscription_status(cast(SubscriptionAuthMode, provider))
+    typer.echo(f"Current status: {_status_label(status)}")
 
 
 @app.command("serve-endpoint")
@@ -129,6 +388,17 @@ def serve_endpoint(
     api_key_env: Annotated[
         str | None, typer.Option("--api-key-env", help="env var holding the API key")
     ] = None,
+    auth_mode: Annotated[
+        str,
+        typer.Option(
+            "--auth-mode",
+            help="credential source: api_key, claude-code, or codex (reuse the CLI login)",
+        ),
+    ] = "api_key",
+    credentials_path: Annotated[
+        str | None,
+        typer.Option("--credentials-path", help="override the CLI credential file path"),
+    ] = None,
     timeout_s: Annotated[float, typer.Option("--timeout-s")] = 120.0,
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
 ) -> None:
@@ -140,6 +410,8 @@ def serve_endpoint(
         base_url=base_url,
         api_key_env=api_key_env,
         timeout_s=timeout_s,
+        auth_mode=auth_mode,
+        credentials_path=credentials_path,
     )
     serve_single_endpoint(endpoint, host=host, port=port)
 

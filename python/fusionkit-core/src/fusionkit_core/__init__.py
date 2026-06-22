@@ -1,6 +1,7 @@
 from fusionkit_core.artifacts import LocalArtifactStore, hash_bytes, hash_text
 from fusionkit_core.clients import (
     AnthropicModelClient,
+    CodexResponsesClient,
     FakeModelClient,
     GoogleModelClient,
     LocalModelClient,
@@ -10,6 +11,7 @@ from fusionkit_core.clients import (
 )
 from fusionkit_core.config import (
     CostMetadata,
+    EndpointAuth,
     EndpointCapabilities,
     FusionConfig,
     FusionMode,
@@ -17,6 +19,7 @@ from fusionkit_core.config import (
     ProviderKind,
     RunBudget,
     SamplingConfig,
+    SubscriptionAuthMode,
 )
 from fusionkit_core.contracts import (
     ArtifactRefV1,
@@ -42,6 +45,15 @@ from fusionkit_core.contracts import (
     producer_version,
     schema_bundle_hash,
     status_for_run_state,
+)
+from fusionkit_core.credentials import (
+    SubscriptionAuthError,
+    SubscriptionStatus,
+    SubscriptionToken,
+    load_claude_code_credentials,
+    load_codex_credentials,
+    resolve_credential,
+    subscription_status,
 )
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import JudgeSynthesisResult, JudgeSynthesizer
@@ -110,10 +122,12 @@ __all__ = [
     "BenchmarkTaskRecordV1",
     "ChatMessage",
     "ChatTrajectoryProducer",
+    "CodexResponsesClient",
     "ContractMetadata",
     "ContractRecord",
     "CostMetadata",
     "CreateRunResult",
+    "EndpointAuth",
     "EndpointCapabilities",
     "EnsembleReceiptV1",
     "ExternalTrajectoryProducer",
@@ -150,6 +164,10 @@ __all__ = [
     "RunStateSummary",
     "SamplingConfig",
     "StreamChunk",
+    "SubscriptionAuthError",
+    "SubscriptionAuthMode",
+    "SubscriptionStatus",
+    "SubscriptionToken",
     "TRACE_ID_HEADER",
     "TRACE_PARENT_SPAN_HEADER",
     "TRACE_SPAN_HEADER",
@@ -181,6 +199,8 @@ __all__ = [
     "hash_bytes",
     "hash_json",
     "hash_text",
+    "load_claude_code_credentials",
+    "load_codex_credentials",
     "make_id",
     "new_span_id",
     "new_trace_id",
@@ -190,6 +210,8 @@ __all__ = [
     "producer_version",
     "provider_metadata",
     "resolve_api_key",
+    "resolve_credential",
+    "subscription_status",
     "schema_bundle_hash",
     "status_for_run_state",
     "trajectory_from_contract",

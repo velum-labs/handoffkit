@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import json
+import time
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any
@@ -8,6 +10,7 @@ from unittest.mock import AsyncMock
 
 from fusionkit_core.clients import (
     AnthropicModelClient,
+    CodexResponsesClient,
     GoogleModelClient,
     OpenAICompatibleClient,
     _anthropic_messages,
@@ -19,7 +22,8 @@ from fusionkit_core.clients import (
     _openai_tools,
     build_client,
 )
-from fusionkit_core.config import ModelEndpoint, ProviderKind
+from fusionkit_core.config import EndpointAuth, ModelEndpoint, ProviderKind
+from fusionkit_core.credentials import clear_credential_cache
 from fusionkit_core.types import ChatMessage, ToolCall
 
 TOOLS = [
@@ -55,6 +59,7 @@ def test_build_client_dispatches_each_provider() -> None:
     assert isinstance(build_client(_endpoint("custom")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("anthropic")), AnthropicModelClient)
     assert isinstance(build_client(_endpoint("google")), GoogleModelClient)
+    assert isinstance(build_client(_endpoint("codex")), CodexResponsesClient)
 
 
 # --- message + tool translation --------------------------------------------
@@ -223,3 +228,113 @@ async def test_openai_stream_chat_yields_chunks() -> None:
     assert chunks[-1].finish_reason == "stop"
     assert chunks[-1].usage is not None
     assert chunks[-1].usage.total_tokens == 3
+
+
+# --- subscription auth clients ---------------------------------------------
+
+
+def _jwt(claims: dict[str, Any]) -> str:
+    payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+    return f"header.{payload}.sig"
+
+
+def _claude_code_endpoint(token_env: str) -> ModelEndpoint:
+    return ModelEndpoint(
+        id="claude-sub",
+        provider="anthropic",
+        model="claude-sonnet-4-5",
+        auth=EndpointAuth(mode="claude-code", token_env=token_env),
+    )
+
+
+async def test_anthropic_claude_code_sends_bearer_and_spoof(monkeypatch) -> None:
+    clear_credential_cache()
+    monkeypatch.setenv("FK_CLAUDE_OAUTH", "tok-1")
+    client = AnthropicModelClient(_claude_code_endpoint("FK_CLAUDE_OAUTH"))
+    message = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="hi")],
+        stop_reason="end_turn",
+        usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+        model_dump=lambda mode="json": {"ok": True},
+    )
+    client._client.messages.create = AsyncMock(return_value=message)
+
+    await client.chat([ChatMessage(role="system", content="be terse"),
+                       ChatMessage(role="user", content="hi")])
+
+    kwargs = client._client.messages.create.call_args.kwargs
+    assert kwargs["extra_headers"] == {"Authorization": "Bearer tok-1"}
+    assert kwargs["system"].startswith("You are Claude Code, Anthropic's official CLI for Claude.")
+    assert "be terse" in kwargs["system"]
+
+    # Per-request resolution: a refreshed CLI token is picked up on the next call.
+    monkeypatch.setenv("FK_CLAUDE_OAUTH", "tok-2")
+    await client.chat([ChatMessage(role="user", content="again")])
+    assert client._client.messages.create.call_args.kwargs["extra_headers"] == {
+        "Authorization": "Bearer tok-2"
+    }
+
+
+async def test_codex_client_streams_and_sets_headers(monkeypatch) -> None:
+    clear_credential_cache()
+    token = _jwt(
+        {
+            "exp": time.time() + 3600,
+            "https://api.openai.com/auth": {"chatgpt_account_id": "acct_x"},
+        }
+    )
+    monkeypatch.setenv("FK_CODEX_OAUTH", token)
+    endpoint = ModelEndpoint(
+        id="codex-sub",
+        provider="codex",
+        model="gpt-5.5-codex",
+        auth=EndpointAuth(mode="codex", token_env="FK_CODEX_OAUTH"),
+    )
+    client = CodexResponsesClient(endpoint)
+    events = [
+        SimpleNamespace(type="response.output_text.delta", delta="he"),
+        SimpleNamespace(type="response.output_text.delta", delta="llo"),
+        SimpleNamespace(
+            type="response.completed",
+            response=SimpleNamespace(
+                usage=SimpleNamespace(input_tokens=3, output_tokens=2, total_tokens=5)
+            ),
+        ),
+    ]
+    client._client.responses.create = AsyncMock(return_value=_aiter(events))
+
+    response = await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert response.content == "hello"
+    assert response.finish_reason == "stop"
+    assert response.usage.total_tokens == 5
+
+    kwargs = client._client.responses.create.call_args.kwargs
+    assert kwargs["stream"] is True
+    assert kwargs["model"] == "gpt-5.5-codex"
+    assert kwargs["extra_headers"]["Authorization"] == f"Bearer {token}"
+    assert kwargs["extra_headers"]["chatgpt-account-id"] == "acct_x"
+    # Live codex backend requirements: instructions are mandatory, storage must be
+    # disabled, and max_output_tokens is rejected.
+    assert kwargs["instructions"]
+    assert kwargs["store"] is False
+    assert "max_output_tokens" not in kwargs
+
+
+async def test_codex_defaults_instructions_when_no_system_message(monkeypatch) -> None:
+    clear_credential_cache()
+    monkeypatch.setenv("FK_CODEX_OAUTH", "header.payload.sig")
+    endpoint = ModelEndpoint(
+        id="codex-sub",
+        provider="codex",
+        model="gpt-5.5",
+        auth=EndpointAuth(mode="codex", token_env="FK_CODEX_OAUTH"),
+    )
+    client = CodexResponsesClient(endpoint)
+    client._client.responses.create = AsyncMock(
+        return_value=_aiter([SimpleNamespace(type="response.completed", response=None)])
+    )
+
+    await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert client._client.responses.create.call_args.kwargs["instructions"]

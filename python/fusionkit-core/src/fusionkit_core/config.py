@@ -7,7 +7,25 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 
 FusionMode = Literal["single", "self", "panel", "router"]
-ProviderKind = Literal["openai", "anthropic", "google", "openai-compatible", "mlx-lm", "custom"]
+ProviderKind = Literal[
+    "openai", "anthropic", "google", "openai-compatible", "mlx-lm", "custom", "codex"
+]
+SubscriptionAuthMode = Literal["api_key", "claude-code", "codex"]
+
+
+class EndpointAuth(BaseModel):
+    """How an endpoint obtains its credential.
+
+    ``api_key`` (the default) keeps the existing behaviour: a literal ``api_key``
+    or ``api_key_env`` on the endpoint. The subscription modes read the local CLI
+    OAuth store read-only at request time (see ``fusionkit_core.credentials``):
+    ``claude-code`` reuses the Claude Code (Pro/Max) login, ``codex`` reuses the
+    Codex (ChatGPT) login.
+    """
+
+    mode: SubscriptionAuthMode = "api_key"
+    credentials_path: str | None = None
+    token_env: str | None = None
 
 
 class EndpointCapabilities(BaseModel):
@@ -55,10 +73,13 @@ class PromptOverrides(BaseModel):
 class ModelEndpoint(BaseModel):
     id: str
     model: str
-    base_url: str
+    # Optional for subscription endpoints (claude-code / codex), where the client
+    # falls back to the provider's default base URL.
+    base_url: str = ""
     api_key: str = "not-needed"
     api_key_env: str | None = None
     provider: ProviderKind = "openai-compatible"
+    auth: EndpointAuth = Field(default_factory=EndpointAuth)
     max_context: int | None = None
     estimated_memory_gb: float | None = None
     capabilities: EndpointCapabilities = Field(default_factory=EndpointCapabilities)

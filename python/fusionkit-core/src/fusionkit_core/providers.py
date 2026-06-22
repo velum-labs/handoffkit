@@ -114,6 +114,8 @@ def _api_compatibility(endpoint: ModelEndpoint) -> str:
         return "mlx-lm-server"
     if endpoint.provider in ("openai", "openai-compatible"):
         return "openai-chat-completions"
+    if endpoint.provider == "codex":
+        return "openai-responses"
     return "custom"
 
 

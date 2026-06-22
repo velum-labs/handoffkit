@@ -12,11 +12,26 @@ from google.genai import types as genai_types
 from openai import AsyncOpenAI
 
 from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
+from fusionkit_core.credentials import resolve_credential
 from fusionkit_core.providers import resolve_api_key
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall, Usage
 
 ToolDefinition = Mapping[str, Any]
 ToolChoice = str | Mapping[str, Any]
+
+# Default base URLs for subscription providers when the endpoint omits one.
+ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
+CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
+
+# The codex Responses backend rejects requests without `instructions`; this is
+# used when the conversation carries no system message.
+CODEX_DEFAULT_INSTRUCTIONS = "You are a helpful assistant."
+
+# Anthropic OAuth (subscription) tokens are only accepted when the request looks
+# like Claude Code: the first system message must identify as the official CLI,
+# and the beta header must be present.
+CLAUDE_CODE_SPOOF_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
+ANTHROPIC_OAUTH_BETA = "oauth-2025-04-20"
 
 
 @runtime_checkable
@@ -168,16 +183,36 @@ class OpenAICompatibleClient:
 
 
 class AnthropicModelClient:
-    """Native Anthropic Messages API client."""
+    """Native Anthropic Messages API client.
+
+    Supports two auth modes (see ``endpoint.auth.mode``): the default ``api_key``
+    path (``x-api-key``) and the ``claude-code`` subscription path, which reuses
+    the local Claude Code OAuth token (``Authorization: Bearer`` + the OAuth beta
+    header, with the Claude Code identity spoof prepended as the first system
+    message). The subscription token is resolved per request so a long-running
+    server stays valid as the CLI refreshes it.
+    """
 
     def __init__(self, endpoint: ModelEndpoint) -> None:
         self.endpoint = endpoint
         self.model_id = endpoint.id
-        self._client = AsyncAnthropic(
-            base_url=endpoint.base_url,
-            api_key=resolve_api_key(endpoint),
-            timeout=endpoint.timeout_s,
-        )
+        self._auth_mode = endpoint.auth.mode
+        if self._auth_mode == "claude-code":
+            # `auth_token=` makes the SDK send `Authorization: Bearer` and never
+            # `x-api-key` (sending both fails). The actual token is overridden per
+            # request via `extra_headers` in `_kwargs`.
+            self._client = AsyncAnthropic(
+                base_url=endpoint.base_url or ANTHROPIC_DEFAULT_BASE_URL,
+                auth_token="placeholder-oauth-token",
+                default_headers={"anthropic-beta": ANTHROPIC_OAUTH_BETA},
+                timeout=endpoint.timeout_s,
+            )
+        else:
+            self._client = AsyncAnthropic(
+                base_url=endpoint.base_url,
+                api_key=resolve_api_key(endpoint),
+                timeout=endpoint.timeout_s,
+            )
 
     def _kwargs(
         self,
@@ -188,6 +223,12 @@ class AnthropicModelClient:
         extra: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
         system_text, conversation = _anthropic_messages(messages)
+        if self._auth_mode == "claude-code":
+            system_text = (
+                f"{CLAUDE_CODE_SPOOF_SYSTEM}\n\n{system_text}"
+                if system_text
+                else CLAUDE_CODE_SPOOF_SYSTEM
+            )
         # Sampling knobs are omitted by default: newer Anthropic models (e.g.
         # claude-opus-4-8) reject `temperature` outright ("deprecated for this
         # model"), and several reject setting both temperature and top_p. The
@@ -204,6 +245,12 @@ class AnthropicModelClient:
             kwargs["tools"] = _anthropic_tools(tools)
         if tool_choice is not None:
             kwargs["tool_choice"] = _anthropic_tool_choice(tool_choice)
+        if self._auth_mode == "claude-code":
+            credential = resolve_credential(self.endpoint)
+            # Capital "Authorization" matches the key the SDK sets from
+            # `auth_token=`; the SDK merges headers with a plain dict spread, so a
+            # differently-cased key would not override the constructor placeholder.
+            kwargs["extra_headers"] = {"Authorization": f"Bearer {credential.token}"}
         if extra:
             kwargs.update(extra)
         return kwargs
@@ -273,6 +320,120 @@ class AnthropicModelClient:
                 if getattr(event, "usage", None) is not None:
                     usage = Usage(completion_tokens=event.usage.output_tokens)
                 yield StreamChunk(finish_reason=finish_reason, usage=usage)
+
+    async def aclose(self) -> None:
+        await self._client.close()
+
+
+class CodexResponsesClient:
+    """Codex (ChatGPT subscription) client over the private Responses API.
+
+    Codex-family models are served only by the stream-only Responses endpoint at
+    ``https://chatgpt.com/backend-api/codex/responses`` (not Chat Completions),
+    authenticated with the local Codex OAuth token (``Authorization: Bearer`` +
+    ``chatgpt-account-id``). The token is resolved per request. Tool calls over
+    the Responses API are out of scope: this client returns text output and
+    aggregates the stream for the non-streaming ``chat`` path.
+    """
+
+    def __init__(self, endpoint: ModelEndpoint) -> None:
+        self.endpoint = endpoint
+        self.model_id = endpoint.id
+        self._client = AsyncOpenAI(
+            base_url=endpoint.base_url or CODEX_BASE_URL,
+            api_key="placeholder-oauth-token",
+            default_headers={"OpenAI-Beta": "responses=v1", "originator": "fusionkit"},
+            timeout=endpoint.timeout_s,
+        )
+
+    def _request_kwargs(
+        self,
+        messages: Sequence[ChatMessage],
+        extra: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        instructions, input_items = _codex_input(messages)
+        credential = resolve_credential(self.endpoint)
+        # Capital "Authorization" matches the SDK's constructor auth header key so
+        # the per-request token overrides the placeholder (see AnthropicModelClient).
+        extra_headers = {"Authorization": f"Bearer {credential.token}"}
+        if credential.account_id:
+            extra_headers["chatgpt-account-id"] = credential.account_id
+        # The codex backend rejects `max_output_tokens` (the subscription manages
+        # its own limits), so sampling knobs are intentionally not forwarded.
+        kwargs: dict[str, Any] = {
+            "model": self.endpoint.model,
+            "instructions": instructions or CODEX_DEFAULT_INSTRUCTIONS,
+            "input": input_items,
+            "stream": True,
+            # The codex backend is stateless and rejects requests unless storage
+            # is explicitly disabled.
+            "store": False,
+            "extra_headers": extra_headers,
+        }
+        if extra:
+            kwargs.update(extra)
+        return kwargs
+
+    async def chat(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig | None = None,
+        tools: Sequence[ToolDefinition] | None = None,
+        tool_choice: ToolChoice | None = None,
+        extra: Mapping[str, Any] | None = None,
+    ) -> ModelResponse:
+        del tools, tool_choice, sampling
+        started = time.perf_counter()
+        text_parts: list[str] = []
+        usage = Usage()
+        finish_reason: str | None = None
+        async for chunk in self._stream(messages, extra):
+            text_parts.append(chunk.delta)
+            if chunk.usage is not None:
+                usage = chunk.usage
+            if chunk.finish_reason is not None:
+                finish_reason = chunk.finish_reason
+        return ModelResponse(
+            model_id=self.model_id,
+            content="".join(text_parts),
+            finish_reason=finish_reason or "stop",
+            usage=usage,
+            latency_s=time.perf_counter() - started,
+        )
+
+    async def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig | None = None,
+        tools: Sequence[ToolDefinition] | None = None,
+        tool_choice: ToolChoice | None = None,
+        extra: Mapping[str, Any] | None = None,
+    ) -> AsyncIterator[StreamChunk]:
+        del tools, tool_choice, sampling
+        async for chunk in self._stream(messages, extra):
+            yield chunk
+
+    async def _stream(
+        self,
+        messages: Sequence[ChatMessage],
+        extra: Mapping[str, Any] | None,
+    ) -> AsyncIterator[StreamChunk]:
+        kwargs = self._request_kwargs(messages, extra)
+        stream = await self._client.responses.create(**kwargs)
+        async for event in stream:
+            event_type = getattr(event, "type", None)
+            if event_type == "response.output_text.delta":
+                yield StreamChunk(delta=getattr(event, "delta", "") or "")
+            elif event_type in ("response.completed", "response.incomplete"):
+                response = getattr(event, "response", None)
+                usage = _codex_usage(getattr(response, "usage", None))
+                finish_reason = "stop" if event_type == "response.completed" else "length"
+                yield StreamChunk(finish_reason=finish_reason, usage=usage)
+            elif event_type == "response.failed":
+                response = getattr(event, "response", None)
+                error = getattr(response, "error", None)
+                message = getattr(error, "message", None) or "Codex response failed"
+                raise RuntimeError(message)
 
     async def aclose(self) -> None:
         await self._client.close()
@@ -461,6 +622,8 @@ def build_client(endpoint: ModelEndpoint) -> ChatClient:
             return AnthropicModelClient(endpoint)
         case "google":
             return GoogleModelClient(endpoint)
+        case "codex":
+            return CodexResponsesClient(endpoint)
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -578,6 +741,46 @@ def _anthropic_messages(
             continue
         conversation.append({"role": message.role, "content": message.content})
     return "\n".join(part for part in system_parts if part), conversation
+
+
+def _codex_input(messages: Sequence[ChatMessage]) -> tuple[str, list[dict[str, Any]]]:
+    """Translate chat messages into Responses-API `instructions` + `input` items.
+
+    System messages collapse into `instructions`; user/tool turns become
+    `input_text` items and assistant turns become `output_text` items.
+    """
+    instruction_parts: list[str] = []
+    items: list[dict[str, Any]] = []
+    for message in messages:
+        if message.role == "system":
+            if message.content:
+                instruction_parts.append(message.content)
+            continue
+        if message.role == "assistant":
+            content_type = "output_text"
+            role = "assistant"
+        else:
+            content_type = "input_text"
+            role = "user"
+        items.append(
+            {"role": role, "content": [{"type": content_type, "text": message.content}]}
+        )
+    return "\n".join(instruction_parts), items
+
+
+def _codex_usage(usage: Any) -> Usage | None:
+    if usage is None:
+        return None
+    prompt_tokens = getattr(usage, "input_tokens", None)
+    completion_tokens = getattr(usage, "output_tokens", None)
+    total_tokens = getattr(usage, "total_tokens", None)
+    if total_tokens is None and (prompt_tokens is not None or completion_tokens is not None):
+        total_tokens = (prompt_tokens or 0) + (completion_tokens or 0)
+    return Usage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
 
 
 def _anthropic_tools(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:

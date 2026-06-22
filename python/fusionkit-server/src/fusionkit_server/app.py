@@ -141,8 +141,11 @@ def create_app(
 
     @app.get("/v1/models")
     async def models() -> dict[str, Any]:
-        data = [{"id": "fusionkit/router", "object": "model"}]
-        data.extend({"id": endpoint.id, "object": "model"} for endpoint in config.endpoints)
+        data: list[dict[str, Any]] = [{"id": "fusionkit/router", "object": "model"}]
+        data.extend(
+            {"id": endpoint.id, "object": "model", "owned_by": endpoint.provider}
+            for endpoint in config.endpoints
+        )
         return {"object": "list", "data": data}
 
     @app.post("/v1/fusion/runs")

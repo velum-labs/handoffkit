@@ -92,13 +92,58 @@ endpoints:
       output_per_1m_tokens: null
       currency: USD
     tags: [compatible, example]
+  # --- Subscription endpoints ----------------------------------------------
+  # These reuse the OAuth login already stored by the Claude Code / Codex CLIs
+  # (read-only; FusionKit never refreshes or writes the tokens back). The CLI
+  # owns the token lifecycle: if requests start failing with an auth error, run
+  # `claude` or `codex login` to refresh.
+  #
+  # ToS CAVEAT: Anthropic and OpenAI restrict reusing subscription OAuth tokens
+  # in third-party tooling (Anthropic's 2026 policy may block this for Claude).
+  # This is intended for personal/local use only -- use at your own risk.
+  #
+  # `pricing` is left null on purpose: a subscription has no per-token billing,
+  # so cost estimates stay "unknown" rather than reporting a wrong dollar amount.
+  - id: claude-code-subscription
+    provider: anthropic
+    model: claude-sonnet-4-5
+    auth:
+      mode: claude-code
+    max_context: 200000
+    capabilities:
+      structured_output: false
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: null
+      output_per_1m_tokens: null
+      currency: USD
+    tags: [subscription, claude-code]
+  - id: codex-subscription
+    provider: codex
+    model: gpt-5.5-codex
+    auth:
+      mode: codex
+    max_context: 256000
+    capabilities:
+      structured_output: false
+      tool_calls: false
+      streaming: true
+    pricing:
+      input_per_1m_tokens: null
+      output_per_1m_tokens: null
+      currency: USD
+    tags: [subscription, codex]
 default_model: qwen-fast
 judge_model: qwen-fast
 synthesizer_model: qwen-fast
 default_mode: router
 sample_count: 4
 self_temperatures: [0.2, 0.4, 0.6, 0.8]
-panel_models: [qwen-fast, gemma-writer]
+# Subscription endpoints are first-class panel members: once configured they
+# are selectable by id at the unified `fusionkit serve` endpoint and can join
+# any router/panel/judge/synth role alongside API-key and local models.
+panel_models: [qwen-fast, gemma-writer, claude-code-subscription]
 sampling:
   temperature: 0.2
   top_p: 0.95

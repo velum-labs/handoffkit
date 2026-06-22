@@ -23,7 +23,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, cast
 
 from fusionkit_core.clients import build_client
-from fusionkit_core.config import ModelEndpoint, ProviderKind, SamplingConfig
+from fusionkit_core.config import (
+    EndpointAuth,
+    ModelEndpoint,
+    ProviderKind,
+    SamplingConfig,
+    SubscriptionAuthMode,
+)
 from fusionkit_core.trace import (
     TRACE_ID_HEADER,
     TRACE_SPAN_HEADER,
@@ -39,6 +45,7 @@ PROVIDER_DEFAULT_BASE_URL = {
     "openai": "https://api.openai.com",
     "anthropic": "https://api.anthropic.com",
     "google": "https://generativelanguage.googleapis.com",
+    "codex": "https://chatgpt.com/backend-api/codex",
 }
 
 
@@ -271,10 +278,13 @@ def build_endpoint(
     base_url: str | None = None,
     api_key_env: str | None = None,
     timeout_s: float = 120.0,
+    auth_mode: str = "api_key",
+    credentials_path: str | None = None,
 ) -> ModelEndpoint:
     resolved_base_url = base_url or PROVIDER_DEFAULT_BASE_URL.get(provider, "http://127.0.0.1")
-    # `provider` arrives as a free string from the CLI; ModelEndpoint validates
-    # it against ProviderKind at construction time (pydantic raises on misuse).
+    # `provider` / `auth_mode` arrive as free strings from the CLI; ModelEndpoint
+    # validates them against their Literal types at construction time (pydantic
+    # raises on misuse).
     return ModelEndpoint(
         id=id,
         model=model,
@@ -282,6 +292,10 @@ def build_endpoint(
         provider=cast(ProviderKind, provider),
         api_key_env=api_key_env,
         timeout_s=timeout_s,
+        auth=EndpointAuth(
+            mode=cast(SubscriptionAuthMode, auth_mode),
+            credentials_path=credentials_path,
+        ),
     )
 
 

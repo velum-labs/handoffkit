@@ -179,6 +179,49 @@ def test_chat_completions_passthrough_by_endpoint_id(tmp_path) -> None:
     assert "fusionkit" not in body
 
 
+def test_subscription_endpoint_is_first_class_in_unified_server(tmp_path) -> None:
+    # A subscription endpoint (claude-code auth) is just another configured
+    # endpoint: it appears in /v1/models and is reachable by id via passthrough.
+    # The FakeModelClient stands in for the credentialed client, so no real
+    # OAuth token is needed to prove the unified-endpoint wiring.
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
+            ModelEndpoint(
+                id="claude-code-subscription",
+                provider="anthropic",
+                model="claude-sonnet-4-5",
+                auth={"mode": "claude-code"},
+            ),
+        ],
+        default_model="fast",
+        default_mode="router",
+    )
+    app = create_app(
+        config,
+        clients={
+            "fast": FakeModelClient("fast", ["from fast"]),
+            "claude-code-subscription": FakeModelClient("claude-code-subscription", ["from sub"]),
+        },
+        run_store_path=tmp_path / "runs",
+    )
+    client = TestClient(app)
+
+    models = client.get("/v1/models").json()["data"]
+    sub_entry = next(m for m in models if m["id"] == "claude-code-subscription")
+    assert sub_entry["owned_by"] == "anthropic"
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "claude-code-subscription",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "from sub"
+
+
 def test_chat_completions_passthrough_accepts_tool_loop_messages(tmp_path) -> None:
     # An agent tool loop sends OpenAI-nested tool_calls and null/tool-result
     # messages; the passthrough must accept them without a 422.
