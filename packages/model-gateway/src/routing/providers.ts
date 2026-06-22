@@ -8,6 +8,7 @@
 import { OpenAiBackend, joinPath } from "../backend.js";
 import type { Backend, BackendRequestOptions } from "../backend.js";
 
+import { disposeAllMlxBackends, getOrCreateMlxBackend } from "./mlx-registry.js";
 import { sanitizeProviderRequest } from "./provider-request.js";
 
 /** Supported upstream provider kinds. */
@@ -19,7 +20,9 @@ export const ROUTING_PROVIDER_KINDS = [
   "openai-compatible",
   "openrouter",
   "deepseek",
-  "groq"
+  "groq",
+  "mlx",
+  "ollama"
 ] as const;
 
 export type RoutingProviderKind = (typeof ROUTING_PROVIDER_KINDS)[number];
@@ -31,6 +34,8 @@ export type RoutingProviderSpec = {
   baseUrl?: string;
   /** Env var holding the API key (never stored inline). */
   keyEnv?: string;
+  /** Hugging Face repo id for `mlx` providers. */
+  model?: string;
 };
 
 /** Resolved provider ready to serve chat completions. */
@@ -55,7 +60,9 @@ const DEFAULT_BASE_URLS: Record<RoutingProviderKind, string> = {
   "openai-compatible": "http://127.0.0.1/v1",
   openrouter: "https://openrouter.ai/api/v1",
   deepseek: "https://api.deepseek.com",
-  groq: "https://api.groq.com/openai/v1"
+  groq: "https://api.groq.com/openai/v1",
+  mlx: "http://127.0.0.1:0",
+  ollama: "http://127.0.0.1:11434/v1"
 };
 
 const DEFAULT_KEY_ENVS: Partial<Record<RoutingProviderKind, string>> = {
@@ -76,7 +83,9 @@ const OPENAI_PREFIX_KINDS = new Set<RoutingProviderKind>([
   "openrouter",
   "groq",
   "google",
-  "google-gemini"
+  "google-gemini",
+  "mlx",
+  "ollama"
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,7 +101,7 @@ export function parseRoutingProviderSpec(raw: unknown, index: number): RoutingPr
   if (!isRecord(raw)) {
     throw new RoutingProviderError(`routing.providers[${index}] must be an object`);
   }
-  const { id, provider, baseUrl, keyEnv } = raw;
+  const { id, provider, baseUrl, keyEnv, model } = raw;
   if (typeof id !== "string" || id.length === 0) {
     throw new RoutingProviderError(`routing.providers[${index}].id must be a non-empty string`);
   }
@@ -120,6 +129,17 @@ export function parseRoutingProviderSpec(raw: unknown, index: number): RoutingPr
   } else if (DEFAULT_KEY_ENVS[kind] !== undefined) {
     spec.keyEnv = DEFAULT_KEY_ENVS[kind];
   }
+  if (model !== undefined) {
+    if (typeof model !== "string" || model.length === 0) {
+      throw new RoutingProviderError(`routing.providers[${index}].model must be a non-empty string`);
+    }
+    spec.model = model;
+  }
+  if (kind === "mlx" && spec.model === undefined) {
+    throw new RoutingProviderError(
+      `routing.providers[${index}] (mlx) requires model (Hugging Face repo id)`
+    );
+  }
   return spec;
 }
 
@@ -131,6 +151,9 @@ export function parseRoutingProviderSpec(raw: unknown, index: number): RoutingPr
  * providers include `/v1` or the Gemini `/v1beta/openai` prefix in their defaults.
  */
 export function resolveProviderBaseUrl(spec: RoutingProviderSpec): string {
+  if (spec.provider === "mlx") {
+    return DEFAULT_BASE_URLS.mlx;
+  }
   const raw = (spec.baseUrl ?? DEFAULT_BASE_URLS[spec.provider]).replace(/\/+$/, "");
   if (spec.provider === "deepseek") {
     return raw;
@@ -163,10 +186,10 @@ class RoutingProviderBackend implements Backend {
   readonly #inner: OpenAiBackend;
   readonly #kind: RoutingProviderKind;
 
-  constructor(inner: OpenAiBackend, kind: RoutingProviderKind) {
+  constructor(inner: OpenAiBackend, kind: RoutingProviderKind, defaultModel?: string) {
     this.#inner = inner;
     this.#kind = kind;
-    this.defaultModel = inner.defaultModel;
+    this.defaultModel = defaultModel ?? inner.defaultModel;
   }
 
   chat(
@@ -201,13 +224,29 @@ export function resolveRoutingProviders(
     if (providers.has(spec.id)) {
       throw new RoutingProviderError(`duplicate routing provider id "${spec.id}"`);
     }
+    if (spec.provider === "mlx") {
+      const model = spec.model;
+      if (model === undefined || model.length === 0) {
+        throw new RoutingProviderError(`routing provider "${spec.id}" (mlx) requires model`);
+      }
+      providers.set(spec.id, {
+        id: spec.id,
+        kind: spec.provider,
+        backend: getOrCreateMlxBackend(model)
+      });
+      continue;
+    }
     const baseUrl = resolveProviderBaseUrl(spec);
     const apiKey = resolveApiKey(spec, env);
-    const inner = new OpenAiBackend({ baseUrl, apiKey });
+    const inner = new OpenAiBackend({
+      baseUrl,
+      apiKey,
+      ...(spec.model !== undefined ? { defaultModel: spec.model } : {})
+    });
     providers.set(spec.id, {
       id: spec.id,
       kind: spec.provider,
-      backend: new RoutingProviderBackend(inner, spec.provider)
+      backend: new RoutingProviderBackend(inner, spec.provider, spec.model)
     });
   }
   return providers;
@@ -223,6 +262,13 @@ export function requireProvider(
     throw new RoutingProviderError(`unknown routing provider "${providerId}"`);
   }
   return provider;
+}
+
+/**
+ * Release all MLX backends owned by the routing provider registry.
+ */
+export async function disposeRoutingMlxBackends(): Promise<void> {
+  await disposeAllMlxBackends();
 }
 
 export { classifyProviderError } from "./provider-errors.js";

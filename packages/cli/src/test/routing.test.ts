@@ -59,19 +59,36 @@ test("panelSpecToRoutingProvider maps cloud panel entries", () => {
     provider: "anthropic",
     keyEnv: "ANTHROPIC_API_KEY"
   });
-  assert.equal(panelSpecToRoutingProvider({ id: "local", model: "qwen", provider: "mlx" }), undefined);
 });
 
-test("mergeRoutingProviders prefers explicit entries and drops mlx panel providers", () => {
+test("panelSpecToRoutingProvider maps mlx panel entries with model field", () => {
+  const spec = panelSpecToRoutingProvider({
+    id: "local",
+    model: "mlx-community/Qwen3-1.7B-4bit",
+    provider: "mlx"
+  });
+  assert.deepEqual(spec, {
+    id: "local",
+    provider: "mlx",
+    model: "mlx-community/Qwen3-1.7B-4bit"
+  });
+});
+
+test("mergeRoutingProviders prefers explicit entries and keeps mlx panel providers", () => {
   const merged = mergeRoutingProviders(
     [{ id: "sonnet", provider: "anthropic", keyEnv: "KEY" }],
     [
       { id: "sonnet", model: "other", provider: "anthropic", keyEnv: "OTHER" },
-      { id: "local", model: "qwen", provider: "mlx" }
+      { id: "local", model: "mlx-community/Qwen3-1.7B-4bit", provider: "mlx" }
     ]
   );
-  assert.equal(merged.length, 1);
-  assert.equal(merged[0]?.keyEnv, "KEY");
+  assert.equal(merged.length, 2);
+  assert.equal(merged.find((entry) => entry.id === "sonnet")?.keyEnv, "KEY");
+  assert.deepEqual(merged.find((entry) => entry.id === "local"), {
+    id: "local",
+    provider: "mlx",
+    model: "mlx-community/Qwen3-1.7B-4bit"
+  });
 });
 
 test("printRoutingPreview emits scenario decision", () => {

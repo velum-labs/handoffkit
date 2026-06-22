@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import {
@@ -25,6 +28,7 @@ import {
   RoutingProviderError,
   DEFAULT_LONG_CONTEXT_THRESHOLD
 } from "../routing/index.js";
+import { sessionOverridePath } from "../session-override.js";
 
 const FULL_ROUTES = parseScenarioRoutes(
   {
@@ -568,5 +572,75 @@ test("RoutingBackend falls back when primary provider throws", async () => {
     assert.deepEqual(fallback.models(), ["claude-haiku"]);
   } finally {
     await fallback.close();
+  }
+});
+
+test("RoutingBackend honors session override provider id", async () => {
+  const home = mkdtempSync(join(tmpdir(), "fusion-session-override-"));
+  mkdirSync(join(home, ".fusionkit"), { recursive: true });
+  writeFileSync(
+    sessionOverridePath(home),
+    JSON.stringify({ modelId: "claude-sub", setAt: "2026-06-22T00:00:00.000Z" }) + "\n"
+  );
+  const mock = await startStatusMock({ "claude-sonnet-4-5": 200 });
+  const backend = new RoutingBackend({
+    routes: parseScenarioRoutes(
+      {
+        default: "claude-sub,claude-sonnet-4-5",
+        webSearch: "other,gpt-4o"
+      },
+      "test"
+    ),
+    providers: [
+      { id: "claude-sub", provider: "anthropic", baseUrl: `${mock.url}/v1`, keyEnv: "ANTHROPIC_API_KEY" },
+      { id: "other", provider: "openai", baseUrl: "http://127.0.0.1:1/v1", keyEnv: "OPENAI_API_KEY" }
+    ],
+    env: { ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "b" },
+    homeDir: home,
+    onDecision: (decision) => {
+      assert.equal(decision.reason, "session model override");
+      assert.equal(decision.target.providerId, "claude-sub");
+      assert.equal(decision.scenario, "default");
+    }
+  });
+  try {
+    const response = await backend.chat({
+      messages: [{ role: "user", content: "hi" }],
+      tools: [{ type: "function", function: { name: "web_search", parameters: {} } }]
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(mock.models(), ["claude-sonnet-4-5"]);
+  } finally {
+    await mock.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("RoutingBackend uses normal routing when session override modelId is null", async () => {
+  const home = mkdtempSync(join(tmpdir(), "fusion-session-override-null-"));
+  mkdirSync(join(home, ".fusionkit"), { recursive: true });
+  writeFileSync(
+    sessionOverridePath(home),
+    JSON.stringify({ modelId: null, setAt: "2026-06-22T00:00:00.000Z" }) + "\n"
+  );
+  const mock = await startStatusMock({ "gpt-4o": 200 });
+  const backend = new RoutingBackend({
+    routes: parseScenarioRoutes({ default: "openai,gpt-4o" }, "test"),
+    providers: [{ id: "openai", provider: "openai", baseUrl: `${mock.url}/v1`, keyEnv: "OPENAI_API_KEY" }],
+    env: { OPENAI_API_KEY: "a" },
+    homeDir: home,
+    onDecision: (decision) => {
+      assert.equal(decision.reason, "standard request");
+    }
+  });
+  try {
+    const response = await backend.chat({
+      messages: [{ role: "user", content: "hi" }]
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(mock.models(), ["gpt-4o"]);
+  } finally {
+    await mock.close();
+    rmSync(home, { recursive: true, force: true });
   }
 });

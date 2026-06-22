@@ -15,6 +15,11 @@ import {
   sanitizeGroqRequest,
   parseScenarioRoutes
 } from "../routing/index.js";
+import { MlxBackend } from "../mlx-backend.js";
+import {
+  resetMlxRegistryForTests,
+  setMlxBackendFactoryForTests
+} from "../routing/mlx-registry.js";
 
 function sendJson(res: ServerResponse, status: number, value: unknown): void {
   res.statusCode = status;
@@ -301,4 +306,131 @@ test("resolveRoutingProviders rejects missing API keys for keyed providers", () 
       ),
     RoutingProviderError
   );
+});
+
+test("parseRoutingProviderSpec accepts mlx with model and ollama without keyEnv", () => {
+  const mlx = parseRoutingProviderSpec(
+    { id: "local", provider: "mlx", model: "mlx-community/Qwen3-1.7B-4bit" },
+    0
+  );
+  assert.equal(mlx.provider, "mlx");
+  assert.equal(mlx.model, "mlx-community/Qwen3-1.7B-4bit");
+  assert.equal(mlx.keyEnv, undefined);
+
+  const ollama = parseRoutingProviderSpec({ id: "ollama", provider: "ollama" }, 0);
+  assert.equal(ollama.provider, "ollama");
+  assert.equal(ollama.keyEnv, undefined);
+});
+
+test("parseRoutingProviderSpec requires model for mlx", () => {
+  assert.throws(
+    () => parseRoutingProviderSpec({ id: "local", provider: "mlx" }, 0),
+    RoutingProviderError
+  );
+});
+
+test("resolveProviderBaseUrl defaults ollama to :11434/v1", () => {
+  const spec = parseRoutingProviderSpec({ id: "ollama", provider: "ollama" }, 0);
+  assert.equal(resolveProviderBaseUrl(spec), "http://127.0.0.1:11434/v1");
+});
+
+test("resolveRoutingProviders mlx kind uses shared MlxBackend per model id", () => {
+  const created: string[] = [];
+  resetMlxRegistryForTests();
+  setMlxBackendFactoryForTests((model) => {
+    created.push(model);
+    return {
+      defaultModel: model,
+      chat: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      models: async () => new Response(JSON.stringify({ data: [] }), { status: 200 }),
+      embeddings: async () => new Response(null, { status: 501 }),
+      close: async () => undefined
+    } as unknown as MlxBackend;
+  });
+  try {
+    resolveRoutingProviders([
+      { id: "mlx-a", provider: "mlx", model: "mlx-community/Qwen3-1.7B-4bit" },
+      { id: "mlx-b", provider: "mlx", model: "mlx-community/Qwen3-1.7B-4bit" }
+    ]);
+    assert.equal(created.length, 1);
+    assert.deepEqual(created, ["mlx-community/Qwen3-1.7B-4bit"]);
+  } finally {
+    resetMlxRegistryForTests();
+  }
+});
+
+test("RoutingBackend routes ollama to OpenAI chat completions on :11434", async () => {
+  const mock = await startProviderMock("/v1/chat/completions");
+  const backend = new RoutingBackend({
+    routes: parseScenarioRoutes({ default: "ollama,llama3.2" }, "test"),
+    providers: [
+      {
+        id: "ollama",
+        provider: "ollama",
+        baseUrl: `${mock.url}/v1`
+      }
+    ]
+  });
+  try {
+    const response = await backend.chat({
+      messages: [{ role: "user", content: "hi" }]
+    });
+    assert.equal(response.status, 200);
+    assert.ok(mock.paths().includes("/v1/chat/completions"), mock.paths().join(","));
+    assert.equal(mock.bodies()[0]?.model, "llama3.2");
+  } finally {
+    await mock.close();
+  }
+});
+
+test("RoutingBackend panel MLX flow uses mocked MlxBackend", async () => {
+  let chatCalls = 0;
+  resetMlxRegistryForTests();
+  setMlxBackendFactoryForTests(
+    () =>
+      ({
+        defaultModel: "mlx-community/Qwen3-1.7B-4bit",
+        chat: async () => {
+          chatCalls++;
+          return new Response(
+            JSON.stringify({
+              id: "chatcmpl-mock",
+              object: "chat.completion",
+              choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }]
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        },
+        models: async () => new Response(JSON.stringify({ data: [] }), { status: 200 }),
+        embeddings: async () => new Response(null, { status: 501 }),
+        close: async () => undefined
+      }) as unknown as MlxBackend
+  );
+  const backend = new RoutingBackend({
+    routes: parseScenarioRoutes(
+      {
+        default: "cloud,claude-sonnet-4-5",
+        background: "local,mlx-community/Qwen3-1.7B-4bit"
+      },
+      "test"
+    ),
+    providers: [
+      {
+        id: "local",
+        provider: "mlx",
+        model: "mlx-community/Qwen3-1.7B-4bit"
+      }
+    ],
+    requestHeaders: { "x-ccr-agent-type": "background" }
+  });
+  try {
+    const response = await backend.chat({
+      messages: [{ role: "user", content: "<background_task>summarize</background_task>" }]
+    });
+    assert.equal(response.status, 200);
+    assert.equal(chatCalls, 1);
+  } finally {
+    await backend.close();
+    resetMlxRegistryForTests();
+  }
 });

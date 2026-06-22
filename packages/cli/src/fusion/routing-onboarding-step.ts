@@ -15,6 +15,7 @@ import {
 } from "./routing-onboarding.js";
 import { probeMlxReadiness, proposeAiRouting } from "./routing-onboarding-ai.js";
 import type { RoutingLlmGenerate } from "./routing-onboarding-ai.js";
+import { probeOllama } from "./ollama.js";
 
 const out = uiStream();
 
@@ -26,6 +27,10 @@ export type RoutingOnboardingStepInput = {
   generate?: RoutingLlmGenerate;
   /** Injectable MLX probe for tests. */
   probeMlx?: typeof probeMlxReadiness;
+  /** Injectable Ollama probe for tests. */
+  probeOllama?: typeof probeOllama;
+  /** Local MLX panel model repo ids from the committed panel. */
+  localPanelModels?: string[];
   /** Fixed prompt answers for non-TTY tests. */
   promptOverrides?: {
     enableRouting?: boolean;
@@ -48,7 +53,13 @@ export async function runRoutingOnboardingStep(
   input: RoutingOnboardingStepInput
 ): Promise<RoutingOnboardingStepResult> {
   const probe = input.probeMlx ?? probeMlxReadiness;
+  const ollamaProbe = input.probeOllama ?? probeOllama;
   const detection = detectRoutingContext(process.env);
+  detection.localPanelModels = input.localPanelModels;
+  detection.ollama = await ollamaProbe();
+  if (detection.ollama.reachable && detection.ollama.models.length > 0) {
+    note(`Ollama detected (${detection.ollama.models.length} model(s) on :11434)`);
+  }
 
   const enableRouting =
     input.promptOverrides?.enableRouting ??
