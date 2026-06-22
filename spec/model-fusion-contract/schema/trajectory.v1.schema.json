@@ -114,6 +114,44 @@
           },
           "additionalProperties": false
         },
+        "synthesis": {
+          "description": "Present only on a fused (consolidated) trajectory: the folded fusion result. Replaces the former standalone judge-synthesis-record.v1 - the fused output is just a trajectory and its decision/rationale/metrics are metadata on it.",
+          "type": "object",
+          "required": [
+            "decision"
+          ],
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": [
+                "synthesize",
+                "select_trajectory",
+                "repair_required",
+                "failed"
+              ]
+            },
+            "selected_trajectory_id": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": "string"
+            },
+            "score": {
+              "type": "number"
+            },
+            "input_trajectory_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "metrics": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false
+        },
         "usage": {
           "$ref": "common.schema.json#/$defs/usage"
         },

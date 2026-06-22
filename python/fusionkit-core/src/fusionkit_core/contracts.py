@@ -317,6 +317,21 @@ class TrajectoryStep(ContractBaseModel):
     output_hash: Sha256 | None = None
 
 
+class TrajectorySynthesis(ContractBaseModel):
+    """The folded fusion result carried on a fused (consolidated) trajectory.
+
+    Present only on the trajectory ``fuse`` produces; replaces the former
+    standalone ``judge-synthesis-record.v1``.
+    """
+
+    decision: SynthesisDecision
+    selected_trajectory_id: str | None = None
+    rationale: str | None = None
+    score: float | None = None
+    input_trajectory_ids: list[str] | None = None
+    metrics: dict[str, Any] | None = None
+
+
 class TrajectoryV1(ContractRecord):
     expected_schema: ClassVar[str] = "trajectory.v1"
     trajectory_id: str = Field(min_length=1)
@@ -329,6 +344,7 @@ class TrajectoryV1(ContractRecord):
     harness_kind: HarnessKind | None = None
     diff: str | None = None
     patch_artifact: ContractArtifactRef | None = None
+    synthesis: TrajectorySynthesis | None = None
     usage: ContractUsage | None = None
     error: ContractError | None = None
     metadata: dict[str, Any] | None = None
@@ -431,7 +447,7 @@ FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
 # We fall back to this constant there; a source checkout still recomputes from the
 # files. tests/ assert the two agree, so this can never silently drift from the
 # schema source. (Mirrors handoffkit's pinned MODEL_FUSION_SCHEMA_BUNDLE_HASH.)
-SCHEMA_BUNDLE_HASH = "sha256:3e8388595aefc8e82962d76e822c514db6552f6ee65e62d487534ef825ad87b8"
+SCHEMA_BUNDLE_HASH = "sha256:80e6bba63b30e8904d9c89f547c94797eb9340be80de67a68643c01f8de86e6d"
 
 
 def schema_bundle_hash(schema_dir: Path | None = None) -> str:

@@ -4,7 +4,7 @@ from importlib.resources import files
 from pathlib import Path
 
 __version__ = "0.1.1"
-SCHEMA_BUNDLE_HASH = "sha256:3e8388595aefc8e82962d76e822c514db6552f6ee65e62d487534ef825ad87b8"
+SCHEMA_BUNDLE_HASH = "sha256:80e6bba63b30e8904d9c89f547c94797eb9340be80de67a68643c01f8de86e6d"
 
 
 def package_root() -> Path:

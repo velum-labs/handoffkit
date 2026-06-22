@@ -30,7 +30,7 @@ from fusionkit_core.contracts import (
     TrajectoryV1,
     contract_metadata,
 )
-from fusionkit_core.types import ChatMessage, ModelResponse, Trajectory
+from fusionkit_core.types import ChatMessage, ModelResponse, Trajectory, TrajectorySynthesis
 
 
 def trajectory_from_response(
@@ -124,6 +124,9 @@ def trajectory_to_contract(
             "status": trajectory.status,
             "steps": [step.model_dump() for step in trajectory.steps],
             "final_output": trajectory.content,
+            "synthesis": (
+                trajectory.synthesis.model_dump() if trajectory.synthesis is not None else None
+            ),
             "usage": contract_usage.model_dump() if contract_usage is not None else None,
             "metadata": trajectory.metadata or None,
         }
@@ -138,6 +141,11 @@ def trajectory_from_contract(record: TrajectoryV1) -> Trajectory:
         content=record.final_output,
         steps=list(record.steps),
         status=record.status,
+        synthesis=(
+            TrajectorySynthesis.model_validate(record.synthesis.model_dump(exclude_none=True))
+            if record.synthesis is not None
+            else None
+        ),
         metadata=dict(record.metadata or {}),
     )
 
