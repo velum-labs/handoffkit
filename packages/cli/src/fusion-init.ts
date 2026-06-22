@@ -5,12 +5,7 @@
  */
 import { execFileSync } from "node:child_process";
 
-import {
-  DEFAULT_CLOUD_PANEL,
-  DEFAULT_TRIO,
-  defaultKeyEnv,
-  fusionkitPyCommand
-} from "./fusion-quickstart.js";
+import { DEFAULT_CLOUD_PANEL, defaultKeyEnv, fusionkitPyCommand } from "./fusion-quickstart.js";
 import type { FusionTool, PanelModelSpec } from "./fusion-quickstart.js";
 import {
   FUSION_CONFIG_VERSION,
@@ -23,14 +18,13 @@ import {
 } from "./fusion-config.js";
 import type { FusionConfig, PromptOverrides } from "./fusion-config.js";
 import {
-  DEFAULT_CLAUDE_SUB_MODEL,
-  detectCodexModel,
-  detectSubscription
-} from "./fusion/subscriptions.js";
-import type { SubscriptionStatus } from "./fusion/subscriptions.js";
-import { parsePanelModelSpec } from "./shared/options.js";
+  buildAuthOptions,
+  defaultModelForAuthChoice,
+  specForAuthChoice
+} from "./fusion/panel-auth.js";
+import type { AuthChoice } from "./fusion/panel-auth.js";
 import { confirm, done, note, select, text } from "./ui/prompt.js";
-import { uiStream } from "./ui/runtime.js";
+import { canPromptInteractively, uiStream } from "./ui/runtime.js";
 import { bold, brandHeader, cyan, dim, red } from "./ui/theme.js";
 
 const out = uiStream();
@@ -44,15 +38,42 @@ function withKeyEnv(spec: PanelModelSpec): PanelModelSpec {
   return keyEnv !== undefined ? { ...spec, keyEnv } : { ...spec };
 }
 
-/** Build a panel from the locally detected subscription logins. */
-function subscriptionPanel(claude: SubscriptionStatus, codex: SubscriptionStatus): PanelModelSpec[] {
+/** Whether every panel member runs locally (drives the config `local` flag). */
+function isAllLocal(panel: PanelModelSpec[]): boolean {
+  return panel.length > 0 && panel.every((spec) => (spec.provider ?? "mlx") === "mlx" && spec.auth === undefined);
+}
+
+/**
+ * Build the panel member-by-member. Each member picks a model and, independently,
+ * how to authenticate it (subscription / API key / local) - so one panel can
+ * freely mix them. On a non-interactive stdin we fall back to the default cloud
+ * panel so `fusion init` still writes a sensible config in CI.
+ */
+async function buildPanel(): Promise<PanelModelSpec[]> {
+  if (!canPromptInteractively()) {
+    return DEFAULT_CLOUD_PANEL.map((spec) => withKeyEnv(spec));
+  }
+  out.write(
+    dim("Build your panel — add one or more models, choosing how each one authenticates.\n")
+  );
+  const authOptions = buildAuthOptions();
   const specs: PanelModelSpec[] = [];
-  if (claude.available) {
-    specs.push({ id: "claude-code", model: DEFAULT_CLAUDE_SUB_MODEL, provider: "anthropic", auth: "claude-code" });
+  for (let index = 0; index < 16; index++) {
+    const id = await text({ message: `Model ${index + 1} id`, defaultValue: `m${index + 1}` });
+    const choice = await select<AuthChoice>({
+      message: "Authenticate this model with",
+      options: authOptions,
+      defaultIndex: 0
+    });
+    const model = await text({
+      message: "Model name",
+      defaultValue: defaultModelForAuthChoice(choice)
+    });
+    specs.push(specForAuthChoice(choice, id, model));
+    const more = await confirm({ message: "Add another model?", defaultValue: index === 0 });
+    if (!more) break;
   }
-  if (codex.available) {
-    specs.push({ id: "codex", model: detectCodexModel(), auth: "codex" });
-  }
+  if (specs.length === 0) return DEFAULT_CLOUD_PANEL.map((spec) => withKeyEnv(spec));
   return specs;
 }
 
@@ -84,31 +105,6 @@ function fetchDefaultPrompts(fusionkitDir?: string): PromptOverrides | undefined
   }
 }
 
-async function buildCustomPanel(): Promise<PanelModelSpec[]> {
-  out.write(
-    dim(
-      "Add panel models as ID=PROVIDER:MODEL (e.g. gpt=openai:gpt-5.5), or a subscription " +
-        "as ID=claude-code:MODEL / ID=codex:MODEL. Blank line to finish.\n"
-    )
-  );
-  const specs: PanelModelSpec[] = [];
-  for (let index = 0; index < 16; index++) {
-    const entry = await text({ message: `model ${index + 1}` });
-    if (entry.length === 0) break;
-    try {
-      specs.push(withKeyEnv(parsePanelModelSpec(entry, {})));
-    } catch (error) {
-      out.write(`${red("!")} ${error instanceof Error ? error.message : String(error)}\n`);
-      index--;
-    }
-  }
-  if (specs.length === 0) {
-    out.write(dim("No models entered; using the default cloud panel.\n"));
-    return DEFAULT_CLOUD_PANEL.map((spec) => withKeyEnv(spec));
-  }
-  return specs;
-}
-
 export async function runFusionInit(input: {
   repoRoot?: string;
   force?: boolean;
@@ -135,57 +131,7 @@ export async function runFusionInit(input: {
     defaultIndex: 0
   });
 
-  // Detect local subscription logins so we can offer them as a panel (no API
-  // keys needed — FusionKit reuses the `claude` / `codex` CLI login read-only).
-  const claudeSub = detectSubscription("claude-code");
-  const codexSub = detectSubscription("codex");
-  const detectedSubs = [
-    claudeSub.available ? "claude-code" : undefined,
-    codexSub.available ? "codex" : undefined
-  ].filter((value): value is string => value !== undefined);
-
-  type Preset = "subscriptions" | "cloud" | "local" | "custom";
-  const presetOptions: Array<{ value: Preset; label: string; hint: string }> = [];
-  if (detectedSubs.length > 0) {
-    presetOptions.push({
-      value: "subscriptions",
-      label: "subscriptions",
-      hint: `reuse your ${detectedSubs.join(" + ")} login (no API keys)`
-    });
-  }
-  presetOptions.push(
-    { value: "cloud", label: "cloud", hint: DEFAULT_CLOUD_PANEL.map((s) => s.id).join(" + ") },
-    { value: "local", label: "local MLX trio", hint: "Apple Silicon, no API keys" },
-    { value: "custom", label: "custom", hint: "pick your own models" }
-  );
-
-  const preset = await select<Preset>({ message: "Panel", options: presetOptions, defaultIndex: 0 });
-
-  let panel: PanelModelSpec[];
-  switch (preset) {
-    case "subscriptions":
-      panel = subscriptionPanel(claudeSub, codexSub);
-      for (const sub of [claudeSub, codexSub]) {
-        if (sub.available && sub.expired) {
-          const cmd = sub.mode === "claude-code" ? "claude" : "codex login";
-          out.write(`${red("!")} ${sub.mode} login is expired — run ${bold(cmd)} to refresh.\n`);
-        }
-      }
-      break;
-    case "cloud":
-      panel = DEFAULT_CLOUD_PANEL.map((spec) => withKeyEnv(spec));
-      break;
-    case "local":
-      panel = DEFAULT_TRIO.map((spec) => ({ ...spec }));
-      break;
-    case "custom":
-      panel = await buildCustomPanel();
-      break;
-    default: {
-      const exhaustive: never = preset;
-      throw new Error(`unknown panel preset: ${String(exhaustive)}`);
-    }
-  }
+  const panel = await buildPanel();
 
   const judgeDefault = panel[0]?.model ?? "";
   const judgeModel = await text({ message: "Judge model (for synthesis)", defaultValue: judgeDefault });
@@ -197,7 +143,7 @@ export async function runFusionInit(input: {
     tool,
     panel,
     ...(judgeModel.length > 0 ? { judgeModel } : {}),
-    local: preset === "local",
+    local: isAllLocal(panel),
     observe
   };
 
