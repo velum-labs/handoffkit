@@ -1,0 +1,19 @@
+{
+  "version": "fusionkit.fusion.v2",
+  "tool": "codex",
+  "panel": [
+    {
+      "id": "codex",
+      "model": "gpt-5.5",
+      "auth": "codex"
+    },
+    {
+      "id": "local",
+      "model": "mlx-community/Qwen3-8B-4bit",
+      "provider": "mlx"
+    }
+  ],
+  "judgeModel": "gpt-5.5",
+  "local": false,
+  "observe": true
+}

@@ -69,83 +69,66 @@ def cmd_scan():
     return 0
 
 
+# Mirror mlx-lm's allow_patterns so we fetch exactly the weights/config/
+# tokenizer files the server needs and skip PyTorch/GGUF duplicates.
+ALLOW_PATTERNS = [
+    "*.json",
+    "model*.safetensors",
+    "*.py",
+    "tokenizer.model",
+    "*.tiktoken",
+    "tiktoken.model",
+    "*.txt",
+    "*.jsonl",
+    "*.jinja",
+]
+
+
 def cmd_download(repo):
+    # Progress is reported through snapshot_download's public tqdm_class hook.
+    # Internally snapshot_download builds its single aggregate byte bar as
+    # tqdm_class(...), and every backend (classic HTTP and the Xet path, which
+    # mlx-community weights use) funnels its byte updates into that bar. So a
+    # tqdm subclass that emits NDJSON instead of drawing gives accurate,
+    # backend-agnostic, resume-safe progress without disabling Xet or touching
+    # any private internals. Overriding display() is tqdm's documented hook.
     try:
         from huggingface_hub import snapshot_download
-        import huggingface_hub.file_download as file_download
-        from huggingface_hub.utils import tqdm as hf_tqdm
+        from tqdm.auto import tqdm as base_tqdm
     except Exception as exc:  # noqa: BLE001
         emit({"type": "error", "message": "huggingface_hub unavailable: %s" % exc})
         return 1
 
-    # Mirror mlx-lm's allow_patterns so we fetch exactly the weights/config/
-    # tokenizer files the server needs and skip PyTorch/GGUF duplicates.
-    allow_patterns = [
-        "*.json",
-        "model*.safetensors",
-        "*.py",
-        "tokenizer.model",
-        "*.tiktoken",
-        "tiktoken.model",
-        "*.txt",
-        "*.jsonl",
-        "*.jinja",
-    ]
+    state = {"last": 0.0}
 
-    state = {"bars": {}, "last": 0.0}
-
-    def flush(force=False):
+    def emit_progress(bar, force=False):
         now = time.time()
-        if not force and now - state["last"] < 0.2:
+        if not force and now - state["last"] < 0.15:
             return
         state["last"] = now
-        downloaded = sum(bar["n"] for bar in state["bars"].values())
-        total = sum(bar["total"] for bar in state["bars"].values() if bar["total"])
+        total = getattr(bar, "total", None)
         emit(
             {
                 "type": "progress",
-                "downloaded": int(downloaded),
+                "downloaded": int(getattr(bar, "n", 0) or 0),
                 "total": int(total) if total else None,
             }
         )
 
-    # The byte-level progress lives in the per-file bars hf_hub_download builds
-    # via huggingface_hub.file_download.tqdm. Subclass that (so the HF disable
-    # env is still honored) and aggregate across every live bar.
-    class ProgressTqdm(hf_tqdm):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self._key = id(self)
-            state["bars"][self._key] = {"n": 0, "total": self.total or 0}
-            desc = (self.desc or "").strip()
-            if desc:
-                emit({"type": "file", "name": desc})
-            flush()
+    class NdjsonTqdm(base_tqdm):
+        def display(self, *args, **kwargs):
+            # snapshot_download also builds an outer files counter (unit "it");
+            # only the byte bar (unit "B") is the download progress we report.
+            if getattr(self, "unit", None) == "B":
+                emit_progress(self)
+            return True  # suppress tqdm's own terminal rendering
 
-        def update(self, n=1):
-            result = super().update(n)
-            bar = state["bars"].get(self._key)
-            if bar is not None:
-                bar["n"] = self.n
-                bar["total"] = self.total or bar["total"]
-            flush()
-            return result
-
-        def close(self):
-            bar = state["bars"].get(self._key)
-            if bar is not None and bar["total"]:
-                bar["n"] = bar["total"]
-            flush(force=True)
-            return super().close()
-
-    file_download.tqdm = ProgressTqdm
-
+    emit({"type": "file", "name": repo})
     try:
-        path = snapshot_download(repo, allow_patterns=allow_patterns)
+        path = snapshot_download(repo, allow_patterns=ALLOW_PATTERNS, tqdm_class=NdjsonTqdm)
     except Exception as exc:  # noqa: BLE001
         emit({"type": "error", "message": str(exc)})
         return 1
-    flush(force=True)
     emit({"type": "download_done", "path": str(path)})
     return 0
 
