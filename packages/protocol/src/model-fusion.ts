@@ -13,7 +13,7 @@ export const MODEL_FUSION_SCHEMA_NAMES = [
   "ensemble-receipt.v1"
 ] as const;
 export const MODEL_FUSION_SCHEMA_BUNDLE_HASH =
-  "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671";
+  "sha256:aae33b89a771fd5916e21bfffc5993d2d7ef98ecfc8542ba9570a8c99074d541";
 
 export type ModelFusionSchemaName = (typeof MODEL_FUSION_SCHEMA_NAMES)[number];
 export type ModelFusionStatus =
@@ -69,7 +69,7 @@ export type BenchmarkSourceRepo = "fusionkit" | "handoffkit" | "cursorkit" | "ml
 export type BenchmarkScorerKind = "exact" | "contains" | "record_join" | "custom";
 export type JudgeSynthesisDecision =
   | "synthesize"
-  | "select_candidate"
+  | "select_trajectory"
   | "repair_required"
   | "failed";
 
@@ -175,10 +175,10 @@ export type HarnessCandidateRecordV1 = ContractMetadataV1<"harness-candidate-rec
 export type JudgeSynthesisRecordV1 = ContractMetadataV1<"judge-synthesis-record.v1"> & {
   synthesis_id: string;
   judge_model_call_id?: string;
-  input_candidate_ids: string[];
+  input_trajectory_ids: string[];
   status: ModelFusionStatus;
   decision: JudgeSynthesisDecision;
-  selected_candidate_id?: string;
+  selected_trajectory_id?: string;
   rationale?: string;
   final_output: string;
   score?: number;
@@ -305,7 +305,7 @@ const BENCHMARK_SOURCE_REPOS = ["fusionkit", "handoffkit", "cursorkit", "mlx-lm"
 const BENCHMARK_SCORER_KINDS = ["exact", "contains", "record_join", "custom"] as const;
 const JUDGE_DECISIONS = [
   "synthesize",
-  "select_candidate",
+  "select_trajectory",
   "repair_required",
   "failed"
 ] as const;
@@ -706,10 +706,10 @@ export function assertJudgeSynthesisRecordV1(
       "created_at",
       "synthesis_id",
       "judge_model_call_id",
-      "input_candidate_ids",
+      "input_trajectory_ids",
       "status",
       "decision",
-      "selected_candidate_id",
+      "selected_trajectory_id",
       "rationale",
       "final_output",
       "score",
@@ -720,10 +720,10 @@ export function assertJudgeSynthesisRecordV1(
   assertMetadata(value, "judge-synthesis-record.v1");
   assertString(value.synthesis_id, "synthesis_id");
   assertOptionalString(value.judge_model_call_id, "judge_model_call_id");
-  assertStringArray(value.input_candidate_ids, "input_candidate_ids", 1);
+  assertStringArray(value.input_trajectory_ids, "input_trajectory_ids", 1);
   assertStatus(value.status, "status");
   assertEnum(value.decision, JUDGE_DECISIONS, "decision");
-  assertOptionalString(value.selected_candidate_id, "selected_candidate_id");
+  assertOptionalString(value.selected_trajectory_id, "selected_trajectory_id");
   assertOptionalString(value.rationale, "rationale");
   assertString(value.final_output, "final_output");
   assertOptionalNumber(value.score, "score");

@@ -673,7 +673,7 @@ test("failed repair returns failure summary without deterministic fallback winne
     assert.equal(result.judgeSynthesisRecord?.decision, "repair_required");
     assert.equal(result.failureSummary?.reason, "repair_failed");
     assert.equal("chosen" in result, false);
-    assert.equal(result.judgeSynthesisRecord.selected_candidate_id, undefined);
+    assert.equal(result.judgeSynthesisRecord.selected_trajectory_id, undefined);
   } finally {
     repo.cleanup();
   }

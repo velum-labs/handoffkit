@@ -134,12 +134,12 @@ function recordFor(
   const record: JudgeSynthesisRecordV1 = {
     ...metadata(new Date().toISOString()),
     synthesis_id: `synthesis_${input.descriptor.id}`,
-    input_candidate_ids: input.candidates.map((candidate) => candidate.candidate_id),
+    input_trajectory_ids: input.candidates.map((candidate) => candidate.candidate_id),
     status,
     decision,
     ...(output.judgeModelCallId ? { judge_model_call_id: output.judgeModelCallId } : {}),
     ...(output.selectedCandidateId
-      ? { selected_candidate_id: output.selectedCandidateId }
+      ? { selected_trajectory_id: output.selectedCandidateId }
       : {}),
     ...(output.rationale ? { rationale: output.rationale } : {}),
     final_output: output.finalOutput,

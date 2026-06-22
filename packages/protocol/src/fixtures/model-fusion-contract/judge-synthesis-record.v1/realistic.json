@@ -1,25 +1,25 @@
 {
   "schema": "judge-synthesis-record.v1",
   "schema_version": "v1",
-  "schema_bundle_hash": "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671",
+  "schema_bundle_hash": "sha256:aae33b89a771fd5916e21bfffc5993d2d7ef98ecfc8542ba9570a8c99074d541",
   "producer": "fusionkit-contract-seed",
   "producer_version": "0.1.0",
   "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "created_at": "2026-06-15T22:07:01Z",
   "synthesis_id": "synthesis_panel_001",
   "judge_model_call_id": "call_judge_001",
-  "input_candidate_ids": [
-    "candidate_fast_001",
-    "candidate_writer_001"
+  "input_trajectory_ids": [
+    "trajectory_fast_001",
+    "trajectory_writer_001"
   ],
   "status": "succeeded",
   "decision": "synthesize",
-  "selected_candidate_id": "candidate_writer_001",
-  "rationale": "The writer candidate covered schema lifecycle and fixture policy.",
+  "selected_trajectory_id": "trajectory_writer_001",
+  "rationale": "The writer trajectory covered schema lifecycle and fixture policy.",
   "final_output": "Create JSON Schemas first, validate synthetic fixtures, then bind per repo.",
   "score": 0.92,
   "metrics": {
     "coverage_gaps": 0,
-    "candidate_count": 2
+    "trajectory_count": 2
   }
 }

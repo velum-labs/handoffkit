@@ -347,7 +347,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           usage: typeof payload.usage === "object" && payload.usage !== null
             ? (payload.usage as Record<string, unknown>)
             : undefined,
-          selectedCandidateId: str(payload.selected_candidate_id),
+          selectedCandidateId: str(payload.selected_trajectory_id),
           record: obj(payload.record)
         };
         const judgeFinal = judge.final.finalOutput ?? judge.final.content;
@@ -360,7 +360,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           content: str(payload.content),
           decision: str(payload.decision),
           rationale: str(payload.rationale),
-          selectedCandidateId: str(payload.selected_candidate_id),
+          selectedCandidateId: str(payload.selected_trajectory_id),
           usage:
             typeof payload.usage === "object" && payload.usage !== null
               ? (payload.usage as Record<string, unknown>)
