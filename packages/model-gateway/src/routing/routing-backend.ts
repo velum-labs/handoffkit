@@ -6,7 +6,8 @@
 import type { Backend, BackendRequestOptions } from "../backend.js";
 import type { AnthropicRequest } from "../adapters/anthropic.js";
 import { anthropicToChat } from "../adapters/anthropic.js";
-import { readSessionModelOverride } from "../session-override.js";
+import { readSessionModelOverrideAsync } from "../session-override.js";
+import type { SessionModelOverride } from "../session-override.js";
 
 import {
   classifyProviderError,
@@ -40,6 +41,8 @@ export type RoutingBackendOptions = {
   env?: NodeJS.ProcessEnv;
   /** Home directory for session override reads (defaults to `os.homedir()`). */
   homeDir?: string;
+  /** Injectable session override reader (tests only). */
+  readSessionOverride?: (homeDir?: string) => Promise<SessionModelOverride | undefined>;
 };
 
 export class RoutingBackend implements Backend {
@@ -50,6 +53,8 @@ export class RoutingBackend implements Backend {
   readonly #headers: Record<string, string | string[] | undefined>;
   readonly #onDecision: ((decision: RoutingDecision) => void) | undefined;
   readonly #homeDir: string | undefined;
+  #sessionOverrideCache: { readAt: number; value: SessionModelOverride | undefined } | null = null;
+  readonly #readSessionOverrideFn: (homeDir?: string) => Promise<SessionModelOverride | undefined>;
 
   constructor(options: RoutingBackendOptions) {
     this.#routes = options.routes;
@@ -59,6 +64,7 @@ export class RoutingBackend implements Backend {
     this.#headers = options.requestHeaders ?? {};
     this.#onDecision = options.onDecision;
     this.#homeDir = options.homeDir;
+    this.#readSessionOverrideFn = options.readSessionOverride ?? readSessionModelOverrideAsync;
   }
 
   /** All configured route targets (for model discovery). */
@@ -82,7 +88,7 @@ export class RoutingBackend implements Backend {
     options: BackendRequestOptions = {}
   ): Promise<Response> {
     const chat = (body ?? {}) as Record<string, unknown>;
-    const decision = this.#resolveDecision(
+    const decision = await this.#resolveDecision(
       chat as Parameters<typeof resolveRoutingDecision>[0],
       { headers: this.#headers }
     );
@@ -96,20 +102,31 @@ export class RoutingBackend implements Backend {
     options: BackendRequestOptions = {}
   ): Promise<Response> {
     const chat = anthropicToChat(body, body.model);
-    const decision = this.#resolveDecision(body, { headers: this.#headers });
+    const decision = await this.#resolveDecision(body, { headers: this.#headers });
     this.#onDecision?.(decision);
     return await this.#invokeWithFallbacks(decision, chat, signal, options);
   }
 
   async close(): Promise<void> {
+    this.#sessionOverrideCache = null;
     await disposeRoutingMlxBackends();
   }
 
-  #resolveDecision(
+  async #readSessionOverride(): Promise<SessionModelOverride | undefined> {
+    const now = Date.now();
+    if (this.#sessionOverrideCache !== null && now - this.#sessionOverrideCache.readAt < 1000) {
+      return this.#sessionOverrideCache.value;
+    }
+    const value = await this.#readSessionOverrideFn(this.#homeDir);
+    this.#sessionOverrideCache = { readAt: now, value };
+    return value;
+  }
+
+  async #resolveDecision(
     request: Parameters<typeof resolveRoutingDecision>[0],
     options: { headers?: Record<string, string | string[] | undefined> }
-  ): RoutingDecision {
-    const override = readSessionModelOverride(this.#homeDir);
+  ): Promise<RoutingDecision> {
+    const override = await this.#readSessionOverride();
     if (override !== undefined && override.modelId !== null) {
       const model = resolveModelForProviderId(override.modelId, this.#routes, this.#providerSpecs);
       return {
@@ -123,6 +140,14 @@ export class RoutingBackend implements Backend {
     return resolveRoutingDecision(request, this.#routes, options);
   }
 
+  /**
+   * Invoke the routed provider, advancing the scenario fallback chain on classified
+   * errors from the primary attempt only.
+   *
+   * Classifies errors only on the primary attempt (`fallbackIndex === 0`). Once a
+   * fallback has fired, any non-2xx is returned as-is — fallback walking is a
+   * one-shot escalation, not a retry loop.
+   */
   async #invokeWithFallbacks(
     initial: RoutingDecision,
     chat: Record<string, unknown>,

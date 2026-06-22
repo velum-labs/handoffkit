@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
 
+import { fusionConfigDir, fusionConfigPath } from "../fusion-config.js";
 import { runRoutingOnboardingStep } from "../fusion/routing-onboarding-step.js";
 import { ROUTING_API_KEY_ENVS } from "../fusion/routing-onboarding.js";
 import type { RoutingOnboardingDetection } from "../fusion/routing-onboarding.js";
@@ -84,4 +88,39 @@ test("proposeAiRouting mocked failure returns deterministic config", async () =>
   );
   assert.equal(result.source, "deterministic");
   assert.equal(result.config.routes.default, "claude-sub,claude-sonnet-4-5");
+});
+
+const tmpRoots: string[] = [];
+
+after(() => {
+  for (const dir of tmpRoots) rmSync(dir, { recursive: true, force: true });
+});
+
+test("routing step: proposal phase leaves on-disk fusion.json unchanged", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "routing-onboarding-disk-"));
+  tmpRoots.push(repo);
+  const original = JSON.stringify({ version: "fusionkit.fusion.v2", tool: "codex" }, null, 2) + "\n";
+  mkdirSync(fusionConfigDir(repo), { recursive: true });
+  writeFileSync(fusionConfigPath(repo), original);
+
+  await runRoutingOnboardingStep({
+    host: { platform: "darwin", arch: "arm64", totalRamGB: 32, appleSilicon: true },
+    probeMlx: async () => ({ available: false }),
+    promptOverrides: { enableRouting: true, preferAi: false, action: "accept" },
+    onProposalReady: () => {
+      assert.equal(readFileSync(fusionConfigPath(repo), "utf8"), original);
+    }
+  });
+
+  assert.equal(readFileSync(fusionConfigPath(repo), "utf8"), original);
+});
+
+test("routing step: ai-routing auto-accepts in non-TTY contexts", async () => {
+  const result = await runRoutingOnboardingStep({
+    host: { platform: "linux", arch: "x64", totalRamGB: 64, appleSilicon: false },
+    aiRouting: true,
+    probeMlx: async () => ({ available: false, reason: "local MLX requires Apple Silicon" })
+  });
+  assert.ok(result.routing);
+  assert.equal(result.usedAi, false);
 });

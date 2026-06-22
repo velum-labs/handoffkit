@@ -7,6 +7,7 @@ import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
 import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { runFusionInit } from "../fusion-init.js";
+import { isForwardedToolHelp, printClaudeRouteHelp } from "../fusion/claude-route-help.js";
 import { runClaudeRoute } from "../fusion/claude-route.js";
 import { parseDashboardPort, runFusionDashboard } from "./fusion-dashboard.js";
 import { runFusionModel } from "./fusion-model.js";
@@ -283,9 +284,11 @@ export function registerFusion(program: Command): void {
     .command("status")
     .description("print smart routing status (config, subscriptions, last-24h stats)")
     .option("--repo <dir>", "coding workspace the panel fuses over")
-    .action(async (opts: FusionOpts) => {
+    .option("--json", "emit JSON instead of formatted output")
+    .action(async (opts: FusionOpts & { json?: boolean }) => {
       const code = await runFusionStatus({
-        ...(opts.repo !== undefined ? { repo: resolve(opts.repo) } : {})
+        ...(opts.repo !== undefined ? { repo: resolve(opts.repo) } : {}),
+        ...(opts.json === true ? { json: true } : {})
       });
       process.exit(code);
     });
@@ -342,6 +345,10 @@ export function registerFusion(program: Command): void {
         }
       }
       const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
+      if (resolvedTool === "claude" && isForwardedToolHelp(toolArgs)) {
+        printClaudeRouteHelp();
+        process.exit(0);
+      }
       const route = resolveRouteInvocation(opts, options, toolArgs);
       if (resolvedTool === "claude" && route.enabled) {
         const code = await runClaudeRoute(route.toolArgs, {
@@ -372,6 +379,10 @@ export function registerFusion(program: Command): void {
           : `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
       )
       .action(async (args: string[], opts: FusionOpts) => {
+        if (tool === "claude" && isForwardedToolHelp(args)) {
+          printClaudeRouteHelp();
+          process.exit(0);
+        }
         const { options } = resolveContext(opts);
         const route = resolveRouteInvocation(opts, options, args);
         if (tool === "claude" && route.enabled) {

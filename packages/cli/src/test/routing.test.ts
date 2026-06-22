@@ -166,3 +166,14 @@ test("claude --help documents route flags", () => {
   assert.match(output, /--route-dry-run/);
   assert.match(output, /--route-preview/);
 });
+
+test("fusion claude --help exits 0 without claude or uvx on PATH", () => {
+  const result = spawnSync(process.execPath, [CLI, "fusion", "claude", "--help"], {
+    encoding: "utf8",
+    env: { ...process.env, PATH: "", PORTLESS: "0" }
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.match(output, /--route/);
+  assert.match(output, /routing wrapper/i);
+});

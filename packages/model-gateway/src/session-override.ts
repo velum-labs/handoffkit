@@ -4,6 +4,7 @@
  * Written by `fusionkit fusion model` to `~/.fusionkit/session-override.json`.
  */
 
+import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -32,18 +33,38 @@ export function sessionOverridePath(homeDir: string = homedir()): string {
 export function readSessionModelOverride(homeDir?: string): SessionModelOverride | undefined {
   try {
     const raw = readFileSync(sessionOverridePath(homeDir), "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
-    const record = parsed as Record<string, unknown>;
-    if (typeof record.setAt !== "string") return undefined;
-    if (record.modelId === null) {
-      return { modelId: null, setAt: record.setAt };
-    }
-    if (typeof record.modelId === "string") {
-      return { modelId: record.modelId, setAt: record.setAt };
-    }
+    return parseSessionModelOverride(raw);
   } catch {
     // best-effort
+  }
+  return undefined;
+}
+
+/**
+ * Async variant of {@link readSessionModelOverride} for hot-path callers that cache reads.
+ */
+export async function readSessionModelOverrideAsync(
+  homeDir?: string
+): Promise<SessionModelOverride | undefined> {
+  try {
+    const raw = await readFile(sessionOverridePath(homeDir), "utf8");
+    return parseSessionModelOverride(raw);
+  } catch {
+    // best-effort
+  }
+  return undefined;
+}
+
+function parseSessionModelOverride(raw: string): SessionModelOverride | undefined {
+  const parsed = JSON.parse(raw) as unknown;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.setAt !== "string") return undefined;
+  if (record.modelId === null) {
+    return { modelId: null, setAt: record.setAt };
+  }
+  if (typeof record.modelId === "string") {
+    return { modelId: record.modelId, setAt: record.setAt };
   }
   return undefined;
 }

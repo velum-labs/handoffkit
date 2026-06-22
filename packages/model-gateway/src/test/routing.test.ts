@@ -644,3 +644,27 @@ test("RoutingBackend uses normal routing when session override modelId is null",
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("RoutingBackend caches session override reads for 1 second", async () => {
+  const mock = await startStatusMock({ "claude-sonnet-4-5": 200 });
+  let reads = 0;
+  const backend = new RoutingBackend({
+    routes: parseScenarioRoutes({ default: "claude-sub,claude-sonnet-4-5" }, "test"),
+    providers: [{ id: "claude-sub", provider: "anthropic", baseUrl: `${mock.url}/v1`, keyEnv: "ANTHROPIC_API_KEY" }],
+    env: { ANTHROPIC_API_KEY: "a" },
+    readSessionOverride: async () => {
+      reads += 1;
+      return { modelId: "claude-sub", setAt: "2026-06-22T00:00:00.000Z" };
+    }
+  });
+  try {
+    for (let index = 0; index < 5; index += 1) {
+      const response = await backend.chat({ messages: [{ role: "user", content: `hi ${index}` }] });
+      assert.equal(response.status, 200);
+    }
+    assert.equal(reads, 1);
+  } finally {
+    await backend.close();
+    await mock.close();
+  }
+});
