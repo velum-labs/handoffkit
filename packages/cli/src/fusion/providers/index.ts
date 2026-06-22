@@ -12,8 +12,12 @@ import { ROUTING_PROVIDER_KINDS } from "@fusionkit/model-gateway";
 const PANEL_TO_ROUTING: Record<string, RoutingProviderSpec["provider"]> = {
   openai: "openai",
   anthropic: "anthropic",
-  google: "google",
-  "openai-compatible": "openai-compatible"
+  google: "google-gemini",
+  "openai-compatible": "openai-compatible",
+  openrouter: "openrouter",
+  deepseek: "deepseek",
+  groq: "groq",
+  "google-gemini": "google-gemini"
 };
 
 /** Map a panel model spec to a routing provider when the provider kind is supported. */
