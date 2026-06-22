@@ -4,7 +4,7 @@
     "fusionkit-protocol": "0.3.0",
     "fusionkit-pypi": "0.5.3",
     "cursorkit": "0.1.4",
-    "handoffkit": "0.5.3",
+    "handoffkit": "0.5.4",
     "mlx-lm": "0.31.3+structured.3"
   }
 }
