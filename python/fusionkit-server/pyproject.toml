@@ -1,11 +1,11 @@
 [project]
 name = "fusionkit-server"
-version = "0.5.2"
+version = "0.5.3"
 description = "OpenAI-compatible HTTP server for fusionkit."
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.124.4",
-  "fusionkit-core==0.5.2",
+  "fusionkit-core==0.5.3",
   "uvicorn>=0.38.0",
 ]
 
