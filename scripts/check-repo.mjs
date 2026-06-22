@@ -325,6 +325,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["commander", "14.0.3"],
   ["figlet", "1.11.0"],
   ["jose", "6.2.3"],
+  ["js-tiktoken", "1.0.21"],
   ["just-bash", "3.0.1"],
   ["minimatch", "10.2.5"],
   ["ms", "2.1.3"],
