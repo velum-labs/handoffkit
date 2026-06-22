@@ -258,7 +258,7 @@ export async function startFusionStepGateway(input: {
 }): Promise<Gateway> {
   const { config } = input;
   const base = config.fusionBackendUrl.replace(/\/+$/, "");
-  const stepUrl = `${base}/v1/fusion/trajectory:step`;
+  const stepUrl = `${base}/v1/fusion/trajectories:fuse`;
   const defaultModel = input.defaultModel ?? "fusion-panel";
 
   const runPanels: PanelRunner = async ({ task, traceId, sessionSpanId, sessionKey, turn }) => {
@@ -273,7 +273,7 @@ export async function startFusionStepGateway(input: {
         environment: {
           repo: config.repo,
           fusion_backend_url: config.fusionBackendUrl,
-          harnesses: ["agent"],
+          harnesses: config.harnesses,
           judge_model: config.judgeModel ?? null,
           models: config.models.map((model) => ({
             id: model.id,
@@ -294,6 +294,7 @@ export async function startFusionStepGateway(input: {
         outputRoot: join(config.outputRoot, sessionKey, `t${turn}`),
         prompt: task,
         models: config.models,
+        harness: config.harnesses[0] ?? "agent",
         fusionBackendUrl: config.fusionBackendUrl,
         traceId,
         parentSpanId: sessionSpanId,
@@ -335,6 +336,11 @@ export async function startFusionStepGateway(input: {
     runPanels,
     defaultModel,
     passthrough
+    // judge_model is intentionally NOT forwarded here: `config.judgeModel` is the
+    // provider model name, but the router (and trajectory:step) route by endpoint
+    // id. The Python step path already resolves the configured judge endpoint via
+    // config.resolved_judge_model, so omitting this keeps routing correct while
+    // the judge gap-analysis still runs on the configured judge.
   });
   return await startGateway({
     backend,

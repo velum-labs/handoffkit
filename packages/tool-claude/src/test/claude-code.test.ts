@@ -78,7 +78,6 @@ test("claude-code adapter can replace mock and skip clearly without credentials"
     result.candidates[0]?.error?.message ?? "",
     /missing Claude Code credential/
   );
-  assert.match(result.summary?.candidates[0]?.verification?.evidence[0] ?? "", /missing Claude/);
 });
 
 test("claude-code adapter delegates through a session backend from a generic descriptor", async () => {

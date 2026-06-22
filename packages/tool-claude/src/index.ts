@@ -18,10 +18,15 @@ export const claudeTool: ToolIntegration = {
   binary: "claude",
   modes: ["fusion", "local"],
   harnessKinds: ["claude-code"],
+  panelHarnessKind: "claude-code",
   launch: launchClaude,
   createHarness: (_kind, options) =>
     createClaudeCodeHarness({
-      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+      execution: "local",
+      fusionBackendUrl: options.fusionBackendUrl,
+      ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {})
     }),
   harness: {
     harnessKind: "claude_code",

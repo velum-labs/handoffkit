@@ -42,24 +42,13 @@ const SUPPORTED_CONFIG_VERSIONS = ["fusionkit.fusion.v1", "fusionkit.fusion.v2"]
  * `.fusionkit/prompts/<id>.md` file and to a `FusionConfig.prompts` key in the
  * Python synthesizer (see {@link PROMPT_CONFIG_KEY}).
  */
-export const PROMPT_IDS = [
-  "judge",
-  "synthesizer",
-  "trajectory-synthesizer",
-  "trajectory-step",
-  "verifier",
-  "panel"
-] as const;
+export const PROMPT_IDS = ["judge", "synthesizer"] as const;
 export type PromptId = (typeof PROMPT_IDS)[number];
 
 /** Map each prompt override id to the `prompts:` key fusionkit's config expects. */
 export const PROMPT_CONFIG_KEY: Record<PromptId, string> = {
   judge: "judge_system",
-  synthesizer: "synthesizer_system",
-  "trajectory-synthesizer": "trajectory_synthesizer_system",
-  "trajectory-step": "trajectory_step_system",
-  verifier: "verifier_system",
-  panel: "panel_system"
+  synthesizer: "synthesizer_system"
 };
 
 export type PromptOverrides = Partial<Record<PromptId, string>>;

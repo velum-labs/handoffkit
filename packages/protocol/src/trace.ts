@@ -293,6 +293,8 @@ export function judgeThinkingPayload(input: {
 export function judgeFinalPayload(input: {
   finalOutput?: string;
   content?: string;
+  /** The fused trajectory's synthesis (decision/selected/rationale/metrics). */
+  synthesis?: unknown;
   toolCalls?: unknown;
   usage?: unknown;
   httpStatus?: number;
@@ -300,8 +302,16 @@ export function judgeFinalPayload(input: {
   turn?: number;
 }): Record<string, unknown> {
   const finalOutput = input.finalOutput ?? input.content;
+  // The fusion result is folded onto the terminal trajectory's synthesis; expose
+  // it (plus the final output) under `record` for the dashboard.
+  const record: Record<string, unknown> = {
+    ...(finalOutput !== undefined ? { final_output: finalOutput } : {}),
+    ...(input.synthesis !== undefined ? { synthesis: input.synthesis } : {})
+  };
   return {
-    ...(finalOutput !== undefined ? { final_output: finalOutput, record: { final_output: finalOutput } } : {}),
+    ...(finalOutput !== undefined ? { final_output: finalOutput } : {}),
+    ...(Object.keys(record).length > 0 ? { record } : {}),
+    ...(input.synthesis !== undefined ? { synthesis: input.synthesis } : {}),
     ...(input.content !== undefined ? { content: input.content } : {}),
     ...(input.toolCalls !== undefined ? { tool_calls: input.toolCalls } : {}),
     ...(input.usage !== undefined ? { usage: input.usage } : {}),

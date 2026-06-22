@@ -71,6 +71,13 @@ export type CursorHarnessOptions = {
   env?: Record<string, string | undefined>;
   runner?: CursorExecRunner;
   skipWhenUnavailable?: boolean;
+  /**
+   * Per-model router endpoints keyed by `EnsembleModel.id`. When a candidate's
+   * model id is present, the Cursorkit bridge is pointed at that endpoint and
+   * routes the endpoint id as its provider model (so the router routes to this
+   * panel member).
+   */
+  modelEndpoints?: Record<string, string>;
 };
 
 type CursorAvailability =
@@ -351,7 +358,6 @@ export function createCursorHarness(
         apply_patch: status,
         tool_call_loop: status,
         tool_records: status,
-        verification: status,
         route_observation: "supported",
         adapter_available: available ? "supported" : "unsupported"
       };
@@ -378,8 +384,11 @@ export function createCursorHarness(
         });
       }
 
+      // Per-model routing: a configured endpoint for this model id points the
+      // bridge at that endpoint and routes the endpoint id as the provider model.
+      const endpointUrl = options.modelEndpoints?.[model.id];
       const fusionBackendUrl =
-        options.fusionBackendUrl ?? state.env.FUSIONKIT_BASE_URL;
+        endpointUrl ?? options.fusionBackendUrl ?? state.env.FUSIONKIT_BASE_URL;
       if (fusionBackendUrl === undefined || fusionBackendUrl.length === 0) {
         return skippedCandidate({
           descriptor,
@@ -402,7 +411,9 @@ export function createCursorHarness(
           command: state.availability.command,
           modelName: options.modelName ?? DEFAULT_BRIDGE_MODEL_NAME,
           providerModel:
-            options.providerModel ?? model.model ?? DEFAULT_BRIDGE_PROVIDER_MODEL,
+            endpointUrl !== undefined
+              ? model.id
+              : options.providerModel ?? model.model ?? DEFAULT_BRIDGE_PROVIDER_MODEL,
           mode: modeFor(descriptor, options.mode),
           ...(options.timeoutMs !== undefined
             ? { timeoutMs: options.timeoutMs }
@@ -470,15 +481,6 @@ export function createCursorHarness(
               : {})
           }
         ],
-        verification: {
-          status,
-          evidence: [
-            `tool_events=${result.toolEvents}`,
-            outputHash,
-            ...(result.diff !== undefined ? ["worktree_diff"] : [])
-          ],
-          ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {})
-        },
         ...(status === "failed"
           ? {
               error: {

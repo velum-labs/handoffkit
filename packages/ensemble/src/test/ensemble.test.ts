@@ -141,7 +141,7 @@ test("mock adapter runs N candidates and emits valid model-fusion records", asyn
   assert.ok(result.artifacts.length >= 4);
 });
 
-test("command adapter records command output, artifact, tool record, and verification", async () => {
+test("command adapter records command output, artifact, and tool record", async () => {
   const result = await runEnsemble(
     descriptor({
       models: [{ id: "command", model: "local-shell" }],
@@ -156,10 +156,6 @@ test("command adapter records command output, artifact, tool record, and verific
   assert.equal(result.toolRecords.length, 1);
   assert.equal(result.toolRecords[0]?.status, "succeeded");
   assert.equal(result.artifacts[0]?.kind, "log");
-  const metadata = result.candidates[0]?.metadata as
-    | { verification?: { status?: string } }
-    | undefined;
-  assert.equal(metadata?.verification?.status, "succeeded");
   assert.deepEqual(result.summary?.candidates[0]?.toolExecutionIds, [
     "exec_ensemble_test_command_0"
   ]);
@@ -465,8 +461,7 @@ test("candidate worktree diffs become patch artifacts", async () => {
         return {
           model,
           status: "succeeded",
-          transcript: `${model.id} wrote a file`,
-          verification: { status: "succeeded", evidence: ["file written"], exitCode: 0 }
+          transcript: `${model.id} wrote a file`
         };
       }
     };
@@ -536,10 +531,7 @@ test("judge synthesis creates a final patch artifact from the original base", as
               },
               contributions: [{ candidateId: "ensemble_test_fast_0", reason: "used evidence" }],
               rejections: [{ candidateId: "ensemble_test_writer_1", reason: "less complete" }]
-            },
-            verificationResults: [
-              { status: "succeeded", evidence: ["final tests passed"], exitCode: 0 }
-            ]
+            }
           })
         }
       })
@@ -595,86 +587,3 @@ test("judge synthesis patch conflicts produce conflict artifacts", async () => {
   }
 });
 
-test("judge synthesis performs one repair round and records success", async () => {
-  const repo = makeRepo();
-  try {
-    const result = await runEnsemble(
-      descriptor({
-        workspace: repo.repo,
-        baseGitSha: repo.head,
-        outputRoot: repo.outputRoot,
-        judge: {
-          id: "judge",
-          synthesizer: createMockJudgeSynthesizer({
-            output: {
-              decision: "synthesize",
-              finalOutput: "needs repair",
-              patch: { content: addFilePatch("initial.txt", "initial\n") }
-            },
-            repairOutput: {
-              decision: "synthesize",
-              finalOutput: "repaired",
-              patch: { content: addFilePatch("repair.txt", "repair\n") }
-            },
-            verificationResults: [
-              { status: "failed", evidence: ["initial failed"], exitCode: 1 },
-              { status: "succeeded", evidence: ["repair passed"], exitCode: 0 }
-            ]
-          })
-        }
-      })
-    );
-
-    assert.equal(result.repairAttempts?.length, 1);
-    assert.equal(result.repairAttempts?.[0]?.status, "succeeded");
-    assert.equal(result.judgeSynthesisRecord?.status, "succeeded");
-    assert.equal(result.failureSummary, undefined);
-  } finally {
-    repo.cleanup();
-  }
-});
-
-test("failed repair returns failure summary without deterministic fallback winner", async () => {
-  const repo = makeRepo();
-  try {
-    const result = await runEnsemble(
-      descriptor({
-        workspace: repo.repo,
-        baseGitSha: repo.head,
-        outputRoot: repo.outputRoot,
-        reviewEvidence: {
-          strategy: "tests-pass-smallest-diff",
-          scorecards: [{ candidate_id: "ensemble_test_fast_0", diffBytes: 1 }],
-          reason: "evidence only"
-        },
-        judge: {
-          id: "judge",
-          synthesizer: createMockJudgeSynthesizer({
-            output: {
-              decision: "synthesize",
-              finalOutput: "needs repair",
-              patch: { content: addFilePatch("initial.txt", "initial\n") }
-            },
-            repairOutput: {
-              decision: "synthesize",
-              finalOutput: "still broken",
-              patch: { content: addFilePatch("repair.txt", "repair\n") }
-            },
-            verificationResults: [
-              { status: "failed", evidence: ["initial failed"], exitCode: 1 },
-              { status: "failed", evidence: ["repair failed"], exitCode: 1 }
-            ]
-          })
-        }
-      })
-    );
-
-    assert.equal(result.judgeSynthesisRecord?.status, "failed");
-    assert.equal(result.judgeSynthesisRecord?.decision, "repair_required");
-    assert.equal(result.failureSummary?.reason, "repair_failed");
-    assert.equal("chosen" in result, false);
-    assert.equal(result.judgeSynthesisRecord.selected_trajectory_id, undefined);
-  } finally {
-    repo.cleanup();
-  }
-});

@@ -14,11 +14,7 @@ Fusion settings live in a committed `.fusionkit/` folder at your repo root. It i
   fusion.json        # all settings (panel, judge, default tool, run defaults)
   prompts/
     judge.md                    # judge analysis system prompt
-    synthesizer.md              # candidate synthesizer system prompt
-    trajectory-synthesizer.md   # trajectory synthesizer system prompt
-    trajectory-step.md          # streaming agent (front-door) system prompt
-    verifier.md                 # verifier system prompt
-    panel.md                    # panel member system prompt
+    synthesizer.md              # synthesizer system prompt (the fused output)
 ```
 
 Scaffold it interactively:
@@ -100,12 +96,8 @@ default; an empty or missing file falls back to the built-in.
 
 | File | Overrides |
 | --- | --- |
-| `judge.md` | The judge analysis prompt (compares candidates/trajectories). |
-| `synthesizer.md` | The candidate synthesizer prompt. |
-| `trajectory-synthesizer.md` | The trajectory synthesizer prompt (the default fusion path). |
-| `trajectory-step.md` | The streaming front-door agent prompt (the default fusion path). |
-| `verifier.md` | The optional verifier prompt. |
-| `panel.md` | The panel member prompt. |
+| `judge.md` | The judge analysis prompt (compares candidate trajectories). |
+| `synthesizer.md` | The synthesizer prompt that produces the fused output (a final answer, or the next agentic step when tools are present). |
 
 To regenerate the built-in defaults at any time (e.g. after upgrading), dump
 them from the synthesizer package:

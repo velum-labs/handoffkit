@@ -29,11 +29,10 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
     }),
     capabilities: () => ({
       shell_command: "supported",
-      artifact_capture: "supported",
-      verification: "supported"
+      artifact_capture: "supported"
     }),
     verificationProfile: () => ({
-      id: `${id}-verification`,
+      id: `${id}-evidence`,
       command: options.command,
       requiredEvidence: ["command output", "exit code", "tool execution record"]
     }),
@@ -83,11 +82,6 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
             output_hash: outputHash
           }
         ],
-        verification: {
-          status,
-          evidence: [`exit_code=${exitCode}`, outputHash],
-          exitCode
-        },
         metadata: {
           command: options.command,
           stdout_bytes: Buffer.byteLength(stdout),

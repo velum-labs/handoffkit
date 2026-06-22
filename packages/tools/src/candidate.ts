@@ -37,10 +37,6 @@ export function buildSkippedCandidate(input: {
         redaction_status: "synthetic"
       }
     ],
-    verification: {
-      status: "skipped",
-      evidence: [reason]
-    },
     error: {
       kind: "capability_missing",
       message: reason,

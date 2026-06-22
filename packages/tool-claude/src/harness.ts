@@ -1,3 +1,7 @@
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
+
 import { artifactHash } from "@fusionkit/protocol";
 import type { NetworkPolicy, RunContract, RunEvent } from "@fusionkit/protocol";
 import { CapabilityMismatchError, prepareExecution } from "@fusionkit/runner";
@@ -6,6 +10,7 @@ import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
 import type { ClaudeCodeBindingOptions } from "@fusionkit/session-harness";
 
 import { hardeningToJson } from "@fusionkit/ensemble";
+import { parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
 import type {
   CandidateHardeningMetadata,
   EnsembleDescriptor,
@@ -38,6 +43,25 @@ export type ClaudeCodeHarnessEnv = Record<string, string | undefined>;
 
 export type ClaudeCodeHarnessOptions = ClaudeCodeBindingOptions & {
   id?: string;
+  /**
+   * Where the agent runs. `"sandbox"` (default) drives Claude Code in a Vercel
+   * sandbox via the session backend; `"local"` drives the `claude` CLI directly
+   * in the candidate's git worktree, pointed at the fusion router. The fusion
+   * panel uses `"local"` for uniform local-worktree isolation.
+   */
+  execution?: "local" | "sandbox";
+  /** Local mode: the CLI binary to spawn (defaults to `claude`). */
+  command?: string;
+  /** Local mode: the fusion router base URL the CLI's model calls go to. */
+  fusionBackendUrl?: string;
+  /** Local mode: bearer token presented to the router (defaults to `local`). */
+  apiKey?: string;
+  /**
+   * Local mode: per-model router endpoints keyed by `EnsembleModel.id`. When a
+   * candidate's id is present, the CLI is pointed at that endpoint and requests
+   * the endpoint id as its model.
+   */
+  modelEndpoints?: Record<string, string>;
   /** Defaults to `process.env`; tests can pass `{}` for deterministic skips. */
   env?: ClaudeCodeHarnessEnv;
   /** Already-released secret values forwarded through the session backend seam. */
@@ -287,11 +311,6 @@ function skippedOutput(input: {
       message: input.reason,
       retryable: false
     },
-    verification: {
-      status: "skipped",
-      evidence: [input.reason, evidenceHash],
-      exitCode: 0
-    },
     metadata: {
       adapter: "claude-code",
       credential_gate: "skipped",
@@ -334,11 +353,6 @@ function failureOutput(input: {
       message,
       retryable: true
     },
-    verification: {
-      status: "failed",
-      evidence: [errorHash],
-      exitCode: 1
-    },
     metadata: {
       adapter: "claude-code",
       credential_gate: "available",
@@ -357,7 +371,270 @@ function failureOutput(input: {
   };
 }
 
+const DEFAULT_CLAUDE_COMMAND = "claude";
+
+/** True when `command` resolves on PATH (or is an existing absolute path). */
+function commandOnPath(command: string, env: ClaudeCodeHarnessEnv): boolean {
+  if (command.includes("/")) return existsSync(command);
+  const pathValue = env.PATH ?? process.env.PATH ?? "";
+  return pathValue
+    .split(delimiter)
+    .filter((entry) => entry.length > 0)
+    .some((dir) => existsSync(join(dir, command)));
+}
+
+function captureWorktreeDiff(cwd: string): string | undefined {
+  try {
+    const result = spawnSync("git", ["-C", cwd, "diff"], { encoding: "utf8" });
+    const stdout = result.stdout ?? "";
+    return result.status === 0 && stdout.length > 0 ? stdout : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+type ClaudePrintResult = {
+  status: "succeeded" | "failed";
+  /** Raw stdout (the stream-json event stream we reconstruct the trajectory from). */
+  stdout: string;
+  /** Human-readable transcript (stdout + stderr) for logs/artifacts. */
+  transcript: string;
+  exitCode?: number;
+  reason?: string;
+};
+
+/**
+ * Drive the `claude` CLI in headless print mode inside the worktree against its
+ * native Anthropic backend. Headless `claude -p` validates the selected model
+ * against the configured endpoint and rejects a custom-gateway-advertised id, so
+ * (unlike codex's gateway wire-capture) we run claude natively and reconstruct
+ * the trajectory by parsing its `--output-format stream-json` stdout.
+ */
+function driveClaudePrint(input: {
+  command: string;
+  cwd: string;
+  prompt: string;
+  model: string;
+  timeoutMs: number;
+  env: Record<string, string>;
+}): Promise<ClaudePrintResult> {
+  const args = [
+    "-p",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--permission-mode",
+    "bypassPermissions",
+    "--model",
+    input.model,
+    input.prompt
+  ];
+  // Run against the native Anthropic backend: never point the CLI at the fusion
+  // gateway (it would 404 the model). Ambient ANTHROPIC_API_KEY (loaded by the
+  // fusion stack) authenticates the run; strip any inherited gateway base URL.
+  const childEnv: Record<string, string> = { ...input.env };
+  delete childEnv.ANTHROPIC_BASE_URL;
+  return new Promise<ClaudePrintResult>((resolve) => {
+    const child = spawn(input.command, args, {
+      cwd: input.cwd,
+      env: childEnv,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, input.timeoutMs);
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({
+        status: "failed",
+        stdout,
+        transcript: stdout,
+        reason: error instanceof Error ? error.message : String(error)
+      });
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      const transcript = [stdout, stderr].filter(Boolean).join("\n");
+      if (timedOut) {
+        resolve({ status: "failed", stdout, transcript, reason: "claude CLI timed out" });
+        return;
+      }
+      const failureReason = stderr.trim().slice(0, 500) || transcript.trim().slice(-500);
+      resolve({
+        status: code === 0 ? "succeeded" : "failed",
+        stdout,
+        transcript,
+        exitCode: code ?? 0,
+        ...(code === 0
+          ? {}
+          : { reason: failureReason.length > 0 ? failureReason : `claude CLI exited with code ${code ?? "null"}` })
+      });
+    });
+  });
+}
+
+/**
+ * Local Claude Code harness: drives the `claude` CLI in the candidate's worktree
+ * pointed at the fusion router, for uniform local-worktree panel isolation. No
+ * Vercel sandbox; the only prerequisite is a logged-in `claude` CLI on PATH.
+ */
+function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): HarnessAdapter {
+  const id = options.id ?? "claude-code";
+  const env = options.env ?? process.env;
+  const command = options.command ?? DEFAULT_CLAUDE_COMMAND;
+  const skipWhenUnavailable = options.skipWhenUnavailable ?? true;
+  const unavailableReason = (): string | undefined =>
+    commandOnPath(command, env)
+      ? undefined
+      : `Claude CLI "${command}" was not found on PATH; install the Claude Code CLI and log in.`;
+  return {
+    id,
+    harnessKind: "claude_code",
+    prepare: () => ({ reason: unavailableReason() }),
+    capabilities: () => {
+      const ready = unavailableReason() === undefined;
+      return {
+        workspace_read: ready ? "supported" : "degraded",
+        workspace_write: ready ? "supported" : "degraded",
+        apply_patch: ready ? "supported" : "degraded",
+        tool_records: "supported",
+        route_model_observation: "supported",
+        adapter_available: ready ? "supported" : "unsupported"
+      };
+    },
+    verificationProfile: () => ({
+      id: `${id}-verification`,
+      requiredEvidence: ["claude transcript", "worktree diff or skip reason"]
+    }),
+    run: async (runInput): Promise<HarnessCandidateOutput> => {
+      const { descriptor, model, ordinal, worktree } = runInput;
+      const candidate = `${descriptor.id}_${model.id}_${ordinal}`;
+      const reason = (runInput.prepared as { reason?: string } | undefined)?.reason ?? unavailableReason();
+      if (reason !== undefined) {
+        if (!skipWhenUnavailable) throw new CapabilityMismatchError(reason);
+        return {
+          candidateId: candidate,
+          model,
+          status: "skipped",
+          ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {}),
+          transcript: reason,
+          summary: reason,
+          error: { kind: "capability_missing", message: reason, retryable: false },
+          metadata: { adapter: "claude-code", execution: "local" }
+        };
+      }
+      // Claude runs against its native Anthropic backend (see driveClaudePrint).
+      // Resolve the panel candidate's model id to a CLI-accepted claude model.
+      const cliModel = resolveClaudeCliModel(model.model);
+      const result = await driveClaudePrint({
+        command,
+        cwd: worktree?.path ?? descriptor.workspace ?? process.cwd(),
+        prompt: descriptor.prompt,
+        model: cliModel,
+        timeoutMs: options.timeoutMs ?? descriptor.policy.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        env: definedLocalEnv(env)
+      });
+      const diff = worktree ? captureWorktreeDiff(worktree.path) : undefined;
+      const outputHash = artifactHash(result.transcript.length > 0 ? result.transcript : candidate);
+      const status: HarnessCandidateOutput["status"] = result.status;
+      // Reconstruct the native trajectory from the CLI's stream-json stdout.
+      const reconstructed = parseClaudeStreamJson(result.stdout);
+      const trajectory =
+        reconstructed.steps.length > 0
+          ? {
+              trajectoryId: candidate,
+              modelId: model.id,
+              model: model.model,
+              candidateId: candidate,
+              harnessKind: "claude_code" as const,
+              status,
+              steps: reconstructed.steps,
+              finalOutput:
+                reconstructed.finalOutput.length > 0 ? reconstructed.finalOutput : result.transcript,
+              ...(diff !== undefined ? { diff } : {})
+            }
+          : undefined;
+      return {
+        candidateId: candidate,
+        model,
+        status,
+        ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {}),
+        ...(trajectory !== undefined ? { trajectory } : {}),
+        transcript: result.transcript,
+        log: result.transcript,
+        ...(diff !== undefined ? { diff } : {}),
+        artifacts: [
+          {
+            artifact_id: `artifact_${candidate}_claude_transcript`,
+            kind: "transcript",
+            hash: outputHash,
+            redaction_status: "synthetic"
+          }
+        ],
+        toolRecords: [
+          {
+            execution_id: `exec_${candidate}_claude`,
+            plan_id: `plan_${candidate}_claude`,
+            status,
+            output_hash: outputHash,
+            ...(status === "failed"
+              ? {
+                  error: {
+                    kind: "provider_error" as const,
+                    message: result.reason ?? "Claude CLI run failed.",
+                    retryable: false
+                  }
+                }
+              : {})
+          }
+        ],
+        ...(status === "failed"
+          ? {
+              error: {
+                kind: "provider_error" as const,
+                message: result.reason ?? "Claude CLI run failed.",
+                retryable: false
+              }
+            }
+          : {}),
+        metadata: {
+          adapter: "claude-code",
+          execution: "local",
+          backend: "anthropic-native",
+          requested_model: model.model,
+          cli_model: cliModel,
+          step_count: reconstructed.steps.length,
+          ...(result.exitCode !== undefined ? { exit_code: result.exitCode } : {}),
+          has_diff: diff !== undefined && diff.length > 0
+        }
+      };
+    },
+    collectArtifacts: () => []
+  };
+}
+
+function definedLocalEnv(env: ClaudeCodeHarnessEnv): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === "string") out[key] = value;
+  }
+  return out;
+}
+
 export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}): HarnessAdapter {
+  if (options.execution === "local") {
+    return createLocalClaudeCodeHarness(options);
+  }
   const id = options.id ?? "claude-code";
   const env = options.env ?? process.env;
   const skipWhenUnavailable = options.skipWhenUnavailable ?? true;
@@ -379,7 +656,6 @@ export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}):
         workspace_write: gate.available ? "supported" : "degraded",
         apply_patch: gate.available ? "supported" : "degraded",
         tool_records: "supported",
-        verification: gate.available ? "supported" : "degraded",
         microvm_isolation: gate.available ? "supported" : "degraded",
         credential_gate: gate.available ? "supported" : "degraded"
       };
@@ -446,11 +722,6 @@ export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}):
               output_hash: outputHash
             }
           ],
-          verification: {
-            status,
-            evidence: [`exit_code=${result.exitCode}`, outputHash],
-            exitCode: result.exitCode
-          },
           ...(status === "failed"
             ? {
                 error: {

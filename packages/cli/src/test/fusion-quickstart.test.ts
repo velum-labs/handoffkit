@@ -160,7 +160,7 @@ test("agent front door: panel produces a trajectory the judge step consumes", as
   const synth = createServer((req, res) => {
     void (async () => {
       const path = new URL(req.url ?? "/", "http://localhost").pathname;
-      if (req.method === "POST" && path === "/v1/fusion/trajectory:step") {
+      if (req.method === "POST" && path === "/v1/fusion/trajectories:fuse") {
         const body = JSON.parse(await readBody(req)) as { trajectories?: unknown[]; messages?: Array<{ role?: string }> };
         stepTrajectories = body.trajectories ?? [];
         stepMessages = body.messages ?? [];
@@ -178,7 +178,13 @@ test("agent front door: panel produces a trajectory the judge step consumes", as
                 finish_reason: "stop"
               }
             ],
-            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+            fusion: {
+              trajectory: {
+                trajectory_id: "synthesis_quickstart",
+                synthesis: { decision: "synthesize", rationale: "fused" }
+              }
+            }
           })
         );
         return;

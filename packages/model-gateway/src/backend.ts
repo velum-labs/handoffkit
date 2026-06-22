@@ -56,6 +56,14 @@ export type OpenAiBackendOptions = {
   apiKey?: string;
   /** Model id used when a request omits `model`. */
   defaultModel?: string;
+  /**
+   * When set, every request's `model` is overwritten with this id before it is
+   * forwarded upstream, regardless of what the client sent. Used by per-candidate
+   * capture gateways that are dedicated to one routed endpoint: the driving CLI
+   * (e.g. Claude Code) picks its own model label, but the router must always
+   * receive the endpoint id. Absent means the client's model passes through.
+   */
+  forceModel?: string;
 };
 
 /** Join a base URL (which may end in `/`) with a route path. */
@@ -69,11 +77,13 @@ export function joinPath(baseUrl: string, path: string): string {
 export class OpenAiBackend implements Backend {
   readonly #baseUrl: string;
   readonly #apiKey: string;
+  readonly #forceModel: string | undefined;
   readonly defaultModel: string | undefined;
 
   constructor(options: OpenAiBackendOptions) {
     this.#baseUrl = options.baseUrl;
     this.#apiKey = options.apiKey ?? "not-needed";
+    this.#forceModel = options.forceModel;
     this.defaultModel = options.defaultModel;
   }
 
@@ -90,10 +100,14 @@ export class OpenAiBackend implements Backend {
     signal?: AbortSignal,
     options: BackendRequestOptions = {}
   ): Promise<Response> {
+    const payload =
+      this.#forceModel !== undefined && typeof body === "object" && body !== null && !Array.isArray(body)
+        ? { ...(body as Record<string, unknown>), model: this.#forceModel }
+        : body;
     return fetch(joinPath(this.#baseUrl, "/chat/completions"), {
       method: "POST",
       headers: this.#headers(options),
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
       ...(signal ? { signal } : {})
     });
   }

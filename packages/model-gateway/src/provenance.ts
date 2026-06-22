@@ -45,6 +45,13 @@ export type ModelCallRecord = ModelCallRecordV1;
 /** Sink for gateway observations. All methods are optional. */
 export type ProvenanceSink = {
   onModelCall?(record: ModelCallRecord): void;
+  /**
+   * Unredacted, in-process observation of one model call: the raw request body
+   * (full message array incl. tool calls + tool results) and raw response body.
+   * Used to reconstruct a native agent trajectory from the wire traffic without
+   * per-CLI stdout parsing. Never persisted by the gateway; the caller decides.
+   */
+  onModelCallRaw?(context: ModelGatewayCallContext, result: ModelGatewayCallResult): void;
 };
 
 function asObject(value: unknown): Record<string, unknown> | undefined {

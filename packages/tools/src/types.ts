@@ -142,6 +142,12 @@ export type ToolIntegration = {
   modes: readonly ToolLaunchMode[];
   /** The unified harness kinds this tool's adapter answers for. */
   harnessKinds: readonly UnifiedHarnessKind[];
+  /**
+   * The harness kind to use when this tool is the launched fusion harness and
+   * drives every panel model. Tools that expose more than one kind (e.g. Cursor)
+   * pick the panel-appropriate one here. Unset for tools with no panel harness.
+   */
+  panelHarnessKind?: UnifiedHarnessKind;
   /** Boot the tool against the host context; resolves with its exit code. */
   launch(ctx: ToolLaunchContext): Promise<number>;
   /** Build the ensemble harness adapter for one of this tool's kinds. */

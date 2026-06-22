@@ -24,6 +24,12 @@ export type ToolRegistry = {
   responseShapeForKind(kind: UnifiedHarnessKind): string;
   /** All unified harness kinds answered by a registered tool. */
   harnessKinds(): UnifiedHarnessKind[];
+  /**
+   * The panel harness kind for the launched tool (by id or alias), i.e. the
+   * harness every panel model runs through when this tool is launched. Undefined
+   * for unknown tools or tools without a panel harness (e.g. opencode, serve).
+   */
+  panelHarnessKindFor(idOrAlias: string): UnifiedHarnessKind | undefined;
   /** Dashboard metadata for tools that provide it, in registration order. */
   dashboardTools(): ToolDashboardMetadata[];
 };
@@ -83,6 +89,7 @@ export function createToolRegistry(integrations: readonly ToolIntegration[]): To
       return harness.responseShape;
     },
     harnessKinds: () => integrations.flatMap((tool) => [...tool.harnessKinds]),
+    panelHarnessKindFor: (idOrAlias) => byKey.get(idOrAlias)?.panelHarnessKind,
     dashboardTools: () =>
       integrations
         .map((tool) => tool.dashboard)

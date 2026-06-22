@@ -203,6 +203,27 @@ test("preserves an explicitly requested model", async () => {
   }
 });
 
+test("forceModel overrides the requested model on every upstream call", async () => {
+  const mock = await startMock();
+  const gateway = await startGateway({
+    backend: new OpenAiBackend({ baseUrl: `${mock.url}/v1`, defaultModel: "advertised", forceModel: "routed-endpoint" })
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "whatever-the-cli-picked", messages: [{ role: "user", content: "hi" }] })
+    });
+    assert.equal(response.status, 200);
+    // The driving client's model is ignored; the dedicated capture gateway routes
+    // every call to its candidate's real endpoint id.
+    assert.equal(mock.lastChatBody()?.model, "routed-endpoint");
+  } finally {
+    await gateway.close();
+    await mock.close();
+  }
+});
+
 test("lists models from the backend", async () => {
   const mock = await startMock();
   const gateway = await startGateway({

@@ -616,6 +616,9 @@ importers:
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
+      '@fusionkit/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol

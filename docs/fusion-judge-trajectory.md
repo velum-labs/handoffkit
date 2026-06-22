@@ -1,17 +1,25 @@
 # Judge-streamed trajectory fusion
 
-`warrant fusion` (the agent harness path) fuses several panel models into one
-coding agent by making the **judge the front-door agent**: a panel of models
-each solves the task once to produce candidate trajectories, then the judge
-runs as a streaming, tool-calling agent whose trajectory the user's own harness
-(codex / Claude Code / cursor-agent) executes. The judge reacts to what the
-harness observes and iterates until the task is done. There is no separate
-apply/verify/repair step in the gateway — iteration is the harness's job.
+`fusionkit <tool>` fuses several panel models into one coding agent. The
+**harness is the single launched tool** (`fusionkit codex` / `claude` /
+`cursor`): every panel model runs THROUGH that one harness in its own local git
+worktree, getting the harness's real tools + context, and only the underlying
+routed model varies. Each panel run produces a native trajectory, reconstructed
+from the normalized provider wire traffic the gateway already proxies (no
+per-CLI stdout parsing). The **judge** (the configured `judgeModel`) compares
+the candidate trajectories and finds the gaps, and the **synthesizer** runs as
+the launched harness's own streaming tool-calling loop — fed the candidates plus
+the judge analysis — emitting the fused trajectory the harness executes in the
+user's repo. There is no apply/verify/repair step and fusionkit owns no
+verification — iteration (and any test runs) are the harness's job.
 
 ## The abstraction
 
 - **CandidateTrajectory** — one panel model's full reasoning / tool-call /
-  observation / result for the task (the reference solutions).
+  observation / output for the task (the reference solutions), reconstructed at
+  the gateway wire boundary ([trajectory-capture.ts](../packages/model-gateway/src/trajectory-capture.ts))
+  from the launched harness's model calls — three provider dialects, no per-CLI
+  stdout parsing, no verification verdict.
 - **Consolidated trajectory** — the live conversation the harness resends each
   turn (the judge's prior steps plus the tool results the harness fed back).
 - **FusionSession** — per front-door conversation: the candidate trajectories
@@ -28,7 +36,7 @@ flowchart TB
   cli["User harness CLI (codex / claude / cursor-agent)"]
   gw["Gateway /v1/responses|messages|chat -> FusionBackend"]
   panels["Panel (once per session): gpt + opus -> candidate trajectories"]
-  step["FusionKit /v1/fusion/trajectory:step (judge agent)"]
+  step["FusionKit /v1/fusion/trajectories:fuse (judge agent)"]
   dash["scope dashboard (collector + UI)"]
 
   cli -->|messages + tools| gw
@@ -48,7 +56,8 @@ the harness loop ends.
 
 | Concern | Location |
 |---|---|
-| Judge step ("brain"): tool-calling completion over candidates + conversation | [packages/fusionkit-server/.../app.py](../../fusionkit/packages/fusionkit-server/src/fusionkit_server/app.py) `POST /v1/fusion/trajectory:step`, [judge.py](../../fusionkit/packages/fusionkit-core/src/fusionkit_core/judge.py) `JudgeSynthesizer.step` |
+| Judge gap-analysis + synthesizer step over candidates + conversation | [packages/fusionkit-server/.../app.py](../../fusionkit/packages/fusionkit-server/src/fusionkit_server/app.py) `POST /v1/fusion/trajectories:fuse`, [judge.py](../../fusionkit/packages/fusionkit-core/src/fusionkit_core/judge.py) `JudgeSynthesizer.fuse` runs `analyze()` then injects the analysis into `build_fuse_system` |
+| Native trajectory reconstruction at the wire boundary | [packages/model-gateway/src/trajectory-capture.ts](../packages/model-gateway/src/trajectory-capture.ts), captured via `ProvenanceSink.onModelCallRaw` |
 | Front-door backend: panels-once + per-turn proxy, immediate streaming + keepalive | [packages/model-gateway/src/fusion-backend.ts](../packages/model-gateway/src/fusion-backend.ts) |
 | Dialect adapters (chat / responses / anthropic) with tools + streaming | [packages/model-gateway/src/adapters/](../packages/model-gateway/src/adapters/) |
 | Panel runner: run the agents once, capture trajectories | [packages/ensemble/src/unified.ts](../packages/ensemble/src/unified.ts) `runFusionPanels` |

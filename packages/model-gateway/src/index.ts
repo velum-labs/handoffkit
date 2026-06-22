@@ -35,6 +35,7 @@ export {
   anthropicModelsResponse,
   anthropicToChat,
   chatToAnthropicMessage,
+  claudeModelAlias,
   countTokensEstimate,
   handleAnthropicMessages,
   handleCountTokens,
@@ -111,3 +112,5 @@ export type {
   ModelGatewayCallResult,
   ProvenanceSink
 } from "./provenance.js";
+export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";
+export type { CapturedStep, CapturedTrajectory, TrajectoryCapture } from "./trajectory-capture.js";

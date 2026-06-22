@@ -32,7 +32,7 @@ async function startFusionBackend(): Promise<{
   const models: string[] = [];
   const server = createServer((req, res) => {
     void (async () => {
-      if (req.method !== "POST" || req.url !== "/v1/chat/completions") {
+      if (req.method !== "POST") {
         res.writeHead(404).end();
         return;
       }
@@ -42,16 +42,33 @@ async function startFusionBackend(): Promise<{
       };
       const model = body.model ?? "unknown";
       models.push(model);
-      const system = body.messages?.find((message) => message.role === "system")?.content ?? "";
-      const content = system.includes("synthesize coding harness candidate evidence")
-        ? `JUDGE_FINAL:${model}`
-        : `MODEL_REPLY:${model}`;
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          choices: [{ message: { role: "assistant", content } }]
-        })
-      );
+      // The unified fusion endpoint: returns an OpenAI chat completion whose
+      // terminal `fusion.trajectory.synthesis` carries the folded fusion result.
+      if (req.url === "/v1/fusion/trajectories:fuse") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { role: "assistant", content: `JUDGE_FINAL:${model}` } }],
+            fusion: {
+              trajectory: {
+                trajectory_id: "synthesis_test",
+                synthesis: { decision: "synthesize", rationale: "fused" }
+              }
+            }
+          })
+        );
+        return;
+      }
+      if (req.url === "/v1/chat/completions") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { role: "assistant", content: `MODEL_REPLY:${model}` } }]
+          })
+        );
+        return;
+      }
+      res.writeHead(404).end();
     })().catch((error: unknown) => {
       res.writeHead(500, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: String(error) }));

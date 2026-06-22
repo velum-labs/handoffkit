@@ -26,9 +26,7 @@ import type {
   JudgeCandidateEvidence,
   JudgeInput,
   JudgeSynthesisOutput,
-  SynthesisFailureSummary,
-  SynthesisRepairAttempt,
-  SynthesisVerificationResult
+  SynthesisFailureSummary
 } from "./judge.js";
 
 const PRODUCER_GIT_SHA = "0".repeat(40);
@@ -40,7 +38,6 @@ export type SynthesisResult = {
   judgeSynthesisRecord: JudgeSynthesisRecordV1;
   artifacts: HarnessArtifact[];
   finalPatchPath: string | null;
-  repairAttempts: SynthesisRepairAttempt[];
   failureSummary?: SynthesisFailureSummary;
 };
 
@@ -87,7 +84,6 @@ function candidateEvidence(
       model: String(candidate.metadata?.model ?? output?.model.model ?? ""),
       status: candidate.status,
       artifacts: candidate.artifacts ?? [],
-      ...(output?.verification ? { verification: output.verification } : {}),
       ...(output?.trajectory ? { trajectory: output.trajectory } : {})
     };
   });
@@ -176,27 +172,25 @@ export async function runJudgeSynthesis(input: RunSynthesisInput): Promise<Synth
   ];
   let finalPatchPath: string | null = null;
   let failureSummary: SynthesisFailureSummary | undefined;
-  const repairAttempts: SynthesisRepairAttempt[] = [];
   // Create the synthesis worktree lazily: a capture-only synthesizer (the panel
-  // trajectory capture used by `runFusionPanels`) produces no patch and has no
-  // verify/repair, so it never touches a worktree — skip the git add/remove.
+  // trajectory capture used by `runFusionPanels`) produces no patch, so it never
+  // touches a worktree — skip the git add/remove. fusionkit owns no verification,
+  // so there is no verify/repair gate here: synthesize, apply the fused patch,
+  // and record the result.
   let worktree: string | undefined;
   try {
-    const first = await synthesizer.synthesize(judgeInput);
-    const needsWorktree =
-      (first.patch?.content !== undefined && first.patch.content.length > 0) ||
-      synthesizer.verify !== undefined ||
-      synthesizer.repair !== undefined;
+    const output = await synthesizer.synthesize(judgeInput);
+    const needsWorktree = output.patch?.content !== undefined && output.patch.content.length > 0;
     if (needsWorktree) worktree = createSynthesisWorktree(input);
-    const applied = applyPatch(worktree, first.patch?.content);
+    const applied = applyPatch(worktree, output.patch?.content);
     if (!applied) {
       const conflict = artifactRef(input.store.writeJson({
         artifactId: `${input.descriptor.id}_patch_conflict`,
         kind: "other",
         value: {
           type: "patch_conflict",
-          sourceCandidateIds: first.patch?.sourceCandidateIds ?? [],
-          patch: first.patch?.content ?? ""
+          sourceCandidateIds: output.patch?.sourceCandidateIds ?? [],
+          patch: output.patch?.content ?? ""
         }
       }));
       artifacts.push(conflict);
@@ -205,44 +199,13 @@ export async function runJudgeSynthesis(input: RunSynthesisInput): Promise<Synth
         judgeInput,
         artifacts,
         finalPatchPath,
-        repairAttempts,
         failureSummary,
-        judgeSynthesisRecord: recordFor(input, first, "failed", "failed", {
-          contributions: first.contributions ?? [],
-          rejections: first.rejections ?? [],
+        judgeSynthesisRecord: recordFor(input, output, "failed", "failed", {
+          contributions: output.contributions ?? [],
+          rejections: output.rejections ?? [],
           failure: failureSummary
         })
       };
-    }
-
-    let verification =
-      (await synthesizer.verify?.({
-        descriptor: input.descriptor,
-        worktreePath: worktree ?? "",
-        output: first,
-        repairRound: 0
-      })) ?? { status: "succeeded", evidence: ["verification not configured"], exitCode: 0 };
-
-    let output = first;
-    if (verification.status !== "succeeded") {
-      repairAttempts.push({ round: 1, verification, status: "failed" });
-      if (synthesizer.repair) {
-        const repaired = await synthesizer.repair({
-          ...judgeInput,
-          failureEvidence: verification,
-          priorOutput: first
-        });
-        applyPatch(worktree, repaired.patch?.content);
-        output = repaired;
-        verification =
-          (await synthesizer.verify?.({
-            descriptor: input.descriptor,
-            worktreePath: worktree ?? "",
-            output: repaired,
-            repairRound: 1
-          })) ?? verification;
-        repairAttempts[0] = { round: 1, verification, status: verification.status };
-      }
     }
 
     const finalPatch = diffWorktree(worktree, input.baseGitSha);
@@ -256,43 +219,15 @@ export async function runJudgeSynthesis(input: RunSynthesisInput): Promise<Synth
       artifacts.push(artifactRef(patchArtifact));
       finalPatchPath = patchArtifact.uri ?? null;
     }
-    artifacts.push(
-      artifactRef(input.store.writeJson({
-        artifactId: `${input.descriptor.id}_synthesis_verification`,
-        kind: "metrics",
-        value: verification
-      }))
-    );
 
-    if (verification.status !== "succeeded") {
-      failureSummary = { reason: "repair_failed", verification, repair: verification };
-    }
-
-    const decision =
-      verification.status === "succeeded"
-        ? output.decision
-        : repairAttempts.length > 0
-          ? "repair_required"
-          : "failed";
     return {
       judgeInput,
       artifacts,
       finalPatchPath,
-      repairAttempts,
-      ...(failureSummary ? { failureSummary } : {}),
-      judgeSynthesisRecord: recordFor(
-        input,
-        output,
-        verification.status === "succeeded" ? "succeeded" : "failed",
-        decision,
-        {
-          contributions: output.contributions ?? [],
-          rejections: output.rejections ?? [],
-          verification,
-          repair_attempts: repairAttempts,
-          ...(failureSummary ? { failure: failureSummary } : {})
-        }
-      )
+      judgeSynthesisRecord: recordFor(input, output, "succeeded", output.decision, {
+        contributions: output.contributions ?? [],
+        rejections: output.rejections ?? []
+      })
     };
   } finally {
     removeSynthesisWorktree(input.workspace, worktree);

@@ -14,11 +14,7 @@ import type {
 } from "@fusionkit/protocol";
 
 import type { CandidateWorktree } from "./worktree.js";
-import type {
-  JudgeSynthesizer,
-  SynthesisFailureSummary,
-  SynthesisRepairAttempt
-} from "./judge.js";
+import type { JudgeSynthesizer, SynthesisFailureSummary } from "./judge.js";
 
 export type EnsembleModel = {
   id: string;
@@ -39,16 +35,12 @@ export type TrajectoryStep = {
   is_error?: boolean;
 };
 
-export type TrajectoryVerification = {
-  status: ModelFusionStatus;
-  evidence: string[];
-  exitCode?: number;
-};
-
 /**
  * A normalized agent trajectory produced by one panel model: the ordered
- * reasoning/tool-call/observation/output sequence plus the final output and
- * any verification. This is the unit of trajectory-level fusion.
+ * reasoning/tool-call/observation/output sequence plus the final output. This is
+ * the unit of trajectory-level fusion. fusionkit does not own verification, so a
+ * trajectory carries no pass/fail verdict; any tests a harness ran are just raw
+ * observation steps.
  */
 export type HarnessTrajectory = {
   trajectoryId: string;
@@ -60,7 +52,6 @@ export type HarnessTrajectory = {
   steps: TrajectoryStep[];
   finalOutput: string;
   diff?: string;
-  verification?: TrajectoryVerification;
 };
 
 export type CandidateIsolationKind = "process" | "container" | "microvm";
@@ -340,11 +331,6 @@ export type HarnessCandidateOutput = {
   score?: number;
   artifacts?: HarnessArtifact[];
   toolRecords?: HarnessToolRecord[];
-  verification?: {
-    status: ModelFusionStatus;
-    evidence: string[];
-    exitCode?: number;
-  };
   error?: HarnessCandidateRecordV1["error"];
   metadata?: Record<string, JsonValue>;
 };
@@ -418,7 +404,6 @@ export type EnsembleRunResult = {
   summary?: EnsembleRunSummary;
   judgeSynthesisRecord?: JudgeSynthesisRecordV1;
   finalPatchPath?: string | null;
-  repairAttempts?: readonly SynthesisRepairAttempt[];
   failureSummary?: SynthesisFailureSummary;
   reviewEvidence?: ReviewEvidence;
 };
@@ -433,7 +418,6 @@ export type EnsembleCandidateSummary = {
   worktreePath?: string;
   toolExecutionIds: string[];
   diffArtifacts: HarnessArtifact[];
-  verification?: HarnessCandidateOutput["verification"];
   hardening?: CandidateHardeningMetadata;
 };
 
@@ -449,6 +433,5 @@ export type EnsembleRunSummary = {
   modelCallRecords: ModelCallRecordV1[];
   judgeSynthesisRecord?: JudgeSynthesisRecordV1;
   finalPatchPath: string | null;
-  repairAttempts?: SynthesisRepairAttempt[];
   failureSummary?: SynthesisFailureSummary;
 };

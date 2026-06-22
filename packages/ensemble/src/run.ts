@@ -124,9 +124,6 @@ function candidateMetadata(
     model: output.model.model,
     endpoint_id: output.model.endpointId ?? output.model.id
   };
-  if (output.verification !== undefined) {
-    metadata.verification = output.verification;
-  }
   if (output.summary !== undefined) {
     metadata.summary = output.summary;
   }
@@ -193,15 +190,6 @@ function artifactsForOutput(input: {
         artifactId: `${prefix}_tool_journal`,
         kind: "other",
         value: input.output.toolRecords
-      })
-    );
-  }
-  if (input.output.verification !== undefined) {
-    artifacts.push(
-      input.store.writeJson({
-        artifactId: `${prefix}_verification`,
-        kind: "metrics",
-        value: input.output.verification
       })
     );
   }
@@ -517,7 +505,6 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
           ...(candidate.worktree_path ? { worktreePath: candidate.worktree_path } : {}),
           toolExecutionIds: output?.toolRecords?.map((record) => record.execution_id) ?? [],
           diffArtifacts,
-          ...(output?.verification ? { verification: output.verification } : {}),
           ...(candidateHardening(output, descriptor)
             ? { hardening: candidateHardening(output, descriptor) }
             : {})
@@ -529,7 +516,6 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
         ? { judgeSynthesisRecord: synthesis.judgeSynthesisRecord }
         : {}),
       finalPatchPath: synthesis?.finalPatchPath ?? null,
-      ...(synthesis?.repairAttempts ? { repairAttempts: synthesis.repairAttempts } : {}),
       ...(synthesis?.failureSummary ? { failureSummary: synthesis.failureSummary } : {})
     };
     const summaryArtifact = store.writeJson({
@@ -586,7 +572,6 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
         ? { judgeSynthesisRecord: synthesis.judgeSynthesisRecord }
         : {}),
       ...(synthesis ? { finalPatchPath: synthesis.finalPatchPath } : {}),
-      ...(synthesis?.repairAttempts ? { repairAttempts: synthesis.repairAttempts } : {}),
       ...(synthesis?.failureSummary ? { failureSummary: synthesis.failureSummary } : {}),
       ...(descriptor.reviewEvidence ? { reviewEvidence: descriptor.reviewEvidence } : {})
     });

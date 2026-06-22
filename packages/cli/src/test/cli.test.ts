@@ -45,17 +45,36 @@ async function closeServer(server: Server): Promise<void> {
 async function startFusionBackend(): Promise<{ url: string; close: () => Promise<void> }> {
   const server = createServer((req, res) => {
     void (async () => {
-      if (req.method !== "POST" || req.url !== "/v1/chat/completions") {
+      if (req.method !== "POST") {
         res.writeHead(404).end();
         return;
       }
       const body = JSON.parse((await readBody(req)).toString("utf8")) as { model?: string };
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          choices: [{ message: { role: "assistant", content: `CLI_FUSION:${body.model}` } }]
-        })
-      );
+      if (req.url === "/v1/fusion/trajectories:fuse") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { role: "assistant", content: `CLI_FUSION:${body.model}` } }],
+            fusion: {
+              trajectory: {
+                trajectory_id: "synthesis_cli",
+                synthesis: { decision: "synthesize", rationale: "fused" }
+              }
+            }
+          })
+        );
+        return;
+      }
+      if (req.url === "/v1/chat/completions") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { role: "assistant", content: `CLI_FUSION:${body.model}` } }]
+          })
+        );
+        return;
+      }
+      res.writeHead(404).end();
     })().catch((error: unknown) => {
       res.writeHead(500, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: String(error) }));
@@ -81,18 +100,38 @@ async function startSentinelBackend(
 ): Promise<{ url: string; close: () => Promise<void> }> {
   const server = createServer((req, res) => {
     void (async () => {
-      if (req.method !== "POST" || req.url !== "/v1/chat/completions") {
+      if (req.method !== "POST") {
         res.writeHead(404).end();
         return;
       }
       await readBody(req);
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          choices: [{ message: { role: "assistant", content: `${sentinel} fusion synthesis` } }],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
-        })
-      );
+      if (req.url === "/v1/fusion/trajectories:fuse") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { role: "assistant", content: `${sentinel} fusion synthesis` } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            fusion: {
+              trajectory: {
+                trajectory_id: "synthesis_sentinel",
+                synthesis: { decision: "synthesize", rationale: "fused" }
+              }
+            }
+          })
+        );
+        return;
+      }
+      if (req.url === "/v1/chat/completions") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { role: "assistant", content: `${sentinel} fusion synthesis` } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+          })
+        );
+        return;
+      }
+      res.writeHead(404).end();
     })().catch((error: unknown) => {
       res.writeHead(500, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: String(error) }));

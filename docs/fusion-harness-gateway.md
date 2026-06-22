@@ -28,9 +28,11 @@ TTY to pick interactively. In one command it:
    Anthropic model), or the local MLX trio with `--local` on Apple Silicon,
    all fronted by a **single `fusionkit serve` router** (one process routes every
    panel model by id and also performs synthesis),
-2. starts the Fusion Harness Gateway running the **agent harness** (each panel
-   model drives a real tool loop — read/list/grep/write/run — in its own git
-   worktree, producing a full **trajectory**),
+2. starts the Fusion Harness Gateway running the **launched harness** (every
+   panel model runs THROUGH the launched tool — codex / claude / cursor — in its
+   own git worktree, with that harness's real tools + context; only the routed
+   model varies, and each run produces a full native **trajectory** reconstructed
+   from the gateway wire traffic),
 3. fuses the trajectories through that router (`/v1/fusion/trajectories:fuse`)
    into one answer,
 4. launches the chosen agent pre-wired to the gateway.
@@ -60,14 +62,15 @@ missing:
 ### Trajectory-level fusion
 
 Fusion operates on **trajectories**, not one-shot patches. Each panel model runs
-the same uniform agent over the repo and produces a `harness-trajectory.v1`
-(reasoning + tool calls + observations + final output + verification). FusionKit's
-trajectory-aware, intent-agnostic synthesizer then produces the final response in
-the request's natural shape and **first person**:
+the launched harness over the repo and produces a `harness-trajectory.v1`
+(reasoning + tool calls + observations + final output). fusionkit owns no
+verification — any tests the harness runs are just observation steps, never a
+pass/fail verdict. FusionKit's trajectory-aware, intent-agnostic synthesizer then
+produces the final response in the request's natural shape and **first person**:
 
 - a question (`"what's in this repo?"`) gets a direct answer,
 - a planning request gets a plan,
-- a code change gets the concrete edit (with tests run as verification),
+- a code change gets the concrete edit,
 
 so every way you use the tool works — not just patch-shaped requests. The
 synthesis backend (`fusionkit serve`) is fetched from PyPI via `uvx` — no

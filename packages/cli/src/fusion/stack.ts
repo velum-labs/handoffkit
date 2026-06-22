@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { EnsembleModel } from "@fusionkit/ensemble";
+import type { EnsembleModel, UnifiedHarnessKind } from "@fusionkit/ensemble";
 import { MlxBackend, startGateway } from "@fusionkit/model-gateway";
 import type { Gateway } from "@fusionkit/model-gateway";
 
@@ -277,6 +277,12 @@ export type StartFusionStackOptions = {
   repo: string;
   outputRoot: string;
   models: PanelModelSpec[];
+  /**
+   * The harness kind the panel runs through (the launched tool's harness). Every
+   * panel model is driven by this one harness; defaults to the generic `agent`
+   * when unset (e.g. `serve` with no launched tool).
+   */
+  harness?: UnifiedHarnessKind;
   endpoints?: Record<string, string>;
   fusionkitDir?: string;
   /** System-prompt overrides emitted into the router's synthesizer config. */
@@ -366,7 +372,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       fusionBackendUrl,
       repo: options.repo,
       outputRoot: options.outputRoot,
-      harnesses: ["agent"],
+      harnesses: [options.harness ?? "agent"],
       models,
       judgeModel: judgeModelName,
       modelEndpoints,

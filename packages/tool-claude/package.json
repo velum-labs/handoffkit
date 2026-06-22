@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@fusionkit/ensemble": "workspace:*",
+    "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runner": "workspace:*",
     "@fusionkit/session-harness": "workspace:*",

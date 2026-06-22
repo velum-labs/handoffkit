@@ -73,19 +73,33 @@ async function startModelBackend(): Promise<Backend> {
         res.end(JSON.stringify({ object: "list", data: [{ id: "local-fusion", object: "model" }] }));
         return;
       }
-      if (req.method === "POST" && path === "/v1/chat/completions") {
-        const body = JSON.parse((await readBody(req)).toString("utf8")) as {
-          model?: string;
-          messages?: Array<{ role?: string; content?: string }>;
-        };
-        const isJudge = (body.messages ?? []).some(
-          (message) =>
-            message.role === "system" &&
-            typeof message.content === "string" &&
-            message.content.includes("synthesize coding harness candidate evidence")
-        );
-        if (isJudge) judgeCalls += 1;
+      // The unified fusion endpoint is the judge: it returns an OpenAI chat
+      // completion whose terminal `fusion.trajectory.synthesis` carries the
+      // folded fusion result.
+      if (req.method === "POST" && path === "/v1/fusion/trajectories:fuse") {
+        const body = JSON.parse((await readBody(req)).toString("utf8")) as { model?: string };
+        judgeCalls += 1;
         const content = `${SENTINEL}: synthesized calculator fix from ${body.model ?? "model"}`;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            id: "chatcmpl_e2e",
+            model: body.model ?? "local-fusion",
+            choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 8, completion_tokens: 8, total_tokens: 16 },
+            fusion: {
+              trajectory: {
+                trajectory_id: "synthesis_e2e",
+                synthesis: { decision: "synthesize", rationale: "fused" }
+              }
+            }
+          })
+        );
+        return;
+      }
+      if (req.method === "POST" && path === "/v1/chat/completions") {
+        const body = JSON.parse((await readBody(req)).toString("utf8")) as { model?: string };
+        const content = `${SENTINEL}: model reply from ${body.model ?? "model"}`;
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({

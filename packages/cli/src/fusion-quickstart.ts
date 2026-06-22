@@ -221,12 +221,14 @@ export async function runFusion(
       }
     }
 
+    const panelHarness = toolRegistry.panelHarnessKindFor(tool);
     stack = await startFusionStack({
       repo,
       outputRoot: join(root, "runs"),
       models,
       logsDir,
       portless,
+      ...(panelHarness !== undefined ? { harness: panelHarness } : {}),
       ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),

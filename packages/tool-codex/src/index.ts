@@ -14,10 +14,12 @@ export const codexTool: ToolIntegration = {
   binary: "codex",
   modes: ["fusion", "local"],
   harnessKinds: ["codex"],
+  panelHarnessKind: "codex",
   launch: launchCodex,
   createHarness: (_kind, options) =>
     createCodexHarness({
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
       provider: {
         kind: "openai-compatible",
         baseUrl: options.fusionBackendUrl,

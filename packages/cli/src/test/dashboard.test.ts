@@ -44,7 +44,6 @@ test("capability matrix covers Cursor, Claude Code, Codex, command, and mock", (
   assert.ok(matrix.capabilities.includes("verification_hint"));
   assert.ok(matrix.capabilities.includes("replay_support"));
   assert.ok(matrix.capabilities.includes("workspace_read"));
-  assert.ok(matrix.capabilities.includes("verification"));
   assert.equal(
     matrix.rows.find((row) => row.harnessId === "cursor")?.availability,
     "credential_gated"

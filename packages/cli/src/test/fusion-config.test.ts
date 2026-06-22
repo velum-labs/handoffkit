@@ -159,9 +159,9 @@ test("loadFusionConfig surfaces invalid JSON as a FusionConfigError", () => {
 test("prompt overrides are read from .fusionkit/prompts/*.md and attached on load", () => {
   const dir = freshDir();
   writeFusionConfig(dir, { version: FUSION_CONFIG_VERSION, tool: "codex" });
-  writeFusionPrompts(dir, { judge: "CUSTOM JUDGE", "trajectory-step": "CUSTOM STEP" });
+  writeFusionPrompts(dir, { judge: "CUSTOM JUDGE", synthesizer: "CUSTOM SYNTH" });
   const loaded = loadFusionConfig(dir);
-  assert.deepEqual(loaded?.prompts, { judge: "CUSTOM JUDGE", "trajectory-step": "CUSTOM STEP" });
+  assert.deepEqual(loaded?.prompts, { judge: "CUSTOM JUDGE", synthesizer: "CUSTOM SYNTH" });
 });
 
 test("empty prompt files are ignored (fall back to built-in defaults)", () => {

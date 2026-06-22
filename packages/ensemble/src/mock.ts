@@ -19,7 +19,6 @@ export type MockCandidateFixture = {
   score?: number;
   artifacts?: HarnessArtifact[];
   toolRecords?: HarnessToolRecord[];
-  verification?: HarnessCandidateOutput["verification"];
 };
 
 export type MockHarnessOptions = {
@@ -44,12 +43,11 @@ export function createMockHarness(options: MockHarnessOptions = {}): HarnessAdap
     capabilities: () => ({
       workspace_read: "supported",
       apply_patch: "supported",
-      tool_records: "supported",
-      verification: "supported"
+      tool_records: "supported"
     }),
     verificationProfile: () => ({
-      id: `${id}-verification`,
-      requiredEvidence: ["transcript", "diff", "verification"]
+      id: `${id}-evidence`,
+      requiredEvidence: ["transcript", "diff"]
     }),
     run: ({ descriptor, model, ordinal }) => {
       const fixture = options.candidates?.[model.id] ?? {};
@@ -73,13 +71,7 @@ export function createMockHarness(options: MockHarnessOptions = {}): HarnessAdap
         ...(fixture.summary ? { summary: fixture.summary } : {}),
         score: fixture.score ?? 1,
         artifacts,
-        toolRecords: fixture.toolRecords ?? [],
-        verification:
-          fixture.verification ?? {
-            status: "succeeded",
-            evidence: ["mock verification passed"],
-            exitCode: 0
-          }
+        toolRecords: fixture.toolRecords ?? []
       };
     },
     collectArtifacts: () => []

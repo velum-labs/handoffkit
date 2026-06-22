@@ -42,6 +42,14 @@ export type ToolHarnessResolveOptions = {
   fusionBackendUrl: string;
   fusionApiKey?: string;
   timeoutMs?: number;
+  /**
+   * Per-model router endpoints keyed by `EnsembleModel.id`. When a candidate's
+   * model id is present, its harness is pointed at that endpoint (and requests
+   * the endpoint id as its model) instead of the shared `fusionBackendUrl`, so
+   * each panel model backs its own routed candidate through the one launched
+   * harness.
+   */
+  modelEndpoints?: Record<string, string>;
 };
 
 /**
@@ -84,7 +92,8 @@ function resolveToolAdapter(
   return requireToolHarnessProvider(kind).adapter(kind, {
     fusionBackendUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
     ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
-    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {})
   });
 }
 
@@ -158,6 +167,14 @@ export type UnifiedHarnessE2EOptions = {
 function normalizeFusionBackendUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
+
+/**
+ * The only text fusionkit adds to a panel run: a single line telling the model
+ * it is one member of a FusionKit panel. Everything else (tools + system
+ * context) is pass-through from the launched harness.
+ */
+const PANEL_MEMBER_SUFFIX =
+  "(You are one model in a FusionKit panel answering this task independently.)";
 
 function chatCompletionsUrl(baseUrl: string): string {
   const normalized = normalizeFusionBackendUrl(baseUrl);
@@ -268,18 +285,7 @@ function trajectoryToWire(trajectory: HarnessTrajectory): Record<string, unknown
     ...(trajectory.candidateId !== undefined ? { candidate_id: trajectory.candidateId } : {}),
     ...(trajectory.model !== undefined ? { model: trajectory.model } : {}),
     ...(trajectory.harnessKind !== undefined ? { harness_kind: trajectory.harnessKind } : {}),
-    ...(trajectory.diff !== undefined && trajectory.diff.length > 0 ? { diff: trajectory.diff } : {}),
-    ...(trajectory.verification !== undefined
-      ? {
-          verification: {
-            status: trajectory.verification.status,
-            evidence: trajectory.verification.evidence,
-            ...(trajectory.verification.exitCode !== undefined
-              ? { exit_code: trajectory.verification.exitCode }
-              : {})
-          }
-        }
-      : {})
+    ...(trajectory.diff !== undefined && trajectory.diff.length > 0 ? { diff: trajectory.diff } : {})
   };
 }
 
@@ -299,82 +305,55 @@ export function createFusionKitJudgeSynthesizer(input: {
       : {};
   return {
     async synthesize(judgeInput: JudgeInput): Promise<JudgeSynthesisOutput> {
-      // Trajectory-level fusion: when candidates carry agent trajectories, fuse
-      // them through FusionKit's trajectory-aware, intent-agnostic synthesizer,
-      // which returns the answer in the request's native shape and first person.
+      // The one fusion operation: post the candidate trajectories + the request
+      // to FusionKit's unified `trajectories:fuse`. With no tools it is terminal
+      // on turn 1 (one-shot text fusion); the response is an OpenAI chat
+      // completion whose terminal `fusion.trajectory.synthesis` carries the
+      // folded fusion result (decision/selected/rationale/metrics).
       const trajectories = judgeInput.candidates
         .map((candidate) => candidate.trajectory)
         .filter((trajectory): trajectory is HarnessTrajectory => trajectory !== undefined);
-      if (trajectories.length > 0) {
-        const fuseResponse = await fetch(trajectoryFuseUrl(input.fusionBackendUrl), {
-          method: "POST",
-          headers: { "content-type": "application/json", ...authHeaders, ...traceHeaders },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: judgeInput.descriptor.prompt }],
-            trajectories: trajectories.map(trajectoryToWire)
-          })
-        });
-        if (!fuseResponse.ok) {
-          throw new Error(
-            `FusionKit trajectory fusion failed: ${fuseResponse.status} ${(await fuseResponse.text()).slice(0, 500)}`
-          );
-        }
-        const fused = (await fuseResponse.json()) as { final_output?: string; rationale?: string };
-        return {
-          decision: "synthesize",
-          finalOutput: fused.final_output ?? "",
-          rationale: fused.rationale ?? "FusionKit trajectory fusion",
-          contributions: trajectories.map((trajectory) => ({
-            candidateId: trajectory.candidateId ?? trajectory.trajectoryId,
-            reason: `fused ${trajectory.status} trajectory`
-          }))
-        };
-      }
-      const response = await fetch(chatCompletionsUrl(input.fusionBackendUrl), {
+      const fuseResponse = await fetch(trajectoryFuseUrl(input.fusionBackendUrl), {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(input.apiKey ? { authorization: `Bearer ${input.apiKey}` } : {})
-        },
+        headers: { "content-type": "application/json", ...authHeaders, ...traceHeaders },
         body: JSON.stringify({
           model: input.model,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You synthesize coding harness candidate evidence. " +
-                input.responseShape
-            },
-            {
-              role: "user",
-              content: JSON.stringify({
-                prompt: judgeInput.descriptor.prompt,
-                candidates: judgeInput.candidates,
-                toolRecords: judgeInput.toolRecords,
-                artifacts: judgeInput.artifacts
-              })
-            }
-          ],
-          temperature: 0,
-          max_tokens: 800
+          messages: [{ role: "user", content: judgeInput.descriptor.prompt }],
+          trajectories: trajectories.map(trajectoryToWire)
         })
       });
-      if (!response.ok) {
-        throw new Error(`FusionKit judge request failed: ${response.status}`);
+      if (!fuseResponse.ok) {
+        throw new Error(
+          `FusionKit trajectory fusion failed: ${fuseResponse.status} ${(await fuseResponse.text()).slice(0, 500)}`
+        );
       }
-      const body = (await response.json()) as {
+      const fused = (await fuseResponse.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
+        fusion?: {
+          trajectory?: {
+            synthesis?: {
+              decision?: string;
+              selected_trajectory_id?: string | null;
+              rationale?: string | null;
+            };
+          };
+        };
       };
-      const finalOutput = body.choices?.[0]?.message?.content ?? "";
-      return {
-        decision: "synthesize",
+      const finalOutput = fused.choices?.[0]?.message?.content ?? "";
+      const synthesis = fused.fusion?.trajectory?.synthesis;
+      const output: JudgeSynthesisOutput = {
+        decision: synthesis?.decision === "select_trajectory" ? "select_trajectory" : "synthesize",
         finalOutput,
-        rationale: "FusionKit judge synthesis",
-        contributions: judgeInput.candidates.map((candidate) => ({
-          candidateId: candidate.candidateId,
-          reason: `included ${candidate.status} candidate evidence`
+        rationale: synthesis?.rationale ?? "FusionKit trajectory fusion",
+        contributions: trajectories.map((trajectory) => ({
+          candidateId: trajectory.candidateId ?? trajectory.trajectoryId,
+          reason: `fused ${trajectory.status} trajectory`
         }))
       };
+      if (synthesis?.selected_trajectory_id) {
+        output.selectedCandidateId = synthesis.selected_trajectory_id;
+      }
+      return output;
     }
   };
 }
@@ -385,6 +364,11 @@ export type FusionPanelOptions = {
   outputRoot: string;
   prompt: string;
   models: EnsembleModel[];
+  /**
+   * The harness every panel model runs through (the launched tool's harness).
+   * Defaults to the generic `agent` when unset.
+   */
+  harness?: UnifiedHarnessKind;
   modelEndpoints?: Record<string, string>;
   /** Fallback agent backend URL for models without a dedicated endpoint. */
   fusionBackendUrl: string;
@@ -408,13 +392,14 @@ export async function runFusionPanels(
   options: FusionPanelOptions
 ): Promise<Record<string, unknown>[]> {
   let captured: HarnessTrajectory[] = [];
+  const harness: UnifiedHarnessKind = options.harness ?? "agent";
   const e2eOptions: UnifiedHarnessE2EOptions = {
     id: options.id ?? `panels_${Date.now()}`,
     fusionBackendUrl: options.fusionBackendUrl,
     repo: options.repo,
     outputRoot: options.outputRoot,
-    prompt: options.prompt,
-    harnesses: ["agent"],
+    prompt: `${options.prompt}\n\n${PANEL_MEMBER_SUFFIX}`,
+    harnesses: [harness],
     models: options.models,
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
     ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
@@ -423,7 +408,7 @@ export async function runFusionPanels(
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {})
   };
-  const descriptor = descriptorFor("agent", e2eOptions);
+  const descriptor = descriptorFor(harness, e2eOptions);
   descriptor.judge = {
     id: "panel-capture",
     synthesizer: {

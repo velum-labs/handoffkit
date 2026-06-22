@@ -88,6 +88,20 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
+    // Anthropic single-model retrieve (`GET /v1/models/{id}`): Claude Code probes
+    // this to validate a selected model before its first turn. Echo the id back
+    // so any advertised/aliased id validates; routing is decided at chat time.
+    if (method === "GET" && path.startsWith("/v1/models/")) {
+      const id = decodeURIComponent(path.slice("/v1/models/".length));
+      writeJson(res, 200, {
+        type: "model",
+        id,
+        display_name: id,
+        created_at: new Date(0).toISOString()
+      });
+      return;
+    }
+
     if (method === "POST" && (path === "/v1/chat/completions" || path === "/chat/completions")) {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
@@ -239,26 +253,26 @@ async function handleModelCall(
   try {
     const upstream = await route.invoke(callId, aborter.signal);
     const body = await pipeUpstream(res, upstream);
-    sink?.onModelCall?.(
-      buildModelCallRecord(context, {
-        statusCode: upstream.status,
-        responseBody: body,
-        durationMs: Date.now() - started
-      })
-    );
+    const result = {
+      statusCode: upstream.status,
+      responseBody: body,
+      durationMs: Date.now() - started
+    };
+    sink?.onModelCall?.(buildModelCallRecord(context, result));
+    sink?.onModelCallRaw?.(context, result);
   } catch (error) {
     const statusCode = 502;
     const payload = writeJson(res, statusCode, {
       error: { message: errorMessage(error), type: "upstream_error" }
     });
-    sink?.onModelCall?.(
-      buildModelCallRecord(context, {
-        statusCode,
-        responseBody: payload,
-        durationMs: Date.now() - started,
-        error
-      })
-    );
+    const result = {
+      statusCode,
+      responseBody: payload,
+      durationMs: Date.now() - started,
+      error
+    };
+    sink?.onModelCall?.(buildModelCallRecord(context, result));
+    sink?.onModelCallRaw?.(context, result);
   } finally {
     res.off("close", onClose);
   }

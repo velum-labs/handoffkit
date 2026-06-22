@@ -5,7 +5,8 @@ import { join } from "node:path";
 
 import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
-import { OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
+import { createTrajectoryCapture, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
+import type { CapturedTrajectory } from "@fusionkit/model-gateway";
 import {
   buildSkippedCandidate,
   definedEnv,
@@ -90,6 +91,12 @@ export type CodexHarnessOptions = {
   sandboxMode?: CodexSandboxMode;
   approvalPolicy?: CodexApprovalPolicy;
   keepCodexHome?: boolean;
+  /**
+   * Per-model router endpoints keyed by `EnsembleModel.id`. When a candidate's
+   * model id is present, Codex is pointed at that endpoint and requests the
+   * endpoint id as its model (so the router routes to that panel member).
+   */
+  modelEndpoints?: Record<string, string>;
 };
 
 export type CodexHarnessEnv = Record<string, string | undefined>;
@@ -117,6 +124,8 @@ type CodexRunProvider = {
   provider: CodexProvider;
   configBaseUrl?: string;
   modelCallRecords: ModelCallRecordV1[];
+  /** Reconstruct the native trajectory from the captured gateway wire traffic. */
+  reconstruct?: () => CapturedTrajectory;
   close(): Promise<void>;
 };
 
@@ -383,6 +392,7 @@ async function runProvider(input: {
       };
     case "openai-compatible": {
       const records: ModelCallRecordV1[] = [];
+      const capture = createTrajectoryCapture();
       const apiKey =
         input.provider.apiKey ??
         (input.provider.apiKeyEnvName !== undefined
@@ -397,13 +407,15 @@ async function runProvider(input: {
         provenance: {
           onModelCall(record) {
             records.push(record);
-          }
+          },
+          onModelCallRaw: capture.sink.onModelCallRaw
         }
       });
       return {
         provider: input.provider,
         configBaseUrl: gateway.url(),
         modelCallRecords: records,
+        reconstruct: capture.reconstruct,
         close: () => gateway.close()
       };
     }
@@ -498,11 +510,10 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
       shell_command: "degraded",
       artifact_capture: "supported",
       model_gateway_responses: "supported",
-      openai_compatible_gateway: "supported",
-      verification: "supported"
+      openai_compatible_gateway: "supported"
     }),
     verificationProfile: () => ({
-      id: `${id}-verification`,
+      id: `${id}-evidence`,
       requiredEvidence: ["codex transcript", "exit code", "optional model-call record"]
     }),
     run: async ({ descriptor, model, ordinal, prepared, worktree }) => {
@@ -512,10 +523,21 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         return skippedCandidate({ descriptor, model, ordinal, reason: missing, provider: state.provider });
       }
 
+      // When a per-model router endpoint is configured, point Codex at it and
+      // request the endpoint id (model.id) as its model so the router routes to
+      // this panel member. Otherwise behave exactly as before.
+      const endpointUrl = options.modelEndpoints?.[model.id];
+      const effectiveModel: EnsembleModel =
+        endpointUrl !== undefined ? { ...model, model: model.id } : model;
+      const effectiveProvider: CodexProvider =
+        endpointUrl !== undefined && state.provider.kind === "openai-compatible"
+          ? { ...state.provider, baseUrl: endpointUrl }
+          : state.provider;
+
       const provider = await runProvider({
-        provider: state.provider,
+        provider: effectiveProvider,
         env: state.env,
-        model
+        model: effectiveModel
       });
       try {
         const env = { ...state.env };
@@ -524,7 +546,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         }
         const codexHome = writeCodexHome({
           tempRoot: state.tempRoot,
-          model,
+          model: effectiveModel,
           providerBaseUrl: provider.configBaseUrl,
           provider: provider.provider,
           env,
@@ -554,12 +576,29 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
           result.exitCode === 0 && result.timedOut !== true ? "succeeded" : "failed";
         const outputHash = artifactHash(transcript);
         const modelCallRecord = provider.modelCallRecords.at(-1);
+        const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
+        const reconstructed = provider.reconstruct?.();
+        const trajectory =
+          reconstructed !== undefined && reconstructed.steps.length > 0
+            ? {
+                trajectoryId: candidateId,
+                modelId: model.id,
+                model: model.model,
+                candidateId,
+                harnessKind: "codex" as const,
+                status,
+                steps: reconstructed.steps,
+                finalOutput:
+                  reconstructed.finalOutput.length > 0 ? reconstructed.finalOutput : transcript
+              }
+            : undefined;
         return {
-          candidateId: `${descriptor.id}_${model.id}_${ordinal}`,
+          candidateId,
           model,
           status,
           ...(modelCallRecord ? { modelCallId: modelCallRecord.call_id, modelCallRecord } : {}),
           ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {}),
+          ...(trajectory !== undefined ? { trajectory } : {}),
           transcript,
           log: transcript,
           artifacts: [
@@ -587,11 +626,6 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
                 : {})
             }
           ],
-          verification: {
-            status,
-            evidence: [`exit_code=${result.exitCode}`, outputHash],
-            exitCode: result.exitCode
-          },
           ...(status === "failed"
             ? {
                 error: {

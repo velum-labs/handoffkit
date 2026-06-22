@@ -13,13 +13,15 @@ export const cursorTool: ToolIntegration = {
   binary: "cursor-agent",
   modes: ["fusion", "local"],
   harnessKinds: ["cursor-acp", "cursor-desktop"],
+  panelHarnessKind: "cursor-acp",
   launch: launchCursor,
   createHarness: (kind, options) =>
     createCursorHarness({
       id: kind,
       fusionBackendUrl: options.fusionBackendUrl,
       ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
-      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {})
     }),
   harness: {
     harnessKind: "cursor",

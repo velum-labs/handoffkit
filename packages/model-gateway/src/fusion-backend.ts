@@ -195,14 +195,17 @@ type AssembledStep = {
   usage?: unknown;
   toolCalls: unknown[];
   finishReason?: string;
+  fusion?: unknown;
 };
 
 /** Best-effort reassembly of an OpenAI chat SSE stream into content, usage,
- *  tool-call deltas, and finish reason (used to tell terminal from intermediate). */
+ *  tool-call deltas, finish reason, and the terminal `fusion` extension (the
+ *  fused trajectory + its synthesis). */
 function assembleSseContent(buffer: string): AssembledStep {
   let content = "";
   let usage: unknown;
   let finishReason: string | undefined;
+  let fusion: unknown;
   const toolCalls: unknown[] = [];
   for (const line of buffer.split("\n")) {
     const trimmed = line.trim();
@@ -213,6 +216,7 @@ function assembleSseContent(buffer: string): AssembledStep {
       const json = JSON.parse(data) as {
         choices?: Array<{ delta?: { content?: unknown; tool_calls?: unknown }; finish_reason?: unknown }>;
         usage?: unknown;
+        fusion?: unknown;
       };
       const choice = json.choices?.[0];
       const delta = choice?.delta?.content;
@@ -220,6 +224,7 @@ function assembleSseContent(buffer: string): AssembledStep {
       if (Array.isArray(choice?.delta?.tool_calls)) toolCalls.push(...choice.delta.tool_calls);
       if (typeof choice?.finish_reason === "string") finishReason = choice.finish_reason;
       if (json.usage !== undefined && json.usage !== null) usage = json.usage;
+      if (json.fusion !== undefined && json.fusion !== null) fusion = json.fusion;
     } catch {
       // ignore partial/non-JSON lines
     }
@@ -228,8 +233,17 @@ function assembleSseContent(buffer: string): AssembledStep {
     content,
     toolCalls,
     ...(usage !== undefined ? { usage } : {}),
-    ...(finishReason !== undefined ? { finishReason } : {})
+    ...(finishReason !== undefined ? { finishReason } : {}),
+    ...(fusion !== undefined ? { fusion } : {})
   };
+}
+
+/** Pull the fused trajectory's synthesis out of a terminal `fusion` extension. */
+function synthesisOf(fusion: unknown): unknown {
+  if (fusion === null || typeof fusion !== "object") return undefined;
+  const trajectory = (fusion as { trajectory?: unknown }).trajectory;
+  if (trajectory === null || typeof trajectory !== "object") return undefined;
+  return (trajectory as { synthesis?: unknown }).synthesis;
 }
 
 /** A judge step is terminal (the real answer) only when it requests no tool calls. */
@@ -517,15 +531,18 @@ export class FusionBackend implements Backend {
             const judged = (await clone.json()) as {
               choices?: Array<{ message?: { content?: string; tool_calls?: unknown }; finish_reason?: string }>;
               usage?: unknown;
+              fusion?: unknown;
             };
             const choice = judged.choices?.[0];
             const message = choice?.message;
             const content = typeof message?.content === "string" ? message.content : undefined;
             const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
             if (isTerminalJudgeStep(toolCalls, choice?.finish_reason)) {
+              const synthesis = synthesisOf(judged.fusion);
               emitJudgeFinal({
                 httpStatus: clone.status,
                 ...(content !== undefined ? { content } : {}),
+                ...(synthesis !== undefined ? { synthesis } : {}),
                 ...(judged.usage !== undefined ? { usage: judged.usage } : {})
               });
             } else {
@@ -617,9 +634,11 @@ export class FusionBackend implements Backend {
           if (traceEnabled) {
             const assembled = assembleSseContent(sseBuffer);
             if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
+              const synthesis = synthesisOf(assembled.fusion);
               emitJudgeFinal({
                 httpStatus: upstream.status,
                 ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
+                ...(synthesis !== undefined ? { synthesis } : {}),
                 ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
               });
             } else {

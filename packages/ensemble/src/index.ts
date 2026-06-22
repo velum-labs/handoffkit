@@ -9,14 +9,10 @@ export type {
   JudgeCandidateEvidence,
   JudgeInput,
   JudgePatch,
-  JudgeRepairInput,
   JudgeSynthesizer,
   JudgeSynthesisOutput,
-  JudgeVerificationInput,
   MockJudgeSynthesizerOptions,
-  SynthesisFailureSummary,
-  SynthesisRepairAttempt,
-  SynthesisVerificationResult
+  SynthesisFailureSummary
 } from "./judge.js";
 export {
   ensemble,
@@ -130,6 +126,9 @@ export type {
   HarnessPrepareInput,
   HarnessRunInput,
   HarnessToolRecord,
+  HarnessTrajectory,
+  TrajectoryStep,
+  TrajectoryStepType,
   ReviewEvidence,
   EnsembleRunSummary,
   VerificationProfile

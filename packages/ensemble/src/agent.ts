@@ -5,8 +5,7 @@ import type {
   HarnessAdapter,
   HarnessCandidateOutput,
   HarnessTrajectory,
-  TrajectoryStep,
-  TrajectoryVerification
+  TrajectoryStep
 } from "./harness.js";
 
 /**
@@ -38,29 +37,6 @@ export type AgentHarnessOptions = {
   /** User-turn index this panel run belongs to (stamped on candidate events). */
   turn?: number;
 };
-
-/**
- * Verification is a signal, not a gate: if the agent ran a command (e.g. tests)
- * the last observed exit code becomes the trajectory's verification status.
- */
-function deriveVerification(steps: TrajectoryStep[]): TrajectoryVerification | undefined {
-  let lastExitCode: number | undefined;
-  for (const step of steps) {
-    // The `run` tool always prefixes its observation with `exit_code=<n>`; anchor
-    // to the start so unrelated tool output that happens to contain the substring
-    // cannot be mistaken for a command result.
-    if (step.type === "observation" && typeof step.text === "string") {
-      const match = step.text.match(/^exit_code=(-?\d+)/);
-      if (match) lastExitCode = Number(match[1]);
-    }
-  }
-  if (lastExitCode === undefined) return undefined;
-  return {
-    status: lastExitCode === 0 ? "succeeded" : "failed",
-    evidence: [`exit_code=${lastExitCode}`],
-    exitCode: lastExitCode
-  };
-}
 
 export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter {
   const id = options.id ?? "agent";
@@ -128,7 +104,6 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
 
       const steps: TrajectoryStep[] = result.steps;
       const status: HarnessCandidateOutput["status"] = result.status === "failed" ? "failed" : "succeeded";
-      const verification = deriveVerification(steps);
       const trajectory: HarnessTrajectory = {
         trajectoryId: candidateId,
         modelId: model.id,
@@ -137,8 +112,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         harnessKind: "generic",
         status,
         steps,
-        finalOutput: result.finalOutput,
-        ...(verification !== undefined ? { verification } : {})
+        finalOutput: result.finalOutput
       };
 
       const transcript = JSON.stringify(steps, null, 2);
@@ -157,8 +131,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
             tool_call_count: result.toolCallCount,
             finish_reason: result.finishReason,
             step_count: steps.length,
-            final_output_preview: result.finalOutput.slice(0, 400),
-            ...(verification !== undefined ? { verification_status: verification.status } : {})
+            final_output_preview: result.finalOutput.slice(0, 400)
           }
         });
         emitTrace({
@@ -203,14 +176,6 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
             output_hash: outputHash
           }
         ],
-        verification:
-          verification !== undefined
-            ? {
-                status: verification.status,
-                evidence: verification.evidence,
-                ...(verification.exitCode !== undefined ? { exitCode: verification.exitCode } : {})
-              }
-            : { status, evidence: [`final_output_chars=${result.finalOutput.length}`, outputHash] },
         metadata: {
           adapter: "agent",
           model_id: model.id,
