@@ -28,7 +28,6 @@ from fusionkit_core.contracts import (
     ContractUsage,
     TrajectoryStep,
     TrajectoryV1,
-    TrajectoryVerification,
     contract_metadata,
 )
 from fusionkit_core.types import ChatMessage, ModelResponse, Trajectory
@@ -59,7 +58,6 @@ def trajectory_from_response(
         model_id=model_id,
         content=response.content,
         steps=[],
-        verification=None,
         status="succeeded",
         metadata=metadata,
     )
@@ -89,7 +87,6 @@ def failed_trajectory(
         model_id=model_id,
         content="",
         steps=[],
-        verification=None,
         status="failed",
         metadata=metadata,
     )
@@ -127,11 +124,6 @@ def trajectory_to_contract(
             "status": trajectory.status,
             "steps": [step.model_dump() for step in trajectory.steps],
             "final_output": trajectory.content,
-            "verification": (
-                trajectory.verification.model_dump()
-                if trajectory.verification is not None
-                else None
-            ),
             "usage": contract_usage.model_dump() if contract_usage is not None else None,
             "metadata": trajectory.metadata or None,
         }
@@ -145,7 +137,6 @@ def trajectory_from_contract(record: TrajectoryV1) -> Trajectory:
         model_id=record.model_id,
         content=record.final_output,
         steps=list(record.steps),
-        verification=record.verification,
         status=record.status,
         metadata=dict(record.metadata or {}),
     )
@@ -376,7 +367,6 @@ class AgentTrajectoryProducer:
             model_id=model_id,
             content=final,
             steps=steps,
-            verification=None,
             status=status,
             metadata={},
         )
@@ -394,7 +384,6 @@ __all__ = [
     "ExternalTrajectoryProducer",
     "ToolExecutor",
     "TrajectoryProducer",
-    "TrajectoryVerification",
     "trajectory_from_contract",
     "trajectory_from_response",
     "trajectory_to_contract",

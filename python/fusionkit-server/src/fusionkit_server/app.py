@@ -20,6 +20,7 @@ from fusionkit_core.contracts import (
     contract_metadata,
 )
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.judge import FuseResult
 from fusionkit_core.producers import trajectory_from_contract
 from fusionkit_core.run import (
     CreateRunResult,
@@ -34,7 +35,6 @@ from fusionkit_core.run import (
 )
 from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER, new_span_id
-from fusionkit_core.trace import emit as trace_emit
 from fusionkit_core.types import ChatMessage, ModelResponse, ToolCall
 from pydantic import BaseModel, Field
 
@@ -81,12 +81,6 @@ class TrajectoryStepInput(BaseModel):
     output_hash: str | None = None
 
 
-class TrajectoryVerificationInput(BaseModel):
-    status: str
-    evidence: list[str] | None = None
-    exit_code: int | None = None
-
-
 class TrajectoryInput(BaseModel):
     trajectory_id: str
     model_id: str
@@ -97,20 +91,19 @@ class TrajectoryInput(BaseModel):
     model: str | None = None
     harness_kind: str | None = None
     diff: str | None = None
-    verification: TrajectoryVerificationInput | None = None
     metadata: dict[str, Any] | None = None
 
 
 class FuseTrajectoriesRequest(BaseModel):
-    messages: list[ChatMessage]
-    trajectories: list[TrajectoryInput]
-    judge_model: str | None = None
-    synthesizer_model: str | None = None
+    """A single fusion step.
 
-
-class StepTrajectoriesRequest(BaseModel):
-    """A single front-door turn: the judge synthesizes the next step (tool call
-    or final answer) from the candidate trajectories + the live conversation."""
+    The one fusion operation: the synthesizer produces the next step (a tool call
+    for the harness to run) or the final answer, from the candidate trajectories
+    plus the live conversation. With no ``tools`` it is terminal on turn 1 (the
+    old one-shot text fusion); with tools the harness drives the loop. The
+    terminal response carries the fused trajectory (with its ``synthesis``) under
+    the ``fusion`` extension.
+    """
 
     model: str = "fusionkit/router"
     # Raw OpenAI chat messages (assistant tool_calls are nested under `function`,
@@ -121,6 +114,7 @@ class StepTrajectoriesRequest(BaseModel):
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
     judge_model: str | None = None
+    synthesizer_model: str | None = None
     stream: bool = False
 
 
@@ -236,13 +230,7 @@ def create_app(
         request: FuseTrajectoriesRequest,
         trace_id: str | None = Header(default=None, alias=TRACE_ID_HEADER),
         span_id: str | None = Header(default=None, alias=TRACE_SPAN_HEADER),
-    ) -> dict[str, Any] | JSONResponse:
-        if not request.trajectories:
-            return _openai_error_response(
-                "no_trajectories",
-                "At least one trajectory is required.",
-                status_code=400,
-            )
+    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         judge_model = request.judge_model or config.resolved_judge_model
         synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
         try:
@@ -265,70 +253,12 @@ def create_app(
             )
             for trajectory in request.trajectories
         ]
-        synthesis_span = new_span_id()
-        trace_emit(
-            component="synthesis",
-            event_type="log",
-            trace_id=trace_id,
-            span_id=synthesis_span,
-            parent_span_id=span_id,
-            payload={
-                "message": "trajectories:fuse received",
-                "judge_model": judge_model,
-                "synthesizer_model": synthesizer_model,
-                "input_trajectory_ids": [trajectory.id for trajectory in trajectories],
-                "input_model_ids": [trajectory.model_id for trajectory in trajectories],
-            },
-        )
-        result = await engine.judge_synthesizer.synthesize(
-            request.messages,
-            trajectories,
-            judge_client=judge_client,
-            synthesizer_client=synthesizer_client,
-            judge_sampling=config.sampling.model_copy(update={"temperature": 0.0}),
-            synthesis_sampling=config.sampling,
-            trace_id=trace_id,
-            span_id=synthesis_span,
-        )
-        return {
-            "final_output": result.final_output,
-            "synthesis_id": result.record.synthesis_id,
-            "decision": result.record.decision,
-            "rationale": result.record.rationale,
-            "judge_synthesis_record": result.record.model_dump(mode="json"),
-        }
-
-    @app.post("/v1/fusion/trajectory:step", response_model=None)
-    async def step_trajectory(
-        request: StepTrajectoriesRequest,
-        trace_id: str | None = Header(default=None, alias=TRACE_ID_HEADER),
-        span_id: str | None = Header(default=None, alias=TRACE_SPAN_HEADER),
-    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
-        judge_model = request.judge_model or config.resolved_judge_model
         try:
-            judge_client = engine.clients[judge_model]
-        except KeyError as exc:
-            return _openai_error_response(
-                "unknown_model",
-                f"Unknown model endpoint {exc}.",
-                status_code=400,
-            )
-        trajectories = [
-            trajectory_from_contract(
-                TrajectoryV1.model_validate(
-                    {
-                        **contract_metadata("trajectory.v1"),
-                        **trajectory.model_dump(exclude_none=True),
-                    }
-                )
-            )
-            for trajectory in request.trajectories
-        ]
-        try:
-            response = await engine.judge_synthesizer.step(
+            result = await engine.judge_synthesizer.fuse(
                 [_to_chat_message(message) for message in request.messages],
                 trajectories,
                 judge_client=judge_client,
+                synthesizer_client=synthesizer_client,
                 sampling=config.sampling,
                 tools=_normalize_tools(request.tools),
                 tool_choice=_normalize_tool_choice(request.tool_choice),
@@ -339,15 +269,16 @@ def create_app(
             traceback.print_exc()
             return _openai_error_response(
                 exc.__class__.__name__,
-                f"trajectory step failed: {exc}",
+                f"fusion step failed: {exc}",
                 status_code=502,
             )
+        fusion_extension = _fusion_extension(result)
         if request.stream:
             return StreamingResponse(
-                _step_completion_sse(request.model, response),
+                _step_completion_sse(request.model, result.response, fusion_extension),
                 media_type="text/event-stream",
             )
-        return _openai_step_response(request.model, response)
+        return _openai_step_response(request.model, result.response, fusion_extension)
 
     return app
 
@@ -745,13 +676,41 @@ def _usage_dict(response: ModelResponse) -> dict[str, Any]:
     }
 
 
-def _openai_step_response(model: str, response: ModelResponse) -> dict[str, Any]:
+def _fusion_extension(result: FuseResult) -> dict[str, Any] | None:
+    """The ``fusion`` extension carried on a terminal fuse response.
+
+    On the terminal step the fused output is a trajectory whose ``synthesis``
+    holds the fusion result (decision/selected/rationale/metrics). It rides on the
+    chat completion so the gateway can surface it without a separate record."""
+    trajectory = result.trajectory
+    if not result.terminal or trajectory is None:
+        return None
+    return {
+        "trajectory": {
+            "trajectory_id": trajectory.id,
+            "model_id": trajectory.model_id,
+            "status": trajectory.status,
+            "final_output": trajectory.content,
+            "synthesis": (
+                trajectory.synthesis.model_dump(mode="json")
+                if trajectory.synthesis is not None
+                else None
+            ),
+        }
+    }
+
+
+def _openai_step_response(
+    model: str,
+    response: ModelResponse,
+    fusion: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
     tool_calls = _tool_calls_payload(response)
     if tool_calls:
         message["tool_calls"] = tool_calls
     finish_reason = "tool_calls" if tool_calls else (response.finish_reason or "stop")
-    return {
+    payload: dict[str, Any] = {
         "id": f"chatcmpl-{uuid.uuid4()}",
         "object": "chat.completion",
         "created": int(time.time()),
@@ -759,22 +718,32 @@ def _openai_step_response(model: str, response: ModelResponse) -> dict[str, Any]
         "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
         "usage": _usage_dict(response),
     }
+    if fusion is not None:
+        payload["fusion"] = fusion
+    return payload
 
 
-async def _step_completion_sse(model: str, response: ModelResponse) -> AsyncIterator[str]:
+async def _step_completion_sse(
+    model: str,
+    response: ModelResponse,
+    fusion: dict[str, Any] | None = None,
+) -> AsyncIterator[str]:
     completion_id = f"chatcmpl-{uuid.uuid4()}"
     created = int(time.time())
     tool_calls = _tool_calls_payload(response)
     finish_reason = "tool_calls" if tool_calls else (response.finish_reason or "stop")
 
     def chunk(delta: dict[str, Any], finish: str | None) -> str:
-        payload = {
+        payload: dict[str, Any] = {
             "id": completion_id,
             "object": "chat.completion.chunk",
             "created": created,
             "model": model,
             "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
         }
+        if finish is not None and fusion is not None:
+            # The fused trajectory (with its synthesis) rides on the terminal chunk.
+            payload["fusion"] = fusion
         return f"data: {json.dumps(payload)}\n\n"
 
     yield chunk({"role": "assistant"}, None)

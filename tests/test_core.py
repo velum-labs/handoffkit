@@ -84,8 +84,8 @@ async def test_fusion_engine_runs_router_to_panel() -> None:
     assert result.content == "fused final answer"
     assert result.analysis is not None
     assert result.analysis.consensus == ["answers agree"]
-    assert result.metrics["judge_synthesis_record"]["schema"] == "judge-synthesis-record.v1"
-    assert result.metrics["judge_synthesis_record"]["final_output"] == "fused final answer"
+    # The fusion result is folded onto the consolidated trajectory's synthesis.
+    assert result.metrics["synthesis"]["decision"] == "synthesize"
 
 
 @pytest.mark.asyncio
@@ -112,10 +112,10 @@ async def test_fusion_engine_final_output_is_synthesized_not_top_trajectory() ->
     assert result.trajectories[0].content == "ranker likes this because it has evidence"
     assert result.content == "synthesized final answer from judge"
     assert result.content != result.trajectories[0].content
-    synthesis_record = result.metrics["judge_synthesis_record"]
-    assert synthesis_record["decision"] == "synthesize"
-    assert synthesis_record["metrics"]["trajectory_contributions"]
-    assert synthesis_record["metrics"]["trajectory_rejections"]
+    synthesis = result.metrics["synthesis"]
+    assert synthesis["decision"] == "synthesize"
+    assert synthesis["metrics"]["trajectory_contributions"]
+    assert synthesis["metrics"]["trajectory_rejections"]
 
 
 @pytest.mark.asyncio

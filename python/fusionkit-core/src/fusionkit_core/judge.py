@@ -10,30 +10,38 @@ from pydantic import BaseModel, ConfigDict
 
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import PromptOverrides, SamplingConfig
-from fusionkit_core.contracts import (
-    JudgeSynthesisRecordV1,
-    contract_metadata,
-)
 from fusionkit_core.prompts import (
     JUDGE_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
-    TRAJECTORY_STEP_SYSTEM_PROMPT,
+    build_fuse_system,
     build_judge_prompt,
-    build_synthesis_prompt,
-    build_trajectory_step_system,
 )
 from fusionkit_core.trace import emit as trace_emit
 from fusionkit_core.trace import new_span_id
-from fusionkit_core.types import ChatMessage, FusionAnalysis, ModelResponse, Trajectory
+from fusionkit_core.types import (
+    ChatMessage,
+    FusionAnalysis,
+    ModelResponse,
+    Trajectory,
+    TrajectorySynthesis,
+)
 
 
-class JudgeSynthesisResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class FuseResult(BaseModel):
+    """The result of one :meth:`JudgeSynthesizer.fuse` step.
 
-    record: JudgeSynthesisRecordV1
-    final_output: str
+    ``response`` is the synthesizer's model turn (content + any tool calls).
+    ``terminal`` is true when the step produced the final answer (no tool calls);
+    only then is ``trajectory`` set - the consolidated output trajectory whose
+    ``synthesis`` metadata carries the fusion decision/rationale/metrics.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    response: ModelResponse
+    terminal: bool
     analysis: FusionAnalysis
-    ranked_trajectories: list[Trajectory]
+    trajectory: Trajectory | None = None
 
 
 class JudgeSynthesizer:
@@ -41,156 +49,81 @@ class JudgeSynthesizer:
         overrides = prompts or PromptOverrides()
         self._judge_system = overrides.judge_system or JUDGE_SYSTEM_PROMPT
         self._synthesizer_system = overrides.synthesizer_system or SYNTHESIZER_SYSTEM_PROMPT
-        self._trajectory_step_system = (
-            overrides.trajectory_step_system or TRAJECTORY_STEP_SYSTEM_PROMPT
-        )
 
-    async def step(
+    async def fuse(
         self,
         messages: Sequence[ChatMessage],
         trajectories: Sequence[Trajectory],
         *,
         judge_client: ChatClient,
+        synthesizer_client: ChatClient | None = None,
         sampling: SamplingConfig,
         tools: Sequence[Mapping[str, Any]] | None = None,
         tool_choice: str | Mapping[str, Any] | None = None,
+        analysis: FusionAnalysis | None = None,
         trace_id: str | None = None,
         span_id: str | None = None,
-    ) -> ModelResponse:
-        """One step of the judge acting as a streaming agent on the front door.
+    ) -> FuseResult:
+        """One fusion step: produce the next step, or the final answer.
 
-        The judge is given the candidate trajectories as reference and the live
-        conversation (the consolidated trajectory so far, including any tool
-        results the user's harness fed back), and produces the next consolidated
-        step: either a tool call for the harness to execute, or the final answer
-        when the work is done. Iteration/verification is the harness's job - this
-        method performs no apply/verify/repair of its own.
+        This is the single fusion operation. With ``tools=None`` the synthesizer
+        is necessarily terminal on its first turn - the old one-shot text fusion,
+        where "produce an answer" is just a zero-tool-round trajectory. With tools
+        present it may emit tool calls and the harness drives the loop, calling
+        back with the observed results.
+
+        The judge ``analyze`` runs once; pass ``analysis`` to reuse a cached result
+        across a turn's tool loop (avoids re-analyzing the unchanged candidates).
+        On a terminal step the consolidated output :class:`Trajectory` is built and
+        its ``synthesis`` is populated (decision/selected/rationale/metrics) - the
+        fusion result lives on the trajectory, not in a separate record.
         """
+        synth_client = synthesizer_client or judge_client
         judge_span = span_id or new_span_id()
-        system = build_trajectory_step_system(trajectories, system=self._trajectory_step_system)
+        resolved_analysis = analysis
+        if resolved_analysis is None and trajectories:
+            resolved_analysis = await self.analyze(
+                messages,
+                trajectories,
+                judge_client=judge_client,
+                judge_sampling=sampling.model_copy(update={"temperature": 0.0}),
+                trace_id=trace_id,
+                judge_span=judge_span,
+            )
+        if resolved_analysis is None:
+            resolved_analysis = FusionAnalysis()
+        system = build_fuse_system(
+            trajectories,
+            synthesizer_system=self._synthesizer_system,
+            analysis=resolved_analysis if trajectories else None,
+            tools_present=tools is not None,
+        )
         conversation = [ChatMessage(role="system", content=system), *messages]
-        response = await judge_client.chat(
+        response = await synth_client.chat(
             conversation,
             sampling,
             tools=tools,
             tool_choice=tool_choice,
         )
         terminal = not response.tool_calls
-        _emit_judge(
-            trace_id,
-            judge_span,
-            "judge.final" if terminal else "judge.thinking",
-            payload={
-                "fusion_unit": "trajectory_step",
-                "terminal": terminal,
-                "content_preview": response.content[:500],
-                **({"final_output": response.content} if terminal else {}),
-                "tool_calls": [
-                    {"id": call.id, "name": call.name, "arguments": call.arguments}
-                    for call in response.tool_calls
-                ],
-                "input_trajectory_ids": [trajectory.id for trajectory in trajectories],
-                "usage": _usage_payload(response),
-            },
-        )
-        return response
-
-    async def synthesize(
-        self,
-        messages: Sequence[ChatMessage],
-        trajectories: Sequence[Trajectory],
-        *,
-        judge_client: ChatClient,
-        synthesizer_client: ChatClient,
-        judge_sampling: SamplingConfig,
-        synthesis_sampling: SamplingConfig,
-        analysis: FusionAnalysis | None = None,
-        final_output_artifact_id: str | None = None,
-        trace_id: str | None = None,
-        span_id: str | None = None,
-    ) -> JudgeSynthesisResult:
-        """Fuse several trajectories into one final response.
-
-        The judge compares the trajectories (final answers, and where present
-        reasoning, tool calls, observations, and verification results) and the
-        synthesizer produces the final answer in the request's natural shape and
-        first person. A plain sampled answer is a zero-step trajectory, so this
-        one path serves both text fusion and agent-trajectory fusion.
-        """
-        if not trajectories:
-            raise ValueError("at least one trajectory is required")
-        judge_span = span_id or new_span_id()
-        resolved_analysis = analysis or await self.analyze(
-            messages,
-            trajectories,
-            judge_client=judge_client,
-            judge_sampling=judge_sampling,
-            trace_id=trace_id,
-            judge_span=judge_span,
-        )
-        metrics = _synthesis_metrics(
-            trajectories,
-            resolved_analysis,
-            final_output_artifact_id=final_output_artifact_id,
-        )
-        _emit_judge(
-            trace_id,
-            judge_span,
-            "judge.scored",
-            payload={
-                "fusion_unit": "trajectory",
-                "analysis": resolved_analysis.model_dump(mode="json"),
-                "metrics": metrics,
-                "input_ids": [trajectory.id for trajectory in trajectories],
-            },
-        )
-        final_output = await self._synthesize_answer(
-            messages,
-            trajectories,
-            resolved_analysis,
-            synthesizer_client=synthesizer_client,
-            synthesis_sampling=synthesis_sampling,
-            trace_id=trace_id,
-            judge_span=judge_span,
-        )
-        if not final_output.strip():
-            # The synthesizer returned nothing (e.g. a reasoning model exhausted
-            # its token budget on reasoning). Fall back to the best trajectory's
-            # own answer so a fused response is always produced.
-            final_output = _best_trajectory_output(trajectories)
-        selected_trajectory_id = _selected_trajectory_id(final_output, trajectories)
-        synthesis_id = _synthesis_id()
-        record = JudgeSynthesisRecordV1.model_validate(
-            {
-                **contract_metadata("judge-synthesis-record.v1"),
-                "synthesis_id": synthesis_id,
-                "input_trajectory_ids": [trajectory.id for trajectory in trajectories],
-                "status": "succeeded",
-                "decision": "select_trajectory" if selected_trajectory_id else "synthesize",
-                "selected_trajectory_id": selected_trajectory_id,
-                "rationale": _rationale(resolved_analysis),
-                "final_output": final_output,
-                "metrics": metrics,
-            }
-        )
-        _emit_judge(
-            trace_id,
-            judge_span,
-            "judge.final",
-            payload={
-                "synthesis_id": synthesis_id,
-                "decision": "select_trajectory" if selected_trajectory_id else "synthesize",
-                "selected_trajectory_id": selected_trajectory_id,
-                "rationale": _rationale(resolved_analysis),
-                "final_output": final_output,
-                "record": record.model_dump(mode="json"),
-            },
-        )
-        return JudgeSynthesisResult(
-            record=record,
-            final_output=final_output,
+        output_trajectory: Trajectory | None = None
+        if terminal:
+            final_output = response.content
+            if not final_output.strip() and trajectories:
+                # The synthesizer returned nothing (e.g. a reasoning model spent
+                # its budget on reasoning). Fall back to the best trajectory's own
+                # answer so a fused response is always produced.
+                final_output = _best_trajectory_output(trajectories)
+                response = response.model_copy(update={"content": final_output})
+            output_trajectory = _consolidated_trajectory(
+                final_output, trajectories, resolved_analysis
+            )
+        self._emit_step(trace_id, judge_span, response, terminal, output_trajectory, trajectories)
+        return FuseResult(
+            response=response,
+            terminal=terminal,
             analysis=resolved_analysis,
-            ranked_trajectories=list(trajectories),
+            trajectory=output_trajectory,
         )
 
     async def analyze(
@@ -225,40 +158,40 @@ class JudgeSynthesizer:
         )
         return parse_analysis(response.content)
 
-    async def _synthesize_answer(
+    def _emit_step(
         self,
-        messages: Sequence[ChatMessage],
+        trace_id: str | None,
+        judge_span: str | None,
+        response: ModelResponse,
+        terminal: bool,
+        output_trajectory: Trajectory | None,
         trajectories: Sequence[Trajectory],
-        analysis: FusionAnalysis,
-        *,
-        synthesizer_client: ChatClient,
-        synthesis_sampling: SamplingConfig,
-        trace_id: str | None = None,
-        judge_span: str | None = None,
-    ) -> str:
-        response = await synthesizer_client.chat(
-            [
-                ChatMessage(role="system", content=self._synthesizer_system),
-                ChatMessage(
-                    role="user",
-                    content=build_synthesis_prompt(
-                        _last_user_text(messages), trajectories, analysis
-                    ),
-                ),
+    ) -> None:
+        payload: dict[str, Any] = {
+            "fusion_unit": "trajectory_step",
+            "terminal": terminal,
+            "content_preview": response.content[:500],
+            "tool_calls": [
+                {"id": call.id, "name": call.name, "arguments": call.arguments}
+                for call in response.tool_calls
             ],
-            synthesis_sampling,
-        )
+            "input_trajectory_ids": [trajectory.id for trajectory in trajectories],
+            "usage": _usage_payload(response),
+        }
+        if terminal and output_trajectory is not None:
+            synthesis = output_trajectory.synthesis
+            payload["final_output"] = response.content
+            if synthesis is not None:
+                payload["decision"] = synthesis.decision
+                payload["selected_trajectory_id"] = synthesis.selected_trajectory_id
+                payload["rationale"] = synthesis.rationale
+                payload["synthesis"] = synthesis.model_dump(mode="json")
         _emit_judge(
             trace_id,
             judge_span,
-            "judge.synthesis",
-            payload={
-                "raw_output": response.content,
-                "empty": not response.content.strip(),
-                "usage": _usage_payload(response),
-            },
+            "judge.final" if terminal else "judge.thinking",
+            payload=payload,
         )
-        return response.content
 
 
 # Sentinel consensus written when the judge response is not valid JSON. Shared
@@ -277,20 +210,41 @@ def parse_analysis(content: str) -> FusionAnalysis:
         )
 
 
+def _consolidated_trajectory(
+    final_output: str,
+    trajectories: Sequence[Trajectory],
+    analysis: FusionAnalysis,
+) -> Trajectory:
+    """Build the fused output trajectory with its ``synthesis`` metadata."""
+    selected_trajectory_id = _selected_trajectory_id(final_output, trajectories)
+    synthesis = TrajectorySynthesis(
+        decision="select_trajectory" if selected_trajectory_id else "synthesize",
+        selected_trajectory_id=selected_trajectory_id,
+        rationale=_rationale(analysis),
+        input_trajectory_ids=[trajectory.id for trajectory in trajectories],
+        metrics=_synthesis_metrics(trajectories, analysis),
+    )
+    return Trajectory(
+        id=_synthesis_id(),
+        model_id="fusionkit/synthesizer",
+        content=final_output,
+        steps=[],
+        status="succeeded",
+        synthesis=synthesis,
+    )
+
+
 def _synthesis_metrics(
     trajectories: Sequence[Trajectory],
     analysis: FusionAnalysis,
     *,
-    final_output_artifact_id: str | None,
+    final_output_artifact_id: str | None = None,
 ) -> dict[str, Any]:
     contributions = [
         {
             "trajectory_id": trajectory.id,
             "model_id": trajectory.model_id,
             "status": trajectory.status,
-            "verification_status": (
-                trajectory.verification.status if trajectory.verification is not None else None
-            ),
             "step_count": len(trajectory.steps),
             "reason": "included as judge synthesis evidence",
         }
@@ -314,13 +268,10 @@ def _synthesis_metrics(
 
 
 def _best_trajectory_output(trajectories: Sequence[Trajectory]) -> str:
-    """Pick a non-empty answer: prefer a verified trajectory, then any succeeded
-    one, then the first with text."""
+    """Pick a non-empty answer: prefer a succeeded trajectory, then any with text."""
 
-    def _rank(trajectory: Trajectory) -> tuple[int, int]:
-        verification = trajectory.verification
-        verified = verification is not None and verification.status == "succeeded"
-        return (0 if verified else 1, 0 if trajectory.status == "succeeded" else 1)
+    def _rank(trajectory: Trajectory) -> int:
+        return 0 if trajectory.status == "succeeded" else 1
 
     ordered = sorted(trajectories, key=_rank)
     for trajectory in ordered:
@@ -421,7 +372,7 @@ def _usage_payload(response: Any) -> dict[str, Any]:
 
 
 __all__ = [
-    "JudgeSynthesisResult",
+    "FuseResult",
     "JudgeSynthesizer",
     "parse_analysis",
 ]

@@ -68,11 +68,6 @@
     "hash": "sha256:042b447ce7d60c68077c6901b3dc595549ace012066f8ba0b9e8539dc8584793",
     "redaction_status": "raw"
   },
-  "verification": {
-    "status": "succeeded",
-    "evidence": ["exit_code=0", "TEST_OK"],
-    "exit_code": 0
-  },
   "usage": {
     "prompt_tokens": 420,
     "completion_tokens": 96,

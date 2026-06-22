@@ -194,15 +194,15 @@ async def replay_task(
         for index, cand in enumerate(task.candidates)
     ]
     synthesizer = JudgeSynthesizer(variant.to_overrides())
-    result = await synthesizer.synthesize(
+    result = await synthesizer.fuse(
         [ChatMessage(role="user", content=task.prompt)],
         candidates,
         judge_client=runtime.clients[runtime.judge_id],
         synthesizer_client=runtime.clients[runtime.synth_id],
-        judge_sampling=runtime.judge_sampling,
-        synthesis_sampling=runtime.synth_sampling,
+        sampling=runtime.synth_sampling,
+        tools=None,
     )
-    answer = result.final_output
+    answer = result.response.content
     code = extract_code(answer).code
     run = await asyncio.to_thread(
         verify_solution,

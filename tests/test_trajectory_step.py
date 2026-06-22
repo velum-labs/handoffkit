@@ -42,7 +42,7 @@ def test_step_returns_final_answer_when_no_tool_calls(tmp_path) -> None:
     client = TestClient(app)
 
     response = client.post(
-        "/v1/fusion/trajectory:step",
+        "/v1/fusion/trajectories:fuse",
         json={
             "messages": [{"role": "user", "content": "fix the add() bug"}],
             "trajectories": [_TRAJECTORY],
@@ -55,6 +55,10 @@ def test_step_returns_final_answer_when_no_tool_calls(tmp_path) -> None:
     assert choice["message"]["content"] == "done: the bug is fixed"
     assert "tool_calls" not in choice["message"]
     assert choice["finish_reason"] == "stop"
+    # Terminal step: the fused output is a trajectory carrying its synthesis.
+    synthesis = body["fusion"]["trajectory"]["synthesis"]
+    assert synthesis["decision"] == "synthesize"
+    assert synthesis["input_trajectory_ids"] == ["t_gpt"]
 
 
 class _ToolCallClient:
@@ -108,7 +112,7 @@ def test_step_emits_tool_calls_and_injects_candidate_context(tmp_path) -> None:
     client = TestClient(app)
 
     response = client.post(
-        "/v1/fusion/trajectory:step",
+        "/v1/fusion/trajectories:fuse",
         json={
             "messages": [{"role": "user", "content": "fix the add() bug"}],
             "trajectories": [_TRAJECTORY],
@@ -141,7 +145,7 @@ def test_step_streams_sse_with_tool_calls(tmp_path) -> None:
     client = TestClient(app)
 
     response = client.post(
-        "/v1/fusion/trajectory:step",
+        "/v1/fusion/trajectories:fuse",
         json={
             "messages": [{"role": "user", "content": "fix"}],
             "trajectories": [_TRAJECTORY],

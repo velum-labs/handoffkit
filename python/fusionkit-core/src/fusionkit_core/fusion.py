@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
-from fusionkit_core.judge import JudgeSynthesisResult, JudgeSynthesizer
+from fusionkit_core.judge import FuseResult, JudgeSynthesizer
 from fusionkit_core.producers import ChatTrajectoryProducer
 from fusionkit_core.router import HeuristicRouter
 from fusionkit_core.types import ChatMessage, FusionResult, Trajectory
@@ -65,18 +65,18 @@ class FusionEngine:
             panel_models=panel_models,
             sample_count=sample_count,
         )
-        synthesis = await self._judge_synthesize(messages, trajectories)
-        answer = synthesis.final_output
+        fused = await self._judge_synthesize(messages, trajectories)
+        answer = fused.response.content
+        metrics: dict[str, object] = {**_trajectory_metrics(trajectories)}
+        synthesis = fused.trajectory.synthesis if fused.trajectory is not None else None
+        if synthesis is not None:
+            metrics["synthesis"] = synthesis.model_dump(mode="json")
         return FusionResult(
             mode=selected_mode,
             content=answer,
             trajectories=trajectories,
-            analysis=synthesis.analysis,
-            metrics={
-                **_trajectory_metrics(trajectories),
-                "judge_synthesis_id": synthesis.record.synthesis_id,
-                "judge_synthesis_record": synthesis.record.model_dump(mode="json"),
-            },
+            analysis=fused.analysis,
+            metrics=metrics,
         )
 
     async def _generate_trajectories(
@@ -106,17 +106,19 @@ class FusionEngine:
         self,
         messages: Sequence[ChatMessage],
         trajectories: Sequence[Trajectory],
-    ) -> JudgeSynthesisResult:
+    ) -> FuseResult:
         judge = self._client(self.config.resolved_judge_model)
         synthesizer = self._client(self.config.resolved_synthesizer_model)
         survivors = [t for t in trajectories if t.status == "succeeded"] or list(trajectories)
-        return await self.judge_synthesizer.synthesize(
+        # Text fusion is a zero-tool-round fuse: no tools means the synthesizer is
+        # terminal on turn 1 and the fused answer + synthesis come back at once.
+        return await self.judge_synthesizer.fuse(
             messages,
             survivors,
             judge_client=judge,
             synthesizer_client=synthesizer,
-            judge_sampling=self.config.sampling.model_copy(update={"temperature": 0.0}),
-            synthesis_sampling=self.config.sampling,
+            sampling=self.config.sampling,
+            tools=None,
         )
 
     def _client(self, model_id: str) -> ChatClient:

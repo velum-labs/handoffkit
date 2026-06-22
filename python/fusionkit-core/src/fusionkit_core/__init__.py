@@ -56,7 +56,7 @@ from fusionkit_core.credentials import (
     subscription_status,
 )
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import JudgeSynthesisResult, JudgeSynthesizer
+from fusionkit_core.judge import FuseResult, JudgeSynthesizer
 from fusionkit_core.producers import (
     AgentTrajectoryProducer,
     ChatTrajectoryProducer,
@@ -146,9 +146,9 @@ __all__ = [
     "HarnessRunResultV1",
     "HeuristicRouter",
     "IdempotencyRecord",
+    "FuseResult",
     "JudgeSynthesisRecordV1",
     "JudgeSynthesizer",
-    "JudgeSynthesisResult",
     "LocalArtifactStore",
     "LocalModelClient",
     "ModelCallRecordV1",

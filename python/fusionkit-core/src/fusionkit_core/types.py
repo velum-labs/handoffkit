@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from fusionkit_core.contracts import Status, TrajectoryStep, TrajectoryVerification
+from fusionkit_core.contracts import Status, SynthesisDecision, TrajectoryStep
 
 ChatRole = Literal["system", "user", "assistant", "tool"]
 
@@ -94,23 +94,47 @@ class StreamChunk(BaseModel):
     usage: Usage | None = None
 
 
+class TrajectorySynthesis(BaseModel):
+    """Fusion result folded onto the consolidated (fused) trajectory.
+
+    Present only on the terminal trajectory ``fuse`` produces. It carries the
+    judge/synthesis ``decision`` (``select_trajectory`` when the fused answer
+    matched a candidate verbatim, else ``synthesize``), the ``selected_trajectory_id``,
+    the ``rationale``, and ``metrics``. This replaces the former standalone
+    ``JudgeSynthesisRecord``: the fused output is just a ``Trajectory`` and its
+    result is metadata on it, not a separate record.
+    """
+
+    decision: SynthesisDecision = "synthesize"
+    selected_trajectory_id: str | None = None
+    rationale: str | None = None
+    score: float | None = None
+    input_trajectory_ids: list[str] = Field(default_factory=list)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+
+
 class Trajectory(BaseModel):
     """The canonical fusion unit.
 
     A trajectory is one attempt at the request. A plain sampled answer is a
-    zero-step trajectory (``steps == []``, ``verification is None``); a coding
-    agent's run is a full trajectory with reasoning/tool/observation steps and a
-    verification result. ``content`` is the final output text. Trajectories flow
-    to the judge in generation order (see
+    zero-step trajectory (``steps == []``); a coding agent's run is a full
+    trajectory with reasoning/tool/observation steps. ``content`` is the final
+    output text. fusionkit does not own verification, so a trajectory carries no
+    pass/fail verdict; any tests a harness ran are just observation steps.
+    Trajectories flow to the judge in generation order (see
     :class:`fusionkit_core.contracts.TrajectoryV1` for the wire contract).
+
+    ``fuse`` produces a consolidated trajectory whose ``synthesis`` holds the
+    fusion result (decision/selected/rationale/metrics); candidate trajectories
+    leave it ``None``.
     """
 
     id: str
     model_id: str
     content: str
     steps: list[TrajectoryStep] = Field(default_factory=list)
-    verification: TrajectoryVerification | None = None
     status: Status = "succeeded"
+    synthesis: TrajectorySynthesis | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

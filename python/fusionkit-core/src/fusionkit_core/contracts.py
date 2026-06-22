@@ -317,12 +317,6 @@ class TrajectoryStep(ContractBaseModel):
     output_hash: Sha256 | None = None
 
 
-class TrajectoryVerification(ContractBaseModel):
-    status: Status
-    evidence: list[str] | None = None
-    exit_code: int | None = None
-
-
 class TrajectoryV1(ContractRecord):
     expected_schema: ClassVar[str] = "trajectory.v1"
     trajectory_id: str = Field(min_length=1)
@@ -335,7 +329,6 @@ class TrajectoryV1(ContractRecord):
     harness_kind: HarnessKind | None = None
     diff: str | None = None
     patch_artifact: ContractArtifactRef | None = None
-    verification: TrajectoryVerification | None = None
     usage: ContractUsage | None = None
     error: ContractError | None = None
     metadata: dict[str, Any] | None = None
@@ -578,7 +571,6 @@ __all__ = [
     "ToolPolicy",
     "TrajectoryStep",
     "TrajectoryV1",
-    "TrajectoryVerification",
     "EnsembleReceiptV1",
     "contract_metadata",
     "contract_model_for_schema",

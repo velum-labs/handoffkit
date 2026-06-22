@@ -7,12 +7,18 @@ import pytest
 from fusionkit_core.config import FusionConfig, PromptOverrides, SamplingConfig
 from fusionkit_core.judge import JudgeSynthesizer
 from fusionkit_core.prompts import (
+    AGENT_STEP_CONTRACT,
     JUDGE_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
     SYSTEM_PROMPT_DEFAULTS,
-    TRAJECTORY_STEP_SYSTEM_PROMPT,
 )
-from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, Trajectory
+from fusionkit_core.types import (
+    ChatMessage,
+    FusionAnalysis,
+    ModelResponse,
+    StreamChunk,
+    Trajectory,
+)
 
 
 class RecordingClient:
@@ -69,6 +75,12 @@ def _trajectory(trajectory_id: str, model_id: str, final_output: str) -> Traject
     )
 
 
+_ANALYSIS_JSON = (
+    '{"consensus":[],"contradictions":[],"unique_insights":[],'
+    '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}'
+)
+
+
 def test_prompt_overrides_default_to_none() -> None:
     config = FusionConfig.model_validate(
         {"endpoints": [{"id": "a", "model": "m", "base_url": "http://x"}], "default_model": "a"}
@@ -90,113 +102,96 @@ def test_prompt_overrides_parsed_from_config_mapping() -> None:
     )
     assert config.prompts.judge_system == "CUSTOM JUDGE"
     assert config.prompts.synthesizer_system == "CUSTOM SYNTH"
-    # Unset fields stay None so the built-in default is used.
-    assert config.prompts.panel_system is None
 
 
 @pytest.mark.asyncio
-async def test_trajectory_synthesis_uses_prompt_overrides() -> None:
+async def test_fuse_no_tools_uses_prompt_overrides() -> None:
     overrides = PromptOverrides(
         judge_system="OVERRIDE JUDGE",
         synthesizer_system="OVERRIDE SYNTH",
     )
     synthesizer = JudgeSynthesizer(overrides)
-    judge = RecordingClient(
-        "judge",
-        [
-            '{"consensus":[],"contradictions":[],"unique_insights":[],'
-            '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
-        ],
-    )
+    judge = RecordingClient("judge", [_ANALYSIS_JSON])
     synth_client = RecordingClient("synth", ["the fused answer"])
 
-    await synthesizer.synthesize(
+    await synthesizer.fuse(
         [ChatMessage(role="user", content="Fix the bug.")],
         [_trajectory("traj_a", "alpha", "Fixed it.")],
         judge_client=judge,
         synthesizer_client=synth_client,
-        judge_sampling=SamplingConfig(temperature=0.0),
-        synthesis_sampling=SamplingConfig(),
+        sampling=SamplingConfig(),
+        tools=None,
     )
 
     assert judge.system_prompts == ["OVERRIDE JUDGE"]
-    assert synth_client.system_prompts == ["OVERRIDE SYNTH"]
+    # No tools => the synthesizer system has no agent-loop contract appended.
+    assert len(synth_client.system_prompts) == 1
+    assert synth_client.system_prompts[0].startswith("OVERRIDE SYNTH")
+    assert AGENT_STEP_CONTRACT not in synth_client.system_prompts[0]
 
 
 @pytest.mark.asyncio
-async def test_trajectory_step_uses_prompt_override() -> None:
-    synthesizer = JudgeSynthesizer(PromptOverrides(trajectory_step_system="OVERRIDE STEP"))
-    judge = RecordingClient("judge", ["done"])
+async def test_fuse_with_tools_appends_agent_contract() -> None:
+    synthesizer = JudgeSynthesizer(PromptOverrides(synthesizer_system="OVERRIDE SYNTH"))
+    judge = RecordingClient("judge", [_ANALYSIS_JSON, "done"])
 
-    await synthesizer.step(
+    await synthesizer.fuse(
         [ChatMessage(role="user", content="Do the thing.")],
         [_trajectory("traj_a", "alpha", "Did the thing.")],
         judge_client=judge,
         sampling=SamplingConfig(),
+        tools=[{"name": "read_file", "description": "", "parameters": {}}],
     )
 
-    assert len(judge.system_prompts) == 1
-    assert judge.system_prompts[0].startswith("OVERRIDE STEP")
+    # The judge gap-analysis runs first (judge system prompt), then the synthesizer
+    # step (the synthesizer override + the code-side agent contract, since tools
+    # are present). No separate synthesizer_client => same recording client.
+    assert len(judge.system_prompts) == 2
+    assert judge.system_prompts[0] == JUDGE_SYSTEM_PROMPT
+    assert judge.system_prompts[1].startswith("OVERRIDE SYNTH")
+    assert AGENT_STEP_CONTRACT in judge.system_prompts[1]
 
 
 @pytest.mark.asyncio
-async def test_candidate_synthesis_uses_prompt_overrides() -> None:
-    overrides = PromptOverrides(judge_system="OVERRIDE JUDGE", synthesizer_system="OVERRIDE SYNTH")
-    synthesizer = JudgeSynthesizer(overrides)
-    judge = RecordingClient(
-        "judge",
-        [
-            '{"consensus":[],"contradictions":[],"unique_insights":[],'
-            '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
-        ],
-    )
-    synth_client = RecordingClient("synth", ["combined"])
+async def test_fuse_reuses_passed_analysis_without_reanalyzing() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = RecordingClient("judge", ["done"])
 
-    await synthesizer.synthesize(
-        [ChatMessage(role="user", content="Compare")],
-        [Trajectory(id="c1", model_id="m", content="answer")],
+    await synthesizer.fuse(
+        [ChatMessage(role="user", content="Do the thing.")],
+        [_trajectory("traj_a", "alpha", "Did the thing.")],
         judge_client=judge,
-        synthesizer_client=synth_client,
-        judge_sampling=SamplingConfig(temperature=0.0),
-        synthesis_sampling=SamplingConfig(),
+        sampling=SamplingConfig(),
+        tools=[{"name": "read_file", "description": "", "parameters": {}}],
+        analysis=FusionAnalysis(),
     )
 
-    assert judge.system_prompts == ["OVERRIDE JUDGE"]
-    assert synth_client.system_prompts == ["OVERRIDE SYNTH"]
+    # A cached analysis was passed, so the judge analyze() call is skipped: the
+    # only system prompt the client saw is the synthesizer step (not the judge).
+    assert len(judge.system_prompts) == 1
+    assert judge.system_prompts[0].startswith(SYNTHESIZER_SYSTEM_PROMPT)
 
 
 @pytest.mark.asyncio
 async def test_unset_overrides_fall_back_to_builtins() -> None:
     synthesizer = JudgeSynthesizer()
-    judge = RecordingClient(
-        "judge",
-        [
-            '{"consensus":[],"contradictions":[],"unique_insights":[],'
-            '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
-        ],
-    )
+    judge = RecordingClient("judge", [_ANALYSIS_JSON])
     synth_client = RecordingClient("synth", ["answer"])
 
-    await synthesizer.synthesize(
+    await synthesizer.fuse(
         [ChatMessage(role="user", content="Fix the bug.")],
         [_trajectory("traj_a", "alpha", "Fixed it.")],
         judge_client=judge,
         synthesizer_client=synth_client,
-        judge_sampling=SamplingConfig(temperature=0.0),
-        synthesis_sampling=SamplingConfig(),
+        sampling=SamplingConfig(),
+        tools=None,
     )
 
     assert judge.system_prompts == [JUDGE_SYSTEM_PROMPT]
-    assert synth_client.system_prompts == [SYNTHESIZER_SYSTEM_PROMPT]
+    assert synth_client.system_prompts[0].startswith(SYNTHESIZER_SYSTEM_PROMPT)
 
 
 def test_system_prompt_defaults_cover_every_override_id() -> None:
-    assert set(SYSTEM_PROMPT_DEFAULTS) == {
-        "judge",
-        "synthesizer",
-        "trajectory-step",
-        "panel",
-    }
+    assert set(SYSTEM_PROMPT_DEFAULTS) == {"judge", "synthesizer"}
     assert SYSTEM_PROMPT_DEFAULTS["judge"] == JUDGE_SYSTEM_PROMPT
     assert SYSTEM_PROMPT_DEFAULTS["synthesizer"] == SYNTHESIZER_SYSTEM_PROMPT
-    assert SYSTEM_PROMPT_DEFAULTS["trajectory-step"] == TRAJECTORY_STEP_SYSTEM_PROMPT

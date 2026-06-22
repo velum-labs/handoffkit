@@ -120,9 +120,9 @@ def prompts_dump(
 ) -> None:
     """Emit the built-in system prompts so a consumer can scaffold editable overrides.
 
-    With no options this prints a JSON object mapping each prompt id (e.g.
-    ``judge``, ``trajectory-step``) to its default text. With ``--dir`` it writes
-    one ``<id>.md`` file per prompt. This keeps the CLI's scaffolded
+    With no options this prints a JSON object mapping each prompt id (``judge``,
+    ``synthesizer``) to its default text. With ``--dir`` it writes one
+    ``<id>.md`` file per prompt. This keeps the CLI's scaffolded
     ``.fusionkit/prompts`` defaults in lockstep with this package's source.
     """
     if dir is not None:

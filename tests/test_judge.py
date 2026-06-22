@@ -3,14 +3,12 @@ from __future__ import annotations
 import pytest
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import SamplingConfig
-from fusionkit_core.contracts import TrajectoryStep, TrajectoryVerification
+from fusionkit_core.contracts import TrajectoryStep
 from fusionkit_core.judge import JudgeSynthesizer
 from fusionkit_core.types import ChatMessage, Trajectory
 
 
-def _trajectory(
-    trajectory_id: str, model_id: str, final_output: str, verified: bool
-) -> Trajectory:
+def _trajectory(trajectory_id: str, model_id: str, final_output: str) -> Trajectory:
     return Trajectory(
         id=trajectory_id,
         model_id=model_id,
@@ -26,15 +24,11 @@ def _trajectory(
             TrajectoryStep(index=1, type="observation", text="add subtracts"),
             TrajectoryStep(index=2, type="output", text=final_output),
         ],
-        verification=TrajectoryVerification(
-            status="succeeded" if verified else "failed",
-            exit_code=0 if verified else 1,
-        ),
     )
 
 
 @pytest.mark.asyncio
-async def test_synthesize_trajectories_fuses_into_first_person_answer() -> None:
+async def test_fuse_no_tools_is_terminal_and_folds_synthesis_onto_trajectory() -> None:
     synthesizer = JudgeSynthesizer()
     judge = FakeModelClient(
         "judge",
@@ -46,32 +40,35 @@ async def test_synthesize_trajectories_fuses_into_first_person_answer() -> None:
         ],
     )
     trajectories = [
-        _trajectory("traj_alpha", "alpha", "Changed add to left + right.", verified=True),
-        _trajectory("traj_beta", "beta", "Rewrote add as a function.", verified=False),
+        _trajectory("traj_alpha", "alpha", "Changed add to left + right."),
+        _trajectory("traj_beta", "beta", "Rewrote add as a function."),
     ]
 
-    result = await synthesizer.synthesize(
+    result = await synthesizer.fuse(
         [ChatMessage(role="user", content="Fix the failing add() test.")],
         trajectories,
         judge_client=judge,
         synthesizer_client=judge,
-        judge_sampling=SamplingConfig(temperature=0.0),
-        synthesis_sampling=SamplingConfig(),
+        sampling=SamplingConfig(),
+        tools=None,
     )
 
-    assert result.record.schema_name == "judge-synthesis-record.v1"
-    assert result.record.decision == "synthesize"
-    assert result.record.input_trajectory_ids == ["traj_alpha", "traj_beta"]
-    assert result.final_output == "I fixed add() to return left + right; the test passes."
-    assert result.record.metrics is not None
-    assert result.record.metrics["fusion_unit"] == "trajectory"
-    contributions = result.record.metrics["trajectory_contributions"]
-    assert contributions[0]["verification_status"] == "succeeded"
-    assert contributions[1]["verification_status"] == "failed"
+    # No tools => terminal on turn 1 (the old one-shot text fusion).
+    assert result.terminal is True
+    assert result.response.content == "I fixed add() to return left + right; the test passes."
+    assert result.trajectory is not None
+    synthesis = result.trajectory.synthesis
+    assert synthesis is not None
+    assert synthesis.decision == "synthesize"
+    assert synthesis.input_trajectory_ids == ["traj_alpha", "traj_beta"]
+    assert synthesis.metrics["fusion_unit"] == "trajectory"
+    contributions = synthesis.metrics["trajectory_contributions"]
+    assert contributions[0]["trajectory_id"] == "traj_alpha"
+    assert contributions[1]["trajectory_id"] == "traj_beta"
 
 
 @pytest.mark.asyncio
-async def test_judge_synthesizer_emits_contract_record_with_candidate_metadata() -> None:
+async def test_fuse_synthesis_metrics_carry_contributions_and_rejections() -> None:
     synthesizer = JudgeSynthesizer()
     judge = FakeModelClient(
         "judge",
@@ -91,25 +88,25 @@ async def test_judge_synthesizer_emits_contract_record_with_candidate_metadata()
         Trajectory(id="candidate_2", model_id="writer", content="terse"),
     ]
 
-    result = await synthesizer.synthesize(
+    result = await synthesizer.fuse(
         [ChatMessage(role="user", content="Compare")],
         candidates,
         judge_client=judge,
         synthesizer_client=judge,
-        judge_sampling=SamplingConfig(temperature=0.0),
-        synthesis_sampling=SamplingConfig(),
+        sampling=SamplingConfig(),
+        tools=None,
     )
 
-    assert result.record.schema_name == "judge-synthesis-record.v1"
-    assert result.record.final_output == "combined answer"
-    assert result.record.metrics is not None
-    assert result.record.metrics["trajectory_contributions"][0]["trajectory_id"] == "candidate_1"
-    assert result.record.metrics["trajectory_rejections"][0]["trajectory_id"] == "candidate_2"
-    assert result.record.metrics["judge_structured_parse_status"] == "parsed"
+    assert result.response.content == "combined answer"
+    assert result.trajectory is not None
+    metrics = result.trajectory.synthesis.metrics
+    assert metrics["trajectory_contributions"][0]["trajectory_id"] == "candidate_1"
+    assert metrics["trajectory_rejections"][0]["trajectory_id"] == "candidate_2"
+    assert metrics["judge_structured_parse_status"] == "parsed"
 
 
 @pytest.mark.asyncio
-async def test_judge_synthesizer_marks_invalid_structured_json() -> None:
+async def test_fuse_marks_invalid_structured_json() -> None:
     synthesizer = JudgeSynthesizer()
     judge = FakeModelClient("judge", ["not json", "fallback answer"])
     candidates = [
@@ -120,15 +117,16 @@ async def test_judge_synthesizer_marks_invalid_structured_json() -> None:
         ),
     ]
 
-    result = await synthesizer.synthesize(
+    result = await synthesizer.fuse(
         [ChatMessage(role="user", content="Compare")],
         candidates,
         judge_client=judge,
         synthesizer_client=judge,
-        judge_sampling=SamplingConfig(temperature=0.0),
-        synthesis_sampling=SamplingConfig(),
+        sampling=SamplingConfig(),
+        tools=None,
     )
 
-    assert result.record.metrics is not None
-    assert result.record.metrics["judge_structured_parse_status"] == "failed"
-    assert result.record.metrics["judge_structured_parse_error"] == "invalid_json"
+    assert result.trajectory is not None
+    metrics = result.trajectory.synthesis.metrics
+    assert metrics["judge_structured_parse_status"] == "failed"
+    assert metrics["judge_structured_parse_error"] == "invalid_json"
