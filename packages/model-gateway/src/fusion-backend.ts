@@ -493,10 +493,16 @@ export class FusionBackend implements Backend {
     const resolveCandidates = async (): Promise<WireTrajectory[]> => {
       const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel");
       if (!hasUsableCandidates(candidates)) {
+        if (candidates.length === 0) {
+          throw new Error("fusion panel produced no candidates");
+        }
+        // Every candidate failed: attribute the failure per model so the error
+        // (and the companion app) points at which panel members went wrong.
+        const breakdown = candidates
+          .map((candidate) => `${candidate.model_id || candidate.trajectory_id}: ${candidate.status}`)
+          .join(", ");
         throw new Error(
-          candidates.length === 0
-            ? "fusion panel produced no candidates"
-            : "fusion panel produced no usable candidates (every model failed)"
+          `fusion panel produced no usable candidates (every model failed) — ${breakdown}`
         );
       }
       return candidates;

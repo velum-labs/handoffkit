@@ -21,6 +21,7 @@ import type {
   TrajectoryStep
 } from "./harness.js";
 import type {
+  JudgeCandidateEvidence,
   JudgeInput,
   JudgeSynthesisOutput,
   JudgeSynthesizer
@@ -321,6 +322,26 @@ function trajectoryToWire(trajectory: HarnessTrajectory): Record<string, unknown
   };
 }
 
+/**
+ * Wire a candidate that ran but captured no trajectory (e.g. its model call
+ * failed before producing any output) as an explicit `failed` trajectory. This
+ * keeps the candidate visible — with its model id and status — instead of
+ * silently dropping it, so a panel where every member failed surfaces as
+ * "every model failed" with attribution rather than an opaque "no candidates".
+ */
+function failedEvidenceToWire(evidence: JudgeCandidateEvidence): Record<string, unknown> {
+  const label = evidence.modelId.length > 0 ? evidence.modelId : evidence.candidateId;
+  return {
+    trajectory_id: evidence.candidateId,
+    model_id: evidence.modelId,
+    status: "failed",
+    items: [],
+    final_output: `panel candidate ${label} produced no trajectory (status: ${evidence.status})`,
+    candidate_id: evidence.candidateId,
+    ...(evidence.model.length > 0 ? { model: evidence.model } : {})
+  };
+}
+
 export function createFusionKitJudgeSynthesizer(input: {
   fusionBackendUrl: string;
   model: string;
@@ -424,6 +445,7 @@ export async function runFusionPanels(
   options: FusionPanelOptions
 ): Promise<Record<string, unknown>[]> {
   let captured: HarnessTrajectory[] = [];
+  let evidence: readonly JudgeCandidateEvidence[] = [];
   const harness: UnifiedHarnessKind = options.harness ?? "agent";
   const e2eOptions: UnifiedHarnessE2EOptions = {
     id: options.id ?? `panels_${Date.now()}`,
@@ -445,6 +467,7 @@ export async function runFusionPanels(
     id: "panel-capture",
     synthesizer: {
       synthesize(judgeInput: JudgeInput): JudgeSynthesisOutput {
+        evidence = judgeInput.candidates;
         captured = judgeInput.candidates
           .map((candidate) => candidate.trajectory)
           .filter((trajectory): trajectory is HarnessTrajectory => trajectory !== undefined);
@@ -455,7 +478,12 @@ export async function runFusionPanels(
     }
   };
   await runEnsemble(descriptor);
-  return captured.map(trajectoryToWire);
+  if (captured.length > 0) return captured.map(trajectoryToWire);
+  // No candidate produced a trajectory. Rather than return an empty set (an
+  // opaque "fusion panel produced no candidates"), surface every candidate that
+  // ran as a failed trajectory carrying its model id and status, so the gateway
+  // reports which models failed and the companion app shows them.
+  return evidence.map(failedEvidenceToWire);
 }
 
 function descriptorFor(

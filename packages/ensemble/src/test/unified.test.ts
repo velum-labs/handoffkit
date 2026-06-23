@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 import {
+  runFusionPanels,
   runUnifiedHarnessE2E,
   type CursorHarnessRunnerInput
 } from "../unified.js";
@@ -153,6 +154,41 @@ test("unified runner routes each command candidate through FusionKit and synthes
     assert.ok(result.reportPath?.endsWith("unified-e2e-report.json"));
   } finally {
     await backend.close();
+    fixture.cleanup();
+  }
+});
+
+test("runFusionPanels surfaces candidates that produced no trajectory as failed wires", async () => {
+  // The mock harness emits candidate outputs without a trajectory (like a real
+  // harness whose model call failed before producing any output). The panel must
+  // surface each as a failed trajectory — with its model id — instead of
+  // dropping them and returning an empty set (an opaque "no candidates").
+  const fixture = makeRepo();
+  try {
+    const wires = await runFusionPanels({
+      id: "panels_no_trajectory",
+      repo: fixture.repo,
+      outputRoot: fixture.outputRoot,
+      prompt: "do the thing",
+      harness: "mock",
+      models: [
+        { id: "alpha", model: "alpha-model" },
+        { id: "beta", model: "beta-model" }
+      ],
+      fusionBackendUrl: "http://127.0.0.1:9999"
+    });
+
+    assert.equal(wires.length, 2);
+    for (const wire of wires) {
+      assert.equal(wire.status, "failed");
+      assert.equal(typeof wire.model_id, "string");
+      assert.match(String(wire.final_output), /produced no trajectory/);
+    }
+    assert.deepEqual(
+      wires.map((wire) => wire.model_id).sort(),
+      ["alpha", "beta"]
+    );
+  } finally {
     fixture.cleanup();
   }
 });
