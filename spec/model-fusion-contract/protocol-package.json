@@ -1,6 +1,6 @@
 {
   "package_name": "@velum-labs/model-fusion-protocol",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "schema_bundle_hash": "sha256:bb04c698793875568976fd6e5c7c9f76dd10f306c2ff2156be46b63afc261867",
   "json_schema_format": "persisted-record-audit-format",
   "v1_service_source_of_truth": "openapi-3.1-http-json",
