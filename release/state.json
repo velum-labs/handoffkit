@@ -34,34 +34,34 @@
   },
   "units": {
     "fusionkit-protocol": {
-      "declared": "0.4.0",
+      "declared": "0.5.0",
       "published": "0.4.0",
       "latestTag": "model-fusion-protocol-v0.4.0",
-      "refreshedAt": "2026-06-23T00:19:52.707Z"
+      "refreshedAt": "2026-06-23T02:06:05.191Z"
     },
     "cursorkit": {
       "declared": "0.1.4",
       "published": "0.1.4",
       "latestTag": "cursorkit-v0.1.4",
-      "refreshedAt": "2026-06-23T00:19:53.080Z"
+      "refreshedAt": "2026-06-23T02:06:05.801Z"
     },
     "fusionkit-pypi": {
       "declared": "0.6.0",
       "published": "0.6.0",
-      "latestTag": "fusionkit-v0.5.3",
-      "refreshedAt": "2026-06-23T00:19:53.300Z"
+      "latestTag": "fusionkit-v0.6.0",
+      "refreshedAt": "2026-06-23T02:06:05.921Z"
     },
     "handoffkit": {
       "declared": "0.6.0",
       "published": "0.6.0",
-      "latestTag": "handoffkit-v0.5.4",
-      "refreshedAt": "2026-06-23T00:19:53.638Z"
+      "latestTag": "handoffkit-v0.6.0",
+      "refreshedAt": "2026-06-23T02:06:06.620Z"
     },
     "mlx-lm": {
       "declared": "0.31.3+structured.3",
       "published": null,
       "latestTag": null,
-      "refreshedAt": "2026-06-23T00:19:53.666Z"
+      "refreshedAt": "2026-06-23T02:06:06.652Z"
     }
   }
 }
