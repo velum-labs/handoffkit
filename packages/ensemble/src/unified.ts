@@ -17,7 +17,8 @@ import type {
   EnsembleRunResult,
   HarnessAdapter,
   HarnessArtifact,
-  HarnessTrajectory
+  HarnessTrajectory,
+  TrajectoryStep
 } from "./harness.js";
 import type {
   JudgeInput,
@@ -275,12 +276,43 @@ function trajectoryFuseUrl(baseUrl: string): string {
   return `${normalizeFusionBackendUrl(baseUrl)}/v1/fusion/trajectories:fuse`;
 }
 
+/** Map an internal trajectory step to a trajectory.v1 Responses-style item. */
+function stepToWireItem(step: TrajectoryStep): Record<string, unknown> {
+  const base: Record<string, unknown> = { index: step.index };
+  switch (step.type) {
+    case "reasoning":
+      return { ...base, type: "reasoning", ...(step.text !== undefined ? { text: step.text } : {}) };
+    case "tool_call":
+      return {
+        ...base,
+        type: "function_call",
+        ...(step.tool_name !== undefined ? { name: step.tool_name } : {}),
+        ...(step.tool_call_id !== undefined ? { call_id: step.tool_call_id } : {}),
+        ...(step.tool_input !== undefined ? { arguments: step.tool_input } : {})
+      };
+    case "observation":
+      return {
+        ...base,
+        type: "function_call_output",
+        ...(step.tool_call_id !== undefined ? { call_id: step.tool_call_id } : {}),
+        ...(step.text !== undefined ? { text: step.text } : {}),
+        ...(step.is_error !== undefined ? { is_error: step.is_error } : {})
+      };
+    case "output":
+      return { ...base, type: "message", ...(step.text !== undefined ? { text: step.text } : {}) };
+    default: {
+      const exhausted: never = step.type;
+      throw new Error(`unsupported trajectory step type: ${String(exhausted)}`);
+    }
+  }
+}
+
 function trajectoryToWire(trajectory: HarnessTrajectory): Record<string, unknown> {
   return {
     trajectory_id: trajectory.trajectoryId,
     model_id: trajectory.modelId,
     status: trajectory.status,
-    steps: trajectory.steps,
+    items: trajectory.steps.map(stepToWireItem),
     final_output: trajectory.finalOutput,
     ...(trajectory.candidateId !== undefined ? { candidate_id: trajectory.candidateId } : {}),
     ...(trajectory.model !== undefined ? { model: trajectory.model } : {}),

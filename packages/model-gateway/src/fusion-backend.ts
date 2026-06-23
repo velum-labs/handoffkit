@@ -66,7 +66,7 @@ export type WireTrajectory = {
   model_id: string;
   status: string;
   final_output: string;
-  steps?: Array<Record<string, unknown>>;
+  items?: Array<Record<string, unknown>>;
   candidate_id?: string;
   model?: string;
   harness_kind?: string;

@@ -216,9 +216,9 @@ test("agent front door: panel produces a trajectory the judge step consumes", as
     assert.match(body.choices[0]?.message.content ?? "", new RegExp(SENTINEL));
     assert.ok(model.solveCalls() >= 1, "the panel model agent must run");
     assert.equal(stepTrajectories.length, 1, "the panel's one trajectory must reach the judge step");
-    const trajectory = stepTrajectories[0] as { steps?: unknown[]; final_output?: string; model_id?: string };
+    const trajectory = stepTrajectories[0] as { items?: unknown[]; final_output?: string; model_id?: string };
     assert.equal(trajectory.model_id, "alpha");
-    assert.ok(Array.isArray(trajectory.steps) && trajectory.steps.length >= 1, "trajectory must carry steps");
+    assert.ok(Array.isArray(trajectory.items) && trajectory.items.length >= 1, "trajectory must carry items");
     assert.match(trajectory.final_output ?? "", /calculator sample/);
     assert.ok(stepMessages.some((message) => message.role === "user"), "the conversation must reach the judge");
   } finally {

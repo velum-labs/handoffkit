@@ -319,7 +319,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@types/figlet", "1.7.0"],
   ["@types/node", "22.19.20"],
   ["@velum-labs/cursorkit", "0.1.2"],
-  ["@velum-labs/model-fusion-protocol", "0.4.0"],
+  ["@velum-labs/model-fusion-protocol", "0.5.0"],
   ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
   ["commander", "14.0.3"],

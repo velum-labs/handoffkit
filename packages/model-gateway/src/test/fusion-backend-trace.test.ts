@@ -16,7 +16,7 @@ process.env.FUSION_TRACE_DIR = traceDir;
 delete process.env.FUSION_TRACE_URL;
 
 function candidate(id: string): WireTrajectory {
-  return { trajectory_id: id, model_id: id, status: "succeeded", final_output: "ok", steps: [] };
+  return { trajectory_id: id, model_id: id, status: "succeeded", final_output: "ok", items: [] };
 }
 
 type TraceEvent = {

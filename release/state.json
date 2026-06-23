@@ -1,36 +1,31 @@
 {
   "$comment": "Last-applied release state, written by `release apply` and reconciled by `release refresh`. Treated as a cache: refresh always trusts registries + git tags over this file.",
   "lastApply": {
-    "at": "2026-06-23T02:06:37.346Z",
-    "plan": "/Users/alen/Documents/Development/handoffkit/release/.plans/2026-06-23T02-06-29-475Z.plan.json",
+    "at": "2026-06-23T02:09:54.130Z",
+    "plan": "/Users/alen/Documents/Development/handoffkit/release/.plans/2026-06-23T02-09-45-573Z.plan.json",
     "results": {
-      "fusionkit-protocol": {
+      "fusionkit-pypi": {
         "status": "released",
-        "version": "0.5.0",
-        "tag": "model-fusion-protocol-v0.5.0",
-        "sha": "ff9b2bc88cdc17f67a261bf9282a6e63b7e434d0",
-        "releaseUrl": null,
+        "version": "0.7.0",
+        "tag": "fusionkit-v0.7.0",
+        "sha": "7e547d522541790a403c2bed106117074879e5a0",
+        "releaseUrl": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.7.0",
         "run": {
-          "id": 27997221495,
-          "url": "https://github.com/velum-labs/fusionkit/actions/runs/27997221495",
+          "id": 27997337797,
+          "url": "https://github.com/velum-labs/fusionkit/actions/runs/27997337797",
           "status": "queued",
           "conclusion": ""
         },
         "urls": {
           "slug": "velum-labs/fusionkit",
           "repo": "https://github.com/velum-labs/fusionkit",
-          "actions": "https://github.com/velum-labs/fusionkit/actions/workflows/model-fusion-protocol-release.yml",
-          "release": "https://github.com/velum-labs/fusionkit/releases/tag/model-fusion-protocol-v0.5.0",
+          "actions": "https://github.com/velum-labs/fusionkit/actions/workflows/pypi-release.yml",
+          "release": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.7.0",
           "registries": [
             {
-              "kind": "npm",
-              "package": "@velum-labs/model-fusion-protocol",
-              "url": "https://www.npmjs.com/package/@velum-labs/model-fusion-protocol"
-            },
-            {
               "kind": "pypi",
-              "package": "velum-model-fusion-protocol",
-              "url": "https://pypi.org/project/velum-model-fusion-protocol/"
+              "package": "fusionkit",
+              "url": "https://pypi.org/project/fusionkit/"
             }
           ]
         }
@@ -51,10 +46,12 @@
       "refreshedAt": "2026-06-23T02:09:41.954Z"
     },
     "fusionkit-pypi": {
-      "declared": "0.6.0",
-      "published": "0.6.0",
-      "latestTag": "fusionkit-v0.6.0",
-      "refreshedAt": "2026-06-23T02:09:42.056Z"
+      "declared": "0.7.0",
+      "published": "0.7.0",
+      "latestTag": "fusionkit-v0.7.0",
+      "runUrl": "https://github.com/velum-labs/fusionkit/actions/runs/27997337797",
+      "releaseUrl": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.7.0",
+      "refreshedAt": "2026-06-23T02:09:54.130Z"
     },
     "handoffkit": {
       "declared": "0.6.0",
