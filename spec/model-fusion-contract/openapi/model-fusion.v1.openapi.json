@@ -160,7 +160,6 @@
           { "$ref": "../schema/fusion-record.v1.schema.json" },
           { "$ref": "../schema/harness-candidate-record.v1.schema.json" },
           { "$ref": "../schema/harness-run-result.v1.schema.json" },
-          { "$ref": "../schema/judge-synthesis-record.v1.schema.json" },
           { "$ref": "../schema/model-call-record.v1.schema.json" },
           { "$ref": "../schema/model-endpoint.v1.schema.json" },
           { "$ref": "../schema/tool-call-plan.v1.schema.json" },

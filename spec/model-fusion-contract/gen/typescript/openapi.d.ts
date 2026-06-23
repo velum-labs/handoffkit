@@ -88,7 +88,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        ContractRecord: components["schemas"]["artifact-ref.v1.schema"] | components["schemas"]["benchmark-task-record.v1.schema"] | components["schemas"]["cursor-run-result.v1.schema"] | components["schemas"]["ensemble-receipt.v1.schema"] | components["schemas"]["fusion-record.v1.schema"] | components["schemas"]["harness-candidate-record.v1.schema"] | components["schemas"]["harness-run-result.v1.schema"] | components["schemas"]["judge-synthesis-record.v1.schema"] | components["schemas"]["model-call-record.v1.schema"] | components["schemas"]["model-endpoint.v1.schema"] | components["schemas"]["tool-call-plan.v1.schema"] | components["schemas"]["tool-execution-record.v1.schema"];
+        ContractRecord: components["schemas"]["artifact-ref.v1.schema"] | components["schemas"]["benchmark-task-record.v1.schema"] | components["schemas"]["cursor-run-result.v1.schema"] | components["schemas"]["ensemble-receipt.v1.schema"] | components["schemas"]["fusion-record.v1.schema"] | components["schemas"]["harness-candidate-record.v1.schema"] | components["schemas"]["harness-run-result.v1.schema"] | components["schemas"]["model-call-record.v1.schema"] | components["schemas"]["model-endpoint.v1.schema"] | components["schemas"]["tool-call-plan.v1.schema"] | components["schemas"]["tool-execution-record.v1.schema"];
         ExecuteCodingTaskRequest: {
             benchmark_task_record: components["schemas"]["benchmark-task-record.v1.schema"];
             manifest_path?: string;
@@ -316,24 +316,6 @@ export interface components {
             };
             artifacts?: components["schemas"]["artifactRef"][];
             error?: components["schemas"]["error"];
-        };
-        /** judge-synthesis-record.v1 */
-        "judge-synthesis-record.v1.schema": components["schemas"]["contractMetadata"] & {
-            /** @constant */
-            schema?: "judge-synthesis-record.v1";
-            synthesis_id: string;
-            judge_model_call_id?: string;
-            input_trajectory_ids: string[];
-            status: components["schemas"]["status"];
-            /** @enum {string} */
-            decision: "synthesize" | "select_trajectory" | "repair_required" | "failed";
-            selected_trajectory_id?: string;
-            rationale?: string;
-            final_output: string;
-            score?: number;
-            metrics?: {
-                [key: string]: unknown;
-            };
         };
         chatMessage: {
             /** @enum {string} */
