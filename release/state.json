@@ -37,33 +37,31 @@
       "declared": "0.5.0",
       "published": "0.5.0",
       "latestTag": "model-fusion-protocol-v0.5.0",
-      "refreshedAt": "2026-06-23T02:09:41.463Z"
+      "refreshedAt": "2026-06-23T02:18:51.897Z"
     },
     "cursorkit": {
       "declared": "0.1.4",
       "published": "0.1.4",
       "latestTag": "cursorkit-v0.1.4",
-      "refreshedAt": "2026-06-23T02:09:41.954Z"
+      "refreshedAt": "2026-06-23T02:18:52.452Z"
     },
     "fusionkit-pypi": {
       "declared": "0.7.0",
       "published": "0.7.0",
-      "latestTag": "fusionkit-v0.7.0",
-      "runUrl": "https://github.com/velum-labs/fusionkit/actions/runs/27997337797",
-      "releaseUrl": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.7.0",
-      "refreshedAt": "2026-06-23T02:09:54.130Z"
+      "latestTag": "fusionkit-v0.6.0",
+      "refreshedAt": "2026-06-23T02:18:52.636Z"
     },
     "handoffkit": {
       "declared": "0.6.0",
       "published": "0.6.0",
       "latestTag": "handoffkit-v0.6.0",
-      "refreshedAt": "2026-06-23T02:09:42.470Z"
+      "refreshedAt": "2026-06-23T02:18:53.266Z"
     },
     "mlx-lm": {
       "declared": "0.31.3+structured.3",
       "published": null,
       "latestTag": null,
-      "refreshedAt": "2026-06-23T02:09:42.498Z"
+      "refreshedAt": "2026-06-23T02:18:53.291Z"
     }
   }
 }
