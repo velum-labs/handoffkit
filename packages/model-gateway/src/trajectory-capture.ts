@@ -227,17 +227,123 @@ function stepsForCall(call: RawCall): CapturedStep[] {
   }
 }
 
+/** Parse a single JSON document; undefined when the text is not one (e.g. SSE). */
+function tryParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Decode the JSON payloads of an SSE event stream (`data: {...}` lines). Used to
+ * reconstruct the final answer from a streamed response: coding CLIs (codex)
+ * request `stream: true`, so the captured response body is an event stream, not
+ * a single JSON object. Comment lines, the `[DONE]` sentinel, and unparseable
+ * lines are skipped.
+ */
+function parseSseEvents(text: string): Record<string, unknown>[] {
+  const events: Record<string, unknown>[] = [];
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const payload = trimmed.slice(5).trim();
+    if (payload.length === 0 || payload === "[DONE]") continue;
+    const obj = asObject(tryParseJson(payload));
+    if (obj !== undefined) events.push(obj);
+  }
+  return events;
+}
+
+/** Final assistant text from an OpenAI Responses event stream. */
+function finalOutputFromResponsesSse(events: Record<string, unknown>[]): string {
+  const assistantTextFromOutput = (output: unknown[]): string => {
+    for (let i = output.length - 1; i >= 0; i -= 1) {
+      const obj = asObject(output[i]);
+      if (obj?.type === "message" || obj?.role === "assistant") {
+        const text = contentText(obj.content);
+        if (text.length > 0) return text;
+      }
+    }
+    return "";
+  };
+  // Prefer the terminal response object (carries the full assembled output).
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const type = asString(events[i]?.type);
+    if (type === "response.completed" || type === "response.incomplete") {
+      const text = assistantTextFromOutput(asArray(asObject(events[i]?.response)?.output));
+      if (text.length > 0) return text;
+    }
+  }
+  // Then a completed message output item.
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (asString(events[i]?.type) !== "response.output_item.done") continue;
+    const item = asObject(events[i]?.item);
+    if (item?.type === "message") {
+      const text = contentText(item.content);
+      if (text.length > 0) return text;
+    }
+  }
+  // Finally, accumulate the streamed text deltas.
+  let accumulated = "";
+  for (const event of events) {
+    if (asString(event.type) === "response.output_text.delta") {
+      accumulated += asString(event.delta) ?? "";
+    }
+  }
+  return accumulated;
+}
+
+/** Final assistant text from an OpenAI chat-completions chunk stream. */
+function finalOutputFromChatSse(events: Record<string, unknown>[]): string {
+  let accumulated = "";
+  for (const event of events) {
+    const choice = asObject(asArray(event.choices)[0]);
+    if (choice === undefined) continue;
+    accumulated += asString(asObject(choice.delta)?.content) ?? "";
+    const message = asObject(choice.message);
+    if (message !== undefined) accumulated += contentText(message.content);
+  }
+  return accumulated;
+}
+
+/** Final assistant text from an Anthropic Messages event stream. */
+function finalOutputFromAnthropicSse(events: Record<string, unknown>[]): string {
+  let accumulated = "";
+  for (const event of events) {
+    if (asString(event.type) !== "content_block_delta") continue;
+    const delta = asObject(event.delta);
+    if (asString(delta?.type) === "text_delta") accumulated += asString(delta?.text) ?? "";
+  }
+  return accumulated;
+}
+
+/** Reconstruct the final answer from a streamed (SSE) response body. */
+function finalOutputFromSse(call: RawCall): string {
+  const events = parseSseEvents(call.responseText);
+  if (events.length === 0) return "";
+  switch (call.dialect) {
+    case "openai-responses":
+      return finalOutputFromResponsesSse(events);
+    case "openai-chat":
+      return finalOutputFromChatSse(events);
+    case "anthropic-messages":
+      return finalOutputFromAnthropicSse(events);
+    default: {
+      const exhaustive: never = call.dialect;
+      throw new Error(`unsupported gateway dialect: ${String(exhaustive)}`);
+    }
+  }
+}
+
 /** Pull the final assistant text out of a model response body (per dialect). */
 function finalOutputForCall(call: RawCall): string {
-  const parsed = ((): unknown => {
-    try {
-      return JSON.parse(call.responseText);
-    } catch {
-      return undefined;
-    }
-  })();
-  const body = asObject(parsed);
-  if (body === undefined) return "";
+  const body = asObject(tryParseJson(call.responseText));
+  if (body === undefined) {
+    // Not a single JSON object: a streamed response is an SSE event stream.
+    return finalOutputFromSse(call);
+  }
   if (call.dialect === "anthropic-messages") return contentText(body.content);
   if (call.dialect === "openai-responses") {
     const output = asArray(body.output);
