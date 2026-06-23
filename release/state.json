@@ -1,31 +1,31 @@
 {
   "$comment": "Last-applied release state, written by `release apply` and reconciled by `release refresh`. Treated as a cache: refresh always trusts registries + git tags over this file.",
   "lastApply": {
-    "at": "2026-06-22T07:45:26.738Z",
-    "plan": "/Users/alen/Documents/Development/handoffkit/release/.plans/2026-06-22T07-45-04-571Z.plan.json",
+    "at": "2026-06-23T00:08:30.412Z",
+    "plan": "/Users/alen/Documents/Development/handoffkit/release/.plans/2026-06-23T00-08-09-793Z.plan.json",
     "results": {
-      "handoffkit": {
+      "fusionkit-pypi": {
         "status": "released",
-        "version": "0.5.4",
-        "tag": "handoffkit-v0.5.4",
-        "sha": "ff7f06060f34c75f197533e1cd89c74095990363",
-        "releaseUrl": "https://github.com/velum-labs/handoffkit/releases/tag/handoffkit-v0.5.4",
+        "version": "0.6.0",
+        "tag": "fusionkit-v0.6.0",
+        "sha": "4051fb2af9f3015e60fca2f1a641f210beba7867",
+        "releaseUrl": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.6.0",
         "run": {
-          "id": 27937449541,
-          "url": "https://github.com/velum-labs/handoffkit/actions/runs/27937449541",
+          "id": 27992770925,
+          "url": "https://github.com/velum-labs/fusionkit/actions/runs/27992770925",
           "status": "queued",
           "conclusion": ""
         },
         "urls": {
-          "slug": "velum-labs/handoffkit",
-          "repo": "https://github.com/velum-labs/handoffkit",
-          "actions": "https://github.com/velum-labs/handoffkit/actions/workflows/release-packages.yml",
-          "release": "https://github.com/velum-labs/handoffkit/releases/tag/handoffkit-v0.5.4",
+          "slug": "velum-labs/fusionkit",
+          "repo": "https://github.com/velum-labs/fusionkit",
+          "actions": "https://github.com/velum-labs/fusionkit/actions/workflows/pypi-release.yml",
+          "release": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.6.0",
           "registries": [
             {
-              "kind": "npm",
-              "package": "@fusionkit/cli",
-              "url": "https://www.npmjs.com/package/@fusionkit/cli"
+              "kind": "pypi",
+              "package": "fusionkit",
+              "url": "https://pypi.org/project/fusionkit/"
             }
           ]
         }
@@ -34,36 +34,36 @@
   },
   "units": {
     "fusionkit-protocol": {
-      "declared": "0.3.0",
-      "published": "0.3.0",
-      "latestTag": "model-fusion-protocol-v0.3.0",
-      "refreshedAt": "2026-06-22T07:45:01.941Z"
+      "declared": "0.4.0",
+      "published": "0.4.0",
+      "latestTag": "model-fusion-protocol-v0.4.0",
+      "refreshedAt": "2026-06-23T00:08:06.621Z"
     },
     "cursorkit": {
       "declared": "0.1.4",
       "published": "0.1.4",
       "latestTag": "cursorkit-v0.1.4",
-      "refreshedAt": "2026-06-22T07:45:02.642Z"
+      "refreshedAt": "2026-06-23T00:08:07.351Z"
     },
     "fusionkit-pypi": {
-      "declared": "0.5.3",
-      "published": "0.5.3",
-      "latestTag": "fusionkit-v0.5.3",
-      "refreshedAt": "2026-06-22T07:45:02.843Z"
+      "declared": "0.6.0",
+      "published": "0.6.0",
+      "latestTag": "fusionkit-v0.6.0",
+      "runUrl": "https://github.com/velum-labs/fusionkit/actions/runs/27992770925",
+      "releaseUrl": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.6.0",
+      "refreshedAt": "2026-06-23T00:08:30.411Z"
     },
     "handoffkit": {
       "declared": "0.5.4",
       "published": "0.5.4",
       "latestTag": "handoffkit-v0.5.4",
-      "runUrl": "https://github.com/velum-labs/handoffkit/actions/runs/27937449541",
-      "releaseUrl": "https://github.com/velum-labs/handoffkit/releases/tag/handoffkit-v0.5.4",
-      "refreshedAt": "2026-06-22T07:45:26.738Z"
+      "refreshedAt": "2026-06-23T00:08:08.156Z"
     },
     "mlx-lm": {
       "declared": "0.31.3+structured.3",
       "published": null,
       "latestTag": null,
-      "refreshedAt": "2026-06-22T07:45:03.189Z"
+      "refreshedAt": "2026-06-23T00:08:08.182Z"
     }
   }
 }

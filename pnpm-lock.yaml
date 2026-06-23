@@ -15,8 +15,8 @@ importers:
         specifier: 22.19.20
         version: 22.19.20
       '@velum-labs/model-fusion-protocol':
-        specifier: 0.3.0
-        version: 0.3.0
+        specifier: 0.4.0
+        version: 0.4.0
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -876,8 +876,8 @@ packages:
     engines: {node: '>=22.0.0'}
     hasBin: true
 
-  '@velum-labs/model-fusion-protocol@0.3.0':
-    resolution: {integrity: sha512-CqGacce/AJMiOBJSOWjFZB+7ID9pwp047938h9T0lxhPVxcDJN6Lj9ZBHKkMjY0h12d0WjtgiaQxL4bqTab/sQ==}
+  '@velum-labs/model-fusion-protocol@0.4.0':
+    resolution: {integrity: sha512-xNfdcNKZEbETjmmDtOSwElJSYuaXwxczr2xyJSGuvanGCAtvZ0wCCC84pZXBNIfTG5A9iWb0hJukuiK7Am8jeQ==}
 
   '@vercel/oidc@3.2.0':
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
@@ -1652,7 +1652,7 @@ snapshots:
       selfsigned: 5.5.0
       undici: 8.5.0
 
-  '@velum-labs/model-fusion-protocol@0.3.0': {}
+  '@velum-labs/model-fusion-protocol@0.4.0': {}
 
   '@vercel/oidc@3.2.0': {}
 
