@@ -1,31 +1,31 @@
 {
   "$comment": "Last-applied release state, written by `release apply` and reconciled by `release refresh`. Treated as a cache: refresh always trusts registries + git tags over this file.",
   "lastApply": {
-    "at": "2026-06-23T02:09:54.130Z",
-    "plan": "/Users/alen/Documents/Development/handoffkit/release/.plans/2026-06-23T02-09-45-573Z.plan.json",
+    "at": "2026-06-23T02:19:05.748Z",
+    "plan": "/Users/alen/Documents/Development/handoffkit/release/.plans/2026-06-23T02-18-56-490Z.plan.json",
     "results": {
-      "fusionkit-pypi": {
+      "handoffkit": {
         "status": "released",
         "version": "0.7.0",
-        "tag": "fusionkit-v0.7.0",
-        "sha": "7e547d522541790a403c2bed106117074879e5a0",
-        "releaseUrl": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.7.0",
+        "tag": "handoffkit-v0.7.0",
+        "sha": "bd2895e10bdc16b7ab22e68208997dac83fc5238",
+        "releaseUrl": "https://github.com/velum-labs/handoffkit/releases/tag/handoffkit-v0.7.0",
         "run": {
-          "id": 27997337797,
-          "url": "https://github.com/velum-labs/fusionkit/actions/runs/27997337797",
+          "id": 27997665749,
+          "url": "https://github.com/velum-labs/handoffkit/actions/runs/27997665749",
           "status": "queued",
           "conclusion": ""
         },
         "urls": {
-          "slug": "velum-labs/fusionkit",
-          "repo": "https://github.com/velum-labs/fusionkit",
-          "actions": "https://github.com/velum-labs/fusionkit/actions/workflows/pypi-release.yml",
-          "release": "https://github.com/velum-labs/fusionkit/releases/tag/fusionkit-v0.7.0",
+          "slug": "velum-labs/handoffkit",
+          "repo": "https://github.com/velum-labs/handoffkit",
+          "actions": "https://github.com/velum-labs/handoffkit/actions/workflows/release-packages.yml",
+          "release": "https://github.com/velum-labs/handoffkit/releases/tag/handoffkit-v0.7.0",
           "registries": [
             {
-              "kind": "pypi",
-              "package": "fusionkit",
-              "url": "https://pypi.org/project/fusionkit/"
+              "kind": "npm",
+              "package": "@fusionkit/cli",
+              "url": "https://www.npmjs.com/package/@fusionkit/cli"
             }
           ]
         }
@@ -37,31 +37,31 @@
       "declared": "0.5.0",
       "published": "0.5.0",
       "latestTag": "model-fusion-protocol-v0.5.0",
-      "refreshedAt": "2026-06-23T02:18:51.897Z"
+      "refreshedAt": "2026-06-23T02:22:31.609Z"
     },
     "cursorkit": {
       "declared": "0.1.4",
       "published": "0.1.4",
       "latestTag": "cursorkit-v0.1.4",
-      "refreshedAt": "2026-06-23T02:18:52.452Z"
+      "refreshedAt": "2026-06-23T02:22:32.063Z"
     },
     "fusionkit-pypi": {
       "declared": "0.7.0",
       "published": "0.7.0",
-      "latestTag": "fusionkit-v0.6.0",
-      "refreshedAt": "2026-06-23T02:18:52.636Z"
+      "latestTag": "fusionkit-v0.7.0",
+      "refreshedAt": "2026-06-23T02:22:32.168Z"
     },
     "handoffkit": {
-      "declared": "0.6.0",
-      "published": "0.6.0",
-      "latestTag": "handoffkit-v0.6.0",
-      "refreshedAt": "2026-06-23T02:18:53.266Z"
+      "declared": "0.7.0",
+      "published": "0.7.0",
+      "latestTag": "handoffkit-v0.7.0",
+      "refreshedAt": "2026-06-23T02:22:32.561Z"
     },
     "mlx-lm": {
       "declared": "0.31.3+structured.3",
       "published": null,
       "latestTag": null,
-      "refreshedAt": "2026-06-23T02:18:53.291Z"
+      "refreshedAt": "2026-06-23T02:22:32.590Z"
     }
   }
 }
