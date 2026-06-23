@@ -99,6 +99,7 @@ async def test_fuse_synthesis_metrics_carry_contributions_and_rejections() -> No
 
     assert result.response.content == "combined answer"
     assert result.trajectory is not None
+    assert result.trajectory.synthesis is not None
     metrics = result.trajectory.synthesis.metrics
     assert metrics["trajectory_contributions"][0]["trajectory_id"] == "candidate_1"
     assert metrics["trajectory_rejections"][0]["trajectory_id"] == "candidate_2"
@@ -127,6 +128,7 @@ async def test_fuse_marks_invalid_structured_json() -> None:
     )
 
     assert result.trajectory is not None
+    assert result.trajectory.synthesis is not None
     metrics = result.trajectory.synthesis.metrics
     assert metrics["judge_structured_parse_status"] == "failed"
     assert metrics["judge_structured_parse_error"] == "invalid_json"
