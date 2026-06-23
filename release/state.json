@@ -37,31 +37,31 @@
       "declared": "0.5.0",
       "published": "0.5.0",
       "latestTag": "model-fusion-protocol-v0.5.0",
-      "refreshedAt": "2026-06-23T02:23:55.481Z"
+      "refreshedAt": "2026-06-23T02:58:56.533Z"
     },
     "cursorkit": {
       "declared": "0.1.4",
       "published": "0.1.4",
       "latestTag": "cursorkit-v0.1.4",
-      "refreshedAt": "2026-06-23T02:23:56.069Z"
+      "refreshedAt": "2026-06-23T02:58:57.088Z"
     },
     "fusionkit-pypi": {
       "declared": "0.7.1",
-      "published": "0.7.0",
-      "latestTag": "fusionkit-v0.7.0",
-      "refreshedAt": "2026-06-23T02:23:56.513Z"
+      "published": "0.7.1",
+      "latestTag": "fusionkit-v0.7.1",
+      "refreshedAt": "2026-06-23T02:58:57.300Z"
     },
     "handoffkit": {
       "declared": "0.7.0",
       "published": "0.7.0",
       "latestTag": "handoffkit-v0.7.0",
-      "refreshedAt": "2026-06-23T02:23:56.983Z"
+      "refreshedAt": "2026-06-23T02:58:57.784Z"
     },
     "mlx-lm": {
       "declared": "0.31.3+structured.3",
       "published": null,
       "latestTag": null,
-      "refreshedAt": "2026-06-23T02:23:57.012Z"
+      "refreshedAt": "2026-06-23T02:58:57.814Z"
     }
   }
 }

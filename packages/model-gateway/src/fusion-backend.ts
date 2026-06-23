@@ -14,14 +14,14 @@
  *      package keeps no dependency on `@fusionkit/ensemble`) to produce the
  *      candidate trajectories,
  *   3. forwards the live conversation + the harness tools + the candidate
- *      trajectories to FusionKit's `trajectory:step`, whose response (an OpenAI
+ *      trajectories to FusionKit's `trajectories:fuse`, whose response (an OpenAI
  *      chat completion, optionally streamed, that may carry `tool_calls`) is
  *      returned verbatim for the server to translate into the caller's dialect.
  *
  * There is no apply/verify/repair here: iteration is the user's harness's job.
  *
  * Failures are surfaced, never swallowed: a panel run that throws or yields no
- * usable candidate, or a `trajectory:step` that errors, produces an explicit
+ * usable candidate, or a `trajectories:fuse` that errors, produces an explicit
  * error (a non-2xx response when nothing has streamed yet, or a terminal error
  * event with `finish_reason: "error"` once the SSE has started) and the failed
  * session is evicted so the next turn retries instead of replaying the failure.
@@ -60,7 +60,7 @@ export type PassthroughModel = {
   endpointUrl: string;
 };
 
-/** A candidate trajectory in the wire shape FusionKit's `trajectory:step` accepts. */
+/** A candidate trajectory in the wire shape FusionKit's `trajectories:fuse` accepts. */
 export type WireTrajectory = {
   trajectory_id: string;
   model_id: string;
@@ -102,7 +102,7 @@ export type PanelRunInput = {
 export type PanelRunner = (input: PanelRunInput) => Promise<WireTrajectory[]>;
 
 export type FusionBackendOptions = {
-  /** FusionKit `POST /v1/fusion/trajectory:step` URL. */
+  /** FusionKit `POST /v1/fusion/trajectories:fuse` URL. */
   stepUrl: string;
   /** Produces candidate trajectories for a new session (injected; uses ensemble). */
   runPanels: PanelRunner;
@@ -114,7 +114,7 @@ export type FusionBackendOptions = {
   sessionTtlMs?: number;
   /** Wall-clock budget for the panel phase before the turn fails. */
   panelTimeoutMs?: number;
-  /** Wall-clock budget for a single `trajectory:step` call. */
+  /** Wall-clock budget for a single `trajectories:fuse` call. */
   stepTimeoutMs?: number;
   /** Mint a trace id (injectable for tests). */
   mintTraceId?: () => string;
@@ -619,7 +619,7 @@ export class FusionBackend implements Backend {
           if (!upstream.ok || upstream.body === null) {
             const detail = upstream.body === null ? "no stream" : (await upstream.text()).slice(0, 800);
             emitJudgeFinal({ httpStatus: upstream.status, error: detail });
-            fail(`trajectory:step ${upstream.status}: ${detail}`);
+            fail(`trajectories:fuse ${upstream.status}: ${detail}`);
             return;
           }
           const reader = upstream.body.getReader();

@@ -245,7 +245,7 @@ function normalizeWireTrajectories(raw: Record<string, unknown>[]): WireTrajecto
 /**
  * The judge-streamed-trajectory front door: the panel runs once per session to
  * produce candidate trajectories, then the judge acts as a streaming tool-calling
- * agent (FusionKit `trajectory:step`) whose trajectory the user's harness executes.
+ * agent (FusionKit `trajectories:fuse`) whose trajectory the user's harness executes.
  * Built on the dialect-aware `startGateway` + a {@link FusionBackend}; iteration is
  * the harness's job (no verify/repair here).
  */
@@ -337,8 +337,8 @@ export async function startFusionStepGateway(input: {
     defaultModel,
     passthrough
     // judge_model is intentionally NOT forwarded here: `config.judgeModel` is the
-    // provider model name, but the router (and trajectory:step) route by endpoint
-    // id. The Python step path already resolves the configured judge endpoint via
+    // provider model name, but the router (and trajectories:fuse) route by endpoint
+    // id. The Python fuse path already resolves the configured judge endpoint via
     // config.resolved_judge_model, so omitting this keeps routing correct while
     // the judge gap-analysis still runs on the configured judge.
   });
