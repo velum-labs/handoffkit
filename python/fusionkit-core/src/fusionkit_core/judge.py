@@ -228,7 +228,7 @@ def _consolidated_trajectory(
         id=_synthesis_id(),
         model_id="fusionkit/synthesizer",
         content=final_output,
-        steps=[],
+        items=[],
         status="succeeded",
         synthesis=synthesis,
     )
@@ -245,7 +245,7 @@ def _synthesis_metrics(
             "trajectory_id": trajectory.id,
             "model_id": trajectory.model_id,
             "status": trajectory.status,
-            "step_count": len(trajectory.steps),
+            "item_count": len(trajectory.items),
             "reason": "included as judge synthesis evidence",
         }
         for trajectory in trajectories

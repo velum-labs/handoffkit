@@ -16,7 +16,6 @@ from fusionkit_core.contracts import (
     HarnessCandidateRecordV1,
     HarnessRunRequestV1,
     HarnessRunResultV1,
-    JudgeSynthesisRecordV1,
     ModelCallRecordV1,
     ModelEndpointV1,
     SchemaName,
@@ -42,7 +41,6 @@ FUSIONKIT_CONTRACT_SCHEMAS: dict[SchemaName, type] = {
     "harness-run-result.v1": HarnessRunResultV1,
     "harness-candidate-record.v1": HarnessCandidateRecordV1,
     "trajectory.v1": TrajectoryV1,
-    "judge-synthesis-record.v1": JudgeSynthesisRecordV1,
     "benchmark-task-record.v1": BenchmarkTaskRecordV1,
     "artifact-ref.v1": ArtifactRefV1,
     "tool-call-plan.v1": ToolCallPlanV1,
@@ -163,9 +161,6 @@ def test_downstream_readiness_fields_are_typed() -> None:
     tool_plan = ToolCallPlanV1.model_validate(
         _load_fixture("tool-call-plan.v1", "realistic.json")
     )
-    synthesis_record = JudgeSynthesisRecordV1.model_validate(
-        _load_fixture("judge-synthesis-record.v1", "realistic.json")
-    )
     harness_result = HarnessRunResultV1.model_validate(
         _load_fixture("harness-run-result.v1", "realistic.json")
     )
@@ -185,7 +180,6 @@ def test_downstream_readiness_fields_are_typed() -> None:
     assert fusion_record.run_id == "fusion_run_panel_001"
     assert fusion_record.artifacts is not None
     assert tool_plan.side_effects == "read_only"
-    assert synthesis_record.synthesis_id == "synthesis_panel_001"
     assert harness_result.harness_kind == "cursor"
     assert harness_candidate.model_call_id == "call_panel_fast_001"
     assert receipt.run_id == "harness_result_cursor_001"

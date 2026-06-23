@@ -26,7 +26,7 @@ from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import SamplingConfig
 from fusionkit_core.contracts import (
     ContractUsage,
-    TrajectoryStep,
+    TrajectoryItem,
     TrajectoryV1,
     contract_metadata,
 )
@@ -57,7 +57,7 @@ def trajectory_from_response(
         id=f"{model_id}:{ordinal}",
         model_id=model_id,
         content=response.content,
-        steps=[],
+        items=[],
         status="succeeded",
         metadata=metadata,
     )
@@ -86,7 +86,7 @@ def failed_trajectory(
         id=f"{model_id}:{ordinal}",
         model_id=model_id,
         content="",
-        steps=[],
+        items=[],
         status="failed",
         metadata=metadata,
     )
@@ -122,7 +122,7 @@ def trajectory_to_contract(
             "trajectory_id": trajectory_id or trajectory.id,
             "model_id": trajectory.model_id,
             "status": trajectory.status,
-            "steps": [step.model_dump() for step in trajectory.steps],
+            "items": [item.model_dump() for item in trajectory.items],
             "final_output": trajectory.content,
             "synthesis": (
                 trajectory.synthesis.model_dump() if trajectory.synthesis is not None else None
@@ -139,7 +139,7 @@ def trajectory_from_contract(record: TrajectoryV1) -> Trajectory:
         id=record.trajectory_id,
         model_id=record.model_id,
         content=record.final_output,
-        steps=list(record.steps),
+        items=list(record.items),
         status=record.status,
         synthesis=(
             TrajectorySynthesis.model_validate(record.synthesis.model_dump(exclude_none=True))
@@ -322,8 +322,8 @@ class AgentTrajectoryProducer:
     ) -> Trajectory:
         client = self._client(model_id)
         conversation = list(messages)
-        steps: list[TrajectoryStep] = []
-        step_index = 0
+        items: list[TrajectoryItem] = []
+        item_index = 0
         final = ""
         status = "succeeded"
         for _ in range(self._max_tool_rounds + 1):
@@ -333,10 +333,10 @@ class AgentTrajectoryProducer:
                 tools=self._tools,
             )
             if response.content.strip():
-                steps.append(
-                    TrajectoryStep(index=step_index, type="reasoning", text=response.content)
+                items.append(
+                    TrajectoryItem(index=item_index, type="reasoning", text=response.content)
                 )
-                step_index += 1
+                item_index += 1
             if not response.tool_calls:
                 final = response.content
                 break
@@ -348,23 +348,28 @@ class AgentTrajectoryProducer:
                 )
             )
             for call in response.tool_calls:
-                steps.append(
-                    TrajectoryStep(
-                        index=step_index,
-                        type="tool_call",
-                        tool_name=call.name,
-                        tool_call_id=call.id,
-                        tool_input=call.arguments,
+                items.append(
+                    TrajectoryItem(
+                        index=item_index,
+                        type="function_call",
+                        name=call.name,
+                        call_id=call.id,
+                        arguments=call.arguments,
                     )
                 )
-                step_index += 1
+                item_index += 1
                 output = await self._executor.execute(
                     call.name, call.arguments, tool_call_id=call.id
                 )
-                steps.append(
-                    TrajectoryStep(index=step_index, type="observation", text=output)
+                items.append(
+                    TrajectoryItem(
+                        index=item_index,
+                        type="function_call_output",
+                        call_id=call.id,
+                        text=output,
+                    )
                 )
-                step_index += 1
+                item_index += 1
                 conversation.append(
                     ChatMessage(role="tool", content=output, tool_call_id=call.id)
                 )
@@ -374,7 +379,7 @@ class AgentTrajectoryProducer:
             id=f"{model_id}:{ordinal}",
             model_id=model_id,
             content=final,
-            steps=steps,
+            items=items,
             status=status,
             metadata={},
         )

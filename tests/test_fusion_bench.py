@@ -177,8 +177,6 @@ async def test_fusion_bench_runs_harness_task_with_configured_executor(tmp_path)
     assert row.harness_run_result["schema"] == "harness-run-result.v1"
     assert row.harness_candidate_records[0]["schema"] == "harness-candidate-record.v1"
     assert row.model_call_records[0]["schema"] == "model-call-record.v1"
-    assert row.judge_synthesis_record is not None
-    assert row.judge_synthesis_record["schema"] == "judge-synthesis-record.v1"
     assert row.tool_records[0]["schema"] == "tool-execution-record.v1"
     assert row.receipt_records[0]["schema"] == "ensemble-receipt.v1"
     assert row.artifact_records
@@ -253,7 +251,6 @@ async def test_fusion_bench_invokes_real_handoffkit_handoff_command(tmp_path) ->
     assert row.harness_run_result is not None
     assert row.harness_run_result["schema"] == "harness-run-result.v1"
     assert row.harness_candidate_records
-    assert row.judge_synthesis_record is not None
     assert row.model_ids
 
 
@@ -845,7 +842,6 @@ def _handoff_records(task) -> list[dict[str, object]]:
     result_metadata = contract_metadata("harness-run-result.v1")
     candidate_metadata = contract_metadata("harness-candidate-record.v1")
     call_metadata = contract_metadata("model-call-record.v1")
-    judge_metadata = contract_metadata("judge-synthesis-record.v1")
     tool_metadata = contract_metadata("tool-execution-record.v1")
     receipt_metadata = contract_metadata("ensemble-receipt.v1")
     artifact = {
@@ -898,17 +894,6 @@ def _handoff_records(task) -> list[dict[str, object]]:
             "latency_ms": 250.0,
             "output_text": "harness final output",
             "metadata": {"cost_estimate": 0.01},
-        },
-        {
-            **judge_metadata,
-            "synthesis_id": f"synthesis_{task.record.task_id}",
-            "input_trajectory_ids": [f"harness_candidate_{task.record.task_id}"],
-            "status": "succeeded",
-            "decision": "select_trajectory",
-            "final_output": "harness final output",
-            "judge_model_call_id": f"call_{task.record.task_id}",
-            "selected_trajectory_id": f"harness_candidate_{task.record.task_id}",
-            "metrics": {"judge_structured_parse_status": "parsed"},
         },
         {
             **tool_metadata,

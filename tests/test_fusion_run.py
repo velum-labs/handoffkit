@@ -53,7 +53,7 @@ async def test_tracked_fusion_run_completes_and_is_inspectable(tmp_path) -> None
     assert len(result.trajectories) == 1
     assert result.model_call_ids
     assert result.judge_synthesis_record is not None
-    assert result.judge_synthesis_record["schema"] == "judge-synthesis-record.v1"
+    assert result.judge_synthesis_record["decision"] in {"synthesize", "select_trajectory"}
     assert result.final_output_artifact is not None
     assert Path(result.final_output_artifact.uri or "").exists()
 

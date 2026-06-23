@@ -70,13 +70,13 @@ class FusionRequest(BaseModel):
     fusion: FusionOptions = Field(default_factory=FusionOptions)
 
 
-class TrajectoryStepInput(BaseModel):
+class TrajectoryItemInput(BaseModel):
     index: int
     type: str
     text: str | None = None
-    tool_name: str | None = None
-    tool_call_id: str | None = None
-    tool_input: str | None = None
+    call_id: str | None = None
+    name: str | None = None
+    arguments: str | None = None
     is_error: bool | None = None
     output_hash: str | None = None
 
@@ -85,7 +85,7 @@ class TrajectoryInput(BaseModel):
     trajectory_id: str
     model_id: str
     status: str
-    steps: list[TrajectoryStepInput] = Field(default_factory=list)
+    items: list[TrajectoryItemInput] = Field(default_factory=list)
     final_output: str
     candidate_id: str | None = None
     model: str | None = None

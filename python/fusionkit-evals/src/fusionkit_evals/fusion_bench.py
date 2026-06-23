@@ -21,7 +21,6 @@ from fusionkit_core.contracts import (
     ContractError,
     FusionRecordV1,
     FusionRunRequestV1,
-    JudgeSynthesisRecordV1,
     ModelCallRecordV1,
     contract_metadata,
     contract_model_for_schema,
@@ -440,11 +439,10 @@ def join_run_records(
     event_list = list(events)
     fusion_record = _first_contract_payload(event_list, "fusion_record", FusionRecordV1)
     model_call_records = _contract_payloads(event_list, "model_call_record", ModelCallRecordV1)
-    judge_synthesis_record = _first_contract_payload(
-        event_list,
-        "judge_synthesis_record",
-        JudgeSynthesisRecordV1,
-    )
+    # The fusion result is folded onto the fused trajectory's synthesis and
+    # surfaced as a plain `judge_synthesis_recorded` event payload (there is no
+    # standalone judge-synthesis-record.v1 contract anymore).
+    judge_synthesis_record = _first_raw_payload(event_list, "judge_synthesis_record")
     artifact_records = [
         payload
         for event in event_list
@@ -735,6 +733,18 @@ def _first_contract_payload(
 ) -> dict[str, Any] | None:
     payloads = _contract_payloads(events, key, model_class)
     return payloads[0] if payloads else None
+
+
+def _first_raw_payload(events: list[Any], key: str) -> dict[str, Any] | None:
+    """Return the first event payload under ``key`` without contract validation.
+
+    Used for run-loop metadata (e.g. the fused trajectory's synthesis surfaced as
+    a ``judge_synthesis_recorded`` event) that is not a frozen contract record."""
+    for event in events:
+        payload = event.payload.get(key)
+        if isinstance(payload, dict):
+            return payload
+    return None
 
 
 def _failure_from_inspection(

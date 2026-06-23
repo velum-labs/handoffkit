@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 OLD_BUNDLE_HASH = "sha256:955da2d6891c88d4c40746a8206439e2dae2efc1e7ffefca015e84d4ce265671"
-NEW_BUNDLE_HASH = "sha256:80e6bba63b30e8904d9c89f547c94797eb9340be80de67a68643c01f8de86e6d"
+NEW_BUNDLE_HASH = "sha256:bb04c698793875568976fd6e5c7c9f76dd10f306c2ff2156be46b63afc261867"
 
 _KEY_RENAMES = {
     "candidate_id": "trajectory_id",

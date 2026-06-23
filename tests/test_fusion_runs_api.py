@@ -35,7 +35,7 @@ def test_native_fusion_run_create_state_inspect_and_events(tmp_path) -> None:
     assert inspection["trajectories"]
     assert inspection["model_call_ids"]
     assert inspection["final_output"] == "fused final answer"
-    assert inspection["judge_synthesis_record"]["schema"] == "judge-synthesis-record.v1"
+    assert inspection["judge_synthesis_record"]["decision"] in {"synthesize", "select_trajectory"}
     assert inspection["final_output_artifact"]["hash"].startswith("sha256:")
 
     events_response = client.get(f"/v1/fusion/runs/{run_id}/events")

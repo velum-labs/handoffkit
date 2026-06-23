@@ -13,7 +13,7 @@
         "trajectory_id",
         "model_id",
         "status",
-        "steps",
+        "items",
         "final_output"
       ],
       "properties": {
@@ -40,7 +40,8 @@
         "status": {
           "$ref": "common.schema.json#/$defs/status"
         },
-        "steps": {
+        "items": {
+          "description": "The trajectory's reasoning/tool/output items, in OpenAI Responses shape: reasoning and message carry text; function_call carries name + arguments + call_id; function_call_output carries the observed output text + call_id, correlated by call_id.",
           "type": "array",
           "items": {
             "type": "object",
@@ -56,22 +57,22 @@
               "type": {
                 "type": "string",
                 "enum": [
+                  "message",
                   "reasoning",
-                  "tool_call",
-                  "observation",
-                  "output"
+                  "function_call",
+                  "function_call_output"
                 ]
               },
               "text": {
                 "type": "string"
               },
-              "tool_name": {
+              "call_id": {
                 "type": "string"
               },
-              "tool_call_id": {
+              "name": {
                 "type": "string"
               },
-              "tool_input": {
+              "arguments": {
                 "type": "string"
               },
               "is_error": {

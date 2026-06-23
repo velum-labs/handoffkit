@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import SamplingConfig
-from fusionkit_core.contracts import TrajectoryStep
+from fusionkit_core.contracts import TrajectoryItem
 from fusionkit_core.judge import JudgeSynthesizer
 from fusionkit_core.types import ChatMessage, Trajectory
 
@@ -14,15 +14,15 @@ def _trajectory(trajectory_id: str, model_id: str, final_output: str) -> Traject
         model_id=model_id,
         content=final_output,
         status="succeeded",
-        steps=[
-            TrajectoryStep(
+        items=[
+            TrajectoryItem(
                 index=0,
-                type="tool_call",
-                tool_name="read_file",
-                tool_input="calculator.js",
+                type="function_call",
+                name="read_file",
+                arguments="calculator.js",
             ),
-            TrajectoryStep(index=1, type="observation", text="add subtracts"),
-            TrajectoryStep(index=2, type="output", text=final_output),
+            TrajectoryItem(index=1, type="function_call_output", text="add subtracts"),
+            TrajectoryItem(index=2, type="message", text=final_output),
         ],
     )
 

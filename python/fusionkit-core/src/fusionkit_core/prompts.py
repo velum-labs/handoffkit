@@ -43,28 +43,28 @@ def _truncate(text: str, limit: int = 1200) -> str:
     return text if len(text) <= limit else text[:limit] + "...[truncated]"
 
 
-def _format_step(step: object) -> str:
-    step_type = getattr(step, "type", "")
-    text = _truncate(getattr(step, "text", "") or "", 600)
-    if step_type == "tool_call":
-        tool = getattr(step, "tool_name", "") or "tool"
-        tool_input = _truncate(getattr(step, "tool_input", "") or "", 300)
-        return f"  [tool_call] {tool} {tool_input}".rstrip()
-    if step_type == "observation":
-        return f"  [observation] {text}".rstrip()
-    if step_type == "reasoning":
+def _format_item(item: object) -> str:
+    item_type = getattr(item, "type", "")
+    text = _truncate(getattr(item, "text", "") or "", 600)
+    if item_type == "function_call":
+        tool = getattr(item, "name", "") or "tool"
+        arguments = _truncate(getattr(item, "arguments", "") or "", 300)
+        return f"  [function_call] {tool} {arguments}".rstrip()
+    if item_type == "function_call_output":
+        return f"  [function_call_output] {text}".rstrip()
+    if item_type == "reasoning":
         return f"  [reasoning] {text}".rstrip()
-    return f"  [output] {text}".rstrip()
+    return f"  [message] {text}".rstrip()
 
 
 def format_trajectories(trajectories: Sequence[Trajectory]) -> str:
     sections = []
     for trajectory in trajectories:
-        steps = "\n".join(_format_step(step) for step in trajectory.steps)
+        items = "\n".join(_format_item(item) for item in trajectory.items)
         sections.append(
             f"Trajectory {trajectory.id} from model {trajectory.model_id} "
             f"(status={trajectory.status}):\n"
-            f"{steps}\n"
+            f"{items}\n"
             f"  final_output:\n{_truncate(trajectory.content)}"
         )
     return "\n\n---\n\n".join(sections)

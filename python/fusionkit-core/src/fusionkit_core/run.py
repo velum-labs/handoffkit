@@ -18,7 +18,6 @@ from fusionkit_core.contracts import (
     FusionRecordV1,
     FusionRunRequestV1,
     FusionRunState,
-    JudgeSynthesisRecordV1,
     ModelCallRecordV1,
     SideEffects,
     ToolCallPlanV1,
@@ -248,27 +247,26 @@ class FusionRunManager:
             )
             self._append_artifact_event(run_id, summary.trace_id, "synthesizing", final_artifact)
             artifacts = [*trajectory_artifacts, final_artifact]
-            synthesis_record = None
+            synthesis_record: dict[str, Any] | None = None
             if fused_synthesis is not None and fused_synthesis.input_trajectory_ids:
                 # The fusion result lives on the fused trajectory's `synthesis`
-                # metadata; the runs API surfaces it as a JudgeSynthesisRecord
-                # event for the inspect view and the benchmark harness.
-                synthesis_record = JudgeSynthesisRecordV1.model_validate(
-                    {
-                        **contract_metadata("judge-synthesis-record.v1"),
-                        "synthesis_id": make_id("synthesis"),
-                        "input_trajectory_ids": fused_synthesis.input_trajectory_ids,
-                        "status": "succeeded",
-                        "decision": fused_synthesis.decision,
-                        "selected_trajectory_id": fused_synthesis.selected_trajectory_id,
-                        "rationale": fused_synthesis.rationale,
-                        "final_output": answer,
-                        "metrics": {
-                            **(fused_synthesis.metrics or {}),
-                            "final_output_artifact_id": final_artifact.artifact_id,
-                        },
-                    }
-                )
+                # metadata (there is no standalone judge-synthesis-record.v1
+                # contract anymore); the runs API surfaces it as a plain
+                # `judge_synthesis_recorded` event for the inspect view and the
+                # benchmark harness.
+                synthesis_record = {
+                    "synthesis_id": make_id("synthesis"),
+                    "input_trajectory_ids": fused_synthesis.input_trajectory_ids,
+                    "status": "succeeded",
+                    "decision": fused_synthesis.decision,
+                    "selected_trajectory_id": fused_synthesis.selected_trajectory_id,
+                    "rationale": fused_synthesis.rationale,
+                    "final_output": answer,
+                    "metrics": {
+                        **(fused_synthesis.metrics or {}),
+                        "final_output_artifact_id": final_artifact.artifact_id,
+                    },
+                }
                 self.store.append_event(
                     FusionRunEvent(
                         event_seq=1,
@@ -277,9 +275,7 @@ class FusionRunManager:
                         state="synthesizing",
                         status=status_for_run_state("synthesizing"),
                         event_type="judge_synthesis_recorded",
-                        payload={
-                            "judge_synthesis_record": synthesis_record.model_dump(mode="json")
-                        },
+                        payload={"judge_synthesis_record": synthesis_record},
                     )
                 )
 
@@ -296,7 +292,7 @@ class FusionRunManager:
                     "model_call_ids": model_call_ids,
                     "selected_trajectory_id": selected_trajectory_id,
                     "synthesis_record_id": (
-                        synthesis_record.synthesis_id if synthesis_record is not None else None
+                        synthesis_record["synthesis_id"] if synthesis_record is not None else None
                     ),
                     "final_output": answer,
                     "started_at": summary.event_cursor and events[0].created_at,

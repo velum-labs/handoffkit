@@ -1,7 +1,7 @@
 {
   "schema": "trajectory.v1",
   "schema_version": "v1",
-  "schema_bundle_hash": "sha256:80e6bba63b30e8904d9c89f547c94797eb9340be80de67a68643c01f8de86e6d",
+  "schema_bundle_hash": "sha256:bb04c698793875568976fd6e5c7c9f76dd10f306c2ff2156be46b63afc261867",
   "producer": "handoffkit-agent-harness",
   "producer_version": "0.1.0",
   "producer_git_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -12,7 +12,7 @@
   "model": "gpt-5.5",
   "harness_kind": "generic",
   "status": "succeeded",
-  "steps": [
+  "items": [
     {
       "index": 0,
       "type": "reasoning",
@@ -20,42 +20,42 @@
     },
     {
       "index": 1,
-      "type": "tool_call",
-      "tool_name": "read_file",
-      "tool_call_id": "call_1",
-      "tool_input": "{\"path\":\"calculator.js\"}"
+      "type": "function_call",
+      "name": "read_file",
+      "call_id": "call_1",
+      "arguments": "{\"path\":\"calculator.js\"}"
     },
     {
       "index": 2,
-      "type": "observation",
-      "tool_call_id": "call_1",
+      "type": "function_call_output",
+      "call_id": "call_1",
       "text": "exports.add = (left, right) => left - right;",
       "output_hash": "sha256:042b447ce7d60c68077c6901b3dc595549ace012066f8ba0b9e8539dc8584793"
     },
     {
       "index": 3,
-      "type": "tool_call",
-      "tool_name": "write_file",
-      "tool_call_id": "call_2",
-      "tool_input": "{\"path\":\"calculator.js\",\"contents\":\"exports.add = (left, right) => left + right;\\n\"}"
+      "type": "function_call",
+      "name": "write_file",
+      "call_id": "call_2",
+      "arguments": "{\"path\":\"calculator.js\",\"contents\":\"exports.add = (left, right) => left + right;\\n\"}"
     },
     {
       "index": 4,
-      "type": "tool_call",
-      "tool_name": "run",
-      "tool_call_id": "call_3",
-      "tool_input": "{\"command\":\"npm test\"}"
+      "type": "function_call",
+      "name": "run",
+      "call_id": "call_3",
+      "arguments": "{\"command\":\"npm test\"}"
     },
     {
       "index": 5,
-      "type": "observation",
-      "tool_call_id": "call_3",
+      "type": "function_call_output",
+      "call_id": "call_3",
       "text": "tests passed (exit_code=0)",
       "is_error": false
     },
     {
       "index": 6,
-      "type": "output",
+      "type": "message",
       "text": "Fixed add() to return left + right; the failing test now passes."
     }
   ],

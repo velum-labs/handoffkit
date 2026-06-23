@@ -19,7 +19,6 @@ SchemaName: TypeAlias = Literal[
     "harness-run-result.v1",
     "harness-candidate-record.v1",
     "trajectory.v1",
-    "judge-synthesis-record.v1",
     "cursor-run-request.v1",
     "cursor-run-result.v1",
     "benchmark-task-record.v1",
@@ -306,13 +305,20 @@ class HarnessCandidateRecordV1(ContractRecord):
     metadata: dict[str, Any] | None = None
 
 
-class TrajectoryStep(ContractBaseModel):
+class TrajectoryItem(ContractBaseModel):
+    """One item of a trajectory, in OpenAI Responses shape.
+
+    ``message`` / ``reasoning`` carry ``text``; ``function_call`` carries
+    ``name`` + ``arguments`` + ``call_id``; ``function_call_output`` carries the
+    observed output ``text`` + ``call_id`` (correlated by ``call_id``).
+    """
+
     index: int = Field(ge=0)
-    type: Literal["reasoning", "tool_call", "observation", "output"]
+    type: Literal["message", "reasoning", "function_call", "function_call_output"]
     text: str | None = None
-    tool_name: str | None = None
-    tool_call_id: str | None = None
-    tool_input: str | None = None
+    call_id: str | None = None
+    name: str | None = None
+    arguments: str | None = None
     is_error: bool | None = None
     output_hash: Sha256 | None = None
 
@@ -337,7 +343,7 @@ class TrajectoryV1(ContractRecord):
     trajectory_id: str = Field(min_length=1)
     model_id: str = Field(min_length=1)
     status: Status
-    steps: list[TrajectoryStep]
+    items: list[TrajectoryItem]
     final_output: str
     candidate_id: str | None = None
     model: str | None = None
@@ -348,20 +354,6 @@ class TrajectoryV1(ContractRecord):
     usage: ContractUsage | None = None
     error: ContractError | None = None
     metadata: dict[str, Any] | None = None
-
-
-class JudgeSynthesisRecordV1(ContractRecord):
-    expected_schema: ClassVar[str] = "judge-synthesis-record.v1"
-    synthesis_id: str = Field(min_length=1)
-    input_trajectory_ids: list[str] = Field(min_length=1)
-    status: Status
-    decision: SynthesisDecision
-    final_output: str
-    judge_model_call_id: str | None = None
-    selected_trajectory_id: str | None = None
-    rationale: str | None = None
-    score: float | None = None
-    metrics: dict[str, Any] | None = None
 
 
 class BenchmarkScorer(ContractBaseModel):
@@ -420,7 +412,6 @@ CONTRACT_MODEL_REGISTRY: dict[SchemaName, type[ContractRecord]] = {
     "harness-run-result.v1": HarnessRunResultV1,
     "harness-candidate-record.v1": HarnessCandidateRecordV1,
     "trajectory.v1": TrajectoryV1,
-    "judge-synthesis-record.v1": JudgeSynthesisRecordV1,
     "benchmark-task-record.v1": BenchmarkTaskRecordV1,
     "artifact-ref.v1": ArtifactRefV1,
     "tool-call-plan.v1": ToolCallPlanV1,
@@ -447,7 +438,7 @@ FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
 # We fall back to this constant there; a source checkout still recomputes from the
 # files. tests/ assert the two agree, so this can never silently drift from the
 # schema source. (Mirrors handoffkit's pinned MODEL_FUSION_SCHEMA_BUNDLE_HASH.)
-SCHEMA_BUNDLE_HASH = "sha256:80e6bba63b30e8904d9c89f547c94797eb9340be80de67a68643c01f8de86e6d"
+SCHEMA_BUNDLE_HASH = "sha256:bb04c698793875568976fd6e5c7c9f76dd10f306c2ff2156be46b63afc261867"
 
 
 def schema_bundle_hash(schema_dir: Path | None = None) -> str:
@@ -573,7 +564,6 @@ __all__ = [
     "HarnessKind",
     "HarnessRunRequestV1",
     "HarnessRunResultV1",
-    "JudgeSynthesisRecordV1",
     "ModelCallRecordV1",
     "ModelEndpointV1",
     "Owner",
@@ -585,7 +575,7 @@ __all__ = [
     "ToolCallPlanV1",
     "ToolExecutionRecordV1",
     "ToolPolicy",
-    "TrajectoryStep",
+    "TrajectoryItem",
     "TrajectoryV1",
     "EnsembleReceiptV1",
     "contract_metadata",

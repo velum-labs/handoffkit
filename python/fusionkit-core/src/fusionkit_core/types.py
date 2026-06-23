@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from fusionkit_core.contracts import Status, SynthesisDecision, TrajectoryStep
+from fusionkit_core.contracts import Status, SynthesisDecision, TrajectoryItem
 
 ChatRole = Literal["system", "user", "assistant", "tool"]
 
@@ -117,10 +117,11 @@ class Trajectory(BaseModel):
     """The canonical fusion unit.
 
     A trajectory is one attempt at the request. A plain sampled answer is a
-    zero-step trajectory (``steps == []``); a coding agent's run is a full
-    trajectory with reasoning/tool/observation steps. ``content`` is the final
-    output text. fusionkit does not own verification, so a trajectory carries no
-    pass/fail verdict; any tests a harness ran are just observation steps.
+    zero-item trajectory (``items == []``); a coding agent's run is a full
+    trajectory of reasoning / function_call / function_call_output / message
+    items (OpenAI Responses shape). ``content`` is the final output text.
+    fusionkit does not own verification, so a trajectory carries no pass/fail
+    verdict; any tests a harness ran are just function_call_output items.
     Trajectories flow to the judge in generation order (see
     :class:`fusionkit_core.contracts.TrajectoryV1` for the wire contract).
 
@@ -132,7 +133,7 @@ class Trajectory(BaseModel):
     id: str
     model_id: str
     content: str
-    steps: list[TrajectoryStep] = Field(default_factory=list)
+    items: list[TrajectoryItem] = Field(default_factory=list)
     status: Status = "succeeded"
     synthesis: TrajectorySynthesis | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
