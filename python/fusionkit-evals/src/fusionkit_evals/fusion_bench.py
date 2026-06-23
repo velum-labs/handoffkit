@@ -677,8 +677,11 @@ def _validate_contract_payload(record: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("Contract record is missing string schema")
     try:
         model_class = contract_model_for_schema(schema)  # type: ignore[arg-type]
-    except KeyError as exc:
-        raise ValueError(f"Unsupported contract schema from handoff executor: {schema}") from exc
+    except KeyError:
+        # Tolerate records for schemas this consumer no longer recognizes (e.g. a
+        # producer still emitting a since-removed record like judge-synthesis-record.v1);
+        # pass them through raw rather than failing the whole handoff record set.
+        return dict(record)
     return model_class.model_validate(record).model_dump(mode="json")
 
 
