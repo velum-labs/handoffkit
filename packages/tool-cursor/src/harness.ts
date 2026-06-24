@@ -12,6 +12,8 @@ import type {
   HarnessAdapter,
   HarnessCandidateOutput
 } from "@fusionkit/ensemble";
+
+import { parseCursorStreamJson } from "./stream-trajectory.js";
 import {
   CURSOR_BRIDGE_MODEL_NAME,
   FUSION_PANEL_MODEL,
@@ -252,6 +254,12 @@ type PrintResult = {
  * the SSE/BidiAppend transport, so the agent can read, apply_patch/write, and
  * run shell inside the worktree. `--trust` skips the workspace-trust prompt and
  * `--force` auto-approves tool actions. For read-only tasks we pass `--mode ask`.
+ *
+ * Output is requested as `stream-json` so we can (a) reconstruct the native
+ * trajectory from the structured events (see {@link parseCursorStreamJson}) and
+ * (b) read the terminal `result` event's `is_error` as the authoritative success
+ * signal — the process exit code is unreliable through the bridge. The raw
+ * JSON-lines stdout is returned as the transcript for the harness to parse.
  */
 async function driveCursorAgentPrint(input: {
   command: string;
@@ -267,7 +275,7 @@ async function driveCursorAgentPrint(input: {
     "--force",
     "--trust",
     "--output-format",
-    "text",
+    "stream-json",
     "--model",
     input.modelName,
     "--endpoint",
@@ -306,20 +314,31 @@ async function driveCursorAgentPrint(input: {
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
-      const transcript = [stdout, stderr].filter(Boolean).join("\n");
       if (timedOut) {
         resolve({
           status: "failed",
-          transcript,
+          transcript: stdout,
           reason: "cursor-agent timed out"
         });
         return;
       }
+      // Prefer the structured terminal `result` event over the exit code: the
+      // bridge can exit non-zero even after a clean, completed answer.
+      const parsed = parseCursorStreamJson(stdout);
+      const status: PrintResult["status"] = parsed.sawResult
+        ? parsed.isError
+          ? "failed"
+          : "succeeded"
+        : code === 0
+          ? "succeeded"
+          : "failed";
       resolve({
-        status: code === 0 ? "succeeded" : "failed",
-        transcript,
+        status,
+        transcript: stdout,
         exitCode: code ?? 0,
-        ...(code === 0 ? {} : { reason: stderr.slice(0, 500) })
+        ...(status === "failed"
+          ? { reason: parsed.isError ? parsed.finalOutput || "cursor-agent reported an error" : stderr.slice(0, 500) }
+          : {})
       });
     });
   });
@@ -437,6 +456,25 @@ export function createCursorHarness(
       );
       const status: HarnessCandidateOutput["status"] = result.status;
       const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
+      // Reconstruct the native trajectory from cursor-agent's stream-json stdout
+      // so the candidate can be fused (the fusion panel's product is the
+      // trajectory, not the patch). Without steps there is no usable candidate.
+      const reconstructed = parseCursorStreamJson(transcript);
+      const trajectory =
+        reconstructed.steps.length > 0
+          ? {
+              trajectoryId: candidateId,
+              modelId: model.id,
+              model: model.model,
+              candidateId,
+              harnessKind: "cursor" as const,
+              status,
+              steps: reconstructed.steps,
+              finalOutput:
+                reconstructed.finalOutput.length > 0 ? reconstructed.finalOutput : transcript,
+              ...(result.diff !== undefined && result.diff.length > 0 ? { diff: result.diff } : {})
+            }
+          : undefined;
       const artifacts: HarnessCandidateOutput["artifacts"] = [
         {
           artifact_id: `artifact_${descriptor.id}_${model.id}_cursor_transcript`,
@@ -460,6 +498,7 @@ export function createCursorHarness(
         ...(worktree
           ? { branchName: worktree.branchName, worktreePath: worktree.path }
           : {}),
+        ...(trajectory !== undefined ? { trajectory } : {}),
         transcript,
         ...(result.diff !== undefined ? { diff: result.diff } : {}),
         log: transcript,
