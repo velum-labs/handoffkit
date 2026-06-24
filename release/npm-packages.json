@@ -9,7 +9,7 @@
   "provenance": true,
   "protocol": {
     "packageName": "@fusionkit/protocol",
-    "version": "0.7.2",
+    "version": "0.7.3",
     "openapiSourceHash": "sha256:346c92f11550ae61a8571972f5db0be8bd5b479984a779d48e42fccf9cd929cb"
   },
   "packages": [
