@@ -417,7 +417,6 @@ export type EnsembleCandidateSummary = {
   branchName?: string;
   worktreePath?: string;
   toolExecutionIds: string[];
-  diffArtifacts: HarnessArtifact[];
   hardening?: CandidateHardeningMetadata;
 };
 

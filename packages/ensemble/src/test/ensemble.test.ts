@@ -432,7 +432,7 @@ test("candidate worktrees are created from one snapshot and summarized after cle
     }
 
     const summary = JSON.parse(readFileSync(result.summaryPath, "utf8")) as {
-      candidates: { worktreePath?: string; diffArtifacts: unknown[] }[];
+      candidates: { worktreePath?: string }[];
       finalPatchPath: string | null;
     };
     assert.equal(summary.finalPatchPath, null);
@@ -480,9 +480,6 @@ test("candidate worktree diffs become patch artifacts", async () => {
       result.candidates.every((candidate) =>
         candidate.artifacts?.some((artifact) => artifact.kind === "patch")
       )
-    );
-    assert.ok(
-      result.summary?.candidates.every((candidate) => candidate.diffArtifacts.length === 1)
     );
   } finally {
     repo.cleanup();

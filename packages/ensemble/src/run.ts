@@ -492,9 +492,6 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
         : {}),
       candidates: candidates.map((candidate, ordinal): EnsembleCandidateSummary => {
         const output = outputs[ordinal];
-        const diffArtifacts = (candidate.artifacts ?? []).filter(
-          (artifact) => artifact.kind === "patch"
-        );
         return {
           candidateId: candidate.candidate_id,
           modelId: output?.model.id ?? "",
@@ -504,7 +501,6 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
           ...(candidate.branch_name ? { branchName: candidate.branch_name } : {}),
           ...(candidate.worktree_path ? { worktreePath: candidate.worktree_path } : {}),
           toolExecutionIds: output?.toolRecords?.map((record) => record.execution_id) ?? [],
-          diffArtifacts,
           ...(candidateHardening(output, descriptor)
             ? { hardening: candidateHardening(output, descriptor) }
             : {})
