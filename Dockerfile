@@ -5,7 +5,7 @@
 # The Node major is pinned on purpose (supply-chain policy: known-good
 # versions everywhere). Bump it together with .github/workflows/ci.yml and
 # the engines field when moving majors.
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git \
   && rm -rf /var/lib/apt/lists/*
@@ -24,7 +24,7 @@ RUN pnpm build
 RUN CI=true pnpm install --prod --frozen-lockfile
 
 # Same pinned base as the build stage, for the same supply-chain reason.
-FROM node:22-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git \
   && rm -rf /var/lib/apt/lists/*
