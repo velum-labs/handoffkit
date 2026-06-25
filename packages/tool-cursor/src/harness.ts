@@ -13,6 +13,8 @@ import type {
   HarnessCandidateOutput
 } from "@fusionkit/ensemble";
 
+import { traceCandidate } from "@fusionkit/ensemble";
+
 import { parseCursorStreamJson } from "./stream-trajectory.js";
 import {
   CURSOR_BRIDGE_MODEL_NAME,
@@ -80,6 +82,10 @@ export type CursorHarnessOptions = {
    * panel member).
    */
   modelEndpoints?: Record<string, string>;
+  /** Observability correlation for per-candidate trace events. */
+  traceId?: string;
+  parentSpanId?: string;
+  turn?: number;
 };
 
 type CursorAvailability =
@@ -418,6 +424,23 @@ export function createCursorHarness(
         });
       }
 
+      const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
+      // Emit per-candidate trace events so the companion app shows this
+      // candidate's trajectory live (started now, finished when the run completes).
+      const tracer = traceCandidate(
+        {
+          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.turn !== undefined ? { turn: options.turn } : {})
+        },
+        {
+          candidateId,
+          modelId: model.id,
+          model: model.model,
+          ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {})
+        }
+      );
+
       const cwd = worktree?.path ?? descriptor.workspace ?? process.cwd();
       let result: CursorExecResult;
       try {
@@ -442,6 +465,7 @@ export function createCursorHarness(
           env: state.env
         });
       } catch (error) {
+        tracer.finished({ status: "failed", steps: [], finishReason: "error" });
         return skippedCandidate({
           descriptor,
           model,
@@ -455,7 +479,6 @@ export function createCursorHarness(
         transcript.length > 0 ? transcript : `cursor:${descriptor.id}`
       );
       const status: HarnessCandidateOutput["status"] = result.status;
-      const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
       // Reconstruct the native trajectory from cursor-agent's stream-json stdout
       // so the candidate can be fused (the fusion panel's product is the
       // trajectory, not the patch). Without steps there is no usable candidate.
@@ -491,6 +514,11 @@ export function createCursorHarness(
           redaction_status: "synthetic"
         });
       }
+      tracer.finished({
+        status,
+        steps: reconstructed.steps,
+        ...(reconstructed.finalOutput.length > 0 ? { finalOutput: reconstructed.finalOutput } : {})
+      });
       return {
         candidateId,
         model,

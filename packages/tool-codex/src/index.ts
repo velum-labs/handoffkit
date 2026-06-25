@@ -20,6 +20,9 @@ export const codexTool: ToolIntegration = {
     createCodexHarness({
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
+      ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+      ...(options.turn !== undefined ? { turn: options.turn } : {}),
       provider: {
         kind: "openai-compatible",
         baseUrl: options.fusionBackendUrl,

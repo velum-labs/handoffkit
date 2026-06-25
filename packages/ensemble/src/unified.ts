@@ -52,6 +52,14 @@ export type ToolHarnessResolveOptions = {
    * harness.
    */
   modelEndpoints?: Record<string, string>;
+  /**
+   * Observability correlation passed to the tool harness so it can emit
+   * per-candidate trace events (`harness.candidate.*`, `trajectory.step`) under
+   * the session, mirroring the agent harness. Unset outside a traced run.
+   */
+  traceId?: string;
+  parentSpanId?: string;
+  turn?: number;
 };
 
 /**
@@ -95,7 +103,10 @@ function resolveToolAdapter(
     fusionBackendUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
     ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-    ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {})
+    ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
+    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.turn !== undefined ? { turn: options.turn } : {})
   });
 }
 

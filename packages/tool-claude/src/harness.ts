@@ -9,7 +9,7 @@ import type { SessionBackend } from "@fusionkit/runner";
 import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
 import type { ClaudeCodeBindingOptions } from "@fusionkit/session-harness";
 
-import { hardeningToJson } from "@fusionkit/ensemble";
+import { hardeningToJson, traceCandidate } from "@fusionkit/ensemble";
 import { parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
 import type {
   CandidateHardeningMetadata,
@@ -73,6 +73,10 @@ export type ClaudeCodeHarnessOptions = ClaudeCodeBindingOptions & {
   timeoutMs?: number;
   logMaxBytes?: number;
   skipWhenUnavailable?: boolean;
+  /** Observability correlation for per-candidate trace events. */
+  traceId?: string;
+  parentSpanId?: string;
+  turn?: number;
 };
 
 type CredentialGate =
@@ -533,6 +537,21 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
           metadata: { adapter: "claude-code", execution: "local" }
         };
       }
+      // Emit per-candidate trace events so the companion app shows this
+      // candidate's trajectory live (started now, finished when the run completes).
+      const tracer = traceCandidate(
+        {
+          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.turn !== undefined ? { turn: options.turn } : {})
+        },
+        {
+          candidateId: candidate,
+          modelId: model.id,
+          model: model.model,
+          ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {})
+        }
+      );
       // Claude runs against its native Anthropic backend (see driveClaudePrint).
       // Resolve the panel candidate's model id to a CLI-accepted claude model.
       const cliModel = resolveClaudeCliModel(model.model);
@@ -564,6 +583,11 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
               ...(diff !== undefined ? { diff } : {})
             }
           : undefined;
+      tracer.finished({
+        status,
+        steps: reconstructed.steps,
+        ...(reconstructed.finalOutput.length > 0 ? { finalOutput: reconstructed.finalOutput } : {})
+      });
       return {
         candidateId: candidate,
         model,

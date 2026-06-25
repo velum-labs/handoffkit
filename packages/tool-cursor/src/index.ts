@@ -21,7 +21,10 @@ export const cursorTool: ToolIntegration = {
       fusionBackendUrl: options.fusionBackendUrl,
       ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-      ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {})
+      ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
+      ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+      ...(options.turn !== undefined ? { turn: options.turn } : {})
     }),
   harness: {
     harnessKind: "cursor",

@@ -60,6 +60,13 @@ export type {
 } from "./synthesis.js";
 export { createMockHarness } from "./mock.js";
 export type { MockCandidateFixture, MockHarnessOptions } from "./mock.js";
+export { traceCandidate } from "./candidate-trace.js";
+export type {
+  CandidateOutcome,
+  CandidateTraceContext,
+  CandidateTraceInput,
+  CandidateTracer
+} from "./candidate-trace.js";
 export {
   createToolExecutor,
   registerDemoTools,

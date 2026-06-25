@@ -7,6 +7,7 @@ import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
 import { createTrajectoryCapture, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type { CapturedTrajectory } from "@fusionkit/model-gateway";
+import { traceCandidate } from "@fusionkit/ensemble";
 import {
   buildSkippedCandidate,
   definedEnv,
@@ -97,6 +98,10 @@ export type CodexHarnessOptions = {
    * endpoint id as its model (so the router routes to that panel member).
    */
   modelEndpoints?: Record<string, string>;
+  /** Observability correlation for per-candidate trace events. */
+  traceId?: string;
+  parentSpanId?: string;
+  turn?: number;
 };
 
 export type CodexHarnessEnv = Record<string, string | undefined>;
@@ -523,6 +528,23 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         return skippedCandidate({ descriptor, model, ordinal, reason: missing, provider: state.provider });
       }
 
+      const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
+      // Emit per-candidate trace events so the companion app shows this
+      // candidate's trajectory live (started now, finished when the run completes).
+      const tracer = traceCandidate(
+        {
+          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.turn !== undefined ? { turn: options.turn } : {})
+        },
+        {
+          candidateId,
+          modelId: model.id,
+          model: model.model,
+          ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {})
+        }
+      );
+
       // When a per-model router endpoint is configured, point Codex at it and
       // request the endpoint id (model.id) as its model so the router routes to
       // this panel member. Otherwise behave exactly as before.
@@ -562,6 +584,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         try {
           result = await runner({ command, args, cwd, env, timeoutMs });
         } catch (error) {
+          tracer.finished({ status: "failed", steps: [], finishReason: "spawn_error" });
           return failedToSpawnCandidate({
             descriptor,
             model,
@@ -576,7 +599,6 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
           result.exitCode === 0 && result.timedOut !== true ? "succeeded" : "failed";
         const outputHash = artifactHash(transcript);
         const modelCallRecord = provider.modelCallRecords.at(-1);
-        const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
         const reconstructed = provider.reconstruct?.();
         const trajectory =
           reconstructed !== undefined && reconstructed.steps.length > 0
@@ -592,6 +614,12 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
                   reconstructed.finalOutput.length > 0 ? reconstructed.finalOutput : transcript
               }
             : undefined;
+        tracer.finished({
+          status,
+          steps: reconstructed?.steps ?? [],
+          ...(trajectory !== undefined ? { finalOutput: trajectory.finalOutput } : {}),
+          ...(result.timedOut === true ? { finishReason: "timeout" } : {})
+        });
         return {
           candidateId,
           model,
