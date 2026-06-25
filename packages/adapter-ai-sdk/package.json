@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/adapter-ai-sdk",
   "private": false,
-  "version": "0.7.3",
+  "version": "0.7.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/velum-labs/handoffkit.git",
