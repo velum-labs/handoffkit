@@ -8,7 +8,7 @@
     "directory": "packages/adapter-compute"
   },
   "description": "ComputeSDK-shaped compute surface over governed runner sessions: sandbox.create(), runCommand, and filesystem, where every operation is a signed contract with a receipt.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

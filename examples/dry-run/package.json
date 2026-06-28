@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Standalone Warrant example: dry-run disclosure before anything moves.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
     "@fusionkit/cli": "workspace:*",

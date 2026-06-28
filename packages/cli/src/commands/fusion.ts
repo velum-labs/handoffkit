@@ -8,7 +8,15 @@ import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { fail } from "../shared/errors.js";
-import { collect, parseFusionTool, parseIdValue, parsePanelModelSpec, parsePort } from "../shared/options.js";
+import {
+  collect,
+  parseBudget,
+  parseFusionTool,
+  parseIdValue,
+  parseOnRateLimit,
+  parsePanelModelSpec,
+  parsePort
+} from "../shared/options.js";
 import { reapFusionServices } from "../shared/portless.js";
 
 type FusionOpts = {
@@ -28,6 +36,11 @@ type FusionOpts = {
   authToken?: string;
   port?: string;
   portless?: boolean;
+  ide?: boolean;
+  onRateLimit?: string;
+  budget?: string;
+  resume?: string;
+  continue?: boolean;
 };
 
 /** Attach the panel/gateway flags shared by `fusion` and the per-tool launchers. */
@@ -50,6 +63,14 @@ function applyFusionOptions(command: Command): Command {
     .option("--port <n>", "gateway port (default: ephemeral)")
     .option("--portless", "route services through portless stable URLs (default; needs the proxy)")
     .option("--no-portless", "disable portless; use raw loopback ports (same as PORTLESS=0)")
+    .option("--ide", "Cursor only: wire the Cursor IDE to the gateway (local desktop proxy, no tunnel)")
+    .option(
+      "--on-rate-limit <policy>",
+      "vendor rate-limit/credit handoff: fusion (continue on the ensemble, default) | passthrough | fail"
+    )
+    .option("--budget <usd>", "stop the session once it has spent this much (gateway-observed USD)")
+    .option("--resume <id>", "resume a stored session by id (or unique prefix); see `fusionkit sessions`")
+    .option("--continue", "resume the most recently active stored session")
     .allowUnknownOption()
     .passThroughOptions();
 }
@@ -73,8 +94,15 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.observe !== undefined) options.observe = opts.observe;
   if (opts.yes === true) options.yes = true;
   if (opts.portless !== undefined) options.portless = opts.portless;
+  if (opts.ide === true) options.ide = true;
+  const onRateLimit = parseOnRateLimit(opts.onRateLimit);
+  if (onRateLimit !== undefined) options.onRateLimit = onRateLimit;
+  const budgetUsd = parseBudget(opts.budget);
+  if (budgetUsd !== undefined) options.budgetUsd = budgetUsd;
   if (opts.authToken !== undefined) options.authToken = opts.authToken;
   if (opts.port !== undefined) options.port = parsePort(opts.port, 0);
+  if (opts.resume !== undefined) options.resume = opts.resume;
+  if (opts.continue === true) options.continueLatest = true;
 
   const fusionkitDirEnv = process.env.FUSIONKIT_DIR ?? process.env.WARRANT_FUSIONKIT_DIR;
   if (options.fusionkitDir === undefined && fusionkitDirEnv !== undefined) {
@@ -115,6 +143,12 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
   if (options.portless === undefined && config.portless !== undefined) options.portless = config.portless;
   if (options.port === undefined && config.port != null) options.port = config.port;
+  if (options.onRateLimit === undefined && config.onRateLimit !== undefined) {
+    options.onRateLimit = config.onRateLimit;
+  }
+  if (options.budgetUsd === undefined && config.budgetUsd !== undefined) {
+    options.budgetUsd = config.budgetUsd;
+  }
   if (options.prompts === undefined && config.prompts !== undefined) options.prompts = config.prompts;
 }
 

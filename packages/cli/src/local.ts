@@ -52,6 +52,8 @@ async function startLocalGateway(config: BackendConfig, authToken?: string): Pro
 export type RunLocalOptions = {
   /** Public URL for Cursor's tunnel (or FUSIONKIT_PUBLIC_URL). */
   publicUrl?: string;
+  /** Cursor only: wire the desktop IDE to the gateway via the local desktop proxy. */
+  ide?: boolean;
   /** Bearer token to require on the gateway. */
   authToken?: string;
   /** Override the resolved backend (tests). */
@@ -96,6 +98,7 @@ export async function runLocal(
       gatewayUrl: gateway.url,
       modelLabel: model,
       toolArgs,
+      ...(options.ide === true ? { ide: true } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(publicUrl !== undefined ? { publicUrl } : {}),
       log,

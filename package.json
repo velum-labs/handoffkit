@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.7.4",
   "description": "The governed execution and provenance plane for AI agents.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@10.33.4",
   "engines": {

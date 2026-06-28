@@ -16,6 +16,7 @@ import type {
 
 import { createArtifactStore } from "./artifacts.js";
 import { hardeningToJson } from "./harness.js";
+import { PRODUCER, PRODUCER_GIT_SHA, PRODUCER_VERSION } from "./provenance.js";
 import type {
   CandidateHardeningMetadata,
   EnsembleCandidateSummary,
@@ -37,9 +38,6 @@ import {
 
 type StoredHarnessArtifact = HarnessArtifact & { path?: string };
 
-const PRODUCER_GIT_SHA = "0".repeat(40);
-const PRODUCER = "handoffkit-ensemble";
-const PRODUCER_VERSION = "0.1.0";
 const DEFAULT_CONTAINER_IMAGE = "node:22";
 const DEFAULT_CONTAINER_ENGINE = "docker";
 const DEFAULT_CONTAINER_WORKDIR = "/workspace";

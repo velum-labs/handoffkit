@@ -21,11 +21,38 @@ export { FusionBackend } from "./fusion-backend.js";
 export type {
   ChatMessageLike,
   FusionBackendOptions,
+  OnRateLimitPolicy,
   PanelRunInput,
   PanelRunner,
   PassthroughModel,
+  SessionMetaInput,
   WireTrajectory
 } from "./fusion-backend.js";
+export {
+  defaultSessionsDir,
+  FileSystemSessionStore,
+  InMemorySessionStore
+} from "./session-store.js";
+export type {
+  PersistedSession,
+  SessionMeta,
+  SessionStore,
+  SessionSummary,
+  SessionTurnRecord
+} from "./session-store.js";
+export {
+  addTurnCost,
+  DEFAULT_MODEL_PRICING,
+  emptySessionCost,
+  estimateCost,
+  formatUsd,
+  lookupPricing,
+  meterTurn,
+  parseUsage,
+  parseUsageFromSse,
+  turnCostLine
+} from "./cost.js";
+export type { ModelPricing, SessionCost, TokenUsage, TurnCost } from "./cost.js";
 export { MlxBackend } from "./mlx-backend.js";
 export type { MlxBackendOptions } from "./mlx-backend.js";
 export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";
@@ -103,7 +130,10 @@ export {
   buildModelCallRecord,
   MODEL_CALL_ID_HEADER,
   modelCallId,
-  responseBodyHash
+  readProducerVersion,
+  resolveProducerGitSha,
+  responseBodyHash,
+  UNKNOWN_GIT_SHA
 } from "./provenance.js";
 export type {
   GatewayDialect,

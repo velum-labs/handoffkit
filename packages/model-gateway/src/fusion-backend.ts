@@ -43,6 +43,17 @@ import {
 import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
+import {
+  addTurnCost,
+  emptySessionCost,
+  formatUsd,
+  meterTurn,
+  parseUsage,
+  parseUsageFromSse,
+  turnCostLine
+} from "./cost.js";
+import type { ModelPricing, SessionCost, TokenUsage, TurnCost } from "./cost.js";
+import type { PersistedSession, SessionStore } from "./session-store.js";
 
 /**
  * A native (non-fused) model the gateway also exposes in the tool's picker.
@@ -83,6 +94,15 @@ export type ChatMessageLike = {
   name?: string;
 };
 
+/** The OpenAI Chat Completions request shape this backend reads. */
+type ChatBody = {
+  model?: string;
+  messages?: ChatMessageLike[];
+  tools?: unknown;
+  tool_choice?: unknown;
+  stream?: boolean;
+};
+
 export type PanelRunInput = {
   /** The task prompt distilled from the conversation prefix (system + first user). */
   task: string;
@@ -96,10 +116,49 @@ export type PanelRunInput = {
   sessionKey: string;
   /** 1-based user-turn index this panel run belongs to. */
   turn: number;
+  /**
+   * Panel model ids (the router endpoint ids) to omit from this run. Set on a
+   * rate-limit failover turn (WS5) to drop the throttled vendor — it would only
+   * hit the same limit again — so the ensemble fuses over the healthy survivors.
+   */
+  excludeModelIds?: readonly string[];
 };
 
 /** Runs the panel once for a session and returns its candidate trajectories. */
 export type PanelRunner = (input: PanelRunInput) => Promise<WireTrajectory[]>;
+
+/**
+ * What the gateway does when a vendor passthrough model is rate-limited or out
+ * of credits/quota part-way through a turn (WS5):
+ *
+ *  - `fusion`      — transparently continue the turn on the fusion ensemble
+ *                    (pre-stream failover); the headline behaviour and default.
+ *  - `passthrough` — return the vendor's response verbatim (including its 429),
+ *                    leaving handling to the harness; opt out of failover.
+ *  - `fail`        — do not fail over; surface a clear gateway error instead.
+ */
+export type OnRateLimitPolicy = "fusion" | "passthrough" | "fail";
+
+/**
+ * The failover-relevant classification of a vendor egress failure, mirroring
+ * FusionKit's `error_category` taxonomy (see `clients.py`): `transient` (429 /
+ * 5xx / overloaded) and `quota_exhausted` (out of credits) are failover-worthy;
+ * `auth_permanent` (401/403, bad key) and `unknown` are not (a blind reroute
+ * would not help).
+ */
+type FailoverCategory = "transient" | "quota_exhausted" | "auth_permanent" | "unknown";
+
+/** A vendor passthrough failure, normalized from the router's error body. */
+type ProxyFailure = {
+  category: FailoverCategory;
+  status?: number;
+  retryAfter?: number;
+  provider?: string;
+  message: string;
+};
+
+/** What to do with a detected pre-stream vendor failure, given the policy. */
+type FailoverDecision = "failover" | "fail-fast" | "fail-error";
 
 export type FusionBackendOptions = {
   /** FusionKit `POST /v1/fusion/trajectories:fuse` URL. */
@@ -125,9 +184,63 @@ export type FusionBackendOptions = {
    * to fusion — from the tool's own picker.
    */
   passthrough?: readonly PassthroughModel[];
+  /**
+   * Rate-limit / credit-exhaustion failover policy for vendor passthrough models
+   * (WS5). Defaults to `fusion` (transparently continue the turn on the
+   * ensemble).
+   */
+  onRateLimit?: OnRateLimitPolicy;
+  /**
+   * Durable session store (WS4). When set, sessions persist to disk and the
+   * in-memory map becomes a hot cache in front of it: a turn's resolved
+   * candidates are written through, and a cache miss (cold start, or after the
+   * in-memory TTL evicts) rehydrates from the store instead of re-running the
+   * panel. Omit it for a purely in-memory gateway (the prior behaviour).
+   */
+  store?: SessionStore;
+  /**
+   * Resume target (WS4 `--resume`/`--continue`). When set, the first new
+   * conversation this process serves is bound to the persisted session of this
+   * id: its trace id, span, and per-turn candidate cache are rehydrated so the
+   * session id stays stable and already-completed turns are replayed from disk
+   * rather than re-run. Requires {@link store}.
+   */
+  resumeId?: string;
+  /** Static metadata persisted into a new session's header (tool, repo, panel). */
+  sessionMeta?: SessionMetaInput;
+  /**
+   * WS7 budget cap (USD). When set, a turn whose session has already accrued at
+   * least this much gateway-observed cost is refused with a clear message
+   * instead of being run (v1 = stop; a budget-driven panel downshift is a noted
+   * follow-up). Omit for no cap.
+   */
+  budgetUsd?: number;
+  /**
+   * WS7 per-model price overrides (USD / 1M tokens), merged over the built-in
+   * {@link DEFAULT_MODEL_PRICING} table. Lets the caller make cloud cost real for
+   * models the table does not know (or correct stale list prices).
+   */
+  pricing?: Readonly<Record<string, ModelPricing>>;
+  /**
+   * WS7 model name to attribute a *fused* turn's cost to — the judge/synthesizer
+   * model whose `usage` the fused response carries. The gateway only sees this
+   * one call's tokens (the panel members are metered inside the Python engine),
+   * so this prices the gateway-observed judge step. Defaults to {@link defaultModel}.
+   */
+  costModel?: string;
+};
+
+/** Caller-supplied session header fields persisted on session creation. */
+export type SessionMetaInput = {
+  tool?: string;
+  repo?: string;
+  models?: Array<{ id: string; model: string }>;
+  judgeModel?: string;
 };
 
 type Session = {
+  /** The persisted session id (the session key; stable across processes). */
+  id: string;
   traceId: string;
   sessionSpan: string;
   /** Candidate trajectories cached per user turn (a follow-up is a new turn). */
@@ -261,6 +374,157 @@ function errorEvent(message: string): string {
   );
 }
 
+// --- WS5: rate-limit / credit failover ------------------------------------
+
+/** An OpenAI chat content-delta SSE chunk (used to splice a notice into a stream). */
+function noticeChunk(text: string): string {
+  return `data: ${JSON.stringify({
+    choices: [{ index: 0, delta: { content: text }, finish_reason: null }]
+  })}\n\n`;
+}
+
+/** A terminal SSE chunk carrying a normal finish reason (no content). */
+function finishChunk(reason: string): string {
+  return `data: ${JSON.stringify({
+    choices: [{ index: 0, delta: {}, finish_reason: reason }]
+  })}\n\n`;
+}
+
+/** The in-stream notice shown when a turn is transparently handed off. */
+function failoverNotice(modelId: string, failure: ProxyFailure): string {
+  const reason = failure.category === "quota_exhausted" ? "is out of credits/quota" : "was rate-limited";
+  return `> _${modelId} ${reason}; handed off to the ensemble for this turn._\n\n`;
+}
+
+/** The terminal notice shown when a vendor fails mid-stream (one-tap resume). */
+function resumeNotice(modelId: string, fusedModel: string): string {
+  return (
+    `\n\n> _${modelId} was rate-limited mid-response, so this turn could not be ` +
+    `continued transparently. Re-run on the "${fusedModel}" model to continue on the ensemble._`
+  );
+}
+
+/** Coerce a router `error_category` (or bare HTTP status) into the failover taxonomy. */
+function normalizeFailoverCategory(raw: unknown, status: number | undefined): FailoverCategory {
+  if (
+    raw === "transient" ||
+    raw === "quota_exhausted" ||
+    raw === "auth_permanent" ||
+    raw === "unknown"
+  ) {
+    return raw;
+  }
+  if (status === 401 || status === 403) return "auth_permanent";
+  if (status === 429) return "transient";
+  if (status !== undefined && status >= 500) return "transient";
+  return "unknown";
+}
+
+/** Whether a classified failure should reroute to the ensemble (vs fail fast). */
+function isFailoverWorthy(category: FailoverCategory): boolean {
+  switch (category) {
+    case "transient":
+    case "quota_exhausted":
+      return true;
+    case "auth_permanent":
+    case "unknown":
+      return false;
+    default: {
+      const unreachable: never = category;
+      throw new Error(`unhandled failover category: ${String(unreachable)}`);
+    }
+  }
+}
+
+/** Build a {@link ProxyFailure} from a router error object + the HTTP status. */
+function failureFromErrorObject(err: Record<string, unknown>, status: number | undefined): ProxyFailure {
+  const raw = err.error_category ?? err.category ?? err.code;
+  const failure: ProxyFailure = {
+    category: normalizeFailoverCategory(raw, status),
+    message: typeof err.message === "string" ? err.message : "vendor error"
+  };
+  if (status !== undefined) failure.status = status;
+  if (typeof err.retry_after === "number") failure.retryAfter = err.retry_after;
+  if (typeof err.provider === "string") failure.provider = err.provider;
+  return failure;
+}
+
+/** Parse the JSON object(s) carried on an SSE event's `data:` line(s). */
+function sseDataObjects(event: string): Array<Record<string, unknown>> {
+  const objects: Array<Record<string, unknown>> = [];
+  for (const line of event.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const data = trimmed.slice(5).trim();
+    if (data.length === 0 || data === "[DONE]") continue;
+    try {
+      const json = JSON.parse(data);
+      if (json !== null && typeof json === "object") objects.push(json as Record<string, unknown>);
+    } catch {
+      // partial / non-JSON line
+    }
+  }
+  return objects;
+}
+
+/** The classified failure carried by an SSE error event, if any. */
+function sseEventError(event: string): ProxyFailure | undefined {
+  for (const object of sseDataObjects(event)) {
+    const err = object.error;
+    if (err !== null && typeof err === "object") {
+      return failureFromErrorObject(err as Record<string, unknown>, undefined);
+    }
+  }
+  return undefined;
+}
+
+/** Whether an SSE event carries a real (non-empty) assistant content delta. */
+function sseEventHasContent(event: string): boolean {
+  for (const object of sseDataObjects(event)) {
+    if (!Array.isArray(object.choices)) continue;
+    const delta = (object.choices[0] as { delta?: { content?: unknown } } | undefined)?.delta;
+    if (delta !== undefined && typeof delta.content === "string" && delta.content.length > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Find whether the first *significant* SSE event in `text` is a content delta or
+ * a terminal error (so the proxy can tell a pre-stream failure — failover-able —
+ * from a mid-stream one). Role-only deltas and keepalive comments are ignored.
+ */
+function firstSseSignal(text: string): { kind: "content" | "error" | "none"; error?: ProxyFailure } {
+  let rest = text;
+  for (;;) {
+    const idx = rest.indexOf("\n\n");
+    if (idx === -1) break;
+    const event = rest.slice(0, idx + 2);
+    rest = rest.slice(idx + 2);
+    const failure = sseEventError(event);
+    if (failure !== undefined) return { kind: "error", error: failure };
+    if (sseEventHasContent(event)) return { kind: "content" };
+  }
+  return { kind: "none" };
+}
+
+/** Re-emit a buffered/consumed error body as a fresh non-2xx response (verbatim). */
+function rebuildErrorResponse(status: number, contentType: string | null, bodyText: string): Response {
+  return new Response(bodyText, {
+    status,
+    headers: { "content-type": contentType ?? "application/json" }
+  });
+}
+
+/** Wrap a static SSE string as a `text/event-stream` response. */
+function sseResponse(body: string): Response {
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
+  });
+}
+
 export class FusionBackend implements Backend {
   readonly defaultModel: string | undefined;
 
@@ -273,6 +537,16 @@ export class FusionBackend implements Backend {
   readonly #mintTraceId: () => string;
   readonly #sessions = new Map<string, Session>();
   readonly #passthrough: readonly PassthroughModel[];
+  readonly #onRateLimit: OnRateLimitPolicy;
+  readonly #store: SessionStore | undefined;
+  readonly #sessionMeta: SessionMetaInput;
+  readonly #budgetUsd: number | undefined;
+  readonly #pricing: Readonly<Record<string, ModelPricing>>;
+  readonly #costModel: string | undefined;
+  /** Running per-session (= session-key) cost accumulation; seeded from the store. */
+  readonly #sessionCost = new Map<string, SessionCost>();
+  /** Explicit resume target; consumed (cleared) when bound to the first session. */
+  #resumeId: string | undefined;
 
   constructor(options: FusionBackendOptions) {
     this.#stepUrl = options.stepUrl;
@@ -284,6 +558,13 @@ export class FusionBackend implements Backend {
     this.#stepTimeoutMs = options.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
     this.#mintTraceId = options.mintTraceId ?? newTraceId;
     this.#passthrough = options.passthrough ?? [];
+    this.#onRateLimit = options.onRateLimit ?? "fusion";
+    this.#store = options.store;
+    this.#sessionMeta = options.sessionMeta ?? {};
+    this.#budgetUsd = options.budgetUsd;
+    this.#pricing = options.pricing ?? {};
+    this.#costModel = options.costModel;
+    this.#resumeId = options.resumeId;
   }
 
   /**
@@ -332,15 +613,30 @@ export class FusionBackend implements Backend {
    * Proxy a chat request to a native model's real provider via the router,
    * preserving streaming and tool-calling. Emits a trace marker so the call is
    * visible on the dashboard like a fusion turn.
+   *
+   * WS5 rate-limit / credit handoff: rather than returning a vendor 429 / quota
+   * error verbatim, this detects the router's classified `error_category` and —
+   * for failover-worthy failures (`transient` / `quota_exhausted`) under the
+   * default `fusion` policy — transparently continues the *same* turn on the
+   * fusion ensemble (excluding the throttled vendor). Detection runs before any
+   * bytes reach the harness: non-2xx replies are pre-stream by construction, and
+   * for streaming replies the proxy peeks the SSE head to tell a pre-stream
+   * failure (failover-able) from a mid-stream one (one-tap resume notice only —
+   * a transparent cut-over is a deliberate follow-up). `auth_permanent` /
+   * `unknown` failures always surface verbatim (a blind reroute would not help).
    */
   async #proxyNative(
     target: PassthroughModel,
-    chat: Record<string, unknown>,
+    chat: ChatBody,
     signal: AbortSignal | undefined,
     options: BackendRequestOptions
   ): Promise<Response> {
     const traceId = this.#mintTraceId();
     const spanId = newSpanId();
+    // WS7: a passthrough turn is metered against the vendor model, accumulated
+    // under the same conversation key the fused path uses (so cost is continuous
+    // across a mid-conversation switch between a vendor model and the ensemble).
+    const costSessionId = this.#sessionKey(Array.isArray(chat.messages) ? chat.messages : []);
     const traceEnabled = getTraceEmitter().isEnabled();
     if (traceEnabled) {
       emitTrace({
@@ -376,28 +672,288 @@ export class FusionBackend implements Backend {
         }
       });
     }
+
+    // `passthrough` opts out of failover entirely: the harness sees the vendor's
+    // response (including its 429) exactly as before WS5.
+    if (this.#onRateLimit === "passthrough") {
+      await this.#meterResponseClone(response, costSessionId, target.modelId, traceId, spanId);
+      return response;
+    }
+
+    if (!response.ok) {
+      // A non-2xx is delivered before any byte streams to the harness, so this
+      // is always a pre-stream failure.
+      const { failure, bodyText } = await this.#readErrorBody(response);
+      return this.#handlePreStreamFailure(target, chat, signal, options, failure, () =>
+        rebuildErrorResponse(response.status, response.headers.get("content-type"), bodyText)
+      );
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (chat.stream === true && contentType.includes("text/event-stream") && response.body !== null) {
+      return this.#proxyNativeStream(response.body, target, chat, signal, options, costSessionId);
+    }
+    await this.#meterResponseClone(response, costSessionId, target.modelId, traceId, spanId);
     return response;
   }
 
-  async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
-    const chat = (body ?? {}) as {
-      model?: string;
-      messages?: ChatMessageLike[];
-      tools?: unknown;
-      tool_choice?: unknown;
-      stream?: boolean;
+  /** Read a non-2xx router reply into a classified {@link ProxyFailure} + its raw body. */
+  async #readErrorBody(response: Response): Promise<{ failure: ProxyFailure; bodyText: string }> {
+    const bodyText = await response.text();
+    try {
+      const json = JSON.parse(bodyText) as Record<string, unknown>;
+      const err =
+        json.error !== null && typeof json.error === "object"
+          ? (json.error as Record<string, unknown>)
+          : json;
+      return { failure: failureFromErrorObject(err, response.status), bodyText };
+    } catch {
+      return {
+        failure: {
+          category: normalizeFailoverCategory(undefined, response.status),
+          status: response.status,
+          message: bodyText.slice(0, 300)
+        },
+        bodyText
+      };
+    }
+  }
+
+  /** Decide what to do with a detected pre-stream failure under the active policy. */
+  #decideFailover(category: FailoverCategory): FailoverDecision {
+    // `passthrough` is short-circuited before any detection runs.
+    if (!isFailoverWorthy(category)) return "fail-fast";
+    return this.#onRateLimit === "fail" ? "fail-error" : "failover";
+  }
+
+  /**
+   * Branch a detected pre-stream vendor failure: reroute to the ensemble, surface
+   * the vendor error verbatim, or emit a clear gateway error (per policy).
+   * `verbatim` rebuilds the original vendor response (its body was consumed for
+   * classification).
+   */
+  #handlePreStreamFailure(
+    target: PassthroughModel,
+    chat: ChatBody,
+    signal: AbortSignal | undefined,
+    options: BackendRequestOptions,
+    failure: ProxyFailure,
+    verbatim: () => Response
+  ): Promise<Response> | Response {
+    const decision = this.#decideFailover(failure.category);
+    switch (decision) {
+      case "fail-fast":
+        console.error(
+          `fusion: ${target.modelId} failed (${failure.category}); not failing over to the ensemble.`
+        );
+        return verbatim();
+      case "fail-error": {
+        const message =
+          `${target.modelId} ${failure.category} (${failure.message}); ` +
+          `failover disabled by --on-rate-limit fail`;
+        console.error(`fusion: ${message}`);
+        if (chat.stream === true) return sseResponse(errorEvent(`fusion error: ${message}`));
+        return jsonError(failure.status ?? 429, message);
+      }
+      case "failover":
+        console.error(
+          `fusion: ${target.modelId} ${failure.category}; handing the turn off to the ensemble.`
+        );
+        return this.#runFusion(chat, signal, options, {
+          excludeModelIds: [target.endpointId],
+          notice: failoverNotice(target.modelId, failure)
+        });
+      default: {
+        const unreachable: never = decision;
+        throw new Error(`unhandled failover decision: ${String(unreachable)}`);
+      }
+    }
+  }
+
+  /**
+   * Peek a streaming vendor reply to classify a pre-stream failure (failover-able)
+   * vs a mid-stream one. A pre-stream error (the first significant SSE event is
+   * an error) branches like the non-streaming path. Once a content delta has
+   * reached the harness we cannot transparently cut over, so any later error is
+   * rewritten into a one-tap resume notice (re-run on the fused model).
+   */
+  async #proxyNativeStream(
+    upstream: ReadableStream<Uint8Array>,
+    target: PassthroughModel,
+    chat: ChatBody,
+    signal: AbortSignal | undefined,
+    options: BackendRequestOptions,
+    sessionId: string
+  ): Promise<Response> {
+    const reader = upstream.getReader();
+    const decoder = new TextDecoder();
+    let buffered = "";
+    let signalKind: "content" | "error" | "none" = "none";
+    let preFailure: ProxyFailure | undefined;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value !== undefined) buffered += decoder.decode(value, { stream: true });
+      const signalSeen = firstSseSignal(buffered);
+      if (signalSeen.kind === "error") {
+        signalKind = "error";
+        preFailure = signalSeen.error;
+        break;
+      }
+      if (signalSeen.kind === "content") {
+        signalKind = "content";
+        break;
+      }
+    }
+
+    if (signalKind === "error" && preFailure !== undefined) {
+      const decision = this.#decideFailover(preFailure.category);
+      if (decision === "failover") {
+        void reader.cancel().catch(() => undefined);
+        return this.#handlePreStreamFailure(target, chat, signal, options, preFailure, () =>
+          sseResponse(buffered)
+        );
+      }
+      if (decision === "fail-error") {
+        const captured = buffered;
+        void reader.cancel().catch(() => undefined);
+        return this.#handlePreStreamFailure(target, chat, signal, options, preFailure, () =>
+          sseResponse(captured)
+        );
+      }
+      // fail-fast: replay the verbatim vendor stream (buffered head + the rest).
+      return this.#reconstructStream(buffered, reader, decoder, target, "verbatim", sessionId);
+    }
+
+    // Content already streamed (mid-stream) or a clean short stream: replay and
+    // continue, converting any later vendor error into a resume notice.
+    return this.#reconstructStream(buffered, reader, decoder, target, "resume-notice", sessionId);
+  }
+
+  /**
+   * Re-emit a partially-consumed vendor SSE stream: flush the buffered head, then
+   * pipe the remainder. In `resume-notice` mode a later error event is replaced
+   * by a one-tap resume notice + a clean finish (WS5 mid-stream: no transparent
+   * cut-over); in `verbatim` mode the stream passes through untouched.
+   */
+  #reconstructStream(
+    buffered: string,
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    decoder: InstanceType<typeof TextDecoder>,
+    target: PassthroughModel,
+    onError: "verbatim" | "resume-notice",
+    sessionId: string
+  ): Response {
+    const encoder = new TextEncoder();
+    const fusedModel = this.defaultModel ?? "fusion-panel";
+    // WS7: meter the vendor stream from the `usage` block riding its SSE tail.
+    const meter = (text: string): void => {
+      this.#meter(sessionId, target.modelId, parseUsageFromSse(text));
     };
+    const readable = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let pending = buffered;
+        let meteredText = buffered;
+        let terminated = false;
+        // Emit every complete SSE event in `pending`; in resume-notice mode an
+        // error event short-circuits the stream with the resume notice instead.
+        const flush = (final: boolean): void => {
+          for (;;) {
+            const idx = pending.indexOf("\n\n");
+            if (idx === -1) break;
+            const event = pending.slice(0, idx + 2);
+            pending = pending.slice(idx + 2);
+            if (onError === "resume-notice" && sseEventError(event) !== undefined) {
+              controller.enqueue(encoder.encode(noticeChunk(resumeNotice(target.modelId, fusedModel))));
+              controller.enqueue(encoder.encode(finishChunk("stop")));
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              terminated = true;
+              return;
+            }
+            controller.enqueue(encoder.encode(event));
+          }
+          if (final && pending.length > 0) {
+            controller.enqueue(encoder.encode(pending));
+            pending = "";
+          }
+        };
+        try {
+          flush(false);
+          while (!terminated) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value !== undefined) {
+              const decoded = decoder.decode(value, { stream: true });
+              pending += decoded;
+              meteredText += decoded;
+            }
+            flush(false);
+          }
+          if (!terminated) flush(true);
+        } catch (error) {
+          controller.enqueue(encoder.encode(errorEvent(`fusion error: ${errorText(error)}`)));
+        } finally {
+          meter(meteredText);
+          void reader.cancel().catch(() => undefined);
+          try {
+            controller.close();
+          } catch {
+            // already closed
+          }
+        }
+      }
+    });
+    return new Response(readable, {
+      status: 200,
+      headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
+    });
+  }
+
+  async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
+    const chat = (body ?? {}) as ChatBody;
+    // WS7 budget cap: refuse a turn once the conversation has already accrued at
+    // least the configured --budget. Checked up front (before any provider call)
+    // for both the fused and passthrough paths, keyed by the same conversation
+    // session key the cost is accumulated under.
+    const messages = Array.isArray(chat.messages) ? chat.messages : [];
+    const costSessionId = this.#sessionKey(messages);
+    if (this.#budgetExceeded(costSessionId)) {
+      return this.#budgetStop(chat.stream === true, costSessionId);
+    }
     // Native model selected from the picker: proxy straight to its real provider
     // (the fusion panel + judge are skipped). Falling back to fusion is just
-    // selecting the fused model again.
+    // selecting the fused model again — or, on a vendor rate-limit/credit
+    // failure, automatic (see #proxyNative's WS5 failover).
     const native = this.#passthroughFor(chat.model);
     if (native !== undefined) {
-      return this.#proxyNative(native, chat as Record<string, unknown>, signal, options);
+      return this.#proxyNative(native, chat, signal, options);
     }
+    return this.#runFusion(chat, signal, options, {});
+  }
+
+  /**
+   * Run the fusion ensemble path for a turn: derive the session, run the panel
+   * once, then drive the judge/synthesizer step (streamed or single JSON).
+   *
+   * `excludeModelIds` drops panel members for this turn (WS5 failover omits the
+   * throttled vendor — it would only hit the same limit again). `notice` is
+   * spliced in as a leading assistant content delta / prefix so the user sees
+   * the handoff ("vendor rate-limited → ensemble").
+   */
+  async #runFusion(
+    chat: ChatBody,
+    signal: AbortSignal | undefined,
+    options: BackendRequestOptions,
+    opts: { excludeModelIds?: readonly string[]; notice?: string }
+  ): Promise<Response> {
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
     const sessionKey = this.#sessionKey(messages);
     const session = this.#ensureSession(sessionKey);
     const streaming = chat.stream === true;
+    // WS7: a fused turn's gateway-observed usage is the judge/synthesis call's,
+    // priced against the configured judge model (fall back to the advertised
+    // fused id, whose cost is reported unknown — no real price for "fusion-panel").
+    const fusedCostModel = this.#costModel ?? this.defaultModel ?? "fusion-panel";
 
     const buildStepBody = (candidates: WireTrajectory[]): string => {
       const stepBody: Record<string, unknown> = {
@@ -432,7 +988,13 @@ export class FusionBackend implements Backend {
     // panel runs once per turn, so each new user request is fused over fresh
     // candidates; the tool loop within a turn reuses them.
     const turn = messages.filter((message) => message.role === "user").length;
-    const turnCandidates = this.#ensureTurnCandidates(session, sessionKey, turn, messages);
+    const turnCandidates = this.#ensureTurnCandidates(
+      session,
+      sessionKey,
+      turn,
+      messages,
+      opts.excludeModelIds
+    );
     const emitJudgeRequest = (candidates: WireTrajectory[]): void => {
       if (!traceEnabled) return;
       emitTrace({
@@ -525,6 +1087,32 @@ export class FusionBackend implements Backend {
         body: buildStepBody(candidates),
         signal: withDeadline(signal, this.#stepTimeoutMs)
       });
+      // Failover handoff: prepend the notice to the single fused answer so the
+      // user sees why the turn moved to the ensemble. Consumes the body, so this
+      // returns before the (clone-based) trace capture below.
+      if (opts.notice !== undefined) {
+        if (!response.ok) return response;
+        let payload: Record<string, unknown>;
+        try {
+          payload = (await response.json()) as Record<string, unknown>;
+        } catch {
+          return jsonError(502, "fusion failover produced an unreadable response");
+        }
+        const choice = (Array.isArray(payload.choices) ? payload.choices[0] : undefined) as
+          | { message?: { content?: unknown } }
+          | undefined;
+        if (choice?.message !== undefined) {
+          const existing = typeof choice.message.content === "string" ? choice.message.content : "";
+          const merged = `${opts.notice}${existing}`;
+          choice.message.content = merged;
+          emitJudgeFinal({ httpStatus: 200, content: merged });
+        }
+        this.#meter(sessionKey, fusedCostModel, parseUsage(payload.usage), sessionTraceId, judgeSpan);
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
       if (traceEnabled) {
         // Capture the judge's output without consuming the piped response.
         const clone = response.clone();
@@ -563,6 +1151,7 @@ export class FusionBackend implements Backend {
           }
         })();
       }
+      await this.#meterResponseClone(response, sessionKey, fusedCostModel, sessionTraceId, judgeSpan);
       return response;
     }
 
@@ -575,6 +1164,10 @@ export class FusionBackend implements Backend {
     const stepUrl = this.#stepUrl;
     const stepSignal = withDeadline(signal, this.#stepTimeoutMs);
     const evictOnFailure = (): void => this.#evictTurn(session, turn);
+    // WS7: meter the fused turn from the judge step's `usage` (rides the SSE tail).
+    const meterStream = (buffer: string): void => {
+      this.#meter(sessionKey, fusedCostModel, parseUsageFromSse(buffer), sessionTraceId, judgeSpan);
+    };
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
     const readable = new ReadableStream<Uint8Array>({
@@ -595,6 +1188,12 @@ export class FusionBackend implements Backend {
           evictOnFailure();
           controller.enqueue(encoder.encode(errorEvent(`fusion error: ${message}`)));
         };
+        // Failover handoff: emit the notice as the first content delta so the
+        // user immediately sees the turn moved to the ensemble, before the
+        // (possibly slow) panel phase produces the fused answer.
+        if (opts.notice !== undefined) {
+          controller.enqueue(encoder.encode(noticeChunk(opts.notice)));
+        }
         try {
           let candidates: WireTrajectory[];
           try {
@@ -634,9 +1233,12 @@ export class FusionBackend implements Backend {
             if (done) break;
             if (value !== undefined) {
               controller.enqueue(value);
-              if (traceEnabled) sseBuffer += decoder.decode(value, { stream: true });
+              // Always accumulate for WS7 cost metering (usage rides the SSE tail);
+              // the trace assembly below reuses the same buffer when enabled.
+              sseBuffer += decoder.decode(value, { stream: true });
             }
           }
+          meterStream(sseBuffer);
           if (traceEnabled) {
             const assembled = assembleSseContent(sseBuffer);
             if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
@@ -741,21 +1343,206 @@ export class FusionBackend implements Backend {
     }
   }
 
-  /** Establish (or reuse) the per-conversation session identity. No panel runs here. */
+  /**
+   * Establish (or reuse) the per-conversation session identity. No panel runs
+   * here. The in-memory map is the hot cache; the durable {@link SessionStore}
+   * (when configured) is the backing layer. On a cache miss this resolves, in
+   * order: (1) an explicit `--resume` target bound to the first conversation,
+   * (2) a stored session whose id equals this conversation's key (durable
+   * rehydrate after a TTL eviction or a fresh process), else (3) a brand-new
+   * session whose header is written through immediately.
+   */
   #ensureSession(sessionKey: string): Session {
     const now = Date.now();
     this.#sweepExpired(now);
     const existing = this.#sessions.get(sessionKey);
     if (existing !== undefined && now - existing.createdAt < this.#ttlMs) return existing;
 
+    if (this.#store !== undefined) {
+      // Explicit resume: bind the persisted session to the FIRST conversation
+      // this process serves, regardless of its derived key (the relaunched
+      // harness may open with a different prefix). One-shot.
+      if (this.#resumeId !== undefined) {
+        const resumeId = this.#resumeId;
+        this.#resumeId = undefined;
+        const persisted = this.#store.load(resumeId);
+        if (persisted !== undefined) {
+          const session = this.#hydrate(persisted, now);
+          this.#sessions.set(sessionKey, session);
+          return session;
+        }
+        console.error(`fusion: --resume target ${resumeId} not found; starting a fresh session.`);
+      }
+      // Durable rehydrate: a stored session for this exact conversation key
+      // (cold start or post-TTL) is reloaded rather than re-running the panel.
+      const stored = this.#store.load(sessionKey);
+      if (stored !== undefined) {
+        const session = this.#hydrate(stored, now);
+        this.#sessions.set(sessionKey, session);
+        return session;
+      }
+    }
+
     const session: Session = {
+      id: sessionKey,
       traceId: this.#mintTraceId(),
       sessionSpan: newSpanId(),
       turns: new Map(),
       createdAt: now
     };
     this.#sessions.set(sessionKey, session);
+    this.#persistMeta(session);
     return session;
+  }
+
+  /** Rebuild an in-memory session from a persisted one (its turn candidates
+   *  become already-resolved promises, so completed turns are not re-run). */
+  #hydrate(persisted: PersistedSession, now: number): Session {
+    const turns = new Map<number, Promise<WireTrajectory[]>>();
+    for (const record of persisted.turns) {
+      turns.set(record.turn, Promise.resolve(record.candidates));
+    }
+    return {
+      id: persisted.meta.id,
+      traceId: persisted.meta.traceId,
+      sessionSpan: persisted.meta.sessionSpan,
+      turns,
+      // Reset the in-memory TTL clock so a freshly rehydrated session is hot.
+      createdAt: now
+    };
+  }
+
+  /** Write a new session's header to the store (best-effort; never fails a turn). */
+  #persistMeta(session: Session): void {
+    if (this.#store === undefined) return;
+    try {
+      const now = Date.now();
+      this.#store.saveMeta({
+        id: session.id,
+        traceId: session.traceId,
+        sessionSpan: session.sessionSpan,
+        createdAt: session.createdAt,
+        updatedAt: now,
+        ...(this.defaultModel !== undefined ? { defaultModel: this.defaultModel } : {}),
+        ...(this.#sessionMeta.tool !== undefined ? { tool: this.#sessionMeta.tool } : {}),
+        ...(this.#sessionMeta.repo !== undefined ? { repo: this.#sessionMeta.repo } : {}),
+        ...(this.#sessionMeta.models !== undefined ? { models: this.#sessionMeta.models } : {}),
+        ...(this.#sessionMeta.judgeModel !== undefined ? { judgeModel: this.#sessionMeta.judgeModel } : {})
+      });
+    } catch (error) {
+      console.error(`fusion: could not persist session ${session.id}: ${errorText(error)}`);
+    }
+  }
+
+  /** Append a resolved turn's conversation + candidates to the store (best-effort). */
+  #persistTurn(session: Session, turn: number, messages: ChatMessageLike[], candidates: WireTrajectory[]): void {
+    if (this.#store === undefined) return;
+    try {
+      this.#store.appendTurn(session.id, { turn, messages, candidates, recordedAt: Date.now() });
+    } catch (error) {
+      console.error(`fusion: could not persist turn ${turn} of session ${session.id}: ${errorText(error)}`);
+    }
+  }
+
+  // --- WS7: cost + token metering -------------------------------------------
+
+  /** The running cost for a conversation, seeded once from the durable store. */
+  #costFor(sessionId: string): SessionCost {
+    const cached = this.#sessionCost.get(sessionId);
+    if (cached !== undefined) return cached;
+    const stored = this.#store?.load(sessionId)?.meta.cost;
+    const seeded = stored ?? emptySessionCost();
+    this.#sessionCost.set(sessionId, seeded);
+    return seeded;
+  }
+
+  /**
+   * Meter one turn's gateway-observed usage: compute its token/cost, fold it into
+   * the session total, persist the total, and surface a concise per-turn line
+   * (stderr + a trace `log` event). `usageRaw` is the response's `usage` block;
+   * `model` is what to price it against (the vendor for passthrough, the judge
+   * for a fused turn). Best-effort: metering never fails a turn.
+   */
+  #meter(
+    sessionId: string,
+    model: string,
+    usage: TokenUsage | undefined,
+    traceId?: string,
+    parentSpanId?: string
+  ): TurnCost {
+    const turnCost = meterTurn(model, usage, this.#pricing);
+    const total = addTurnCost(this.#costFor(sessionId), turnCost);
+    this.#sessionCost.set(sessionId, total);
+    try {
+      this.#store?.recordCost(sessionId, total);
+    } catch (error) {
+      console.error(`fusion: could not persist cost for session ${sessionId}: ${errorText(error)}`);
+    }
+    const line = turnCostLine(turnCost, total.totalUsd);
+    console.error(`fusion: ${line}`);
+    if (getTraceEmitter().isEnabled()) {
+      emitTrace({
+        component: "gateway",
+        event_type: "log",
+        ...(traceId !== undefined ? { traceId } : {}),
+        spanId: newSpanId(),
+        ...(parentSpanId !== undefined ? { parentSpanId } : {}),
+        sessionId,
+        payload: {
+          kind: "cost.metered",
+          model: turnCost.model,
+          usage: turnCost.usage,
+          turn_cost_usd: turnCost.costUsd ?? null,
+          unknown_cost: turnCost.unknownCost,
+          unknown_usage: turnCost.unknownUsage,
+          session_total_usd: total.totalUsd,
+          currency: total.currency
+        }
+      });
+    }
+    return turnCost;
+  }
+
+  /**
+   * Meter a single-JSON (non-streamed) response without consuming the body the
+   * caller pipes: clone it, read its `usage`, and meter. Awaited (not detached)
+   * so the session total is recorded before the turn returns — a following
+   * turn's budget check then sees this turn's cost. Best-effort: a 4xx/5xx or
+   * unreadable body simply leaves the turn unmetered.
+   */
+  async #meterResponseClone(
+    response: Response,
+    sessionId: string,
+    model: string,
+    traceId?: string,
+    parentSpanId?: string
+  ): Promise<void> {
+    if (!response.ok) return;
+    const clone = response.clone();
+    try {
+      const json = (await clone.json()) as { usage?: unknown };
+      this.#meter(sessionId, model, parseUsage(json.usage), traceId, parentSpanId);
+    } catch {
+      // best-effort: an unreadable body means the turn is left unmetered.
+    }
+  }
+
+  /** Whether `sessionId` has already accrued at least the configured budget. */
+  #budgetExceeded(sessionId: string): boolean {
+    if (this.#budgetUsd === undefined) return false;
+    return this.#costFor(sessionId).totalUsd >= this.#budgetUsd;
+  }
+
+  /** The clear stop response returned when a turn is refused for exceeding the budget. */
+  #budgetStop(streaming: boolean, sessionId: string): Response {
+    const total = this.#costFor(sessionId);
+    const message =
+      `budget cap reached: this session has spent ${formatUsd(total.totalUsd, total.currency)} ` +
+      `of the ${formatUsd(this.#budgetUsd ?? 0, total.currency)} --budget. ` +
+      `Raise or remove --budget to continue.`;
+    console.error(`fusion: ${message}`);
+    if (streaming) return sseResponse(errorEvent(`fusion error: ${message}`));
+    return jsonError(402, message);
   }
 
   /**
@@ -768,7 +1555,8 @@ export class FusionBackend implements Backend {
     session: Session,
     sessionKey: string,
     turn: number,
-    messages: ChatMessageLike[]
+    messages: ChatMessageLike[],
+    excludeModelIds?: readonly string[]
   ): Promise<WireTrajectory[]> {
     const existing = session.turns.get(turn);
     if (existing !== undefined) return existing;
@@ -779,13 +1567,22 @@ export class FusionBackend implements Backend {
       traceId: session.traceId,
       sessionSpanId: session.sessionSpan,
       sessionKey,
-      turn
+      turn,
+      ...(excludeModelIds !== undefined && excludeModelIds.length > 0 ? { excludeModelIds } : {})
     });
     session.turns.set(turn, candidates);
-    candidates.catch((error: unknown) => {
-      console.error(`fusion: panel run failed for session ${sessionKey} turn ${turn}: ${errorText(error)}`);
-      if (session.turns.get(turn) === candidates) session.turns.delete(turn);
-    });
+    // Write a usable turn through to the durable store; evict a failed turn so a
+    // retry re-runs it (failures are never cached or persisted). A single
+    // settle handler keeps both paths and avoids an unhandled rejection.
+    void candidates.then(
+      (resolved) => {
+        if (hasUsableCandidates(resolved)) this.#persistTurn(session, turn, messages, resolved);
+      },
+      (error: unknown) => {
+        console.error(`fusion: panel run failed for session ${sessionKey} turn ${turn}: ${errorText(error)}`);
+        if (session.turns.get(turn) === candidates) session.turns.delete(turn);
+      }
+    );
     return candidates;
   }
 }

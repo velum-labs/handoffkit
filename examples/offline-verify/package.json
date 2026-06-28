@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Standalone Warrant example: receipt tamper evidence.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
     "@fusionkit/example-utils": "workspace:*",

@@ -1,4 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   artifactHash,
@@ -20,6 +24,66 @@ import type {
 export type GatewayDialect = "openai-chat" | "anthropic-messages" | "openai-responses";
 
 export const MODEL_CALL_ID_HEADER = "x-velum-model-call-id";
+
+// --- WS7: real-lite producer provenance -----------------------------------
+
+/**
+ * The sentinel emitted for `producer_git_sha` when no real SHA is resolvable.
+ * Deliberately NOT 40 zeros: an all-zero SHA reads as a valid (null) git object
+ * and was the old "faked provenance" placeholder. The protocol's
+ * `producer_git_sha` validator accepts this literal as a clearly-marked unknown.
+ */
+export const UNKNOWN_GIT_SHA = "unknown";
+
+const GIT_SHA_PATTERN = /^[a-f0-9]{40}$/;
+
+/** This module's own directory (works in dev `src` and built `dist`). */
+function moduleDir(): string {
+  return dirname(fileURLToPath(import.meta.url));
+}
+
+/**
+ * Resolve a producer's real git SHA, real-lite (WS7). Resolution order:
+ *   1. a build/publish-time stamp (`FUSIONKIT_BUILD_GIT_SHA`) — baked in when the
+ *      package is built so an installed artifact still carries real provenance;
+ *   2. a runtime `git rev-parse HEAD` — only when running from a source checkout
+ *      (the module path is NOT under `node_modules`), so an installed copy never
+ *      mis-reports the *consuming project's* repo SHA as the producer's;
+ *   3. the {@link UNKNOWN_GIT_SHA} sentinel — never 40 zeros.
+ */
+export function resolveProducerGitSha(fromDir: string = moduleDir()): string {
+  const stamped = process.env.FUSIONKIT_BUILD_GIT_SHA?.trim();
+  if (stamped !== undefined && GIT_SHA_PATTERN.test(stamped)) return stamped;
+  if (!fromDir.includes("node_modules")) {
+    const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: fromDir, encoding: "utf8" });
+    if (result.status === 0) {
+      const sha = result.stdout.trim();
+      if (GIT_SHA_PATTERN.test(sha)) return sha;
+    }
+  }
+  return UNKNOWN_GIT_SHA;
+}
+
+/** Read a producer's real version from the nearest ancestor `package.json`. */
+export function readProducerVersion(fromDir: string = moduleDir(), fallback = "0.0.0"): string {
+  let dir = fromDir;
+  for (let depth = 0; depth < 8; depth += 1) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { version?: unknown };
+      if (typeof pkg.version === "string" && pkg.version.length > 0) return pkg.version;
+    } catch {
+      // No package.json here (or unreadable); keep walking up.
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return fallback;
+}
+
+const PRODUCER = "handoffkit-model-gateway";
+const PRODUCER_VERSION = readProducerVersion();
+const PRODUCER_GIT_SHA = resolveProducerGitSha();
 
 export type ModelGatewayCallContext = {
   callId: string;
@@ -210,9 +274,9 @@ export function buildModelCallRecord(
     schema: "model-call-record.v1",
     schema_version: "v1",
     schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-    producer: "handoffkit-model-gateway",
-    producer_version: "0.1.0",
-    producer_git_sha: "0".repeat(40),
+    producer: PRODUCER,
+    producer_version: PRODUCER_VERSION,
+    producer_git_sha: PRODUCER_GIT_SHA,
     created_at: context.startedAt,
     call_id: context.callId,
     endpoint_id: context.endpointId ?? context.dialect,

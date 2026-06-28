@@ -8,7 +8,7 @@
     "directory": "packages/plane"
   },
   "description": "Warrant control plane: contracts, policy, approvals, receipt countersignature, secret broker, audit export, and the control panel UI.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {
@@ -18,7 +18,8 @@
   },
   "files": [
     "dist",
-    "ui"
+    "ui",
+    "LICENSE"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

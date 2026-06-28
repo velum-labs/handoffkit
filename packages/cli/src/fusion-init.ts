@@ -322,7 +322,13 @@ async function setupLocalModels(panel: PanelModelSpec[], host: HostInfo): Promis
     return;
   }
   if (!canPromptInteractively()) {
-    note(`local models will download on first run: ${repos.join(", ")}`);
+    // Non-TTY (CI): no prompts, but still surface the combined download budget so
+    // logs record roughly how many GB the first run will pull.
+    const budgetGB = repos
+      .map((repo) => catalogEntry(repo)?.sizeGB ?? 0)
+      .reduce((sum, gb) => sum + gb, 0);
+    const budgetNote = budgetGB > 0 ? ` (~${budgetGB.toFixed(1)} GB total)` : "";
+    note(`local models will download on first run: ${repos.join(", ")}${budgetNote}`);
     return;
   }
 
@@ -358,24 +364,51 @@ async function setupLocalModels(panel: PanelModelSpec[], host: HostInfo): Promis
     // best-effort; treat as nothing present and let downloads decide
   }
 
-  const ready: string[] = [];
+  const alreadyHave = repos.filter((repo) => present.has(repo));
+  const missing = repos.filter((repo) => !present.has(repo));
+
+  // Global download budget: the combined estimated size across the panel's
+  // not-yet-present models, shown up front so the user sees the whole-panel cost
+  // before agreeing to each download — not just isolated per-file bars.
+  if (missing.length > 0) {
+    const known = missing
+      .map((repo) => catalogEntry(repo)?.sizeGB)
+      .filter((gb): gb is number => gb !== undefined);
+    const budgetGB = known.reduce((sum, gb) => sum + gb, 0);
+    const unknownCount = missing.length - known.length;
+    const budget =
+      budgetGB > 0
+        ? `~${budgetGB.toFixed(1)} GB across ${missing.length} model(s)${unknownCount > 0 ? ` (+${unknownCount} of unknown size)` : ""}`
+        : `${missing.length} model(s) of unknown size`;
+    out.write(`${dim(`download budget: ${budget}`)}\n`);
+  }
+
+  const ready: string[] = [...alreadyHave];
   const deferred: string[] = [];
-  for (const repo of repos) {
-    if (present.has(repo)) {
-      ready.push(repo);
-      continue;
-    }
+  // Track bytes pulled this session so the summary reports a combined total, not
+  // just the per-model bars that scrolled past.
+  let downloadedBytes = 0;
+  for (let index = 0; index < missing.length; index++) {
+    const repo = missing[index] as string;
     const entry = catalogEntry(repo);
     const sizeNote = entry !== undefined ? `~${entry.sizeGB} GB` : "size unknown";
-    const yes = await confirm({ message: `Download ${cyan(repo)} (${sizeNote}) now?`, defaultValue: true });
+    const counter = missing.length > 1 ? `[${index + 1}/${missing.length}] ` : "";
+    const yes = await confirm({ message: `Download ${counter}${cyan(repo)} (${sizeNote}) now?`, defaultValue: true });
     if (!yes) {
       deferred.push(repo);
       continue;
     }
-    const bar = new ProgressBar(`  ${cyan(repo)}`).start();
+    const bar = new ProgressBar(`  ${counter}${cyan(repo)}`).start();
+    let modelBytes = 0;
     try {
-      await env.downloadModel(repo, { onProgress: (progress) => bar.update(progress) });
-      bar.succeed(`  ${cyan(repo)}`);
+      await env.downloadModel(repo, {
+        onProgress: (progress) => {
+          modelBytes = progress.downloaded;
+          bar.update(progress);
+        }
+      });
+      bar.succeed(`  ${counter}${cyan(repo)}`);
+      downloadedBytes += modelBytes;
       ready.push(repo);
     } catch (error) {
       bar.fail(`  ${repo} ${gray(`— ${firstLine(error instanceof Error ? error.message : String(error))}`)}`);
@@ -386,6 +419,7 @@ async function setupLocalModels(panel: PanelModelSpec[], host: HostInfo): Promis
   const lines: string[] = [];
   if (ready.length > 0) lines.push(`${green(glyph.tick())} ready now: ${ready.join(", ")}`);
   if (deferred.length > 0) lines.push(`${yellow(glyph.arrow())} on first run: ${deferred.join(", ")}`);
+  if (downloadedBytes > 0) lines.push(dim(`downloaded ${formatBytes(downloadedBytes)} this session`));
   lines.push(dim(`runtime: ${env.dir} · ${formatBytes(env.info().diskBytes)} on disk`));
   out.write(`\n${box("local models", lines)}\n`);
 }

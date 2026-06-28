@@ -14,6 +14,9 @@ import { loadFusionConfig, fusionConfigPath, FusionConfigError } from "../fusion
 import type { FusionConfig } from "../fusion-config.js";
 import { detectHost } from "../fusion/local-catalog.js";
 import { ownedMlxEnv } from "../fusion/mlx.js";
+import { FUSIONKIT_PYPI_VERSION } from "../fusion/env.js";
+import { platformCapabilities } from "../fusion/platform.js";
+import { engineCached, provisionEngineWithProgress } from "../fusion/provision.js";
 import { hasBinary, INSTALL_HINTS } from "../shared/preflight.js";
 import { formatBytes } from "../ui/progress.js";
 import { bold, brandBanner, brandHeader, cyan, dim, glyph, gray, green, red, yellow } from "../ui/theme.js";
@@ -71,7 +74,7 @@ function keyPresent(name: string): boolean {
 }
 
 /** `fusionkit doctor` — a proactive environment checklist with fix hints. */
-async function runDoctor(): Promise<number> {
+async function runDoctor(opts: { provision?: boolean } = {}): Promise<number> {
   // Match runtime: a project .env makes provider keys available without export.
   loadEnvFileInto(join(process.cwd(), ".env"), process.env);
 
@@ -118,7 +121,40 @@ async function runDoctor(): Promise<number> {
     );
   }
 
+  // Per-platform capability: cloud everywhere; local MLX on Apple Silicon only.
+  console.log("");
+  console.log(bold("platform capability"));
+  for (const cap of platformCapabilities()) {
+    const mark = cap.ok ? green(glyph.tick()) : gray(glyph.bullet());
+    console.log(`  ${mark} ${cap.label} ${dim(`— ${cap.detail}`)}`);
+  }
+
+  // Is the pinned Python engine already provisioned (warmed into the uv cache)?
+  // Probing it offline is fast either way and tells the user whether the first
+  // real run will pay a cold start.
+  console.log("");
+  console.log(bold("fusion engine (Python synthesizer)"));
+  if (!runner) {
+    console.log(
+      `  ${gray(glyph.bullet())} ${dim(`fusionkit@${FUSIONKIT_PYPI_VERSION} — install uv/uvx first, then \`fusionkit setup\``)}`
+    );
+  } else if (await engineCached()) {
+    console.log(`  ${green(glyph.tick())} fusionkit@${FUSIONKIT_PYPI_VERSION} provisioned ${dim("(cached — first run is instant, works offline)")}`);
+  } else {
+    console.log(
+      `  ${gray(glyph.bullet())} fusionkit@${FUSIONKIT_PYPI_VERSION} ${dim("not provisioned yet — the first run pulls it from PyPI")}`
+    );
+    console.log(`    ${yellow(glyph.arrow())} run ${bold("fusionkit setup")} (or ${bold("fusionkit doctor --provision")}) to pre-warm it now`);
+  }
+
   await reportLocalMlx();
+
+  // Optional: actually warm the engine now (doctor + setup in one shot).
+  if (opts.provision === true && runner) {
+    console.log("");
+    console.log(bold("provisioning"));
+    await provisionEngineWithProgress({});
+  }
 
   // Config status, if any.
   if (repoRoot !== undefined) {
@@ -129,9 +165,11 @@ async function runDoctor(): Promise<number> {
         console.log(`  ${gray(glyph.bullet())} ${dim(message)}`)
       );
       if (config === undefined) {
+        const trio = DEFAULT_CLOUD_PANEL.map((spec) => spec.id).join(", ");
         console.log(
-          `  ${gray(glyph.bullet())} no ${cyan(".fusionkit/")} yet — run ${bold("fusionkit fusion init")}`
+          `  ${gray(glyph.bullet())} no ${cyan(".fusionkit/")} yet — using built-in defaults (cloud trio: ${trio})`
         );
+        console.log(`    ${dim(`run ${bold("fusionkit init")} to scaffold one, or ${bold("fusionkit config show")} to see the effective defaults`)}`);
       } else {
         const overrides = Object.keys(config.prompts ?? {});
         console.log(`  ${green(glyph.tick())} ${cyan(fusionConfigPath(repoRoot))}`);
@@ -139,6 +177,7 @@ async function runDoctor(): Promise<number> {
         console.log(
           `    ${dim(`prompt overrides: ${overrides.length > 0 ? overrides.join(", ") : "(none — built-in defaults)"}`)}`
         );
+        console.log(`    ${dim(`see the merged config + provenance with ${bold("fusionkit config show")}`)}`);
       }
     } catch (error) {
       const message = error instanceof FusionConfigError ? error.message : String(error);
@@ -183,7 +222,7 @@ function runStatus(): number {
   const panel = config?.panel ?? (local ? [...DEFAULT_TRIO] : [...DEFAULT_CLOUD_PANEL]);
   const tool = config?.tool ?? "codex";
   const judge = config?.judgeModel ?? panel[0]?.model ?? "(first panel model)";
-  const source = config !== undefined ? cyan(fusionConfigPath(repoRoot)) : dim("(built-in defaults; run `fusionkit fusion init`)");
+  const source = config !== undefined ? cyan(fusionConfigPath(repoRoot)) : dim("(built-in defaults; run `fusionkit init`)");
 
   console.log(`${dim("config:")} ${source}`);
   console.log(`${dim("repo:")}   ${repoRoot}`);
@@ -206,8 +245,9 @@ export function registerDoctor(program: Command): void {
   program
     .command("doctor")
     .description("check that prerequisites (uv, agents, keys, git) are ready")
-    .action(async () => {
-      process.exit(await runDoctor());
+    .option("--provision", "also pre-provision (warm) the fusion engine into the uv cache")
+    .action(async (opts: { provision?: boolean }) => {
+      process.exit(await runDoctor({ provision: opts.provision === true }));
     });
 
   program

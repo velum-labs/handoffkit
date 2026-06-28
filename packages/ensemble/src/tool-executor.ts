@@ -21,6 +21,8 @@ import type {
 } from "@fusionkit/protocol";
 import { resolveInsideWorkspace } from "@fusionkit/workspace";
 
+import { PRODUCER, PRODUCER_GIT_SHA, PRODUCER_VERSION } from "./provenance.js";
+
 export type ToolImplementation = {
   definition: ToolDefinition;
   execute(args: JsonValue): Promise<JsonValue> | JsonValue;
@@ -37,9 +39,9 @@ function metadata(createdAt: string) {
     schema: "tool-execution-record.v1" as const,
     schema_version: "v1" as const,
     schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-    producer: "handoffkit-ensemble",
-    producer_version: "0.1.0",
-    producer_git_sha: "0".repeat(40),
+    producer: PRODUCER,
+    producer_version: PRODUCER_VERSION,
+    producer_git_sha: PRODUCER_GIT_SHA,
     created_at: createdAt
   };
 }

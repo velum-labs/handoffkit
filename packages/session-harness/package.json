@@ -8,7 +8,7 @@
     "directory": "packages/session-harness"
   },
   "description": "AI SDK harness session backend for Warrant runners: drives vendor agent harnesses (Claude Code) through @ai-sdk/harness inside a Vercel Sandbox microVM, capturing the structured harness event stream as governed-session evidence.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

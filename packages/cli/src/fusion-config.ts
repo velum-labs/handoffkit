@@ -21,9 +21,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+
 import { FUSION_TOOLS } from "./fusion-quickstart.js";
 import type { FusionTool, PanelAuthMode, PanelModelSpec, PanelProvider } from "./fusion-quickstart.js";
-import { PANEL_AUTH_MODES, PANEL_PROVIDERS } from "./shared/options.js";
+import { ON_RATE_LIMIT_POLICIES, PANEL_AUTH_MODES, PANEL_PROVIDERS } from "./shared/options.js";
 
 export const FUSION_CONFIG_DIRNAME = ".fusionkit";
 // `fusion.json` (not `config.json`) so the fusion settings never collide with
@@ -62,6 +64,10 @@ export type FusionConfig = {
   observe?: boolean;
   portless?: boolean;
   port?: number | null;
+  /** WS5 rate-limit / credit handoff policy for vendor passthrough models. */
+  onRateLimit?: OnRateLimitPolicy;
+  /** WS7 budget cap (USD) for the session's gateway-observed cost. */
+  budgetUsd?: number;
   /**
    * System-prompt overrides, loaded from `.fusionkit/prompts/*.md`. Not stored
    * inline in `config.json` — it is hydrated from the prompt files on load.
@@ -189,6 +195,23 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
       throw new FusionConfigError(`${source}: port must be a non-negative integer or null`);
     }
     config.port = raw.port;
+  }
+  if (raw.onRateLimit !== undefined) {
+    if (
+      typeof raw.onRateLimit !== "string" ||
+      !(ON_RATE_LIMIT_POLICIES as readonly string[]).includes(raw.onRateLimit)
+    ) {
+      throw new FusionConfigError(
+        `${source}: onRateLimit must be one of ${ON_RATE_LIMIT_POLICIES.join(", ")}`
+      );
+    }
+    config.onRateLimit = raw.onRateLimit as OnRateLimitPolicy;
+  }
+  if (raw.budgetUsd !== undefined) {
+    if (typeof raw.budgetUsd !== "number" || !Number.isFinite(raw.budgetUsd) || raw.budgetUsd <= 0) {
+      throw new FusionConfigError(`${source}: budgetUsd must be a positive number of USD`);
+    }
+    config.budgetUsd = raw.budgetUsd;
   }
   return config;
 }

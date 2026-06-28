@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Apple-Silicon smoke test: Warrant-owned MLX server with a generateText call.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",

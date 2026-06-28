@@ -5,11 +5,14 @@ import { Command } from "commander";
 
 import "./tools.js";
 import { FUSIONKIT_PYPI_VERSION } from "./fusion-quickstart.js";
+import { registerConfig } from "./commands/config.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerEnsemble } from "./commands/ensemble.js";
 import { registerFusion } from "./commands/fusion.js";
 import { registerLocal } from "./commands/local.js";
 import { registerModels } from "./commands/models.js";
+import { registerSessions } from "./commands/sessions.js";
+import { registerSetup } from "./commands/setup.js";
 
 /**
  * Build the `fusionkit` command tree. `enablePositionalOptions` keeps the
@@ -44,6 +47,9 @@ export function buildProgram(): Command {
   registerLocal(program);
   registerFusion(program);
   registerModels(program);
+  registerSessions(program);
+  registerConfig(program);
+  registerSetup(program);
   registerDoctor(program);
 
   return program;

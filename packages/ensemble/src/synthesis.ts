@@ -28,10 +28,7 @@ import type {
   JudgeSynthesisOutput,
   SynthesisFailureSummary
 } from "./judge.js";
-
-const PRODUCER_GIT_SHA = "0".repeat(40);
-const PRODUCER = "handoffkit-ensemble";
-const PRODUCER_VERSION = "0.1.0";
+import { PRODUCER, PRODUCER_GIT_SHA, PRODUCER_VERSION } from "./provenance.js";
 
 export type SynthesisResult = {
   judgeInput: JudgeInput;

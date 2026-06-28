@@ -8,7 +8,7 @@
     "directory": "packages/session-hermetic"
   },
   "description": "Hermetic session backend for Warrant runners: a simulated bash interpreter (just-bash) with a virtual filesystem and interpreter-enforced network allowlists. No real processes or sockets to escape with.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

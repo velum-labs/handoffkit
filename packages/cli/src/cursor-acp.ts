@@ -72,6 +72,20 @@ async function runCursorAcpOutcome(
   Object.assign(bridgeEnv, {
     BRIDGE_PORT: String(bridgePort),
     BRIDGE_ROUTE_INVENTORY: "true",
+    // WS5 cursorkit failover seam (DEFERRED — owned by WS6, cursorkit/tool-cursor).
+    // For Codex/Claude, vendor rate-limit/credit handoff already works: those
+    // harnesses send native passthrough requests to the gateway's
+    // /v1/chat/completions, where FusionBackend#proxyNative detects the
+    // classified `error_category` and reroutes the turn to the ensemble. Because
+    // MODEL_BASE_URL below also points the cursorkit bridge at that same gateway
+    // endpoint, Cursor inherits the SAME pre-stream failover for its *model*
+    // backend for free.
+    // What's still deferred here is the Cursor-*upstream* (CURSOR_UPSTREAM_BASE_URL,
+    // api2.cursor.sh) path: cursorkit's provider (openai.ts) currently collapses
+    // upstream failures to `http_error` and the bridge ends the stream with
+    // "local model failed". When WS6 lands, classify that upstream error in
+    // cursorkit and, on a rate-limit/quota category, hand the turn off to the
+    // gateway's fused model (MODEL_PROVIDER_MODEL = "fusion-panel") here.
     CURSOR_UPSTREAM_BASE_URL: "https://api2.cursor.sh",
     MODEL_BASE_URL: normalizeModelBaseUrl(input.gatewayUrl),
     MODEL_API_KEY: "local",

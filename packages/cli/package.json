@@ -8,7 +8,7 @@
     "directory": "packages/cli"
   },
   "description": "fusionkit — real model fusion behind your coding agent (codex, claude, cursor).",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "fusionkit": "./dist/index.js"
@@ -25,7 +25,8 @@
   },
   "files": [
     "dist",
-    "scope"
+    "scope",
+    "LICENSE"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

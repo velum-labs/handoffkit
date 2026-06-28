@@ -22,7 +22,10 @@ import { join } from "node:path";
 
 import { FUSION_PANEL_MODEL } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
+import { defaultSessionsDir, FileSystemSessionStore } from "@fusionkit/model-gateway";
+import type { SessionMetaInput } from "@fusionkit/model-gateway";
 
+import { resolveSessionId } from "./commands/sessions.js";
 import { gatewaySetupSnippets, setGatewayChatter } from "./gateway.js";
 import { toolRegistry } from "./tools.js";
 import { createPortlessSession } from "./shared/portless.js";
@@ -41,12 +44,14 @@ import {
 import type { FusionTool, RunFusionOptions, StackReporter } from "./fusion/env.js";
 import { openUrl, startObservability } from "./fusion/observability.js";
 import type { Observability } from "./fusion/observability.js";
+import { ensureLocalPanelSupported } from "./fusion/platform.js";
 import { startFusionStack } from "./fusion/stack.js";
 import type { FusionStack } from "./fusion/stack.js";
 import { preflightRequirements } from "./fusion/preflight.js";
 
 export * from "./fusion/env.js";
 export * from "./fusion/observability.js";
+export * from "./fusion/platform.js";
 export * from "./fusion/stack.js";
 export * from "./fusion/preflight.js";
 
@@ -96,8 +101,36 @@ export async function runFusion(
   if (repo !== process.cwd()) loadEnvFileInto(join(repo, ".env"), process.env);
   const models = options.models ?? (options.local === true ? [...DEFAULT_TRIO] : [...DEFAULT_CLOUD_PANEL]);
 
+  // Cross-platform gating (WS8): a local MLX panel only runs on Apple Silicon.
+  // Fail early with a pointer at the cross-platform cloud path instead of
+  // crashing deep in the MLX backend on Linux/Windows.
+  ensureLocalPanelSupported(models);
+
   // Fail fast on missing prerequisites before we start spawning a stack.
   runPreflight(preflightRequirements(tool, models, options));
+
+  // WS4 — durable sessions. The store persists every gateway session under
+  // ~/.fusionkit/sessions (or $FUSIONKIT_SESSIONS_DIR) so it survives this
+  // CLI process; `--resume <id>`/`--continue` rehydrate one into the new run.
+  const sessionStore = new FileSystemSessionStore(defaultSessionsDir());
+  let resumeId: string | undefined;
+  if (options.resume !== undefined) {
+    resumeId = resolveSessionId(sessionStore, options.resume);
+    if (resumeId === undefined) {
+      log(`fusion: no stored session matches "${options.resume}"; starting fresh.`);
+    } else {
+      log(`fusion: resuming session ${resumeId}`);
+    }
+  } else if (options.continueLatest === true) {
+    resumeId = sessionStore.list()[0]?.id;
+    log(resumeId !== undefined ? `fusion: continuing latest session ${resumeId}` : "fusion: no prior session to continue; starting fresh.");
+  }
+  const sessionMeta: SessionMetaInput = {
+    tool,
+    repo,
+    models: models.map((spec) => ({ id: spec.id, model: spec.model })),
+    ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {})
+  };
 
   // Bring up the portless session (programmatic RouteStore). Portless is a
   // polish layer, never a hard requirement: when it is off, unavailable (Node <
@@ -238,6 +271,11 @@ export async function runFusion(
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
+      ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
+      sessionStore,
+      sessionMeta,
+      ...(resumeId !== undefined ? { resumeId } : {}),
       log
     });
     disposers.push(() => stack.close());
@@ -293,6 +331,7 @@ export async function runFusion(
       nativeModels: models.map((spec) => spec.model),
       toolArgs,
       repo,
+      ...(options.ide === true ? { ide: true } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(portless.caCertPath !== undefined ? { caCertPath: portless.caCertPath } : {}),
       logsDir,

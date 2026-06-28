@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Standalone Warrant example: a cloud orchestrator harness driving a governed swarm of local Pi workers via swarmTools, with a terminal cockpit.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
     "@ai-sdk/harness": "1.0.0-canary.6",

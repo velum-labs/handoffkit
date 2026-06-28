@@ -30,8 +30,11 @@ import type {
   FrontDoorRunnerResult,
   FusionGateway,
   Gateway,
+  OnRateLimitPolicy,
   PanelRunner,
   PassthroughModel,
+  SessionMetaInput,
+  SessionStore,
   WireTrajectory
 } from "@fusionkit/model-gateway";
 
@@ -48,6 +51,16 @@ export type GatewayRunnerConfig = {
   judgeModel?: string;
   fusionApiKey?: string;
   modelEndpoints?: Record<string, string>;
+  /** WS5 rate-limit / credit failover policy for vendor passthrough models. */
+  onRateLimit?: OnRateLimitPolicy;
+  /** WS7 budget cap (USD) for the session's gateway-observed cost. */
+  budgetUsd?: number;
+  /** WS4 durable session store; when set the gateway persists/resumes sessions. */
+  sessionStore?: SessionStore;
+  /** WS4 resume target id bound to the first conversation this gateway serves. */
+  resumeId?: string;
+  /** WS4 static session header (tool/repo/panel) persisted on session creation. */
+  sessionMeta?: SessionMetaInput;
 };
 
 // Once an interactive coding agent owns the terminal, the per-turn panel chatter
@@ -261,7 +274,20 @@ export async function startFusionStepGateway(input: {
   const stepUrl = `${base}/v1/fusion/trajectories:fuse`;
   const defaultModel = input.defaultModel ?? "fusion-panel";
 
-  const runPanels: PanelRunner = async ({ task, traceId, sessionSpanId, sessionKey, turn }) => {
+  const runPanels: PanelRunner = async ({
+    task,
+    traceId,
+    sessionSpanId,
+    sessionKey,
+    turn,
+    excludeModelIds
+  }) => {
+    // WS5 failover excludes the throttled vendor (by router endpoint id == panel
+    // model id) so the ensemble fuses over the healthy survivors this turn.
+    const panelModels =
+      excludeModelIds === undefined || excludeModelIds.length === 0
+        ? config.models
+        : config.models.filter((model) => !excludeModelIds.includes(model.id));
     emitTrace({
       component: "gateway",
       event_type: "session.started",
@@ -275,7 +301,7 @@ export async function startFusionStepGateway(input: {
           fusion_backend_url: config.fusionBackendUrl,
           harnesses: config.harnesses,
           judge_model: config.judgeModel ?? null,
-          models: config.models.map((model) => ({
+          models: panelModels.map((model) => ({
             id: model.id,
             model: model.model,
             ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
@@ -285,7 +311,13 @@ export async function startFusionStepGateway(input: {
       }
     });
     if (gatewayChatter) {
-      console.error(`fusion: running panel (${config.models.map((m) => m.id).join(", ")}) for session ${sessionKey}...`);
+      const excluded =
+        excludeModelIds !== undefined && excludeModelIds.length > 0
+          ? ` (excluding ${excludeModelIds.join(", ")} after a vendor rate-limit)`
+          : "";
+      console.error(
+        `fusion: running panel (${panelModels.map((m) => m.id).join(", ")}) for session ${sessionKey}${excluded}...`
+      );
     }
     try {
       const wire = await runFusionPanels({
@@ -293,7 +325,7 @@ export async function startFusionStepGateway(input: {
         repo: config.repo,
         outputRoot: join(config.outputRoot, sessionKey, `t${turn}`),
         prompt: task,
-        models: config.models,
+        models: panelModels,
         harness: config.harnesses[0] ?? "agent",
         fusionBackendUrl: config.fusionBackendUrl,
         traceId,
@@ -335,7 +367,17 @@ export async function startFusionStepGateway(input: {
     stepUrl,
     runPanels,
     defaultModel,
-    passthrough
+    passthrough,
+    ...(config.onRateLimit !== undefined ? { onRateLimit: config.onRateLimit } : {}),
+    ...(config.budgetUsd !== undefined ? { budgetUsd: config.budgetUsd } : {}),
+    // WS7 cost attribution: a fused turn's gateway-observed `usage` is the
+    // judge/synthesis call's, so price it against the configured judge model
+    // name (distinct from routing — see the judge_model note below). Where the
+    // judge is unset/unpriced the fused turn is reported `unknown_cost`.
+    ...(config.judgeModel !== undefined ? { costModel: config.judgeModel } : {}),
+    ...(config.sessionStore !== undefined ? { store: config.sessionStore } : {}),
+    ...(config.resumeId !== undefined ? { resumeId: config.resumeId } : {}),
+    ...(config.sessionMeta !== undefined ? { sessionMeta: config.sessionMeta } : {})
     // judge_model is intentionally NOT forwarded here: `config.judgeModel` is the
     // provider model name, but the router (and trajectories:fuse) route by endpoint
     // id. The Python fuse path already resolves the configured judge endpoint via

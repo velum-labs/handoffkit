@@ -1,4 +1,5 @@
 import type { EnsembleModel, UnifiedHarnessKind } from "@fusionkit/ensemble";
+import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 import { SESSION_ISOLATIONS } from "@fusionkit/protocol";
 import type { SessionIsolation } from "@fusionkit/protocol";
 
@@ -76,6 +77,14 @@ export function parsePort(raw: string | undefined, fallback: number): number {
   return port;
 }
 
+/** Parse `--budget <usd>` (WS7): a positive dollar cap. Returns undefined when unset. */
+export function parseBudget(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const budget = Number(value);
+  if (!Number.isFinite(budget) || budget <= 0) fail("--budget must be a positive number of USD");
+  return budget;
+}
+
 export function isolationFlag(value: string | undefined): SessionIsolation | undefined {
   if (value === undefined) return undefined;
   if (!SESSION_ISOLATIONS.includes(value as SessionIsolation)) {
@@ -94,6 +103,17 @@ export const PANEL_PROVIDERS: readonly PanelProvider[] = [
 
 /** Subscription auth modes accepted in `id=MODE:MODEL` panel specs and configs. */
 export const PANEL_AUTH_MODES: readonly PanelAuthMode[] = ["claude-code", "codex"];
+
+/** WS5 rate-limit / credit handoff policies (`--on-rate-limit`). */
+export const ON_RATE_LIMIT_POLICIES: readonly OnRateLimitPolicy[] = ["fusion", "passthrough", "fail"];
+
+export function parseOnRateLimit(value: string | undefined): OnRateLimitPolicy | undefined {
+  if (value === undefined) return undefined;
+  if (!(ON_RATE_LIMIT_POLICIES as readonly string[]).includes(value)) {
+    fail(`--on-rate-limit must be one of ${ON_RATE_LIMIT_POLICIES.join(" | ")}`);
+  }
+  return value as OnRateLimitPolicy;
+}
 
 export function parseFusionTool(value: string | undefined): FusionTool {
   if (value === undefined || !(FUSION_TOOLS as readonly string[]).includes(value)) {

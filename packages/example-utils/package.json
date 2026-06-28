@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Shared narration and live-model helpers for standalone Warrant examples.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {

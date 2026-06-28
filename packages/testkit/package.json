@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Test and demo harness: in-process plane + runner stacks and git repo fixtures.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {

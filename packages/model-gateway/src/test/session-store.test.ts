@@ -1,0 +1,137 @@
+import assert from "node:assert/strict";
+import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
+
+import {
+  defaultSessionsDir,
+  FileSystemSessionStore,
+  InMemorySessionStore
+} from "../session-store.js";
+import type { SessionMeta, SessionTurnRecord } from "../session-store.js";
+
+const tempDirs: string[] = [];
+function tempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "fusionkit-sessions-store-"));
+  tempDirs.push(dir);
+  return dir;
+}
+after(() => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+function meta(id: string): SessionMeta {
+  return {
+    id,
+    tool: "codex",
+    repo: "/repo",
+    models: [
+      { id: "gpt", model: "gpt-5.5" },
+      { id: "sonnet", model: "claude-sonnet-4-6" }
+    ],
+    judgeModel: "gpt-5.5",
+    defaultModel: "fusion-panel",
+    traceId: `trace_${id}`,
+    sessionSpan: `span_${id}`,
+    createdAt: 1000,
+    updatedAt: 1000
+  };
+}
+
+function turn(index: number): SessionTurnRecord {
+  return {
+    turn: index,
+    messages: [{ role: "user", content: `task ${index}` }],
+    candidates: [{ trajectory_id: `t${index}`, model_id: "gpt", status: "succeeded", final_output: "ok" }],
+    recordedAt: 1000 + index
+  };
+}
+
+test("round-trips a session through a fresh store instance (persist → reload)", () => {
+  const root = tempDir();
+  const writer = new FileSystemSessionStore(root);
+  writer.saveMeta(meta("alpha"));
+  writer.appendTurn("alpha", turn(1));
+  writer.appendTurn("alpha", turn(2));
+
+  // A brand-new instance (simulating a new CLI process) reads it back.
+  const reader = new FileSystemSessionStore(root);
+  const loaded = reader.load("alpha");
+  assert.ok(loaded !== undefined);
+  assert.equal(loaded.meta.id, "alpha");
+  assert.equal(loaded.meta.tool, "codex");
+  assert.equal(loaded.meta.traceId, "trace_alpha");
+  assert.deepEqual(loaded.turns.map((entry) => entry.turn), [1, 2]);
+  assert.equal(loaded.turns[1]?.candidates[0]?.trajectory_id, "t2");
+  // appendTurn bumps last-activity but never the creation time.
+  assert.equal(loaded.meta.createdAt, 1000);
+  assert.equal(loaded.meta.updatedAt, 1002);
+});
+
+test("list summarizes sessions, most-recently-active first, with turn counts", () => {
+  const root = tempDir();
+  const store = new FileSystemSessionStore(root);
+  store.saveMeta(meta("older"));
+  store.appendTurn("older", turn(1));
+  store.saveMeta(meta("newer"));
+  store.appendTurn("newer", turn(1));
+  store.appendTurn("newer", turn(2));
+
+  const list = store.list();
+  assert.deepEqual(list.map((entry) => entry.id), ["newer", "older"]);
+  assert.equal(list[0]?.turnCount, 2);
+  assert.equal(list[1]?.turnCount, 1);
+});
+
+test("remove deletes a session and is idempotent", () => {
+  const root = tempDir();
+  const store = new FileSystemSessionStore(root);
+  store.saveMeta(meta("gone"));
+  assert.equal(store.remove("gone"), true);
+  assert.equal(store.load("gone"), undefined);
+  assert.equal(store.remove("gone"), false);
+});
+
+test("load returns undefined for an unknown id and an empty list on a missing root", () => {
+  const store = new FileSystemSessionStore(join(tempDir(), "does-not-exist"));
+  assert.equal(store.load("nope"), undefined);
+  assert.deepEqual(store.list(), []);
+});
+
+test("a torn trailing turn line is skipped, not fatal", () => {
+  const root = tempDir();
+  const store = new FileSystemSessionStore(root);
+  store.saveMeta(meta("torn"));
+  store.appendTurn("torn", turn(1));
+  // Simulate a crash mid-write by appending a partial JSON line.
+  appendFileSync(join(root, "torn", "turns.jsonl"), '{"turn":2,"messa', "utf8");
+  const loaded = store.load("torn");
+  assert.ok(loaded !== undefined);
+  assert.deepEqual(loaded.turns.map((entry) => entry.turn), [1]);
+});
+
+test("the in-memory store mirrors the filesystem store's contract", () => {
+  const store = new InMemorySessionStore();
+  store.saveMeta(meta("mem"));
+  store.appendTurn("mem", turn(1));
+  store.appendTurn("mem", turn(2));
+  const loaded = store.load("mem");
+  assert.deepEqual(loaded?.turns.map((entry) => entry.turn), [1, 2]);
+  assert.equal(store.list()[0]?.turnCount, 2);
+  assert.equal(store.remove("mem"), true);
+  assert.equal(store.load("mem"), undefined);
+});
+
+test("defaultSessionsDir honors FUSIONKIT_SESSIONS_DIR", () => {
+  const previous = process.env.FUSIONKIT_SESSIONS_DIR;
+  try {
+    process.env.FUSIONKIT_SESSIONS_DIR = "/tmp/custom-sessions";
+    assert.equal(defaultSessionsDir(), "/tmp/custom-sessions");
+    delete process.env.FUSIONKIT_SESSIONS_DIR;
+    assert.match(defaultSessionsDir(), /\.fusionkit\/sessions$/);
+  } finally {
+    if (previous === undefined) delete process.env.FUSIONKIT_SESSIONS_DIR;
+    else process.env.FUSIONKIT_SESSIONS_DIR = previous;
+  }
+});

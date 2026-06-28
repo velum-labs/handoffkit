@@ -1,532 +1,198 @@
-# Warrant (working name)
+# FusionKit
 
-The governed execution and provenance plane for AI agents.
+**Run ensembles of local and cloud models** — for normal inference *and* behind
+your coding agent.
 
-Run any vendor's agent — Claude Code, Codex, Cursor CLI — on a runtime you control, under policy, with a signed receipt proving what it saw, ran, changed, and was given.
+FusionKit fans a single request out across a panel of models (local MLX, plus
+OpenAI / Anthropic / Google / any OpenAI-compatible endpoint), runs each one,
+and synthesizes the results into one answer. You can use it two ways:
 
-The two core objects are the **run contract** (a signed authorization to execute under stated conditions) and the **receipt** (a signed, offline-verifiable record of what actually happened). Continuation — handing local work to a governed runner and pulling it back — is built from those same primitives and shipped here as the **handoff SDK**.
+- as a **raw inference endpoint** (`fusionkit serve`) that any OpenAI- or
+  Anthropic-compatible client can point at, and
+- as the **backend for an unmodified coding harness** — `fusionkit codex`,
+  `fusionkit claude`, `fusionkit cursor` wire Codex, Claude Code, and Cursor to
+  the ensemble over their own native wire protocols, so the tool never learns
+  fusion happened.
 
-> **Documentation:** the full, user-facing docs (fusionkit CLI + platform concepts, architecture, SDKs, self-hosting, and the API reference) live in the Fumadocs site under [`apps/docs`](apps/docs), published at `fusionkit.velum-labs.com`. This README is the product narrative and quick tour.
+The Node **`@fusionkit/cli`** is the single front door; the Python
+**`fusionkit serve`** (PyPI `fusionkit`) is the documented raw endpoint it drives
+under the hood.
 
-## Status
+> **Documentation:** the full user-facing docs live in the Fumadocs site under
+> [`apps/docs`](apps/docs), published at `fusionkit.velum-labs.com`. This README
+> is the product narrative and quick tour; the maintainer docs are in
+> [`docs/`](docs).
 
-The kernel, control plane, runner, control panel UI, handoff SDK, AI SDK and compute adapters, CLI, demo series, and Docker deployment are implemented. The control plane is hardened: durable transactional SQLite storage, atomic run claims, durable replay protection, role-based principal auth with rotation/revocation, IdP-backed approvals, request validation, rate limiting, master-key at-rest encryption, retention/GC, and structured logging + metrics (see "Hardening and operations" below). The protocol/verifier packages still use only Node built-ins, keeping the offline verifier maximally auditable; other packages use trusted, exact-pinned third-party dependencies (see "Dependency policy"). The validation gate in the spec (design-partner interviews) still governs go-to-market.
+## Install — one install story
 
-## Repository layout
+```bash
+pnpm add -g @fusionkit/cli           # or: npm i -g @fusionkit/cli  (installs the `fusionkit` command)
+fusionkit setup                      # pre-provision the Python engine so the first run is instant
+```
+
+**Prerequisites:** [`uv`](https://docs.astral.sh/uv/) (ships `uvx`), `git`, and —
+for the coding-harness path — the agent CLI you want (`codex` / `claude` /
+`cursor-agent`). No separate Python install: the `fusionkit serve` synthesizer is
+fetched from PyPI via `uvx` and **auto-provisioned**. `fusionkit setup` (or
+`fusionkit doctor --provision`) warms that `uvx` environment up front so the
+first real run doesn't pay a cold-start; without it, the engine provisions
+on first use. Prefer not to install globally? Use `npx @fusionkit/cli <command>`.
+
+## Quickstart — one command
+
+Back a coding agent with a model ensemble:
+
+```bash
+export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  GEMINI_API_KEY=...
+cd your-git-repo
+fusionkit codex                      # or: claude | cursor | serve   (add --local for an Apple-Silicon MLX panel)
+```
+
+`fusionkit codex` spawns everything for you — the model panel, a single
+`fusionkit serve` router that fronts each model and performs synthesis, the
+harness gateway, and Codex pre-wired to it. One `Ctrl+C` tears the whole stack
+down. See the
+[Fusion Harness Gateway](docs/fusion-harness-gateway.md#quickstart-one-command).
+
+Run `fusionkit doctor` first to check prerequisites (uv, agents, provider keys,
+git, and per-platform capability), and `fusionkit init` to scaffold a committed
+`.fusionkit/` config for a repo.
+
+### Quickstarts
+
+- [Inference endpoint](docs/quickstart-inference.md) — `fusionkit serve` as an
+  OpenAI-compatible ensemble endpoint, with curl streaming + tool-calling.
+- [Coding harness](docs/quickstart-harness.md) — `fusionkit codex` / `claude` /
+  `cursor` (+ `--ide`), the auto-wiring, and fused vs. passthrough models.
+- [Rate-limit handoff](docs/quickstart-handoff.md) — how `--on-rate-limit` works,
+  what failover looks like, and one-tap resume.
+- [Model catalog](docs/model-catalog.md) — choosing/configuring panel models
+  (cloud, open-weight, local MLX), pricing/`--budget`, decorrelated-trio guidance.
+
+> **Cross-platform.** Cloud ensembles run on Linux, Windows, and macOS. Local MLX
+> panels (`--local`) are Apple-Silicon-only; off Apple Silicon, `--local` fails
+> early with a pointer at the cloud path. `fusionkit doctor` reports capability
+> per platform.
+
+## What's implemented
+
+The ensemble loop is real end-to-end today, with these headline features:
+
+| Feature | What it gives you | Docs |
+| --- | --- | --- |
+| **Streaming + tool calling through the ensemble** | Real SSE streaming and function/tool calls flow through the panel + judge, in each harness's native dialect (OpenAI Responses / Anthropic Messages / OpenAI Chat). | [gateway](docs/fusion-harness-gateway.md) |
+| **Rate-limit / credit handoff** | When a vendor passthrough model hits a 429 / quota / billing error, the turn is transparently rerouted to the ensemble. `--on-rate-limit fusion\|passthrough\|fail`. | [cli](docs/cli.md), [config](docs/configuration.md) |
+| **Durable, resumable sessions** | Sessions persist under `~/.fusionkit/sessions/`; resume with `--resume <id>` / `--continue`, inspect with `fusionkit sessions`. | [cli](docs/cli.md#durable-sessions---resume----continue) |
+| **Cost metering + budgets** | Per-turn token + USD accounting, a running session total, and an optional `--budget <usd>` cap. | [cli](docs/cli.md#cost-metering-and-budgets---budget) |
+| **Turnkey Cursor IDE** | `fusionkit cursor --ide` wires the Cursor IDE to the gateway through a local desktop proxy — no manual public tunnel. | [cli](docs/cli.md) |
+| **One config source of truth** | A committed `.fusionkit/fusion.json` (+ `prompts/*.md`); the Python router YAML is *derived* from it via `fusionkit config export-yaml`. | [config](docs/configuration.md) |
+
+## The CLI surface
+
+| Command | What it does |
+| --- | --- |
+| `codex` \| `claude` \| `cursor` \| `serve` | Run the model ensemble behind a coding harness (or `serve` for the raw endpoint setup). |
+| `fusion [tool]` | The generic launcher behind the shortcuts; `fusion stop` reaps portless services. |
+| `init` | Scaffold a committed `.fusionkit/` for this repo. |
+| `config` | `config show` / `config path` / `config export-yaml`. |
+| `sessions` | `sessions [list]` / `sessions show <id>` / `sessions rm <id>`. |
+| `models` | `models list` / `models download` / `models rm` (local MLX cache). |
+| `local <tool>` | Back a vendor agent with a single local model (no fusion). |
+| `ensemble` | Lower-level ensemble + gateway tooling (`run` / `handoff` / `dashboard` / `e2e` / `gateway`). |
+| `setup` | Pre-provision (warm) the fusion engine into the `uvx` cache so the first run is instant. |
+| `doctor`, `status` | Preflight the environment (incl. per-platform capability); preview the effective config and run plan. |
+
+Full reference: [docs/cli.md](docs/cli.md).
+
+## Architecture
+
+Two cooperating processes:
+
+1. **`fusionkit serve`** (Python, PyPI `fusionkit`) — the model **router + fusion
+   engine**: fronts every panel model by id (passthrough) and performs
+   judge + synthesis (`/v1/fusion/trajectories:fuse`, `/v1/chat/completions`).
+   This is the inference brain, and the documented raw endpoint.
+2. **`@fusionkit/cli`** (Node) — the **harness gateway + UX**: auto-wires
+   Codex / Claude / Cursor, manages per-model git worktrees, spawns the Python
+   router via `uvx`, and owns onboarding, config, sessions, and model management.
+
+Each panel model runs the launched harness in its own lightweight git worktree
+(parallel harnesses editing one repo — not VM isolation), producing a full
+native **trajectory**; the synthesizer fuses those trajectories into one answer
+in the request's natural shape. See
+[Fusion Harness Gateway](docs/fusion-harness-gateway.md) and
+[Fusion Judge Trajectory](docs/fusion-judge-trajectory.md).
+
+## Repository layout (product packages)
 
 | Package | What it is |
 | --- | --- |
-| [`@fusionkit/protocol`](packages/protocol) | The open data contracts (`warrant.contract.v1`, `receipt.v1`, `event.v1`, `manifest.v1`, `policy.v1`, `checkpoint.v1`, `envelope.v1`), the wire API types, and the primitives to sign, hash-chain, and verify them offline. |
-| [`@fusionkit/workspace`](packages/workspace) | Git workspace capture (with provable secret-pattern denial), session materialization, output collection, and divergence-safe pull. |
-| [`@fusionkit/plane`](packages/plane) | Control plane: contracts, policy evaluation, role-based principal auth, IdP-backed approvals, receipt countersignature, secret broker, durable SQLite storage, rate limiting, retention/GC, metrics, audit export — and the control panel UI at `/ui/`. |
-| [`@fusionkit/runner`](packages/runner) | Outbound-only runner: claims contracts, materializes workspaces, runs agent harnesses in governed sessions with deny-by-default egress, signs receipts. Pluggable session-isolation backends. |
-| [`@fusionkit/session-hermetic`](packages/session-hermetic) | Hermetic session backend: a simulated bash interpreter ([just-bash](https://github.com/vercel-labs/just-bash)) with a virtual filesystem and interpreter-enforced egress. No real process or socket to escape with. |
-| [`@fusionkit/session-vercel-sandbox`](packages/session-vercel-sandbox) | Vercel Sandbox session backend: each session runs in a Firecracker microVM with VM-level isolation and domain egress policy. Experimental, integration-gated. |
-| [`@fusionkit/session-harness`](packages/session-harness) | AI SDK harness driver, binding-based: `claudeCodeBinding` runs claude-code through `@ai-sdk/harness` (`HarnessAgent`) in a Vercel Sandbox microVM, and `piBinding` runs the host-runtime Pi harness on a local [just-bash](https://github.com/vercel-labs/just-bash) sandbox driving a local model (the cheap swarm worker). Structured events become a JSONL transcript. Experimental, integration-gated. |
-| [`@fusionkit/sdk`](packages/sdk) | Thin client over the plane API plus offline receipt verification. |
-| [`@fusionkit/handoff`](packages/handoff) | The continuation SDK: `handoff(...)`, `checkpoint`, `continueIn`, `parallel`, `review`, `pull` — typed descriptors, fail-closed planning, full provenance. |
-| [`@fusionkit/adapter-ai-sdk`](packages/adapter-ai-sdk) | AI SDK adapter for app-owned loops and orchestrators: `remoteTools(...)` runs a model's tool calls as governed contracts; `swarmTools(...)` gives a cloud orchestrator harness governed dispatch/status/pull/escalate over a local worker swarm. Both return AI SDK-compatible tools that execute in governed sessions and return with receipts. |
-| [`@fusionkit/adapter-compute`](packages/adapter-compute) | ComputeSDK-shaped compute surface: `sandbox.create()`, `runCommand`, `filesystem` — every command a governed run with a receipt. |
-| [`@fusionkit/model-gateway`](packages/model-gateway) | Native local-model gateway: fronts an OpenAI-compatible local model (the owned `mlx_lm.server` fork by default) and exposes the wire dialects each agent harness needs — OpenAI Chat Completions (opencode, Cursor plan mode), Anthropic Messages (Claude Code), and OpenAI Responses (Codex) — so a local model can transparently back them. |
-| [`@fusionkit/cli`](packages/cli) | The `fusionkit` CLI: the primary product surface. |
-| [`@fusionkit/testkit`](packages/testkit) | In-process plane + runner stacks and git fixtures, shared by tests and demos. |
-| [`examples/*`](examples) | Standalone example projects for the runnable demos (below). |
-| [`uniroute`](python/uniroute) | Python (uv workspace member): UniRoute universal model routing, arXiv:2502.08773. |
-| [`uniroute-mlx`](python/uniroute-mlx) | Python (uv workspace member): evaluate and fit UniRoute routers over OpenAI-compatible endpoints (mlx-lm, Ollama, cloud), exporting portable router cards consumed by `routedModel`. |
+| [`@fusionkit/cli`](packages/cli) | The `fusionkit` CLI — the single front door and primary product surface. |
+| [`@fusionkit/ensemble`](packages/ensemble) | The ensemble run engine: per-model worktrees, harness execution, judge synthesis, trajectory fusion. |
+| [`@fusionkit/model-gateway`](packages/model-gateway) | The harness gateway: dialect translation (OpenAI Responses / Anthropic Messages / OpenAI Chat), streaming, durable session store, cost metering, rate-limit handoff. |
+| [`@fusionkit/tools`](packages/tools) + [`tool-codex`](packages/tool-codex) / [`tool-claude`](packages/tool-claude) / [`tool-cursor`](packages/tool-cursor) / [`tool-opencode`](packages/tool-opencode) | The per-harness adapters that drive each vendor CLI. |
+| [`@fusionkit/protocol`](packages/protocol) | The model-fusion data contracts (harness run request/result, trajectories) and generated SDK bindings. |
+| [`@fusionkit/workspace`](packages/workspace) | Git workspace capture, worktree materialization, and divergence-safe pull. |
+| [`@fusionkit/adapter-ai-sdk`](packages/adapter-ai-sdk) | The managed local-model stack (`mlxServer`) + AI SDK model adapters used by `fusionkit models`/`--local`. |
+
+Several **governance / VM-isolation packages remain in the tree** but are
+**not part of the ensemble product** (`plane`, `runner`, `sdk`, `handoff`,
+`adapter-compute`, `session-hermetic`, `session-vercel-sandbox`,
+`session-harness`). See **[docs/scope.md](docs/scope.md)** for the exact product
+vs. out-of-scope mapping and the planned separation steps.
 
 ## Python workspace
 
-Alongside the pnpm workspace, the repository is a [uv](https://docs.astral.sh/uv/) monorepo for its Python side: the root `pyproject.toml` declares a virtual workspace whose members live under `python/*` and share the committed `uv.lock`.
+Alongside the pnpm workspace, the repository is a [uv](https://docs.astral.sh/uv/)
+monorepo for its Python side (the root `pyproject.toml` declares a virtual
+workspace under `python/*`):
 
 ```sh
 uv sync --all-packages                 # one .venv for every Python package
-uv run pytest python/uniroute/tests   # test a member
-uv run uniroute-demo                   # run a member's entry point
+uv run pytest python/uniroute/tests    # test a member
 ```
 
-## FusionKit integration
+## Development
 
-- [FusionKit handoff executor](docs/fusionkit-handoff-executor.md): stdin/stdout record envelope for FusionKit coding-harness benchmark tasks.
-- [Fusion Harness Gateway](docs/fusion-harness-gateway.md): front door that lets unmodified Codex, Claude Code, and Cursor use model fusion as their backend over their native wire protocols.
-
-One-command quickstart (real models, no mocks): install the `fusionkit` CLI globally and back a coding agent with model fusion in a single command —
-
-```bash
-pnpm add -g @fusionkit/cli           # public npm; installs the `fusionkit` command
-export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...
-cd your-git-repo
-fusionkit codex                      # or: claude | cursor | serve  (add --local for an Apple-Silicon MLX panel)
-```
-
-The synthesizer (`fusionkit serve`) is fetched from PyPI via `uvx`, so only `uv` and your coding-agent CLI need to be installed. See [Fusion Harness Gateway](docs/fusion-harness-gateway.md#quickstart-one-command) for details.
-
-## Quickstart
-
-Prerequisites: Node >= 22 and git. The exact pnpm version is pinned via Corepack — no global install needed:
+Prerequisites: Node >= 22 and git. The pnpm version is pinned via `packageManager`:
 
 ```sh
-corepack enable          # one-time; activates the pinned pnpm from package.json
+corepack enable          # one-time; activates the pinned pnpm
 pnpm install             # links all workspace packages from the frozen lockfile
 pnpm build               # tsc -b builds every package in dependency order
 pnpm verify              # repo checks + build + the full test suite
 ```
 
-Optional but recommended: install [portless](https://github.com/vercel-labs/portless)
-(`npm i -g portless && portless service install && portless trust`, Node `>=24`)
-so the dashboard, gateway, router, and control panel come up at stable HTTPS
-names (`https://scope.localhost`, `https://gateway.fusion.localhost`, ...) and
-are reused across runs. Without it the stack falls back to raw ports; pass
-`--no-portless` (or `PORTLESS=0`) to force ports. See
-[docs/getting-started.md](docs/getting-started.md#portless-stable-named-urls).
-
 ```sh
-
-# one-time: org keys, config, policy
-node packages/cli/dist/index.js init
-
-# terminal 1: control plane + control panel
-node packages/cli/dist/index.js plane start      # http://127.0.0.1:7172/ui/ (or https://plane.fusion.localhost/ui/ with portless)
-
-# terminal 2: an outbound-only runner (your machine is the "customer infra")
-node packages/cli/dist/index.js runner start --pool default
-
-# terminal 3: a governed run in any git repo
-cd your-repo
-node ../path/to/packages/cli/dist/index.js run --agent mock "try the kernel"      # no API keys needed
-node ../path/to/packages/cli/dist/index.js run --agent claude-code "fix the bug"  # wraps the real CLI
-
-# what would move, without moving anything
-node packages/cli/dist/index.js run --agent mock --dry-run "probe"
-
-# the product: one screen, five questions — then prove it offline
-node packages/cli/dist/index.js receipt run_...
-node packages/cli/dist/index.js bundle run_... --out bundle.json
-node packages/cli/dist/index.js verify bundle.json
-
-# continuation, built from the same primitives
-node packages/cli/dist/index.js continue --agent mock --reason "laptop going offline" "finish the refactor"
-node packages/cli/dist/index.js pull run_...
+pnpm check               # repo invariants (required files, dependency pins, ...)
+pnpm test                # the full unit + integration + example suite
+pnpm demo all            # run every non-interactive example
 ```
-
-### Docker
-
-One command boots the plane (with the control panel), a runner, and a seeder that fills the panel with showcase runs:
-
-```sh
-docker compose up --build
-# open http://localhost:7172/ui/
-docker compose exec plane warrant ui      # prints the control panel login token
-docker compose exec plane warrant runs    # or drive it from the CLI
-```
-
-### Control panel
-
-`warrant plane start` serves a dependency-free control panel at `/ui/`: live run list, hash-chained event timelines, one-screen receipts (the five questions), consent approvals, run cancellation, runner inventory, the content-addressed policy snapshot, bundle download, and audit JSONL export. Sign in with the admin token from `warrant ui`.
-
-## Standalone examples
-
-Each demo is now its own workspace project under `examples/`. They remain self-contained (in-process plane + runner + built-in mock agent; no vendor CLIs or API keys) and narrate what they prove:
-
-```sh
-pnpm demo           # list standalone examples
-pnpm demo 01        # run one example project
-pnpm demo all       # run every non-interactive example
-```
-
-| # | Demo | What it proves |
-| --- | --- | --- |
-| 01 | [Governed run](examples/governed-run) | Signed contract → governed session → receipt answering the five questions, verified offline. |
-| 02 | [Dry run](examples/dry-run) | The complete disclosure report — including provably denied `.env`/key captures — with nothing moved. |
-| 03 | [Consent + secrets](examples/consent-secrets) | A secret-releasing run blocks on human approval; the value is injected at runtime and appears nowhere in any artifact. |
-| 04 | [Egress policy](examples/egress-policy) | Fail-closed network policy at contract time, deny-by-default enforcement and evidence at the session boundary. |
-| 05 | [Offline verification](examples/offline-verify) | Tampered event chains and forged receipts are detected with no trust in the plane. |
-| 06 | [Handoff](examples/handoff) | `h.continueIn(targets.pool("eng-prod"), …)`: checkpoint, envelope, governed run, trace, receipt, divergence-safe pull. |
-| 07 | [Parallel fan-out](examples/parallel-fanout) | One checkpoint forked into isolated attempts, reviewed with typed deterministic strategies; every attempt keeps its receipt. |
-| 08 | [Control panel](examples/control-panel) | Boots a seeded plane + runner and leaves the UI up for you to explore (interactive). |
-| 09 | [AI SDK loop](examples/ai-sdk-loop) | An ordinary `generateText` loop whose tool calls execute in governed sessions and return with verified receipts. |
-| 10 | [Compute sandbox](examples/compute-sandbox) | The ComputeSDK shape (`create`, `runCommand`, `filesystem`) over governed sessions, with continuity through the workspace. |
-| 11 | [Golden interface](examples/golden-interface) | `h.tools` + `h.needs` + `h.continueIn` + `h.compute` + `h.summary` in one context, with the tool journal carried across the boundary. |
-| 12 | [Model escalation](examples/model-escalation) | `h.model` starts local, escalates to cloud on deterministic conditions, explains every routing decision, and gates `h.needs`. |
-| 13 | [Hermetic session](examples/hermetic-session) | The `command` harness runs inside a bash interpreter with a virtual filesystem and interpreter-enforced egress; the receipt records `isolation: hermetic`. |
-| 14 | [Cloud orchestrator, local swarm](examples/swarm) | A cloud orchestrator drives a governed swarm via `swarmTools`: dispatch fans a goal across cheap local workers (each a signed run), completed workers are judged from deterministic evidence and pulled, overlaps are caught from receipts and escalated to a cloud target. `cockpit.ts` wires the same tools into a `HarnessAgent` + `@ai-sdk/tui` terminal. |
-
-## Using real models
-
-The AI SDK demos (09, 11, 12) run with scripted mock models by default so the series is deterministic and key-free in CI. Point them at real models through any OpenAI-compatible endpoint and the same demos run live — the governance (contracts, sessions, receipts) is identical in both modes:
-
-```sh
-# real local model (Ollama, LM Studio, …)
-export WARRANT_DEMO_LOCAL_URL=http://localhost:11434/v1
-export WARRANT_DEMO_LOCAL_MODEL=qwen3:8b
-
-# real cloud model (OpenAI, a gateway, OpenRouter, …)
-export OPENAI_API_KEY=sk-...                       # or WARRANT_DEMO_CLOUD_API_KEY
-export WARRANT_DEMO_CLOUD_MODEL=gpt-4o-mini        # named explicitly, no silent default
-# export WARRANT_DEMO_CLOUD_URL=https://api.openai.com/v1   (default)
-
-pnpm demo 09   # a real model drives generateText; its tool calls run in governed sessions
-pnpm demo 12   # real local-first escalation: local model → cloud model, decision trace included
-```
-
-And the core product path has always been real models: the vendor agent harnesses wrap the actual CLIs, with API keys released by the secret broker — never present in prompts, contracts, logs, or receipts:
-
-```sh
-# org policy: make the key releasable and the API host reachable, then:
-warrant secrets set ANTHROPIC_API_KEY sk-ant-...
-warrant run --agent claude-code --secret ANTHROPIC_API_KEY \
-  --allow-host api.anthropic.com "fix the flaky auth test and run the suite"
-```
-
-### Managed MLX: Warrant owns the model server
-
-On Apple Silicon, `mlxServer(...)` from `@fusionkit/adapter-ai-sdk` owns the whole local-model stack rather than pointing at a server you run by hand. It provisions a dedicated directory (default `~/.warrant/mlx`) containing a private Python venv with [mlx-lm](https://pypi.org/project/mlx-lm/), an env manifest, and a contained Hugging Face model cache — then boots `mlx_lm server` from that env's own interpreter on the first model call, and scales it to zero after an idle period. The next call transparently restarts it.
-
-Provisioning prefers [uv](https://docs.astral.sh/uv/) when available (an explicit path, `WARRANT_UV`, or PATH discovery): installs are an order of magnitude faster, and uv supplies its own managed CPython at a pinned version — removing even the system-python requirement — with its caches and interpreters contained inside the owned directory. Without uv it falls back to stdlib `python3 -m venv` + pip, so uv is an upgrade, never a dependency. The manifest records which toolchain built the env.
-
-```ts
-import { handoffModel, mlxServer } from "@fusionkit/adapter-ai-sdk";
-
-const local = mlxServer({
-  model: "mlx-community/Qwen3-4B-4bit",
-  idleShutdownMs: 5 * 60 * 1000 // scale to zero after 5 idle minutes
-});
-
-const model = handoffModel({ local, cloud: openai("gpt-5.5") });
-// First call: provisions the env (once), spawns the server, waits for
-// health. Idle: the process is stopped. Crash or wrong platform: the
-// call escalates to cloud, honestly recorded in the routing trace.
-```
-
-The footprint is one inspectable directory: `local.env.info()` reports the manifest and disk usage, `local.env.verify()` checks the env is intact, and `local.env.destroy()` removes everything — venv, weights, logs, uv caches. The upstream mlx-lm pin (`MLX_LM_PIN`), structured fork pin (`MLX_LM_STRUCTURED_PIN`), and Python version requested from uv (`PYTHON_PIN`) follow the same trusted-pin policy as the npm allowlist: exact versions, bumped only as reviewed changes. The generic layer (`managedModelServer(...)`) accepts any `prepare()` hook, so the same lazy-start/scale-to-zero lifecycle can manage other OpenAI-compatible servers.
-
-Passing `structured: true` to `mlxServer(...)` provisions the current reviewed commit from the `main` branch of the [velum-labs/mlx-lm fork](https://github.com/velum-labs/mlx-lm) with its `[structured]` extra instead of upstream mlx-lm. The fork is self-contained: upstream mlx-lm plus an `mlx_lm.structured` package built on [outlines-core](https://pypi.org/project/outlines-core/) (see the fork's `STRUCTURED.md`). The stock mlx-lm server silently ignores `response_format`; the fork enforces JSON schema / regex / choice constraints by masking logits with a compiled FSM, so the AI SDK's structured output modes (`generateObject`, `responseFormat: json`) produce schema-valid output from the local model.
-
-The MLX stress runner drives many concurrent requests through the same managed server and reports request throughput, token throughput, latency percentiles, and error samples. Build first, then run it on Apple Silicon:
-
-```bash
-pnpm build
-pnpm mlx:stress
-```
-
-Useful knobs:
-
-```bash
-WARRANT_MLX_STRESS_REQUESTS=256 \
-WARRANT_MLX_STRESS_CONCURRENCY=16 \
-WARRANT_MLX_STRESS_MODE=mixed \
-WARRANT_MLX_STRESS_MAX_TOKENS=64 \
-pnpm mlx:stress
-```
-
-`WARRANT_MLX_STRESS_MODE` can be `text`, `object`, or `mixed`; `object` and `mixed` use structured outputs.
-
-### UniRoute: learned routing over a model pool
-
-Beyond the two-model `handoffModel` escalation, `routedModel(...)` routes each call across a *pool* of candidates by predicted correctness (UniRoute, [arXiv:2502.08773](https://arxiv.org/abs/2502.08773)). The router is fitted offline by the Python [`uniroute`](python/uniroute)/[`uniroute-mlx`](python/uniroute-mlx) workspace packages and frozen into a portable router card (`uniroute.router.v1` JSON); onboarding a new model is one validation pass, never a retrain.
-
-```ts
-import { loadRouterCard, mlxServer, routedModel } from "@fusionkit/adapter-ai-sdk";
-
-const card = loadRouterCard(JSON.parse(await readFile("router-card.json", "utf8")));
-const model = routedModel({
-  card,
-  candidates: {
-    "mlx-community/Qwen3-1.7B-4bit": mlxServer({ model: "mlx-community/Qwen3-1.7B-4bit" }),
-    "mlx-community/Qwen3-8B-4bit": mlxServer({ model: "mlx-community/Qwen3-8B-4bit" }),
-    "gpt-5.5": openai("gpt-5.5")
-  },
-  embed: embedWithTheCardsEmbedder // must match card.embedder.model
-});
-// Each call: embed → cluster → argmin(predicted error + λ·cost) → one model
-// runs. A failed call falls back to the next-best candidate, honestly
-// reported via onDecision (withRoutedModel wires this into h.trace()).
-```
-
-## Local models behind agent harnesses
-
-`warrant local <tool>` backs a vendor agent — Claude Code, Codex, opencode, or Cursor — with a locally running model, without changing how you invoke the tool. It starts the [`@fusionkit/model-gateway`](packages/model-gateway), which fronts an OpenAI-compatible local model (the owned `mlx_lm.server` fork by default) and exposes the dialect each harness expects: OpenAI Chat Completions for opencode and the Cursor plan panel, the Anthropic Messages API for Claude Code, and the OpenAI Responses API for Codex. The launcher applies the tool's native config shim and then execs the real binary with your own arguments.
-
-```sh
-# Default backend is the owned mlx fork; or point at any OpenAI-compatible server:
-export WARRANT_LOCAL_MODEL_URL=http://localhost:11434/v1   # Ollama, vLLM, LM Studio, …
-export WARRANT_LOCAL_MODEL=qwen3:8b
-
-warrant local claude "fix the flaky auth test"   # Claude Code on the local model
-warrant local codex "summarize the repo"          # Codex via the Responses dialect
-warrant local opencode "add a CHANGELOG entry"    # opencode via a custom provider
-warrant local serve                               # just run the gateway (all dialects)
-```
-
-Cursor is supported in plan/chat mode only: its coding agent (Composer, inline edit, apply, autocomplete) is locked to Cursor's own backend and cannot reach localhost, so `warrant local cursor` prints the Settings → Models values to paste and expects a public tunnel URL (`--public-url` or `WARRANT_PUBLIC_URL`).
-
-## The handoff SDK
-
-```ts
-import { agents, handoff, localFirst, reviewStrategies, targets } from "@fusionkit/handoff";
-
-const h = handoff({
-  workspace: ".",
-  plane: { url: planeUrl, adminToken },
-  agent: agents.claudeCode(),                       // or agents.codex(), agents.mock()
-  policy: localFirst({ allowPools: ["eng-prod"], maxParallelRuns: 4 })
-});
-
-// what would move? (a security feature: moves nothing)
-const { report } = await h.dryRun(targets.pool("eng-prod"), { task: "run the suite" });
-
-// one gesture: checkpoint → content-addressed envelope → signed contract → governed run
-const run = await h.continueIn(targets.pool("eng-prod"), {
-  task: "finish the refactor and run the tests",
-  reason: "laptop going offline",
-  transcript: sessionTranscript
-});
-await run.wait();
-await run.pull();                                    // divergence-safe: applies or lands on a branch
-
-// fan-out is topology, not a tournament
-const runs = await h.parallel(["fix A", "fix B", "fix C"], targets.pool("eng-prod"));
-const review = await h.review(runs, { choose: reviewStrategies.smallestDiff() });
-await review.chosen.run.pull();
-
-console.log(h.trace());                              // every planning, envelope, run, and pull decision
-```
-
-Continuation is not a separate trust domain: the envelope is content-addressed, the signed run contract pins the envelope hash, the checkpoint appears in the hash-chained event log, and the result is an ordinary offline-verifiable receipt.
-
-### The golden interface
-
-The predecessor spec's golden shape, implemented to the extent the current spec permits — and honest about the one piece it omits:
-
-```ts
-import { generateText } from "ai";
-import { agents, handoff, localFirst, targets } from "@fusionkit/handoff";
-import { withCompute } from "@fusionkit/adapter-compute";
-
-const h = withCompute(
-  handoff({ workspace: ".", plane, agent: agents.claudeCode(), policy: localFirst({ allowPools: ["eng-prod"] }) }),
-  { pool: "eng-prod" }
-);
-
-const result = await generateText({
-  model: yourModel,                 // your model, your loop
-  prompt: "plan the refactor",
-  tools: h.tools({ search, read }) // your tools, journaled as semantic state
-});
-
-if (h.needs(targets.pool("eng-prod"))) {
-  await h.continueIn(targets.pool("eng-prod"), { task: "apply the plan and run tests" });
-}
-
-await h.compute.sandbox.create();   // ComputeSDK-shaped surface, same context
-console.log(await h.summary());     // recomputed story: tools, checkpoints, runs, pulls
-```
-
-- `h.tools(...)` wraps any AI SDK-shaped toolset: calls execute locally and are journaled (`warrant.tooljournal.v1`); the journal travels as content-addressed semantic state in the next checkpoint, pinned via the envelope inside the signed contract.
-- `h.model` (via `withModel(h, { local, cloud })` from `@fusionkit/adapter-ai-sdk`) is an AI SDK-compatible model that starts local and escalates to cloud under deterministic, explainable conditions — a local failure, a classified context overflow, a prompt-size threshold — with every routing decision recorded as a `model.routed` trace event. Honest limits: escalation happens *between* calls; there is no mid-generation handoff.
-- `h.needs(target)` is a pure, deterministic check: the target must be allowed by policy, and — when the policy declares `continueWhen: [triggers.…]` — at least one trigger must fire against observable state (`triggers.userRequested()`, `toolFailed()`, `slowTools({ thresholdMs })`, `modelEscalated()`). `h.requestContinuation(reason)` is the explicit user gesture.
-- `h.stream(runs)` yields a live, typed event stream (status transitions, every hash-chained event, `artifact.ready`, terminals) across any set of runs.
-- `h.parallel(..., { isolate: branch() })` and `run.pull({ isolate: branch() })` force results onto dedicated branches; the default stays divergence-safe auto.
-- `h.review(runs, { choose: reviewStrategies.testsPassSmallestDiff() })` compares attempts on evidence-derived scorecards (harness exit, diff size, files changed, duration, blocked egress, secrets released).
-- Every run carries `ContinueResult` parity: `tier`, `explanation` (the planner's reasons), `url` (control panel deep link), and `auditUrl`; checkpoints form a lineage (`parent`), listable via `h.checkpoints()`.
-- `defineHandoffConfig({...})` registers provider-style defaults once, so app code can be just `handoff({ workspace: "." })`.
-
-## App-owned loops: AI SDK and compute adapters
-
-For applications that own their model loop, the adapters govern the execution boundary instead (spec §6.2 — supported, limited, honestly labeled: no durability claim attaches to the caller's loop, and there is no mid-generation continuation):
-
-```ts
-import { generateText } from "ai";
-import { remoteTools } from "@fusionkit/adapter-ai-sdk";
-
-const rt = remoteTools({ workspace: ".", plane, pool: "eng-prod" });
-const result = await generateText({
-  model: yourModel,            // your model, your loop
-  tools: rt.tools,             // tool calls become signed contracts with receipts
-  prompt: "run the tests and summarize the failures"
-});
-rt.calls();                    // [{ runId, contractHash, receiptVerified: true, … }]
-```
-
-```ts
-import { governedCompute } from "@fusionkit/adapter-compute";
-
-const compute = governedCompute({ workspace: ".", plane, pool: "eng-prod" });
-const sandbox = await compute.sandbox.create();
-await sandbox.filesystem.writeFile("task.md", task);
-await sandbox.runCommand("npm test");               // a governed run with a receipt
-sandbox.runs();                                      // evidence for every command
-```
-
-Each command runs in a fresh governed session materialized from the current workspace; continuity flows through the workspace's git history, and the receipts — not a long-lived remote process — are what persists.
-
-## Session isolation
-
-How the runner isolates the agent session is pluggable, requested per run (`--isolation`, or `session:` in the handoff SDK), and recorded honestly in every receipt (`runner.isolation`):
-
-| Tier | Backend | Isolation | Harnesses | Status |
-| --- | --- | --- | --- | --- |
-| `process` | built-in | child process, scrubbed env, egress proxy (process-level — a binary can ignore proxy vars; every attempt is still recorded) | all | default |
-| `hermetic` | `@fusionkit/session-hermetic` | simulated bash interpreter + virtual filesystem; egress enforced by the interpreter (no socket exists for denied hosts) | `command` only (no real OS) | implemented, tested |
-| `hermetic` | `@fusionkit/session-harness` (`piBinding`) | same just-bash tier, with the host-runtime Pi harness driving a local model; everything else delegates to `hermeticBackend()` | `pi` (plus the fallback's `command`) | experimental, integration-gated |
-| `vercel-sandbox` | `@fusionkit/session-vercel-sandbox` | Firecracker microVM, VM-level isolation, domain egress policy | all but the test mock | experimental, integration-gated |
-| `vercel-sandbox` | `@fusionkit/session-harness` (`claudeCodeBinding`) | same microVM tier, with claude-code driven through the AI SDK harness bridge (structured event transcript, in-sandbox runtime bootstrap); everything else delegates to the plain backend | all but the test mock | experimental, integration-gated |
-
-```sh
-warrant run --agent command --isolation hermetic "awk -F, 'NR>1{s+=$2}END{print s}' orders.csv > total.txt"
-```
-
-Compute callers can request the same tier without changing the ComputeSDK-shaped
-surface. Each `runCommand` is still a governed command with a receipt:
-
-```ts
-import { governedCompute } from "@fusionkit/adapter-compute";
-
-const compute = governedCompute({
-  workspace: ".",
-  plane,
-  pool: "microvm",
-  session: "vercel-sandbox"
-});
-const sandbox = await compute.sandbox.create();
-await sandbox.runCommand("npm test");
-sandbox.runs(); // [{ isolation: "vercel-sandbox", receiptVerified: true, ... }]
-```
-
-The two stronger backends are injected into the runner so the trust-critical kernel stays dependency-free:
-
-```ts
-import { Runner } from "@fusionkit/runner";
-import { hermeticBackend } from "@fusionkit/session-hermetic";
-import { vercelSandboxBackend } from "@fusionkit/session-vercel-sandbox";
-
-new Runner({ planeUrl, pool, enrollToken, backends: [hermeticBackend(), vercelSandboxBackend()] });
-```
-
-This is the execution substrate the spec places *below* Warrant ("E2B, Modal, Daytona, Vercel Sandbox, local Docker, and customer VPCs sit below"): Warrant owns the contract, policy, secret release, and receipt; the backend owns only how the session is isolated.
-
-### AI SDK harness driver: claude-code without a pre-baked CLI
-
-AI SDK 7 introduced an experimental [harness abstraction](https://vercel.com/changelog/program-agent-harnesses-with-ai-sdk) (`HarnessAgent` + adapters like [`@ai-sdk/harness-claude-code`](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/claude-code)): the adapter bootstraps the agent runtime *inside* a sandbox from pinned, lockfile-frozen bridge dependencies and streams structured events (tool calls, file changes, finish reasons) back to the host over a sandbox-exposed WebSocket. `@fusionkit/session-harness` wraps that, binding-based: a `HarnessBinding` names an agent kind, an isolation tier, an adapter factory, and a sandbox factory, and the generic backend owns staging, the transcript, mirror-back, and the boundary event once. `aiSdkHarnessBackend()` hosts the `claudeCodeBinding` for the `vercel-sandbox` tier:
-
-```ts
-import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
-
-new Runner({ planeUrl, pool, enrollToken, backends: [aiSdkHarnessBackend()] });
-```
-
-What changes versus the plain `vercel-sandbox` backend — and what deliberately does not:
-
-- The microVM needs no pre-installed vendor CLI: the adapter's bootstrap recipe installs the Claude Code runtime inside the sandbox on first use.
-- The run's log artifact becomes the harness's structured event stream as JSONL (every tool call and file-change notice the harness reported), not a merged stdout blob. Boundary evidence stays runner-owned: `file.changed` events still come from the git diff after mirror-back, never from harness telemetry.
-- Credentials still flow only through the secret broker. The backend maps the session env onto the adapter's *explicit* auth settings and provably suppresses its host-environment fallback, so a runner operator's own `ANTHROPIC_API_KEY` can never leak into a run; a contract with no released credential fails closed.
-- Egress policy is still the contract's, applied at the VM boundary. The bridge bootstrap and the model API are subject to it, so a deny-by-default run must allowlist the npm registry and `api.anthropic.com` (or the AI Gateway host) explicitly.
-- Non-claude-code executions (the `command` harness, custom argv/shell) are delegated unchanged to `vercelSandboxBackend()`, so this backend never narrows what the tier could already run.
-
-The `@ai-sdk/harness*` packages are canary releases; they are exact-pinned on the dependency allowlist like everything else, and the backend is integration-gated the same way `@fusionkit/session-vercel-sandbox` is (it constructs without credentials; the real path needs `VERCEL_TOKEN` plus a contract-released model credential). The package's test suite drives the real `HarnessAgent` orchestration end-to-end against an in-process harness adapter and a local-filesystem sandbox provider — contract to verified receipt, no cloud dependencies.
-
-### Cloud orchestrator, local swarm
-
-The second binding, `piBinding`, runs the host-runtime [Pi harness](https://ai-sdk.dev/v7/providers/ai-sdk-harnesses/pi) on a local [`@ai-sdk/sandbox-just-bash`](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses) sandbox — no microVM, no per-run image. Each Pi worker drives a cheap *local* model: the endpoint arrives as the broker-released secrets `OPENAI_BASE_URL` / `OPENAI_API_KEY`, mapped fail-closed into the adapter's explicit auth (`piAuthFromEnv`), never the host environment. `pi` is harness-only — the runner refuses to spawn it as a process — so there is exactly one way to run it.
-
-```ts
-import { piHarnessBackend } from "@fusionkit/session-harness";
-
-// concurrency lets one runner execute a worker fan-out in parallel
-new Runner({ planeUrl, pool, enrollToken, concurrency: 8, backends: [piHarnessBackend()] });
-```
-
-On top of that, `swarmTools()` gives a *cloud orchestrator harness* (Claude Code dynamic workflows, a Codex goal — anything run through `HarnessAgent`) the governed dispatch surface it lacks, as host-executed AI SDK tools:
-
-- `dispatch_workers` fans a goal out across the local swarm via `h.parallel()` — each worker a signed governed run. Policy-bounded: a fan-out past the `localFirst()` ceiling returns `budgetExceeded` (Codex's `budget_limited`, expressed with Warrant's policy) instead of throwing.
-- `worker_status` reports without blocking, so the harness interleaves its own work.
-- `pull_worker` waits, then judges from deterministic evidence. Overlap with already-pulled files is computed from receipt `file.changed` events — never asked of a model — and downgraded to escalation; a clean, disjoint, completed worker is pulled onto the workspace of record and returned with its `Scorecard`, a diff excerpt, and its verified receipt.
-- `escalate_task` re-runs a task on a capable cloud target via `h.continueIn()`, bounded by an escalation budget.
-
-The orchestration *loop* stays the vendor harness's own (its native decomposition, iteration, and durable progress); Warrant contributes only the boundary. The orchestrator's sandbox is never mirrored back — the sole path into the workspace of record is a governed-run pull, so every landed change carries a contract and a receipt. [`examples/swarm`](examples/swarm) shows both forms: a deterministic, key-free `run.ts` walkthrough (demo 14) and a live `@ai-sdk/tui` terminal cockpit (`cockpit.ts`) where `escalate_task` — the only tool that spends cloud money — pauses for a terminal `y/n`.
-
-## Hardening and operations
-
-The control plane is built for a single-node production deployment, with the security-critical paths hardened:
-
-- Durable, transactional storage (`node:sqlite`, WAL) behind a `PlaneStore` interface. Run claims are an atomic compare-and-set (no double-claim), and the claim-completion nonce ledger is a durable UNIQUE-constrained table, so replay protection survives restarts.
-- Role-based identity: principals with roles (`admin`/`requester`/`approver`/`enroller`), per-principal API keys that can be issued, rotated, and revoked, and capability-gated routes. Runner enrollment uses single-use expiring tokens (or a revocable bootstrap enroller credential).
-- IdP-backed approvals: an approval can carry an IdP-issued JWT, verified against configured JWKS, so consent is attributable to a real subject.
-- Boundary validation (`zod`) with structured 400s, plus per-principal/per-IP token-bucket rate limiting and auth-failure backoff.
-- At-rest encryption: the org signing key and the secret store are sealed (scrypt + AES-256-GCM) with a master key supplied via `WARRANT_MASTER_KEY` (or a generated 0600 key file). No key material lives in `config.json`.
-- Retention and GC: a sweeper enforces the `RetentionPolicy` and reference-counted blob GC; `pino` structured logging (set `LOG_LEVEL`), metrics counters, and `/v1/ready` + `/v1/metrics`.
-
-Operational notes:
-
-- Set `WARRANT_MASTER_KEY` (e.g. `openssl rand -hex 32`) in any real deployment; the same value must be present wherever the plane or a CLI loads the home (the runner shares it to read the home config). `docker compose` injects a labeled dev default you should override.
-- Performance budgets from spec section 8.4 are asserted by `pnpm bench` (corpus size via `WARRANT_BENCH_FILES`).
-- MicroVM migration measurements are asserted separately by `pnpm microvm:bench`.
-  The default command is CI-safe and skips live Vercel Sandbox sections:
-
-  ```sh
-  pnpm build
-  WARRANT_MICROVM_LIVE=0 pnpm microvm:bench
-  ```
-
-  Live measurements are opt-in and require Vercel credentials. Set
-  `WARRANT_MICROVM_SNAPSHOT_ID` to measure the warm snapshot path:
-
-  ```sh
-  pnpm build
-  WARRANT_MICROVM_LIVE=1 pnpm microvm:bench
-  WARRANT_MICROVM_LIVE=1 WARRANT_MICROVM_SNAPSHOT_ID=snap_... pnpm microvm:bench
-  ```
-
-- Manage principals and enrollment from the CLI/API: `POST /v1/principals`, `POST /v1/enroll-tokens`, `GET /v1/metrics`.
-
-What remains explicitly out of scope: true multi-node HA (the `PlaneStore` interface is the seam for a Postgres adapter), real TEE attestation (still labeled `mock`), and a full OIDC login UI (only IdP assertion verification is implemented).
 
 ## Dependency policy
 
-Third-party dependencies are allowed in any package, but only trusted, exact-pinned versions on the explicit allowlist in `scripts/check-repo.mjs`. There is no zero-dependency rule; trust comes from pinning reviewed versions plus the `.npmrc` supply-chain controls (`save-exact`, `ignore-scripts`, `verify-store-integrity`, frozen lockfile installs, and a 24-hour `minimum-release-age` against fresh-release attacks), not from the absence of dependencies. The protocol/sdk/workspace packages still happen to use only Node built-ins, which keeps the offline verifier maximally auditable — a property, not a gate. Bumping a dependency means updating the allowlist pin, which is the review checkpoint.
+Third-party dependencies are allowed in any package, but only trusted,
+exact-pinned versions on the explicit allowlist in
+[`scripts/check-repo.mjs`](scripts/check-repo.mjs). Trust comes from pinning
+reviewed versions plus the `.npmrc` supply-chain controls (`save-exact`,
+`ignore-scripts`, `verify-store-integrity`, frozen-lockfile installs, and a
+24-hour `minimum-release-age`), not from the absence of dependencies. Bumping a
+dependency means updating the allowlist pin — the review checkpoint.
 
-## Thesis
+## Out of product scope
 
-AI work crosses trust boundaries — laptops, vendor clouds, customer VPCs, attested runtimes — and that shift is permanent. Vendors already own continuation *inside* their silos and give it away. What no vendor can ship is the cross-vendor answer to what their agents did: Anthropic will not audit Codex, and Cursor will not govern Claude Code.
+These remain in the repository (and are still published from it for now) but are
+**not part of the FusionKit ensemble product**:
 
-The unowned layer is governed execution and provenance:
+- **Governance plane** — `@fusionkit/plane`, `@fusionkit/runner`,
+  `@fusionkit/sdk`, `@fusionkit/handoff` (contracts, receipts, policy,
+  approvals, signed provenance).
+- **VM / sandbox isolation** — `@fusionkit/session-hermetic`,
+  `@fusionkit/session-vercel-sandbox`, `@fusionkit/session-harness`,
+  `@fusionkit/adapter-compute`.
 
-- execution of vendor harnesses, wrapped as-is, on customer-controlled runners
-- policy decided before execution and enforced at the session boundary
-- signed, hash-chained receipts portable across vendors and runtimes
-- secret release that is brokered, scoped, and logged — never prompted
-- offline verification that requires trusting no one, including us
-
-## Product invariant
-
-Every run must answer:
-
-1. What moved?
-2. Why did it move?
-3. Who or what approved it?
-4. Which runtime, model, tools, data, and secrets saw it?
-5. How can the user resume, inspect, revoke, or reproduce it?
-
-If the platform cannot answer those questions from a signed receipt, on one screen, without trusting the runtime that executed the work, it is just remote execution with branding.
-
-## Testing
-
-```sh
-pnpm verify          # repo checks + build + the full test suite
-pnpm test            # unit + integration: protocol, policy, workspace, plane API/UI,
-                     # plane hardening (atomic claim, replay, auth/roles, rate limit,
-                     # sealing, retention), planner, handoff e2e, CLI e2e, examples
-pnpm demo all        # the standalone examples double as an executable acceptance suite
-pnpm bench           # asserts the spec section 8.4 performance budgets
-pnpm microvm:bench   # CI-safe microVM migration benchmark; live Vercel sections opt in
-```
-
-CI runs the suite, the standalone examples, the performance benchmark, and a Docker Compose smoke test (build, boot, seed, hit the API, readiness, metrics, and control panel).
-
-## Current artifacts
-
-- [Governed agent execution plane spec](spec/2026-06-11-governed-agent-execution-plane-spec.md)
-- [ENG-596 microVM design spike and migration plan](spec/2026-06-16-eng-596-microvm-design-spike.md)
-
-## Superseded
-
-- [Local-first handoff platform SDK spec](spec/2026-06-11-local-first-handoff-platform-spec.md) — the predecessor "HandoffKit" artifact, retained for record. Its positioning ("The coordination layer for hybrid distributed AI compute.") is superseded: continuation and handoff are now demos of the primitives — implemented here as `@fusionkit/handoff` — not the product.
+The shipped `fusionkit` command tree does not invoke them at runtime. They are
+retained because other packages and a cross-repo release coordinator still
+reference them; separating them cleanly is tracked in
+**[docs/scope.md](docs/scope.md)**. The governed-execution design itself is
+preserved in [`spec/`](spec).

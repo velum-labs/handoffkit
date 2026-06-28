@@ -105,15 +105,16 @@ fusionkit codex \
   --judge-model gpt-5.5
 ```
 
-- Cloud models require `--fusionkit-dir` (or `WARRANT_FUSIONKIT_DIR`): each cloud
-  candidate is served by FusionKit's `scripts/simple_openai_server.py`, which
-  uses FusionKit's provider clients. Keys come from `OPENAI_API_KEY` /
-  `ANTHROPIC_API_KEY` (override per model with `--key-env ID=ENV`).
-- Keys load seamlessly: the FusionKit checkout's `.env` is read automatically and
-  injected into the cloud server processes (already-exported env vars win), so a
-  `.env` with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` in the FusionKit dir means
-  you never pass keys on the command line. Secrets stay in FusionKit's `.env`;
-  nothing is copied into this repo.
+- Cloud models need no checkout: the single `fusionkit serve` router (fetched
+  from PyPI via `uvx`) fronts every cloud candidate directly through its
+  provider's API. Keys come from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
+  `GEMINI_API_KEY` (override per model with `--key-env ID=ENV`). `--fusionkit-dir`
+  (or `WARRANT_FUSIONKIT_DIR`) is only a dev override that runs a local FusionKit
+  checkout via `uv run` instead of `uvx`.
+- Keys load seamlessly: a project `.env` (the cwd, then the repo root) is read
+  automatically, and already-exported env vars always win, so you never pass keys
+  on the command line. The config stores only the env-var *names* (`keyEnv`),
+  never the secret values.
 - You can mix local and cloud (e.g. `--model local=mlx:...:` alongside cloud).
 - For an already-running OpenAI-compatible server, skip provisioning entirely
   with `--model-endpoint ID=URL` (repeatable) and `--judge-endpoint URL`.

@@ -1,9 +1,54 @@
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { spawnTool, terminate } from "@fusionkit/tools";
+import { resolveCursorkitCli } from "@fusionkit/ensemble";
+import { normalizeApiBaseUrl, scrubBridgeEnv, spawnLogged, spawnTool, terminate, waitForOutput } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
 import { startCursorBridge } from "./bridge.js";
+
+/** Local model entry the cursorkit desktop bridge advertises in Cursor's picker. */
+type IdeModelEntry = {
+  id: string;
+  displayName: string;
+  providerModel: string;
+  baseUrl: string;
+  apiKey: string;
+  contextTokenLimit: number;
+};
+
+/** Build the `BRIDGE_MODELS_JSON` the desktop bridge seeds into Cursor's model picker. */
+function ideModelsJson(ctx: ToolLaunchContext): string {
+  const baseUrl = normalizeApiBaseUrl(ctx.gatewayUrl);
+  const apiKey = ctx.authToken ?? "local";
+  const entry = (model: string): IdeModelEntry => ({
+    id: model,
+    displayName: model,
+    providerModel: model,
+    baseUrl,
+    apiKey,
+    contextTokenLimit: 128000
+  });
+  // The fused model is the default; each native panel member is offered too so
+  // the picker shows fused + passthrough (the gateway routes each by id).
+  const natives = (ctx.nativeModels ?? []).filter((model) => model !== ctx.modelLabel);
+  return JSON.stringify([entry(ctx.modelLabel), ...natives.map(entry)]);
+}
+
+/** Human-facing setup for the turnkey Cursor IDE (desktop proxy) flow. */
+export function cursorIdeInstructions(model: string): string {
+  return [
+    "Cursor IDE is being wired to the fusion ensemble via the bundled cursorkit",
+    "desktop proxy — local-only, no public tunnel and no Settings changes. An",
+    "isolated Cursor window will open on this repo.",
+    "",
+    `  In the Agent model picker, choose: ${model}`,
+    "",
+    "Your normal Cursor profile and its built-in models are untouched; the",
+    "isolated window adds the fusion model additively. Leave this process running",
+    "while you use Cursor. Ctrl+C to stop."
+  ].join("\n");
+}
 
 /** Human-facing setup for Cursor (IDE plan/chat panel only; needs a public URL). */
 export function cursorInstructions(publicUrl: string, model: string): string {
@@ -72,8 +117,72 @@ async function launchCursorLocal(ctx: ToolLaunchContext): Promise<number> {
   return 0;
 }
 
+/**
+ * Turnkey Cursor IDE launch: drive cursorkit's bundled desktop launcher (`ck`),
+ * which starts the local TLS desktop proxy + a loopback CONNECT proxy and opens
+ * an isolated Cursor app pre-wired to it. The fused model (and each native panel
+ * member) is seeded into that isolated profile pointed at the gateway, so the
+ * user only picks the model in Cursor's Agent picker. No public tunnel, no
+ * Settings override, no system routing changes. Works in both fusion and local
+ * mode (both expose a gateway URL).
+ */
+async function launchCursorIde(ctx: ToolLaunchContext): Promise<number> {
+  const { serveCli } = resolveCursorkitCli();
+  const repo = ctx.repo ?? process.cwd();
+  // Keep ck's certs/state/logs in a scratch dir (the session logs dir when one
+  // exists) so we never write a `.cursor-rpc/` folder into the user's repo, and
+  // open the real repo as the Cursor workspace via CK_WORKSPACE_PATH.
+  const stateDir = ctx.logsDir !== undefined ? join(ctx.logsDir, "cursor-ide") : join(repo, ".cursor-rpc-ide");
+  mkdirSync(stateDir, { recursive: true });
+
+  const env: Record<string, string> = {
+    ...scrubBridgeEnv(process.env, ["BRIDGE_", "MODEL_", "E2E_", "CURSOR_UPSTREAM", "CK_"]),
+    CK_WORKSPACE_PATH: repo,
+    BRIDGE_MODELS_JSON: ideModelsJson(ctx),
+    MODEL_BASE_URL: normalizeApiBaseUrl(ctx.gatewayUrl),
+    MODEL_API_KEY: ctx.authToken ?? "local",
+    MODEL_NAME: ctx.modelLabel,
+    MODEL_PROVIDER_MODEL: ctx.modelLabel,
+    MODEL_CONTEXT_TOKEN_LIMIT: "128000",
+    // Trust the gateway's portless CA so the desktop bridge can reach it over
+    // HTTPS. ck forwards its own process env to the bridge it spawns.
+    ...(ctx.caCertPath !== undefined
+      ? { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS ?? ctx.caCertPath }
+      : {})
+  };
+
+  const proc = spawnLogged(process.execPath, [serveCli, "ck"], {
+    cwd: stateDir,
+    env,
+    ...(ctx.logsDir !== undefined ? { logFile: join(ctx.logsDir, "cursor-ide.log") } : {})
+  });
+  try {
+    await waitForOutput(proc, /ck ready|bridge listening/, {
+      timeoutMs: 60_000,
+      label: "Cursor desktop bridge"
+    });
+  } catch (error) {
+    terminate(proc.child);
+    throw error instanceof Error ? error : new Error(String(error));
+  }
+  ctx.registerDisposer(() => terminate(proc.child));
+
+  ctx.log("");
+  ctx.log(cursorIdeInstructions(ctx.modelLabel));
+  ctx.log("");
+  ctx.log(`fusion: Cursor IDE desktop proxy running (state: ${stateDir})`);
+  // Hold the gateway up for the life of the desktop session; resolve when the
+  // ck process (desktop proxy) exits.
+  return await new Promise<number>((resolve) => {
+    proc.child.once("exit", (code) => resolve(code ?? 0));
+  });
+}
+
 /** Boot Cursor, branching on whether it backs the fusion panel or a local model. */
 export async function launchCursor(ctx: ToolLaunchContext): Promise<number> {
+  if (ctx.ide === true) {
+    return await launchCursorIde(ctx);
+  }
   switch (ctx.mode) {
     case "fusion":
       return await launchCursorFusion(ctx);

@@ -112,6 +112,12 @@ for (const entry of manifest.packages ?? []) {
   if (!Array.isArray(pkg.files) || !pkg.files.includes("dist")) {
     fail(`${packagePath} must publish built dist files`);
   }
+  if (!Array.isArray(pkg.files) || !pkg.files.includes("LICENSE")) {
+    fail(`${packagePath} must ship a LICENSE in the published tarball`);
+  }
+  if (pkg.license !== "Apache-2.0") {
+    fail(`${packagePath} license must be Apache-2.0`);
+  }
 }
 
 for (const path of ["packages/testkit", "packages/example-utils"]) {

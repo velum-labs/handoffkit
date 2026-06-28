@@ -11,6 +11,7 @@ export function registerLocal(program: Command): void {
     .argument("[tool]", `${LOCAL_TOOLS.join(" | ")}`)
     .argument("[args...]", "arguments forwarded to the tool")
     .option("--public-url <url>", "public tunnel URL for Cursor (or FUSIONKIT_PUBLIC_URL)")
+    .option("--ide", "Cursor only: wire the Cursor IDE to the gateway (local desktop proxy, no tunnel)")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .allowUnknownOption()
     .passThroughOptions()
@@ -22,13 +23,14 @@ export function registerLocal(program: Command): void {
       async (
         tool: string | undefined,
         args: string[],
-        opts: { publicUrl?: string; authToken?: string }
+        opts: { publicUrl?: string; authToken?: string; ide?: boolean }
       ) => {
         if (tool === undefined || !(LOCAL_TOOLS as readonly string[]).includes(tool)) {
           fail(`usage: fusionkit local <${LOCAL_TOOLS.join(" | ")}> [args...]`);
         }
-        const options: { publicUrl?: string; authToken?: string } = {
+        const options: { publicUrl?: string; authToken?: string; ide?: boolean } = {
           ...(opts.publicUrl !== undefined ? { publicUrl: opts.publicUrl } : {}),
+          ...(opts.ide === true ? { ide: true } : {}),
           ...(opts.authToken !== undefined ? { authToken: opts.authToken } : {})
         };
         const code = await runLocal(tool as LocalTool, args, options);

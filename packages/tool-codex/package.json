@@ -8,7 +8,7 @@
     "directory": "packages/tool-codex"
   },
   "description": "Codex CLI tool integration for fusionkit: launcher config shim plus the ensemble Codex harness adapter.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

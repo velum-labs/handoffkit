@@ -81,4 +81,4 @@ export type {
   CursorRunMode
 } from "./harness.js";
 export { startCursorBridge } from "./bridge.js";
-export { cursorInstructions, launchCursor } from "./launch.js";
+export { cursorIdeInstructions, cursorInstructions, launchCursor } from "./launch.js";

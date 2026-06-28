@@ -6,7 +6,11 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
+import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+
 import type { PromptOverrides } from "../fusion-config.js";
+
+export type { OnRateLimitPolicy };
 
 /** A launchable tool id from the registry, or the `serve` pseudo-tool. */
 export type FusionTool = string;
@@ -54,8 +58,29 @@ export type RunFusionOptions = {
   yes?: boolean;
   /** Route services through portless (stable named URLs + singletons). Default on. */
   portless?: boolean;
+  /** Cursor only: wire the desktop IDE (not just cursor-agent) to the gateway. */
+  ide?: boolean;
+  /**
+   * WS5 rate-limit / credit handoff policy for vendor passthrough models:
+   * `fusion` (default — continue the turn on the ensemble), `passthrough`
+   * (return the vendor error verbatim), or `fail` (surface a gateway error).
+   */
+  onRateLimit?: OnRateLimitPolicy;
+  /**
+   * WS7 budget cap (USD). Plumbed to the gateway: once a session has accrued at
+   * least this much gateway-observed cost, the next turn is refused with a clear
+   * message (v1 = stop). Omit for no cap.
+   */
+  budgetUsd?: number;
   /** System-prompt overrides forwarded to the synthesizer's router config. */
   prompts?: PromptOverrides;
+  /**
+   * WS4 session continuity. `resume` rehydrates a specific persisted session id
+   * (a prefix is accepted) into the new gateway process; `continueLatest`
+   * (`--continue`) resolves to the most recently active session instead.
+   */
+  resume?: string;
+  continueLatest?: boolean;
   log?: (line: string) => void;
 };
 
@@ -84,15 +109,21 @@ export type StackReporter = (event: StackEvent) => void;
  * synthesizer (`fusionkit serve`) and the single-model OpenAI shim
  * (`fusionkit serve-endpoint`). Pinned so `uvx` resolves a reproducible build.
  */
-export const FUSIONKIT_PYPI_VERSION = "0.7.0";
+export const FUSIONKIT_PYPI_VERSION = "0.8.0";
 
 /**
- * Default cloud panel — works cross-platform with only `OPENAI_API_KEY` and
- * `ANTHROPIC_API_KEY` set. The judge defaults to the first entry.
+ * Default cloud panel — a genuine decorrelated three-vendor trio (OpenAI +
+ * Anthropic + Google), so the ensemble fuses three independent frontier voices
+ * rather than a single cross-vendor pair. Works cross-platform with
+ * `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY` set (a member
+ * whose key is missing simply fails its slot; survivors are still fused). The
+ * judge defaults to the first entry. `gemini-2.5-pro` is the frontier-tier id in
+ * the curated Google catalog and is accepted by the `google` provider path.
  */
 export const DEFAULT_CLOUD_PANEL: readonly PanelModelSpec[] = [
   { id: "gpt", model: "gpt-5.5", provider: "openai" },
-  { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic" }
+  { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic" },
+  { id: "gemini", model: "gemini-2.5-pro", provider: "google" }
 ];
 
 /** The locally cached MLX trio (Apple Silicon only) used behind `--local`. */
@@ -117,6 +148,28 @@ export function fusionkitPyCommand(fusionkitDir?: string): {
     return { command: "uv", prefix: ["run", "fusionkit"], cwd: fusionkitDir };
   }
   return { command: "uvx", prefix: [`fusionkit@${FUSIONKIT_PYPI_VERSION}`] };
+}
+
+/**
+ * The argv that "warms" (pre-provisions) the pinned `fusionkit` engine: it
+ * resolves, downloads, and builds the package into the local `uv` cache so the
+ * first real `fusionkit serve` run doesn't pay the cold-start cost. We invoke
+ * the engine's own `--help`, which is the cheapest entrypoint that still forces
+ * `uvx`/`uv` to materialize the exact same environment a run uses (the resolved
+ * package is cached regardless of what the subcommand then does). With
+ * `offline: true` it never touches the network, so a zero exit code is a
+ * reliable "already cached" probe. Mirrors {@link fusionkitPyCommand} so the
+ * warmed environment is byte-for-byte the one a run resolves.
+ */
+export function fusionkitWarmArgv(
+  fusionkitDir?: string,
+  options: { offline?: boolean } = {}
+): { command: string; args: string[]; cwd?: string } {
+  const offline = options.offline === true ? ["--offline"] : [];
+  if (fusionkitDir !== undefined) {
+    return { command: "uv", args: ["run", ...offline, "fusionkit", "--help"], cwd: fusionkitDir };
+  }
+  return { command: "uvx", args: [...offline, `fusionkit@${FUSIONKIT_PYPI_VERSION}`, "--help"] };
 }
 
 /**

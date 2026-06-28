@@ -47,6 +47,12 @@ export type ToolLaunchContext = {
   logsDir?: string;
   /** Public tunnel URL for tools that cannot reach loopback (local Cursor). */
   publicUrl?: string;
+  /**
+   * Wire the desktop IDE (not just the agent CLI) to the gateway. Cursor honors
+   * this by launching an isolated Cursor app through its bundled desktop proxy
+   * (local-only, no public tunnel); other tools ignore it.
+   */
+  ide?: boolean;
   /** Line logger. */
   log: (line: string) => void;
   /**

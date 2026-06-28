@@ -9,7 +9,12 @@ import { join } from "node:path";
 
 import type { EnsembleModel, UnifiedHarnessKind } from "@fusionkit/ensemble";
 import { MlxBackend, startGateway } from "@fusionkit/model-gateway";
-import type { Gateway } from "@fusionkit/model-gateway";
+import type {
+  Gateway,
+  OnRateLimitPolicy,
+  SessionMetaInput,
+  SessionStore
+} from "@fusionkit/model-gateway";
 
 import { startFusionStepGateway } from "../gateway.js";
 import type { GatewayRunnerConfig } from "../gateway.js";
@@ -145,6 +150,31 @@ export function routerConfigYaml(input: {
   }
   lines.push("");
   return lines.join("\n");
+}
+
+/**
+ * Build the derived `fusionkit serve` router YAML for a resolved panel, for
+ * `fusionkit config export-yaml` (raw `fusionkit serve` users who don't go
+ * through the Node harness gateway). It reuses the exact same {@link
+ * routerConfigYaml} the live stack writes, so the exported file never drifts
+ * from what a real run produces. The judge endpoint is selected the same way
+ * {@link startRouter} does (by model name, first member as fallback). MLX members
+ * carry an empty `base_url` placeholder, since their loopback gateway only exists
+ * during a live Node run — annotate it so raw users know to fill it in (or run
+ * the panel through `fusionkit <tool>` / `fusionkit serve` instead).
+ */
+export function exportRouterYaml(input: {
+  specs: PanelModelSpec[];
+  judgeModel?: string;
+  prompts?: PromptOverrides;
+}): string {
+  const judgeSpec = judgeSpecFor(input.specs, input.judgeModel);
+  return routerConfigYaml({
+    specs: input.specs,
+    mlxUrls: {},
+    judgeId: judgeSpec.id,
+    ...(input.prompts !== undefined ? { prompts: input.prompts } : {})
+  });
 }
 
 /**
@@ -294,6 +324,16 @@ export type StartFusionStackOptions = {
   port?: number;
   authToken?: string;
   timeoutMs?: number;
+  /** WS5 rate-limit / credit failover policy (default `fusion`). */
+  onRateLimit?: OnRateLimitPolicy;
+  /** WS7 budget cap (USD) for the session's gateway-observed cost. */
+  budgetUsd?: number;
+  /** WS4 durable session store; when set the gateway persists/resumes sessions. */
+  sessionStore?: SessionStore;
+  /** WS4 resume target id bound to the first conversation this gateway serves. */
+  resumeId?: string;
+  /** WS4 static session header (tool/repo/panel) persisted on session creation. */
+  sessionMeta?: SessionMetaInput;
   logsDir?: string;
   report?: StackReporter;
   /** Active portless session; defaults to a disabled (loopback) session. */
@@ -376,7 +416,12 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       models,
       judgeModel: judgeModelName,
       modelEndpoints,
-      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {})
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
+      ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
+      ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),
+      ...(options.resumeId !== undefined ? { resumeId: options.resumeId } : {}),
+      ...(options.sessionMeta !== undefined ? { sessionMeta: options.sessionMeta } : {})
     };
     const gateway = await startFusionStepGateway({
       config: gatewayConfig,

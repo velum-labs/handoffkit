@@ -368,6 +368,20 @@ function assertGitSha(value: unknown, context: string): asserts value is string 
   }
 }
 
+/**
+ * `producer_git_sha` accepts a real 40-char git SHA or the literal `"unknown"`
+ * sentinel (WS7 real-lite provenance) — emitted only when a producer cannot
+ * resolve a real SHA (e.g. an installed artifact with no build stamp and no
+ * checkout). The sentinel is deliberately NOT 40 zeros, which read as a valid
+ * null SHA and were the old faked-provenance placeholder. `base_git_sha` /
+ * `source_sha` stay strict (those must always be real commits).
+ */
+function assertProducerGitSha(value: unknown, context: string): asserts value is string {
+  if (typeof value !== "string" || (value !== "unknown" && !GIT_SHA_PATTERN.test(value))) {
+    throw new Error(`${context} must be a 40-character git SHA or "unknown"`);
+  }
+}
+
 function assertDateTime(value: unknown, context: string): asserts value is string {
   assertString(value, context);
   if (Number.isNaN(Date.parse(value))) {
@@ -475,7 +489,7 @@ function assertMetadata<S extends ModelFusionSchemaName>(
   assertHash(value.schema_bundle_hash, "schema_bundle_hash");
   assertString(value.producer, "producer");
   assertString(value.producer_version, "producer_version");
-  assertGitSha(value.producer_git_sha, "producer_git_sha");
+  assertProducerGitSha(value.producer_git_sha, "producer_git_sha");
   assertDateTime(value.created_at, "created_at");
 }
 
