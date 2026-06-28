@@ -3,6 +3,8 @@ name = "fusionkit-mlx"
 version = "0.7.1"
 description = "Optional MLX helper utilities for fusionkit."
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
   "fusionkit-core==0.7.1",
 ]

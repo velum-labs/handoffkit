@@ -3,6 +3,8 @@ name = "fusionkit"
 version = "0.7.1"
 description = "Command line interface for fusionkit: local response-level model fusion."
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
   "fusionkit-core==0.7.1",
   "fusionkit-evals==0.7.1",

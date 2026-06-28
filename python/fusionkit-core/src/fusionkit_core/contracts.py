@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from importlib import metadata
@@ -117,8 +118,18 @@ FusionRunState: TypeAlias = Literal[
 
 Sha256: TypeAlias = Annotated[str, Field(pattern=r"^sha256:[a-f0-9]{64}$")]
 GitSha: TypeAlias = Annotated[str, Field(pattern=r"^[a-f0-9]{40}$")]
+# `producer_git_sha` accepts a real 40-char SHA or the "unknown" sentinel (WS7
+# real-lite provenance), emitted only when no real SHA is resolvable. `GitSha`
+# (base_git_sha / source_sha) stays strict — those must always be real commits.
+ProducerGitSha: TypeAlias = Annotated[str, Field(pattern=r"^([a-f0-9]{40}|unknown)$")]
 
-UNKNOWN_GIT_SHA = "0" * 40
+# The sentinel emitted for `producer_git_sha` when no real SHA is resolvable.
+# Deliberately NOT 40 zeros: an all-zero SHA reads as a valid (null) git object
+# and was the old "faked provenance" placeholder flagged by the readiness audit.
+UNKNOWN_GIT_SHA = "unknown"
+# Build/publish-time stamp env var: set when packaging so an installed wheel
+# (which ships no .git) still carries a real producer git SHA.
+BUILD_GIT_SHA_ENV = "FUSIONKIT_BUILD_GIT_SHA"
 PRODUCER = "fusionkit-core"
 
 
@@ -136,7 +147,7 @@ class ContractMetadata(ContractBaseModel):
     schema_bundle_hash: Sha256
     producer: str = Field(min_length=1)
     producer_version: str = Field(min_length=1)
-    producer_git_sha: GitSha
+    producer_git_sha: ProducerGitSha
     created_at: datetime
 
 
@@ -465,8 +476,30 @@ def producer_version() -> str:
         return "0.1.1"
 
 
+def _is_git_sha(value: str) -> bool:
+    return len(value) == 40 and all(character in "0123456789abcdef" for character in value)
+
+
 def producer_git_sha(repo_root: Path | None = None) -> str:
-    root = repo_root or _default_repo_root()
+    """Resolve this producer's real git SHA, real-lite (WS7).
+
+    Resolution order:
+      1. a build/publish-time stamp (``FUSIONKIT_BUILD_GIT_SHA``) — baked in when
+         the wheel is built so an installed package still carries real provenance;
+      2. a runtime ``git rev-parse HEAD`` — only when running from a source
+         checkout (an ancestor ``.git`` exists), so an installed wheel never
+         mis-reports the *current working directory's* repo SHA as fusionkit's;
+      3. the ``"unknown"`` sentinel — never 40 zeros.
+
+    An explicit ``repo_root`` (e.g. in tests) forces the git lookup at that path.
+    """
+    stamped = os.environ.get(BUILD_GIT_SHA_ENV, "").strip()
+    if _is_git_sha(stamped):
+        return stamped
+
+    root = repo_root if repo_root is not None else _checkout_root()
+    if root is None:
+        return UNKNOWN_GIT_SHA
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -479,9 +512,7 @@ def producer_git_sha(repo_root: Path | None = None) -> str:
         return UNKNOWN_GIT_SHA
 
     git_sha = result.stdout.strip()
-    if len(git_sha) == 40 and all(character in "0123456789abcdef" for character in git_sha):
-        return git_sha
-    return UNKNOWN_GIT_SHA
+    return git_sha if _is_git_sha(git_sha) else UNKNOWN_GIT_SHA
 
 
 def contract_metadata(
@@ -524,11 +555,17 @@ def _find_schema_dir() -> Path | None:
     return None
 
 
-def _default_repo_root() -> Path:
+def _checkout_root() -> Path | None:
+    """The source-checkout root containing this module (an ancestor ``.git``).
+
+    Returns ``None`` for an installed wheel (no ``.git`` above the package), so
+    callers do NOT fall back to ``git rev-parse`` in the current working
+    directory — that would stamp the *consuming project's* SHA as fusionkit's.
+    """
     for parent in Path(__file__).resolve().parents:
         if (parent / ".git").exists():
             return parent
-    return Path.cwd()
+    return None
 
 
 def _load_json(path: Path) -> Any:
@@ -568,6 +605,8 @@ __all__ = [
     "ModelEndpointV1",
     "Owner",
     "PRODUCER",
+    "ProducerGitSha",
+    "UNKNOWN_GIT_SHA",
     "SchemaName",
     "Sha256",
     "SideEffects",

@@ -19,10 +19,11 @@ import json
 import time
 import traceback
 import uuid
+from collections.abc import AsyncIterator, Sequence
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, cast
 
-from fusionkit_core.clients import build_client
+from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition, build_client
 from fusionkit_core.config import (
     EndpointAuth,
     ModelEndpoint,
@@ -30,6 +31,7 @@ from fusionkit_core.config import (
     SamplingConfig,
     SubscriptionAuthMode,
 )
+from fusionkit_core.judge import accumulate_tool_call
 from fusionkit_core.trace import (
     TRACE_ID_HEADER,
     TRACE_SPAN_HEADER,
@@ -86,6 +88,62 @@ def _to_tools(tools: Any) -> list[dict[str, Any]] | None:
     return converted
 
 
+async def _astream_sse(
+    client: ChatClient,
+    model: str,
+    messages: Sequence[ChatMessage],
+    sampling: SamplingConfig,
+    tools: Sequence[ToolDefinition] | None,
+    tool_choice: ToolChoice | None,
+) -> AsyncIterator[str]:
+    """Stream a single endpoint's response as OpenAI chat.completion.chunk SSE.
+
+    True token streaming from the provider's ``stream_chat`` (not buffer-then-
+    rechunk). Tool-call fragments are normalized via the same
+    :func:`accumulate_tool_call` seam the unified server uses, then emitted whole
+    before the terminal chunk.
+    """
+    completion_id = f"chatcmpl-{uuid.uuid4()}"
+    created = int(time.time())
+
+    def chunk(delta: dict[str, Any], finish: str | None) -> str:
+        payload = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        }
+        return f"data: {json.dumps(payload)}\n\n"
+
+    yield chunk({"role": "assistant"}, None)
+    tool_accumulator: list[dict[str, str]] = []
+    seen_tool_ids: set[str] = set()
+    finish_reason: str | None = None
+    async for piece in client.stream_chat(messages, sampling, tools=tools, tool_choice=tool_choice):
+        if piece.delta:
+            yield chunk({"content": piece.delta}, None)
+        if piece.tool_call_delta is not None:
+            accumulate_tool_call(tool_accumulator, seen_tool_ids, piece.tool_call_delta)
+        if piece.finish_reason is not None:
+            finish_reason = piece.finish_reason
+    tool_calls = [
+        {
+            "id": item["id"] or f"call_{index}",
+            "type": "function",
+            "function": {"name": item["name"], "arguments": item["arguments"] or "{}"},
+        }
+        for index, item in enumerate(tool_accumulator)
+    ]
+    if tool_calls:
+        yield chunk(
+            {"tool_calls": [{"index": index, **call} for index, call in enumerate(tool_calls)]},
+            None,
+        )
+    yield chunk({}, "tool_calls" if tool_calls else (finish_reason or "stop"))
+    yield "data: [DONE]\n\n"
+
+
 def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         server_version = "fusionkit-openai-bridge/0.1"
@@ -122,6 +180,39 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                 return
             self._send_json(404, {"error": {"message": "not found"}})
 
+        def _serve_stream(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig,
+            tools: Sequence[ToolDefinition] | None,
+            tool_choice: ToolChoice | None,
+        ) -> None:
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.send_header("cache-control", "no-cache")
+            self.end_headers()
+
+            async def pump() -> None:
+                # Build + close the client inside this request's event loop so the
+                # SDK connection pool is released instead of leaking a socket.
+                client = build_client(endpoint)
+                try:
+                    async for sse in _astream_sse(
+                        client, endpoint.model, messages, sampling, tools, tool_choice
+                    ):
+                        self.wfile.write(sse.encode("utf-8"))
+                        self.wfile.flush()
+                except Exception as exc:  # noqa: BLE001 - surface mid-stream as an SSE error
+                    traceback.print_exc()
+                    error = {"message": str(exc), "type": exc.__class__.__name__}
+                    self.wfile.write(f"data: {json.dumps({'error': error})}\n\n".encode())
+                    self.wfile.write(b"data: [DONE]\n\n")
+                    self.wfile.flush()
+                finally:
+                    await client.aclose()
+
+            asyncio.run(pump())
+
         def do_POST(self) -> None:
             if self.path != "/v1/chat/completions":
                 self._send_json(404, {"error": {"message": "not found"}})
@@ -137,12 +228,18 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                     _to_chat_message(message) for message in (request.get("messages") or [])
                 ]
                 tools = _to_tools(request.get("tools"))
-                tool_choice = request.get("tool_choice")
+                raw_tool_choice = request.get("tool_choice")
+                tool_choice = raw_tool_choice if isinstance(raw_tool_choice, str) else None
                 sampling = SamplingConfig(
                     temperature=float(request.get("temperature", 0.2) or 0.2),
                     top_p=float(request.get("top_p", 0.95) or 0.95),
                     max_tokens=int(request.get("max_tokens", 1024) or 1024),
                 )
+                if request.get("stream"):
+                    # Real passthrough streaming: drain the provider's stream_chat
+                    # straight to the client as chat.completion.chunk SSE events.
+                    self._serve_stream(messages, sampling, tools, tool_choice)
+                    return
                 trace_emit(
                     component="panel-model",
                     event_type="model.call.started",
@@ -169,7 +266,7 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                             messages,
                             sampling,
                             tools=tools,
-                            tool_choice=tool_choice if isinstance(tool_choice, str) else None,
+                            tool_choice=tool_choice,
                         )
                     finally:
                         await client.aclose()

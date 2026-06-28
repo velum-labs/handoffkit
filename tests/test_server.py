@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastapi.testclient import TestClient
-from fusionkit_core.clients import FakeModelClient
+from fusionkit_core.clients import FakeModelClient, ProviderCallError
 from fusionkit_core.config import EndpointAuth, FusionConfig, FusionMode, ModelEndpoint
 from fusionkit_server import create_app
 
@@ -269,6 +270,88 @@ def test_chat_completions_passthrough_accepts_tool_loop_messages(tmp_path) -> No
 
     assert response.status_code == 200
     assert response.json()["choices"][0]["message"]["content"] == "done"
+
+
+class _RaisingClient:
+    """A passthrough client whose chat raises a classified provider error."""
+
+    def __init__(self, model_id: str, error: ProviderCallError) -> None:
+        self.model_id = model_id
+        self._error = error
+
+    async def chat(self, *args: Any, **kwargs: Any) -> Any:
+        raise self._error
+
+    def stream_chat(self, *args: Any, **kwargs: Any) -> Any:
+        raise self._error
+
+    async def aclose(self) -> None:
+        return None
+
+
+def test_passthrough_provider_error_surfaces_machine_readable_error_category(tmp_path) -> None:
+    # A classified vendor failure on the passthrough path must carry a
+    # machine-readable ``error_category`` (plus the ``category``/``code`` aliases)
+    # so the Node gateway's WS5 failover can branch without re-parsing text. A
+    # quota exhaustion maps to HTTP 429.
+    config = FusionConfig(
+        endpoints=[ModelEndpoint(id="gpt", model="fake-gpt", base_url="http://localhost:8101")],
+        default_model="gpt",
+        default_mode="router",
+    )
+    error = ProviderCallError(
+        "You exceeded your current quota",
+        category="quota_exhausted",
+        provider="openai",
+        status_code=429,
+        retry_after=12.0,
+    )
+    app = create_app(
+        config,
+        clients={"gpt": _RaisingClient("gpt", error)},
+        run_store_path=tmp_path / "runs",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt", "messages": [{"role": "user", "content": "hi"}]},
+    )
+
+    assert response.status_code == 429
+    body = response.json()["error"]
+    assert body["error_category"] == "quota_exhausted"
+    assert body["category"] == "quota_exhausted"
+    assert body["code"] == "quota_exhausted"
+    assert body["provider"] == "openai"
+    assert body["retry_after"] == 12.0
+
+
+def test_passthrough_auth_error_maps_to_401_with_error_category(tmp_path) -> None:
+    # A permanent auth failure maps to HTTP 401 and is labelled auth_permanent so
+    # the gateway fails fast rather than failing over to the ensemble.
+    config = FusionConfig(
+        endpoints=[ModelEndpoint(id="gpt", model="fake-gpt", base_url="http://localhost:8101")],
+        default_model="gpt",
+        default_mode="router",
+    )
+    error = ProviderCallError(
+        "invalid api key", category="auth_permanent", provider="openai", status_code=401
+    )
+    app = create_app(
+        config,
+        clients={"gpt": _RaisingClient("gpt", error)},
+        run_store_path=tmp_path / "runs",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt", "messages": [{"role": "user", "content": "hi"}]},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["error_category"] == "auth_permanent"
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:

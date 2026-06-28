@@ -22,7 +22,7 @@ import asyncio
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
-from fusionkit_core.clients import ChatClient
+from fusionkit_core.clients import ChatClient, ProviderCallError, ToolDefinition
 from fusionkit_core.config import SamplingConfig
 from fusionkit_core.contracts import (
     ContractUsage,
@@ -79,6 +79,14 @@ def failed_trajectory(
         "error_code": exc.__class__.__name__,
         "error_message": str(exc),
     }
+    # Surface the egress taxonomy category on the failed trajectory so the run
+    # metadata records *why* a model dropped out (transient vs quota vs auth) -
+    # the substrate the WS5 failover layer reads without re-parsing.
+    if isinstance(exc, ProviderCallError):
+        metadata["error_category"] = exc.category
+        metadata["provider"] = exc.provider
+        if exc.status_code is not None:
+            metadata["status_code"] = exc.status_code
     if sampling is not None:
         metadata["temperature"] = sampling.temperature
         metadata["seed"] = sampling.seed
@@ -185,9 +193,10 @@ class ChatTrajectoryProducer:
         model_id: str,
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
+        tools: Sequence[ToolDefinition] | None = None,
     ) -> Trajectory:
         client = self._client(model_id)
-        response = await client.chat(messages, sampling)
+        response = await client.chat(messages, sampling, tools=tools)
         return trajectory_from_response(model_id, response, ordinal=0)
 
     async def generate_self_fusion(
@@ -197,6 +206,7 @@ class ChatTrajectoryProducer:
         base_sampling: SamplingConfig,
         temperatures: Sequence[float],
         sample_count: int,
+        tools: Sequence[ToolDefinition] | None = None,
     ) -> list[Trajectory]:
         selected_temperatures = list(temperatures)[:sample_count]
         if len(selected_temperatures) < sample_count:
@@ -212,23 +222,25 @@ class ChatTrajectoryProducer:
                 }
             )
             specs.append((model_id, index, sampling))
-        return await self._settle(specs, messages)
+        return await self._settle(specs, messages, tools)
 
     async def generate_panel(
         self,
         model_ids: Sequence[str],
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
+        tools: Sequence[ToolDefinition] | None = None,
     ) -> list[Trajectory]:
         specs = [
             (model_id, index, sampling) for index, model_id in enumerate(model_ids)
         ]
-        return await self._settle(specs, messages)
+        return await self._settle(specs, messages, tools)
 
     async def _settle(
         self,
         specs: Sequence[tuple[str, int, SamplingConfig]],
         messages: Sequence[ChatMessage],
+        tools: Sequence[ToolDefinition] | None = None,
     ) -> list[Trajectory]:
         """Run every attempt, tolerating individual failures.
 
@@ -237,7 +249,7 @@ class ChatTrajectoryProducer:
         :class:`PanelExhaustedError`.
         """
         results = await asyncio.gather(
-            *(self._generate(model_id, index, messages, sampling)
+            *(self._generate(model_id, index, messages, sampling, tools)
               for model_id, index, sampling in specs),
             return_exceptions=True,
         )
@@ -264,9 +276,10 @@ class ChatTrajectoryProducer:
         index: int,
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
+        tools: Sequence[ToolDefinition] | None = None,
     ) -> Trajectory:
         client = self._client(model_id)
-        response = await client.chat(messages, sampling)
+        response = await client.chat(messages, sampling, tools=tools)
         return trajectory_from_response(model_id, response, ordinal=index, sampling=sampling)
 
     def _client(self, model_id: str) -> ChatClient:

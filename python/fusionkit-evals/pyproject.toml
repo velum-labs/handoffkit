@@ -3,6 +3,8 @@ name = "fusionkit-evals"
 version = "0.7.1"
 description = "Evaluation and Pareto analysis tools for fusionkit."
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
   "fusionkit-core==0.7.1",
   "pydantic>=2.12.5",

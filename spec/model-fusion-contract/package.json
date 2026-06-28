@@ -20,7 +20,8 @@
     "openapi",
     "gen",
     "protocol-package.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -22,8 +22,11 @@ from fusionkit_core.types import (
     ChatMessage,
     FusionAnalysis,
     ModelResponse,
+    StreamChunk,
+    ToolCall,
     Trajectory,
     TrajectorySynthesis,
+    Usage,
 )
 
 
@@ -80,6 +83,116 @@ class JudgeSynthesizer:
         """
         synth_client = synthesizer_client or judge_client
         judge_span = span_id or new_span_id()
+        conversation, resolved_analysis = await self._prepare_conversation(
+            messages,
+            trajectories,
+            judge_client=judge_client,
+            sampling=sampling,
+            tools=tools,
+            analysis=analysis,
+            trace_id=trace_id,
+            judge_span=judge_span,
+        )
+        response = await synth_client.chat(
+            conversation,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+        result = self._build_fuse_result(response, trajectories, resolved_analysis)
+        self._emit_step(
+            trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
+        )
+        return result
+
+    async def fuse_stream(
+        self,
+        messages: Sequence[ChatMessage],
+        trajectories: Sequence[Trajectory],
+        *,
+        judge_client: ChatClient,
+        synthesizer_client: ChatClient | None = None,
+        sampling: SamplingConfig,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        analysis: FusionAnalysis | None = None,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> AsyncIterator[StreamChunk | FuseResult]:
+        """Streaming counterpart of :meth:`fuse`: the synthesizer turn streams.
+
+        Yields the synthesizer's :class:`StreamChunk`s as real tokens arrive
+        (true streaming, not buffer-then-rechunk), then a final
+        :class:`FuseResult` as the last item so the caller can attach the fused
+        trajectory metadata to the terminal SSE chunk. The judge ``analyze`` is
+        still a single up-front non-streaming call.
+        """
+        synth_client = synthesizer_client or judge_client
+        judge_span = span_id or new_span_id()
+        conversation, resolved_analysis = await self._prepare_conversation(
+            messages,
+            trajectories,
+            judge_client=judge_client,
+            sampling=sampling,
+            tools=tools,
+            analysis=analysis,
+            trace_id=trace_id,
+            judge_span=judge_span,
+        )
+        content_parts: list[str] = []
+        tool_accumulator: list[dict[str, str]] = []
+        seen_tool_ids: set[str] = set()
+        finish_reason: str | None = None
+        usage = Usage()
+        async for chunk in synth_client.stream_chat(
+            conversation,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+        ):
+            if chunk.delta:
+                content_parts.append(chunk.delta)
+            if chunk.tool_call_delta is not None:
+                accumulate_tool_call(tool_accumulator, seen_tool_ids, chunk.tool_call_delta)
+            if chunk.finish_reason is not None:
+                finish_reason = chunk.finish_reason
+            if chunk.usage is not None:
+                usage = chunk.usage
+            yield chunk
+        tool_calls = [
+            ToolCall(id=item["id"], name=item["name"], arguments=item["arguments"] or "{}")
+            for item in tool_accumulator
+        ]
+        response = ModelResponse(
+            model_id=synth_client.model_id,
+            content="".join(content_parts),
+            finish_reason=finish_reason or ("tool_calls" if tool_calls else "stop"),
+            usage=usage,
+            tool_calls=tool_calls,
+        )
+        result = self._build_fuse_result(response, trajectories, resolved_analysis)
+        self._emit_step(
+            trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
+        )
+        yield result
+
+    async def _prepare_conversation(
+        self,
+        messages: Sequence[ChatMessage],
+        trajectories: Sequence[Trajectory],
+        *,
+        judge_client: ChatClient,
+        sampling: SamplingConfig,
+        tools: Sequence[Mapping[str, Any]] | None,
+        analysis: FusionAnalysis | None,
+        trace_id: str | None,
+        judge_span: str | None,
+    ) -> tuple[list[ChatMessage], FusionAnalysis]:
+        """Build the synthesizer conversation (judge analysis + system + history).
+
+        Shared by :meth:`fuse` and :meth:`fuse_stream` so the streaming and
+        non-streaming paths cannot drift in how they ground the synthesizer.
+        """
         resolved_analysis = analysis
         if resolved_analysis is None and trajectories:
             resolved_analysis = await self.analyze(
@@ -99,12 +212,14 @@ class JudgeSynthesizer:
             tools_present=tools is not None,
         )
         conversation = [ChatMessage(role="system", content=system), *messages]
-        response = await synth_client.chat(
-            conversation,
-            sampling,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
+        return conversation, resolved_analysis
+
+    def _build_fuse_result(
+        self,
+        response: ModelResponse,
+        trajectories: Sequence[Trajectory],
+        resolved_analysis: FusionAnalysis,
+    ) -> FuseResult:
         terminal = not response.tool_calls
         output_trajectory: Trajectory | None = None
         if terminal:
@@ -118,7 +233,6 @@ class JudgeSynthesizer:
             output_trajectory = _consolidated_trajectory(
                 final_output, trajectories, resolved_analysis
             )
-        self._emit_step(trace_id, judge_span, response, terminal, output_trajectory, trajectories)
         return FuseResult(
             response=response,
             terminal=terminal,
@@ -198,6 +312,32 @@ class JudgeSynthesizer:
 # between the producer (parse_analysis) and the detector (_judge_parse_failed)
 # so the two cannot silently drift apart.
 _PARSE_FAILURE_CONSENSUS = "Judge did not return valid structured JSON."
+
+
+def accumulate_tool_call(
+    accumulator: list[dict[str, str]],
+    seen_ids: set[str],
+    delta: ToolCall,
+) -> None:
+    """Fold a streamed tool-call fragment into the in-progress accumulator.
+
+    Handles both common streaming shapes: OpenAI Chat (the opening fragment
+    carries id+name, later fragments carry argument text with an empty id) and
+    Codex/Responses (every argument fragment repeats the same non-empty
+    ``call_id``). A new, previously unseen id starts a fresh call; anything else
+    appends argument text (and a late name) to the call already in flight.
+    """
+    if delta.id and delta.id not in seen_ids:
+        seen_ids.add(delta.id)
+        accumulator.append({"id": delta.id, "name": delta.name, "arguments": delta.arguments})
+        return
+    if not accumulator:
+        accumulator.append({"id": delta.id, "name": delta.name, "arguments": delta.arguments})
+        return
+    current = accumulator[-1]
+    if delta.name:
+        current["name"] = delta.name
+    current["arguments"] += delta.arguments
 
 
 def parse_analysis(content: str) -> FusionAnalysis:
@@ -374,5 +514,6 @@ def _usage_payload(response: Any) -> dict[str, Any]:
 __all__ = [
     "FuseResult",
     "JudgeSynthesizer",
+    "accumulate_tool_call",
     "parse_analysis",
 ]

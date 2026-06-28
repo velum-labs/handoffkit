@@ -6,8 +6,11 @@ from fusionkit_core.clients import (
     GoogleModelClient,
     LocalModelClient,
     OpenAICompatibleClient,
+    ProviderCallError,
+    ProviderErrorCategory,
     build_client,
     build_clients,
+    classify_provider_error,
 )
 from fusionkit_core.config import (
     CostMetadata,
@@ -155,6 +158,8 @@ __all__ = [
     "ModelResponse",
     "NativeRunError",
     "OpenAICompatibleClient",
+    "ProviderCallError",
+    "ProviderErrorCategory",
     "ProviderKind",
     "RunEventPage",
     "RunInspection",
@@ -188,6 +193,7 @@ __all__ = [
     "build_client",
     "build_clients",
     "canonical_json",
+    "classify_provider_error",
     "contract_metadata",
     "contract_model_for_schema",
     "emit",

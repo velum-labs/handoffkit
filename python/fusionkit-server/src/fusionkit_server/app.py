@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 import traceback
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 
 from fastapi import FastAPI, Header, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from fusionkit_core.artifacts import LocalArtifactStore
-from fusionkit_core.clients import ChatClient, build_clients
-from fusionkit_core.config import FusionConfig, FusionMode
+from fusionkit_core.clients import (
+    ChatClient,
+    ProviderCallError,
+    ProviderErrorCategory,
+    build_clients,
+)
+from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
 from fusionkit_core.contracts import (
     FusionRunRequestV1,
     TrajectoryV1,
@@ -21,7 +25,7 @@ from fusionkit_core.contracts import (
 )
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import FuseResult
-from fusionkit_core.producers import trajectory_from_contract
+from fusionkit_core.producers import PanelExhaustedError, trajectory_from_contract
 from fusionkit_core.run import (
     CreateRunResult,
     FusionRunManager,
@@ -35,7 +39,7 @@ from fusionkit_core.run import (
 )
 from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER, new_span_id
-from fusionkit_core.types import ChatMessage, ModelResponse, ToolCall
+from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall
 from pydantic import BaseModel, Field
 
 
@@ -214,15 +218,33 @@ def create_app(
         # path below.
         if _is_endpoint_model(config, request.model):
             return await _passthrough_chat(engine, config, request)
+        # Real SSE streaming on the fused path: the candidate trajectories are
+        # generated, then the synthesizer turn streams tokens straight through
+        # (no buffer-then-rechunk).
+        if request.stream:
+            stream = engine.run_stream(
+                request.messages,
+                mode=_mode_from_request(request),
+                sampling=_request_sampling(config, request),
+                panel_models=request.fusion.panel_models,
+                sample_count=request.fusion.sample_count,
+                tools=_normalize_tools(request.tools),
+                tool_choice=_normalize_tool_choice(request.tool_choice),
+            )
+            return StreamingResponse(
+                _fused_completion_sse(request.model, stream),
+                media_type="text/event-stream",
+            )
+        # Tool calling through the ensemble: when the caller passes `tools`, the
+        # fused step is allowed to emit `tool_calls`. We return them to the caller
+        # (OpenAI Chat Completions semantics) rather than executing in-process;
+        # the caller posts `tool` results back on the next request.
+        if request.tools:
+            return await _fusion_tool_step(engine, config, request)
         resolved = await _resolve_native_chat(native_runs, request, config)
         if isinstance(resolved, JSONResponse):
             return resolved
         final_output, metadata = resolved
-        if request.stream:
-            return StreamingResponse(
-                _chat_completion_sse(request.model, final_output, metadata),
-                media_type="text/event-stream",
-            )
         return _openai_chat_response(request.model, final_output, metadata)
 
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
@@ -253,18 +275,42 @@ def create_app(
             )
             for trajectory in request.trajectories
         ]
-        try:
-            result = await engine.judge_synthesizer.fuse(
-                [_to_chat_message(message) for message in request.messages],
+        messages = [_to_chat_message(message) for message in request.messages]
+        tools = _normalize_tools(request.tools)
+        tool_choice = _normalize_tool_choice(request.tool_choice)
+        resolved_span = span_id or new_span_id()
+        # Real streaming: the synthesizer turn streams tokens; the fused
+        # trajectory metadata rides on the terminal SSE chunk.
+        if request.stream:
+            stream = engine.judge_synthesizer.fuse_stream(
+                messages,
                 trajectories,
                 judge_client=judge_client,
                 synthesizer_client=synthesizer_client,
                 sampling=config.sampling,
-                tools=_normalize_tools(request.tools),
-                tool_choice=_normalize_tool_choice(request.tool_choice),
+                tools=tools,
+                tool_choice=tool_choice,
                 trace_id=trace_id,
-                span_id=span_id or new_span_id(),
+                span_id=resolved_span,
             )
+            return StreamingResponse(
+                _fused_completion_sse(request.model, stream),
+                media_type="text/event-stream",
+            )
+        try:
+            result = await engine.judge_synthesizer.fuse(
+                messages,
+                trajectories,
+                judge_client=judge_client,
+                synthesizer_client=synthesizer_client,
+                sampling=config.sampling,
+                tools=tools,
+                tool_choice=tool_choice,
+                trace_id=trace_id,
+                span_id=resolved_span,
+            )
+        except ProviderCallError as exc:
+            return _provider_error_response(exc)
         except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
             traceback.print_exc()
             return _openai_error_response(
@@ -272,13 +318,7 @@ def create_app(
                 f"fusion step failed: {exc}",
                 status_code=502,
             )
-        fusion_extension = _fusion_extension(result)
-        if request.stream:
-            return StreamingResponse(
-                _step_completion_sse(request.model, result.response, fusion_extension),
-                media_type="text/event-stream",
-            )
-        return _openai_step_response(request.model, result.response, fusion_extension)
+        return _openai_step_response(request.model, result.response, _fusion_extension(result))
 
     return app
 
@@ -304,7 +344,80 @@ async def _passthrough_chat(
     panel model — including its tool-call loop — through the same base URL.
     """
     client = engine.clients[request.model]
-    sampling = config.sampling.model_copy(
+    sampling = _request_sampling(config, request)
+    tools = _normalize_tools(request.tools)
+    tool_choice = _normalize_tool_choice(request.tool_choice)
+    if request.stream:
+        # Real passthrough streaming straight from the provider's stream_chat.
+        stream = engine.stream_passthrough(
+            request.model,
+            request.messages,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+        return StreamingResponse(
+            _fused_completion_sse(request.model, stream),
+            media_type="text/event-stream",
+        )
+    try:
+        response = await client.chat(
+            request.messages,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+    except ProviderCallError as exc:
+        return _provider_error_response(exc)
+    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+        traceback.print_exc()
+        return _openai_error_response(
+            exc.__class__.__name__,
+            f"passthrough chat failed: {exc}",
+            status_code=502,
+        )
+    return _openai_step_response(request.model, response)
+
+
+async def _fusion_tool_step(
+    engine: FusionEngine,
+    config: FusionConfig,
+    request: FusionRequest,
+) -> dict[str, Any] | JSONResponse:
+    """Non-streaming fused step that may return ``tool_calls`` to the caller.
+
+    The ensemble generates tool-aware candidate trajectories, and the synthesizer
+    step is allowed to emit ``tool_calls``. Following OpenAI Chat Completions tool
+    semantics, those calls are returned to the caller (finish_reason
+    ``tool_calls``); the caller executes them and posts ``tool`` result messages
+    back on the next request, which re-enter the panel + synthesizer.
+    """
+    try:
+        result = await engine.run_step(
+            request.messages,
+            mode=_mode_from_request(request),
+            sampling=_request_sampling(config, request),
+            panel_models=request.fusion.panel_models,
+            sample_count=request.fusion.sample_count,
+            tools=_normalize_tools(request.tools),
+            tool_choice=_normalize_tool_choice(request.tool_choice),
+        )
+    except ProviderCallError as exc:
+        return _provider_error_response(exc)
+    except PanelExhaustedError as exc:
+        return _openai_error_response(
+            "all_models_failed", f"fusion step failed: {exc}", status_code=502
+        )
+    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+        traceback.print_exc()
+        return _openai_error_response(
+            exc.__class__.__name__, f"fusion step failed: {exc}", status_code=502
+        )
+    return _openai_step_response(request.model, result.response, _fusion_extension(result))
+
+
+def _request_sampling(config: FusionConfig, request: FusionRequest) -> SamplingConfig:
+    return config.sampling.model_copy(
         update={
             key: value
             for key, value in {
@@ -315,26 +428,6 @@ async def _passthrough_chat(
             if value is not None
         }
     )
-    try:
-        response = await client.chat(
-            request.messages,
-            sampling,
-            tools=_normalize_tools(request.tools),
-            tool_choice=_normalize_tool_choice(request.tool_choice),
-        )
-    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
-        traceback.print_exc()
-        return _openai_error_response(
-            exc.__class__.__name__,
-            f"passthrough chat failed: {exc}",
-            status_code=502,
-        )
-    if request.stream:
-        return StreamingResponse(
-            _step_completion_sse(request.model, response),
-            media_type="text/event-stream",
-        )
-    return _openai_step_response(request.model, response)
 
 
 async def _resolve_native_chat(
@@ -359,41 +452,102 @@ async def _resolve_native_chat(
     return result.final_output, _chat_fusion_metadata(result)
 
 
-async def _chat_completion_sse(
+async def _fused_completion_sse(
     model: str,
-    content: str,
-    metadata: dict[str, Any],
+    stream: AsyncIterator[StreamChunk | FuseResult],
 ) -> AsyncIterator[str]:
+    """Emit OpenAI ``chat.completion.chunk`` SSE from a fused/passthrough stream.
+
+    Consumes the engine's ``AsyncIterator[StreamChunk | FuseResult]``: each
+    :class:`StreamChunk` with text becomes a content delta as it arrives (true
+    streaming), and the terminal :class:`FuseResult` carries any ``tool_calls``,
+    the finish reason, and the fused trajectory metadata (the ``fusion``
+    extension) on the final chunk. A mid-stream provider failure is surfaced as
+    an OpenAI-style error event before ``[DONE]``.
+    """
     completion_id = f"chatcmpl-{uuid.uuid4()}"
     created = int(time.time())
 
-    def chunk(delta: dict[str, Any], finish_reason: str | None) -> str:
+    def chunk(delta: dict[str, Any], finish: str | None, extra: dict[str, Any] | None) -> str:
         payload: dict[str, Any] = {
             "id": completion_id,
             "object": "chat.completion.chunk",
             "created": created,
             "model": model,
-            "choices": [
-                {"index": 0, "delta": delta, "finish_reason": finish_reason},
-            ],
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
         }
-        if finish_reason is not None:
-            payload["fusionkit"] = metadata
+        if extra is not None:
+            payload.update(extra)
         return f"data: {json.dumps(payload)}\n\n"
 
-    yield chunk({"role": "assistant"}, None)
-    for piece in _stream_pieces(content):
-        yield chunk({"content": piece}, None)
-    yield chunk({}, "stop")
+    yield chunk({"role": "assistant"}, None, None)
+    streamed_content = False
+    final_result: FuseResult | None = None
+    try:
+        async for item in stream:
+            if isinstance(item, FuseResult):
+                final_result = item
+                continue
+            if item.delta:
+                streamed_content = True
+                yield chunk({"content": item.delta}, None, None)
+    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error event
+        traceback.print_exc()
+        yield _sse_error_event(exc)
+        yield "data: [DONE]\n\n"
+        return
+
+    response = final_result.response if final_result is not None else None
+    tool_calls = _tool_calls_payload(response) if response is not None else []
+    # If nothing streamed (e.g. a reasoning model that produced its answer only
+    # via the post-stream fallback), emit the resolved content once before close.
+    if response is not None and not streamed_content and response.content and not tool_calls:
+        yield chunk({"content": response.content}, None, None)
+    if tool_calls:
+        yield chunk(
+            {"tool_calls": [{"index": index, **call} for index, call in enumerate(tool_calls)]},
+            None,
+            None,
+        )
+    finish = "tool_calls" if tool_calls else (
+        (response.finish_reason if response is not None else None) or "stop"
+    )
+    extra: dict[str, Any] = {}
+    if final_result is not None:
+        fusion_extension = _fusion_extension(final_result)
+        if fusion_extension is not None:
+            extra["fusion"] = fusion_extension
+    # WS7: carry the synthesizer turn's token usage on the terminal chunk so a
+    # streaming client (and the Node gateway's cost meter, which reads `usage`
+    # off the SSE tail) can account a fused stream's cost — mirroring the
+    # non-streaming `_openai_step_response` body, which always includes `usage`.
+    if response is not None:
+        extra["usage"] = _usage_dict(response)
+    yield chunk({}, finish, extra or None)
     yield "data: [DONE]\n\n"
 
 
-def _stream_pieces(content: str) -> list[str]:
-    if not content:
-        return []
-    # Split into tokens that retain their trailing whitespace so the
-    # concatenation of all pieces reproduces the original content exactly.
-    return [token for token in re.findall(r"\S+\s*|\s+", content) if token]
+def _sse_error_event(exc: BaseException) -> str:
+    if isinstance(exc, ProviderCallError):
+        body: dict[str, Any] = {
+            "message": str(exc),
+            "type": "provider_error",
+            "code": exc.category,
+            # Mirror the non-streaming error body so a mid-stream failure carries
+            # the same canonical ``error_category`` failover signal (WS5).
+            "error_category": exc.category,
+            "category": exc.category,
+            "provider": exc.provider,
+        }
+        if exc.retry_after is not None:
+            body["retry_after"] = exc.retry_after
+    else:
+        body = {
+            "message": str(exc),
+            "type": exc.__class__.__name__,
+            "code": exc.__class__.__name__,
+        }
+    return f"data: {json.dumps({'error': body})}\n\n"
 
 
 def _create_run_manager(
@@ -723,44 +877,41 @@ def _openai_step_response(
     return payload
 
 
-async def _step_completion_sse(
-    model: str,
-    response: ModelResponse,
-    fusion: dict[str, Any] | None = None,
-) -> AsyncIterator[str]:
-    completion_id = f"chatcmpl-{uuid.uuid4()}"
-    created = int(time.time())
-    tool_calls = _tool_calls_payload(response)
-    finish_reason = "tool_calls" if tool_calls else (response.finish_reason or "stop")
+def _provider_error_response(exc: ProviderCallError) -> JSONResponse:
+    """Map a classified egress failure onto an OpenAI-style error body.
 
-    def chunk(delta: dict[str, Any], finish: str | None) -> str:
-        payload: dict[str, Any] = {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": model,
-            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
-        }
-        if finish is not None and fusion is not None:
-            # The fused trajectory (with its synthesis) rides on the terminal chunk.
-            payload["fusion"] = fusion
-        return f"data: {json.dumps(payload)}\n\n"
+    The taxonomy ``category`` (and ``retry_after``) is surfaced verbatim so a
+    client - or the WS5 failover layer reading this response - can branch on it
+    without re-parsing the upstream provider error.
+    """
+    body: dict[str, Any] = {
+        "message": str(exc),
+        "type": "provider_error",
+        "code": exc.category,
+        # ``error_category`` is the canonical machine-readable failover signal
+        # the Node gateway (WS5) branches on without re-parsing provider text;
+        # ``category``/``code`` are kept as aliases for existing readers.
+        "error_category": exc.category,
+        "category": exc.category,
+        "provider": exc.provider,
+    }
+    if exc.retry_after is not None:
+        body["retry_after"] = exc.retry_after
+    return _json_response({"error": body}, status_code=_status_for_category(exc.category))
 
-    yield chunk({"role": "assistant"}, None)
-    if response.content:
-        for piece in _stream_pieces(response.content):
-            yield chunk({"content": piece}, None)
-    if tool_calls:
-        yield chunk(
-            {
-                "tool_calls": [
-                    {"index": index, **call} for index, call in enumerate(tool_calls)
-                ]
-            },
-            None,
-        )
-    yield chunk({}, finish_reason)
-    yield "data: [DONE]\n\n"
+
+def _status_for_category(category: ProviderErrorCategory) -> int:
+    match category:
+        case "transient":
+            return 503
+        case "quota_exhausted":
+            return 429
+        case "auth_permanent":
+            return 401
+        case "unknown":
+            return 502
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _openai_chat_response(model: str, content: str, metadata: dict[str, Any]) -> dict[str, Any]:

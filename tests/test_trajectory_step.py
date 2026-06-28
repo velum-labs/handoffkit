@@ -92,7 +92,7 @@ class _ToolCallClient:
             ],
         )
 
-    def stream_chat(
+    async def stream_chat(
         self,
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig | None = None,
@@ -100,7 +100,19 @@ class _ToolCallClient:
         tool_choice: str | Mapping[str, Any] | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        raise NotImplementedError
+        self.seen_tools = tools
+        self.system_prompt = next(
+            (message.content for message in messages if message.role == "system"), ""
+        )
+        # The synthesizer step proposes a tool call mid-stream (id+name in the
+        # opening fragment, arguments follow), then finishes with tool_calls.
+        yield StreamChunk(
+            tool_call_delta=ToolCall(id="call_1", name="write_file", arguments="")
+        )
+        yield StreamChunk(
+            tool_call_delta=ToolCall(id="call_1", name="", arguments='{"path": "calculator.js"}')
+        )
+        yield StreamChunk(finish_reason="tool_calls")
 
     async def aclose(self) -> None:
         return None

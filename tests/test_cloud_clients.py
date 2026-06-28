@@ -233,6 +233,43 @@ async def test_openai_stream_chat_yields_chunks() -> None:
     assert chunks[-1].usage.total_tokens == 3
 
 
+async def test_anthropic_stream_chat_includes_prompt_tokens() -> None:
+    # Anthropic delivers input_tokens on `message_start` and output_tokens on
+    # `message_delta`. The terminal chunk's usage must carry BOTH so a fused turn
+    # metered off the synthesizer step (Node gateway) does not under-report cost.
+    client = AnthropicModelClient(_endpoint("anthropic"))
+    events = [
+        SimpleNamespace(
+            type="message_start",
+            message=SimpleNamespace(usage=SimpleNamespace(input_tokens=11, output_tokens=0)),
+        ),
+        SimpleNamespace(
+            type="content_block_delta",
+            delta=SimpleNamespace(type="text_delta", text="he"),
+        ),
+        SimpleNamespace(
+            type="content_block_delta",
+            delta=SimpleNamespace(type="text_delta", text="llo"),
+        ),
+        SimpleNamespace(
+            type="message_delta",
+            delta=SimpleNamespace(stop_reason="end_turn"),
+            usage=SimpleNamespace(output_tokens=5),
+        ),
+    ]
+    client._client.messages.create = AsyncMock(return_value=_aiter(events))
+
+    chunks = [chunk async for chunk in client.stream_chat([ChatMessage(role="user", content="hi")])]
+
+    assert "".join(chunk.delta for chunk in chunks) == "hello"
+    terminal = chunks[-1]
+    assert terminal.finish_reason == "end_turn"
+    assert terminal.usage is not None
+    assert terminal.usage.prompt_tokens == 11
+    assert terminal.usage.completion_tokens == 5
+    assert terminal.usage.total_tokens == 16
+
+
 # --- subscription auth clients ---------------------------------------------
 
 
