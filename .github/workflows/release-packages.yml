@@ -28,12 +28,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # No registry-url/scope here on purpose: setup-node's registry-url writes a
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` line into .npmrc; a
+      # present (or empty) token makes npm use token auth and SHADOWS OIDC trusted
+      # publishing. publish-npm-workspaces.mjs passes --registry/--access
+      # explicitly and publishes token-free via OIDC.
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 22
-          registry-url: "https://registry.npmjs.org"
-          scope: "@fusionkit"
 
       - name: Enable Corepack
         run: corepack enable
@@ -41,11 +44,10 @@ jobs:
       - name: Pin pnpm
         run: corepack prepare pnpm@10.33.4 --activate
 
-      # `pnpm publish` performs the npm OIDC exchange via the npm CLI, which must
-      # be >= 11.5.1 for trusted publishing. Once a Trusted Publisher is
-      # configured on npmjs.com, publishing uses OIDC automatically and the
-      # NPM_TOKEN below is no longer used (it remains only as a bootstrap
-      # fallback for the very first publish, before the packages exist).
+      # The publish step performs the npm OIDC exchange via the npm CLI, which
+      # must be >= 11.5.1 for trusted publishing. Trusted Publishers for the
+      # @fusionkit/* packages are configured on npmjs.com, so publishing is
+      # token-free via OIDC (provenance is emitted automatically).
       - name: Update npm for OIDC trusted publishing
         run: npm install -g npm@latest
 
@@ -85,20 +87,13 @@ jobs:
       - name: Stage dashboard into CLI package
         run: node scripts/stage-scope.mjs
 
-      - name: Configure npm registry auth
-        if: github.event_name == 'release'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> "$HOME/.npmrc"
-
       - name: Dry-run package tarballs
         if: github.event_name == 'workflow_dispatch'
         run: node scripts/publish-npm-workspaces.mjs --dry-run
 
       - name: Publish packages to npm
         if: github.event_name == 'release'
+        # No NODE_AUTH_TOKEN: publishing is via OIDC trusted publishing.
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node scripts/publish-npm-workspaces.mjs
