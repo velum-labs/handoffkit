@@ -927,7 +927,10 @@ function applyBump(unit, version) {
           warn(`${unit.key}: could not write version source ${source}`);
         }
       }
-      if (unit.ecosystem === "uv-monorepo") touched.push(...repinUvInternalDeps(unit, version));
+      if (unit.ecosystem === "uv-monorepo") {
+        touched.push(...repinUvInternalDeps(unit, version));
+        touched.push(...regenerateUvLock(unit));
+      }
       break;
     default:
       throw new Error(`no bump adapter for ecosystem ${unit.ecosystem}`);
@@ -981,6 +984,23 @@ function repinUvInternalDeps(unit, version) {
     }
   }
   return touched;
+}
+
+// fusionkit-pypi: bumping the member pyproject versions makes uv.lock stale, so
+// the release workflow's `uv lock --check` would fail (it has, every release).
+// Regenerate the lockfile in lockstep so the release commit carries a current
+// uv.lock. Plain `uv lock` only resolves what the bump changed (no --upgrade).
+function regenerateUvLock(unit) {
+  const lockPath = join(unit.absRepo, "uv.lock");
+  if (!existsSync(lockPath)) return [];
+  const res = run("uv", ["lock"], { cwd: unit.absRepo });
+  if (!res.ok) {
+    die(
+      `${unit.key}: \`uv lock\` failed while refreshing the lockfile after the ` +
+        `version bump:\n${res.stderr || res.stdout}`
+    );
+  }
+  return ["uv.lock"];
 }
 
 // --- protocol pin propagation into consumers ------------------------------
