@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0 - 2026-06-29
+
+- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+
 ## 0.7.4 - 2026-06-25
 
 - Release cut via the cross-repo coordinator (`scripts/release.mjs`).
