@@ -3,6 +3,7 @@ import type { BackendConfig } from "@fusionkit/model-gateway";
 import { LOCAL_MODEL_LABEL, readEnv } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
+import { KernelBackend } from "./kernel-backend.js";
 import { toolRegistry } from "./tools.js";
 
 /**
@@ -41,7 +42,7 @@ export { cursorInstructions } from "@fusionkit/tool-cursor";
 type GatewayHandle = { url: string; close: () => Promise<void> };
 
 async function startLocalGateway(config: BackendConfig, authToken?: string): Promise<GatewayHandle> {
-  const backend = createBackend(config);
+  const backend = new KernelBackend(createBackend(config));
   const gateway = await startGateway({
     backend,
     ...(authToken !== undefined ? { authToken } : {})

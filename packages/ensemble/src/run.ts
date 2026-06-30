@@ -17,6 +17,7 @@ import type {
 import { createArtifactStore } from "./artifacts.js";
 import { hardeningToJson } from "./harness.js";
 import { PRODUCER, PRODUCER_GIT_SHA, PRODUCER_VERSION } from "./provenance.js";
+import { createArtifact, FusionRuntime, StaticDAGScheduler } from "./runtime.js";
 import type {
   CandidateHardeningMetadata,
   EnsembleCandidateSummary,
@@ -35,6 +36,7 @@ import {
   diffCandidateWorktree,
   sealCandidateWorktree
 } from "./worktree.js";
+import type { Operator } from "./runtime.js";
 
 type StoredHarnessArtifact = HarnessArtifact & { path?: string };
 
@@ -327,7 +329,7 @@ function candidateHardening(
   return undefined;
 }
 
-export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<EnsembleRunResult> {
+export async function runEnsembleLegacy(descriptor: EnsembleDescriptor): Promise<EnsembleRunResult> {
   assertDescriptor(descriptor);
   const createdAt = new Date().toISOString();
   const capabilities = descriptor.harness.capabilities(descriptor);
@@ -583,6 +585,59 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       });
     }
   }
+}
+
+export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<EnsembleRunResult> {
+  const descriptorArtifact = createArtifact({
+    id: `${descriptor.id}.descriptor`,
+    type: "ensemble_descriptor",
+    value: descriptor,
+    visibility: "developer",
+    leakage: "none"
+  });
+  const legacyOperator: Operator = {
+    spec: {
+      id: "legacy.run-ensemble",
+      kind: "legacy.ensemble.run",
+      requiredInputTypes: ["ensemble_descriptor"],
+      outputTypes: ["ensemble_run_result"],
+      sideEffects: "write_workspace"
+    },
+    async run(inputs, ctx) {
+      const value = inputs.find((artifact) => artifact.type === "ensemble_descriptor")?.value as
+        | EnsembleDescriptor
+        | undefined;
+      if (value === undefined) throw new Error("runEnsemble kernel wrapper missing descriptor artifact");
+      return [
+        ctx.createArtifact({
+          id: `${ctx.nodeId}.result`,
+          type: "ensemble_run_result",
+          value: await runEnsembleLegacy(value),
+          visibility: "developer",
+          leakage: "none"
+        })
+      ];
+    }
+  };
+  const result = await new FusionRuntime().run({
+    runId: `ensemble_${descriptor.id}`,
+    graph: {
+      id: `${descriptor.id}.ensemble-run`,
+      inputArtifactIds: [descriptorArtifact.id],
+      nodes: [
+        {
+          id: "run-ensemble",
+          operator: legacyOperator,
+          inputs: [{ artifactId: descriptorArtifact.id }]
+        }
+      ]
+    },
+    scheduler: new StaticDAGScheduler("legacy-ensemble-run"),
+    artifacts: [descriptorArtifact]
+  });
+  const output = result.finalArtifacts[0]?.value as EnsembleRunResult | undefined;
+  if (output === undefined) throw new Error("runEnsemble kernel wrapper produced no result");
+  return output;
 }
 
 export const ensemble = {

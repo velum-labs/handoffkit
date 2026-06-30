@@ -3,18 +3,22 @@
 Status: product cutover plan for the runtime kernel introduced in PR #37.
 
 PR #37 makes the kernel real, but it does **not** make every product execution
-surface kernel-native. The current production path remains conservative:
+surface decomposed into native kernel operators. The current production path is
+now kernel-wrapped for the Node/CLI surfaces, while preserving conservative
+legacy behavior inside compatibility operators:
 
 ```text
 fusionkit codex / claude / cursor / serve
   -> CLI launcher
   -> startFusionStack
   -> startFusionStepGateway
-  -> FusionBackend
+  -> KernelBackend
+  -> legacy FusionBackend.chat operator
   -> runFusionPanels
   -> runtime kernel for panel capture only
-  -> legacy runEnsemble harness capture
-  -> Python trajectories:fuse
+  -> runEnsemble kernel wrapper
+  -> legacy runEnsemble implementation operator
+  -> Python trajectories:fuse inside legacy backend turn
   -> gateway streaming back to the tool
 ```
 
@@ -40,14 +44,14 @@ selection, repair, session candidate reuse, budget policy, or outcome logging.
 
 | Surface | Current execution path | Kernel-backed today? | Cutover target |
 | --- | --- | ---: | --- |
-| `fusionkit codex` | CLI -> FusionBackend -> panel capture -> Python fuse | Partial | `fusion-frontdoor-turn` workflow |
-| `fusionkit claude` | Same stack, Anthropic dialect | Partial | same workflow; dialect adapter only |
-| `fusionkit cursor` | Same stack, Cursor bridge/ACP/IDE | Partial | same workflow; Cursor adapter only |
-| `fusionkit fusion <tool>` | Generic dispatcher to `runFusion` | Partial | same workflow |
-| `fusionkit serve` | Starts fusion gateway | Partial | gateway dispatches every turn into kernel |
-| `fusionkit local <tool>` | local gateway over direct backend | No | `direct-model-turn` workflow |
-| `fusionkit ensemble run` | legacy `runEnsemble` | No | `ensemble-run` workflow |
-| `fusionkit ensemble e2e` | `runUnifiedHarnessE2E` -> legacy `runEnsemble` | No | e2e adapter -> kernel workflow |
+| `fusionkit codex` | CLI -> KernelBackend -> legacy FusionBackend -> panel capture -> Python fuse | Kernel-wrapped | native `fusion-frontdoor-turn` |
+| `fusionkit claude` | Same stack, Anthropic dialect | Kernel-wrapped | same workflow; dialect adapter only |
+| `fusionkit cursor` | Same stack, Cursor bridge/ACP/IDE | Kernel-wrapped | same workflow; Cursor adapter only |
+| `fusionkit fusion <tool>` | Generic dispatcher to `runFusion` | Kernel-wrapped | same as tool shortcuts |
+| `fusionkit serve` | Starts kernel-wrapped fusion gateway | Kernel-wrapped | gateway dispatches every turn into native workflow |
+| `fusionkit local <tool>` | kernel-wrapped local gateway over direct backend | Kernel-wrapped | native `direct-model-turn` |
+| `fusionkit ensemble run` | `runEnsemble` wrapper -> legacy operator | Kernel-wrapped | decomposed `ensemble-run` |
+| `fusionkit ensemble e2e` | `runUnifiedHarnessE2E` -> `runEnsemble` wrapper | Kernel-wrapped | e2e adapter -> decomposed workflow |
 | Node `/v1/chat/completions` | protocol adapter -> backend.chat | Only fused panel capture | backend execution via workflow |
 | Node `/v1/responses` | responses adapter -> backend.chat | Only fused panel capture | adapter only; kernel owns execution |
 | Node `/v1/messages` | Anthropic adapter -> backend.chat | Only fused panel capture | adapter only; kernel owns execution |
@@ -270,9 +274,17 @@ Add workflows that wrap current behavior without changing product semantics:
 - `legacy-fusion-frontdoor-turn`;
 - `legacy-local-direct-turn`.
 
-Status in PR #37: `legacy-ensemble-run` and
-`legacy-trajectory-fuse-step` compatibility workflows/operators exist. The
-frontdoor/local wrappers remain follow-up work.
+Status in PR #37:
+
+- `runEnsemble` is a kernel wrapper around the legacy implementation.
+- `legacy-ensemble-run` and `legacy-trajectory-fuse-step`
+  compatibility workflows/operators exist.
+- CLI local and fusion-step gateways wrap their backend calls in
+  `KernelBackend`, so the HTTP backend execution surface enters the kernel.
+
+Remaining follow-up: decompose these compatibility operators into native
+operators and replace the legacy `FusionBackend` internals with
+`fusion-frontdoor-turn`.
 
 ### Phase 2: kernel-backed `FusionBackend`
 

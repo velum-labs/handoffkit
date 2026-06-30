@@ -73,6 +73,8 @@ This document tracks the implementation status of the architecture in `docs/fusi
 - workflow registry
 - built-in workflow recipes
 - legacy compatibility workflows for `ensemble-run` and Python `trajectories:fuse`
+- `runEnsemble` public API wrapped through a kernel compatibility graph
+- CLI local/fusion gateways wrapped through `KernelBackend`
 - package subpath exports
 - `fusionkit runtime list`
 - `fusionkit runtime explain <workflow>`
@@ -83,6 +85,8 @@ This document tracks the implementation status of the architecture in `docs/fusi
 
 - Production `runFusionPanels` uses the runtime kernel for panel capture.
 - `runFusionPanelWorkflow` exposes the runtime result for callers needing traces/outcomes/replay.
+- Product Node backends for local and fusion-step gateways enter the kernel through
+  compatibility backend operators while preserving legacy behavior.
 - Live gateway synthesis still posts to `trajectories:fuse` through the gateway/Python synthesizer path.
 
 ## Not embedded in the kernel by design

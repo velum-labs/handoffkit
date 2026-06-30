@@ -1,20 +1,17 @@
+import type { WireTrajectory } from "@fusionkit/protocol";
+
 import { graph, refs } from "./kernel.js";
 import { createTaskArtifact } from "./kernel-helpers.js";
 import { StaticDAGScheduler } from "./runtime.js";
-import { runEnsemble } from "./run.js";
-import type {
-  Artifact,
-  Operator,
-  OperatorRunContext,
-  OperatorSpec,
-  TaskSpec
-} from "./runtime.js";
-import type { EnsembleDescriptor, EnsembleRunResult } from "./harness.js";
+import { runEnsembleLegacy } from "./run.js";
 import type { ChatMessage } from "./fusion-operators.js";
+import type { EnsembleDescriptor, EnsembleRunResult } from "./harness.js";
 import type { KernelWorkflow } from "./kernel.js";
-import type { WireTrajectory } from "@fusionkit/protocol";
+import type { Artifact, Operator, OperatorRunContext, OperatorSpec, TaskSpec } from "./runtime.js";
 
 export const LegacyArtifactTypes = {
+  BackendResponse: "legacy_backend_response",
+  BackendRequest: "legacy_backend_request",
   EnsembleDescriptor: "ensemble_descriptor",
   EnsembleRunResult: "ensemble_run_result",
   TrajectoryFuseRequest: "trajectory_fuse_request",
@@ -35,7 +32,7 @@ export class LegacyRunEnsembleOperator implements Operator {
       | EnsembleDescriptor
       | undefined;
     if (descriptor === undefined) throw new Error("legacy ensemble workflow requires an EnsembleDescriptor artifact");
-    const result = await runEnsemble(descriptor);
+    const result = await runEnsembleLegacy(descriptor);
     return [
       ctx.createArtifact<EnsembleRunResult>({
         id: `${ctx.nodeId}.result`,
@@ -108,7 +105,7 @@ export type EnsembleRunWorkflowInput = {
 
 export function ensembleRunWorkflow(input: EnsembleRunWorkflowInput): KernelWorkflow {
   const task = createTaskArtifact({ ...(input.task ?? { id: "ensemble-run", prompt: input.descriptor.prompt }) });
-  const descriptor = {
+  const descriptorArtifact = {
     id: "ensemble-descriptor",
     type: LegacyArtifactTypes.EnsembleDescriptor,
     value: input.descriptor,
@@ -121,9 +118,9 @@ export function ensembleRunWorkflow(input: EnsembleRunWorkflowInput): KernelWork
   };
   return graph("legacy-ensemble-run")
     .task(task)
-    .artifact(descriptor)
+    .artifact(descriptorArtifact)
     .node("run-ensemble", new LegacyRunEnsembleOperator(), {
-      inputs: [refs.artifact(descriptor.id)]
+      inputs: [refs.artifact(descriptorArtifact.id)]
     })
     .scheduler(new StaticDAGScheduler())
     .compile();
@@ -135,7 +132,7 @@ export type PythonTrajectoryFuseWorkflowInput = {
 
 export function pythonTrajectoryFuseWorkflow(input: PythonTrajectoryFuseWorkflowInput): KernelWorkflow {
   const task = createTaskArtifact({ id: "trajectory-fuse", prompt: "Fuse trajectories" });
-  const request = {
+  const requestArtifact = {
     id: "trajectory-fuse-request",
     type: LegacyArtifactTypes.TrajectoryFuseRequest,
     value: input.request,
@@ -148,9 +145,9 @@ export function pythonTrajectoryFuseWorkflow(input: PythonTrajectoryFuseWorkflow
   };
   return graph("legacy-python-trajectory-fuse")
     .task(task)
-    .artifact(request)
+    .artifact(requestArtifact)
     .node("trajectory-fuse", new PythonTrajectoryFuseOperator(), {
-      inputs: [refs.artifact(request.id)]
+      inputs: [refs.artifact(requestArtifact.id)]
     })
     .scheduler(new StaticDAGScheduler())
     .compile();

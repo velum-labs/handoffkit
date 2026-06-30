@@ -45,6 +45,7 @@ import type {
 } from "@fusionkit/model-gateway";
 
 import { buildCursorAcpProducer } from "./cursor-acp.js";
+import { KernelBackend } from "./kernel-backend.js";
 
 export type GatewayRunnerConfig = {
   fusionBackendUrl: string;
@@ -382,7 +383,7 @@ export async function startFusionStepGateway(input: {
             : [{ modelId: model.model, endpointId: model.id, endpointUrl }];
         });
 
-  const backend = new FusionBackend({
+  const backend = new KernelBackend(new FusionBackend({
     stepUrl,
     runPanels,
     defaultModel,
@@ -402,7 +403,7 @@ export async function startFusionStepGateway(input: {
     // id. The Python fuse path already resolves the configured judge endpoint via
     // config.resolved_judge_model, so omitting this keeps routing correct while
     // the judge gap-analysis still runs on the configured judge.
-  });
+  }));
   return await startGateway({
     backend,
     host: input.host,
