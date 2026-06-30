@@ -241,3 +241,10 @@ The demo composes:
 3. replay export.
 
 See `examples/runtime-kernel/src/run.ts`.
+
+## Product cutover
+
+This guide describes the runtime substrate and composition API. It does not mean
+every product surface is already kernel-native. For the single-right-way
+migration plan, streaming runtime requirements, session-state requirements, and
+surface parity checklist, see `docs/fusion/kernel-migration.md`.

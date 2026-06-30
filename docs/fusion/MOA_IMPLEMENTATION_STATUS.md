@@ -18,6 +18,8 @@ This document tracks the implementation status of the architecture in `docs/fusi
 - `Signal`
 - `OutcomeRecord`
 - `fusion-runtime-replay.v1` replay records
+- `RuntimeEvent` streaming contract and `FusionRuntime.stream(...)`
+- `KernelSessionState`, `KernelTurnState`, and `KernelStateStore`
 
 ### Runtime invariants
 
@@ -70,6 +72,7 @@ This document tracks the implementation status of the architecture in `docs/fusi
 - fluent `GraphBuilder`
 - workflow registry
 - built-in workflow recipes
+- legacy compatibility workflows for `ensemble-run` and Python `trajectories:fuse`
 - package subpath exports
 - `fusionkit runtime list`
 - `fusionkit runtime explain <workflow>`
@@ -96,3 +99,6 @@ registry.
 
 The workflow registry is the migration seam for moving richer production flows behind explicit
 workflow IDs without changing the existing gateway behavior unexpectedly.
+
+See `docs/fusion/kernel-migration.md` for the product cutover plan, required streaming runtime,
+session-state model, and parity checklist.

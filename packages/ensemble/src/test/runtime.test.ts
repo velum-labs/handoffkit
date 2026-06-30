@@ -23,6 +23,7 @@ import {
   BudgetExceededError,
   DirectFastPathScheduler,
   FusionRuntime,
+  InMemoryKernelStateStore,
   RuntimeCancelledError,
   RuntimeExecutionError,
   StaticDAGScheduler,
@@ -802,6 +803,58 @@ test("graph builder and built-in workflow registry compose direct kernels", asyn
 
   const result = await workflow.run();
   assert.equal((result.finalArtifacts[0]?.value as CandidateArtifactValue).content, "built");
+});
+
+test("runtime stream API emits a final event for non-streaming workflows", async () => {
+  const task = taskArtifact();
+  const model = new ModelGenerateOperator({
+    model: "stream-compatible",
+    client: {
+      generate: () => ({ model: "stream-compatible", content: "final" })
+    }
+  });
+  const events = [];
+  for await (const event of new FusionRuntime().stream({
+    graph: {
+      id: "stream_graph",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "model", operator: model, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler: new DirectFastPathScheduler(),
+    artifacts: [task]
+  })) {
+    events.push(event);
+  }
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, "final");
+});
+
+test("in-memory kernel state store persists session turn state", () => {
+  const store = new InMemoryKernelStateStore<{ totalUsd: number }, { tool: string }>();
+  const state = store.update("session-a", () => ({
+    sessionId: "session-a",
+    traceId: "trace-a",
+    sessionSpanId: "span-a",
+    turns: {
+      1: {
+        turn: 1,
+        candidateArtifactIds: ["candidate-a"],
+        status: "succeeded"
+      }
+    },
+    cost: { totalUsd: 0.01 },
+    metadata: { tool: "codex" }
+  }));
+
+  assert.equal(state.turns[1]?.candidateArtifactIds[0], "candidate-a");
+  assert.equal(store.load("session-a")?.metadata.tool, "codex");
+});
+
+test("built-in registry includes legacy compatibility workflow IDs", () => {
+  registerBuiltInWorkflows();
+  assert.ok(getWorkflow("legacy-ensemble-run") !== undefined);
+  assert.ok(getWorkflow("legacy-trajectory-fuse-step") !== undefined);
 });
 
 test("rank-fuse scheduler supports PairRank -> Select -> GenFuser", async () => {

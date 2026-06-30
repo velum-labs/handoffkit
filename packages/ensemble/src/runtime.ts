@@ -165,6 +165,21 @@ export type Operator<I extends readonly Artifact[] = readonly Artifact[], O exte
   run(inputs: I, ctx: OperatorRunContext): Promise<O> | O;
 };
 
+export type RuntimeEvent =
+  | TraceEvent
+  | { type: "output.delta"; artifactId?: string; content: string }
+  | { type: "tool_call.delta"; callId: string; delta: unknown }
+  | { type: "keepalive" }
+  | { type: "final"; result: RuntimeExecutionResult }
+  | { type: "error"; error: RuntimeExecutionError };
+
+export type StreamingOperator<
+  I extends readonly Artifact[] = readonly Artifact[],
+  O extends readonly Artifact[] = readonly Artifact[]
+> = Operator<I, O> & {
+  stream?(inputs: I, ctx: OperatorRunContext): AsyncIterable<RuntimeEvent>;
+};
+
 export type ArtifactInputRef =
   | { artifactId: string }
   | { nodeId: string; type?: string };
@@ -337,6 +352,57 @@ export type RuntimeExecutionResult = {
   trace: readonly TraceEvent[];
   outcome: OutcomeRecord;
 };
+
+export type KernelTurnState = {
+  turn: number;
+  candidateArtifactIds: string[];
+  replayRecordId?: string;
+  status: "pending" | "succeeded" | "failed";
+};
+
+export type KernelSessionState<Cost = unknown, Metadata = Record<string, unknown>> = {
+  sessionId: string;
+  traceId: string;
+  sessionSpanId: string;
+  turns: Record<number, KernelTurnState>;
+  cost: Cost;
+  metadata: Metadata;
+};
+
+export type KernelStateStore<Cost = unknown, Metadata = Record<string, unknown>> = {
+  load(sessionId: string): KernelSessionState<Cost, Metadata> | undefined;
+  save(state: KernelSessionState<Cost, Metadata>): void;
+  update(
+    sessionId: string,
+    updater: (state: KernelSessionState<Cost, Metadata> | undefined) => KernelSessionState<Cost, Metadata>
+  ): KernelSessionState<Cost, Metadata>;
+};
+
+export class InMemoryKernelStateStore<Cost = unknown, Metadata = Record<string, unknown>>
+  implements KernelStateStore<Cost, Metadata>
+{
+  readonly #sessions = new Map<string, KernelSessionState<Cost, Metadata>>();
+
+  load(sessionId: string): KernelSessionState<Cost, Metadata> | undefined {
+    return this.#sessions.get(sessionId);
+  }
+
+  save(state: KernelSessionState<Cost, Metadata>): void {
+    this.#sessions.set(state.sessionId, state);
+  }
+
+  update(
+    sessionId: string,
+    updater: (state: KernelSessionState<Cost, Metadata> | undefined) => KernelSessionState<Cost, Metadata>
+  ): KernelSessionState<Cost, Metadata> {
+    const next = updater(this.#sessions.get(sessionId));
+    if (next.sessionId !== sessionId) {
+      throw new Error(`kernel session update for ${sessionId} returned mismatched session ${next.sessionId}`);
+    }
+    this.save(next);
+    return next;
+  }
+}
 
 export class RuntimeExecutionError extends Error {
   readonly outcome: OutcomeRecord;
@@ -559,6 +625,31 @@ export class FusionRuntime {
 
   constructor(options: { now?: () => number } = {}) {
     this.#now = options.now ?? Date.now;
+  }
+
+  async *stream(input: {
+    graph: OperatorGraph;
+    scheduler: Scheduler;
+    artifacts?: readonly Artifact[];
+    budget?: BudgetPolicy;
+    runId?: string;
+    signal?: AbortSignal;
+    metadata?: Record<string, unknown>;
+  }): AsyncIterable<RuntimeEvent> {
+    try {
+      // The substrate now exposes a streaming event contract. Until individual
+      // operators implement `stream`, non-streaming workflows still produce a
+      // single final event. Product gateway cutover can depend on this API and
+      // progressively replace legacy HTTP streaming with StreamingOperator nodes.
+      const result = await this.run(input);
+      yield { type: "final", result };
+    } catch (error) {
+      if (error instanceof RuntimeExecutionError) {
+        yield { type: "error", error };
+        return;
+      }
+      throw error;
+    }
   }
 
   async run(input: {

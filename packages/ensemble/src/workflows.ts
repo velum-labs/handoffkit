@@ -13,6 +13,10 @@ import {
   SynthesizeOperator
 } from "./fusion-operators.js";
 import { graph, registerWorkflow, refs } from "./kernel.js";
+import {
+  ensembleRunWorkflow,
+  pythonTrajectoryFuseWorkflow
+} from "./legacy-workflows.js";
 import { createTaskArtifact } from "./kernel-helpers.js";
 import {
   DirectFastPathScheduler,
@@ -221,7 +225,9 @@ export function registerBuiltInWorkflows(): void {
     ["panel-judge-synth", panelJudgeSynthWorkflow],
     ["rank-fuse", rankFuseWorkflow],
     ["execution-select", executionSelectWorkflow],
-    ["execution-select-repair", executionSelectRepairWorkflow]
+    ["execution-select-repair", executionSelectRepairWorkflow],
+    ["legacy-ensemble-run", ensembleRunWorkflow],
+    ["legacy-trajectory-fuse-step", pythonTrajectoryFuseWorkflow]
   ];
   for (const [id, factory] of workflows) {
     try {

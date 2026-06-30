@@ -90,6 +90,10 @@
     "./workflows": {
       "types": "./dist/workflows.d.ts",
       "default": "./dist/workflows.js"
+    },
+    "./workflows/legacy": {
+      "types": "./dist/legacy-workflows.d.ts",
+      "default": "./dist/legacy-workflows.js"
     }
   },
   "files": [

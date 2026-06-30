@@ -110,6 +110,17 @@ export {
   rankFuseWorkflow,
   registerBuiltInWorkflows
 } from "./workflows.js";
+export {
+  LegacyRunEnsembleOperator,
+  PythonTrajectoryFuseOperator,
+  ensembleRunWorkflow,
+  pythonTrajectoryFuseWorkflow
+} from "./legacy-workflows.js";
+export type {
+  EnsembleRunWorkflowInput,
+  PythonTrajectoryFuseWorkflowInput,
+  TrajectoryFuseRequest
+} from "./legacy-workflows.js";
 export type {
   DirectModelWorkflowInput,
   ExecutionSelectWorkflowInput,
@@ -175,6 +186,7 @@ export {
   BudgetExceededError,
   DirectFastPathScheduler,
   FusionRuntime,
+  InMemoryKernelStateStore,
   OperatorGraphError,
   RuntimeCancelledError,
   RuntimeExecutionError,
@@ -217,6 +229,10 @@ export type {
   RecordObservationInput,
   RecordSignalInput,
   RetryPolicy,
+  KernelSessionState,
+  KernelStateStore,
+  KernelTurnState,
+  RuntimeEvent,
   RuntimeExecutionResult,
   RuntimeReplayRecord,
   RuntimeState,
@@ -227,6 +243,7 @@ export type {
   Signal,
   SignalCalibration,
   SignalDimension,
+  StreamingOperator,
   TaskSpec,
   TraceEvent,
   TraceEventInput,
