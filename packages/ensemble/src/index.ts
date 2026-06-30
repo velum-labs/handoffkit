@@ -60,6 +60,38 @@ export type {
   SynthesisResult
 } from "./synthesis.js";
 export {
+  ArchitectureEvaluateOperator,
+  CalibrateSignalOperator,
+  DelegateOperator,
+  EvidenceSourceOperator,
+  GenFuserOperator,
+  OfflineModelMergeOperator,
+  PairRankOperator,
+  RepairOperator,
+  ReviewOperator,
+  RouteOperator,
+  SchemaValidationOperator,
+  SelectOperator,
+  TreeExpandOperator,
+  TreeScoreOperator
+} from "./advanced-operators.js";
+export type {
+  ArchitectureEvaluation,
+  CandidateRepairer,
+  CandidateSelector,
+  DelegationResult,
+  EvidenceBundle,
+  EvidenceSource,
+  MergeRecipe,
+  RankMatrix,
+  RepairOutput,
+  ReviewResult,
+  RouteDecision,
+  SelectedCandidate,
+  SignalCalibrator,
+  TreeNodeValue
+} from "./advanced-operators.js";
+export {
   JudgeCompareOperator,
   ModelGenerateOperator,
   PanelGenerateOperator,
@@ -84,9 +116,24 @@ export {
   DirectFastPathScheduler,
   FusionRuntime,
   OperatorGraphError,
+  RuntimeCancelledError,
   StaticDAGScheduler,
+  createRuntimeReplayRecord,
+  runtimeReplayRecordJson,
   createArtifact
 } from "./runtime.js";
+export {
+  AdaptiveRouterScheduler,
+  AgenticDelegationScheduler,
+  BestOfNScheduler,
+  ExecutionSelectRepairScheduler,
+  FixedLayerMoAScheduler,
+  LearnedWorkflowScheduler,
+  OfflineArchitectureSearchScheduler,
+  RankFuseScheduler,
+  TreeSearchScheduler
+} from "./schedulers.js";
+export type { LearnedWorkflowPolicy } from "./schedulers.js";
 export type {
   Artifact,
   ArtifactInputRef,
@@ -109,6 +156,7 @@ export type {
   RecordObservationInput,
   RecordSignalInput,
   RuntimeExecutionResult,
+  RuntimeReplayRecord,
   RuntimeState,
   RuntimeStatus,
   Scheduler,

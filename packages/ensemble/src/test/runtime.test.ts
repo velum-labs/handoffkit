@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  ArchitectureEvaluateOperator,
+  DelegateOperator,
+  EvidenceSourceOperator,
+  GenFuserOperator,
+  OfflineModelMergeOperator,
+  PairRankOperator,
+  RepairOperator,
+  RouteOperator,
+  SchemaValidationOperator,
+  SelectOperator
+} from "../advanced-operators.js";
+import {
   JudgeCompareOperator,
   ModelGenerateOperator,
   PanelGenerateOperator,
@@ -11,9 +23,19 @@ import {
   BudgetExceededError,
   DirectFastPathScheduler,
   FusionRuntime,
+  RuntimeCancelledError,
   StaticDAGScheduler,
+  createRuntimeReplayRecord,
   createArtifact
 } from "../runtime.js";
+import {
+  AdaptiveRouterScheduler,
+  AgenticDelegationScheduler,
+  ExecutionSelectRepairScheduler,
+  LearnedWorkflowScheduler,
+  OfflineArchitectureSearchScheduler,
+  RankFuseScheduler
+} from "../schedulers.js";
 import type { CandidateArtifactValue, ModelClient } from "../fusion-operators.js";
 import type { Artifact, Operator, Scheduler, TaskSpec } from "../runtime.js";
 
@@ -462,4 +484,320 @@ test("workspace writer budget enforces single-writer discipline", async () => {
       }),
     (error) => error instanceof BudgetExceededError && /workspace writers 2 > 1/.test(error.message)
   );
+});
+
+test("runtime retries retryable operators and exports replay records", async () => {
+  const task = taskArtifact();
+  let attempts = 0;
+  const flaky: Operator = {
+    spec: {
+      id: "flaky",
+      kind: "flaky",
+      inputTypes: ["task"],
+      outputTypes: ["final_answer"],
+      sideEffects: "none",
+      retry: { maxAttempts: 2, retryableErrors: ["transient"] }
+    },
+    run(_inputs, ctx) {
+      attempts += 1;
+      if (attempts === 1) throw new Error("transient provider failure");
+      return [ctx.createArtifact({ type: "final_answer", value: { content: "ok" } })];
+    }
+  };
+
+  const result = await new FusionRuntime().run({
+    runId: "retry_run",
+    graph: {
+      id: "retry_graph",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "flaky", operator: flaky, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler: new StaticDAGScheduler(),
+    artifacts: [task]
+  });
+  const replay = createRuntimeReplayRecord(result);
+
+  assert.equal(attempts, 2);
+  assert.ok(result.trace.some((event) => event.type === "operator.retry"));
+  assert.equal(replay.schema, "fusion-runtime-replay.v1");
+  assert.equal(replay.outcome.runId, "retry_run");
+});
+
+test("runtime cancellation marks cancelled status", async () => {
+  const task = taskArtifact();
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "cancel_graph",
+          inputArtifactIds: [task.id],
+          nodes: [
+            {
+              id: "noop",
+              operator: {
+                spec: {
+                  id: "noop",
+                  kind: "noop",
+                  inputTypes: ["task"],
+                  outputTypes: ["final_answer"],
+                  sideEffects: "none"
+                },
+                run(_inputs, ctx) {
+                  return [ctx.createArtifact({ type: "final_answer", value: { content: "no" } })];
+                }
+              },
+              inputs: [{ artifactId: task.id }]
+            }
+          ]
+        },
+        scheduler: new StaticDAGScheduler(),
+        artifacts: [task],
+        signal: controller.signal
+      }),
+    (error) => error instanceof RuntimeCancelledError
+  );
+});
+
+test("rank-fuse scheduler supports PairRank -> Select -> GenFuser", async () => {
+  const task = taskArtifact();
+  const panel = new PanelGenerateOperator({
+    id: "panel",
+    models: [
+      { id: "weak", model: "weak-model" },
+      { id: "strong", model: "strong-model" }
+    ],
+    runner: () => [
+      { candidateId: "weak", modelId: "weak", model: "weak-model", content: "weak" },
+      { candidateId: "strong", modelId: "strong", model: "strong-model", content: "strong" }
+    ]
+  });
+  const rank = new PairRankOperator({
+    id: "rank",
+    rank: ({ candidates }) => ({
+      rankings: candidates.map((candidate) => ({
+        candidateId: candidate.candidateId,
+        score: candidate.candidateId === "strong" ? 1 : 0
+      }))
+    })
+  });
+  const select = new SelectOperator({ id: "select" });
+  const fuse = new GenFuserOperator({
+    id: "fuse",
+    fuse: ({ selected }) => ({ content: `winner:${selected?.candidate.content ?? "none"}` })
+  });
+
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: "rank_fuse_graph",
+      inputArtifactIds: [task.id],
+      nodes: [
+        { id: "panel", operator: panel, inputs: [{ artifactId: task.id }] },
+        { id: "rank", operator: rank, inputs: [{ artifactId: task.id }, { nodeId: "panel" }] },
+        { id: "select", operator: select, inputs: [{ artifactId: task.id }, { nodeId: "panel" }, { nodeId: "rank" }] },
+        { id: "fuse", operator: fuse, inputs: [{ artifactId: task.id }, { nodeId: "panel" }, { nodeId: "rank" }, { nodeId: "select" }] }
+      ]
+    },
+    scheduler: new RankFuseScheduler(),
+    artifacts: [task]
+  });
+
+  assert.equal((result.finalArtifacts[0]?.value as { content: string }).content, "winner:strong");
+  assert.equal(result.outcome.schedulerFamily, "rank-fuse");
+});
+
+test("execution-select-repair scheduler records evidence and repairs selected candidates", async () => {
+  const task = taskArtifact();
+  const panel = new PanelGenerateOperator({
+    id: "panel",
+    models: [{ id: "alpha", model: "alpha" }],
+    runner: () => [{ candidateId: "alpha", modelId: "alpha", model: "alpha", content: "buggy" }]
+  });
+  const evidence = new EvidenceSourceOperator({
+    id: "tests",
+    source: ({ candidates }) => ({
+      observations: candidates.map((candidate) => ({
+        sourceId: "public-tests",
+        targetArtifactId: `panel.candidate.1.${candidate.candidateId}`,
+        type: "test_result",
+        value: { passed: false },
+        leakage: "public" as const
+      })),
+      summary: "public tests failed"
+    })
+  });
+  const select = new SelectOperator({ id: "select" });
+  const repair = new RepairOperator({
+    id: "repair",
+    repair: ({ selected }) => ({
+      candidate: {
+        candidateId: "alpha-repaired",
+        modelId: selected?.candidate.modelId ?? "alpha",
+        model: selected?.candidate.model ?? "alpha",
+        content: "fixed"
+      }
+    })
+  });
+
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: "repair_graph",
+      inputArtifactIds: [task.id],
+      nodes: [
+        { id: "panel", operator: panel, inputs: [{ artifactId: task.id }] },
+        { id: "tests", operator: evidence, inputs: [{ artifactId: task.id }, { nodeId: "panel" }] },
+        { id: "select", operator: select, inputs: [{ artifactId: task.id }, { nodeId: "panel" }, { nodeId: "tests" }] },
+        { id: "repair", operator: repair, inputs: [{ artifactId: task.id }, { nodeId: "panel" }, { nodeId: "tests" }, { nodeId: "select" }] }
+      ]
+    },
+    scheduler: new ExecutionSelectRepairScheduler({ maxRepairRounds: 1 }),
+    artifacts: [task]
+  });
+
+  assert.equal((result.finalArtifacts[0]?.value as CandidateArtifactValue).content, "fixed");
+  assert.equal(result.observations.length, 1);
+});
+
+test("schema validation operator emits format signals", async () => {
+  const task = taskArtifact();
+  const model = new ModelGenerateOperator({
+    id: "model",
+    model: "json-model",
+    client: {
+      generate: () => ({ model: "json-model", content: "{\"ok\":true}" })
+    }
+  });
+  const validate = new SchemaValidationOperator({
+    id: "validate",
+    validate: (value) => ({
+      passed:
+        value !== null &&
+        typeof value === "object" &&
+        typeof (value as { content?: unknown }).content === "string"
+    })
+  });
+
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: "schema_graph",
+      inputArtifactIds: [task.id],
+      nodes: [
+        { id: "model", operator: model, inputs: [{ artifactId: task.id }] },
+        { id: "validate", operator: validate, inputs: [{ nodeId: "model" }] }
+      ]
+    },
+    scheduler: new StaticDAGScheduler(),
+    artifacts: [task]
+  });
+
+  assert.equal(result.signals[0]?.dimension, "format");
+  assert.equal(result.signals[0]?.score, 1);
+});
+
+test("adaptive router and agentic delegation schedulers run route/delegate/review graphs", async () => {
+  const task = taskArtifact();
+  const route = new RouteOperator({
+    id: "route",
+    route: () => ({ routeId: "sidekick", reason: "read-only review" })
+  });
+  const delegate = new DelegateOperator({
+    id: "delegate",
+    role: "sidekick",
+    delegate: ({ route: decision }) => ({
+      role: decision?.routeId ?? "unknown",
+      output: "sidekick notes"
+    })
+  });
+
+  const adaptive = await new FusionRuntime().run({
+    graph: {
+      id: "route_graph",
+      inputArtifactIds: [task.id],
+      nodes: [
+        { id: "route", operator: route, inputs: [{ artifactId: task.id }] },
+        { id: "delegate", operator: delegate, inputs: [{ artifactId: task.id }, { nodeId: "route" }] }
+      ]
+    },
+    scheduler: new AdaptiveRouterScheduler(),
+    artifacts: [task]
+  });
+  const agentic = await new FusionRuntime().run({
+    graph: {
+      id: "delegate_graph",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "delegate", operator: delegate, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler: new AgenticDelegationScheduler(),
+    artifacts: [task]
+  });
+
+  assert.equal((adaptive.finalArtifacts[0]?.value as { role: string }).role, "sidekick");
+  assert.equal((agentic.finalArtifacts[0]?.value as { output: string }).output, "sidekick notes");
+});
+
+test("learned workflow scheduler follows injected policy", async () => {
+  const task = taskArtifact();
+  const seen: string[] = [];
+  const op = (id: string): Operator => ({
+    spec: { id, kind: "step", inputTypes: ["task"], outputTypes: ["final_answer"], sideEffects: "none" },
+    run(_inputs, ctx) {
+      seen.push(id);
+      return [ctx.createArtifact({ id: `${id}.out`, type: "final_answer", value: { content: id } })];
+    }
+  });
+
+  await new FusionRuntime().run({
+    graph: {
+      id: "learned_graph",
+      inputArtifactIds: [task.id],
+      nodes: [
+        { id: "a", operator: op("a"), inputs: [{ artifactId: task.id }] },
+        { id: "b", operator: op("b"), inputs: [{ artifactId: task.id }] }
+      ]
+    },
+    scheduler: new LearnedWorkflowScheduler({
+      policy: {
+        chooseReadyNode: ({ ready }) => ready.find((node) => node.id === "b")?.id ?? ready[0]?.id
+      }
+    }),
+    artifacts: [task]
+  });
+
+  assert.deepEqual(seen, ["b", "a"]);
+});
+
+test("offline architecture and model merge operators stay separate lifecycle artifacts", async () => {
+  const task = taskArtifact();
+  const architecture = new ArchitectureEvaluateOperator({
+    id: "arch",
+    evaluate: () => ({ architectureId: "dag-a", score: 0.7 })
+  });
+  const merge = new OfflineModelMergeOperator({
+    id: "merge",
+    merge: () => ({ recipeId: "merge-a", modelIds: ["a", "b"], steps: [{ kind: "average" }] })
+  });
+  const archResult = await new FusionRuntime().run({
+    graph: {
+      id: "arch_graph",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "arch", operator: architecture, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler: new OfflineArchitectureSearchScheduler(),
+    artifacts: [task],
+    budget: { allowPrivateRuntimeInputs: true }
+  });
+  const mergeResult = await new FusionRuntime().run({
+    graph: {
+      id: "merge_graph",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "merge", operator: merge, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler: new StaticDAGScheduler(),
+    artifacts: [task]
+  });
+
+  assert.equal(archResult.finalArtifacts[0]?.type, "architecture_result");
+  assert.equal(mergeResult.finalArtifacts[0]?.type, "merge_recipe");
 });

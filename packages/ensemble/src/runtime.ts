@@ -104,8 +104,14 @@ export type OperatorSpec = {
   outputTypes: string[];
   sideEffects: OperatorSideEffects;
   allowedInputLeakage?: ArtifactLeakage[];
+  retry?: RetryPolicy;
   expectedCost?: CostEstimate;
   expectedLatencyMs?: number;
+};
+
+export type RetryPolicy = {
+  maxAttempts: number;
+  retryableErrors?: string[];
 };
 
 export type CreateArtifactInput<T = unknown> = {
@@ -190,6 +196,7 @@ export type TraceEventType =
   | "scheduler.decision"
   | "operator.started"
   | "operator.finished"
+  | "operator.retry"
   | "artifact.created"
   | "observation.recorded"
   | "signal.recorded"
@@ -276,6 +283,18 @@ export type RuntimeExecutionResult = {
   outcome: OutcomeRecord;
 };
 
+export type RuntimeReplayRecord = {
+  schema: "fusion-runtime-replay.v1";
+  runId: string;
+  graph: OperatorGraph;
+  scheduler: { id: string; family: string };
+  artifacts: readonly Artifact[];
+  observations: readonly Observation[];
+  signals: readonly Signal[];
+  trace: readonly TraceEvent[];
+  outcome: OutcomeRecord;
+};
+
 export class BudgetExceededError extends Error {
   constructor(message: string) {
     super(message);
@@ -287,6 +306,13 @@ export class OperatorGraphError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "OperatorGraphError";
+  }
+}
+
+export class RuntimeCancelledError extends Error {
+  constructor(message = "runtime cancelled") {
+    super(message);
+    this.name = "RuntimeCancelledError";
   }
 }
 
@@ -436,6 +462,12 @@ function usageWithDefaults(usage: BudgetUsage): Required<CostEstimate> {
   };
 }
 
+function isRetryable(error: unknown, retry: RetryPolicy): boolean {
+  if (retry.retryableErrors === undefined || retry.retryableErrors.length === 0) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return retry.retryableErrors.some((needle) => message.includes(needle));
+}
+
 export class FusionRuntime {
   readonly #now: () => number;
 
@@ -499,6 +531,9 @@ export class FusionRuntime {
 
     const updateElapsed = (): void => {
       ledger.elapsedMs = Math.max(0, this.#now() - startedAtMs);
+    };
+    const throwIfAborted = (): void => {
+      if (input.signal?.aborted) throw new RuntimeCancelledError();
     };
     const ensureUsageBudget = (usage: BudgetUsage, operatorId?: string): void => {
       updateElapsed();
@@ -625,6 +660,7 @@ export class FusionRuntime {
       return Object.freeze(resolved);
     };
     const runNode = async (node: OperatorGraphNode): Promise<readonly Artifact[]> => {
+      throwIfAborted();
       const inputs = resolveInputs(node);
       if (!operatorInputTypesSatisfied(node.operator.spec, inputs)) {
         throw new OperatorGraphError(
@@ -757,7 +793,30 @@ export class FusionRuntime {
         },
         recordTrace
       };
-      const outputs = await node.operator.run(inputs, operatorContext);
+      const retry = node.operator.spec.retry ?? { maxAttempts: 1 };
+      let outputs: readonly Artifact[] | undefined;
+      let attempt = 0;
+      for (;;) {
+        throwIfAborted();
+        attempt += 1;
+        try {
+          outputs = await node.operator.run(inputs, operatorContext);
+          break;
+        } catch (error) {
+          if (attempt >= retry.maxAttempts || !isRetryable(error, retry)) throw error;
+          recordTrace({
+            type: "operator.retry",
+            nodeId: node.id,
+            operatorId: node.operator.spec.id,
+            inputArtifactIds,
+            payload: {
+              attempt,
+              max_attempts: retry.maxAttempts,
+              error: error instanceof Error ? error.message : String(error)
+            }
+          });
+        }
+      }
       const outputIds: string[] = [];
       for (const artifact of outputs) {
         if (store.artifacts.has(artifact.id)) throw new OperatorGraphError(`duplicate artifact id: ${artifact.id}`);
@@ -853,7 +912,7 @@ export class FusionRuntime {
         terminalNodeIds(input.graph).flatMap((nodeId) => store.nodeOutputs.get(nodeId) ?? []);
       updateElapsed();
     } catch (error) {
-      status = "failed";
+      status = error instanceof RuntimeCancelledError ? "cancelled" : "failed";
       errorMessage = error instanceof Error ? error.message : String(error);
       updateElapsed();
       recordTrace({
@@ -972,6 +1031,27 @@ function isArtifact(value: Artifact | undefined): value is Artifact {
   return value !== undefined;
 }
 
+export function createRuntimeReplayRecord(result: RuntimeExecutionResult): RuntimeReplayRecord {
+  return deepFreeze({
+    schema: "fusion-runtime-replay.v1",
+    runId: result.runId,
+    graph: result.graph,
+    scheduler: {
+      id: result.scheduler.id,
+      family: result.scheduler.family
+    },
+    artifacts: [...result.artifacts],
+    observations: [...result.observations],
+    signals: [...result.signals],
+    trace: [...result.trace],
+    outcome: result.outcome
+  });
+}
+
+export function runtimeReplayRecordJson(record: RuntimeReplayRecord): string {
+  return JSON.stringify(record, null, 2) + "\n";
+}
+
 export class DirectFastPathScheduler implements Scheduler {
   readonly id: string;
   readonly family = "direct-fast-path";
@@ -1000,34 +1080,51 @@ export class DirectFastPathScheduler implements Scheduler {
 export class StaticDAGScheduler implements Scheduler {
   readonly id: string;
   readonly family = "static-dag";
+  readonly #maxConcurrency: number;
 
-  constructor(id = "static-dag") {
-    this.id = id;
+  constructor(input: string | { id?: string; maxConcurrency?: number } = "static-dag") {
+    if (typeof input === "string") {
+      this.id = input;
+      this.#maxConcurrency = 1;
+    } else {
+      this.id = input.id ?? "static-dag";
+      this.#maxConcurrency = Math.max(1, input.maxConcurrency ?? 1);
+    }
   }
 
   async schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
     const remaining = new Map(graph.nodes.map((node) => [node.id, node]));
     const completed = new Set<string>();
     while (remaining.size > 0) {
-      let progressed = false;
-      for (const [nodeId, node] of [...remaining.entries()]) {
+      const ready: Array<[string, OperatorGraphNode]> = [];
+      for (const [nodeId, node] of remaining.entries()) {
         const dependencies = [...(node.dependsOn ?? []), ...inputNodeIds(node)];
         if (dependencies.some((dependency) => !completed.has(dependency))) continue;
-        ctx.recordTrace({
-          type: "scheduler.decision",
-          nodeId,
-          operatorId: node.operator.spec.id,
-          payload: { ready_dependencies: dependencies }
-        });
-        await ctx.runNode(node);
-        completed.add(nodeId);
-        remaining.delete(nodeId);
-        progressed = true;
+        ready.push([nodeId, node]);
       }
-      if (!progressed) {
+      if (ready.length === 0) {
         throw new OperatorGraphError(
           `operator graph ${graph.id} has a cycle or unsatisfied dependencies: ${[...remaining.keys()].join(", ")}`
         );
+      }
+      for (let index = 0; index < ready.length; index += this.#maxConcurrency) {
+        const batch = ready.slice(index, index + this.#maxConcurrency);
+        await Promise.all(
+          batch.map(async ([nodeId, node]) => {
+            const dependencies = [...(node.dependsOn ?? []), ...inputNodeIds(node)];
+            ctx.recordTrace({
+              type: "scheduler.decision",
+              nodeId,
+              operatorId: node.operator.spec.id,
+              payload: { ready_dependencies: dependencies, concurrency: this.#maxConcurrency }
+            });
+            await ctx.runNode(node);
+          })
+        );
+        for (const [nodeId] of batch) {
+          completed.add(nodeId);
+          remaining.delete(nodeId);
+        }
       }
     }
     const finalArtifactIds =
