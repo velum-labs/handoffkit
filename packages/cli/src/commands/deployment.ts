@@ -2,6 +2,7 @@ import type { Command } from "commander";
 
 import { Plane, startPlaneServer } from "@fusionkit/plane";
 import { Runner } from "@fusionkit/runner";
+import { PlaneClient } from "@fusionkit/sdk";
 
 import { loadHome, secretStoreFor } from "../config.js";
 import { resolveDir } from "../shared/plane.js";
@@ -19,6 +20,30 @@ type RunnerStartOpts = {
 };
 
 export function registerDeployment(program: Command): void {
+  program
+    .command("ui")
+    .option("--dir <dir>", "plane home directory")
+    .description("print the control-panel login token")
+    .action((opts: { dir?: string }) => {
+      const home = loadHome(resolveDir(opts.dir));
+      console.log(`login token ${home.config.adminToken}`);
+      console.log(`url ${home.config.planeUrl}/ui/`);
+    });
+
+  program
+    .command("runs")
+    .option("--dir <dir>", "plane home directory")
+    .description("list runs from the configured plane")
+    .action(async (opts: { dir?: string }) => {
+      const home = loadHome(resolveDir(opts.dir));
+      const client = new PlaneClient(home.config.planeUrl, home.config.adminToken);
+      const result = await client.listRuns();
+      for (const run of result.runs) {
+        console.log(`${run.runId}\t${run.status}\t${run.agentKind}\t${run.pool}`);
+      }
+      if (result.runs.length === 0) console.log("no runs");
+    });
+
   program
     .command("plane")
     .description("run the control plane")
