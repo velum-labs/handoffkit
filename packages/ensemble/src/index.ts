@@ -59,6 +59,62 @@ export type {
   RunSynthesisInput,
   SynthesisResult
 } from "./synthesis.js";
+export {
+  JudgeCompareOperator,
+  ModelGenerateOperator,
+  PanelGenerateOperator,
+  SynthesizeOperator
+} from "./fusion-operators.js";
+export type {
+  CandidateArtifactValue,
+  ChatMessage,
+  JudgeComparator,
+  JudgeComparison,
+  ModelClient,
+  ModelGenerateOutput,
+  ModelGenerateRequest,
+  PanelCandidate,
+  PanelRunInput,
+  PanelRunner,
+  Synthesizer,
+  SynthesisOutput
+} from "./fusion-operators.js";
+export {
+  BudgetExceededError,
+  DirectFastPathScheduler,
+  FusionRuntime,
+  OperatorGraphError,
+  StaticDAGScheduler,
+  createArtifact
+} from "./runtime.js";
+export type {
+  Artifact,
+  ArtifactInputRef,
+  ArtifactLeakage,
+  ArtifactVisibility,
+  BudgetLedger,
+  BudgetPolicy,
+  CostEstimate,
+  CreateArtifactInput,
+  Operator,
+  OperatorGraph,
+  OperatorGraphNode,
+  OperatorRunContext,
+  OperatorSideEffects,
+  OperatorSpec,
+  OutcomeRecord,
+  Provenance,
+  RuntimeExecutionResult,
+  RuntimeState,
+  RuntimeStatus,
+  Scheduler,
+  SchedulerExecutionContext,
+  SchedulerRunResult,
+  TaskSpec,
+  TraceEvent,
+  TraceEventInput,
+  TraceEventType
+} from "./runtime.js";
 export { createMockHarness } from "./mock.js";
 export type { MockCandidateFixture, MockHarnessOptions } from "./mock.js";
 export { traceCandidate } from "./candidate-trace.js";

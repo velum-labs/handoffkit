@@ -10,7 +10,9 @@ import { createAgentHarness } from "./agent.js";
 import { createCommandHarness } from "./command.js";
 import { resolveCursorkitCli } from "./cursorkit-path.js";
 import { createMockHarness } from "./mock.js";
+import { PanelGenerateOperator } from "./fusion-operators.js";
 import { runEnsemble } from "./run.js";
+import { FusionRuntime, StaticDAGScheduler, createArtifact } from "./runtime.js";
 import type {
   EnsembleDescriptor,
   EnsembleModel,
@@ -497,15 +499,11 @@ export type FusionPanelOptions = {
 };
 
 /**
- * Run the panel once: each panel model executes the task as a real coding agent
- * in its own git worktree, and we capture the resulting trajectories (the
- * candidate reference solutions the judge fuses). This reuses the full agent
- * harness via `runEnsemble` with a capturing judge — no fusion/synthesis call is
- * made here; the trajectories are the product.
+ * Capture one panel run through the existing ensemble harness. This is the leaf
+ * effect the runtime `PanelGenerateOperator` wraps, keeping graph scheduling
+ * separate from harness mechanics.
  */
-export async function runFusionPanels(
-  options: FusionPanelOptions
-): Promise<Record<string, unknown>[]> {
+async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Record<string, unknown>[]> {
   let captured: HarnessTrajectory[] = [];
   let evidence: readonly JudgeCandidateEvidence[] = [];
   const harness: UnifiedHarnessKind = options.harness ?? "agent";
@@ -552,6 +550,81 @@ export async function runFusionPanels(
   // ran as a failed trajectory carrying its model id and status, so the gateway
   // reports which models failed and the companion app shows them.
   return evidence.map(failedEvidenceToWire);
+}
+
+/**
+ * Run the panel once: each panel model executes the task as a real coding agent
+ * in its own git worktree, and we capture the resulting trajectories (the
+ * candidate reference solutions the judge fuses). This is now expressed as a
+ * one-node static operator graph so the production entry point uses the same
+ * artifact/provenance/budget substrate as richer fusion graphs.
+ */
+export async function runFusionPanels(options: FusionPanelOptions): Promise<Record<string, unknown>[]> {
+  const runtime = new FusionRuntime();
+  const task = createArtifact({
+    id: `${options.id ?? "fusion_panels"}.task`,
+    type: "task",
+    value: {
+      id: options.id,
+      prompt: options.prompt,
+      metadata: {
+        repo: options.repo,
+        model_ids: options.models.map((model) => model.id)
+      }
+    },
+    visibility: "runtime",
+    leakage: "none"
+  });
+  const panel = new PanelGenerateOperator({
+    id: "fusion.panel.generate",
+    models: options.models,
+    sideEffects: sideEffectsForHarness(options.harness ?? "agent") === "writes_workspace" ? "write_workspace" : "external_tool",
+    runner: async () => {
+      const wires = await captureFusionPanelWires(options);
+      return wires.map((wire) => ({
+        candidateId:
+          typeof wire.candidate_id === "string"
+            ? wire.candidate_id
+            : typeof wire.trajectory_id === "string"
+              ? wire.trajectory_id
+              : undefined,
+        modelId: typeof wire.model_id === "string" ? wire.model_id : "unknown",
+        model: typeof wire.model === "string" ? wire.model : undefined,
+        content: typeof wire.final_output === "string" ? wire.final_output : "",
+        raw: wire,
+        metadata: {
+          status: typeof wire.status === "string" ? wire.status : "unknown"
+        }
+      }));
+    }
+  });
+  const result = await runtime.run({
+    runId: `${options.id ?? "fusion_panels"}_runtime`,
+    graph: {
+      id: `${options.id ?? "fusion_panels"}_graph`,
+      inputArtifactIds: [task.id],
+      nodes: [
+        {
+          id: "panel",
+          operator: panel,
+          inputs: [{ artifactId: task.id }]
+        }
+      ]
+    },
+    scheduler: new StaticDAGScheduler("fusion-panels-static-dag"),
+    artifacts: [task],
+    budget: {
+      id: "fusion-panels",
+      maxCandidates: options.models.length,
+      maxWorkspaceWriters: 1
+    }
+  });
+  return result.finalArtifacts
+    .map((artifact) => {
+      const value = artifact.value as { raw?: unknown };
+      return value.raw;
+    })
+    .filter((value): value is Record<string, unknown> => value !== null && typeof value === "object");
 }
 
 function descriptorFor(
