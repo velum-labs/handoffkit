@@ -89,6 +89,7 @@ export {
   registerWorkflow,
   runWorkflow
 } from "./kernel.js";
+export { KernelBackend } from "./kernel-backend.js";
 export type { GraphNodeInput, KernelWorkflow, WorkflowFactory } from "./kernel.js";
 export {
   artifactValue,

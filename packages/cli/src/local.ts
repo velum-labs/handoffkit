@@ -1,9 +1,9 @@
 import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
 import type { BackendConfig } from "@fusionkit/model-gateway";
+import { KernelBackend } from "@fusionkit/ensemble";
 import { LOCAL_MODEL_LABEL, readEnv } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
-import { KernelBackend } from "./kernel-backend.js";
 import { toolRegistry } from "./tools.js";
 
 /**

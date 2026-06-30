@@ -23,6 +23,10 @@
       "types": "./dist/kernel.d.ts",
       "default": "./dist/kernel.js"
     },
+    "./kernel-backend": {
+      "types": "./dist/kernel-backend.d.ts",
+      "default": "./dist/kernel-backend.js"
+    },
     "./schedulers": {
       "types": "./dist/schedulers.d.ts",
       "default": "./dist/schedulers.js"

@@ -43,9 +43,9 @@ import type {
   SessionStore,
   WireTrajectory
 } from "@fusionkit/model-gateway";
+import { KernelBackend } from "@fusionkit/ensemble";
 
 import { buildCursorAcpProducer } from "./cursor-acp.js";
-import { KernelBackend } from "./kernel-backend.js";
 
 export type GatewayRunnerConfig = {
   fusionBackendUrl: string;
