@@ -149,7 +149,7 @@ class UniRouteLearnedMap:
         *,
         psi_embeddings: np.ndarray | None = None,
         psi_errors: np.ndarray | None = None,
-    ) -> "UniRouteLearnedMap":
+    ) -> UniRouteLearnedMap:
         train_embeddings = np.asarray(train_embeddings, dtype=np.float64)
         train_errors = np.asarray(train_errors, dtype=np.float64)
         if train_embeddings.shape[0] != train_errors.shape[0]:

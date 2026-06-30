@@ -1,0 +1,99 @@
+name: Release fusionkit to PyPI
+
+on:
+  # Publishing is gated behind a published GitHub Release (not a bare tag push).
+  # The release tag must match fusionkit-v* (enforced in "Validate release tag").
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and validate distributions without publishing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: pypi-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Only the 5 fusionkit packages are published; the workspace also contains the
+  # unpublished uniroute/uniroute-mlx members, so build/publish must be scoped.
+  FUSIONKIT_PACKAGES: >-
+    --package fusionkit
+    --package fusionkit-core
+    --package fusionkit-evals
+    --package fusionkit-mlx
+    --package fusionkit-server
+
+jobs:
+  release:
+    name: build, validate, and publish to PyPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only the canonical repository may publish.
+    if: github.repository == 'velum-labs/handoffkit'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate release tag
+        if: github.event_name == 'release'
+        run: |
+          case "${{ github.event.release.tag_name }}" in
+            fusionkit-v*) echo "release tag ${{ github.event.release.tag_name }} ok" ;;
+            *) echo "release tag must match fusionkit-v*"; exit 1 ;;
+          esac
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Lockfile is current
+        run: uv lock --check
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: Lint and type-check
+        run: |
+          uv run ruff check .
+          uv run pyright
+
+      - name: Test
+        run: uv run pytest
+
+      - name: Build fusionkit distributions
+        run: |
+          rm -rf dist
+          uv build ${FUSIONKIT_PACKAGES}
+
+      - name: Validate distribution metadata
+        run: uv run --with twine python -m twine check dist/*
+
+      - name: Publish to PyPI
+        # Real publish only on a published GitHub Release; workflow_dispatch is
+        # build/validate only. Uses an API token when PYPI_TOKEN is set (the
+        # one-time bootstrap, before Trusted Publishers can be attached to
+        # not-yet-existing projects); otherwise authenticates via OIDC trusted
+        # publishing. Remove the PYPI_TOKEN secret after bootstrap to go
+        # token-free.
+        if: github.event_name == 'release'
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          # --check-url makes re-runs idempotent: uv skips files already on the
+          # index and only uploads what's missing (e.g. after a partial publish
+          # that tripped PyPI's new-project rate limit).
+          if [ -n "${UV_PUBLISH_TOKEN}" ]; then
+            echo "Publishing to PyPI with an API token (bootstrap)"
+            uv publish --check-url https://pypi.org/simple/
+          else
+            echo "Publishing to PyPI via OIDC trusted publishing"
+            uv publish --trusted-publishing always --check-url https://pypi.org/simple/
+          fi

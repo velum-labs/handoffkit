@@ -154,7 +154,7 @@ def cmd_route(args: argparse.Namespace) -> int:
         f"  predicted error {decision.predicted_error:.3f}, "
         f"cost {decision.cost:.4f}, score {decision.score:.4f}"
     )
-    for model, score in sorted(zip(card.models, decision.scores), key=lambda t: t[1]):
+    for model, score in sorted(zip(card.models, decision.scores, strict=False), key=lambda t: t[1]):
         marker = "*" if model.model_id == decision.model_id else " "
         print(f"  {marker} {model.model_id:<40} score {score:.4f} cost {model.cost:.4f}")
     return 0

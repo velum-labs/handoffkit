@@ -31,7 +31,7 @@ The existing manifest path is enough:
 ```bash
 uv run fusionkit fusion-bench \
   --config path/to/config.toml \
-  --manifest packages/fusionkit-evals/fixtures/public-smoke \
+  --manifest python/fusionkit-evals/fixtures/public-smoke \
   --output .fusionkit/public-smoke/rows.jsonl \
   --report .fusionkit/public-smoke/report.md
 ```

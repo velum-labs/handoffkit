@@ -7,7 +7,6 @@ OpenAI-compatible endpoint is an in-process fake instead of `mlx_lm server`.
 import json
 
 import pytest
-
 from uniroute_mlx import load_card
 from uniroute_mlx.cli import main
 

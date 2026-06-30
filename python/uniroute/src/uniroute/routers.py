@@ -116,7 +116,7 @@ class UniRouteKMeans:
             raise RuntimeError("router is not fitted; call fit() first")
         return self._centroids
 
-    def fit(self, train_embeddings: np.ndarray) -> "UniRouteKMeans":
+    def fit(self, train_embeddings: np.ndarray) -> UniRouteKMeans:
         result = kmeans(train_embeddings, self.n_clusters, seed=self.seed)
         self._centroids = result.centroids
         return self
@@ -168,7 +168,7 @@ class KNNRouter:
         self._val_embeddings: np.ndarray | None = None
         self._val_errors: np.ndarray | None = None
 
-    def fit(self, val_embeddings: np.ndarray, val_errors: np.ndarray) -> "KNNRouter":
+    def fit(self, val_embeddings: np.ndarray, val_errors: np.ndarray) -> KNNRouter:
         val_embeddings = np.asarray(val_embeddings, dtype=np.float64)
         val_errors = np.asarray(val_errors, dtype=np.float64)
         if val_embeddings.shape[0] != val_errors.shape[0]:
@@ -226,7 +226,7 @@ class ZeroRouter:
         self._frontier: list[int] | None = None
         self._frontier_quality: np.ndarray | None = None
 
-    def fit(self, costs: np.ndarray, val_errors: np.ndarray) -> "ZeroRouter":
+    def fit(self, costs: np.ndarray, val_errors: np.ndarray) -> ZeroRouter:
         costs = np.asarray(costs, dtype=np.float64)
         quality = 1.0 - np.asarray(val_errors, dtype=np.float64).mean(axis=0)
         if costs.shape[0] != quality.shape[0]:
@@ -273,7 +273,7 @@ class ZeroRouter:
         if budget >= costs[frontier[-1]]:
             best = frontier[-1]
             return ZeroRouterPlan(low_index=best, high_index=best, high_weight=1.0)
-        for low, high in zip(frontier, frontier[1:]):
+        for low, high in zip(frontier, frontier[1:], strict=False):
             if costs[low] <= budget < costs[high]:
                 weight = (budget - costs[low]) / (costs[high] - costs[low])
                 return ZeroRouterPlan(

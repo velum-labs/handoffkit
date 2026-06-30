@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 from uniroute import UniRouteKMeans, UniRouteLearnedMap
-
 from uniroute_mlx import build_card, load_card, save_card
 
 

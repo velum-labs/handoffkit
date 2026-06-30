@@ -6,7 +6,7 @@
 #
 #   FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.gpt-opus.yaml \
 #     fusionkit public-bench --suite livecodebench \
-#       --runner-command "uv run python packages/fusionkit-evals/adapters/livecodebench_adapter.py"
+#       --runner-command "uv run python python/fusionkit-evals/adapters/livecodebench_adapter.py"
 #
 #   fusionkit fusion-hillclimb -c configs/benchmark-panel.gpt-opus.yaml
 #

@@ -52,7 +52,7 @@ class FakeOpenAIServer:
     def dims(self) -> int:
         return len(self.embed_keywords) + 1
 
-    def __enter__(self) -> "FakeOpenAIServer":
+    def __enter__(self) -> FakeOpenAIServer:
         outer = self
 
         class Handler(BaseHTTPRequestHandler):

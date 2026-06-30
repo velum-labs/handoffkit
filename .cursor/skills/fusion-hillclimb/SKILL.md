@@ -51,7 +51,7 @@ Copy this checklist and track progress:
 git checkout -b fusion-hillclimb/$(date +%Y%m%d-%H%M)
 FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.gpt-opus.yaml \
   uv run fusionkit public-bench --suite livecodebench --subset 5 \
-  --runner-command "uv run python packages/fusionkit-evals/adapters/livecodebench_adapter.py" \
+  --runner-command "uv run python python/fusionkit-evals/adapters/livecodebench_adapter.py" \
   -o .fusionkit/hillclimb/smoke.jsonl
 ```
 A non-empty `scored` count with real candidate_scores confirms the panel works. Abort if models/keys do not resolve.

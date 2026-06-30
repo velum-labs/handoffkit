@@ -1,5 +1,4 @@
 import numpy as np
-
 from uniroute import UniRouteKMeans, UniRouteLearnedMap, make_benchmark
 
 

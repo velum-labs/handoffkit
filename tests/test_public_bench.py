@@ -35,7 +35,7 @@ from typer.testing import CliRunner
 
 _SAMPLE_ENVELOPE = (
     Path(__file__).resolve().parents[1]
-    / "packages"
+    / "python"
     / "fusionkit-evals"
     / "fixtures"
     / "public-bench"

@@ -463,7 +463,7 @@ export LCB_CONCURRENCY=4
 uv run --with 'datasets<4' fusionkit public-bench \
   --suite livecodebench \
   --subset 15 \
-  --runner-command "python packages/fusionkit-evals/adapters/livecodebench_adapter.py" \
+  --runner-command "python python/fusionkit-evals/adapters/livecodebench_adapter.py" \
   --output out/lcb-openweight.jsonl \
   --report out/lcb-openweight.md \
   --ledger out/lcb-ledger.jsonl

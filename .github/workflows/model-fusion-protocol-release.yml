@@ -1,0 +1,167 @@
+name: Release model-fusion protocol
+
+on:
+  push:
+    tags:
+      - "model-fusion-protocol-v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and validate release artifacts without publishing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  CANONICAL_REPOSITORY: velum-labs/handoffkit
+  CONTRACT_DIR: spec/model-fusion-contract
+  PYTHON_PROTOCOL_DIR: spec/model-fusion-contract/python
+
+jobs:
+  build-test:
+    name: Build and test release artifacts
+    if: github.repository == 'velum-labs/handoffkit'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          scope: "@velum-labs"
+
+      - name: Install workspace dependencies
+        run: uv sync --all-packages
+
+      - name: Validate contracts and protocol metadata
+        run: |
+          uv run python scripts/validate_contract_fixtures.py
+          uv run python scripts/validate_protocol_package.py
+
+      - name: Install protocol package generator dependencies
+        working-directory: ${{ env.CONTRACT_DIR }}
+        run: npm ci
+
+      - name: Check generated protocol SDK drift
+        working-directory: ${{ env.CONTRACT_DIR }}
+        run: npm run check:generated
+
+      - name: Run tests and static checks
+        run: |
+          uv run pytest
+          uv run ruff check .
+          uv run pyright
+
+      - name: Validate npm package contents
+        working-directory: ${{ env.CONTRACT_DIR }}
+        run: npm pack --dry-run
+
+      - name: Build Python protocol package
+        run: uv run python scripts/build_protocol_python_package.py
+
+      - name: Check Python distribution metadata
+        run: uv run --with twine python -m twine check "${PYTHON_PROTOCOL_DIR}/dist/"*
+
+      - name: Upload release build artifacts for dry-run/debugging
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-fusion-protocol-dist
+          path: |
+            ${{ env.PYTHON_PROTOCOL_DIR }}/dist/*
+            ${{ env.CONTRACT_DIR }}/package.json
+            ${{ env.CONTRACT_DIR }}/protocol-package.json
+            ${{ env.CONTRACT_DIR }}/openapi/model-fusion.v1.openapi.json
+            ${{ env.CONTRACT_DIR }}/gen/**/*
+            ${{ env.PYTHON_PROTOCOL_DIR }}/src/velum_model_fusion_protocol/generated/**/*
+
+  publish-npm:
+    name: Publish npm protocol package
+    needs: build-test
+    if: github.repository == 'velum-labs/handoffkit' && startsWith(github.ref, 'refs/tags/model-fusion-protocol-v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          scope: "@velum-labs"
+
+      # npm publish --provenance performs the OIDC exchange via the npm CLI,
+      # which must be >= 11.5.1 for trusted publishing.
+      - name: Update npm for OIDC trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Publish to public npm
+        working-directory: ${{ env.CONTRACT_DIR }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
+
+  publish-python:
+    name: Publish Python protocol package
+    needs: build-test
+    if: github.repository == 'velum-labs/handoffkit' && startsWith(github.ref, 'refs/tags/model-fusion-protocol-v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build Python protocol package
+        run: uv run python scripts/build_protocol_python_package.py
+
+      - name: Publish to private PyPI-compatible registry when configured
+        id: private-pypi
+        env:
+          PRIVATE_PYPI_URL: ${{ secrets.PRIVATE_PYPI_URL }}
+          PRIVATE_PYPI_USERNAME: ${{ secrets.PRIVATE_PYPI_USERNAME }}
+          PRIVATE_PYPI_PASSWORD: ${{ secrets.PRIVATE_PYPI_PASSWORD }}
+        run: |
+          if [ -n "${PRIVATE_PYPI_URL}" ] && [ -n "${PRIVATE_PYPI_USERNAME}" ] && [ -n "${PRIVATE_PYPI_PASSWORD}" ]; then
+            uv run --with twine python -m twine upload \
+              --repository-url "${PRIVATE_PYPI_URL}" \
+              --username "${PRIVATE_PYPI_USERNAME}" \
+              --password "${PRIVATE_PYPI_PASSWORD}" \
+              "${PYTHON_PROTOCOL_DIR}/dist/"*
+            echo "published_private_pypi=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "Private PyPI secrets are not configured; using GitHub Release artifact fallback."
+            echo "published_private_pypi=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Upload Python distributions to GitHub Release fallback
+        if: steps.private-pypi.outputs.published_private_pypi == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release view "${TAG_NAME}" >/dev/null 2>&1 || \
+            gh release create "${TAG_NAME}" \
+              --title "${TAG_NAME}" \
+              --notes "Private PyPI secrets were not configured; Python protocol distributions are attached as release artifacts."
+          gh release upload "${TAG_NAME}" "${PYTHON_PROTOCOL_DIR}/dist/"* --clobber

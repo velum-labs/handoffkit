@@ -71,7 +71,7 @@ packages/model-gateway/src/fusion-backend.ts:958-968  (buildStepBody)
 …but the Python side prepends fusionkit's own prompt as the FIRST system message:
 
 ```
-packages/fusionkit-core/src/fusionkit_core/judge.py:206-214  (_prepare_conversation)
+python/fusionkit-core/src/fusionkit_core/judge.py:206-214  (_prepare_conversation)
   system = build_fuse_system(trajectories, synthesizer_system=self._synthesizer_system, ...)
   conversation = [ChatMessage(role="system", content=system), *messages]
 ```

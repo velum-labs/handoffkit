@@ -4,7 +4,11 @@ from fusionkit_evals.fusion_compound import (
     compare_compound_vs_individual,
     format_compound_comparison_markdown,
 )
-from fusionkit_evals.public_bench import ExternalBenchmarkRun, ExternalBenchmarkTaskRow
+from fusionkit_evals.public_bench import (
+    ExternalBenchmarkRun,
+    ExternalBenchmarkTaskRow,
+    TaskOutcome,
+)
 
 
 def _row(
@@ -12,7 +16,7 @@ def _row(
     fused: bool,
     gpt: float,
     opus: float,
-    outcome: str = "scored",
+    outcome: TaskOutcome = "scored",
 ) -> ExternalBenchmarkTaskRow:
     return ExternalBenchmarkTaskRow(
         task_id=task_id,

@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-
 from uniroute_mlx import (
     EndpointError,
     Evaluation,
@@ -85,7 +84,9 @@ def test_evaluate_model_scores_and_persists(tmp_path):
     with FakeOpenAIServer(
         chat_models={
             # Aces math, fails code.
-            "math-llm": lambda prompt: "4" if "2+2" in prompt else ("6" if "3+3" in prompt else "???")
+            "math-llm": lambda prompt: (
+                "4" if "2+2" in prompt else ("6" if "3+3" in prompt else "???")
+            )
         }
     ) as server:
         client = OpenAICompatibleClient(server.base_url)

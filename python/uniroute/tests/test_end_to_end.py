@@ -4,7 +4,6 @@ All routing over the TEST LLM pool uses only (i) unlabelled training prompts,
 (ii) the small labelled validation set, never the test pool's test-set labels.
 """
 
-import numpy as np
 
 from uniroute import (
     UniRouteKMeans,

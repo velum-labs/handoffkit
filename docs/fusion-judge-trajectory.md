@@ -56,7 +56,7 @@ the harness loop ends.
 
 | Concern | Location |
 |---|---|
-| Judge gap-analysis + synthesizer step over candidates + conversation | [packages/fusionkit-server/.../app.py](../../fusionkit/packages/fusionkit-server/src/fusionkit_server/app.py) `POST /v1/fusion/trajectories:fuse`, [judge.py](../../fusionkit/packages/fusionkit-core/src/fusionkit_core/judge.py) `JudgeSynthesizer.fuse` runs `analyze()` then injects the analysis into `build_fuse_system` |
+| Judge gap-analysis + synthesizer step over candidates + conversation | [python/fusionkit-server/.../app.py](../python/fusionkit-server/src/fusionkit_server/app.py) `POST /v1/fusion/trajectories:fuse`, [judge.py](../python/fusionkit-core/src/fusionkit_core/judge.py) `JudgeSynthesizer.fuse` runs `analyze()` then injects the analysis into `build_fuse_system` |
 | Native trajectory reconstruction at the wire boundary | [packages/model-gateway/src/trajectory-capture.ts](../packages/model-gateway/src/trajectory-capture.ts), captured via `ProvenanceSink.onModelCallRaw` |
 | Front-door backend: panels-once + per-turn proxy, immediate streaming + keepalive | [packages/model-gateway/src/fusion-backend.ts](../packages/model-gateway/src/fusion-backend.ts) |
 | Dialect adapters (chat / responses / anthropic) with tools + streaming | [packages/model-gateway/src/adapters/](../packages/model-gateway/src/adapters/) |
@@ -95,7 +95,7 @@ cd /Users/alen/Documents/Development/handoffkit && pnpm build
 # front-door harness, and the scope dashboard observing it live on :4317.
 node packages/cli/dist/index.js fusion codex \
   --observe \
-  --fusionkit-dir /Users/alen/Documents/Development/fusionkit \
+  --fusionkit-dir . \
   --model gpt=openai:gpt-5.5 \
   --model opus=anthropic:claude-opus-4-8 \
   --judge-model gpt-5.5

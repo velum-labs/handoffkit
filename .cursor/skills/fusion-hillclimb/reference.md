@@ -22,7 +22,7 @@ beats the best single model with wins >> losses (significant).
 
 Implementation: `fusionkit_evals.exec_select` (`select_index`, `CandidateSample`),
 `fusionkit_evals.livecodebench_data.decode_public_private` (public/private split),
-and the runner `packages/fusionkit-evals/adapters/lcb_select_adapter.py`.
+and the runner `python/fusionkit-evals/adapters/lcb_select_adapter.py`.
 
 Run it:
 
@@ -30,7 +30,7 @@ Run it:
 FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.gpt-opus.yaml \
   LCB_SELECT_SAMPLES=3 PYTHONUNBUFFERED=1 \
   uv run fusionkit public-bench --suite livecodebench --subset 86 \
-  --runner-command "uv run python packages/fusionkit-evals/adapters/lcb_select_adapter.py" \
+  --runner-command "uv run python python/fusionkit-evals/adapters/lcb_select_adapter.py" \
   -o runs.jsonl --ledger ledger.jsonl
 # then: compare_compound_vs_individual(run) for the per-model table + McNemar
 ```
@@ -80,8 +80,8 @@ the expensive part -- budget accordingly.
 Only after Tier 1/2 are exhausted and budget remains. Propose ONE focused change to
 the synthesis logic, tied to concrete failure exemplars from the report:
 
-- candidate formatting / ordering in `packages/fusionkit-core/src/fusionkit_core/prompts.py` (`format_trajectories`, `build_fuse_system`).
-- judge/synthesis control flow in `packages/fusionkit-core/src/fusionkit_core/judge.py` (e.g. multi-round judging, self-consistency vote, best-of-n select-then-refine).
+- candidate formatting / ordering in `python/fusionkit-core/src/fusionkit_core/prompts.py` (`format_trajectories`, `build_fuse_system`).
+- judge/synthesis control flow in `python/fusionkit-core/src/fusionkit_core/judge.py` (e.g. multi-round judging, self-consistency vote, best-of-n select-then-refine).
 
 Procedure for each candidate code change:
 1. Make the edit on the climb branch.

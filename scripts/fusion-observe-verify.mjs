@@ -9,10 +9,11 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { startFusionStack, startObservability } from "../packages/cli/dist/fusion-quickstart.js";
 
-const FK_DIR = process.env.WARRANT_FUSION_FK_DIR ?? "/Users/alen/Documents/Development/fusionkit";
+const FK_DIR = process.env.WARRANT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
 const log = (line) => process.stderr.write(`${line}\n`);
 
 function materializeRepo(root) {

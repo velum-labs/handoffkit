@@ -70,7 +70,7 @@ fusionkit public-bench \
 
 The `--runner-command` adapter receives the request as JSON on stdin and emits a
 normalized run envelope on stdout. See
-`packages/fusionkit-evals/fixtures/public-bench/aider-polyglot-subset.sample.json`
+`python/fusionkit-evals/fixtures/public-bench/aider-polyglot-subset.sample.json`
 for the shape. Key fields: `suite`, `resolved_tasks`, `passed_tasks`, optional
 `score`, optional `cost_total_usd`, and a `tasks` array whose rows may include
 `candidate_scores` (per-panel-member success) so oracle and failure-correlation
@@ -97,7 +97,7 @@ The harness is built so a full-scale number is trustworthy, not just runnable.
 - Frozen manifest + pinning: set `LCB_MANIFEST` to a committed list of
   `question_id`s plus the dataset version and contamination window, so runs are
   comparable over time (replaces drift-prone "most recent N"). See
-  `packages/fusionkit-evals/fixtures/public-bench/livecodebench/manifest-2025h2-medium-hard.example.json`.
+  `python/fusionkit-evals/fixtures/public-bench/livecodebench/manifest-2025h2-medium-hard.example.json`.
 - Statistical rigor: pass@1 is reported with a 95% Wilson interval; helpers exist
   for pass@k, multi-seed aggregation, and bootstrap CIs. Use >=100 tasks and >=3
   seeds for a real number.

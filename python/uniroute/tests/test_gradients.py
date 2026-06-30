@@ -9,10 +9,9 @@ high-variance nuisance direction) and asserts that supervision recovers it.
 
 import numpy as np
 import pytest
-
 from uniroute import UniRouteKMeans, UniRouteLearnedMap, area_under_curve, deferral_curve
-from uniroute.learned_map import _augment, _init_theta, loss_and_grad
 from uniroute.kmeans import kmeans
+from uniroute.learned_map import _augment, _init_theta, loss_and_grad
 
 
 def finite_difference_grad(theta, features, errors, psi_t, eps=1e-6):

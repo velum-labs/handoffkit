@@ -30,7 +30,7 @@ consumer of that contract, not a replacement for it.
 
 Fixtures under `spec/model-fusion-contract/fixture` are compatibility tests, not
 examples. Keep that fixture matrix small and stable. Product benchmark fixtures live
-under `packages/fusionkit-evals/fixtures`, not in the contract fixture tree.
+under `python/fusionkit-evals/fixtures`, not in the contract fixture tree.
 
 ### Native Runs Are The Product Boundary
 
@@ -99,15 +99,15 @@ flowchart LR
 ## Important Files
 
 - `spec/model-fusion-contract/README.md`: schema lifecycle and fixture policy.
-- `packages/fusionkit-core/src/fusionkit_core/contracts.py`: Python contract bindings.
-- `packages/fusionkit-core/src/fusionkit_core/run.py`: native run manager, state, idempotency, tools, budgets.
-- `packages/fusionkit-core/src/fusionkit_core/run_store.py`: filesystem JSONL event store and inspection reconstruction.
-- `packages/fusionkit-core/src/fusionkit_core/judge.py`: judge synthesis flow.
-- `packages/fusionkit-core/src/fusionkit_core/providers.py`: provider metadata and cost helpers.
-- `packages/fusionkit-server/src/fusionkit_server/app.py`: native and compatibility HTTP endpoints.
-- `packages/fusionkit-evals/src/fusionkit_evals/tiny.py`: tiny Phase 1 smoke benchmark runner.
-- `packages/fusionkit-evals/src/fusionkit_evals/fusion_bench.py`: record join layer and fusion-bench rows.
-- `packages/fusionkit-evals/fixtures/tiny-phase1`: 25 synthetic benchmark task records.
+- `python/fusionkit-core/src/fusionkit_core/contracts.py`: Python contract bindings.
+- `python/fusionkit-core/src/fusionkit_core/run.py`: native run manager, state, idempotency, tools, budgets.
+- `python/fusionkit-core/src/fusionkit_core/run_store.py`: filesystem JSONL event store and inspection reconstruction.
+- `python/fusionkit-core/src/fusionkit_core/judge.py`: judge synthesis flow.
+- `python/fusionkit-core/src/fusionkit_core/providers.py`: provider metadata and cost helpers.
+- `python/fusionkit-server/src/fusionkit_server/app.py`: native and compatibility HTTP endpoints.
+- `python/fusionkit-evals/src/fusionkit_evals/tiny.py`: tiny Phase 1 smoke benchmark runner.
+- `python/fusionkit-evals/src/fusionkit_evals/fusion_bench.py`: record join layer and fusion-bench rows.
+- `python/fusionkit-evals/fixtures/tiny-phase1`: 25 synthetic benchmark task records.
 
 ## Verification Commands
 

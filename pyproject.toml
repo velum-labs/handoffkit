@@ -11,6 +11,64 @@
 [tool.uv.workspace]
 members = ["python/*"]
 
+# The fusionkit package set (merged in from the former standalone repo) depends
+# on its siblings by exact version; these sources resolve those to the local
+# workspace members instead of PyPI.
+[tool.uv.sources]
+fusionkit-core = { workspace = true }
+fusionkit-server = { workspace = true }
+fusionkit-evals = { workspace = true }
+fusionkit = { workspace = true }
+fusionkit-mlx = { workspace = true }
+
 # Dev tooling shared by all members; synced by default with `uv sync`.
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+  "coverage>=7.13.0",
+  "datasets<4",
+  "httpx>=0.28.1",
+  "httpx2>=2.4.0",
+  "jsonschema>=4.26.0",
+  "pyright>=1.1.407",
+  "pytest>=9.0.2",
+  "pytest-asyncio>=1.3.0",
+  "ruff>=0.14.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Machine-generated protocol bindings are not hand-formatted; they are
+# overwritten by the codegen scripts.
+extend-exclude = ["packages/protocol/generated"]
+
+[tool.pyright]
+# Type-check the FusionKit Python sources merged from the former standalone
+# repo. uniroute/uniroute-mlx predate the merge and were never type-checked
+# under handoffkit's CI, so they stay outside the pyright scope here.
+include = [
+  "python/fusionkit-cli",
+  "python/fusionkit-core",
+  "python/fusionkit-evals",
+  "python/fusionkit-mlx",
+  "python/fusionkit-server",
+  "spec/model-fusion-contract/python",
+  "scripts",
+  "tests",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+testpaths = ["tests", "python"]
+
+[tool.coverage.run]
+source = ["python"]
+
+[tool.coverage.report]
+# Gate: keep overall line coverage at or above this floor (currently ~83%).
+fail_under = 80
+show_missing = true

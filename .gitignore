@@ -19,3 +19,10 @@ __pycache__/
 /release/.plans/
 # Packed tarballs produced by scripts/publish-npm-workspaces.mjs.
 /release-artifacts/
+.ruff_cache/
+.coverage
+# FusionKit local run artifacts (the engine writes benchmark/hillclimb/run
+# outputs under .fusionkit/; the tracked fusion.json + prompts/ stay versioned).
+/.fusionkit/runs/
+/.fusionkit/fusion-bench/
+/.fusionkit/hillclimb/

@@ -138,7 +138,7 @@ async def test_dirty_dozen_report_keeps_harness_skips_separate(tmp_path) -> None
 def test_dirty_dozen_readme_documents_setup_scoring_and_contamination() -> None:
     readme_path = (
         Path(__file__).resolve().parents[1]
-        / "packages"
+        / "python"
         / "fusionkit-evals"
         / "benchmarks"
         / "README.md"

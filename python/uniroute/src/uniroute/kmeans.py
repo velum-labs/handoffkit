@@ -79,7 +79,7 @@ def kmeans(
     centroids = _kmeans_plus_plus(points, n_clusters, rng)
     labels = np.zeros(n_points, dtype=np.int64)
     n_iter = 0
-    for n_iter in range(1, max_iter + 1):
+    for n_iter in range(1, max_iter + 1):  # noqa: B007 - returned as the final iteration count
         distances = _squared_distances(points, centroids)
         labels = distances.argmin(axis=1)
         new_centroids = np.empty_like(centroids)

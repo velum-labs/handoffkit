@@ -58,7 +58,7 @@ def test_fusion_bench_loads_tiny_manifests() -> None:
 
 def test_fusion_bench_loads_adversarial_native_fusion_ranker_fixtures() -> None:
     tasks = load_benchmark_tasks(
-        "packages/fusionkit-evals/fixtures/adversarial-native-fusion"
+        "python/fusionkit-evals/fixtures/adversarial-native-fusion"
     )
 
     assert len(tasks) == 2
@@ -72,7 +72,7 @@ def test_fusion_bench_loads_adversarial_native_fusion_ranker_fixtures() -> None:
 
 def test_adversarial_ranker_fixture_reports_regret_not_quality_claim() -> None:
     task = load_benchmark_tasks(
-        "packages/fusionkit-evals/fixtures/adversarial-native-fusion"
+        "python/fusionkit-evals/fixtures/adversarial-native-fusion"
     )[0]
     row = _report_row(
         task.record.task_id,
@@ -713,8 +713,7 @@ def _handoffkit_cli_or_skip() -> Path:
         candidates.append(Path(env_cli))
     candidates.extend(
         [
-            Path(__file__).resolve().parents[2]
-            / "handoffkit"
+            Path(__file__).resolve().parents[1]
             / "packages"
             / "cli"
             / "dist"

@@ -9,8 +9,8 @@ can be routed to without retraining the router.
 from .evaluate import (
     DeferralCurve,
     area_under_curve,
-    deferral_curve,
     default_lambda_grid,
+    deferral_curve,
     pareto_clean,
     quality_neutral_cost,
     select_n_clusters,

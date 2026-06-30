@@ -66,7 +66,7 @@ jobs:
   python:
     name: uv workspace (python/*)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -82,14 +82,34 @@ jobs:
       - name: Sync workspace
         run: uv sync --all-packages
 
-      - name: Test
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Type-check
+        run: uv run pyright
+
+      - name: Test uniroute
         run: uv run pytest python -q
+
+      - name: Test fusionkit
+        run: uv run pytest tests -q
+
+      - name: Validate model-fusion contracts
+        run: |
+          uv run python scripts/validate_contract_fixtures.py
+          uv run python scripts/validate_protocol_package.py
 
       - name: Demo smoke
         run: uv run uniroute-demo --trials 1
 
       - name: Router CLI smoke
         run: uv run uniroute-mlx --help
+
+      - name: Build distributions (PyPI metadata smoke)
+        run: |
+          rm -rf dist
+          uv build --all-packages
+          uv run --with twine python -m twine check dist/*
 
   docker:
     name: docker compose smoke

@@ -4,7 +4,7 @@
   "units": [
     {
       "key": "fusionkit-protocol",
-      "repo": "fusionkit",
+      "repo": "handoffkit",
       "ecosystem": "protocol-dual",
       "description": "@velum-labs/model-fusion-protocol (npm) + velum-model-fusion-protocol (PyPI), the contract consumed by handoffkit and cursorkit.",
       "branch": "main",
@@ -24,7 +24,7 @@
     },
     {
       "key": "fusionkit-pypi",
-      "repo": "fusionkit",
+      "repo": "handoffkit",
       "ecosystem": "uv-monorepo",
       "description": "The 5 fusionkit PyPI packages (fusionkit, fusionkit-core, fusionkit-evals, fusionkit-mlx, fusionkit-server) published in lockstep.",
       "branch": "main",
@@ -33,11 +33,11 @@
       "publishWorkflow": "pypi-release.yml",
       "registries": [{ "kind": "pypi", "package": "fusionkit" }],
       "versionSources": [
-        "packages/fusionkit-core/pyproject.toml#project.version",
-        "packages/fusionkit-cli/pyproject.toml#project.version",
-        "packages/fusionkit-evals/pyproject.toml#project.version",
-        "packages/fusionkit-mlx/pyproject.toml#project.version",
-        "packages/fusionkit-server/pyproject.toml#project.version"
+        "python/fusionkit-core/pyproject.toml#project.version",
+        "python/fusionkit-cli/pyproject.toml#project.version",
+        "python/fusionkit-evals/pyproject.toml#project.version",
+        "python/fusionkit-mlx/pyproject.toml#project.version",
+        "python/fusionkit-server/pyproject.toml#project.version"
       ],
       "preflight": ["uv", "build", "--all-packages"],
       "dependsOn": ["fusionkit-protocol"]

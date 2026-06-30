@@ -44,7 +44,7 @@ isProject: false
 A locally-run Next.js dashboard that observes the entire fusion stack end-to-end: **sessions**, **environments** (panel/stack config), **each panel model's trajectory** (reasoning / tool calls / observations / diffs), and the **judge's thinking, scoring, synthesis reasoning, and final output** — all live and correlated by a single trace id.
 
 ## Why instrumentation is required (research findings)
-- FusionKit's new `trajectories:fuse` endpoint (what agent fusion actually uses) **persists nothing**, and the judge's **raw reasoning is discarded** — only structured consensus/contradictions/scores survive ([judge.py](packages/fusionkit-core/src/fusionkit_core/judge.py), [prompts.py](packages/fusionkit-core/src/fusionkit_core/prompts.py)).
+- FusionKit's new `trajectories:fuse` endpoint (what agent fusion actually uses) **persists nothing**, and the judge's **raw reasoning is discarded** — only structured consensus/contradictions/scores survive ([judge.py](python/fusionkit-core/src/fusionkit_core/judge.py), [prompts.py](python/fusionkit-core/src/fusionkit_core/prompts.py)).
 - HandoffKit's fusion path has **no event stream/DB/logger**; it only writes a post-run `unified-e2e-report.json` and returns `x-fusion-*` headers ([fusion-gateway.ts](packages/model-gateway/src/fusion-gateway.ts), [unified.ts](packages/ensemble/src/unified.ts)).
 - Cursorkit emits structured JSON logs but no transcript store.
 - There is **no frontend anywhere** — greenfield app.
@@ -95,8 +95,8 @@ flowchart LR
 
 ### 3. FusionKit instrumentation (Python)
 - New `fusionkit_core/trace.py`: env-driven emitter (`FUSION_TRACE_URL`, `FUSION_TRACE_DIR`, `FUSION_TRACE_ID`), background-thread queue, JSONL fallback, no-op when unset.
-- [judge.py](packages/fusionkit-core/src/fusionkit_core/judge.py): in `analyze` / `_synthesize_answer` / `synthesize_trajectories`, **retain the raw analyze + synthesize responses** (currently discarded) and emit `judge.thinking` / `judge.scored` / `judge.synthesis` / `judge.final`.
-- [app.py](packages/fusionkit-server/src/fusionkit_server/app.py): in `POST /v1/fusion/trajectories:fuse`, read `x-fusion-trace-id`, emit a `session`/judge span set, and **persist its `judge_synthesis_record`** (today it writes nothing).
+- [judge.py](python/fusionkit-core/src/fusionkit_core/judge.py): in `analyze` / `_synthesize_answer` / `synthesize_trajectories`, **retain the raw analyze + synthesize responses** (currently discarded) and emit `judge.thinking` / `judge.scored` / `judge.synthesis` / `judge.final`.
+- [app.py](python/fusionkit-server/src/fusionkit_server/app.py): in `POST /v1/fusion/trajectories:fuse`, read `x-fusion-trace-id`, emit a `session`/judge span set, and **persist its `judge_synthesis_record`** (today it writes nothing).
 - Panel model servers [simple_openai_server.py](scripts/simple_openai_server.py) + [simple_mlx_openai_server.py](scripts/simple_mlx_openai_server.py): read trace headers, emit `model.call.started/finished` with usage/latency/finish_reason.
 
 ### 4. HandoffKit instrumentation + propagation (TS)
