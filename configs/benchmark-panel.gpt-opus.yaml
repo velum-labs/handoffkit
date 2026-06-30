@@ -1,0 +1,61 @@
+# Two-member decorrelated frontier panel for fusion benchmarking + hill climbing.
+#
+# GPT-5.5 (OpenAI) + Claude Opus 4.8 (Anthropic): comparable-strength peers from
+# different model families, so the panel's failures are decorrelated and fusion has
+# real oracle headroom to convert into wins. Used by:
+#
+#   FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.gpt-opus.yaml \
+#     fusionkit public-bench --suite livecodebench \
+#       --runner-command "uv run python packages/fusionkit-evals/adapters/livecodebench_adapter.py"
+#
+#   fusionkit fusion-hillclimb -c configs/benchmark-panel.gpt-opus.yaml
+#
+# Requires OPENAI_API_KEY and ANTHROPIC_API_KEY in the environment.
+endpoints:
+  - id: gpt
+    provider: openai
+    model: gpt-5.5
+    base_url: https://api.openai.com
+    api_key_env: OPENAI_API_KEY
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 1.25
+      output_per_1m_tokens: 10.0
+      currency: USD
+    tags: [cloud, peer]
+  - id: opus
+    provider: anthropic
+    model: claude-opus-4-8
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+    capabilities:
+      structured_output: false
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 5.0
+      output_per_1m_tokens: 25.0
+      currency: USD
+    tags: [cloud, peer]
+default_model: gpt
+judge_model: gpt
+synthesizer_model: gpt
+default_mode: panel
+panel_models: [gpt, opus]
+# Keep the coding-harness system prompt (when one is present) as the synthesizer's
+# primary base; the LiveCodeBench code-gen path sends none, so this is inert there
+# but correct for the agentic path.
+harness_prompt_passthrough: true
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 4096
+budget:
+  max_candidates: 2
+  wall_clock_s: 1800
+  max_cost: null
+  max_tool_rounds: 24
+  max_tool_calls: 200

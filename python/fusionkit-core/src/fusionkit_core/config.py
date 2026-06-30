@@ -103,6 +103,18 @@ class FusionConfig(BaseModel):
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
     budget: RunBudget = Field(default_factory=RunBudget)
     prompts: PromptOverrides = Field(default_factory=PromptOverrides)
+    # When true (default), a coding-harness system prompt arriving in the
+    # conversation (e.g. Codex/Claude Code's agent prompt) is used as the primary
+    # base for the judge/synthesizer, with the fusion framing layered on top.
+    # Set false to fall back to the standalone fusion prompts (e.g. for a weak or
+    # heterogeneous synthesizer model that the harness prompt does not fit).
+    harness_prompt_passthrough: bool = True
+    # When true, text/code fusion (no tools) returns the judge-selected best candidate
+    # VERBATIM instead of having the synthesizer rewrite an answer. This best-of-N
+    # selection preserves a working candidate's solution (the LLM rewrite can regress
+    # passing code) and skips the synth call. Falls back to composition when the judge
+    # names no best candidate. No effect on tool-using agent fusion.
+    synthesis_select_best: bool = False
 
     def endpoint_for(self, model_id: str) -> ModelEndpoint:
         for endpoint in self.endpoints:

@@ -13,8 +13,10 @@ from fusionkit_core.config import PromptOverrides, SamplingConfig
 from fusionkit_core.prompts import (
     JUDGE_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
+    FusionIdentity,
     build_fuse_system,
     build_judge_prompt,
+    build_judge_system,
 )
 from fusionkit_core.trace import emit as trace_emit
 from fusionkit_core.trace import new_span_id
@@ -48,10 +50,56 @@ class FuseResult(BaseModel):
 
 
 class JudgeSynthesizer:
-    def __init__(self, prompts: PromptOverrides | None = None) -> None:
+    def __init__(
+        self,
+        prompts: PromptOverrides | None = None,
+        *,
+        harness_passthrough: bool = True,
+        select_best: bool = False,
+    ) -> None:
         overrides = prompts or PromptOverrides()
         self._judge_system = overrides.judge_system or JUDGE_SYSTEM_PROMPT
         self._synthesizer_system = overrides.synthesizer_system or SYNTHESIZER_SYSTEM_PROMPT
+        self._synthesizer_overridden = overrides.synthesizer_system is not None
+        # When on, a coding-harness system prompt arriving in the conversation is
+        # treated as the primary base for the judge/synthesizer (fusion framing
+        # rides on top), instead of being demoted beneath the fusion prompt.
+        self._harness_passthrough = harness_passthrough
+        # When on (and no tools), return the judge-selected best candidate verbatim
+        # rather than letting the synthesizer rewrite the answer (best-of-N selection).
+        self._select_best = select_best
+
+    def _selected_verbatim(
+        self,
+        trajectories: Sequence[Trajectory],
+        analysis: FusionAnalysis,
+        synth_client: ChatClient,
+    ) -> ModelResponse | None:
+        """The judge-selected candidate's content as a terminal response, or None.
+
+        Returns None (fall back to composition) when select-best is off, the judge
+        named no best candidate, or the named id is not a succeeded trajectory.
+        """
+        if not self._select_best or not analysis.best_trajectory:
+            return None
+        chosen = next(
+            (
+                trajectory
+                for trajectory in trajectories
+                if trajectory.id == analysis.best_trajectory
+                and trajectory.status == "succeeded"
+                and trajectory.content.strip()
+            ),
+            None,
+        )
+        if chosen is None:
+            return None
+        return ModelResponse(
+            model_id=synth_client.model_id,
+            content=chosen.content,
+            finish_reason="stop",
+            usage=Usage(),
+        )
 
     async def fuse(
         self,
@@ -87,18 +135,29 @@ class JudgeSynthesizer:
             messages,
             trajectories,
             judge_client=judge_client,
+            identity=self._identity(trajectories, judge_client, synth_client),
             sampling=sampling,
             tools=tools,
             analysis=analysis,
             trace_id=trace_id,
             judge_span=judge_span,
         )
-        response = await synth_client.chat(
-            conversation,
-            sampling,
-            tools=tools,
-            tool_choice=tool_choice,
+        # Best-of-N selection (no tools): return the judge-picked candidate verbatim
+        # instead of an LLM rewrite, skipping the synthesizer call entirely.
+        selected = (
+            self._selected_verbatim(trajectories, resolved_analysis, synth_client)
+            if tools is None
+            else None
         )
+        if selected is not None:
+            response = selected
+        else:
+            response = await synth_client.chat(
+                conversation,
+                sampling,
+                tools=tools,
+                tool_choice=tool_choice,
+            )
         result = self._build_fuse_result(response, trajectories, resolved_analysis)
         self._emit_step(
             trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
@@ -133,12 +192,33 @@ class JudgeSynthesizer:
             messages,
             trajectories,
             judge_client=judge_client,
+            identity=self._identity(trajectories, judge_client, synth_client),
             sampling=sampling,
             tools=tools,
             analysis=analysis,
             trace_id=trace_id,
             judge_span=judge_span,
         )
+        # Best-of-N selection (no tools): emit the judge-picked candidate verbatim as
+        # a single chunk and skip the synthesizer stream.
+        selected = (
+            self._selected_verbatim(trajectories, resolved_analysis, synth_client)
+            if tools is None
+            else None
+        )
+        if selected is not None:
+            yield StreamChunk(delta=selected.content)
+            result = self._build_fuse_result(selected, trajectories, resolved_analysis)
+            self._emit_step(
+                trace_id,
+                judge_span,
+                result.response,
+                result.terminal,
+                result.trajectory,
+                trajectories,
+            )
+            yield result
+            return
         content_parts: list[str] = []
         tool_accumulator: list[dict[str, str]] = []
         seen_tool_ids: set[str] = set()
@@ -176,12 +256,49 @@ class JudgeSynthesizer:
         )
         yield result
 
+    def _identity(
+        self,
+        trajectories: Sequence[Trajectory],
+        judge_client: ChatClient,
+        synth_client: ChatClient,
+    ) -> FusionIdentity:
+        """Factual run identity (panel/judge/synthesizer) for prompt disclosure."""
+        return FusionIdentity(
+            panel=tuple(trajectory.model_id for trajectory in trajectories),
+            judge=getattr(judge_client, "model_id", None),
+            synthesizer=getattr(synth_client, "model_id", None),
+        )
+
+    def _split_harness_system(
+        self, messages: Sequence[ChatMessage]
+    ) -> tuple[str | None, list[ChatMessage]]:
+        """Split inbound system messages (the harness prompt) from the body.
+
+        With pass-through on, the coding-harness system prompt (Codex/Claude Code
+        put their full agent prompt in the system role) is lifted out so it can
+        become the primary base of the composed system message - and dropped from
+        the forwarded body so it is not duplicated. With pass-through off, the
+        messages are returned unchanged (the prior behavior: the harness prompt
+        stays in the body, demoted beneath the fusion system prompt).
+        """
+        if not self._harness_passthrough:
+            return None, list(messages)
+        system_parts = [
+            message.content
+            for message in messages
+            if message.role == "system" and message.content
+        ]
+        body = [message for message in messages if message.role != "system"]
+        harness = "\n\n".join(system_parts) if system_parts else None
+        return harness, body
+
     async def _prepare_conversation(
         self,
         messages: Sequence[ChatMessage],
         trajectories: Sequence[Trajectory],
         *,
         judge_client: ChatClient,
+        identity: FusionIdentity | None,
         sampling: SamplingConfig,
         tools: Sequence[Mapping[str, Any]] | None,
         analysis: FusionAnalysis | None,
@@ -193,6 +310,7 @@ class JudgeSynthesizer:
         Shared by :meth:`fuse` and :meth:`fuse_stream` so the streaming and
         non-streaming paths cannot drift in how they ground the synthesizer.
         """
+        harness_system, body = self._split_harness_system(messages)
         resolved_analysis = analysis
         if resolved_analysis is None and trajectories:
             resolved_analysis = await self.analyze(
@@ -208,10 +326,13 @@ class JudgeSynthesizer:
         system = build_fuse_system(
             trajectories,
             synthesizer_system=self._synthesizer_system,
+            harness_system=harness_system,
+            synthesizer_overridden=self._synthesizer_overridden,
+            identity=identity if trajectories else None,
             analysis=resolved_analysis if trajectories else None,
             tools_present=tools is not None,
         )
-        conversation = [ChatMessage(role="system", content=system), *messages]
+        conversation = [ChatMessage(role="system", content=system), *body]
         return conversation, resolved_analysis
 
     def _build_fuse_result(
@@ -250,9 +371,13 @@ class JudgeSynthesizer:
         trace_id: str | None = None,
         judge_span: str | None = None,
     ) -> FusionAnalysis:
+        harness_system, _ = self._split_harness_system(messages)
         response = await judge_client.chat(
             [
-                ChatMessage(role="system", content=self._judge_system),
+                ChatMessage(
+                    role="system",
+                    content=build_judge_system(self._judge_system, harness_system=harness_system),
+                ),
                 ChatMessage(
                     role="user",
                     content=build_judge_prompt(_last_user_text(messages), trajectories),

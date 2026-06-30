@@ -146,6 +146,10 @@ class FusionAnalysis(BaseModel):
     coverage_gaps: list[str] = Field(default_factory=list)
     likely_errors: list[str] = Field(default_factory=list)
     recommended_final_structure: list[str] = Field(default_factory=list)
+    # The id of the single candidate trajectory the judge deems most likely correct
+    # and complete, to be returned verbatim under select-best synthesis. Null when no
+    # single candidate is clearly best (then the synthesizer composes the answer).
+    best_trajectory: str | None = None
 
 
 class FusionResult(BaseModel):

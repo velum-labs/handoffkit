@@ -13,7 +13,7 @@ import asyncio
 import hashlib
 import json
 import random
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -151,6 +151,8 @@ class TunerRuntime:
         checker_mode: CheckerMode = "exact",
         test_timeout_s: float = 8.0,
         concurrency: int = 4,
+        verifier: Callable[[BankTask, str], bool] | None = None,
+        select_best: bool = False,
     ) -> None:
         self.clients = dict(clients)
         self.judge_id = judge_id
@@ -163,6 +165,25 @@ class TunerRuntime:
         self.checker_mode: CheckerMode = checker_mode
         self.test_timeout_s = test_timeout_s
         self.semaphore = asyncio.Semaphore(max(1, concurrency))
+        # Best-of-N selection: replay builds the synthesizer with this flag so the
+        # judge-selected candidate is returned verbatim (vs an LLM rewrite).
+        self.select_best = select_best
+        # How a fused solution is verified for a task. Defaults to the stdin/stdout
+        # code-execution verifier (LiveCodeBench); a different suite (e.g. polyglot)
+        # injects its own verifier so replay can score in that suite's way.
+        self.verifier = verifier
+
+    def verify(self, task: BankTask, code: str) -> bool:
+        if self.verifier is not None:
+            return self.verifier(task, code)
+        run = verify_solution(
+            self.sandbox,
+            code,
+            task.tests,
+            timeout_s=self.test_timeout_s,
+            checker_mode=self.checker_mode,
+        )
+        return run.passed
 
     def _sampling_hash(self) -> str:
         payload = {
@@ -193,7 +214,7 @@ async def replay_task(
         Trajectory(id=f"cand_{index}", model_id=cand.model_id, content=cand.content)
         for index, cand in enumerate(task.candidates)
     ]
-    synthesizer = JudgeSynthesizer(variant.to_overrides())
+    synthesizer = JudgeSynthesizer(variant.to_overrides(), select_best=runtime.select_best)
     result = await synthesizer.fuse(
         [ChatMessage(role="user", content=task.prompt)],
         candidates,
@@ -204,15 +225,8 @@ async def replay_task(
     )
     answer = result.response.content
     code = extract_code(answer).code
-    run = await asyncio.to_thread(
-        verify_solution,
-        runtime.sandbox,
-        code,
-        task.tests,
-        timeout_s=runtime.test_timeout_s,
-        checker_mode=runtime.checker_mode,
-    )
-    return PerTaskResult(passed=run.passed, fused_output=answer[:4000])
+    passed = await asyncio.to_thread(runtime.verify, task, code)
+    return PerTaskResult(passed=passed, fused_output=answer[:4000])
 
 
 async def evaluate_variant(

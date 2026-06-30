@@ -46,6 +46,11 @@ from fusionkit_evals.dirty_dozen import (
     assert_dirty_dozen_manifest,
     load_dirty_dozen_tasks,
 )
+from fusionkit_evals.exec_select import (
+    CandidateSample,
+    select_index,
+    selected_private_pass,
+)
 from fusionkit_evals.fusion_bench import (
     FUSION_BENCH_DISCLAIMER,
     CommandHandoffKitExecutor,
@@ -70,6 +75,22 @@ from fusionkit_evals.fusion_bench import (
     score_fusion_bench_row,
     write_fusion_bench_jsonl,
 )
+from fusionkit_evals.fusion_compound import (
+    CompoundComparison,
+    ModelRate,
+    compare_compound_vs_individual,
+    format_compound_comparison_markdown,
+)
+from fusionkit_evals.fusion_hillclimb import (
+    BestSingle,
+    ClimbDiagnosis,
+    ClimbResult,
+    TargetCheck,
+    best_single_baseline,
+    check_target,
+    diagnose_bank,
+    run_climb,
+)
 from fusionkit_evals.fusion_reports import (
     format_fusion_bench_html_report,
     format_fusion_bench_markdown_report,
@@ -90,6 +111,15 @@ from fusionkit_evals.livecodebench_data import (
     prepare_tasks,
 )
 from fusionkit_evals.pareto import ParetoPoint, find_pareto_front, format_pareto_markdown
+from fusionkit_evals.polyglot import (
+    LANGUAGES,
+    LanguageSpec,
+    PolyglotExercise,
+    PolyglotRun,
+    build_prompt,
+    load_polyglot_exercises,
+    run_polyglot,
+)
 from fusionkit_evals.prompt_tuning import (
     LLMProposer,
     PromptEval,
@@ -233,6 +263,21 @@ __all__ = [
     "CommandExternalBenchmarkExecutor",
     "CommandHandoffKitExecutor",
     "ComparisonBaselineRow",
+    "CompoundComparison",
+    "ModelRate",
+    "compare_compound_vs_individual",
+    "format_compound_comparison_markdown",
+    "CandidateSample",
+    "select_index",
+    "selected_private_pass",
+    "BestSingle",
+    "ClimbDiagnosis",
+    "ClimbResult",
+    "TargetCheck",
+    "best_single_baseline",
+    "check_target",
+    "diagnose_bank",
+    "run_climb",
     "DECORRELATED_PEER_PANEL",
     "DIRTY_DOZEN_REPOS",
     "DIRTY_DOZEN_ROOT",
@@ -294,6 +339,13 @@ __all__ = [
     "PUBLIC_SMOKE_SUITES",
     "PUBLIC_SMOKE_SUITE_INFO",
     "ParetoPoint",
+    "LANGUAGES",
+    "LanguageSpec",
+    "PolyglotExercise",
+    "PolyglotRun",
+    "build_prompt",
+    "load_polyglot_exercises",
+    "run_polyglot",
     "PublicSmokeSuite",
     "PublicSmokeSuiteInfo",
     "TinyBenchmarkResult",

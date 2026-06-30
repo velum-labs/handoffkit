@@ -30,7 +30,11 @@ class FusionEngine:
         self.clients = dict(clients)
         self.producer = ChatTrajectoryProducer(self.clients)
         self.router = router or HeuristicRouter()
-        self.judge_synthesizer = JudgeSynthesizer(config.prompts)
+        self.judge_synthesizer = JudgeSynthesizer(
+            config.prompts,
+            harness_passthrough=config.harness_prompt_passthrough,
+            select_best=config.synthesis_select_best,
+        )
 
     async def run(
         self,

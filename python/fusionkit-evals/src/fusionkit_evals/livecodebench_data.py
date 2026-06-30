@@ -122,6 +122,44 @@ def decode_tests(row: Mapping[str, Any], max_tests: int) -> list[dict[str, str]]
     return stdin_tests if max_tests <= 0 else stdin_tests[:max_tests]
 
 
+def decode_public_private(
+    row: Mapping[str, Any],
+    max_tests: int = 0,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Decode public and private stdin tests separately.
+
+    Public tests are given to the solver and are used for execution-guided
+    selection; private tests are held out and used only for grading, so selecting
+    on public and grading on private is leakage-free. Returns (public, private)
+    lists of stdin test cases.
+    """
+    public: list[dict[str, str]] = []
+    with contextlib.suppress(KeyError, json.JSONDecodeError, TypeError):
+        public.extend(json.loads(row["public_test_cases"]))
+    private: list[dict[str, str]] = []
+    raw_private = row.get("private_test_cases")
+    if isinstance(raw_private, str) and raw_private:
+        try:
+            private.extend(json.loads(raw_private))
+        except json.JSONDecodeError:
+            with contextlib.suppress(Exception):  # best-effort compressed private decode
+                private.extend(
+                    json.loads(
+                        pickle.loads(zlib.decompress(base64.b64decode(raw_private.encode("utf-8"))))
+                    )
+                )
+    public_stdin = [t for t in public if t.get("testtype") == "stdin"]
+    private_stdin = [t for t in private if t.get("testtype") == "stdin"]
+    # Fall back to public when private is unavailable (keeps the task scorable; the
+    # adapter records when grading reused public so it is never silently misleading).
+    if not private_stdin:
+        private_stdin = public_stdin
+    if max_tests > 0:
+        public_stdin = public_stdin[:max_tests]
+        private_stdin = private_stdin[:max_tests]
+    return public_stdin, private_stdin
+
+
 def prepare_tasks(
     problems: Sequence[Mapping[str, Any]],
     *,
@@ -144,6 +182,7 @@ def prepare_tasks(
 
 __all__ = [
     "LCB_PROMPT_SUFFIX",
+    "decode_public_private",
     "decode_tests",
     "load_manifest",
     "load_problems",

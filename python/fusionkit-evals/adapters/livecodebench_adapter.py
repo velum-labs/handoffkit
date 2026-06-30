@@ -233,7 +233,7 @@ def _score_result(
     )
     candidate_scores: dict[str, float] = {}
     candidate_methods: dict[str, str] = {}
-    for cand in result.candidates:
+    for cand in result.trajectories:
         extracted = extract_code(cand.content)
         run = verify_solution(
             sandbox, extracted.code, tests, timeout_s=test_timeout, checker_mode=checker_mode
