@@ -1,11 +1,12 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
 import { artifactHash, emitTrace, newSpanId } from "@fusionkit/protocol";
 
-import type {
-  HarnessAdapter,
-  HarnessCandidateOutput,
-  HarnessTrajectory,
-  TrajectoryStep
+import {
+  panelMemberPreamble,
+  type HarnessAdapter,
+  type HarnessCandidateOutput,
+  type HarnessTrajectory,
+  type TrajectoryStep
 } from "./harness.js";
 
 /**
@@ -36,6 +37,8 @@ export type AgentHarnessOptions = {
   parentSpanId?: string;
   /** User-turn index this panel run belongs to (stamped on candidate events). */
   turn?: number;
+  /** When true, prepend a per-member identity line to the prompt (see harness.ts). */
+  panelIdentity?: boolean;
 };
 
 export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter {
@@ -89,9 +92,13 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
       // Bound the whole agent run so a hung model HTTP call cannot wedge a
       // candidate forever (the per-command timeout only bounds `run`).
       const modelTimeoutMs = options.modelTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS;
+      const prompt =
+        options.panelIdentity === true
+          ? `${panelMemberPreamble(model.id, ordinal, descriptor.models.length)}\n\n${descriptor.prompt}`
+          : descriptor.prompt;
       const result = await runWorktreeAgent({
         worktree: root,
-        prompt: descriptor.prompt,
+        prompt,
         baseUrl,
         model: model.id,
         abortSignal: AbortSignal.timeout(modelTimeoutMs),

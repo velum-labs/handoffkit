@@ -373,6 +373,21 @@ export type ReviewEvidence = {
   reason?: string;
 };
 
+/**
+ * Per-member identity line (panel identity on): tells the model exactly which
+ * panel member it is. This makes each member's prompt differ from its peers, so
+ * it is gated behind `panelIdentity` (it trades some inter-member decorrelation
+ * for self-awareness) and injected at the harness `run`, where the model id and
+ * ordinal are known. Lives here (a leaf module) so both the agent harness and the
+ * per-tool harness packages can use it without a circular import.
+ */
+export function panelMemberPreamble(modelId: string, ordinal: number, total: number): string {
+  return (
+    `You are model "${modelId}", panel member ${ordinal + 1} of ${total} in a FusionKit ` +
+    "ensemble answering this task independently."
+  );
+}
+
 export type EnsembleDescriptor = {
   id: string;
   harness: HarnessAdapter;

@@ -23,6 +23,7 @@ export const codexTool: ToolIntegration = {
       ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
       ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
       ...(options.turn !== undefined ? { turn: options.turn } : {}),
+      ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
       provider: {
         kind: "openai-compatible",
         baseUrl: options.fusionBackendUrl,

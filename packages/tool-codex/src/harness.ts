@@ -7,7 +7,7 @@ import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
 import { createTrajectoryCapture, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type { CapturedTrajectory } from "@fusionkit/model-gateway";
-import { traceCandidate } from "@fusionkit/ensemble";
+import { panelMemberPreamble, traceCandidate } from "@fusionkit/ensemble";
 import {
   buildSkippedCandidate,
   definedEnv,
@@ -102,6 +102,12 @@ export type CodexHarnessOptions = {
   traceId?: string;
   parentSpanId?: string;
   turn?: number;
+  /**
+   * When true, a per-member identity line (which panel member this model is) is
+   * prepended to the prompt. Gated because it makes members' prompts differ from
+   * each other; see `panelMemberPreamble`.
+   */
+  panelIdentity?: boolean;
 };
 
 export type CodexHarnessEnv = Record<string, string | undefined>;
@@ -577,7 +583,11 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
           approvalPolicy
         });
         env.CODEX_HOME = codexHome;
-        const args = codexArgs(descriptor.prompt);
+        const prompt =
+          options.panelIdentity === true
+            ? `${panelMemberPreamble(model.id, ordinal, descriptor.models.length)}\n\n${descriptor.prompt}`
+            : descriptor.prompt;
+        const args = codexArgs(prompt);
         const cwd = worktree?.path ?? options.cwd ?? descriptor.workspace ?? process.cwd();
         const timeoutMs = options.timeoutMs ?? descriptor.policy.timeoutMs;
         let result: CodexExecResult;

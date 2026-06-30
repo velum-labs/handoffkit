@@ -19,6 +19,7 @@ export {
   runEnsemble
 } from "./run.js";
 export {
+  buildPanelPrompt,
   createFusionKitJudgeSynthesizer,
   runFusionPanels,
   runUnifiedHarnessE2E,
@@ -107,7 +108,7 @@ export {
   sealCandidateWorktree
 } from "./worktree.js";
 export type { CandidateWorktree, WorktreePlan } from "./worktree.js";
-export { hardeningToJson } from "./harness.js";
+export { hardeningToJson, panelMemberPreamble } from "./harness.js";
 export type {
   EnsembleCandidateSummary,
   EnsembleDescriptor,

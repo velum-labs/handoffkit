@@ -60,6 +60,8 @@ export type ToolHarnessResolveOptions = {
   traceId?: string;
   parentSpanId?: string;
   turn?: number;
+  /** When true, the tool harness tells its model which panel member it is. */
+  panelIdentity?: boolean;
 };
 
 /**
@@ -106,7 +108,8 @@ function resolveToolAdapter(
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
     ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
-    ...(options.turn !== undefined ? { turn: options.turn } : {})
+    ...(options.turn !== undefined ? { turn: options.turn } : {}),
+    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
   });
 }
 
@@ -175,6 +178,8 @@ export type UnifiedHarnessE2EOptions = {
   parentSpanId?: string;
   /** User-turn index this panel run belongs to (stamped on candidate events). */
   turn?: number;
+  /** When true, each harness tells its model which panel member it is (see FusionPanelOptions). */
+  panelIdentity?: boolean;
 };
 
 function normalizeFusionBackendUrl(value: string): string {
@@ -182,12 +187,44 @@ function normalizeFusionBackendUrl(value: string): string {
 }
 
 /**
- * The only text fusionkit adds to a panel run: a single line telling the model
- * it is one member of a FusionKit panel. Everything else (tools + system
- * context) is pass-through from the launched harness.
+ * The minimal text fusionkit adds to a panel run when panel identity is off: a
+ * single line telling the model it is one member of a FusionKit panel. Everything
+ * else (tools + system context) is pass-through from the launched harness.
  */
 const PANEL_MEMBER_SUFFIX =
   "(You are one model in a FusionKit panel answering this task independently.)";
+
+/**
+ * Compose the shared panel-member prompt: optionally pass through the launched
+ * coding tool's own system/custom instructions (so panel members follow the
+ * user's developer guidance, not just the bare request), the task itself, and a
+ * membership suffix. The per-member self-identity line is added separately at the
+ * harness `run` (it needs the model id + ordinal). With `panelIdentity` off this
+ * reduces to the prior behavior (task + the generic membership suffix).
+ */
+export function buildPanelPrompt(input: {
+  prompt: string;
+  panel: EnsembleModel[];
+  harnessSystem?: string;
+  panelIdentity?: boolean;
+}): string {
+  const parts: string[] = [];
+  const harnessSystem = input.harnessSystem?.trim();
+  if (input.panelIdentity && harnessSystem !== undefined && harnessSystem.length > 0) {
+    parts.push(
+      "Custom instructions for this task (from the launched coding tool; follow them):\n" +
+        harnessSystem
+    );
+  }
+  parts.push(input.prompt);
+  if (input.panelIdentity) {
+    const roster = input.panel.map((model) => model.id).join(", ");
+    parts.push(`(You are one model in a FusionKit panel [${roster}] answering this independently.)`);
+  } else {
+    parts.push(PANEL_MEMBER_SUFFIX);
+  }
+  return parts.join("\n\n");
+}
 
 function chatCompletionsUrl(baseUrl: string): string {
   const normalized = normalizeFusionBackendUrl(baseUrl);
@@ -228,7 +265,8 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
         ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
         ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
-        ...(options.turn !== undefined ? { turn: options.turn } : {})
+        ...(options.turn !== undefined ? { turn: options.turn } : {}),
+        ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
       });
     case "command": {
       if (!options.command) {
@@ -443,6 +481,19 @@ export type FusionPanelOptions = {
   parentSpanId?: string;
   /** User-turn index this panel run belongs to (for per-turn grouping). */
   turn?: number;
+  /**
+   * The launched coding tool's own system/custom instructions, passed through to
+   * panel members (so they follow the user's developer guidance, not just the
+   * bare request). Only applied when `panelIdentity` is on.
+   */
+  harnessSystem?: string;
+  /**
+   * When true, panel members are told exactly which member they are (model id +
+   * peer N of M) and the panel roster, and the harness system instructions are
+   * passed through. Default off, because per-member identity makes members'
+   * prompts differ from each other (some inter-member decorrelation trade-off).
+   */
+  panelIdentity?: boolean;
 };
 
 /**
@@ -463,7 +514,12 @@ export async function runFusionPanels(
     fusionBackendUrl: options.fusionBackendUrl,
     repo: options.repo,
     outputRoot: options.outputRoot,
-    prompt: `${options.prompt}\n\n${PANEL_MEMBER_SUFFIX}`,
+    prompt: buildPanelPrompt({
+      prompt: options.prompt,
+      panel: options.models,
+      ...(options.harnessSystem !== undefined ? { harnessSystem: options.harnessSystem } : {}),
+      ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
+    }),
     harnesses: [harness],
     models: options.models,
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
@@ -471,7 +527,8 @@ export async function runFusionPanels(
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
     ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
-    ...(options.turn !== undefined ? { turn: options.turn } : {})
+    ...(options.turn !== undefined ? { turn: options.turn } : {}),
+    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
   };
   const descriptor = descriptorFor(harness, e2eOptions);
   descriptor.judge = {

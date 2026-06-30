@@ -26,6 +26,7 @@ import {
 } from "@fusionkit/model-gateway";
 import type {
   AcpRunner,
+  ChatMessageLike,
   FrontDoorRunner,
   FrontDoorRunnerResult,
   FusionGateway,
@@ -61,7 +62,37 @@ export type GatewayRunnerConfig = {
   resumeId?: string;
   /** WS4 static session header (tool/repo/panel) persisted on session creation. */
   sessionMeta?: SessionMetaInput;
+  /**
+   * When true, panel members are told which member they are and are given the
+   * launched tool's own system/custom instructions (not just the bare request).
+   * Default off (per-member identity reduces inter-member decorrelation).
+   */
+  panelIdentity?: boolean;
 };
+
+/** Join the system-role messages (the launched tool's harness/custom prompt). */
+function harnessSystemFromMessages(messages: readonly ChatMessageLike[]): string | undefined {
+  const parts = messages
+    .filter((message) => message.role === "system")
+    .map((message) => messageText(message.content))
+    .filter((text) => text.length > 0);
+  return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
+/** Flatten OpenAI message content (string or content parts) into plain text. */
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) =>
+        part !== null && typeof part === "object" && typeof (part as { text?: unknown }).text === "string"
+          ? (part as { text: string }).text
+          : ""
+      )
+      .join("");
+  }
+  return "";
+}
 
 // Once an interactive coding agent owns the terminal, the per-turn panel chatter
 // would corrupt its full-screen TUI. The launcher flips this off before handing
@@ -276,6 +307,7 @@ export async function startFusionStepGateway(input: {
 
   const runPanels: PanelRunner = async ({
     task,
+    messages,
     traceId,
     sessionSpanId,
     sessionKey,
@@ -320,6 +352,8 @@ export async function startFusionStepGateway(input: {
       );
     }
     try {
+      const harnessSystem =
+        config.panelIdentity === true ? harnessSystemFromMessages(messages) : undefined;
       const wire = await runFusionPanels({
         id: `panels_${sessionKey}_t${turn}`,
         repo: config.repo,
@@ -333,7 +367,9 @@ export async function startFusionStepGateway(input: {
         turn,
         ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
-        ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {})
+        ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
+        ...(config.panelIdentity !== undefined ? { panelIdentity: config.panelIdentity } : {}),
+        ...(harnessSystem !== undefined ? { harnessSystem } : {})
       });
       const trajectories = normalizeWireTrajectories(wire);
       if (gatewayChatter) {

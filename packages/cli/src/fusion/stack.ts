@@ -334,6 +334,11 @@ export type StartFusionStackOptions = {
   resumeId?: string;
   /** WS4 static session header (tool/repo/panel) persisted on session creation. */
   sessionMeta?: SessionMetaInput;
+  /**
+   * When true, panel members are told which member they are and are given the
+   * launched tool's own system/custom instructions. Default off.
+   */
+  panelIdentity?: boolean;
   logsDir?: string;
   report?: StackReporter;
   /** Active portless session; defaults to a disabled (loopback) session. */
@@ -421,7 +426,8 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),
       ...(options.resumeId !== undefined ? { resumeId: options.resumeId } : {}),
-      ...(options.sessionMeta !== undefined ? { sessionMeta: options.sessionMeta } : {})
+      ...(options.sessionMeta !== undefined ? { sessionMeta: options.sessionMeta } : {}),
+      ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
     };
     const gateway = await startFusionStepGateway({
       config: gatewayConfig,
