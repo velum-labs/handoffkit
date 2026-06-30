@@ -23,6 +23,60 @@ export type CostEstimate = {
   toolCalls?: number;
 };
 
+export type BudgetUsage = CostEstimate;
+
+export type SignalDimension = "correctness" | "coverage" | "safety" | "format" | "latency" | "cost";
+
+export type SignalCalibration = "ground_truth" | "empirical" | "heuristic" | "llm_judge" | "unknown";
+
+export type Observation = {
+  id: string;
+  sourceId: string;
+  targetArtifactId?: string;
+  type: string;
+  value: unknown;
+  leakage: ArtifactLeakage;
+  visibility: ArtifactVisibility;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type Signal = {
+  id: string;
+  targetArtifactId: string;
+  dimension: SignalDimension;
+  score: number;
+  confidence: number;
+  calibration: SignalCalibration;
+  leakageRisk: ArtifactLeakage;
+  observationIds: string[];
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type RecordObservationInput = {
+  id?: string;
+  sourceId: string;
+  targetArtifactId?: string;
+  type: string;
+  value: unknown;
+  leakage?: ArtifactLeakage;
+  visibility?: ArtifactVisibility;
+  metadata?: Record<string, unknown>;
+};
+
+export type RecordSignalInput = {
+  id?: string;
+  targetArtifactId: string;
+  dimension: SignalDimension;
+  score: number;
+  confidence: number;
+  calibration: SignalCalibration;
+  leakageRisk?: ArtifactLeakage;
+  observationIds?: string[];
+  metadata?: Record<string, unknown>;
+};
+
 export type Provenance = {
   runId?: string;
   graphId?: string;
@@ -49,6 +103,7 @@ export type OperatorSpec = {
   inputTypes: string[];
   outputTypes: string[];
   sideEffects: OperatorSideEffects;
+  allowedInputLeakage?: ArtifactLeakage[];
   expectedCost?: CostEstimate;
   expectedLatencyMs?: number;
 };
@@ -71,6 +126,9 @@ export type OperatorRunContext = {
   signal?: AbortSignal;
   getArtifact(id: string): Artifact | undefined;
   createArtifact<T = unknown>(input: CreateArtifactInput<T>): Artifact<T>;
+  consumeBudget(usage: BudgetUsage): void;
+  recordObservation(input: RecordObservationInput): Observation;
+  recordSignal(input: RecordSignalInput): Signal;
   recordTrace(input: TraceEventInput): TraceEvent;
 };
 
@@ -104,10 +162,13 @@ export type BudgetPolicy = {
   maxArtifacts?: number;
   maxCandidates?: number;
   maxCostUsd?: number;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
   maxLatencyMs?: number;
   maxToolCalls?: number;
   allowedSideEffects?: OperatorSideEffects[];
   maxWorkspaceWriters?: number;
+  allowPrivateRuntimeInputs?: boolean;
 };
 
 export type BudgetLedger = {
@@ -115,6 +176,8 @@ export type BudgetLedger = {
   artifacts: number;
   candidates: number;
   costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
   toolCalls: number;
   workspaceWriters: number;
   startedAt: string;
@@ -128,6 +191,9 @@ export type TraceEventType =
   | "operator.started"
   | "operator.finished"
   | "artifact.created"
+  | "observation.recorded"
+  | "signal.recorded"
+  | "budget.consumed"
   | "budget.exceeded";
 
 export type TraceEventInput = {
@@ -149,6 +215,8 @@ export type TraceEvent = TraceEventInput & {
 export type RuntimeState = {
   artifactIds: string[];
   nodeOutputs: Record<string, string[]>;
+  observationIds: string[];
+  signalIds: string[];
   budget: BudgetLedger;
 };
 
@@ -161,6 +229,10 @@ export type OutcomeRecord = {
   status: RuntimeStatus;
   taskArtifactIds: string[];
   finalArtifactIds: string[];
+  observationIds: string[];
+  signalIds: string[];
+  privateObservationIds: string[];
+  privateSignalIds: string[];
   traceEventIds: string[];
   budget: BudgetLedger;
   startedAt: string;
@@ -179,6 +251,8 @@ export type SchedulerExecutionContext = {
   budget: BudgetPolicy;
   state(): RuntimeState;
   nodeOutputIds(nodeId: string): readonly string[];
+  observationIds(): readonly string[];
+  signalIds(): readonly string[];
   resolveInputs(node: OperatorGraphNode): readonly Artifact[];
   runNode(node: OperatorGraphNode): Promise<readonly Artifact[]>;
   recordTrace(input: TraceEventInput): TraceEvent;
@@ -195,6 +269,8 @@ export type RuntimeExecutionResult = {
   graph: OperatorGraph;
   scheduler: Scheduler;
   artifacts: readonly Artifact[];
+  observations: readonly Observation[];
+  signals: readonly Signal[];
   finalArtifacts: readonly Artifact[];
   trace: readonly TraceEvent[];
   outcome: OutcomeRecord;
@@ -216,14 +292,33 @@ export class OperatorGraphError extends Error {
 
 type RuntimeCounters = {
   artifact: number;
+  observation: number;
+  signal: number;
   trace: number;
 };
 
 type RuntimeStore = {
   artifacts: Map<string, Artifact>;
+  observations: Map<string, Observation>;
+  signals: Map<string, Signal>;
   nodeOutputs: Map<string, string[]>;
   trace: TraceEvent[];
 };
+
+function isPlainObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) return value;
+  seen.add(value);
+  if (Array.isArray(value) || isPlainObject(value)) {
+    for (const child of Object.values(value)) deepFreeze(child, seen);
+  }
+  return Object.freeze(value);
+}
 
 export function createArtifact<T = unknown>(input: CreateArtifactInput<T>): Artifact<T> {
   const createdAt = input.provenance?.createdAt ?? new Date().toISOString();
@@ -243,13 +338,13 @@ export function createArtifact<T = unknown>(input: CreateArtifactInput<T>): Arti
   const artifact: Artifact<T> = {
     id: input.id ?? `artifact_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     type: input.type,
-    value: input.value,
+    value: deepFreeze(input.value),
     provenance,
     visibility: input.visibility ?? "runtime",
     leakage: input.leakage ?? "none",
     ...(input.contentType !== undefined ? { contentType: input.contentType } : {})
   };
-  return Object.freeze(artifact);
+  return deepFreeze(artifact);
 }
 
 function cloneBudgetLedger(ledger: BudgetLedger): BudgetLedger {
@@ -304,6 +399,43 @@ function budgetMessage(limit: string, policy: BudgetPolicy): string {
   return `budget ${policy.id ?? "default"} exceeded: ${limit}`;
 }
 
+function isPrivateLeakage(leakage: ArtifactLeakage): boolean {
+  switch (leakage) {
+    case "private":
+    case "contaminated":
+      return true;
+    case "none":
+    case "public":
+      return false;
+    default: {
+      const exhausted: never = leakage;
+      throw new Error(`unsupported leakage class: ${String(exhausted)}`);
+    }
+  }
+}
+
+function schedulerVisibleArtifact(artifact: Artifact): boolean {
+  return artifact.visibility !== "private_eval" && !isPrivateLeakage(artifact.leakage);
+}
+
+function schedulerVisibleObservation(observation: Observation): boolean {
+  return observation.visibility !== "private_eval" && !isPrivateLeakage(observation.leakage);
+}
+
+function schedulerVisibleSignal(signal: Signal): boolean {
+  return !isPrivateLeakage(signal.leakageRisk);
+}
+
+function usageWithDefaults(usage: BudgetUsage): Required<CostEstimate> {
+  return {
+    usd: usage.usd ?? 0,
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    candidates: usage.candidates ?? 0,
+    toolCalls: usage.toolCalls ?? 0
+  };
+}
+
 export class FusionRuntime {
   readonly #now: () => number;
 
@@ -330,14 +462,18 @@ export class FusionRuntime {
       artifacts: input.artifacts?.length ?? 0,
       candidates: 0,
       costUsd: 0,
+      inputTokens: 0,
+      outputTokens: 0,
       toolCalls: 0,
       workspaceWriters: 0,
       startedAt,
       elapsedMs: 0
     };
-    const counters: RuntimeCounters = { artifact: 0, trace: 0 };
+    const counters: RuntimeCounters = { artifact: 0, observation: 0, signal: 0, trace: 0 };
     const store: RuntimeStore = {
       artifacts: new Map(),
+      observations: new Map(),
+      signals: new Map(),
       nodeOutputs: new Map(),
       trace: []
     };
@@ -354,7 +490,7 @@ export class FusionRuntime {
     };
     for (const artifact of input.artifacts ?? []) {
       if (store.artifacts.has(artifact.id)) throw new OperatorGraphError(`duplicate artifact id: ${artifact.id}`);
-      store.artifacts.set(artifact.id, Object.freeze(artifact));
+      store.artifacts.set(artifact.id, deepFreeze(artifact));
     }
     recordTrace({
       type: "runtime.started",
@@ -363,6 +499,58 @@ export class FusionRuntime {
 
     const updateElapsed = (): void => {
       ledger.elapsedMs = Math.max(0, this.#now() - startedAtMs);
+    };
+    const ensureUsageBudget = (usage: BudgetUsage, operatorId?: string): void => {
+      updateElapsed();
+      const projected = usageWithDefaults(usage);
+      if (budget.maxCostUsd !== undefined && ledger.costUsd + projected.usd > budget.maxCostUsd) {
+        recordTrace({ type: "budget.exceeded", ...(operatorId !== undefined ? { operatorId } : {}), payload: { limit: "maxCostUsd" } });
+        throw new BudgetExceededError(budgetMessage(`cost ${ledger.costUsd + projected.usd} > ${budget.maxCostUsd}`, budget));
+      }
+      if (budget.maxInputTokens !== undefined && ledger.inputTokens + projected.inputTokens > budget.maxInputTokens) {
+        recordTrace({ type: "budget.exceeded", ...(operatorId !== undefined ? { operatorId } : {}), payload: { limit: "maxInputTokens" } });
+        throw new BudgetExceededError(
+          budgetMessage(`input tokens ${ledger.inputTokens + projected.inputTokens} > ${budget.maxInputTokens}`, budget)
+        );
+      }
+      if (budget.maxOutputTokens !== undefined && ledger.outputTokens + projected.outputTokens > budget.maxOutputTokens) {
+        recordTrace({ type: "budget.exceeded", ...(operatorId !== undefined ? { operatorId } : {}), payload: { limit: "maxOutputTokens" } });
+        throw new BudgetExceededError(
+          budgetMessage(`output tokens ${ledger.outputTokens + projected.outputTokens} > ${budget.maxOutputTokens}`, budget)
+        );
+      }
+      if (budget.maxCandidates !== undefined && ledger.candidates + projected.candidates > budget.maxCandidates) {
+        recordTrace({ type: "budget.exceeded", ...(operatorId !== undefined ? { operatorId } : {}), payload: { limit: "maxCandidates" } });
+        throw new BudgetExceededError(
+          budgetMessage(`candidates ${ledger.candidates + projected.candidates} > ${budget.maxCandidates}`, budget)
+        );
+      }
+      if (budget.maxToolCalls !== undefined && ledger.toolCalls + projected.toolCalls > budget.maxToolCalls) {
+        recordTrace({ type: "budget.exceeded", ...(operatorId !== undefined ? { operatorId } : {}), payload: { limit: "maxToolCalls" } });
+        throw new BudgetExceededError(
+          budgetMessage(`tool calls ${ledger.toolCalls + projected.toolCalls} > ${budget.maxToolCalls}`, budget)
+        );
+      }
+    };
+    const consumeBudget = (usage: BudgetUsage, operatorId?: string): void => {
+      ensureUsageBudget(usage, operatorId);
+      const actual = usageWithDefaults(usage);
+      ledger.costUsd += actual.usd;
+      ledger.inputTokens += actual.inputTokens;
+      ledger.outputTokens += actual.outputTokens;
+      ledger.candidates += actual.candidates;
+      ledger.toolCalls += actual.toolCalls;
+      recordTrace({
+        type: "budget.consumed",
+        ...(operatorId !== undefined ? { operatorId } : {}),
+        payload: {
+          cost_usd: actual.usd,
+          input_tokens: actual.inputTokens,
+          output_tokens: actual.outputTokens,
+          candidates: actual.candidates,
+          tool_calls: actual.toolCalls
+        }
+      });
     };
     const ensureBudget = (spec: OperatorSpec): void => {
       updateElapsed();
@@ -385,24 +573,7 @@ export class FusionRuntime {
         throw new BudgetExceededError(budgetMessage(`side effect ${spec.sideEffects} is not allowed`, budget));
       }
       const expected = costOf(spec);
-      if (budget.maxCostUsd !== undefined && ledger.costUsd + (expected.usd ?? 0) > budget.maxCostUsd) {
-        recordTrace({ type: "budget.exceeded", operatorId: spec.id, payload: { limit: "maxCostUsd" } });
-        throw new BudgetExceededError(
-          budgetMessage(`cost ${ledger.costUsd + (expected.usd ?? 0)} > ${budget.maxCostUsd}`, budget)
-        );
-      }
-      if (budget.maxCandidates !== undefined && ledger.candidates + (expected.candidates ?? 0) > budget.maxCandidates) {
-        recordTrace({ type: "budget.exceeded", operatorId: spec.id, payload: { limit: "maxCandidates" } });
-        throw new BudgetExceededError(
-          budgetMessage(`candidates ${ledger.candidates + (expected.candidates ?? 0)} > ${budget.maxCandidates}`, budget)
-        );
-      }
-      if (budget.maxToolCalls !== undefined && ledger.toolCalls + (expected.toolCalls ?? 0) > budget.maxToolCalls) {
-        recordTrace({ type: "budget.exceeded", operatorId: spec.id, payload: { limit: "maxToolCalls" } });
-        throw new BudgetExceededError(
-          budgetMessage(`tool calls ${ledger.toolCalls + (expected.toolCalls ?? 0)} > ${budget.maxToolCalls}`, budget)
-        );
-      }
+      ensureUsageBudget(expected, spec.id);
       if (
         budget.maxWorkspaceWriters !== undefined &&
         spec.sideEffects === "write_workspace" &&
@@ -417,12 +588,25 @@ export class FusionRuntime {
     const resolveInputs = (node: OperatorGraphNode): readonly Artifact[] => {
       const refs = node.inputs ?? [];
       const resolved: Artifact[] = [];
+      const ensureArtifactAllowed = (artifact: Artifact): void => {
+        if (budget.allowPrivateRuntimeInputs === true) return;
+        const allowedLeakage = node.operator.spec.allowedInputLeakage ?? ["none", "public"];
+        if (
+          artifact.visibility === "private_eval" ||
+          (!allowedLeakage.includes(artifact.leakage) && isPrivateLeakage(artifact.leakage))
+        ) {
+          throw new OperatorGraphError(
+            `node ${node.id} cannot consume private/contaminated artifact ${artifact.id} at runtime`
+          );
+        }
+      };
       for (const ref of refs) {
         if ("artifactId" in ref) {
           const artifact = store.artifacts.get(ref.artifactId);
           if (artifact === undefined) {
             throw new OperatorGraphError(`node ${node.id} references missing artifact ${ref.artifactId}`);
           }
+          ensureArtifactAllowed(artifact);
           resolved.push(artifact);
         } else {
           const outputIds = store.nodeOutputs.get(ref.nodeId);
@@ -432,6 +616,7 @@ export class FusionRuntime {
           for (const artifactId of outputIds) {
             const artifact = store.artifacts.get(artifactId);
             if (artifact !== undefined && (ref.type === undefined || artifact.type === ref.type)) {
+              ensureArtifactAllowed(artifact);
               resolved.push(artifact);
             }
           }
@@ -479,6 +664,97 @@ export class FusionRuntime {
               createdAt: artifactInput.provenance?.createdAt ?? new Date(this.#now()).toISOString()
             }
           }),
+        consumeBudget: (usage) => consumeBudget(usage, node.operator.spec.id),
+        recordObservation: (observationInput) => {
+          const observation: Observation = deepFreeze({
+            id: observationInput.id ?? `${node.operator.spec.id}.observation.${++counters.observation}`,
+            sourceId: observationInput.sourceId,
+            ...(observationInput.targetArtifactId !== undefined
+              ? { targetArtifactId: observationInput.targetArtifactId }
+              : {}),
+            type: observationInput.type,
+            value: deepFreeze(observationInput.value),
+            leakage: observationInput.leakage ?? "public",
+            visibility: observationInput.visibility ?? "runtime",
+            createdAt: new Date(this.#now()).toISOString(),
+            ...(observationInput.metadata !== undefined ? { metadata: observationInput.metadata } : {})
+          });
+          if (store.observations.has(observation.id)) {
+            throw new OperatorGraphError(`duplicate observation id: ${observation.id}`);
+          }
+          if (
+            observation.targetArtifactId !== undefined &&
+            store.artifacts.get(observation.targetArtifactId) === undefined
+          ) {
+            throw new OperatorGraphError(
+              `observation ${observation.id} references missing artifact ${observation.targetArtifactId}`
+            );
+          }
+          store.observations.set(observation.id, observation);
+          recordTrace({
+            type: "observation.recorded",
+            nodeId: node.id,
+            operatorId: node.operator.spec.id,
+            ...(observation.targetArtifactId !== undefined ? { outputArtifactIds: [observation.targetArtifactId] } : {}),
+            payload: {
+              observation_id: observation.id,
+              source_id: observation.sourceId,
+              observation_type: observation.type,
+              leakage: observation.leakage,
+              visibility: observation.visibility
+            }
+          });
+          return observation;
+        },
+        recordSignal: (signalInput) => {
+          if (signalInput.score < 0 || signalInput.score > 1) {
+            throw new OperatorGraphError(`signal ${signalInput.id ?? "(new)"} score must be between 0 and 1`);
+          }
+          if (signalInput.confidence < 0 || signalInput.confidence > 1) {
+            throw new OperatorGraphError(`signal ${signalInput.id ?? "(new)"} confidence must be between 0 and 1`);
+          }
+          if (store.artifacts.get(signalInput.targetArtifactId) === undefined) {
+            throw new OperatorGraphError(
+              `signal ${signalInput.id ?? "(new)"} references missing artifact ${signalInput.targetArtifactId}`
+            );
+          }
+          const observationIds = [...(signalInput.observationIds ?? [])];
+          for (const observationId of observationIds) {
+            if (store.observations.get(observationId) === undefined) {
+              throw new OperatorGraphError(`signal ${signalInput.id ?? "(new)"} references missing observation ${observationId}`);
+            }
+          }
+          const signal: Signal = deepFreeze({
+            id: signalInput.id ?? `${node.operator.spec.id}.signal.${++counters.signal}`,
+            targetArtifactId: signalInput.targetArtifactId,
+            dimension: signalInput.dimension,
+            score: signalInput.score,
+            confidence: signalInput.confidence,
+            calibration: signalInput.calibration,
+            leakageRisk: signalInput.leakageRisk ?? "public",
+            observationIds,
+            createdAt: new Date(this.#now()).toISOString(),
+            ...(signalInput.metadata !== undefined ? { metadata: signalInput.metadata } : {})
+          });
+          if (store.signals.has(signal.id)) throw new OperatorGraphError(`duplicate signal id: ${signal.id}`);
+          store.signals.set(signal.id, signal);
+          recordTrace({
+            type: "signal.recorded",
+            nodeId: node.id,
+            operatorId: node.operator.spec.id,
+            outputArtifactIds: [signal.targetArtifactId],
+            payload: {
+              signal_id: signal.id,
+              dimension: signal.dimension,
+              score: signal.score,
+              confidence: signal.confidence,
+              calibration: signal.calibration,
+              leakage_risk: signal.leakageRisk,
+              observation_ids: signal.observationIds
+            }
+          });
+          return signal;
+        },
         recordTrace
       };
       const outputs = await node.operator.run(inputs, operatorContext);
@@ -490,7 +766,7 @@ export class FusionRuntime {
             `operator ${node.operator.spec.id} emitted unsupported artifact type ${artifact.type}`
           );
         }
-        store.artifacts.set(artifact.id, Object.freeze(artifact));
+        store.artifacts.set(artifact.id, deepFreeze(artifact));
         outputIds.push(artifact.id);
         recordTrace({
           type: "artifact.created",
@@ -511,6 +787,8 @@ export class FusionRuntime {
       ledger.artifacts = store.artifacts.size;
       ledger.candidates += expected.candidates ?? outputs.filter((artifact) => artifact.type === "candidate").length;
       ledger.costUsd += expected.usd ?? 0;
+      ledger.inputTokens += expected.inputTokens ?? 0;
+      ledger.outputTokens += expected.outputTokens ?? 0;
       ledger.toolCalls += expected.toolCalls ?? 0;
       if (node.operator.spec.sideEffects === "write_workspace") ledger.workspaceWriters += 1;
       updateElapsed();
@@ -536,11 +814,29 @@ export class FusionRuntime {
       graphId: input.graph.id,
       budget,
       state: () => ({
-        artifactIds: [...store.artifacts.keys()],
-        nodeOutputs: Object.fromEntries([...store.nodeOutputs.entries()].map(([key, value]) => [key, [...value]])),
+        artifactIds: [...store.artifacts.values()].filter(schedulerVisibleArtifact).map((artifact) => artifact.id),
+        nodeOutputs: Object.fromEntries(
+          [...store.nodeOutputs.entries()].map(([key, value]) => [
+            key,
+            value.filter((artifactId) => {
+              const artifact = store.artifacts.get(artifactId);
+              return artifact !== undefined && schedulerVisibleArtifact(artifact);
+            })
+          ])
+        ),
+        observationIds: [...store.observations.values()]
+          .filter(schedulerVisibleObservation)
+          .map((observation) => observation.id),
+        signalIds: [...store.signals.values()].filter(schedulerVisibleSignal).map((signal) => signal.id),
         budget: cloneBudgetLedger(ledger)
       }),
       nodeOutputIds: (nodeId) => Object.freeze([...(store.nodeOutputs.get(nodeId) ?? [])]),
+      observationIds: () =>
+        Object.freeze(
+          [...store.observations.values()].filter(schedulerVisibleObservation).map((observation) => observation.id)
+        ),
+      signalIds: () =>
+        Object.freeze([...store.signals.values()].filter(schedulerVisibleSignal).map((signal) => signal.id)),
       resolveInputs,
       runNode,
       recordTrace
@@ -570,6 +866,16 @@ export class FusionRuntime {
         scheduler: input.scheduler,
         taskArtifactIds: input.graph.inputArtifactIds ?? [],
         finalArtifactIds: [],
+        observationIds: [...store.observations.values()]
+          .filter(schedulerVisibleObservation)
+          .map((observation) => observation.id),
+        signalIds: [...store.signals.values()].filter(schedulerVisibleSignal).map((signal) => signal.id),
+        privateObservationIds: [...store.observations.values()]
+          .filter((observation) => !schedulerVisibleObservation(observation))
+          .map((observation) => observation.id),
+        privateSignalIds: [...store.signals.values()]
+          .filter((signal) => !schedulerVisibleSignal(signal))
+          .map((signal) => signal.id),
         trace: store.trace,
         budget: ledger,
         startedAt,
@@ -592,6 +898,16 @@ export class FusionRuntime {
       scheduler: input.scheduler,
       taskArtifactIds: input.graph.inputArtifactIds ?? [],
       finalArtifactIds,
+      observationIds: [...store.observations.values()]
+        .filter(schedulerVisibleObservation)
+        .map((observation) => observation.id),
+      signalIds: [...store.signals.values()].filter(schedulerVisibleSignal).map((signal) => signal.id),
+      privateObservationIds: [...store.observations.values()]
+        .filter((observation) => !schedulerVisibleObservation(observation))
+        .map((observation) => observation.id),
+      privateSignalIds: [...store.signals.values()]
+        .filter((signal) => !schedulerVisibleSignal(signal))
+        .map((signal) => signal.id),
       trace: store.trace,
       budget: ledger,
       startedAt,
@@ -603,6 +919,8 @@ export class FusionRuntime {
       graph: input.graph,
       scheduler: input.scheduler,
       artifacts: Object.freeze([...store.artifacts.values()]),
+      observations: Object.freeze([...store.observations.values()]),
+      signals: Object.freeze([...store.signals.values()]),
       finalArtifacts: Object.freeze(finalArtifactIds.map((id) => store.artifacts.get(id)).filter(isArtifact)),
       trace: Object.freeze([...store.trace]),
       outcome: Object.freeze(outcome)
@@ -615,6 +933,10 @@ export class FusionRuntime {
     scheduler: Scheduler;
     taskArtifactIds: string[];
     finalArtifactIds: string[];
+    observationIds: string[];
+    signalIds: string[];
+    privateObservationIds: string[];
+    privateSignalIds: string[];
     trace: readonly TraceEvent[];
     budget: BudgetLedger;
     startedAt: string;
@@ -632,6 +954,10 @@ export class FusionRuntime {
       status: input.status,
       taskArtifactIds: [...input.taskArtifactIds],
       finalArtifactIds: [...input.finalArtifactIds],
+      observationIds: [...input.observationIds],
+      signalIds: [...input.signalIds],
+      privateObservationIds: [...input.privateObservationIds],
+      privateSignalIds: [...input.privateSignalIds],
       traceEventIds: input.trace.map((event) => event.id),
       budget: cloneBudgetLedger(input.budget),
       startedAt: input.startedAt,

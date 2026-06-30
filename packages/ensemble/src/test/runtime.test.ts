@@ -15,7 +15,7 @@ import {
   createArtifact
 } from "../runtime.js";
 import type { CandidateArtifactValue, ModelClient } from "../fusion-operators.js";
-import type { Artifact, TaskSpec } from "../runtime.js";
+import type { Artifact, Operator, Scheduler, TaskSpec } from "../runtime.js";
 
 function taskArtifact(id = "task"): Artifact<TaskSpec> {
   return createArtifact({
@@ -249,5 +249,217 @@ test("budget policy enforces candidate caps before panel fanout", async () => {
         budget: { id: "tiny", maxCandidates: 1 }
       }),
     (error) => error instanceof BudgetExceededError && /candidates 2 > 1/.test(error.message)
+  );
+});
+
+test("artifacts are deeply immutable", () => {
+  const artifact = createArtifact({
+    id: "immutable",
+    type: "nested",
+    value: { nested: { count: 1 }, list: ["a"] },
+    visibility: "runtime",
+    leakage: "none"
+  });
+
+  assert.throws(() => {
+    artifact.value.nested.count = 2;
+  }, TypeError);
+  assert.throws(() => {
+    artifact.value.list.push("b");
+  }, TypeError);
+});
+
+test("operators can consume actual budget and fail before emitting output", async () => {
+  const task = taskArtifact();
+  const metered: Operator = {
+    spec: {
+      id: "metered",
+      kind: "metered",
+      inputTypes: ["task"],
+      outputTypes: ["final_answer"],
+      sideEffects: "none"
+    },
+    run(_inputs, ctx) {
+      ctx.consumeBudget({ inputTokens: 10, outputTokens: 3, usd: 0.02 });
+      return [
+        ctx.createArtifact({
+          type: "final_answer",
+          value: { content: "too late" }
+        })
+      ];
+    }
+  };
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "actual_budget",
+          inputArtifactIds: [task.id],
+          nodes: [{ id: "metered", operator: metered, inputs: [{ artifactId: task.id }] }]
+        },
+        scheduler: new StaticDAGScheduler(),
+        artifacts: [task],
+        budget: { id: "tokens", maxInputTokens: 5 }
+      }),
+    (error) => error instanceof BudgetExceededError && /input tokens 10 > 5/.test(error.message)
+  );
+});
+
+test("private observations and signals are recorded but hidden from scheduler state", async () => {
+  const task = taskArtifact();
+  const observedSignalIds: string[][] = [];
+  const observedStateSignals: string[][] = [];
+  const evidenceOperator: Operator = {
+    spec: {
+      id: "evidence",
+      kind: "evidence",
+      inputTypes: ["task"],
+      outputTypes: ["final_answer"],
+      sideEffects: "none"
+    },
+    run(inputs, ctx) {
+      const targetArtifactId = inputs[0]?.id ?? task.id;
+      const publicObservation = ctx.recordObservation({
+        sourceId: "public-tests",
+        targetArtifactId,
+        type: "test_log",
+        value: { passed: true },
+        leakage: "public"
+      });
+      const privateObservation = ctx.recordObservation({
+        sourceId: "private-grade",
+        targetArtifactId,
+        type: "private_grade",
+        value: { passed: false },
+        leakage: "private",
+        visibility: "private_eval"
+      });
+      ctx.recordSignal({
+        targetArtifactId,
+        dimension: "correctness",
+        score: 0.8,
+        confidence: 0.7,
+        calibration: "heuristic",
+        leakageRisk: "public",
+        observationIds: [publicObservation.id]
+      });
+      ctx.recordSignal({
+        targetArtifactId,
+        dimension: "correctness",
+        score: 0,
+        confidence: 1,
+        calibration: "ground_truth",
+        leakageRisk: "private",
+        observationIds: [privateObservation.id]
+      });
+      return [
+        ctx.createArtifact({
+          type: "final_answer",
+          value: { content: "answer" }
+        })
+      ];
+    }
+  };
+  const scheduler: Scheduler = {
+    id: "observing-scheduler",
+    family: "test",
+    async schedule(graph, ctx) {
+      const node = graph.nodes[0];
+      assert.ok(node !== undefined);
+      await ctx.runNode(node);
+      observedSignalIds.push([...ctx.signalIds()]);
+      observedStateSignals.push(ctx.state().signalIds);
+      return { finalArtifactIds: [...ctx.nodeOutputIds(node.id)] };
+    }
+  };
+
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: "evidence_graph",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "evidence", operator: evidenceOperator, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler,
+    artifacts: [task]
+  });
+
+  assert.equal(result.observations.length, 2);
+  assert.equal(result.signals.length, 2);
+  assert.equal(result.outcome.observationIds.length, 1);
+  assert.equal(result.outcome.signalIds.length, 1);
+  assert.equal(result.outcome.privateObservationIds.length, 1);
+  assert.equal(result.outcome.privateSignalIds.length, 1);
+  assert.deepEqual(observedSignalIds, [result.outcome.signalIds]);
+  assert.deepEqual(observedStateSignals, [result.outcome.signalIds]);
+});
+
+test("private evaluation artifacts cannot enter runtime operator inputs by default", async () => {
+  const privateGrade = createArtifact({
+    id: "private-grade",
+    type: "private_grade",
+    value: { pass: true },
+    visibility: "private_eval",
+    leakage: "private"
+  });
+  const operator: Operator = {
+    spec: {
+      id: "reader",
+      kind: "reader",
+      inputTypes: ["private_grade"],
+      outputTypes: ["final_answer"],
+      sideEffects: "none"
+    },
+    run(_inputs, ctx) {
+      return [ctx.createArtifact({ type: "final_answer", value: { content: "leaked" } })];
+    }
+  };
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "private_input",
+          inputArtifactIds: [privateGrade.id],
+          nodes: [{ id: "reader", operator, inputs: [{ artifactId: privateGrade.id }] }]
+        },
+        scheduler: new StaticDAGScheduler(),
+        artifacts: [privateGrade]
+      }),
+    /cannot consume private\/contaminated artifact/
+  );
+});
+
+test("workspace writer budget enforces single-writer discipline", async () => {
+  const task = taskArtifact();
+  const writer = (id: string): Operator => ({
+    spec: {
+      id,
+      kind: "writer",
+      inputTypes: ["task"],
+      outputTypes: ["final_answer"],
+      sideEffects: "write_workspace"
+    },
+    run(_inputs, ctx) {
+      return [ctx.createArtifact({ type: "final_answer", value: { content: id } })];
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "single_writer",
+          inputArtifactIds: [task.id],
+          nodes: [
+            { id: "writer_a", operator: writer("writer_a"), inputs: [{ artifactId: task.id }] },
+            { id: "writer_b", operator: writer("writer_b"), inputs: [{ artifactId: task.id }] }
+          ]
+        },
+        scheduler: new StaticDAGScheduler(),
+        artifacts: [task],
+        budget: { id: "single-writer", maxWorkspaceWriters: 1 }
+      }),
+    (error) => error instanceof BudgetExceededError && /workspace writers 2 > 1/.test(error.message)
   );
 });

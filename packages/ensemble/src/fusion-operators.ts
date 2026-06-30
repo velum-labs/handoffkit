@@ -108,7 +108,29 @@ function spec(input: {
 }
 
 function slug(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "") || "artifact";
+  let out = "";
+  let lastWasUnderscore = false;
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    const safe =
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      char === "." ||
+      char === "-";
+    if (safe) {
+      out += char;
+      lastWasUnderscore = false;
+    } else if (!lastWasUnderscore) {
+      out += "_";
+      lastWasUnderscore = true;
+    }
+  }
+  let start = 0;
+  let end = out.length;
+  while (start < end && out[start] === "_") start += 1;
+  while (end > start && out[end - 1] === "_") end -= 1;
+  return out.slice(start, end) || "artifact";
 }
 
 function taskFromInputs(inputs: readonly Artifact[]): TaskSpec {
