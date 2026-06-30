@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/ensemble-receipt.v1.schema.json",
+  "title": "ensemble-receipt.v1",
+  "description": "Minimal demo stub. Receipt hardening lands in later tickets.",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "receipt_id",
+        "run_id",
+        "status",
+        "artifact_hashes"
+      ],
+      "properties": {
+        "schema": {
+          "const": "ensemble-receipt.v1"
+        },
+        "receipt_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        },
+        "artifact_hashes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/hash"
+          }
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

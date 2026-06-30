@@ -1,0 +1,16 @@
+mode: router
+policies:
+  single:
+    description: Use the default model directly for short/simple prompts.
+  self:
+    description: Generate multiple samples from the default model, then rank and synthesize.
+    sample_count: 4
+  panel:
+    description: Generate candidates from multiple local models, then rank and synthesize.
+    panel_models: [qwen-fast, gemma-writer]
+evaluation:
+  required_claim_controls:
+    - compare against best single local model
+    - compare against self-fusion
+    - report latency and memory
+    - report confidence intervals for judged benchmarks

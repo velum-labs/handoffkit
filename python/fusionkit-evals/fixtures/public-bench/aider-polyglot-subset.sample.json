@@ -1,0 +1,37 @@
+{
+  "suite": "aider-polyglot",
+  "mount_mode": "fusion_behind_agent",
+  "harness": "aider",
+  "harness_version": "0.0.0-example",
+  "model": "fusionkit/panel",
+  "resolved_tasks": 3,
+  "total_tasks": 3,
+  "passed_tasks": 2,
+  "cost_total_usd": 4.5,
+  "tasks": [
+    {
+      "task_id": "exercism/python/grains",
+      "passed": true,
+      "cost_usd": 1.4,
+      "latency_s": 22.0,
+      "candidate_scores": {"gpt": 1.0, "opus": 0.0, "gemini": 1.0}
+    },
+    {
+      "task_id": "exercism/rust/clock",
+      "passed": true,
+      "cost_usd": 1.6,
+      "latency_s": 31.0,
+      "candidate_scores": {"gpt": 0.0, "opus": 1.0, "gemini": 1.0}
+    },
+    {
+      "task_id": "exercism/go/bank-account",
+      "passed": false,
+      "cost_usd": 1.5,
+      "latency_s": 40.0,
+      "candidate_scores": {"gpt": 0.0, "opus": 0.0, "gemini": 1.0}
+    }
+  ],
+  "metadata": {
+    "note": "synthetic example envelope showing the normalized shape a runner adapter emits"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema": "trajectory.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:bb04c698793875568976fd6e5c7c9f76dd10f306c2ff2156be46b63afc261867",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-17T22:13:01Z",
+  "trajectory_id": "traj_minimal_001",
+  "model_id": "qwen-judge",
+  "status": "succeeded",
+  "items": [
+    {
+      "index": 0,
+      "type": "message",
+      "text": "The repository is a small calculator package."
+    }
+  ],
+  "final_output": "The repository is a small calculator package."
+}

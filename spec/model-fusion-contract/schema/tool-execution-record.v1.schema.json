@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/tool-execution-record.v1.schema.json",
+  "title": "tool-execution-record.v1",
+  "description": "Minimal demo stub. Safe tool execution details land in later tickets.",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "execution_id",
+        "plan_id",
+        "status"
+      ],
+      "properties": {
+        "schema": {
+          "const": "tool-execution-record.v1"
+        },
+        "execution_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "plan_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        },
+        "output_hash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        },
+        "error": {
+          "$ref": "common.schema.json#/$defs/error"
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

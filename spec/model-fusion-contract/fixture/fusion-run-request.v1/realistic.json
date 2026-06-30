@@ -1,0 +1,34 @@
+{
+  "schema": "fusion-run-request.v1",
+  "schema_version": "v1",
+  "schema_bundle_hash": "sha256:bb04c698793875568976fd6e5c7c9f76dd10f306c2ff2156be46b63afc261867",
+  "producer": "fusionkit-contract-seed",
+  "producer_version": "0.1.0",
+  "producer_git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-06-15T22:02:01Z",
+  "request_id": "fusion_req_panel_001",
+  "mode": "panel",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Produce concise implementation guidance."
+    },
+    {
+      "role": "user",
+      "content": "Plan the smallest safe contract seed for local model fusion."
+    }
+  ],
+  "requested_models": [
+    "mlx-local-fast",
+    "mlx-local-writer"
+  ],
+  "sampling": {
+    "temperature": 0.2,
+    "top_p": 0.95,
+    "max_tokens": 1024,
+    "seed": 564
+  },
+  "sample_count": 2,
+  "tool_policy": "disabled",
+  "request_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+}

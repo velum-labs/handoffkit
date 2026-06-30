@@ -1,0 +1,627 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import subprocess
+from datetime import UTC, datetime
+from importlib import metadata
+from pathlib import Path
+from typing import Annotated, Any, ClassVar, Literal, TypeAlias
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+SchemaName: TypeAlias = Literal[
+    "model_endpoint.v1",
+    "model-call-record.v1",
+    "fusion-run-request.v1",
+    "fusion-record.v1",
+    "harness-run-request.v1",
+    "harness-run-result.v1",
+    "harness-candidate-record.v1",
+    "trajectory.v1",
+    "cursor-run-request.v1",
+    "cursor-run-result.v1",
+    "benchmark-task-record.v1",
+    "artifact-ref.v1",
+    "tool-call-plan.v1",
+    "tool-execution-record.v1",
+    "ensemble-receipt.v1",
+]
+
+ErrorKind: TypeAlias = Literal[
+    "none",
+    "provider_error",
+    "validation_error",
+    "timeout",
+    "rate_limited",
+    "tool_denied",
+    "secret_denied",
+    "capability_missing",
+    "internal_error",
+]
+Owner: TypeAlias = Literal[
+    "fusionkit",
+    "handoffkit",
+    "cursorkit",
+    "mlx-lm",
+    "benchmark",
+    "external",
+]
+Status: TypeAlias = Literal[
+    "pending",
+    "running",
+    "succeeded",
+    "failed",
+    "canceled",
+    "requires_action",
+    "skipped",
+    "unsupported",
+]
+SideEffects: TypeAlias = Literal[
+    "none",
+    "read_only",
+    "writes_workspace",
+    "network",
+    "tool_execution",
+    "unknown",
+]
+ArtifactKind: TypeAlias = Literal[
+    "patch",
+    "log",
+    "transcript",
+    "metrics",
+    "benchmark_task",
+    "worktree",
+    "receipt",
+    "other",
+]
+CapabilityStatus: TypeAlias = Literal["supported", "unsupported", "degraded", "unknown"]
+FusionMode: TypeAlias = Literal["single", "self", "panel", "router"]
+ChatRole: TypeAlias = Literal["system", "user", "assistant", "tool"]
+ApiCompatibility: TypeAlias = Literal[
+    "openai-chat-completions",
+    "openai-responses",
+    "mlx-lm-server",
+    "custom",
+]
+ToolPolicy: TypeAlias = Literal["disabled", "external_pause", "allowed"]
+HarnessKind: TypeAlias = Literal[
+    "generic",
+    "cursor",
+    "claude_code",
+    "codex",
+    "openai_responses",
+]
+SynthesisDecision: TypeAlias = Literal[
+    "synthesize",
+    "select_trajectory",
+    "repair_required",
+    "failed",
+]
+BenchmarkTaskKind: TypeAlias = Literal["model_fusion", "harness_coding"]
+BenchmarkSourceRepo: TypeAlias = Literal["fusionkit", "handoffkit", "cursorkit", "mlx-lm"]
+BenchmarkScorerKind: TypeAlias = Literal["exact", "contains", "record_join", "custom"]
+RedactionStatus: TypeAlias = Literal["synthetic", "redacted", "raw"]
+
+FusionRunState: TypeAlias = Literal[
+    "queued",
+    "generating",
+    "requires_action",
+    "judging",
+    "synthesizing",
+    "completed",
+    "failed",
+    "cancelled",
+    "expired",
+]
+
+Sha256: TypeAlias = Annotated[str, Field(pattern=r"^sha256:[a-f0-9]{64}$")]
+GitSha: TypeAlias = Annotated[str, Field(pattern=r"^[a-f0-9]{40}$")]
+# `producer_git_sha` accepts a real 40-char SHA or the "unknown" sentinel (WS7
+# real-lite provenance), emitted only when no real SHA is resolvable. `GitSha`
+# (base_git_sha / source_sha) stays strict — those must always be real commits.
+ProducerGitSha: TypeAlias = Annotated[str, Field(pattern=r"^([a-f0-9]{40}|unknown)$")]
+
+# The sentinel emitted for `producer_git_sha` when no real SHA is resolvable.
+# Deliberately NOT 40 zeros: an all-zero SHA reads as a valid (null) git object
+# and was the old "faked provenance" placeholder flagged by the readiness audit.
+UNKNOWN_GIT_SHA = "unknown"
+# Build/publish-time stamp env var: set when packaging so an installed wheel
+# (which ships no .git) still carries a real producer git SHA.
+BUILD_GIT_SHA_ENV = "FUSIONKIT_BUILD_GIT_SHA"
+PRODUCER = "fusionkit-core"
+
+
+class ContractBaseModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
+
+class ContractMetadata(ContractBaseModel):
+    schema_name: SchemaName = Field(alias="schema")
+    schema_version: Literal["v1"]
+    schema_bundle_hash: Sha256
+    producer: str = Field(min_length=1)
+    producer_version: str = Field(min_length=1)
+    producer_git_sha: ProducerGitSha
+    created_at: datetime
+
+
+class ContractRecord(ContractMetadata):
+    expected_schema: ClassVar[str] = ""
+
+    @model_validator(mode="after")
+    def validate_expected_schema(self) -> ContractRecord:
+        if self.expected_schema and self.schema_name != self.expected_schema:
+            raise ValueError(
+                f"Expected schema {self.expected_schema!r}, got {self.schema_name!r}"
+            )
+        return self
+
+
+class ContractChatMessage(ContractBaseModel):
+    role: ChatRole
+    content: str
+
+
+class ContractUsage(ContractBaseModel):
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    total_tokens: int | None = Field(default=None, ge=0)
+
+
+class ContractError(ContractBaseModel):
+    kind: ErrorKind
+    message: str | None = None
+    retryable: bool | None = None
+
+
+class ContractSampling(ContractBaseModel):
+    temperature: float | None = Field(default=None, ge=0)
+    top_p: float | None = Field(default=None, ge=0, le=1)
+    max_tokens: int | None = Field(default=None, ge=1)
+    seed: int | None = None
+
+
+class ArtifactRefV1(ContractRecord):
+    expected_schema: ClassVar[str] = "artifact-ref.v1"
+    artifact_id: str = Field(min_length=1)
+    kind: ArtifactKind
+    hash: Sha256
+    uri: str | None = None
+    redaction_status: RedactionStatus | None = None
+
+
+class ContractArtifactRef(ContractBaseModel):
+    artifact_id: str = Field(min_length=1)
+    kind: ArtifactKind
+    hash: Sha256
+    uri: str | None = None
+    redaction_status: RedactionStatus | None = None
+
+
+class ModelEndpointV1(ContractRecord):
+    expected_schema: ClassVar[str] = "model_endpoint.v1"
+    endpoint_id: str = Field(min_length=1)
+    owner: Owner
+    provider: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    api_compatibility: ApiCompatibility
+    capabilities: dict[str, CapabilityStatus]
+    status: Status
+    base_url: str | None = None
+    max_context_tokens: int | None = Field(default=None, ge=1)
+    estimated_memory_gb: float | None = Field(default=None, ge=0)
+    tags: list[str] | None = None
+
+
+class ModelCallRecordV1(ContractRecord):
+    expected_schema: ClassVar[str] = "model-call-record.v1"
+    call_id: str = Field(min_length=1)
+    endpoint_id: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    request_hash: Sha256
+    status: Status
+    messages: list[ContractChatMessage] = Field(min_length=1)
+    side_effects: SideEffects
+    started_at: datetime
+    provider_request_id: str | None = None
+    response_hash: Sha256 | None = None
+    finished_at: datetime | None = None
+    latency_ms: float | None = Field(default=None, ge=0)
+    usage: ContractUsage | None = None
+    output_text: str | None = None
+    error: ContractError | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class FusionRunRequestV1(ContractRecord):
+    expected_schema: ClassVar[str] = "fusion-run-request.v1"
+    request_id: str = Field(min_length=1)
+    mode: FusionMode
+    messages: list[ContractChatMessage] = Field(min_length=1)
+    sampling: ContractSampling
+    requested_models: list[str] | None = None
+    sample_count: int | None = Field(default=None, ge=1)
+    tool_policy: ToolPolicy | None = None
+    request_hash: Sha256 | None = None
+
+
+class FusionRecordV1(ContractRecord):
+    expected_schema: ClassVar[str] = "fusion-record.v1"
+    run_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1)
+    mode: FusionMode
+    status: Status
+    trajectory_ids: list[str]
+    model_call_ids: list[str]
+    started_at: datetime
+    selected_trajectory_id: str | None = None
+    synthesis_record_id: str | None = None
+    final_output: str | None = None
+    finished_at: datetime | None = None
+    latency_ms: float | None = Field(default=None, ge=0)
+    metrics: dict[str, Any] | None = None
+    artifacts: list[ContractArtifactRef] | None = None
+    error: ContractError | None = None
+
+
+class HarnessRunRequestV1(ContractRecord):
+    expected_schema: ClassVar[str] = "harness-run-request.v1"
+    request_id: str = Field(min_length=1)
+    harness_kind: HarnessKind
+    source_repo: str = Field(min_length=1)
+    base_git_sha: GitSha
+    prompt: str = Field(min_length=1)
+    prompt_hash: Sha256
+    allowed_tools: list[str] | None = None
+    side_effects: SideEffects
+    requested_capabilities: dict[str, CapabilityStatus]
+    metadata: dict[str, Any] | None = None
+
+
+class HarnessRunResultV1(ContractRecord):
+    expected_schema: ClassVar[str] = "harness-run-result.v1"
+    result_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1)
+    harness_kind: HarnessKind
+    status: Status
+    candidate_ids: list[str]
+    output_summary: str | None = None
+    artifacts: list[ContractArtifactRef] | None = None
+    capabilities: dict[str, CapabilityStatus]
+    started_at: datetime
+    finished_at: datetime | None = None
+    errors: list[ContractError] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class HarnessCandidateRecordV1(ContractRecord):
+    expected_schema: ClassVar[str] = "harness-candidate-record.v1"
+    candidate_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1)
+    harness_kind: HarnessKind
+    model_call_id: str | None = None
+    status: Status
+    side_effects: SideEffects
+    branch_name: str | None = None
+    worktree_path: str | None = None
+    artifacts: list[ContractArtifactRef] | None = None
+    score: float | None = None
+    error: ContractError | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class TrajectoryItem(ContractBaseModel):
+    """One item of a trajectory, in OpenAI Responses shape.
+
+    ``message`` / ``reasoning`` carry ``text``; ``function_call`` carries
+    ``name`` + ``arguments`` + ``call_id``; ``function_call_output`` carries the
+    observed output ``text`` + ``call_id`` (correlated by ``call_id``).
+    """
+
+    index: int = Field(ge=0)
+    type: Literal["message", "reasoning", "function_call", "function_call_output"]
+    text: str | None = None
+    call_id: str | None = None
+    name: str | None = None
+    arguments: str | None = None
+    is_error: bool | None = None
+    output_hash: Sha256 | None = None
+
+
+class TrajectorySynthesis(ContractBaseModel):
+    """The folded fusion result carried on a fused (consolidated) trajectory.
+
+    Present only on the trajectory ``fuse`` produces; replaces the former
+    standalone ``judge-synthesis-record.v1``.
+    """
+
+    decision: SynthesisDecision
+    selected_trajectory_id: str | None = None
+    rationale: str | None = None
+    score: float | None = None
+    input_trajectory_ids: list[str] | None = None
+    metrics: dict[str, Any] | None = None
+
+
+class TrajectoryV1(ContractRecord):
+    expected_schema: ClassVar[str] = "trajectory.v1"
+    trajectory_id: str = Field(min_length=1)
+    model_id: str = Field(min_length=1)
+    status: Status
+    items: list[TrajectoryItem]
+    final_output: str
+    candidate_id: str | None = None
+    model: str | None = None
+    harness_kind: HarnessKind | None = None
+    diff: str | None = None
+    patch_artifact: ContractArtifactRef | None = None
+    synthesis: TrajectorySynthesis | None = None
+    usage: ContractUsage | None = None
+    error: ContractError | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class BenchmarkScorer(ContractBaseModel):
+    kind: BenchmarkScorerKind
+    params: dict[str, Any] | None = None
+
+
+class BenchmarkTaskRecordV1(ContractRecord):
+    expected_schema: ClassVar[str] = "benchmark-task-record.v1"
+    task_id: str = Field(min_length=1)
+    task_kind: BenchmarkTaskKind
+    source_repo: BenchmarkSourceRepo
+    source_sha: GitSha
+    prompt_hash: Sha256
+    setup_hash: Sha256
+    expected_evidence: list[str] = Field(min_length=1)
+    scorer: BenchmarkScorer
+    holdout: bool
+    contamination_notes: str
+    allowed_tools: list[str]
+    prompt: str | None = None
+
+
+class ToolCallPlanV1(ContractRecord):
+    expected_schema: ClassVar[str] = "tool-call-plan.v1"
+    plan_id: str = Field(min_length=1)
+    tool_name: str = Field(min_length=1)
+    arguments_hash: Sha256
+    side_effects: SideEffects
+    status: Status
+
+
+class ToolExecutionRecordV1(ContractRecord):
+    expected_schema: ClassVar[str] = "tool-execution-record.v1"
+    execution_id: str = Field(min_length=1)
+    plan_id: str = Field(min_length=1)
+    status: Status
+    output_hash: Sha256 | None = None
+    error: ContractError | None = None
+
+
+class EnsembleReceiptV1(ContractRecord):
+    expected_schema: ClassVar[str] = "ensemble-receipt.v1"
+    receipt_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    status: Status
+    artifact_hashes: list[Sha256]
+
+
+CONTRACT_MODEL_REGISTRY: dict[SchemaName, type[ContractRecord]] = {
+    "model_endpoint.v1": ModelEndpointV1,
+    "model-call-record.v1": ModelCallRecordV1,
+    "fusion-run-request.v1": FusionRunRequestV1,
+    "fusion-record.v1": FusionRecordV1,
+    "harness-run-request.v1": HarnessRunRequestV1,
+    "harness-run-result.v1": HarnessRunResultV1,
+    "harness-candidate-record.v1": HarnessCandidateRecordV1,
+    "trajectory.v1": TrajectoryV1,
+    "benchmark-task-record.v1": BenchmarkTaskRecordV1,
+    "artifact-ref.v1": ArtifactRefV1,
+    "tool-call-plan.v1": ToolCallPlanV1,
+    "tool-execution-record.v1": ToolExecutionRecordV1,
+    "ensemble-receipt.v1": EnsembleReceiptV1,
+}
+
+FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
+    "queued": "pending",
+    "generating": "running",
+    "requires_action": "requires_action",
+    "judging": "running",
+    "synthesizing": "running",
+    "completed": "succeeded",
+    "failed": "failed",
+    "cancelled": "canceled",
+    "expired": "failed",
+}
+
+
+# Precomputed hash of the frozen model-fusion-contract schema bundle. The
+# canonical schema (spec/model-fusion-contract/schema) lives outside the packaged
+# wheel, so an installed package (e.g. `uvx fusionkit`) cannot locate it on disk.
+# We fall back to this constant there; a source checkout still recomputes from the
+# files. tests/ assert the two agree, so this can never silently drift from the
+# schema source. (Mirrors handoffkit's pinned MODEL_FUSION_SCHEMA_BUNDLE_HASH.)
+SCHEMA_BUNDLE_HASH = "sha256:bb04c698793875568976fd6e5c7c9f76dd10f306c2ff2156be46b63afc261867"
+
+
+def schema_bundle_hash(schema_dir: Path | None = None) -> str:
+    resolved_schema_dir = schema_dir if schema_dir is not None else _find_schema_dir()
+    # Installed wheels do not ship the canonical schema dir; the contract bundle
+    # is frozen, so the pinned hash is the source of truth there.
+    if resolved_schema_dir is None:
+        return SCHEMA_BUNDLE_HASH
+    payload = []
+    for path in sorted(resolved_schema_dir.glob("*.schema.json")):
+        payload.append({"path": path.name, "schema": _load_json(path)})
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def producer() -> str:
+    return PRODUCER
+
+
+def producer_version() -> str:
+    try:
+        return metadata.version(PRODUCER)
+    except metadata.PackageNotFoundError:
+        return "0.1.1"
+
+
+def _is_git_sha(value: str) -> bool:
+    return len(value) == 40 and all(character in "0123456789abcdef" for character in value)
+
+
+def producer_git_sha(repo_root: Path | None = None) -> str:
+    """Resolve this producer's real git SHA, real-lite (WS7).
+
+    Resolution order:
+      1. a build/publish-time stamp (``FUSIONKIT_BUILD_GIT_SHA``) — baked in when
+         the wheel is built so an installed package still carries real provenance;
+      2. a runtime ``git rev-parse HEAD`` — only when running from a source
+         checkout (an ancestor ``.git`` exists), so an installed wheel never
+         mis-reports the *current working directory's* repo SHA as fusionkit's;
+      3. the ``"unknown"`` sentinel — never 40 zeros.
+
+    An explicit ``repo_root`` (e.g. in tests) forces the git lookup at that path.
+    """
+    stamped = os.environ.get(BUILD_GIT_SHA_ENV, "").strip()
+    if _is_git_sha(stamped):
+        return stamped
+
+    root = repo_root if repo_root is not None else _checkout_root()
+    if root is None:
+        return UNKNOWN_GIT_SHA
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return UNKNOWN_GIT_SHA
+
+    git_sha = result.stdout.strip()
+    return git_sha if _is_git_sha(git_sha) else UNKNOWN_GIT_SHA
+
+
+def contract_metadata(
+    schema: SchemaName,
+    *,
+    schema_dir: Path | None = None,
+    repo_root: Path | None = None,
+    created_at: datetime | None = None,
+) -> dict[str, Any]:
+    timestamp = created_at or datetime.now(UTC)
+    return {
+        "schema": schema,
+        "schema_version": "v1",
+        "schema_bundle_hash": schema_bundle_hash(schema_dir),
+        "producer": producer(),
+        "producer_version": producer_version(),
+        "producer_git_sha": producer_git_sha(repo_root),
+        "created_at": timestamp,
+    }
+
+
+def contract_model_for_schema(schema: SchemaName) -> type[ContractRecord]:
+    return CONTRACT_MODEL_REGISTRY[schema]
+
+
+def status_for_run_state(state: FusionRunState) -> Status:
+    return FUSION_RUN_STATE_TO_STATUS[state]
+
+
+def _find_schema_dir() -> Path | None:
+    """Locate the canonical contract schema dir in a source checkout.
+
+    Returns None when it cannot be found (e.g. an installed wheel that does not
+    ship spec/), in which case callers fall back to the pinned SCHEMA_BUNDLE_HASH.
+    """
+    for parent in Path(__file__).resolve().parents:
+        schema_dir = parent / "spec" / "model-fusion-contract" / "schema"
+        if schema_dir.exists():
+            return schema_dir
+    return None
+
+
+def _checkout_root() -> Path | None:
+    """The source-checkout root containing this module (an ancestor ``.git``).
+
+    Returns ``None`` for an installed wheel (no ``.git`` above the package), so
+    callers do NOT fall back to ``git rev-parse`` in the current working
+    directory — that would stamp the *consuming project's* SHA as fusionkit's.
+    """
+    for parent in Path(__file__).resolve().parents:
+        if (parent / ".git").exists():
+            return parent
+    return None
+
+
+def _load_json(path: Path) -> Any:
+    with path.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+__all__ = [
+    "ArtifactKind",
+    "ArtifactRefV1",
+    "BenchmarkScorer",
+    "BenchmarkScorerKind",
+    "BenchmarkSourceRepo",
+    "BenchmarkTaskKind",
+    "BenchmarkTaskRecordV1",
+    "CapabilityStatus",
+    "ChatRole",
+    "ContractArtifactRef",
+    "ContractChatMessage",
+    "ContractError",
+    "ContractMetadata",
+    "ContractRecord",
+    "ContractSampling",
+    "ContractUsage",
+    "ErrorKind",
+    "FUSION_RUN_STATE_TO_STATUS",
+    "FusionMode",
+    "FusionRecordV1",
+    "FusionRunRequestV1",
+    "FusionRunState",
+    "GitSha",
+    "HarnessCandidateRecordV1",
+    "HarnessKind",
+    "HarnessRunRequestV1",
+    "HarnessRunResultV1",
+    "ModelCallRecordV1",
+    "ModelEndpointV1",
+    "Owner",
+    "PRODUCER",
+    "ProducerGitSha",
+    "UNKNOWN_GIT_SHA",
+    "SchemaName",
+    "Sha256",
+    "SideEffects",
+    "Status",
+    "ToolCallPlanV1",
+    "ToolExecutionRecordV1",
+    "ToolPolicy",
+    "TrajectoryItem",
+    "TrajectoryV1",
+    "EnsembleReceiptV1",
+    "contract_metadata",
+    "contract_model_for_schema",
+    "producer",
+    "producer_git_sha",
+    "producer_version",
+    "schema_bundle_hash",
+    "status_for_run_state",
+]

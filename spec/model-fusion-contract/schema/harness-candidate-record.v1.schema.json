@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.velum.ai/fusionkit/model-fusion-contract/harness-candidate-record.v1.schema.json",
+  "title": "harness-candidate-record.v1",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/contractMetadata"
+    },
+    {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "request_id",
+        "harness_kind",
+        "status",
+        "side_effects"
+      ],
+      "properties": {
+        "schema": {
+          "const": "harness-candidate-record.v1"
+        },
+        "candidate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "harness_kind": {
+          "$ref": "common.schema.json#/$defs/harness_kind"
+        },
+        "model_call_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        },
+        "side_effects": {
+          "$ref": "common.schema.json#/$defs/side_effects"
+        },
+        "branch_name": {
+          "type": "string"
+        },
+        "worktree_path": {
+          "type": "string"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/artifactRef"
+          }
+        },
+        "score": {
+          "type": "number"
+        },
+        "error": {
+          "$ref": "common.schema.json#/$defs/error"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

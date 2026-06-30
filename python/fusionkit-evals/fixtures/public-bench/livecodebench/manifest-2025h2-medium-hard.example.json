@@ -1,0 +1,24 @@
+{
+  "name": "livecodebench-2025h2-medium-hard",
+  "suite": "livecodebench",
+  "version": "release_v6",
+  "dataset": "livecodebench/code_generation_lite",
+  "description": "Frozen example manifest: explicit question_ids pin the exact tasks so runs are comparable over time. Replace/extend question_ids with your reproducible set. Set per-model contamination cutoffs to confirmed training cutoffs.",
+  "contamination_window": {
+    "min_contest_date": "2025-07-01",
+    "per_model_cutoffs": {
+      "gpt-5.5": "2025-06-01",
+      "claude-opus-4-8": "2025-06-01"
+    }
+  },
+  "question_ids": [
+    "arc196_a",
+    "arc196_b",
+    "arc196_c",
+    "arc196_d",
+    "abc400_c",
+    "abc400_d",
+    "abc400_e",
+    "abc400_g"
+  ]
+}
