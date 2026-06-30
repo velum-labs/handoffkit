@@ -98,6 +98,13 @@
       "title": "cloud orchestrator, local swarm",
       "summary": "A cloud orchestrator drives a governed swarm via swarmTools: dispatch fans a goal out across cheap local workers, each a signed run; completed workers are judged from deterministic evidence and pulled, overlaps are caught from receipts and escalated to a cloud target. The orchestration loop is the harness's own; Warrant governs the boundary.",
       "interactive": false
+    },
+    {
+      "id": "15",
+      "directory": "runtime-kernel",
+      "title": "FusionKit runtime kernel",
+      "summary": "Compose explicit model-fusion operator graphs: direct fast path, rank/fuse workflow, trace, outcome, and replay record without hidden controller heuristics.",
+      "interactive": false
     }
   ],
   "infra": [

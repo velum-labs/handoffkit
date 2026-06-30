@@ -73,3 +73,10 @@ import { EvidenceSourceOperator } from "@fusionkit/ensemble/operators/evidence";
 - Schedulers choose execution order; operators do not choose global control flow.
 - Private/contaminated evidence is recorded in outcomes but hidden from scheduler-visible state.
 - Outcome and replay records are emitted for future learned coordination.
+
+## More docs
+
+- `docs/fusion/runtime-kernel.md` — full architecture and API guide.
+- `docs/fusion/runtime-recipes.md` — copy-paste workflow recipes.
+- `docs/fusion/MOA_IMPLEMENTATION_STATUS.md` — implementation status against the design.
+- `pnpm demo 15` — runnable runtime-kernel demo.

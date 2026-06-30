@@ -30,7 +30,7 @@ The TypeScript workspace is managed by pnpm. Package entry points are generally
 | `@fusionkit/session-hermetic` | just-bash virtual filesystem backend with interpreter-enforced egress and no real process/socket escape path. | `packages/session-hermetic/src/index.ts` |
 | `@fusionkit/session-vercel-sandbox` | Firecracker microVM backend through Vercel Sandbox with domain egress policy. | `packages/session-vercel-sandbox/src/index.ts` |
 | `@fusionkit/session-harness` | AI SDK harness bindings for vendor coding agents in governed sessions. | `packages/session-harness/src/index.ts` |
-| `@fusionkit/ensemble` | Harness-agnostic model-fusion runner, artifacts, worktrees, dashboards, judge synthesis, and protocol records. | `packages/ensemble/src/index.ts` |
+| `@fusionkit/ensemble` | FusionKit runtime kernel, typed operator graphs, schedulers, workflow recipes, harness-agnostic model-fusion runner, artifacts, worktrees, dashboards, judge synthesis, and protocol records. | `packages/ensemble/src/index.ts`, `packages/ensemble/src/kernel.ts`, `packages/ensemble/src/workflows.ts` |
 
 ## Support packages
 

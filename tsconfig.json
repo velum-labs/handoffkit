@@ -110,6 +110,9 @@
       "path": "examples/model-escalation"
     },
     {
+      "path": "examples/runtime-kernel"
+    },
+    {
       "path": "examples/hermetic-session"
     },
     {

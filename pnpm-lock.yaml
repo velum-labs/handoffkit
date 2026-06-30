@@ -252,6 +252,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/testkit
 
+  examples/runtime-kernel:
+    dependencies:
+      '@fusionkit/ensemble':
+        specifier: workspace:*
+        version: link:../../packages/ensemble
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../packages/example-utils
+
   examples/seed:
     dependencies:
       '@fusionkit/handoff':
