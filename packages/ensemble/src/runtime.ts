@@ -133,15 +133,31 @@ export type CreateArtifactInput<T = unknown> = {
 export type OperatorRunContext = {
   runId: string;
   graphId: string;
+  nodeId: string;
   operator: OperatorSpec;
   budget: BudgetPolicy;
   signal?: AbortSignal;
   getArtifact(id: string): Artifact | undefined;
+  getObservation(id: string): Observation | undefined;
+  getSignal(id: string): Signal | undefined;
+  visibleObservations(filter?: ObservationFilter): readonly Observation[];
+  visibleSignals(filter?: SignalFilter): readonly Signal[];
   createArtifact<T = unknown>(input: CreateArtifactInput<T>): Artifact<T>;
   consumeBudget(usage: BudgetUsage): void;
   recordObservation(input: RecordObservationInput): Observation;
   recordSignal(input: RecordSignalInput): Signal;
   recordTrace(input: TraceEventInput): TraceEvent;
+};
+
+export type ObservationFilter = {
+  targetArtifactId?: string;
+  sourceId?: string;
+  type?: string;
+};
+
+export type SignalFilter = {
+  targetArtifactId?: string;
+  dimension?: SignalDimension;
 };
 
 export type Operator<I extends readonly Artifact[] = readonly Artifact[], O extends readonly Artifact[] = readonly Artifact[]> = {
@@ -189,9 +205,19 @@ export type BudgetLedger = {
   artifacts: number;
   candidates: number;
   costUsd: number;
+  reservedCostUsd: number;
+  actualCostUsd: number;
   inputTokens: number;
+  reservedInputTokens: number;
+  actualInputTokens: number;
   outputTokens: number;
+  reservedOutputTokens: number;
+  actualOutputTokens: number;
   toolCalls: number;
+  reservedToolCalls: number;
+  actualToolCalls: number;
+  reservedCandidates: number;
+  actualCandidates: number;
   workspaceWriters: number;
   startedAt: string;
   elapsedMs: number;
@@ -253,6 +279,24 @@ export type OutcomeRecord = {
   finishedAt: string;
   error?: string;
   metadata?: Record<string, unknown>;
+  success?: {
+    metric: string;
+    value: number | boolean;
+    leakage: ArtifactLeakage;
+  };
+  taskFeatures?: Record<string, unknown>;
+  operatorSummaries?: Array<{
+    nodeId: string;
+    operatorId: string;
+    kind: string;
+    inputArtifactIds: string[];
+    outputArtifactIds: string[];
+  }>;
+  decisionTrace?: string[];
+  availableSignalIds?: string[];
+  selectedArtifactIds?: string[];
+  counterfactualArtifactIds?: string[];
+  evaluationSplit?: string;
 };
 
 export type SchedulerRunResult = {
@@ -267,6 +311,10 @@ export type SchedulerExecutionContext = {
   nodeOutputIds(nodeId: string): readonly string[];
   observationIds(): readonly string[];
   signalIds(): readonly string[];
+  getObservation(id: string): Observation | undefined;
+  getSignal(id: string): Signal | undefined;
+  visibleObservations(filter?: ObservationFilter): readonly Observation[];
+  visibleSignals(filter?: SignalFilter): readonly Signal[];
   resolveInputs(node: OperatorGraphNode): readonly Artifact[];
   runNode(node: OperatorGraphNode): Promise<readonly Artifact[]>;
   recordTrace(input: TraceEventInput): TraceEvent;
@@ -466,6 +514,30 @@ function schedulerVisibleSignal(signal: Signal): boolean {
   return !isPrivateLeakage(signal.leakageRisk);
 }
 
+function leakageRank(leakage: ArtifactLeakage): number {
+  switch (leakage) {
+    case "none":
+      return 0;
+    case "public":
+      return 1;
+    case "private":
+      return 2;
+    case "contaminated":
+      return 3;
+    default: {
+      const exhausted: never = leakage;
+      throw new Error(`unsupported leakage class: ${String(exhausted)}`);
+    }
+  }
+}
+
+function maxLeakage(values: readonly ArtifactLeakage[]): ArtifactLeakage {
+  return values.reduce<ArtifactLeakage>(
+    (current, next) => (leakageRank(next) > leakageRank(current) ? next : current),
+    "none"
+  );
+}
+
 function usageWithDefaults(usage: BudgetUsage): Required<CostEstimate> {
   return {
     usd: usage.usd ?? 0,
@@ -509,9 +581,19 @@ export class FusionRuntime {
       artifacts: input.artifacts?.length ?? 0,
       candidates: 0,
       costUsd: 0,
+      reservedCostUsd: 0,
+      actualCostUsd: 0,
       inputTokens: 0,
+      reservedInputTokens: 0,
+      actualInputTokens: 0,
       outputTokens: 0,
+      reservedOutputTokens: 0,
+      actualOutputTokens: 0,
       toolCalls: 0,
+      reservedToolCalls: 0,
+      actualToolCalls: 0,
+      reservedCandidates: 0,
+      actualCandidates: 0,
       workspaceWriters: 0,
       startedAt,
       elapsedMs: 0
@@ -524,6 +606,7 @@ export class FusionRuntime {
       nodeOutputs: new Map(),
       trace: []
     };
+    const operatorSummaries: NonNullable<OutcomeRecord["operatorSummaries"]> = [];
     const recordTrace = (event: TraceEventInput): TraceEvent => {
       const traceEvent: TraceEvent = Object.freeze({
         ...event,
@@ -585,11 +668,26 @@ export class FusionRuntime {
     const consumeBudget = (usage: BudgetUsage, operatorId?: string): void => {
       ensureUsageBudget(usage, operatorId);
       const actual = usageWithDefaults(usage);
-      ledger.costUsd += actual.usd;
-      ledger.inputTokens += actual.inputTokens;
-      ledger.outputTokens += actual.outputTokens;
-      ledger.candidates += actual.candidates;
-      ledger.toolCalls += actual.toolCalls;
+      const reconciledCost = Math.min(ledger.reservedCostUsd, actual.usd);
+      const reconciledInput = Math.min(ledger.reservedInputTokens, actual.inputTokens);
+      const reconciledOutput = Math.min(ledger.reservedOutputTokens, actual.outputTokens);
+      const reconciledCandidates = Math.min(ledger.reservedCandidates, actual.candidates);
+      const reconciledToolCalls = Math.min(ledger.reservedToolCalls, actual.toolCalls);
+      ledger.reservedCostUsd -= reconciledCost;
+      ledger.reservedInputTokens -= reconciledInput;
+      ledger.reservedOutputTokens -= reconciledOutput;
+      ledger.reservedCandidates -= reconciledCandidates;
+      ledger.reservedToolCalls -= reconciledToolCalls;
+      ledger.actualCostUsd += actual.usd;
+      ledger.actualInputTokens += actual.inputTokens;
+      ledger.actualOutputTokens += actual.outputTokens;
+      ledger.actualCandidates += actual.candidates;
+      ledger.actualToolCalls += actual.toolCalls;
+      ledger.costUsd += actual.usd - reconciledCost;
+      ledger.inputTokens += actual.inputTokens - reconciledInput;
+      ledger.outputTokens += actual.outputTokens - reconciledOutput;
+      ledger.candidates += actual.candidates - reconciledCandidates;
+      ledger.toolCalls += actual.toolCalls - reconciledToolCalls;
       recordTrace({
         type: "budget.consumed",
         ...(operatorId !== undefined ? { operatorId } : {}),
@@ -641,15 +739,22 @@ export class FusionRuntime {
       const refs = node.inputs ?? [];
       const resolved: Artifact[] = [];
       const ensureArtifactAllowed = (artifact: Artifact): void => {
-        if (budget.allowPrivateRuntimeInputs === true) return;
         const allowedLeakage = node.operator.spec.allowedInputLeakage ?? ["none", "public"];
-        if (
-          artifact.visibility === "private_eval" ||
-          (!allowedLeakage.includes(artifact.leakage) && isPrivateLeakage(artifact.leakage))
-        ) {
-          throw new OperatorGraphError(
-            `node ${node.id} cannot consume private/contaminated artifact ${artifact.id} at runtime`
-          );
+        if (artifact.visibility === "private_eval" || isPrivateLeakage(artifact.leakage)) {
+          if (budget.allowPrivateRuntimeInputs !== true) {
+            throw new OperatorGraphError(
+              `node ${node.id} cannot consume private/contaminated artifact ${artifact.id} without private runtime input budget permission`
+            );
+          }
+          if (!allowedLeakage.includes(artifact.leakage)) {
+            throw new OperatorGraphError(
+              `node ${node.id} cannot consume ${artifact.leakage} artifact ${artifact.id} without operator leakage permission`
+            );
+          }
+          return;
+        }
+        if (!allowedLeakage.includes(artifact.leakage)) {
+          throw new OperatorGraphError(`node ${node.id} cannot consume ${artifact.leakage} artifact ${artifact.id}`);
         }
       };
       for (const ref of refs) {
@@ -689,10 +794,15 @@ export class FusionRuntime {
       ledger.operatorRuns += 1;
       if ((budget.expectedCostPolicy ?? "reserve") === "reserve") {
         ledger.costUsd += expected.usd ?? 0;
+        ledger.reservedCostUsd += expected.usd ?? 0;
         ledger.inputTokens += expected.inputTokens ?? 0;
+        ledger.reservedInputTokens += expected.inputTokens ?? 0;
         ledger.outputTokens += expected.outputTokens ?? 0;
+        ledger.reservedOutputTokens += expected.outputTokens ?? 0;
         ledger.candidates += expected.candidates ?? 0;
+        ledger.reservedCandidates += expected.candidates ?? 0;
         ledger.toolCalls += expected.toolCalls ?? 0;
+        ledger.reservedToolCalls += expected.toolCalls ?? 0;
       }
       if (node.operator.spec.sideEffects === "write_workspace") ledger.workspaceWriters += 1;
       const inputArtifactIds = inputs.map((artifact) => artifact.id);
@@ -709,10 +819,38 @@ export class FusionRuntime {
       const operatorContext: OperatorRunContext = {
         runId,
         graphId: input.graph.id,
+        nodeId: node.id,
         operator: node.operator.spec,
         budget,
         ...(input.signal !== undefined ? { signal: input.signal } : {}),
         getArtifact: (id) => store.artifacts.get(id),
+        getObservation: (id) => {
+          const observation = store.observations.get(id);
+          return observation !== undefined && schedulerVisibleObservation(observation) ? observation : undefined;
+        },
+        getSignal: (id) => {
+          const signal = store.signals.get(id);
+          return signal !== undefined && schedulerVisibleSignal(signal) ? signal : undefined;
+        },
+        visibleObservations: (filter = {}) =>
+          Object.freeze(
+            [...store.observations.values()].filter(
+              (observation) =>
+                schedulerVisibleObservation(observation) &&
+                (filter.targetArtifactId === undefined || observation.targetArtifactId === filter.targetArtifactId) &&
+                (filter.sourceId === undefined || observation.sourceId === filter.sourceId) &&
+                (filter.type === undefined || observation.type === filter.type)
+            )
+          ),
+        visibleSignals: (filter = {}) =>
+          Object.freeze(
+            [...store.signals.values()].filter(
+              (signal) =>
+                schedulerVisibleSignal(signal) &&
+                (filter.targetArtifactId === undefined || signal.targetArtifactId === filter.targetArtifactId) &&
+                (filter.dimension === undefined || signal.dimension === filter.dimension)
+            )
+          ),
         createArtifact: <T = unknown>(artifactInput: CreateArtifactInput<T>): Artifact<T> =>
           createArtifact({
             ...artifactInput,
@@ -782,11 +920,16 @@ export class FusionRuntime {
             );
           }
           const observationIds = [...(signalInput.observationIds ?? [])];
+          const observationLeakage: ArtifactLeakage[] = [];
           for (const observationId of observationIds) {
-            if (store.observations.get(observationId) === undefined) {
+            const observation = store.observations.get(observationId);
+            if (observation === undefined) {
               throw new OperatorGraphError(`signal ${signalInput.id ?? "(new)"} references missing observation ${observationId}`);
             }
+            observationLeakage.push(observation.leakage);
           }
+          const requestedLeakage = signalInput.leakageRisk ?? "public";
+          const effectiveLeakage = maxLeakage([requestedLeakage, ...observationLeakage]);
           const signal: Signal = deepFreeze({
             id: signalInput.id ?? `${node.operator.spec.id}.signal.${++counters.signal}`,
             targetArtifactId: signalInput.targetArtifactId,
@@ -794,7 +937,7 @@ export class FusionRuntime {
             score: signalInput.score,
             confidence: signalInput.confidence,
             calibration: signalInput.calibration,
-            leakageRisk: signalInput.leakageRisk ?? "public",
+            leakageRisk: effectiveLeakage,
             observationIds,
             createdAt: new Date(this.#now()).toISOString(),
             ...(signalInput.metadata !== undefined ? { metadata: signalInput.metadata } : {})
@@ -889,6 +1032,13 @@ export class FusionRuntime {
           elapsed_ms: ledger.elapsedMs
         }
       });
+      operatorSummaries.push({
+        nodeId: node.id,
+        operatorId: node.operator.spec.id,
+        kind: node.operator.spec.kind,
+        inputArtifactIds,
+        outputArtifactIds: outputIds
+      });
       return Object.freeze(outputs.map((artifact) => store.artifacts.get(artifact.id) ?? artifact));
     };
     const schedulerContext: SchedulerExecutionContext = {
@@ -919,6 +1069,33 @@ export class FusionRuntime {
         ),
       signalIds: () =>
         Object.freeze([...store.signals.values()].filter(schedulerVisibleSignal).map((signal) => signal.id)),
+      getObservation: (id) => {
+        const observation = store.observations.get(id);
+        return observation !== undefined && schedulerVisibleObservation(observation) ? observation : undefined;
+      },
+      getSignal: (id) => {
+        const signal = store.signals.get(id);
+        return signal !== undefined && schedulerVisibleSignal(signal) ? signal : undefined;
+      },
+      visibleObservations: (filter = {}) =>
+        Object.freeze(
+          [...store.observations.values()].filter(
+            (observation) =>
+              schedulerVisibleObservation(observation) &&
+              (filter.targetArtifactId === undefined || observation.targetArtifactId === filter.targetArtifactId) &&
+              (filter.sourceId === undefined || observation.sourceId === filter.sourceId) &&
+              (filter.type === undefined || observation.type === filter.type)
+          )
+        ),
+      visibleSignals: (filter = {}) =>
+        Object.freeze(
+          [...store.signals.values()].filter(
+            (signal) =>
+              schedulerVisibleSignal(signal) &&
+              (filter.targetArtifactId === undefined || signal.targetArtifactId === filter.targetArtifactId) &&
+              (filter.dimension === undefined || signal.dimension === filter.dimension)
+          )
+        ),
       resolveInputs,
       runNode,
       recordTrace
@@ -963,7 +1140,9 @@ export class FusionRuntime {
         startedAt,
         status,
         ...(errorMessage !== undefined ? { error: errorMessage } : {}),
-        ...(input.metadata !== undefined ? { metadata: input.metadata } : {})
+        ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+        operatorSummaries,
+        availableSignalIds: [...store.signals.values()].filter(schedulerVisibleSignal).map((signal) => signal.id)
       });
       Object.freeze(failedOutcome);
       const failedResult = Object.freeze({
@@ -1014,7 +1193,10 @@ export class FusionRuntime {
       budget: ledger,
       startedAt,
       status,
-      ...(input.metadata !== undefined ? { metadata: input.metadata } : {})
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      operatorSummaries,
+      availableSignalIds: [...store.signals.values()].filter(schedulerVisibleSignal).map((signal) => signal.id),
+      selectedArtifactIds: finalArtifactIds
     });
     return Object.freeze({
       runId,
@@ -1045,6 +1227,9 @@ export class FusionRuntime {
     status: RuntimeStatus;
     error?: string;
     metadata?: Record<string, unknown>;
+    operatorSummaries?: OutcomeRecord["operatorSummaries"];
+    availableSignalIds?: string[];
+    selectedArtifactIds?: string[];
   }): OutcomeRecord {
     const finishedAt = new Date(this.#now()).toISOString();
     return {
@@ -1065,7 +1250,10 @@ export class FusionRuntime {
       startedAt: input.startedAt,
       finishedAt,
       ...(input.error !== undefined ? { error: input.error } : {}),
-      ...(input.metadata !== undefined ? { metadata: input.metadata } : {})
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      ...(input.operatorSummaries !== undefined ? { operatorSummaries: input.operatorSummaries } : {}),
+      ...(input.availableSignalIds !== undefined ? { availableSignalIds: [...input.availableSignalIds] } : {}),
+      ...(input.selectedArtifactIds !== undefined ? { selectedArtifactIds: [...input.selectedArtifactIds] } : {})
     };
   }
 }

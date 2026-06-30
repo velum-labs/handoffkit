@@ -26,7 +26,8 @@ import type {
   CandidateRepairer,
   CandidateSelector,
   EvidenceSource,
-  RankMatrix
+  RankMatrix,
+  RepairPredicate
 } from "./advanced-operators.js";
 import type {
   CandidateArtifactValue,
@@ -151,9 +152,39 @@ export type ExecutionSelectRepairWorkflowInput = {
   panel: PanelRunner;
   evidence: EvidenceSource;
   selector: CandidateSelector;
+  repairWhen: RepairPredicate;
   repair: CandidateRepairer;
   budget?: BudgetPolicy;
 };
+
+export type ExecutionSelectWorkflowInput = {
+  task: TaskSpec;
+  models: readonly EnsembleModel[];
+  panel: PanelRunner;
+  evidence: EvidenceSource;
+  selector: CandidateSelector;
+  budget?: BudgetPolicy;
+};
+
+export function executionSelectWorkflow(input: ExecutionSelectWorkflowInput): KernelWorkflow {
+  const task = createTaskArtifact({ ...input.task, artifactId: input.task.id ?? "task" });
+  return graph("execution-select")
+    .task(task)
+    .node("panel", new PanelGenerateOperator({ models: input.models, runner: input.panel }), { inputs: [refs.artifact(task.id)] })
+    .node("evidence", new EvidenceSourceOperator({ source: input.evidence }), {
+      inputs: [refs.artifact(task.id), refs.node("panel", ArtifactTypes.Candidate)]
+    })
+    .node("select", new SelectOperator({ selector: input.selector }), {
+      inputs: [
+        refs.artifact(task.id),
+        refs.node("panel", ArtifactTypes.Candidate),
+        refs.node("evidence", ArtifactTypes.EvidenceBundle)
+      ]
+    })
+    .scheduler(new ExecutionSelectRepairScheduler({ maxRepairRounds: 0 }))
+    .budget(input.budget ?? { maxCandidates: input.models.length })
+    .compile();
+}
 
 export function executionSelectRepairWorkflow(input: ExecutionSelectRepairWorkflowInput): KernelWorkflow {
   const task = createTaskArtifact({ ...input.task, artifactId: input.task.id ?? "task" });
@@ -170,7 +201,7 @@ export function executionSelectRepairWorkflow(input: ExecutionSelectRepairWorkfl
         refs.node("evidence", ArtifactTypes.EvidenceBundle)
       ]
     })
-    .node("repair", new RepairOperator({ repair: input.repair }), {
+    .node("repair", new RepairOperator({ repair: input.repair, shouldRepair: input.repairWhen }), {
       inputs: [
         refs.artifact(task.id),
         refs.node("panel", ArtifactTypes.Candidate),
@@ -189,6 +220,7 @@ export function registerBuiltInWorkflows(): void {
     ["panel-capture", panelCaptureWorkflow],
     ["panel-judge-synth", panelJudgeSynthWorkflow],
     ["rank-fuse", rankFuseWorkflow],
+    ["execution-select", executionSelectWorkflow],
     ["execution-select-repair", executionSelectRepairWorkflow]
   ];
   for (const [id, factory] of workflows) {

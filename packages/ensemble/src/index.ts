@@ -103,6 +103,7 @@ export {
 export type { CreateTaskArtifactInput } from "./kernel-helpers.js";
 export {
   directModelWorkflow,
+  executionSelectWorkflow,
   executionSelectRepairWorkflow,
   panelCaptureWorkflow,
   panelJudgeSynthWorkflow,
@@ -111,6 +112,7 @@ export {
 } from "./workflows.js";
 export type {
   DirectModelWorkflowInput,
+  ExecutionSelectWorkflowInput,
   ExecutionSelectRepairWorkflowInput,
   PanelCaptureWorkflowInput,
   PanelJudgeSynthWorkflowInput,
@@ -141,6 +143,7 @@ export type {
   EvidenceSource,
   MergeRecipe,
   RankMatrix,
+  RepairPredicate,
   RepairOutput,
   ReviewResult,
   RouteDecision,

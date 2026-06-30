@@ -9,6 +9,11 @@ outcomes. The kernel is intentionally boring: artifacts, operators, graph
 execution, budgets, traces, evidence, and outcomes. SOTA behavior lives in
 schedulers and operators.
 
+Advanced scheduler-family exports are extension points. They define where
+adaptive routing, tree search, agentic delegation, learned workflow policies, and
+offline architecture search plug in; they should not be read as full
+AB-MCTS/TreeQuest, Devin Fusion, or Fugu-style implementations by themselves.
+
 ## What it gives you
 
 - immutable typed artifacts;

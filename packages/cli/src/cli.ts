@@ -6,6 +6,7 @@ import { Command } from "commander";
 import "./tools.js";
 import { FUSIONKIT_PYPI_VERSION } from "./fusion-quickstart.js";
 import { registerConfig } from "./commands/config.js";
+import { registerDeployment } from "./commands/deployment.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerEnsemble } from "./commands/ensemble.js";
 import { registerFusion } from "./commands/fusion.js";
@@ -53,6 +54,7 @@ export function buildProgram(): Command {
   registerConfig(program);
   registerSetup(program);
   registerDoctor(program);
+  registerDeployment(program);
 
   return program;
 }

@@ -430,6 +430,54 @@ test("private observations and signals are recorded but hidden from scheduler st
   assert.deepEqual(observedStateSignals, [result.outcome.signalIds]);
 });
 
+test("signals derived from private observations inherit private leakage", async () => {
+  const task = taskArtifact();
+  const evidenceOperator: Operator = {
+    spec: {
+      id: "private-evidence",
+      kind: "evidence",
+      requiredInputTypes: ["task"],
+      outputTypes: ["final_answer"],
+      sideEffects: "none"
+    },
+    run(inputs, ctx) {
+      const targetArtifactId = inputs[0]?.id ?? task.id;
+      const observation = ctx.recordObservation({
+        sourceId: "private-grade",
+        targetArtifactId,
+        type: "private_grade",
+        value: { passed: true },
+        leakage: "private",
+        visibility: "private_eval"
+      });
+      ctx.recordSignal({
+        targetArtifactId,
+        dimension: "correctness",
+        score: 1,
+        confidence: 1,
+        calibration: "ground_truth",
+        leakageRisk: "public",
+        observationIds: [observation.id]
+      });
+      return [ctx.createArtifact({ type: "final_answer", value: { content: "done" } })];
+    }
+  };
+
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: "private_signal_graph",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "evidence", operator: evidenceOperator, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler: new StaticDAGScheduler(),
+    artifacts: [task]
+  });
+
+  assert.equal(result.signals[0]?.leakageRisk, "private");
+  assert.equal(result.outcome.signalIds.length, 0);
+  assert.equal(result.outcome.privateSignalIds.length, 1);
+});
+
 test("private evaluation artifacts cannot enter runtime operator inputs by default", async () => {
   const privateGrade = createArtifact({
     id: "private-grade",
@@ -464,6 +512,70 @@ test("private evaluation artifacts cannot enter runtime operator inputs by defau
       }),
     /cannot consume private\/contaminated artifact/
   );
+});
+
+test("private runtime inputs require both budget and operator leakage permission", async () => {
+  const privateArtifact = createArtifact({
+    id: "private-runtime",
+    type: "private_grade",
+    value: { score: 1 },
+    visibility: "runtime",
+    leakage: "private"
+  });
+  const reader = (allowedInputLeakage?: Array<"none" | "public" | "private" | "contaminated">): Operator => ({
+    spec: {
+      id: "reader",
+      kind: "reader",
+      requiredInputTypes: ["private_grade"],
+      outputTypes: ["final_answer"],
+      sideEffects: "none",
+      ...(allowedInputLeakage !== undefined ? { allowedInputLeakage } : {})
+    },
+    run(_inputs, ctx) {
+      return [ctx.createArtifact({ type: "final_answer", value: { content: "ok" } })];
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "private_no_budget",
+          inputArtifactIds: [privateArtifact.id],
+          nodes: [{ id: "reader", operator: reader(["private"]), inputs: [{ artifactId: privateArtifact.id }] }]
+        },
+        scheduler: new StaticDAGScheduler(),
+        artifacts: [privateArtifact]
+      }),
+    /without private runtime input budget permission/
+  );
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "private_no_operator",
+          inputArtifactIds: [privateArtifact.id],
+          nodes: [{ id: "reader", operator: reader(), inputs: [{ artifactId: privateArtifact.id }] }]
+        },
+        scheduler: new StaticDAGScheduler(),
+        artifacts: [privateArtifact],
+        budget: { allowPrivateRuntimeInputs: true }
+      }),
+    /without operator leakage permission/
+  );
+
+  const allowed = await new FusionRuntime().run({
+    graph: {
+      id: "private_allowed",
+      inputArtifactIds: [privateArtifact.id],
+      nodes: [{ id: "reader", operator: reader(["private"]), inputs: [{ artifactId: privateArtifact.id }] }]
+    },
+    scheduler: new StaticDAGScheduler(),
+    artifacts: [privateArtifact],
+    budget: { allowPrivateRuntimeInputs: true }
+  });
+  assert.equal(allowed.outcome.status, "succeeded");
 });
 
 test("workspace writer budget enforces single-writer discipline", async () => {
@@ -538,6 +650,65 @@ test("runtime retries retryable operators and exports replay records", async () 
   assert.ok(result.trace.some((event) => event.type === "operator.retry"));
   assert.equal(replay.schema, "fusion-runtime-replay.v1");
   assert.equal(replay.outcome.runId, "retry_run");
+});
+
+test("same-model samples get distinct candidate and artifact identities", async () => {
+  const task = taskArtifact();
+  const client: ModelClient = {
+    generate: ({ model }) => ({ model, content: "sample" })
+  };
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: "self_moa_samples",
+      inputArtifactIds: [task.id],
+      nodes: [
+        { id: "sample_a", operator: new ModelGenerateOperator({ model: "same", client }), inputs: [{ artifactId: task.id }] },
+        { id: "sample_b", operator: new ModelGenerateOperator({ model: "same", client }), inputs: [{ artifactId: task.id }] }
+      ]
+    },
+    scheduler: new StaticDAGScheduler(),
+    artifacts: [task]
+  });
+  const candidates = result.finalArtifacts.map((artifact) => artifact.value as CandidateArtifactValue);
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.candidateId).sort(),
+    ["same:sample:sample_a", "same:sample:sample_b"]
+  );
+  assert.equal(new Set(result.outcome.finalArtifactIds).size, 2);
+});
+
+test("actual budget usage reconciles reserved expected cost", async () => {
+  const task = taskArtifact();
+  const metered: Operator = {
+    spec: {
+      id: "metered",
+      kind: "metered",
+      requiredInputTypes: ["task"],
+      outputTypes: ["final_answer"],
+      sideEffects: "none",
+      expectedCost: { usd: 0.05, inputTokens: 10 }
+    },
+    run(_inputs, ctx) {
+      ctx.consumeBudget({ usd: 0.03, inputTokens: 7 });
+      return [ctx.createArtifact({ type: "final_answer", value: { content: "ok" } })];
+    }
+  };
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: "budget_reconcile",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "metered", operator: metered, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler: new StaticDAGScheduler(),
+    artifacts: [task],
+    budget: { expectedCostPolicy: "reserve" }
+  });
+
+  assert.equal(result.outcome.budget.actualCostUsd, 0.03);
+  assert.equal(result.outcome.budget.costUsd, 0.05);
+  assert.ok(Math.abs(result.outcome.budget.reservedCostUsd - 0.02) < 1e-9);
+  assert.equal(result.outcome.budget.actualInputTokens, 7);
+  assert.equal(result.outcome.budget.inputTokens, 10);
 });
 
 test("runtime cancellation marks cancelled status", async () => {
@@ -718,10 +889,10 @@ test("execution-select-repair scheduler records evidence and repairs selected ca
   });
   const evidence = new EvidenceSourceOperator({
     id: "tests",
-    source: ({ candidates }) => ({
-      observations: candidates.map((candidate) => ({
+    source: ({ candidateRefs }) => ({
+      observations: candidateRefs.map((candidate) => ({
         sourceId: "public-tests",
-        targetArtifactId: `panel.candidate.1.${candidate.candidateId}`,
+        targetArtifactId: candidate.artifactId,
         type: "test_result",
         value: { passed: false },
         leakage: "public" as const
@@ -731,7 +902,8 @@ test("execution-select-repair scheduler records evidence and repairs selected ca
   });
   const select = new SelectOperator({
     id: "select",
-    selector: ({ candidates }) => {
+    selector: ({ candidates, visibleObservations }) => {
+      assert.equal(visibleObservations[0]?.targetArtifactId, "panel.candidate.1.alpha");
       const candidate = candidates[0];
       assert.ok(candidate !== undefined);
       return { candidate, reason: "single generated candidate" };
@@ -739,6 +911,11 @@ test("execution-select-repair scheduler records evidence and repairs selected ca
   });
   const repair = new RepairOperator({
     id: "repair",
+    shouldRepair: ({ visibleObservations }) =>
+      visibleObservations.some((observation) => {
+        const value = observation.value as { passed?: boolean };
+        return value.passed === false;
+      }),
     repair: ({ selected }) => ({
       candidate: {
         candidateId: "alpha-repaired",

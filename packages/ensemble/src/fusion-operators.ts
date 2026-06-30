@@ -202,7 +202,7 @@ export class ModelGenerateOperator implements Operator {
       },
       ctx
     );
-    const candidateId = this.#modelId;
+    const candidateId = `${this.#modelId}:sample:${ctx.nodeId}`;
     const value: CandidateArtifactValue = {
       candidateId,
       modelId: this.#modelId,
@@ -215,7 +215,7 @@ export class ModelGenerateOperator implements Operator {
     };
     return [
       ctx.createArtifact({
-        id: `${this.spec.id}.candidate.${slug(candidateId)}`,
+        id: `${ctx.nodeId}.${this.spec.id}.candidate.${slug(candidateId)}`,
         type: ArtifactTypes.Candidate,
         value,
         visibility: this.#visibility,

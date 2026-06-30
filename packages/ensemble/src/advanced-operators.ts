@@ -10,6 +10,7 @@ import type {
   RecordSignalInput,
   TaskSpec
 } from "./runtime.js";
+import type { Observation, Signal } from "./runtime.js";
 import { ArtifactTypes, OperatorKinds } from "./artifact-types.js";
 import {
   candidatesFromInputs,
@@ -28,6 +29,12 @@ export type EvidenceBundle = {
   signals: string[];
   summary?: string;
   metadata?: Record<string, unknown>;
+};
+
+export type CandidateRef = {
+  artifactId: string;
+  value: CandidateArtifactValue;
+  provenance: Artifact["provenance"];
 };
 
 export type RankMatrix = {
@@ -96,6 +103,9 @@ export type MergeRecipe = {
 export type EvidenceSource = (input: {
   task: TaskSpec;
   candidates: CandidateArtifactValue[];
+  candidateRefs: CandidateRef[];
+  visibleSignals: readonly Signal[];
+  visibleObservations: readonly Observation[];
   ctx: OperatorRunContext;
 }) =>
   | {
@@ -114,16 +124,22 @@ export type EvidenceSource = (input: {
 export type SignalCalibrator = (input: {
   task: TaskSpec;
   candidates: CandidateArtifactValue[];
+  candidateRefs: CandidateRef[];
   evidence: EvidenceBundle[];
+  visibleSignals: readonly Signal[];
+  visibleObservations: readonly Observation[];
   ctx: OperatorRunContext;
 }) => RecordSignalInput[] | Promise<RecordSignalInput[]>;
 
 export type CandidateSelector = (input: {
   task: TaskSpec;
   candidates: CandidateArtifactValue[];
+  candidateRefs: CandidateRef[];
   comparison?: JudgeComparison;
   rankMatrix?: RankMatrix;
   evidence: EvidenceBundle[];
+  visibleSignals: readonly Signal[];
+  visibleObservations: readonly Observation[];
   ctx: OperatorRunContext;
 }) => SelectedCandidate | Promise<SelectedCandidate>;
 
@@ -131,9 +147,21 @@ export type CandidateRepairer = (input: {
   task: TaskSpec;
   selected?: SelectedCandidate;
   candidates: CandidateArtifactValue[];
+  candidateRefs: CandidateRef[];
   evidence: EvidenceBundle[];
+  visibleSignals: readonly Signal[];
+  visibleObservations: readonly Observation[];
   ctx: OperatorRunContext;
 }) => RepairOutput | Promise<RepairOutput>;
+
+export type RepairPredicate = (input: {
+  selected?: SelectedCandidate;
+  candidates: CandidateArtifactValue[];
+  candidateRefs: CandidateRef[];
+  evidence: EvidenceBundle[];
+  visibleSignals: readonly Signal[];
+  visibleObservations: readonly Observation[];
+}) => boolean;
 
 function spec(input: {
   id: string;
@@ -159,6 +187,19 @@ function evidenceFromInputs(inputs: readonly Artifact[]): EvidenceBundle[] {
   return inputs
     .filter((artifact) => artifact.type === ArtifactTypes.EvidenceBundle)
     .map((artifact) => artifact.value as EvidenceBundle);
+}
+
+function candidateRefsFromInputs(inputs: readonly Artifact[]): CandidateRef[] {
+  return inputs.flatMap((artifact) => {
+    const candidate = candidatesFromInputs([artifact])[0];
+    return candidate === undefined
+      ? []
+      : [{
+          artifactId: artifact.id,
+          value: candidate,
+          provenance: artifact.provenance
+        }];
+  });
 }
 
 function comparisonFromInputs(inputs: readonly Artifact[]): JudgeComparison | undefined {
@@ -225,7 +266,14 @@ export class EvidenceSourceOperator implements Operator {
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
-    const result = await this.#source({ task: taskFromInputs(inputs), candidates: candidatesFromInputs(inputs), ctx });
+    const result = await this.#source({
+      task: taskFromInputs(inputs),
+      candidates: candidatesFromInputs(inputs),
+      candidateRefs: candidateRefsFromInputs(inputs),
+      visibleSignals: ctx.visibleSignals(),
+      visibleObservations: ctx.visibleObservations(),
+      ctx
+    });
     const observations = (result.observations ?? []).map((observation) => ctx.recordObservation(observation).id);
     const signals = (result.signals ?? []).map((signal) => ctx.recordSignal(signal).id);
     return [
@@ -264,7 +312,10 @@ export class CalibrateSignalOperator implements Operator {
     const signals = await this.#calibrator({
       task: taskFromInputs(inputs),
       candidates: candidatesFromInputs(inputs),
+      candidateRefs: candidateRefsFromInputs(inputs),
       evidence: evidenceFromInputs(inputs),
+      visibleSignals: ctx.visibleSignals(),
+      visibleObservations: ctx.visibleObservations(),
       ctx
     });
     const signalIds = signals.map((signal) => ctx.recordSignal(signal).id);
@@ -376,9 +427,12 @@ export class SelectOperator implements Operator {
         ? await this.#selector({
             task: taskFromInputs(inputs),
             candidates,
+            candidateRefs: candidateRefsFromInputs(inputs),
             comparison: comparisonFromInputs(inputs),
             rankMatrix: rankMatrixFromInputs(inputs),
             evidence: evidenceFromInputs(inputs),
+            visibleSignals: ctx.visibleSignals(),
+            visibleObservations: ctx.visibleObservations(),
             ctx
           })
         : selectFromEvidence({ candidates, comparison: comparisonFromInputs(inputs), rankMatrix: rankMatrixFromInputs(inputs) });
@@ -397,9 +451,11 @@ export class SelectOperator implements Operator {
 export class RepairOperator implements Operator {
   readonly spec: OperatorSpec;
   readonly #repair: CandidateRepairer;
+  readonly #shouldRepair: RepairPredicate | undefined;
 
-  constructor(options: { id?: string; repair: CandidateRepairer; sideEffects?: OperatorSideEffects }) {
+  constructor(options: { id?: string; repair: CandidateRepairer; shouldRepair?: RepairPredicate; sideEffects?: OperatorSideEffects }) {
     this.#repair = options.repair;
+    this.#shouldRepair = options.shouldRepair;
     this.spec = spec({
       id: options.id ?? "candidate.repair",
       kind: OperatorKinds.Repair,
@@ -411,11 +467,42 @@ export class RepairOperator implements Operator {
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
+    const candidates = candidatesFromInputs(inputs);
+    const candidateRefs = candidateRefsFromInputs(inputs);
+    const evidence = evidenceFromInputs(inputs);
+    const selected = selectedFromInputs(inputs);
+    const visibleSignals = ctx.visibleSignals();
+    const visibleObservations = ctx.visibleObservations();
+    if (
+      this.#shouldRepair !== undefined &&
+      !this.#shouldRepair({ selected, candidates, candidateRefs, evidence, visibleSignals, visibleObservations })
+    ) {
+      const original = selected?.candidate ?? candidates[0];
+      if (original === undefined) throw new Error("repair skipped but no candidate is available to pass through");
+      return [
+        ctx.createArtifact({
+          id: `${this.spec.id}.${original.candidateId}.unchanged`,
+          type: ArtifactTypes.Candidate,
+          value: {
+            ...original,
+            metadata: {
+              ...(original.metadata ?? {}),
+              repair_skipped: true
+            }
+          },
+          visibility: "runtime",
+          leakage: "public"
+        })
+      ];
+    }
     const output = await this.#repair({
       task: taskFromInputs(inputs),
-      selected: selectedFromInputs(inputs),
-      candidates: candidatesFromInputs(inputs),
-      evidence: evidenceFromInputs(inputs),
+      selected,
+      candidates,
+      candidateRefs,
+      evidence,
+      visibleSignals,
+      visibleObservations,
       ctx
     });
     return [

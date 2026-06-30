@@ -31,6 +31,11 @@ Use the kernel when composing or testing:
 Do not use the kernel as a learned-policy training loop. Learned coordination consumes replay and
 outcome records emitted by the kernel; it does not live inside the runtime substrate.
 
+Advanced scheduler-family classes are extension points unless stated otherwise.
+For example, `TreeSearchScheduler` validates and executes graph nodes that
+represent expansion/scoring, but it is not a full AB-MCTS/TreeQuest search loop
+until a concrete search-state policy is supplied around it.
+
 ## Install / import surface
 
 ```ts
