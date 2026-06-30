@@ -371,7 +371,7 @@ Velum fork of Apple `mlx-lm`. v0.31.3+structured.3. ~50k LOC, 298 tests. MIT (up
 
 **Positioning:** a provider/consumer of the model-fusion protocol, **not** its owner. Velum-added modules are all import-safe (no `mlx` import required): `model_fusion_protocol.py`, `model_fusion_contracts.py`, `openai_compat.py`, `server_metadata.py`, plus scripts and the lock.
 
-**Protocol lock:** origin `velum-labs/fusionkit spec/model-fusion-contract`; hash `sha256:75792f89…`; records `model_endpoint.v1`, `model-call-record.v1` (provider-only — no FusionKit/HandoffKit imports). **No package semver pinned** — identified by bundle hash + OpenAPI 3.1 only.
+**Protocol lock:** origin `velum-labs/handoffkit spec/model-fusion-contract`; hash `sha256:75792f89…`; records `model_endpoint.v1`, `model-call-record.v1` (provider-only — no FusionKit/HandoffKit imports). **No package semver pinned** — identified by bundle hash + OpenAPI 3.1 only.
 
 **CI split:** `velum-protocol-validation` (Ubuntu, import-safe only, ~6 modules) is the real PR gate; `velum-private-release` (Ubuntu, build + validate + private PyPI or GH draft); upstream `pull_request` (self-hosted macOS, full MLX suite) is **guarded off** on the fork (`if: github.repository == 'ml-explore/mlx-lm'`). The fork's PR CI **never exercises real MLX inference**.
 

@@ -20,7 +20,7 @@ Only tags matching `model-fusion-protocol-v*` trigger publishing. Manual
 The workflow is guarded with:
 
 ```yaml
-if: github.repository == 'velum-labs/fusionkit'
+if: github.repository == 'velum-labs/handoffkit'
 ```
 
 Forks and non-canonical repositories do not publish packages.
