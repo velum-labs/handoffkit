@@ -12,7 +12,6 @@ import type {
 
 type RunGraphOptions = {
   maxConcurrency?: number;
-  maxRunsByKind?: Record<string, number>;
   chooseReady?: (ready: readonly OperatorGraphNode[], ctx: SchedulerExecutionContext) => OperatorGraphNode | undefined;
 };
 
@@ -71,7 +70,6 @@ async function runGraph(
 ): Promise<SchedulerRunResult> {
   const remaining = new Map(graph.nodes.map((node) => [node.id, node]));
   const completed = new Set<string>();
-  const kindRuns = new Map<string, number>();
   const maxConcurrency = Math.max(1, options.maxConcurrency ?? 1);
   while (remaining.size > 0) {
     const ready = [...remaining.values()].filter((node) =>
@@ -82,20 +80,20 @@ async function runGraph(
         `${family} graph ${graph.id} has a cycle or unsatisfied dependencies: ${[...remaining.keys()].join(", ")}`
       );
     }
-    const chosen = options.chooseReady?.(ready, ctx);
-    const runnable = chosen !== undefined ? [chosen] : ready;
-    const allowed = runnable.filter((node) => {
-      const maxRuns = options.maxRunsByKind?.[node.operator.spec.kind];
-      return maxRuns === undefined || (kindRuns.get(node.operator.spec.kind) ?? 0) < maxRuns;
-    });
-    if (allowed.length === 0) {
-      break;
+    let runnable: readonly OperatorGraphNode[];
+    if (options.chooseReady !== undefined) {
+      const chosen = options.chooseReady(ready, ctx);
+      if (chosen === undefined || !ready.some((node) => node.id === chosen.id)) {
+        throw new OperatorGraphError(`${family} policy must choose one of the ready nodes`);
+      }
+      runnable = [chosen];
+    } else {
+      runnable = ready;
     }
-    await runLayer(allowed, ctx, maxConcurrency, family);
-    for (const node of allowed) {
+    await runLayer(runnable, ctx, maxConcurrency, family);
+    for (const node of runnable) {
       completed.add(node.id);
       remaining.delete(node.id);
-      kindRuns.set(node.operator.spec.kind, (kindRuns.get(node.operator.spec.kind) ?? 0) + 1);
     }
   }
   const finalArtifactIds =
@@ -104,27 +102,29 @@ async function runGraph(
 }
 
 function inferLayers(graph: OperatorGraph): OperatorGraphNode[][] {
-  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
-  const depth = new Map<string, number>();
-  const visit = (node: OperatorGraphNode): number => {
-    const cached = depth.get(node.id);
-    if (cached !== undefined) return cached;
-    const dependencyDepths = dependenciesFor(node)
-      .map((dependency) => nodesById.get(dependency))
-      .filter((dependency): dependency is OperatorGraphNode => dependency !== undefined)
-      .map(visit);
-    const value = dependencyDepths.length === 0 ? 0 : Math.max(...dependencyDepths) + 1;
-    depth.set(node.id, value);
-    return value;
-  };
-  for (const node of graph.nodes) visit(node);
+  const remaining = new Map(graph.nodes.map((node) => [node.id, node]));
+  const completed = new Set<string>();
   const layers: OperatorGraphNode[][] = [];
-  for (const node of graph.nodes) {
-    const layerIndex = depth.get(node.id) ?? 0;
-    layers[layerIndex] ??= [];
-    layers[layerIndex]?.push(node);
+  while (remaining.size > 0) {
+    const layer = [...remaining.values()].filter((node) =>
+      dependenciesFor(node).every((dependency) => completed.has(dependency))
+    );
+    if (layer.length === 0) {
+      throw new OperatorGraphError(
+        `fixed-layer-moa graph ${graph.id} has a cycle or unsatisfied dependencies: ${[...remaining.keys()].join(", ")}`
+      );
+    }
+    layers.push(layer);
+    for (const node of layer) {
+      completed.add(node.id);
+      remaining.delete(node.id);
+    }
   }
   return layers;
+}
+
+function countKind(graph: OperatorGraph, kind: string): number {
+  return graph.nodes.filter((node) => node.operator.spec.kind === kind).length;
 }
 
 export class FixedLayerMoAScheduler implements Scheduler {
@@ -136,7 +136,7 @@ export class FixedLayerMoAScheduler implements Scheduler {
   constructor(options: { id?: string; layers?: string[][]; maxConcurrency?: number } = {}) {
     this.id = options.id ?? "fixed-layer-moa";
     this.#layers = options.layers;
-    this.#maxConcurrency = Math.max(1, options.maxConcurrency ?? Number.POSITIVE_INFINITY);
+    this.#maxConcurrency = Math.max(1, options.maxConcurrency ?? Number.MAX_SAFE_INTEGER);
   }
 
   async schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
@@ -164,17 +164,21 @@ export class BestOfNScheduler implements Scheduler {
   readonly #maxCandidates: number;
 
   constructor(options: { id?: string; maxCandidates: number }) {
+    if (!Number.isInteger(options.maxCandidates) || options.maxCandidates < 1) {
+      throw new OperatorGraphError("best-of-n maxCandidates must be a positive integer");
+    }
     this.id = options.id ?? "best-of-n";
     this.#maxCandidates = options.maxCandidates;
   }
 
   schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
-    return runGraph(graph, ctx, this.family, {
-      maxRunsByKind: {
-        "model.generate": this.#maxCandidates,
-        "panel.generate": 1
-      }
-    });
+    const generatorCount = countKind(graph, "model.generate") + countKind(graph, "panel.generate");
+    if (generatorCount > this.#maxCandidates) {
+      throw new OperatorGraphError(
+        `best-of-n graph declares ${generatorCount} generator operator(s), above maxCandidates ${this.#maxCandidates}`
+      );
+    }
+    return runGraph(graph, ctx, this.family);
   }
 }
 
@@ -204,11 +208,13 @@ export class ExecutionSelectRepairScheduler implements Scheduler {
 
   schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
     ensureKinds(graph, this.family, ["evidence", "select"]);
-    return runGraph(graph, ctx, this.family, {
-      maxRunsByKind: {
-        repair: this.#maxRepairRounds
-      }
-    });
+    const repairCount = countKind(graph, "repair");
+    if (repairCount > this.#maxRepairRounds) {
+      throw new OperatorGraphError(
+        `execution-select-repair graph declares ${repairCount} repair operator(s), above maxRepairRounds ${this.#maxRepairRounds}`
+      );
+    }
+    return runGraph(graph, ctx, this.family);
   }
 }
 
@@ -233,16 +239,18 @@ export class TreeSearchScheduler implements Scheduler {
 
   constructor(options: { id?: string; maxExpansions?: number } = {}) {
     this.id = options.id ?? "tree-search";
-    this.#maxExpansions = options.maxExpansions ?? Number.POSITIVE_INFINITY;
+    this.#maxExpansions = options.maxExpansions ?? Number.MAX_SAFE_INTEGER;
   }
 
   schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
     ensureKinds(graph, this.family, ["tree.expand", "tree.score"]);
-    return runGraph(graph, ctx, this.family, {
-      maxRunsByKind: {
-        "tree.expand": this.#maxExpansions
-      }
-    });
+    const expansionCount = countKind(graph, "tree.expand");
+    if (expansionCount > this.#maxExpansions) {
+      throw new OperatorGraphError(
+        `tree-search graph declares ${expansionCount} expansion operator(s), above maxExpansions ${this.#maxExpansions}`
+      );
+    }
+    return runGraph(graph, ctx, this.family);
   }
 }
 
@@ -284,7 +292,14 @@ export class LearnedWorkflowScheduler implements Scheduler {
     return runGraph(graph, ctx, this.family, {
       chooseReady: (ready) => {
         const selectedId = this.#policy.chooseReadyNode({ graph, ready, state: ctx.state() });
-        return ready.find((node) => node.id === selectedId) ?? ready[0];
+        if (selectedId === undefined) {
+          throw new OperatorGraphError("learned workflow policy did not choose a ready node");
+        }
+        const selected = ready.find((node) => node.id === selectedId);
+        if (selected === undefined) {
+          throw new OperatorGraphError(`learned workflow policy chose non-ready node ${selectedId}`);
+        }
+        return selected;
       }
     });
   }

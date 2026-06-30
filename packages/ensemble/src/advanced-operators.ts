@@ -199,25 +199,37 @@ function selectedFromInputs(inputs: readonly Artifact[]): SelectedCandidate | un
   return artifact?.value !== null && typeof artifact?.value === "object" ? (artifact.value as SelectedCandidate) : undefined;
 }
 
-function firstCandidate(candidates: CandidateArtifactValue[]): SelectedCandidate {
-  const candidate = candidates[0];
-  if (candidate === undefined) throw new Error("no candidates available to select");
-  return { candidate, reason: "first candidate fallback" };
-}
-
-function defaultSelect(input: {
+function selectFromEvidence(input: {
   candidates: CandidateArtifactValue[];
   comparison?: JudgeComparison;
   rankMatrix?: RankMatrix;
 }): SelectedCandidate {
+  if (input.candidates.length === 0) throw new Error("selection requires at least one candidate");
   const selectedId =
     input.comparison?.selectedCandidateId ??
     [...(input.rankMatrix?.rankings ?? [])].sort((left, right) => right.score - left.score)[0]?.candidateId;
   if (selectedId !== undefined) {
     const candidate = input.candidates.find((entry) => entry.candidateId === selectedId);
     if (candidate !== undefined) return { candidate, reason: "selected by comparison/ranking" };
+    throw new Error(`selection referenced missing candidate ${selectedId}`);
   }
-  return firstCandidate(input.candidates);
+  throw new Error("selection requires an explicit comparison, rank matrix, or selector policy");
+}
+
+function assertScore(name: string, score: number): void {
+  if (!Number.isFinite(score) || score < 0 || score > 1) {
+    throw new Error(`${name} score must be between 0 and 1`);
+  }
+}
+
+function validateRankMatrix(matrix: RankMatrix): void {
+  const seen = new Set<string>();
+  for (const ranking of matrix.rankings) {
+    if (ranking.candidateId.length === 0) throw new Error("rank matrix candidateId must be non-empty");
+    if (seen.has(ranking.candidateId)) throw new Error(`rank matrix duplicates candidate ${ranking.candidateId}`);
+    seen.add(ranking.candidateId);
+    assertScore(`rank matrix ${ranking.candidateId}`, ranking.score);
+  }
 }
 
 export class EvidenceSourceOperator implements Operator {
@@ -363,6 +375,7 @@ export class PairRankOperator implements Operator {
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const matrix = await this.#rank({ candidates: candidatesFromInputs(inputs), task: taskFromInputs(inputs), ctx });
+    validateRankMatrix(matrix);
     return [ctx.createArtifact({ id: `${this.spec.id}.matrix`, type: "rank_matrix", value: matrix, visibility: "runtime", leakage: "public" })];
   }
 }
@@ -393,7 +406,7 @@ export class SelectOperator implements Operator {
             evidence: evidenceFromInputs(inputs),
             ctx
           })
-        : defaultSelect({ candidates, comparison: comparisonFromInputs(inputs), rankMatrix: rankMatrixFromInputs(inputs) });
+        : selectFromEvidence({ candidates, comparison: comparisonFromInputs(inputs), rankMatrix: rankMatrixFromInputs(inputs) });
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.selected`,
@@ -478,6 +491,7 @@ export class RouteOperator implements Operator {
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const decision = await this.#route({ task: taskFromInputs(inputs), ctx });
+    if (decision.routeId.length === 0) throw new Error("route decision requires a non-empty routeId");
     return [ctx.createArtifact({ id: `${this.spec.id}.decision`, type: "route_decision", value: decision, visibility: "runtime", leakage: "public" })];
   }
 }
@@ -504,7 +518,9 @@ export class DelegateOperator implements Operator {
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const route = inputs.find((artifact) => artifact.type === "route_decision")?.value as RouteDecision | undefined;
+    if (route !== undefined && route.routeId.length === 0) throw new Error("route decision requires a non-empty routeId");
     const result = await this.#delegate({ task: taskFromInputs(inputs), route, ctx });
+    if (result.role.length === 0) throw new Error("delegation result requires a non-empty role");
     return [ctx.createArtifact({ id: `${this.spec.id}.result`, type: "delegation_result", value: result, visibility: "runtime", leakage: "public" })];
   }
 }
@@ -536,6 +552,10 @@ export class TreeExpandOperator implements Operator {
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const nodes = inputs.filter((artifact) => artifact.type === "tree_node").map((artifact) => artifact.value as TreeNodeValue);
     const expanded = await this.#expand({ task: taskFromInputs(inputs), nodes, ctx });
+    for (const node of expanded) {
+      if (node.nodeId.length === 0) throw new Error("tree node requires a non-empty nodeId");
+      if (!Number.isInteger(node.depth) || node.depth < 0) throw new Error(`tree node ${node.nodeId} has invalid depth`);
+    }
     return expanded.map((node) => ctx.createArtifact({ id: `${this.spec.id}.${node.nodeId}`, type: "tree_node", value: node, visibility: "runtime", leakage: "public" }));
   }
 }
@@ -554,6 +574,7 @@ export class TreeScoreOperator implements Operator {
       nodes: inputs.filter((artifact) => artifact.type === "tree_node").map((artifact) => artifact.value as TreeNodeValue),
       ctx
     });
+    validateRankMatrix(matrix);
     return [ctx.createArtifact({ id: `${this.spec.id}.matrix`, type: "rank_matrix", value: matrix, visibility: "runtime", leakage: "public" })];
   }
 }
@@ -569,6 +590,8 @@ export class ArchitectureEvaluateOperator implements Operator {
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const result = await this.#evaluate({ task: taskFromInputs(inputs), ctx });
+    if (result.architectureId.length === 0) throw new Error("architecture evaluation requires a non-empty architectureId");
+    assertScore(`architecture ${result.architectureId}`, result.score);
     return [ctx.createArtifact({ id: `${this.spec.id}.result`, type: "architecture_result", value: result, visibility: "developer", leakage: "private" })];
   }
 }
@@ -584,6 +607,9 @@ export class OfflineModelMergeOperator implements Operator {
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const recipe = await this.#merge({ task: taskFromInputs(inputs), ctx });
+    if (recipe.recipeId.length === 0) throw new Error("merge recipe requires a non-empty recipeId");
+    if (recipe.modelIds.length === 0) throw new Error(`merge recipe ${recipe.recipeId} requires at least one model`);
+    if (recipe.steps.length === 0) throw new Error(`merge recipe ${recipe.recipeId} requires at least one step`);
     return [ctx.createArtifact({ id: `${this.spec.id}.${recipe.recipeId}`, type: "merge_recipe", value: recipe, visibility: "developer", leakage: "private" })];
   }
 }

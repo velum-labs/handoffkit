@@ -331,6 +331,8 @@ type RuntimeStore = {
   trace: TraceEvent[];
 };
 
+let defaultArtifactIdCounter = 0;
+
 function isPlainObject(value: object): boolean {
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
@@ -362,7 +364,7 @@ export function createArtifact<T = unknown>(input: CreateArtifactInput<T>): Arti
     ...(input.provenance?.metadata !== undefined ? { metadata: input.provenance.metadata } : {})
   };
   const artifact: Artifact<T> = {
-    id: input.id ?? `artifact_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    id: input.id ?? `artifact_${++defaultArtifactIdCounter}`,
     type: input.type,
     value: deepFreeze(input.value),
     provenance,
@@ -668,6 +670,14 @@ export class FusionRuntime {
         );
       }
       ensureBudget(node.operator.spec);
+      const expected = costOf(node.operator.spec);
+      ledger.operatorRuns += 1;
+      ledger.costUsd += expected.usd ?? 0;
+      ledger.inputTokens += expected.inputTokens ?? 0;
+      ledger.outputTokens += expected.outputTokens ?? 0;
+      ledger.candidates += expected.candidates ?? 0;
+      ledger.toolCalls += expected.toolCalls ?? 0;
+      if (node.operator.spec.sideEffects === "write_workspace") ledger.workspaceWriters += 1;
       const inputArtifactIds = inputs.map((artifact) => artifact.id);
       recordTrace({
         type: "operator.started",
@@ -841,15 +851,11 @@ export class FusionRuntime {
         });
       }
       store.nodeOutputs.set(node.id, outputIds);
-      const expected = costOf(node.operator.spec);
-      ledger.operatorRuns += 1;
       ledger.artifacts = store.artifacts.size;
-      ledger.candidates += expected.candidates ?? outputs.filter((artifact) => artifact.type === "candidate").length;
-      ledger.costUsd += expected.usd ?? 0;
-      ledger.inputTokens += expected.inputTokens ?? 0;
-      ledger.outputTokens += expected.outputTokens ?? 0;
-      ledger.toolCalls += expected.toolCalls ?? 0;
-      if (node.operator.spec.sideEffects === "write_workspace") ledger.workspaceWriters += 1;
+      if (expected.candidates === undefined) {
+        const outputCandidates = outputs.filter((artifact) => artifact.type === "candidate").length;
+        if (outputCandidates > 0) consumeBudget({ candidates: outputCandidates }, node.operator.spec.id);
+      }
       updateElapsed();
       if (budget.maxArtifacts !== undefined && ledger.artifacts > budget.maxArtifacts) {
         recordTrace({ type: "budget.exceeded", operatorId: node.operator.spec.id, payload: { limit: "maxArtifacts" } });

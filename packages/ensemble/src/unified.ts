@@ -588,12 +588,12 @@ export async function runFusionPanels(options: FusionPanelOptions): Promise<Reco
             : typeof wire.trajectory_id === "string"
               ? wire.trajectory_id
               : undefined,
-        modelId: typeof wire.model_id === "string" ? wire.model_id : "unknown",
+        modelId: requiredWireString(wire, "model_id"),
         model: typeof wire.model === "string" ? wire.model : undefined,
-        content: typeof wire.final_output === "string" ? wire.final_output : "",
+        content: requiredWireString(wire, "final_output"),
         raw: wire,
         metadata: {
-          status: typeof wire.status === "string" ? wire.status : "unknown"
+          status: requiredWireString(wire, "status")
         }
       }));
     }
@@ -625,6 +625,14 @@ export async function runFusionPanels(options: FusionPanelOptions): Promise<Reco
       return value.raw;
     })
     .filter((value): value is Record<string, unknown> => value !== null && typeof value === "object");
+}
+
+function requiredWireString(wire: Record<string, unknown>, field: string): string {
+  const value = wire[field];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`fusion panel wire trajectory missing required string field ${field}`);
+  }
+  return value;
 }
 
 function descriptorFor(

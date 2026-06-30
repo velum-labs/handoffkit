@@ -362,7 +362,7 @@ test("private observations and signals are recorded but hidden from scheduler st
         dimension: "correctness",
         score: 0.8,
         confidence: 0.7,
-        calibration: "heuristic",
+        calibration: "empirical",
         leakageRisk: "public",
         observationIds: [publicObservation.id]
       });
@@ -608,6 +608,35 @@ test("rank-fuse scheduler supports PairRank -> Select -> GenFuser", async () => 
   assert.equal(result.outcome.schedulerFamily, "rank-fuse");
 });
 
+test("select operator rejects missing ranking/comparison/selector", async () => {
+  const task = taskArtifact();
+  const model = new ModelGenerateOperator({
+    id: "model",
+    model: "solo",
+    client: {
+      generate: () => ({ model: "solo", content: "answer" })
+    }
+  });
+  const select = new SelectOperator({ id: "select" });
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "select_requires_evidence",
+          inputArtifactIds: [task.id],
+          nodes: [
+            { id: "model", operator: model, inputs: [{ artifactId: task.id }] },
+            { id: "select", operator: select, inputs: [{ artifactId: task.id }, { nodeId: "model" }] }
+          ]
+        },
+        scheduler: new StaticDAGScheduler(),
+        artifacts: [task]
+      }),
+    /selection requires an explicit comparison, rank matrix, or selector policy/
+  );
+});
+
 test("execution-select-repair scheduler records evidence and repairs selected candidates", async () => {
   const task = taskArtifact();
   const panel = new PanelGenerateOperator({
@@ -628,7 +657,14 @@ test("execution-select-repair scheduler records evidence and repairs selected ca
       summary: "public tests failed"
     })
   });
-  const select = new SelectOperator({ id: "select" });
+  const select = new SelectOperator({
+    id: "select",
+    selector: ({ candidates }) => {
+      const candidate = candidates[0];
+      assert.ok(candidate !== undefined);
+      return { candidate, reason: "single generated candidate" };
+    }
+  });
   const repair = new RepairOperator({
     id: "repair",
     repair: ({ selected }) => ({
@@ -706,7 +742,7 @@ test("adaptive router and agentic delegation schedulers run route/delegate/revie
     id: "delegate",
     role: "sidekick",
     delegate: ({ route: decision }) => ({
-      role: decision?.routeId ?? "unknown",
+      role: decision?.routeId ?? "sidekick",
       output: "sidekick notes"
     })
   });
@@ -759,13 +795,77 @@ test("learned workflow scheduler follows injected policy", async () => {
     },
     scheduler: new LearnedWorkflowScheduler({
       policy: {
-        chooseReadyNode: ({ ready }) => ready.find((node) => node.id === "b")?.id ?? ready[0]?.id
+        chooseReadyNode: ({ ready }) => {
+          const preferred = ready.find((node) => node.id === "b") ?? ready.find((node) => node.id === "a");
+          assert.ok(preferred !== undefined);
+          return preferred.id;
+        }
       }
     }),
     artifacts: [task]
   });
 
   assert.deepEqual(seen, ["b", "a"]);
+});
+
+test("learned workflow scheduler rejects non-ready policy choices", async () => {
+  const task = taskArtifact();
+  const op = (id: string): Operator => ({
+    spec: { id, kind: "step", inputTypes: ["task"], outputTypes: ["final_answer"], sideEffects: "none" },
+    run(_inputs, ctx) {
+      return [ctx.createArtifact({ id: `${id}.out`, type: "final_answer", value: { content: id } })];
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "bad_learned_policy",
+          inputArtifactIds: [task.id],
+          nodes: [{ id: "a", operator: op("a"), inputs: [{ artifactId: task.id }] }]
+        },
+        scheduler: new LearnedWorkflowScheduler({
+          policy: {
+            chooseReadyNode: () => "missing"
+          }
+        }),
+        artifacts: [task]
+      }),
+    /non-ready node missing/
+  );
+});
+
+test("concurrent static DAG reserves operator budget before awaiting work", async () => {
+  const task = taskArtifact();
+  let started = 0;
+  const op = (id: string): Operator => ({
+    spec: { id, kind: "parallel", inputTypes: ["task"], outputTypes: ["final_answer"], sideEffects: "none" },
+    async run(_inputs, ctx) {
+      started += 1;
+      await Promise.resolve();
+      return [ctx.createArtifact({ id: `${id}.out`, type: "final_answer", value: { content: id } })];
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      new FusionRuntime().run({
+        graph: {
+          id: "parallel_budget",
+          inputArtifactIds: [task.id],
+          nodes: [
+            { id: "a", operator: op("a"), inputs: [{ artifactId: task.id }] },
+            { id: "b", operator: op("b"), inputs: [{ artifactId: task.id }] }
+          ]
+        },
+        scheduler: new StaticDAGScheduler({ maxConcurrency: 2 }),
+        artifacts: [task],
+        budget: { maxOperatorRuns: 1 }
+      }),
+    (error) => error instanceof BudgetExceededError && /operator runs 2 > 1/.test(error.message)
+  );
+  assert.equal(started, 1);
 });
 
 test("offline architecture and model merge operators stay separate lifecycle artifacts", async () => {
