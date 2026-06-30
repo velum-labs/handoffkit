@@ -1,3 +1,6 @@
+import { validateOperatorGraph } from "./graph-validation.js";
+import { inputNodeIds, terminalNodeIds } from "./graph-utils.js";
+
 export type ArtifactVisibility = "runtime" | "developer" | "user" | "private_eval";
 
 export type ArtifactLeakage = "none" | "public" | "private" | "contaminated";
@@ -100,7 +103,10 @@ export type Artifact<T = unknown> = {
 export type OperatorSpec = {
   id: string;
   kind: string;
-  inputTypes: string[];
+  /** Backward-compatible alias for requiredInputTypes. Prefer requiredInputTypes in new code. */
+  inputTypes?: string[];
+  requiredInputTypes?: string[];
+  optionalInputTypes?: string[];
   outputTypes: string[];
   sideEffects: OperatorSideEffects;
   allowedInputLeakage?: ArtifactLeakage[];
@@ -175,6 +181,7 @@ export type BudgetPolicy = {
   allowedSideEffects?: OperatorSideEffects[];
   maxWorkspaceWriters?: number;
   allowPrivateRuntimeInputs?: boolean;
+  expectedCostPolicy?: "reserve" | "advisory";
 };
 
 export type BudgetLedger = {
@@ -283,6 +290,39 @@ export type RuntimeExecutionResult = {
   outcome: OutcomeRecord;
 };
 
+export class RuntimeExecutionError extends Error {
+  readonly outcome: OutcomeRecord;
+  readonly trace: readonly TraceEvent[];
+  readonly artifacts: readonly Artifact[];
+  readonly observations: readonly Observation[];
+  readonly signals: readonly Signal[];
+
+  constructor(input: {
+    message: string;
+    outcome: OutcomeRecord;
+    trace: readonly TraceEvent[];
+    artifacts: readonly Artifact[];
+    observations: readonly Observation[];
+    signals: readonly Signal[];
+    cause?: unknown;
+  }) {
+    super(input.message);
+    this.name = "RuntimeExecutionError";
+    this.outcome = input.outcome;
+    this.trace = input.trace;
+    this.artifacts = input.artifacts;
+    this.observations = input.observations;
+    this.signals = input.signals;
+    if (input.cause !== undefined) {
+      Object.defineProperty(this, "cause", {
+        value: input.cause,
+        configurable: true,
+        writable: true
+      });
+    }
+  }
+}
+
 export type RuntimeReplayRecord = {
   schema: "fusion-runtime-replay.v1";
   runId: string;
@@ -384,43 +424,15 @@ function costOf(spec: OperatorSpec): CostEstimate {
 }
 
 function operatorInputTypesSatisfied(spec: OperatorSpec, inputs: readonly Artifact[]): boolean {
-  for (const type of spec.inputTypes) {
+  for (const type of spec.requiredInputTypes ?? spec.inputTypes ?? []) {
     if (!inputs.some((artifact) => artifact.type === type)) return false;
   }
   return true;
 }
 
-function inputNodeIds(node: OperatorGraphNode): string[] {
-  return (node.inputs ?? []).flatMap((input) => ("nodeId" in input ? [input.nodeId] : []));
-}
-
-function terminalNodeIds(graph: OperatorGraph): string[] {
-  const dependedOn = new Set<string>();
-  for (const node of graph.nodes) {
-    for (const dependency of node.dependsOn ?? []) dependedOn.add(dependency);
-    for (const dependency of inputNodeIds(node)) dependedOn.add(dependency);
-  }
-  return graph.nodes.map((node) => node.id).filter((id) => !dependedOn.has(id));
-}
-
 function validateGraph(graph: OperatorGraph): void {
-  if (graph.id.length === 0) throw new OperatorGraphError("operator graph requires an id");
-  if (graph.nodes.length === 0) throw new OperatorGraphError("operator graph requires at least one node");
-  const ids = new Set<string>();
-  for (const node of graph.nodes) {
-    if (ids.has(node.id)) throw new OperatorGraphError(`duplicate operator graph node id: ${node.id}`);
-    ids.add(node.id);
-    if (node.operator.spec.id.length === 0) {
-      throw new OperatorGraphError(`operator graph node ${node.id} has an operator without an id`);
-    }
-  }
-  for (const node of graph.nodes) {
-    for (const dependency of [...(node.dependsOn ?? []), ...inputNodeIds(node)]) {
-      if (!ids.has(dependency)) {
-        throw new OperatorGraphError(`operator graph node ${node.id} depends on missing node ${dependency}`);
-      }
-    }
-  }
+  const errors = validateOperatorGraph(graph).filter((issue) => issue.severity === "error");
+  if (errors.length > 0) throw new OperatorGraphError(errors.map((issue) => issue.message).join("; "));
 }
 
 function budgetMessage(limit: string, policy: BudgetPolicy): string {
@@ -484,6 +496,7 @@ export class FusionRuntime {
     budget?: BudgetPolicy;
     runId?: string;
     signal?: AbortSignal;
+    failureMode?: "throw" | "return";
     metadata?: Record<string, unknown>;
   }): Promise<RuntimeExecutionResult> {
     validateGraph(input.graph);
@@ -610,7 +623,9 @@ export class FusionRuntime {
         throw new BudgetExceededError(budgetMessage(`side effect ${spec.sideEffects} is not allowed`, budget));
       }
       const expected = costOf(spec);
-      ensureUsageBudget(expected, spec.id);
+      if ((budget.expectedCostPolicy ?? "reserve") === "reserve") {
+        ensureUsageBudget(expected, spec.id);
+      }
       if (
         budget.maxWorkspaceWriters !== undefined &&
         spec.sideEffects === "write_workspace" &&
@@ -672,11 +687,13 @@ export class FusionRuntime {
       ensureBudget(node.operator.spec);
       const expected = costOf(node.operator.spec);
       ledger.operatorRuns += 1;
-      ledger.costUsd += expected.usd ?? 0;
-      ledger.inputTokens += expected.inputTokens ?? 0;
-      ledger.outputTokens += expected.outputTokens ?? 0;
-      ledger.candidates += expected.candidates ?? 0;
-      ledger.toolCalls += expected.toolCalls ?? 0;
+      if ((budget.expectedCostPolicy ?? "reserve") === "reserve") {
+        ledger.costUsd += expected.usd ?? 0;
+        ledger.inputTokens += expected.inputTokens ?? 0;
+        ledger.outputTokens += expected.outputTokens ?? 0;
+        ledger.candidates += expected.candidates ?? 0;
+        ledger.toolCalls += expected.toolCalls ?? 0;
+      }
       if (node.operator.spec.sideEffects === "write_workspace") ledger.workspaceWriters += 1;
       const inputArtifactIds = inputs.map((artifact) => artifact.id);
       recordTrace({
@@ -949,7 +966,27 @@ export class FusionRuntime {
         ...(input.metadata !== undefined ? { metadata: input.metadata } : {})
       });
       Object.freeze(failedOutcome);
-      throw error;
+      const failedResult = Object.freeze({
+        runId,
+        graph: input.graph,
+        scheduler: input.scheduler,
+        artifacts: Object.freeze([...store.artifacts.values()]),
+        observations: Object.freeze([...store.observations.values()]),
+        signals: Object.freeze([...store.signals.values()]),
+        finalArtifacts: Object.freeze([]),
+        trace: Object.freeze([...store.trace]),
+        outcome: Object.freeze(failedOutcome)
+      });
+      if (input.failureMode === "return") return failedResult;
+      throw new RuntimeExecutionError({
+        message: errorMessage,
+        outcome: failedOutcome,
+        trace: failedResult.trace,
+        artifacts: failedResult.artifacts,
+        observations: failedResult.observations,
+        signals: failedResult.signals,
+        cause: error
+      });
     }
 
     recordTrace({

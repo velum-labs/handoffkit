@@ -2,6 +2,13 @@ import {
   OperatorGraphError,
   StaticDAGScheduler
 } from "./runtime.js";
+import {
+  countOperatorKind,
+  dependenciesFor,
+  nodesById,
+  terminalNodeIds,
+  topoLayers
+} from "./graph-utils.js";
 import type {
   OperatorGraph,
   OperatorGraphNode,
@@ -14,23 +21,6 @@ type RunGraphOptions = {
   maxConcurrency?: number;
   chooseReady?: (ready: readonly OperatorGraphNode[], ctx: SchedulerExecutionContext) => OperatorGraphNode | undefined;
 };
-
-function inputNodeIds(node: OperatorGraphNode): string[] {
-  return (node.inputs ?? []).flatMap((input) => ("nodeId" in input ? [input.nodeId] : []));
-}
-
-function terminalNodeIds(graph: OperatorGraph): string[] {
-  const dependedOn = new Set<string>();
-  for (const node of graph.nodes) {
-    for (const dependency of node.dependsOn ?? []) dependedOn.add(dependency);
-    for (const dependency of inputNodeIds(node)) dependedOn.add(dependency);
-  }
-  return graph.nodes.map((node) => node.id).filter((id) => !dependedOn.has(id));
-}
-
-function dependenciesFor(node: OperatorGraphNode): string[] {
-  return [...(node.dependsOn ?? []), ...inputNodeIds(node)];
-}
 
 function ensureKinds(graph: OperatorGraph, family: string, kinds: readonly string[]): void {
   for (const kind of kinds) {
@@ -101,32 +91,6 @@ async function runGraph(
   return { finalArtifactIds };
 }
 
-function inferLayers(graph: OperatorGraph): OperatorGraphNode[][] {
-  const remaining = new Map(graph.nodes.map((node) => [node.id, node]));
-  const completed = new Set<string>();
-  const layers: OperatorGraphNode[][] = [];
-  while (remaining.size > 0) {
-    const layer = [...remaining.values()].filter((node) =>
-      dependenciesFor(node).every((dependency) => completed.has(dependency))
-    );
-    if (layer.length === 0) {
-      throw new OperatorGraphError(
-        `fixed-layer-moa graph ${graph.id} has a cycle or unsatisfied dependencies: ${[...remaining.keys()].join(", ")}`
-      );
-    }
-    layers.push(layer);
-    for (const node of layer) {
-      completed.add(node.id);
-      remaining.delete(node.id);
-    }
-  }
-  return layers;
-}
-
-function countKind(graph: OperatorGraph, kind: string): number {
-  return graph.nodes.filter((node) => node.operator.spec.kind === kind).length;
-}
-
 export class FixedLayerMoAScheduler implements Scheduler {
   readonly id: string;
   readonly family = "fixed-layer-moa";
@@ -140,15 +104,15 @@ export class FixedLayerMoAScheduler implements Scheduler {
   }
 
   async schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
-    const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+    const byId = nodesById(graph);
     const layers =
       this.#layers?.map((layer) =>
         layer.map((nodeId) => {
-          const node = nodesById.get(nodeId);
+          const node = byId.get(nodeId);
           if (node === undefined) throw new OperatorGraphError(`fixed layer references missing node ${nodeId}`);
           return node;
         })
-      ) ?? inferLayers(graph);
+      ) ?? topoLayers(graph);
     for (const layer of layers) {
       await runLayer(layer, ctx, this.#maxConcurrency, this.family);
     }
@@ -172,7 +136,7 @@ export class BestOfNScheduler implements Scheduler {
   }
 
   schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
-    const generatorCount = countKind(graph, "model.generate") + countKind(graph, "panel.generate");
+    const generatorCount = countOperatorKind(graph, "model.generate") + countOperatorKind(graph, "panel.generate");
     if (generatorCount > this.#maxCandidates) {
       throw new OperatorGraphError(
         `best-of-n graph declares ${generatorCount} generator operator(s), above maxCandidates ${this.#maxCandidates}`
@@ -208,7 +172,7 @@ export class ExecutionSelectRepairScheduler implements Scheduler {
 
   schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
     ensureKinds(graph, this.family, ["evidence", "select"]);
-    const repairCount = countKind(graph, "repair");
+    const repairCount = countOperatorKind(graph, "repair");
     if (repairCount > this.#maxRepairRounds) {
       throw new OperatorGraphError(
         `execution-select-repair graph declares ${repairCount} repair operator(s), above maxRepairRounds ${this.#maxRepairRounds}`
@@ -244,7 +208,7 @@ export class TreeSearchScheduler implements Scheduler {
 
   schedule(graph: OperatorGraph, ctx: SchedulerExecutionContext): Promise<SchedulerRunResult> {
     ensureKinds(graph, this.family, ["tree.expand", "tree.score"]);
-    const expansionCount = countKind(graph, "tree.expand");
+    const expansionCount = countOperatorKind(graph, "tree.expand");
     if (expansionCount > this.#maxExpansions) {
       throw new OperatorGraphError(
         `tree-search graph declares ${expansionCount} expansion operator(s), above maxExpansions ${this.#maxExpansions}`

@@ -15,7 +15,12 @@ import type {
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
-import { emitTrace, newSpanId, newTraceId } from "@fusionkit/protocol";
+import {
+  emitTrace,
+  newSpanId,
+  newTraceId,
+  normalizeWireTrajectories
+} from "@fusionkit/protocol";
 import {
   FusionBackend,
   installAcpAdapters,
@@ -262,28 +267,6 @@ export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string):
     "ACP registry adapters:",
     "  fusionkit ensemble gateway acp-registry install codex-cli claude-agent"
   ].join("\n");
-}
-
-/**
- * Validate the loosely-typed panel output before it crosses the wire to the
- * synthesizer: keep only entries with the required string fields and drop the
- * rest (with a warning) rather than forwarding malformed trajectories.
- */
-function normalizeWireTrajectories(raw: Record<string, unknown>[]): WireTrajectory[] {
-  const out: WireTrajectory[] = [];
-  for (const entry of raw) {
-    if (
-      typeof entry.trajectory_id === "string" &&
-      typeof entry.model_id === "string" &&
-      typeof entry.status === "string" &&
-      typeof entry.final_output === "string"
-    ) {
-      out.push(entry as WireTrajectory);
-    } else {
-      console.error(`fusion: dropping malformed panel trajectory: ${JSON.stringify(entry).slice(0, 200)}`);
-    }
-  }
-  return out;
 }
 
 /**

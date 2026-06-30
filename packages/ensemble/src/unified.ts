@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
+import type { WireTrajectory } from "@fusionkit/protocol";
 import { newSpanId, TRACE_ID_HEADER, TRACE_SPAN_HEADER } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
 
@@ -13,6 +14,7 @@ import { createMockHarness } from "./mock.js";
 import { PanelGenerateOperator } from "./fusion-operators.js";
 import { runEnsemble } from "./run.js";
 import { FusionRuntime, StaticDAGScheduler, createArtifact } from "./runtime.js";
+import type { RuntimeExecutionResult } from "./runtime.js";
 import type {
   EnsembleDescriptor,
   EnsembleModel,
@@ -359,7 +361,7 @@ function stepToWireItem(step: TrajectoryStep): Record<string, unknown> {
   }
 }
 
-function trajectoryToWire(trajectory: HarnessTrajectory): Record<string, unknown> {
+function trajectoryToWire(trajectory: HarnessTrajectory): WireTrajectory {
   return {
     trajectory_id: trajectory.trajectoryId,
     model_id: trajectory.modelId,
@@ -380,7 +382,7 @@ function trajectoryToWire(trajectory: HarnessTrajectory): Record<string, unknown
  * silently dropping it, so a panel where every member failed surfaces as
  * "every model failed" with attribution rather than an opaque "no candidates".
  */
-function failedEvidenceToWire(evidence: JudgeCandidateEvidence): Record<string, unknown> {
+function failedEvidenceToWire(evidence: JudgeCandidateEvidence): WireTrajectory {
   const label = evidence.modelId.length > 0 ? evidence.modelId : evidence.candidateId;
   return {
     trajectory_id: evidence.candidateId,
@@ -503,7 +505,7 @@ export type FusionPanelOptions = {
  * effect the runtime `PanelGenerateOperator` wraps, keeping graph scheduling
  * separate from harness mechanics.
  */
-async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Record<string, unknown>[]> {
+async function captureFusionPanelWires(options: FusionPanelOptions): Promise<WireTrajectory[]> {
   let captured: HarnessTrajectory[] = [];
   let evidence: readonly JudgeCandidateEvidence[] = [];
   const harness: UnifiedHarnessKind = options.harness ?? "agent";
@@ -559,7 +561,7 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Rec
  * one-node static operator graph so the production entry point uses the same
  * artifact/provenance/budget substrate as richer fusion graphs.
  */
-export async function runFusionPanels(options: FusionPanelOptions): Promise<Record<string, unknown>[]> {
+export async function runFusionPanelWorkflow(options: FusionPanelOptions): Promise<RuntimeExecutionResult> {
   const runtime = new FusionRuntime();
   const task = createArtifact({
     id: `${options.id ?? "fusion_panels"}.task`,
@@ -598,7 +600,7 @@ export async function runFusionPanels(options: FusionPanelOptions): Promise<Reco
       }));
     }
   });
-  const result = await runtime.run({
+  return await runtime.run({
     runId: `${options.id ?? "fusion_panels"}_runtime`,
     graph: {
       id: `${options.id ?? "fusion_panels"}_graph`,
@@ -619,15 +621,19 @@ export async function runFusionPanels(options: FusionPanelOptions): Promise<Reco
       maxWorkspaceWriters: 1
     }
   });
+}
+
+export async function runFusionPanels(options: FusionPanelOptions): Promise<WireTrajectory[]> {
+  const result = await runFusionPanelWorkflow(options);
   return result.finalArtifacts
     .map((artifact) => {
       const value = artifact.value as { raw?: unknown };
       return value.raw;
     })
-    .filter((value): value is Record<string, unknown> => value !== null && typeof value === "object");
+    .filter((value): value is WireTrajectory => value !== null && typeof value === "object");
 }
 
-function requiredWireString(wire: Record<string, unknown>, field: string): string {
+function requiredWireString(wire: WireTrajectory, field: keyof WireTrajectory): string {
   const value = wire[field];
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`fusion panel wire trajectory missing required string field ${field}`);

@@ -1,4 +1,10 @@
 import type { EnsembleModel } from "./harness.js";
+import { ArtifactTypes, OperatorKinds } from "./artifact-types.js";
+import {
+  candidatesFromInputs,
+  firstArtifactByType,
+  taskFromInputs
+} from "./kernel-helpers.js";
 import type {
   Artifact,
   ArtifactLeakage,
@@ -92,7 +98,9 @@ export type Synthesizer = (input: {
 function spec(input: {
   id: string;
   kind: string;
-  inputTypes: string[];
+  inputTypes?: string[];
+  requiredInputTypes?: string[];
+  optionalInputTypes?: string[];
   outputTypes: string[];
   sideEffects?: OperatorSideEffects;
   candidates?: number;
@@ -100,7 +108,9 @@ function spec(input: {
   return {
     id: input.id,
     kind: input.kind,
-    inputTypes: input.inputTypes,
+    ...(input.inputTypes !== undefined ? { inputTypes: input.inputTypes } : {}),
+    ...(input.requiredInputTypes !== undefined ? { requiredInputTypes: input.requiredInputTypes } : {}),
+    ...(input.optionalInputTypes !== undefined ? { optionalInputTypes: input.optionalInputTypes } : {}),
     outputTypes: input.outputTypes,
     sideEffects: input.sideEffects ?? "none",
     expectedCost: { candidates: input.candidates ?? 0 }
@@ -133,14 +143,6 @@ function slug(value: string): string {
   return out.slice(start, end) || "artifact";
 }
 
-function taskFromInputs(inputs: readonly Artifact[]): TaskSpec {
-  const task = inputs.find((artifact) => artifact.type === "task");
-  if (task === undefined) return {};
-  if (task.value !== null && typeof task.value === "object") return task.value as TaskSpec;
-  if (typeof task.value === "string") return { prompt: task.value };
-  return {};
-}
-
 function promptFromTask(task: TaskSpec): string {
   if (task.prompt !== undefined) return task.prompt;
   return (task.messages ?? [])
@@ -155,37 +157,8 @@ function messagesFromTask(task: TaskSpec): ChatMessage[] {
   return prompt.length > 0 ? [{ role: "user", content: prompt }] : [];
 }
 
-function candidateFromArtifact(artifact: Artifact): CandidateArtifactValue | undefined {
-  if (artifact.type !== "candidate") return undefined;
-  const value = artifact.value;
-  if (value === null || typeof value !== "object") return undefined;
-  const candidate = value as Partial<CandidateArtifactValue>;
-  if (
-    typeof candidate.candidateId === "string" &&
-    typeof candidate.modelId === "string" &&
-    typeof candidate.model === "string" &&
-    typeof candidate.content === "string"
-  ) {
-    return {
-      candidateId: candidate.candidateId,
-      modelId: candidate.modelId,
-      model: candidate.model,
-      content: candidate.content,
-      ...(candidate.raw !== undefined ? { raw: candidate.raw } : {}),
-      ...(candidate.metadata !== undefined ? { metadata: candidate.metadata } : {})
-    };
-  }
-  return undefined;
-}
-
-function candidatesFromInputs(inputs: readonly Artifact[]): CandidateArtifactValue[] {
-  return inputs.map(candidateFromArtifact).filter((candidate): candidate is CandidateArtifactValue => candidate !== undefined);
-}
-
 function comparisonFromInputs(inputs: readonly Artifact[]): JudgeComparison | undefined {
-  const artifact = inputs.find((candidate) => candidate.type === "judge_comparison");
-  if (artifact === undefined || artifact.value === null || typeof artifact.value !== "object") return undefined;
-  return artifact.value as JudgeComparison;
+  return firstArtifactByType<JudgeComparison>(inputs, ArtifactTypes.JudgeComparison);
 }
 
 export class ModelGenerateOperator implements Operator {
@@ -211,9 +184,9 @@ export class ModelGenerateOperator implements Operator {
     this.#leakage = options.leakage ?? "none";
     this.spec = spec({
       id: options.id ?? `model.generate.${slug(this.#modelId)}`,
-      kind: "model.generate",
-      inputTypes: ["task"],
-      outputTypes: ["candidate"],
+      kind: OperatorKinds.ModelGenerate,
+      requiredInputTypes: [ArtifactTypes.Task],
+      outputTypes: [ArtifactTypes.Candidate],
       candidates: 1
     });
   }
@@ -243,7 +216,7 @@ export class ModelGenerateOperator implements Operator {
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.candidate.${slug(candidateId)}`,
-        type: "candidate",
+        type: ArtifactTypes.Candidate,
         value,
         visibility: this.#visibility,
         leakage: this.#leakage,
@@ -276,9 +249,9 @@ export class PanelGenerateOperator implements Operator {
     this.#sideEffects = options.sideEffects ?? "none";
     this.spec = spec({
       id: options.id ?? "panel.generate",
-      kind: "panel.generate",
-      inputTypes: ["task"],
-      outputTypes: ["candidate"],
+      kind: OperatorKinds.PanelGenerate,
+      requiredInputTypes: [ArtifactTypes.Task],
+      outputTypes: [ArtifactTypes.Candidate],
       sideEffects: this.#sideEffects,
       candidates: options.models.length
     });
@@ -300,7 +273,7 @@ export class PanelGenerateOperator implements Operator {
       };
       return ctx.createArtifact({
         id: `${this.spec.id}.candidate.${index + 1}.${slug(candidateId)}`,
-        type: "candidate",
+        type: ArtifactTypes.Candidate,
         value,
         visibility: this.#visibility,
         leakage: this.#leakage,
@@ -327,9 +300,9 @@ export class JudgeCompareOperator implements Operator {
     this.#leakage = options.leakage ?? "public";
     this.spec = spec({
       id: options.id ?? "judge.compare",
-      kind: "judge.compare",
-      inputTypes: ["task", "candidate"],
-      outputTypes: ["judge_comparison"]
+      kind: OperatorKinds.JudgeCompare,
+      requiredInputTypes: [ArtifactTypes.Task, ArtifactTypes.Candidate],
+      outputTypes: [ArtifactTypes.JudgeComparison]
     });
   }
 
@@ -343,7 +316,7 @@ export class JudgeCompareOperator implements Operator {
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.comparison`,
-        type: "judge_comparison",
+        type: ArtifactTypes.JudgeComparison,
         value: comparison,
         visibility: this.#visibility,
         leakage: this.#leakage,
@@ -370,9 +343,10 @@ export class SynthesizeOperator implements Operator {
     this.#leakage = options.leakage ?? "none";
     this.spec = spec({
       id: options.id ?? "synthesize",
-      kind: "synthesize",
-      inputTypes: ["task", "candidate"],
-      outputTypes: ["final_answer"]
+      kind: OperatorKinds.Synthesize,
+      requiredInputTypes: [ArtifactTypes.Task, ArtifactTypes.Candidate],
+      optionalInputTypes: [ArtifactTypes.JudgeComparison],
+      outputTypes: [ArtifactTypes.FinalAnswer]
     });
   }
 
@@ -387,7 +361,7 @@ export class SynthesizeOperator implements Operator {
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.final_answer`,
-        type: "final_answer",
+        type: ArtifactTypes.FinalAnswer,
         value: output,
         visibility: this.#visibility,
         leakage: this.#leakage,

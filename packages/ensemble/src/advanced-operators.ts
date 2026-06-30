@@ -10,6 +10,12 @@ import type {
   RecordSignalInput,
   TaskSpec
 } from "./runtime.js";
+import { ArtifactTypes, OperatorKinds } from "./artifact-types.js";
+import {
+  candidatesFromInputs,
+  firstArtifactByType,
+  taskFromInputs
+} from "./kernel-helpers.js";
 
 import type {
   CandidateArtifactValue,
@@ -132,71 +138,39 @@ export type CandidateRepairer = (input: {
 function spec(input: {
   id: string;
   kind: string;
-  inputTypes: string[];
+  inputTypes?: string[];
+  requiredInputTypes?: string[];
+  optionalInputTypes?: string[];
   outputTypes: string[];
   sideEffects?: OperatorSideEffects;
 }): OperatorSpec {
   return {
     id: input.id,
     kind: input.kind,
-    inputTypes: input.inputTypes,
+    ...(input.inputTypes !== undefined ? { inputTypes: input.inputTypes } : {}),
+    ...(input.requiredInputTypes !== undefined ? { requiredInputTypes: input.requiredInputTypes } : {}),
+    ...(input.optionalInputTypes !== undefined ? { optionalInputTypes: input.optionalInputTypes } : {}),
     outputTypes: input.outputTypes,
     sideEffects: input.sideEffects ?? "none"
   };
 }
 
-function taskFromInputs(inputs: readonly Artifact[]): TaskSpec {
-  const task = inputs.find((artifact) => artifact.type === "task");
-  if (task?.value !== null && typeof task?.value === "object") return task.value as TaskSpec;
-  if (typeof task?.value === "string") return { prompt: task.value };
-  return {};
-}
-
-function candidateFromArtifact(artifact: Artifact): CandidateArtifactValue | undefined {
-  const value = artifact.value as Partial<CandidateArtifactValue> | undefined;
-  if (
-    artifact.type === "candidate" &&
-    value !== undefined &&
-    typeof value.candidateId === "string" &&
-    typeof value.modelId === "string" &&
-    typeof value.model === "string" &&
-    typeof value.content === "string"
-  ) {
-    return {
-      candidateId: value.candidateId,
-      modelId: value.modelId,
-      model: value.model,
-      content: value.content,
-      ...(value.raw !== undefined ? { raw: value.raw } : {}),
-      ...(value.metadata !== undefined ? { metadata: value.metadata } : {})
-    };
-  }
-  return undefined;
-}
-
-function candidatesFromInputs(inputs: readonly Artifact[]): CandidateArtifactValue[] {
-  return inputs.map(candidateFromArtifact).filter((candidate): candidate is CandidateArtifactValue => candidate !== undefined);
-}
-
 function evidenceFromInputs(inputs: readonly Artifact[]): EvidenceBundle[] {
   return inputs
-    .filter((artifact) => artifact.type === "evidence_bundle")
+    .filter((artifact) => artifact.type === ArtifactTypes.EvidenceBundle)
     .map((artifact) => artifact.value as EvidenceBundle);
 }
 
 function comparisonFromInputs(inputs: readonly Artifact[]): JudgeComparison | undefined {
-  const artifact = inputs.find((entry) => entry.type === "judge_comparison");
-  return artifact?.value !== null && typeof artifact?.value === "object" ? (artifact.value as JudgeComparison) : undefined;
+  return firstArtifactByType<JudgeComparison>(inputs, ArtifactTypes.JudgeComparison);
 }
 
 function rankMatrixFromInputs(inputs: readonly Artifact[]): RankMatrix | undefined {
-  const artifact = inputs.find((entry) => entry.type === "rank_matrix");
-  return artifact?.value !== null && typeof artifact?.value === "object" ? (artifact.value as RankMatrix) : undefined;
+  return firstArtifactByType<RankMatrix>(inputs, ArtifactTypes.RankMatrix);
 }
 
 function selectedFromInputs(inputs: readonly Artifact[]): SelectedCandidate | undefined {
-  const artifact = inputs.find((entry) => entry.type === "selected_candidate");
-  return artifact?.value !== null && typeof artifact?.value === "object" ? (artifact.value as SelectedCandidate) : undefined;
+  return firstArtifactByType<SelectedCandidate>(inputs, ArtifactTypes.SelectedCandidate);
 }
 
 function selectFromEvidence(input: {
@@ -244,9 +218,9 @@ export class EvidenceSourceOperator implements Operator {
     this.#leakage = options.leakage ?? "public";
     this.spec = spec({
       id: options.id ?? "evidence.source",
-      kind: "evidence",
-      inputTypes: ["task", "candidate"],
-      outputTypes: ["evidence_bundle"]
+      kind: OperatorKinds.Evidence,
+      requiredInputTypes: [ArtifactTypes.Task, ArtifactTypes.Candidate],
+      outputTypes: [ArtifactTypes.EvidenceBundle]
     });
   }
 
@@ -257,7 +231,7 @@ export class EvidenceSourceOperator implements Operator {
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.bundle`,
-        type: "evidence_bundle",
+        type: ArtifactTypes.EvidenceBundle,
         value: {
           observations,
           signals,
@@ -280,9 +254,9 @@ export class CalibrateSignalOperator implements Operator {
     this.#calibrator = options.calibrator;
     this.spec = spec({
       id: options.id ?? "signal.calibrate",
-      kind: "calibrate",
-      inputTypes: ["task", "candidate", "evidence_bundle"],
-      outputTypes: ["evidence_bundle"]
+      kind: OperatorKinds.Calibrate,
+      requiredInputTypes: [ArtifactTypes.Task, ArtifactTypes.Candidate, ArtifactTypes.EvidenceBundle],
+      outputTypes: [ArtifactTypes.EvidenceBundle]
     });
   }
 
@@ -297,7 +271,7 @@ export class CalibrateSignalOperator implements Operator {
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.bundle`,
-        type: "evidence_bundle",
+        type: ArtifactTypes.EvidenceBundle,
         value: { observations: [], signals: signalIds } satisfies EvidenceBundle,
         visibility: "runtime",
         leakage: signals.some((signal) => signal.leakageRisk === "private" || signal.leakageRisk === "contaminated")
@@ -317,16 +291,16 @@ export class SchemaValidationOperator implements Operator {
     this.#validate = options.validate;
     this.spec = spec({
       id: options.id ?? "schema.validate",
-      kind: "evidence",
-      inputTypes: ["candidate"],
-      outputTypes: ["evidence_bundle"]
+      kind: OperatorKinds.Evidence,
+      requiredInputTypes: [ArtifactTypes.Candidate],
+      outputTypes: [ArtifactTypes.EvidenceBundle]
     });
   }
 
   run(inputs: readonly Artifact[], ctx: OperatorRunContext): readonly Artifact[] {
     const observations: string[] = [];
     const signals: string[] = [];
-    for (const candidate of inputs.filter((artifact) => artifact.type === "candidate")) {
+    for (const candidate of inputs.filter((artifact) => artifact.type === ArtifactTypes.Candidate)) {
       const result = this.#validate(candidate.value);
       const observation = ctx.recordObservation({
         sourceId: this.spec.id,
@@ -350,7 +324,7 @@ export class SchemaValidationOperator implements Operator {
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.bundle`,
-        type: "evidence_bundle",
+        type: ArtifactTypes.EvidenceBundle,
         value: { observations, signals } satisfies EvidenceBundle,
         visibility: "runtime",
         leakage: "public"
@@ -367,16 +341,16 @@ export class PairRankOperator implements Operator {
     this.#rank = options.rank;
     this.spec = spec({
       id: options.id ?? "pair.rank",
-      kind: "rank",
-      inputTypes: ["task", "candidate"],
-      outputTypes: ["rank_matrix"]
+      kind: OperatorKinds.Rank,
+      requiredInputTypes: [ArtifactTypes.Task, ArtifactTypes.Candidate],
+      outputTypes: [ArtifactTypes.RankMatrix]
     });
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const matrix = await this.#rank({ candidates: candidatesFromInputs(inputs), task: taskFromInputs(inputs), ctx });
     validateRankMatrix(matrix);
-    return [ctx.createArtifact({ id: `${this.spec.id}.matrix`, type: "rank_matrix", value: matrix, visibility: "runtime", leakage: "public" })];
+    return [ctx.createArtifact({ id: `${this.spec.id}.matrix`, type: ArtifactTypes.RankMatrix, value: matrix, visibility: "runtime", leakage: "public" })];
   }
 }
 
@@ -388,9 +362,10 @@ export class SelectOperator implements Operator {
     this.#selector = options.selector;
     this.spec = spec({
       id: options.id ?? "candidate.select",
-      kind: "select",
-      inputTypes: ["task", "candidate"],
-      outputTypes: ["selected_candidate"]
+      kind: OperatorKinds.Select,
+      requiredInputTypes: [ArtifactTypes.Task, ArtifactTypes.Candidate],
+      optionalInputTypes: [ArtifactTypes.JudgeComparison, ArtifactTypes.RankMatrix, ArtifactTypes.EvidenceBundle],
+      outputTypes: [ArtifactTypes.SelectedCandidate]
     });
   }
 
@@ -410,7 +385,7 @@ export class SelectOperator implements Operator {
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.selected`,
-        type: "selected_candidate",
+        type: ArtifactTypes.SelectedCandidate,
         value: selected,
         visibility: "runtime",
         leakage: "public"
@@ -427,9 +402,10 @@ export class RepairOperator implements Operator {
     this.#repair = options.repair;
     this.spec = spec({
       id: options.id ?? "candidate.repair",
-      kind: "repair",
-      inputTypes: ["task", "candidate"],
-      outputTypes: ["candidate"],
+      kind: OperatorKinds.Repair,
+      requiredInputTypes: [ArtifactTypes.Task, ArtifactTypes.Candidate],
+      optionalInputTypes: [ArtifactTypes.SelectedCandidate, ArtifactTypes.EvidenceBundle],
+      outputTypes: [ArtifactTypes.Candidate],
       sideEffects: options.sideEffects
     });
   }
@@ -445,7 +421,7 @@ export class RepairOperator implements Operator {
     return [
       ctx.createArtifact({
         id: `${this.spec.id}.${output.candidate.candidateId}`,
-        type: "candidate",
+        type: ArtifactTypes.Candidate,
         value: output.candidate,
         visibility: "runtime",
         leakage: "public"
@@ -462,9 +438,10 @@ export class GenFuserOperator implements Operator {
     this.#fuse = options.fuse;
     this.spec = spec({
       id: options.id ?? "gen.fuse",
-      kind: "fuse",
-      inputTypes: ["task", "candidate"],
-      outputTypes: ["final_answer"]
+      kind: OperatorKinds.Fuse,
+      requiredInputTypes: [ArtifactTypes.Task, ArtifactTypes.Candidate],
+      optionalInputTypes: [ArtifactTypes.SelectedCandidate, ArtifactTypes.RankMatrix],
+      outputTypes: [ArtifactTypes.FinalAnswer]
     });
   }
 
@@ -476,7 +453,7 @@ export class GenFuserOperator implements Operator {
       rankMatrix: rankMatrixFromInputs(inputs),
       ctx
     });
-    return [ctx.createArtifact({ id: `${this.spec.id}.final_answer`, type: "final_answer", value: output, visibility: "user", leakage: "none" })];
+    return [ctx.createArtifact({ id: `${this.spec.id}.final_answer`, type: ArtifactTypes.FinalAnswer, value: output, visibility: "user", leakage: "none" })];
   }
 }
 
@@ -486,13 +463,13 @@ export class RouteOperator implements Operator {
 
   constructor(options: { id?: string; route: (input: { task: TaskSpec; ctx: OperatorRunContext }) => RouteDecision | Promise<RouteDecision> }) {
     this.#route = options.route;
-    this.spec = spec({ id: options.id ?? "route", kind: "route", inputTypes: ["task"], outputTypes: ["route_decision"] });
+    this.spec = spec({ id: options.id ?? "route", kind: OperatorKinds.Route, requiredInputTypes: [ArtifactTypes.Task], outputTypes: [ArtifactTypes.RouteDecision] });
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const decision = await this.#route({ task: taskFromInputs(inputs), ctx });
     if (decision.routeId.length === 0) throw new Error("route decision requires a non-empty routeId");
-    return [ctx.createArtifact({ id: `${this.spec.id}.decision`, type: "route_decision", value: decision, visibility: "runtime", leakage: "public" })];
+    return [ctx.createArtifact({ id: `${this.spec.id}.decision`, type: ArtifactTypes.RouteDecision, value: decision, visibility: "runtime", leakage: "public" })];
   }
 }
 
@@ -509,19 +486,20 @@ export class DelegateOperator implements Operator {
     this.#delegate = options.delegate;
     this.spec = spec({
       id: options.id ?? `delegate.${options.role}`,
-      kind: "delegate",
-      inputTypes: ["task"],
-      outputTypes: ["delegation_result"],
+      kind: OperatorKinds.Delegate,
+      requiredInputTypes: [ArtifactTypes.Task],
+      optionalInputTypes: [ArtifactTypes.RouteDecision],
+      outputTypes: [ArtifactTypes.DelegationResult],
       sideEffects: options.sideEffects ?? "read_workspace"
     });
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
-    const route = inputs.find((artifact) => artifact.type === "route_decision")?.value as RouteDecision | undefined;
+    const route = inputs.find((artifact) => artifact.type === ArtifactTypes.RouteDecision)?.value as RouteDecision | undefined;
     if (route !== undefined && route.routeId.length === 0) throw new Error("route decision requires a non-empty routeId");
     const result = await this.#delegate({ task: taskFromInputs(inputs), route, ctx });
     if (result.role.length === 0) throw new Error("delegation result requires a non-empty role");
-    return [ctx.createArtifact({ id: `${this.spec.id}.result`, type: "delegation_result", value: result, visibility: "runtime", leakage: "public" })];
+    return [ctx.createArtifact({ id: `${this.spec.id}.result`, type: ArtifactTypes.DelegationResult, value: result, visibility: "runtime", leakage: "public" })];
   }
 }
 
@@ -531,12 +509,12 @@ export class ReviewOperator implements Operator {
 
   constructor(options: { id?: string; review: (input: { task: TaskSpec; inputs: readonly Artifact[]; ctx: OperatorRunContext }) => ReviewResult | Promise<ReviewResult> }) {
     this.#review = options.review;
-    this.spec = spec({ id: options.id ?? "review", kind: "review", inputTypes: ["task"], outputTypes: ["review"] });
+    this.spec = spec({ id: options.id ?? "review", kind: OperatorKinds.Review, requiredInputTypes: [ArtifactTypes.Task], outputTypes: [ArtifactTypes.Review] });
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const review = await this.#review({ task: taskFromInputs(inputs), inputs, ctx });
-    return [ctx.createArtifact({ id: `${this.spec.id}.review`, type: "review", value: review, visibility: "developer", leakage: "public" })];
+    return [ctx.createArtifact({ id: `${this.spec.id}.review`, type: ArtifactTypes.Review, value: review, visibility: "developer", leakage: "public" })];
   }
 }
 
@@ -546,17 +524,17 @@ export class TreeExpandOperator implements Operator {
 
   constructor(options: { id?: string; expand: (input: { task: TaskSpec; nodes: TreeNodeValue[]; ctx: OperatorRunContext }) => TreeNodeValue[] | Promise<TreeNodeValue[]> }) {
     this.#expand = options.expand;
-    this.spec = spec({ id: options.id ?? "tree.expand", kind: "tree.expand", inputTypes: ["task"], outputTypes: ["tree_node"] });
+    this.spec = spec({ id: options.id ?? "tree.expand", kind: OperatorKinds.TreeExpand, requiredInputTypes: [ArtifactTypes.Task], optionalInputTypes: [ArtifactTypes.TreeNode], outputTypes: [ArtifactTypes.TreeNode] });
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
-    const nodes = inputs.filter((artifact) => artifact.type === "tree_node").map((artifact) => artifact.value as TreeNodeValue);
+    const nodes = inputs.filter((artifact) => artifact.type === ArtifactTypes.TreeNode).map((artifact) => artifact.value as TreeNodeValue);
     const expanded = await this.#expand({ task: taskFromInputs(inputs), nodes, ctx });
     for (const node of expanded) {
       if (node.nodeId.length === 0) throw new Error("tree node requires a non-empty nodeId");
       if (!Number.isInteger(node.depth) || node.depth < 0) throw new Error(`tree node ${node.nodeId} has invalid depth`);
     }
-    return expanded.map((node) => ctx.createArtifact({ id: `${this.spec.id}.${node.nodeId}`, type: "tree_node", value: node, visibility: "runtime", leakage: "public" }));
+    return expanded.map((node) => ctx.createArtifact({ id: `${this.spec.id}.${node.nodeId}`, type: ArtifactTypes.TreeNode, value: node, visibility: "runtime", leakage: "public" }));
   }
 }
 
@@ -566,16 +544,16 @@ export class TreeScoreOperator implements Operator {
 
   constructor(options: { id?: string; score: (input: { nodes: TreeNodeValue[]; ctx: OperatorRunContext }) => RankMatrix | Promise<RankMatrix> }) {
     this.#score = options.score;
-    this.spec = spec({ id: options.id ?? "tree.score", kind: "tree.score", inputTypes: ["tree_node"], outputTypes: ["rank_matrix"] });
+    this.spec = spec({ id: options.id ?? "tree.score", kind: OperatorKinds.TreeScore, requiredInputTypes: [ArtifactTypes.TreeNode], outputTypes: [ArtifactTypes.RankMatrix] });
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const matrix = await this.#score({
-      nodes: inputs.filter((artifact) => artifact.type === "tree_node").map((artifact) => artifact.value as TreeNodeValue),
+      nodes: inputs.filter((artifact) => artifact.type === ArtifactTypes.TreeNode).map((artifact) => artifact.value as TreeNodeValue),
       ctx
     });
     validateRankMatrix(matrix);
-    return [ctx.createArtifact({ id: `${this.spec.id}.matrix`, type: "rank_matrix", value: matrix, visibility: "runtime", leakage: "public" })];
+    return [ctx.createArtifact({ id: `${this.spec.id}.matrix`, type: ArtifactTypes.RankMatrix, value: matrix, visibility: "runtime", leakage: "public" })];
   }
 }
 
@@ -585,14 +563,14 @@ export class ArchitectureEvaluateOperator implements Operator {
 
   constructor(options: { id?: string; evaluate: (input: { task: TaskSpec; ctx: OperatorRunContext }) => ArchitectureEvaluation | Promise<ArchitectureEvaluation> }) {
     this.#evaluate = options.evaluate;
-    this.spec = spec({ id: options.id ?? "architecture.evaluate", kind: "architecture.evaluate", inputTypes: ["task"], outputTypes: ["architecture_result"] });
+    this.spec = spec({ id: options.id ?? "architecture.evaluate", kind: OperatorKinds.ArchitectureEvaluate, requiredInputTypes: [ArtifactTypes.Task], outputTypes: [ArtifactTypes.ArchitectureResult] });
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const result = await this.#evaluate({ task: taskFromInputs(inputs), ctx });
     if (result.architectureId.length === 0) throw new Error("architecture evaluation requires a non-empty architectureId");
     assertScore(`architecture ${result.architectureId}`, result.score);
-    return [ctx.createArtifact({ id: `${this.spec.id}.result`, type: "architecture_result", value: result, visibility: "developer", leakage: "private" })];
+    return [ctx.createArtifact({ id: `${this.spec.id}.result`, type: ArtifactTypes.ArchitectureResult, value: result, visibility: "developer", leakage: "private" })];
   }
 }
 
@@ -602,7 +580,7 @@ export class OfflineModelMergeOperator implements Operator {
 
   constructor(options: { id?: string; merge: (input: { task: TaskSpec; ctx: OperatorRunContext }) => MergeRecipe | Promise<MergeRecipe> }) {
     this.#merge = options.merge;
-    this.spec = spec({ id: options.id ?? "model.merge.recipe", kind: "model.merge", inputTypes: ["task"], outputTypes: ["merge_recipe"] });
+    this.spec = spec({ id: options.id ?? "model.merge.recipe", kind: OperatorKinds.ModelMerge, requiredInputTypes: [ArtifactTypes.Task], outputTypes: [ArtifactTypes.MergeRecipe] });
   }
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
@@ -610,6 +588,6 @@ export class OfflineModelMergeOperator implements Operator {
     if (recipe.recipeId.length === 0) throw new Error("merge recipe requires a non-empty recipeId");
     if (recipe.modelIds.length === 0) throw new Error(`merge recipe ${recipe.recipeId} requires at least one model`);
     if (recipe.steps.length === 0) throw new Error(`merge recipe ${recipe.recipeId} requires at least one step`);
-    return [ctx.createArtifact({ id: `${this.spec.id}.${recipe.recipeId}`, type: "merge_recipe", value: recipe, visibility: "developer", leakage: "private" })];
+    return [ctx.createArtifact({ id: `${this.spec.id}.${recipe.recipeId}`, type: ArtifactTypes.MergeRecipe, value: recipe, visibility: "developer", leakage: "private" })];
   }
 }

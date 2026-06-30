@@ -39,6 +39,7 @@ import {
   newTraceId,
   TRACE_ID_HEADER
 } from "@fusionkit/protocol";
+import type { WireTrajectory } from "@fusionkit/protocol";
 
 import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
@@ -55,6 +56,8 @@ import {
 import type { ModelPricing, SessionCost, TokenUsage, TurnCost } from "./cost.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
 
+export type { WireTrajectory } from "@fusionkit/protocol";
+
 /**
  * A native (non-fused) model the gateway also exposes in the tool's picker.
  * Selecting it proxies the request to its real provider via the `fusionkit
@@ -69,21 +72,6 @@ export type PassthroughModel = {
   endpointId: string;
   /** Router base URL (e.g. http://127.0.0.1:PORT) fronting the real provider. */
   endpointUrl: string;
-};
-
-/** A candidate trajectory in the wire shape FusionKit's `trajectories:fuse` accepts. */
-export type WireTrajectory = {
-  trajectory_id: string;
-  model_id: string;
-  status: string;
-  final_output: string;
-  items?: Array<Record<string, unknown>>;
-  candidate_id?: string;
-  model?: string;
-  harness_kind?: string;
-  diff?: string;
-  verification?: { status: string; evidence?: string[]; exit_code?: number };
-  metadata?: Record<string, unknown>;
 };
 
 export type ChatMessageLike = {

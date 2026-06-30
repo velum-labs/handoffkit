@@ -24,10 +24,18 @@ import {
   DirectFastPathScheduler,
   FusionRuntime,
   RuntimeCancelledError,
+  RuntimeExecutionError,
   StaticDAGScheduler,
   createRuntimeReplayRecord,
   createArtifact
 } from "../runtime.js";
+import {
+  getWorkflow,
+  graph,
+  refs,
+} from "../kernel.js";
+import { registerBuiltInWorkflows } from "../workflows.js";
+import { createTaskArtifact, defineOperator } from "../kernel-helpers.js";
 import {
   AdaptiveRouterScheduler,
   AgenticDelegationScheduler,
@@ -270,7 +278,10 @@ test("budget policy enforces candidate caps before panel fanout", async () => {
         artifacts: [task],
         budget: { id: "tiny", maxCandidates: 1 }
       }),
-    (error) => error instanceof BudgetExceededError && /candidates 2 > 1/.test(error.message)
+    (error) =>
+      error instanceof RuntimeExecutionError &&
+      error.cause instanceof BudgetExceededError &&
+      /candidates 2 > 1/.test(error.message)
   );
 });
 
@@ -324,7 +335,10 @@ test("operators can consume actual budget and fail before emitting output", asyn
         artifacts: [task],
         budget: { id: "tokens", maxInputTokens: 5 }
       }),
-    (error) => error instanceof BudgetExceededError && /input tokens 10 > 5/.test(error.message)
+    (error) =>
+      error instanceof RuntimeExecutionError &&
+      error.cause instanceof BudgetExceededError &&
+      /input tokens 10 > 5/.test(error.message)
   );
 });
 
@@ -482,7 +496,10 @@ test("workspace writer budget enforces single-writer discipline", async () => {
         artifacts: [task],
         budget: { id: "single-writer", maxWorkspaceWriters: 1 }
       }),
-    (error) => error instanceof BudgetExceededError && /workspace writers 2 > 1/.test(error.message)
+    (error) =>
+      error instanceof RuntimeExecutionError &&
+      error.cause instanceof BudgetExceededError &&
+      /workspace writers 2 > 1/.test(error.message)
   );
 });
 
@@ -557,8 +574,63 @@ test("runtime cancellation marks cancelled status", async () => {
         artifacts: [task],
         signal: controller.signal
       }),
-    (error) => error instanceof RuntimeCancelledError
+    (error) =>
+      error instanceof RuntimeExecutionError &&
+      error.cause instanceof RuntimeCancelledError &&
+      error.outcome.status === "cancelled"
   );
+});
+
+test("failureMode return exposes failed outcomes without throwing", async () => {
+  const task = taskArtifact();
+  const failing = defineOperator(
+    {
+      id: "fail",
+      kind: "fail",
+      requiredInputTypes: ["task"],
+      outputTypes: ["final_answer"],
+      sideEffects: "none"
+    },
+    () => {
+      throw new Error("boom");
+    }
+  );
+
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: "failure_return",
+      inputArtifactIds: [task.id],
+      nodes: [{ id: "fail", operator: failing, inputs: [{ artifactId: task.id }] }]
+    },
+    scheduler: new StaticDAGScheduler(),
+    artifacts: [task],
+    failureMode: "return"
+  });
+
+  assert.equal(result.outcome.status, "failed");
+  assert.match(result.outcome.error ?? "", /boom/);
+});
+
+test("graph builder and built-in workflow registry compose direct kernels", async () => {
+  registerBuiltInWorkflows();
+  const task = createTaskArtifact({ id: "builder-task", prompt: "hello" });
+  const op = new ModelGenerateOperator({
+    id: "builder-model",
+    model: "builder",
+    client: {
+      generate: () => ({ model: "builder", content: "built" })
+    }
+  });
+  const workflow = graph("builder-direct")
+    .task(task)
+    .node("model", op, { inputs: [refs.artifact(task.id)] })
+    .scheduler(new DirectFastPathScheduler())
+    .compile();
+  const direct = getWorkflow("direct");
+  assert.ok(direct !== undefined);
+
+  const result = await workflow.run();
+  assert.equal((result.finalArtifacts[0]?.value as CandidateArtifactValue).content, "built");
 });
 
 test("rank-fuse scheduler supports PairRank -> Select -> GenFuser", async () => {
@@ -863,7 +935,10 @@ test("concurrent static DAG reserves operator budget before awaiting work", asyn
         artifacts: [task],
         budget: { maxOperatorRuns: 1 }
       }),
-    (error) => error instanceof BudgetExceededError && /operator runs 2 > 1/.test(error.message)
+    (error) =>
+      error instanceof RuntimeExecutionError &&
+      error.cause instanceof BudgetExceededError &&
+      /operator runs 2 > 1/.test(error.message)
   );
   assert.equal(started, 1);
 });

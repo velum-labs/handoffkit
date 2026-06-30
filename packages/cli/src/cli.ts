@@ -11,6 +11,7 @@ import { registerEnsemble } from "./commands/ensemble.js";
 import { registerFusion } from "./commands/fusion.js";
 import { registerLocal } from "./commands/local.js";
 import { registerModels } from "./commands/models.js";
+import { registerRuntime } from "./commands/runtime.js";
 import { registerSessions } from "./commands/sessions.js";
 import { registerSetup } from "./commands/setup.js";
 
@@ -47,6 +48,7 @@ export function buildProgram(): Command {
   registerLocal(program);
   registerFusion(program);
   registerModels(program);
+  registerRuntime(program);
   registerSessions(program);
   registerConfig(program);
   registerSetup(program);

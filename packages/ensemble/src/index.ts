@@ -21,6 +21,7 @@ export {
 export {
   buildPanelPrompt,
   createFusionKitJudgeSynthesizer,
+  runFusionPanelWorkflow,
   runFusionPanels,
   runUnifiedHarnessE2E,
   setToolHarnessProvider
@@ -59,6 +60,62 @@ export type {
   RunSynthesisInput,
   SynthesisResult
 } from "./synthesis.js";
+export { ArtifactTypes, OperatorKinds } from "./artifact-types.js";
+export type { ArtifactType, OperatorKind } from "./artifact-types.js";
+export {
+  artifactRef,
+  countOperatorKind,
+  dependenciesFor,
+  inputNodeIds,
+  nodeOutputRefs,
+  nodeRef,
+  nodesById,
+  terminalNodeIds,
+  topoLayers
+} from "./graph-utils.js";
+export {
+  assertValidOperatorGraph,
+  explainGraph,
+  validateOperatorGraph,
+  validateSchedulerGraph
+} from "./graph-validation.js";
+export type { GraphExplanation, GraphValidationIssue } from "./graph-validation.js";
+export {
+  GraphBuilder,
+  getWorkflow,
+  graph,
+  listWorkflows,
+  refs,
+  registerWorkflow,
+  runWorkflow
+} from "./kernel.js";
+export type { GraphNodeInput, KernelWorkflow, WorkflowFactory } from "./kernel.js";
+export {
+  artifactValue,
+  candidatesFromInputs,
+  consumeUsageFromOutput,
+  createTaskArtifact,
+  defineOperator,
+  firstArtifactByType,
+  operatorSpec,
+  taskFromInputs
+} from "./kernel-helpers.js";
+export type { CreateTaskArtifactInput } from "./kernel-helpers.js";
+export {
+  directModelWorkflow,
+  executionSelectRepairWorkflow,
+  panelCaptureWorkflow,
+  panelJudgeSynthWorkflow,
+  rankFuseWorkflow,
+  registerBuiltInWorkflows
+} from "./workflows.js";
+export type {
+  DirectModelWorkflowInput,
+  ExecutionSelectRepairWorkflowInput,
+  PanelCaptureWorkflowInput,
+  PanelJudgeSynthWorkflowInput,
+  RankFuseWorkflowInput
+} from "./workflows.js";
 export {
   ArchitectureEvaluateOperator,
   CalibrateSignalOperator,
@@ -117,6 +174,7 @@ export {
   FusionRuntime,
   OperatorGraphError,
   RuntimeCancelledError,
+  RuntimeExecutionError,
   StaticDAGScheduler,
   createRuntimeReplayRecord,
   runtimeReplayRecordJson,
@@ -155,6 +213,7 @@ export type {
   Provenance,
   RecordObservationInput,
   RecordSignalInput,
+  RetryPolicy,
   RuntimeExecutionResult,
   RuntimeReplayRecord,
   RuntimeState,

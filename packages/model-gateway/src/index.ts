@@ -25,9 +25,9 @@ export type {
   PanelRunInput,
   PanelRunner,
   PassthroughModel,
-  SessionMetaInput,
-  WireTrajectory
+  SessionMetaInput
 } from "./fusion-backend.js";
+export type { WireTrajectory } from "@fusionkit/protocol";
 export {
   defaultSessionsDir,
   FileSystemSessionStore,
