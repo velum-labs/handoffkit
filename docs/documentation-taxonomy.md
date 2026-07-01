@@ -50,7 +50,9 @@ Generated API pages should not be edited by hand except when regenerating from t
 | --- | --- | --- |
 | `README.md` | Orientation | Maintainer landing page and routing table for the `docs/` tree. |
 | `documentation-taxonomy.md` | Orientation | Defines the categories and placement rules that keep documentation coherent. |
+| `repository-coverage-map.md` | Orientation | Maps every major repository area to the documentation that owns it. |
 | `repository-reference.md` | Reference | Whole-repository map across packages, apps, specs, scripts, examples, and verification. |
+| `source-symbol-index.md` | Reference | Source-grounded TypeScript export and Python class/function inventory. |
 | `typescript-reference.md` | Reference | Package-by-package TypeScript ownership, public symbols, and examples. |
 | `python-reference.md` | Reference | Python package, module, class, function, and CLI ownership. |
 | `specs-and-apis.md` | Reference | Protocol schemas, generated bindings, routes, trace events, and schema workflow. |

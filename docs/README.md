@@ -23,7 +23,9 @@ this tree.
 | --- | --- |
 | [Documentation taxonomy](documentation-taxonomy.md) | Orientation | Category definitions, placement rules, and entry justification. |
 | [Product scope](scope.md) | Orientation | Which packages are the ensemble product versus retained governance and VM depth. |
+| [Repository coverage map](repository-coverage-map.md) | Orientation | Every major repo area mapped to its owning documentation. |
 | [Repository reference](repository-reference.md) | Reference | Comprehensive package, API, app, example, protocol, and operations map. |
+| [Source symbol index](source-symbol-index.md) | Reference | Source-grounded TypeScript export and Python symbol inventory. |
 | [Quickstart: inference endpoint](quickstart-inference.md) | Task guide | `fusionkit serve` as an OpenAI-compatible endpoint with curl streaming and tools. |
 | [Quickstart: coding harness](quickstart-harness.md) | Task guide | `fusionkit codex`, `claude`, `cursor`, `--ide`, auto-wiring, fused versus passthrough. |
 | [Quickstart: rate-limit handoff](quickstart-handoff.md) | Task guide | `--on-rate-limit`, failover behavior, and one-tap resume. |
