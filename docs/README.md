@@ -1,6 +1,6 @@
 # FusionKit documentation
 
-FusionKit runs ensembles of local and cloud models — as a raw inference endpoint
+FusionKit runs ensembles of local and cloud models, as a raw inference endpoint
 and behind unmodified coding harnesses (Codex, Claude Code, Cursor). The Node
 `@fusionkit/cli` is the single front door; the Python `fusionkit serve` is the
 documented raw endpoint.
@@ -27,18 +27,22 @@ root [`README.md`](../README.md) remains the product narrative and quick tour.
 | [Fusion Judge Trajectory](fusion-judge-trajectory.md) | How trajectories are produced and synthesized. |
 | [Product scope](scope.md) | Which packages are the ensemble product vs. out-of-scope governance/VM. |
 | [Getting started](getting-started.md) | Local install, build, demos, and verification commands. |
-| [Documentation rubric](documentation-rubric.md) | Quality criteria for every documentation entry in this repository. |
 | [Repository reference](repository-reference.md) | Comprehensive package, API, app, example, protocol, and operations map. |
+| [TypeScript reference](typescript-reference.md) | Package-by-package TypeScript exports, functions, classes, and usage examples. |
+| [Python reference](python-reference.md) | Python packages, modules, public classes, functions, CLI commands, and examples. |
+| [Specs and APIs](specs-and-apis.md) | Protocol schemas, generated bindings, HTTP APIs, trace events, and contract workflow. |
+| [Apps and examples](apps-and-examples.md) | Standalone apps, every example package, demo commands, and expected behavior. |
+| [Operations and scripts](operations-and-scripts.md) | Root scripts, release files, CI workflows, dependency policy, and verification commands. |
 
 ## Out-of-product-scope topic docs
 
 These pages document the **governance / VM-isolation** packages that remain in
 the tree but are not part of the ensemble product (see [Product scope](scope.md)):
 
-- [Concepts](concepts.md) — contracts, receipts, planes, runners, sessions, checkpoints, handoffs.
+- [Concepts](concepts.md): contracts, receipts, planes, runners, sessions, checkpoints, handoffs.
 - [Architecture](architecture.md), [Package guide](packages.md), [Operations](operations.md).
-- [Handoff SDK](handoff-sdk.md) — the continuation-first developer API on the governance primitives.
-- [Examples](examples.md) — the governed-run demo suite.
+- [Handoff SDK](handoff-sdk.md): the continuation-first developer API on the governance primitives.
+- [Examples](examples.md): the governed-run demo suite.
 
 ## Other topic docs
 
@@ -47,15 +51,18 @@ the tree but are not part of the ensemble product (see [Product scope](scope.md)
 
 ## Repository at a glance
 
-- `packages/` contains the TypeScript pnpm workspace: protocol primitives,
-  plane, runner, SDKs, adapters, session backends, CLI, examples support, and
-  model-fusion packages.
-- `examples/` contains standalone demos driven by `examples/manifest.json` and
-  `pnpm demo`.
-- `python/` contains the uv workspace for UniRoute and UniRoute MLX routing.
-- `spec/` contains the dated product and engineering specs that motivated the
-  current implementation.
-- `apps/scope/` contains the local observability companion for fusion traces.
+- `packages/` contains the TypeScript pnpm workspace. Start with
+  [TypeScript reference](typescript-reference.md) for package ownership and
+  public symbols.
+- `python/` contains the uv workspace. Start with
+  [Python reference](python-reference.md) for module ownership, classes, CLI
+  commands, and examples.
+- `spec/` contains schemas, OpenAPI contracts, generated bindings, fixtures, and
+  design specs. Start with [Specs and APIs](specs-and-apis.md).
+- `apps/` and `examples/` contain standalone apps and runnable demos. Start with
+  [Apps and examples](apps-and-examples.md).
+- `scripts/`, `release/`, and `.github/workflows/` contain maintainer
+  automation. Start with [Operations and scripts](operations-and-scripts.md).
 
 ## Documentation conventions
 

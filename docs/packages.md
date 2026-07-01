@@ -3,6 +3,12 @@
 The TypeScript workspace is managed by pnpm. Package entry points are generally
 `packages/<name>/src/index.ts`; tests live next to source under `src/test`.
 
+This page is the short package guide. For full package ownership, exported
+functions and classes, examples, and change guidance, read
+[TypeScript reference](typescript-reference.md) and
+[Python reference](python-reference.md). For schemas, generated bindings, and
+HTTP contracts, read [Specs and APIs](specs-and-apis.md).
+
 ## Core packages
 
 | Package | Responsibility | Start with |
