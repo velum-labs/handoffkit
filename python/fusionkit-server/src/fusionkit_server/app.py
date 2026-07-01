@@ -24,8 +24,8 @@ from fusionkit_core.contracts import (
     contract_metadata,
 )
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.judge import FuseResult
+from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.producers import PanelExhaustedError, trajectory_from_contract
 from fusionkit_core.run import (
     CreateRunResult,
