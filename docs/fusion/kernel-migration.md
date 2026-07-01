@@ -55,9 +55,9 @@ selection, repair, session candidate reuse, budget policy, or outcome logging.
 | Node `/v1/chat/completions` | protocol adapter -> backend.chat | Only fused panel capture | backend execution via workflow |
 | Node `/v1/responses` | responses adapter -> backend.chat | Only fused panel capture | adapter only; kernel owns execution |
 | Node `/v1/messages` | Anthropic adapter -> backend.chat | Only fused panel capture | adapter only; kernel owns execution |
-| Python `/v1/fusion/trajectories:fuse` | Python judge/synth | No | `python-fusion-legacy-step` operator first |
-| Python `/v1/chat/completions` | Python `FusionEngine` | No | legacy or forwards into kernel |
-| Python `/v1/fusion/runs` | Python `FusionRunManager` | No | legacy or replaced by kernel run store |
+| Python `/v1/fusion/trajectories:fuse` | Python `FusionKernel` -> judge/synth | Kernel-wrapped | TS-native fuse operator or sidecar operator |
+| Python `/v1/chat/completions` | Python `FusionKernel` -> `FusionEngine` | Kernel-wrapped | legacy or forwards into TS kernel |
+| Python `/v1/fusion/runs` | Python `FusionKernel` -> `FusionRunManager` | Kernel-wrapped | legacy or replaced by kernel run store |
 
 ## Required workflow inventory
 
@@ -281,6 +281,8 @@ Status in PR #37:
   compatibility workflows/operators exist.
 - CLI local and fusion-step gateways wrap their backend calls in
   `KernelBackend`, so the HTTP backend execution surface enters the kernel.
+- Python FastAPI routes call `FusionKernel`, which wraps the current
+  `FusionEngine` and `FusionRunManager` internals.
 
 Remaining follow-up: decompose these compatibility operators into native
 operators and replace the legacy `FusionBackend` internals with

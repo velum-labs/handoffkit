@@ -22,6 +22,10 @@ from fusionkit_core.config import (
 )
 from fusionkit_core.credentials import SubscriptionStatus, subscription_status
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.kernel import FusionKernel
+from fusionkit_core.run import FusionRunManager
+from fusionkit_core.run_store import FileSystemRunStore
+from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.prompts import SYSTEM_PROMPT_DEFAULTS
 from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous
 from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
@@ -127,6 +131,16 @@ app.add_typer(prompts_app, name="prompts")
 
 auth_app = typer.Typer(help="Inspect and switch model authentication (API key / subscription).")
 app.add_typer(auth_app, name="auth")
+
+
+def _legacy_kernel(config: FusionConfig, clients: dict[str, object], run_root: Path) -> FusionKernel:
+    engine = FusionEngine(config=config, clients=clients)  # type: ignore[arg-type]
+    manager = FusionRunManager(
+        engine,
+        FileSystemRunStore(run_root),
+        LocalArtifactStore(run_root),
+    )
+    return FusionKernel(engine, manager)
 
 
 @prompts_app.command("dump")
@@ -444,7 +458,7 @@ def run_eval(
 ) -> None:
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = FusionEngine(config=fusion_config, clients=clients)
+    engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, Path(".fusionkit/python-kernel-runs/eval")))
     runner = BenchmarkRunner(engine)
     results = asyncio.run(runner.run_samples(load_jsonl_samples(samples), config_id, mode))
     write_jsonl_results(output, results)
@@ -470,7 +484,7 @@ def tiny_bench(
 ) -> None:
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = FusionEngine(config=fusion_config, clients=clients)
+    engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, Path(".fusionkit/python-kernel-runs/tiny-bench")))
     results = asyncio.run(
         run_tiny_benchmark(
             engine,
@@ -519,7 +533,7 @@ def fusion_bench(
 ) -> None:
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = FusionEngine(config=fusion_config, clients=clients)
+    engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, run_root / "kernel"))
     runner = FusionBenchRunner(
         engine,
         run_root=run_root,
@@ -739,7 +753,7 @@ def tune_prompts(
     resolved_role = cast(TunableRole, role)
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = FusionEngine(config=fusion_config, clients=clients)
+    engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
     if bank.exists():
@@ -896,7 +910,7 @@ def fusion_hillclimb(
     resolved_role = cast(TunableRole, role)
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = FusionEngine(config=fusion_config, clients=clients)
+    engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
     if bank.exists():
@@ -1083,7 +1097,7 @@ def fusion_hillclimb_polyglot(
     root = polyglot_root or (Path.home() / ".cache" / "fusionkit-bench" / "polyglot")
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = FusionEngine(config=fusion_config, clients=clients)
+    engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
     # task_id -> exercise (needed by the replay verifier), rebuilt whether or not

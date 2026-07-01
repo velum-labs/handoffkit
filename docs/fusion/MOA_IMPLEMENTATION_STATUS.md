@@ -87,6 +87,8 @@ This document tracks the implementation status of the architecture in `docs/fusi
 - `runFusionPanelWorkflow` exposes the runtime result for callers needing traces/outcomes/replay.
 - Product Node backends for local and fusion-step gateways enter the kernel through
   compatibility backend operators while preserving legacy behavior.
+- Python server routes enter a Python `FusionKernel` compatibility wrapper around
+  `FusionEngine` and `FusionRunManager`.
 - Live gateway synthesis still posts to `trajectories:fuse` through the gateway/Python synthesizer path.
 
 ## Not embedded in the kernel by design
