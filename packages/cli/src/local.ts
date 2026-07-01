@@ -1,5 +1,6 @@
 import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
 import type { BackendConfig } from "@fusionkit/model-gateway";
+import { KernelBackend } from "@fusionkit/ensemble";
 import { LOCAL_MODEL_LABEL, readEnv } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
@@ -41,7 +42,9 @@ export { cursorInstructions } from "@fusionkit/tool-cursor";
 type GatewayHandle = { url: string; close: () => Promise<void> };
 
 async function startLocalGateway(config: BackendConfig, authToken?: string): Promise<GatewayHandle> {
-  const backend = createBackend(config);
+  const backend = new KernelBackend(createBackend(config), {
+    workflowIds: { chat: "direct-model-turn", models: "direct-model-models", embeddings: "direct-model-embeddings" }
+  });
   const gateway = await startGateway({
     backend,
     ...(authToken !== undefined ? { authToken } : {})

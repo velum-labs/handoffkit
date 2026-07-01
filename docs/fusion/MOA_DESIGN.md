@@ -506,6 +506,19 @@ FusionKit should expose:
 | 5. Agentic routing | role permissions, sidekick/reviewer, single-writer | workspace mutation tests | cost reduction without quality regression |
 | 6. Learned scheduling | outcome store, feature extraction, offline replay | off-policy replay, temporal split | learned policy beats heuristic on heldout tasks |
 
+### Current implementation status
+
+The TypeScript kernel in `@fusionkit/ensemble` implements the runtime substrate,
+direct/static execution, workflow recipes, replay records, evidence/signal
+records, and scaffold scheduler families. The advanced family classes
+(`TreeSearchScheduler`, `AdaptiveRouterScheduler`, `AgenticDelegationScheduler`,
+`LearnedWorkflowScheduler`, and `OfflineArchitectureSearchScheduler`) are
+explicit extension points over typed graphs. They do **not** claim full
+TreeQuest/AB-MCTS, Devin Fusion, Fugu/TRINITY/Conductor, or Archon semantics
+until those schedulers own the corresponding adaptive state, policy learning, or
+offline optimization loops. See `docs/fusion/MOA_IMPLEMENTATION_STATUS.md` for
+the current checklist.
+
 ## 14. Invariants
 
 - Degree-1 path is observationally equivalent to a direct model call plus safe trace metadata.

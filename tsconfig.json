@@ -2,6 +2,9 @@
   "files": [],
   "references": [
     {
+      "path": "packages/kernel"
+    },
+    {
       "path": "packages/adapter-ai-sdk"
     },
     {
@@ -108,6 +111,9 @@
     },
     {
       "path": "examples/model-escalation"
+    },
+    {
+      "path": "examples/runtime-kernel"
     },
     {
       "path": "examples/hermetic-session"

@@ -7,7 +7,7 @@ import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
 import { createTrajectoryCapture, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type { CapturedTrajectory } from "@fusionkit/model-gateway";
-import { panelMemberPreamble, traceCandidate } from "@fusionkit/ensemble";
+import { KernelBackend, panelMemberPreamble, traceCandidate } from "@fusionkit/ensemble";
 import {
   buildSkippedCandidate,
   definedEnv,
@@ -410,10 +410,12 @@ async function runProvider(input: {
           ? input.env[input.provider.apiKeyEnvName]
           : input.env.OPENAI_API_KEY);
       const gateway = await startGateway({
-        backend: new OpenAiBackend({
+        backend: new KernelBackend(new OpenAiBackend({
           baseUrl: normalizeApiBaseUrl(input.provider.baseUrl),
           ...(apiKey !== undefined ? { apiKey } : {}),
           defaultModel: input.provider.defaultModel ?? input.model.model
+        }), {
+          workflowIds: { chat: "native-passthrough-turn", models: "native-passthrough-models", embeddings: "native-passthrough-embeddings" }
         }),
         provenance: {
           onModelCall(record) {

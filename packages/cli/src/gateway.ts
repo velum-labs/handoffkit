@@ -9,13 +9,22 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { runFusionPanels, runUnifiedHarnessE2E } from "@fusionkit/ensemble";
+import {
+  createKernelFuseStepRunner,
+  runFusionPanels,
+  runUnifiedHarnessE2E
+} from "@fusionkit/ensemble";
 import type {
   EnsembleModel,
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
-import { emitTrace, newSpanId, newTraceId } from "@fusionkit/protocol";
+import {
+  emitTrace,
+  newSpanId,
+  newTraceId,
+  normalizeWireTrajectories
+} from "@fusionkit/protocol";
 import {
   FusionBackend,
   installAcpAdapters,
@@ -265,28 +274,6 @@ export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string):
 }
 
 /**
- * Validate the loosely-typed panel output before it crosses the wire to the
- * synthesizer: keep only entries with the required string fields and drop the
- * rest (with a warning) rather than forwarding malformed trajectories.
- */
-function normalizeWireTrajectories(raw: Record<string, unknown>[]): WireTrajectory[] {
-  const out: WireTrajectory[] = [];
-  for (const entry of raw) {
-    if (
-      typeof entry.trajectory_id === "string" &&
-      typeof entry.model_id === "string" &&
-      typeof entry.status === "string" &&
-      typeof entry.final_output === "string"
-    ) {
-      out.push(entry as WireTrajectory);
-    } else {
-      console.error(`fusion: dropping malformed panel trajectory: ${JSON.stringify(entry).slice(0, 200)}`);
-    }
-  }
-  return out;
-}
-
-/**
  * The judge-streamed-trajectory front door: the panel runs once per session to
  * produce candidate trajectories, then the judge acts as a streaming tool-calling
  * agent (FusionKit `trajectories:fuse`) whose trajectory the user's harness executes.
@@ -399,9 +386,15 @@ export async function startFusionStepGateway(input: {
             : [{ modelId: model.model, endpointId: model.id, endpointUrl }];
         });
 
+  // FusionBackend is itself kernel-native: every request is dispatched through
+  // `FusionRuntime` as the `fusion-frontdoor-request` graph (routing into the
+  // `fusion-frontdoor-turn` graph), and the fuse step runs through
+  // `createKernelFuseStepRunner`. No outer `KernelBackend` wrapper is needed here
+  // (that would only re-wrap the already-kernel-owned turn in a redundant single node).
   const backend = new FusionBackend({
     stepUrl,
     runPanels,
+    runFuseStep: createKernelFuseStepRunner(),
     defaultModel,
     passthrough,
     ...(config.onRateLimit !== undefined ? { onRateLimit: config.onRateLimit } : {}),

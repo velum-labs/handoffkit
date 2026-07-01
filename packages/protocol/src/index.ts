@@ -62,6 +62,12 @@ export type {
 export { canonicalize } from "./jcs.js";
 export type { JsonValue } from "./jcs.js";
 export {
+  assertWireTrajectory,
+  isWireTrajectory,
+  normalizeWireTrajectories
+} from "./fusion-wire.js";
+export type { WireTrajectory } from "./fusion-wire.js";
+export {
   artifactHash,
   hashCanonical,
   hashCanonicalSha256,

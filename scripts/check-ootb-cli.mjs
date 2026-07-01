@@ -37,7 +37,10 @@ const preflight = runCli(["codex"], {
 });
 if (preflight.status === 0) fail("`fusionkit codex` unexpectedly succeeded with no prerequisites");
 const preflightOutput = `${preflight.stdout}${preflight.stderr}`;
-if (!preflightOutput.includes("preflight failed")) {
+if (
+  !preflightOutput.includes("preflight failed") &&
+  !preflightOutput.includes("local MLX models need Apple Silicon")
+) {
   fail(`expected a preflight failure, got:\n${preflightOutput}`);
 }
 

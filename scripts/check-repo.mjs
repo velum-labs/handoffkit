@@ -420,5 +420,96 @@ if (tracked.status === 0) {
   }
 }
 
+const kernelWrapperGuards = [
+  {
+    file: "packages/cli/src/local.ts",
+    snippets: ["new KernelBackend(createBackend(config)", "direct-model-turn"]
+  },
+  {
+    file: "packages/cli/src/gateway.ts",
+    snippets: ["new FusionBackend({", "runFuseStep: createKernelFuseStepRunner()"]
+  },
+  {
+    file: "packages/model-gateway/src/fusion-backend.ts",
+    snippets: ["runFrontdoorRequest(this.#services", "#buildServices()", "#proxyVendor("]
+  },
+  {
+    file: "packages/model-gateway/src/frontdoor/request.ts",
+    snippets: [
+      "class FrontdoorRequestScheduler",
+      "frontdoorBudgetGateOperator",
+      "frontdoorResolveModelOperator",
+      "frontdoorVendorProxyOperator",
+      "runFusionTurnResponse"
+    ]
+  },
+  {
+    file: "packages/model-gateway/src/frontdoor/workflow.ts",
+    snippets: [
+      "frontdoorPanelOperator",
+      "frontdoorFuseOperator",
+      "frontdoorFinalizeOperator",
+      "frontdoorStreamingFuseOperator"
+    ]
+  },
+  {
+    file: "packages/cli/src/fusion/stack.ts",
+    snippets: ["new KernelBackend(backend", "direct-model-turn"]
+  },
+  {
+    file: "packages/tool-codex/src/harness.ts",
+    snippets: ["new KernelBackend(new OpenAiBackend({", "native-passthrough-turn"]
+  },
+  {
+    file: "packages/ensemble/src/run.ts",
+    snippets: ["ensembleRunWorkflow({ descriptor })"]
+  },
+  {
+    file: "python/fusionkit-server/src/fusionkit_server/app.py",
+    snippets: ["kernel = FusionKernel(engine, native_runs)"]
+  },
+  {
+    file: "packages/ensemble/src/kernel-gateway.ts",
+    snippets: ["createKernelFuseStepRunner", "captureWireResponse", "WireArtifactTypes.TrajectoryFuseStepResponse"]
+  },
+  {
+    file: "packages/ensemble/src/kernel-backend.ts",
+    snippets: ["captureWireResponse", "WireArtifactTypes.WireResponse"]
+  }
+];
+for (const guard of kernelWrapperGuards) {
+  const text = readFileSync(guard.file, "utf8");
+  for (const snippet of guard.snippets) {
+    if (!text.includes(snippet)) {
+      fail(`kernel wrapper guard failed: ${guard.file} must include ${snippet}`);
+    }
+  }
+}
+
+// Docs-consistency guard: the front-door workflow ids and operator kinds are the
+// product's public vocabulary, so the docs must name them. This fails CI if the
+// operators/workflows are renamed without updating the docs (fixes doc drift at
+// the process level).
+const docsConsistencyTerms = [
+  "fusion-frontdoor-request",
+  "fusion-frontdoor-turn",
+  "frontdoor.budget-gate",
+  "frontdoor.resolve-model",
+  "frontdoor.vendor-proxy",
+  "frontdoor.panel",
+  "frontdoor.fuse",
+  "frontdoor.finalize"
+];
+const docsConsistencyFiles = [
+  "docs/fusion/kernel-migration.md",
+  "packages/cli/src/commands/runtime.ts"
+];
+for (const term of docsConsistencyTerms) {
+  const documented = docsConsistencyFiles.some((file) => readFileSync(file, "utf8").includes(term));
+  if (!documented) {
+    fail(`docs-consistency guard failed: no doc/runtime-explain surface names "${term}"`);
+  }
+}
+
 if (process.exitCode) process.exit(process.exitCode);
 console.log("repo check passed");

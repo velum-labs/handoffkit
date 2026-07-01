@@ -39,10 +39,14 @@ import {
   newTraceId,
   TRACE_ID_HEADER
 } from "@fusionkit/protocol";
+import type { WireTrajectory } from "@fusionkit/protocol";
 
 import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
+import { runFrontdoorRequest } from "./frontdoor/request.js";
+import { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
+import type { FrontdoorRequestValue, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";
 import {
   addTurnCost,
   emptySessionCost,
@@ -54,6 +58,8 @@ import {
 } from "./cost.js";
 import type { ModelPricing, SessionCost, TokenUsage, TurnCost } from "./cost.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
+
+export type { WireTrajectory } from "@fusionkit/protocol";
 
 /**
  * A native (non-fused) model the gateway also exposes in the tool's picker.
@@ -69,21 +75,6 @@ export type PassthroughModel = {
   endpointId: string;
   /** Router base URL (e.g. http://127.0.0.1:PORT) fronting the real provider. */
   endpointUrl: string;
-};
-
-/** A candidate trajectory in the wire shape FusionKit's `trajectories:fuse` accepts. */
-export type WireTrajectory = {
-  trajectory_id: string;
-  model_id: string;
-  status: string;
-  final_output: string;
-  items?: Array<Record<string, unknown>>;
-  candidate_id?: string;
-  model?: string;
-  harness_kind?: string;
-  diff?: string;
-  verification?: { status: string; evidence?: string[]; exit_code?: number };
-  metadata?: Record<string, unknown>;
 };
 
 export type ChatMessageLike = {
@@ -127,6 +118,16 @@ export type PanelRunInput = {
 /** Runs the panel once for a session and returns its candidate trajectories. */
 export type PanelRunner = (input: PanelRunInput) => Promise<WireTrajectory[]>;
 
+export type FuseStepRunInput = {
+  stepUrl: string;
+  headers: Record<string, string>;
+  body: string;
+  signal?: AbortSignal;
+  streaming: boolean;
+};
+
+export type FuseStepRunner = (input: FuseStepRunInput) => Promise<Response>;
+
 /**
  * What the gateway does when a vendor passthrough model is rate-limited or out
  * of credits/quota part-way through a turn (WS5):
@@ -165,6 +166,8 @@ export type FusionBackendOptions = {
   stepUrl: string;
   /** Produces candidate trajectories for a new session (injected; uses ensemble). */
   runPanels: PanelRunner;
+  /** Executes the trajectory fuse step; defaults to direct fetch. */
+  runFuseStep?: FuseStepRunner;
   /** Model id echoed to clients and sent to the judge step. */
   defaultModel?: string;
   /** Judge model id forwarded to FusionKit (defaults to its configured judge). */
@@ -228,6 +231,8 @@ export type FusionBackendOptions = {
    * so this prices the gateway-observed judge step. Defaults to {@link defaultModel}.
    */
   costModel?: string;
+  /** Hot kernel session state store for in-process session/turn candidate state. */
+  kernelStateStore?: FusionBackendKernelStateStore;
 };
 
 /** Caller-supplied session header fields persisted on session creation. */
@@ -247,6 +252,55 @@ type Session = {
   turns: Map<number, Promise<WireTrajectory[]>>;
   createdAt: number;
 };
+
+export type FusionBackendKernelSessionState = Session;
+
+/**
+ * The kernel-owned state store for the fusion front door. It is the single home
+ * for a conversation's turn state — session identity + per-turn candidate cache
+ * (TTL-scoped; swept by the backend so a stale turn re-runs the panel) — and its
+ * running cost ledger (process/durable-scoped; seeded from and written through to
+ * the durable {@link SessionStore}). Session and cost are distinct concerns with
+ * different lifetimes, so the store exposes them separately; the backend keeps no
+ * private session/cost maps of its own.
+ */
+export type FusionBackendKernelStateStore = {
+  get(sessionKey: string): FusionBackendKernelSessionState | undefined;
+  set(sessionKey: string, state: FusionBackendKernelSessionState): void;
+  delete(sessionKey: string): void;
+  entries(): IterableIterator<[string, FusionBackendKernelSessionState]>;
+  getCost(sessionKey: string): SessionCost | undefined;
+  setCost(sessionKey: string, cost: SessionCost): void;
+};
+
+export class InMemoryFusionBackendKernelStateStore implements FusionBackendKernelStateStore {
+  readonly #sessions = new Map<string, FusionBackendKernelSessionState>();
+  readonly #cost = new Map<string, SessionCost>();
+
+  get(sessionKey: string): FusionBackendKernelSessionState | undefined {
+    return this.#sessions.get(sessionKey);
+  }
+
+  set(sessionKey: string, state: FusionBackendKernelSessionState): void {
+    this.#sessions.set(sessionKey, state);
+  }
+
+  delete(sessionKey: string): void {
+    this.#sessions.delete(sessionKey);
+  }
+
+  entries(): IterableIterator<[string, FusionBackendKernelSessionState]> {
+    return this.#sessions.entries();
+  }
+
+  getCost(sessionKey: string): SessionCost | undefined {
+    return this.#cost.get(sessionKey);
+  }
+
+  setCost(sessionKey: string, cost: SessionCost): void {
+    this.#cost.set(sessionKey, cost);
+  }
+}
 
 const DEFAULT_SESSION_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_PANEL_TIMEOUT_MS = 15 * 60 * 1000;
@@ -525,17 +579,31 @@ function sseResponse(body: string): Response {
   });
 }
 
+/**
+ * The fusion front-door backend is a kernel-native surface adapter: it maps the
+ * gateway {@link Backend} contract onto data-driven `FusionRuntime` graphs. Every
+ * request is dispatched as the `fusion-frontdoor-request` graph, whose
+ * `frontdoor.budget-gate` / `frontdoor.resolve-model` / `frontdoor.vendor-proxy`
+ * operators + `FrontdoorRequestScheduler` route to budget-stop, the
+ * `fusion-frontdoor-turn` graph (panel -> fuse -> finalize, streaming or
+ * buffered), or the vendor proxy (whose pre-stream failover re-enters the fusion
+ * turn). All per-turn inputs travel as a {@link FrontdoorRequestValue} artifact;
+ * this backend owns only the stable {@link FrontdoorServices} the operators invoke
+ * (session identity, panel/fuse implementations, cost/trace/persistence, vendor
+ * proxy), while the runtime owns admission, provenance, budget, trace, and replay.
+ */
 export class FusionBackend implements Backend {
   readonly defaultModel: string | undefined;
 
   readonly #stepUrl: string;
   readonly #runPanels: PanelRunner;
+  readonly #runFuseStep: FuseStepRunner;
   readonly #judgeModel: string | undefined;
   readonly #ttlMs: number;
   readonly #panelTimeoutMs: number;
   readonly #stepTimeoutMs: number;
   readonly #mintTraceId: () => string;
-  readonly #sessions = new Map<string, Session>();
+  readonly #kernelStateStore: FusionBackendKernelStateStore;
   readonly #passthrough: readonly PassthroughModel[];
   readonly #onRateLimit: OnRateLimitPolicy;
   readonly #store: SessionStore | undefined;
@@ -543,14 +611,23 @@ export class FusionBackend implements Backend {
   readonly #budgetUsd: number | undefined;
   readonly #pricing: Readonly<Record<string, ModelPricing>>;
   readonly #costModel: string | undefined;
-  /** Running per-session (= session-key) cost accumulation; seeded from the store. */
-  readonly #sessionCost = new Map<string, SessionCost>();
+  /** The stable front-door services the request/turn operators invoke. */
+  readonly #services: FrontdoorServices;
   /** Explicit resume target; consumed (cleared) when bound to the first session. */
   #resumeId: string | undefined;
 
   constructor(options: FusionBackendOptions) {
     this.#stepUrl = options.stepUrl;
     this.#runPanels = options.runPanels;
+    this.#runFuseStep =
+      options.runFuseStep ??
+      ((request) =>
+        fetch(request.stepUrl, {
+          method: "POST",
+          headers: request.headers,
+          body: request.body,
+          ...(request.signal ? { signal: request.signal } : {})
+        }));
     this.defaultModel = options.defaultModel;
     this.#judgeModel = options.judgeModel;
     this.#ttlMs = options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
@@ -560,11 +637,15 @@ export class FusionBackend implements Backend {
     this.#passthrough = options.passthrough ?? [];
     this.#onRateLimit = options.onRateLimit ?? "fusion";
     this.#store = options.store;
+    this.#kernelStateStore = options.kernelStateStore ?? new InMemoryFusionBackendKernelStateStore();
     this.#sessionMeta = options.sessionMeta ?? {};
     this.#budgetUsd = options.budgetUsd;
     this.#pricing = options.pricing ?? {};
     this.#costModel = options.costModel;
     this.#resumeId = options.resumeId;
+    // Built once, after all fields are set: the stable wire the front-door
+    // request/turn operators invoke with per-turn data.
+    this.#services = this.#buildServices();
   }
 
   /**
@@ -625,18 +706,17 @@ export class FusionBackend implements Backend {
    * a transparent cut-over is a deliberate follow-up). `auth_permanent` /
    * `unknown` failures always surface verbatim (a blind reroute would not help).
    */
-  async #proxyNative(
-    target: PassthroughModel,
-    chat: ChatBody,
-    signal: AbortSignal | undefined,
-    options: BackendRequestOptions
-  ): Promise<Response> {
+  async #proxyVendor(req: FrontdoorRequestValue): Promise<VendorProxyOutcome> {
+    const target = this.#passthroughFor(req.chat.model);
+    if (target === undefined) throw new Error("vendor proxy invoked without a native model");
+    const chat = req.chat;
+    const signal = this.#signalFor(req);
     const traceId = this.#mintTraceId();
     const spanId = newSpanId();
     // WS7: a passthrough turn is metered against the vendor model, accumulated
     // under the same conversation key the fused path uses (so cost is continuous
     // across a mid-conversation switch between a vendor model and the ensemble).
-    const costSessionId = this.#sessionKey(Array.isArray(chat.messages) ? chat.messages : []);
+    const costSessionId = req.sessionKey;
     const traceEnabled = getTraceEmitter().isEnabled();
     if (traceEnabled) {
       emitTrace({
@@ -648,7 +728,7 @@ export class FusionBackend implements Backend {
       });
     }
     const headers: Record<string, string> = { "content-type": "application/json" };
-    if (options.modelCallId) headers["x-velum-model-call-id"] = options.modelCallId;
+    if (req.modelCallId) headers["x-velum-model-call-id"] = req.modelCallId;
     // The router routes by endpoint id, so rewrite `model` to it; everything
     // else (messages, tools, tool results, stream flag) passes through verbatim.
     const body = JSON.stringify({ ...chat, model: target.endpointId });
@@ -677,24 +757,24 @@ export class FusionBackend implements Backend {
     // response (including its 429) exactly as before WS5.
     if (this.#onRateLimit === "passthrough") {
       await this.#meterResponseClone(response, costSessionId, target.modelId, traceId, spanId);
-      return response;
+      return { kind: "response", response };
     }
 
     if (!response.ok) {
       // A non-2xx is delivered before any byte streams to the harness, so this
       // is always a pre-stream failure.
       const { failure, bodyText } = await this.#readErrorBody(response);
-      return this.#handlePreStreamFailure(target, chat, signal, options, failure, () =>
+      return this.#classifyPreStreamFailure(target, failure, req.streaming, () =>
         rebuildErrorResponse(response.status, response.headers.get("content-type"), bodyText)
       );
     }
 
     const contentType = response.headers.get("content-type") ?? "";
     if (chat.stream === true && contentType.includes("text/event-stream") && response.body !== null) {
-      return this.#proxyNativeStream(response.body, target, chat, signal, options, costSessionId);
+      return this.#proxyVendorStream(response.body, target, req, costSessionId);
     }
     await this.#meterResponseClone(response, costSessionId, target.modelId, traceId, spanId);
-    return response;
+    return { kind: "response", response };
   }
 
   /** Read a non-2xx router reply into a classified {@link ProxyFailure} + its raw body. */
@@ -732,37 +812,48 @@ export class FusionBackend implements Backend {
    * `verbatim` rebuilds the original vendor response (its body was consumed for
    * classification).
    */
-  #handlePreStreamFailure(
+  /**
+   * Classify a detected pre-stream vendor failure into a {@link VendorProxyOutcome}:
+   * surface the vendor error verbatim, emit a clear gateway error (per policy), or
+   * signal a `failover` so the request scheduler re-enters the fusion turn with the
+   * throttled vendor excluded. `verbatim` rebuilds the original vendor response
+   * (its body was consumed for classification). The failover *control* now lives in
+   * the scheduler, not in a recursive proxy call.
+   */
+  #classifyPreStreamFailure(
     target: PassthroughModel,
-    chat: ChatBody,
-    signal: AbortSignal | undefined,
-    options: BackendRequestOptions,
     failure: ProxyFailure,
+    streaming: boolean,
     verbatim: () => Response
-  ): Promise<Response> | Response {
+  ): VendorProxyOutcome {
     const decision = this.#decideFailover(failure.category);
     switch (decision) {
       case "fail-fast":
         console.error(
           `fusion: ${target.modelId} failed (${failure.category}); not failing over to the ensemble.`
         );
-        return verbatim();
+        return { kind: "response", response: verbatim() };
       case "fail-error": {
         const message =
           `${target.modelId} ${failure.category} (${failure.message}); ` +
           `failover disabled by --on-rate-limit fail`;
         console.error(`fusion: ${message}`);
-        if (chat.stream === true) return sseResponse(errorEvent(`fusion error: ${message}`));
-        return jsonError(failure.status ?? 429, message);
+        return {
+          kind: "response",
+          response: streaming
+            ? sseResponse(errorEvent(`fusion error: ${message}`))
+            : jsonError(failure.status ?? 429, message)
+        };
       }
       case "failover":
         console.error(
           `fusion: ${target.modelId} ${failure.category}; handing the turn off to the ensemble.`
         );
-        return this.#runFusion(chat, signal, options, {
+        return {
+          kind: "failover",
           excludeModelIds: [target.endpointId],
           notice: failoverNotice(target.modelId, failure)
-        });
+        };
       default: {
         const unreachable: never = decision;
         throw new Error(`unhandled failover decision: ${String(unreachable)}`);
@@ -777,14 +868,12 @@ export class FusionBackend implements Backend {
    * reached the harness we cannot transparently cut over, so any later error is
    * rewritten into a one-tap resume notice (re-run on the fused model).
    */
-  async #proxyNativeStream(
+  async #proxyVendorStream(
     upstream: ReadableStream<Uint8Array>,
     target: PassthroughModel,
-    chat: ChatBody,
-    signal: AbortSignal | undefined,
-    options: BackendRequestOptions,
+    req: FrontdoorRequestValue,
     sessionId: string
-  ): Promise<Response> {
+  ): Promise<VendorProxyOutcome> {
     const reader = upstream.getReader();
     const decoder = new TextDecoder();
     let buffered = "";
@@ -810,24 +899,26 @@ export class FusionBackend implements Backend {
       const decision = this.#decideFailover(preFailure.category);
       if (decision === "failover") {
         void reader.cancel().catch(() => undefined);
-        return this.#handlePreStreamFailure(target, chat, signal, options, preFailure, () =>
-          sseResponse(buffered)
-        );
+        return this.#classifyPreStreamFailure(target, preFailure, req.streaming, () => sseResponse(buffered));
       }
       if (decision === "fail-error") {
         const captured = buffered;
         void reader.cancel().catch(() => undefined);
-        return this.#handlePreStreamFailure(target, chat, signal, options, preFailure, () =>
-          sseResponse(captured)
-        );
+        return this.#classifyPreStreamFailure(target, preFailure, req.streaming, () => sseResponse(captured));
       }
       // fail-fast: replay the verbatim vendor stream (buffered head + the rest).
-      return this.#reconstructStream(buffered, reader, decoder, target, "verbatim", sessionId);
+      return {
+        kind: "response",
+        response: this.#reconstructStream(buffered, reader, decoder, target, "verbatim", sessionId)
+      };
     }
 
     // Content already streamed (mid-stream) or a clean short stream: replay and
     // continue, converting any later vendor error into a resume notice.
-    return this.#reconstructStream(buffered, reader, decoder, target, "resume-notice", sessionId);
+    return {
+      kind: "response",
+      response: this.#reconstructStream(buffered, reader, decoder, target, "resume-notice", sessionId)
+    };
   }
 
   /**
@@ -911,370 +1002,314 @@ export class FusionBackend implements Backend {
 
   async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
     const chat = (body ?? {}) as ChatBody;
-    // WS7 budget cap: refuse a turn once the conversation has already accrued at
-    // least the configured --budget. Checked up front (before any provider call)
-    // for both the fused and passthrough paths, keyed by the same conversation
-    // session key the cost is accumulated under.
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
-    const costSessionId = this.#sessionKey(messages);
-    if (this.#budgetExceeded(costSessionId)) {
-      return this.#budgetStop(chat.stream === true, costSessionId);
-    }
-    // Native model selected from the picker: proxy straight to its real provider
-    // (the fusion panel + judge are skipped). Falling back to fusion is just
-    // selecting the fused model again — or, on a vendor rate-limit/credit
-    // failure, automatic (see #proxyNative's WS5 failover).
-    const native = this.#passthroughFor(chat.model);
-    if (native !== undefined) {
-      return this.#proxyNative(native, chat, signal, options);
-    }
-    return this.#runFusion(chat, signal, options, {});
+    // The whole request runs as the `fusion-frontdoor-request` kernel graph: the
+    // budget gate, requested-model resolution, and rate-limit failover are
+    // first-class operators + a routing scheduler decision. This backend supplies
+    // only the stable services (session/panel/fuse/cost/trace/vendor wire) those
+    // operators invoke; every per-turn input travels as the request artifact.
+    const req: FrontdoorRequestValue = {
+      requestId: newSpanId(),
+      chat,
+      sessionKey: this.#sessionKey(messages),
+      // The user-turn index: a follow-up user message is a new turn, while a
+      // harness tool-loop continuation keeps the count (and reuses candidates).
+      turn: messages.filter((message) => message.role === "user").length,
+      // Minted once so this turn's judge.request and judge.final share a span.
+      judgeSpanId: newSpanId(),
+      streaming: chat.stream === true,
+      ...(options.modelCallId !== undefined ? { modelCallId: options.modelCallId } : {}),
+      ...(signal !== undefined ? { [FRONTDOOR_SIGNAL]: signal } : {})
+    };
+    return runFrontdoorRequest(this.#services, req);
   }
 
-  /**
-   * Run the fusion ensemble path for a turn: derive the session, run the panel
-   * once, then drive the judge/synthesizer step (streamed or single JSON).
-   *
-   * `excludeModelIds` drops panel members for this turn (WS5 failover omits the
-   * throttled vendor — it would only hit the same limit again). `notice` is
-   * spliced in as a leading assistant content delta / prefix so the user sees
-   * the handoff ("vendor rate-limited → ensemble").
-   */
-  async #runFusion(
-    chat: ChatBody,
-    signal: AbortSignal | undefined,
-    options: BackendRequestOptions,
-    opts: { excludeModelIds?: readonly string[]; notice?: string }
-  ): Promise<Response> {
-    const messages = Array.isArray(chat.messages) ? chat.messages : [];
-    const sessionKey = this.#sessionKey(messages);
-    const session = this.#ensureSession(sessionKey);
-    const streaming = chat.stream === true;
-    // WS7: a fused turn's gateway-observed usage is the judge/synthesis call's,
-    // priced against the configured judge model (fall back to the advertised
-    // fused id, whose cost is reported unknown — no real price for "fusion-panel").
-    const fusedCostModel = this.#costModel ?? this.defaultModel ?? "fusion-panel";
+  // --- front-door services: the stable wire the operators invoke ------------
+  //
+  // Built once (see the constructor). Every method takes the request as data and
+  // derives session identity, spans, headers, and cost from the request + the
+  // kernel state store. No per-turn closures.
 
-    const buildStepBody = (candidates: WireTrajectory[]): string => {
-      const stepBody: Record<string, unknown> = {
-        model: chat.model ?? this.defaultModel ?? "fusion-panel",
-        messages,
-        trajectories: candidates,
-        stream: streaming
-      };
-      if (chat.tools !== undefined) stepBody.tools = chat.tools;
-      if (chat.tool_choice !== undefined) stepBody.tool_choice = chat.tool_choice;
-      if (this.#judgeModel !== undefined) stepBody.judge_model = this.#judgeModel;
-      return JSON.stringify(stepBody);
+  #buildServices(): FrontdoorServices {
+    return {
+      budgetUsd: this.#budgetUsd,
+      costTotalUsd: (sessionKey) => this.#costFor(sessionKey).totalUsd,
+      budgetStopResponse: (req) => this.#budgetStop(req.streaming, req.sessionKey),
+      isNativeModel: (model) => this.#passthroughFor(model) !== undefined,
+      resolvePanelCandidates: (req) => this.#resolvePanelCandidates(req),
+      runFuseStep: (req, candidates) => this.#runFuseStepBuffered(req, candidates),
+      openFuseStream: (req, candidates) => this.#openFuseStream(req, candidates),
+      finalizeFused: (req, response) => this.#finalizeFused(req, response),
+      meterAndTraceStream: (req, buffer) => this.#meterAndTraceStream(req, buffer),
+      onFuseUpstreamError: (req, status, detail) => this.#onFuseUpstreamError(req, status, detail),
+      onFuseException: (req, message) => this.#onFuseException(req, message),
+      proxyVendor: (req) => this.#proxyVendor(req),
+      evictTurn: (req) => this.#evictTurnFor(req)
     };
+  }
+
+  #signalFor(req: FrontdoorRequestValue): AbortSignal | undefined {
+    return req[FRONTDOOR_SIGNAL];
+  }
+
+  #fusedCostModel(): string {
+    // WS7: a fused turn's gateway-observed usage is the judge/synthesis call's,
+    // priced against the configured judge model (falling back to the advertised
+    // fused id, whose cost is reported unknown).
+    return this.#costModel ?? this.defaultModel ?? "fusion-panel";
+  }
+
+  #buildStepBody(req: FrontdoorRequestValue, candidates: readonly WireTrajectory[]): string {
+    const stepBody: Record<string, unknown> = {
+      model: req.chat.model ?? this.defaultModel ?? "fusion-panel",
+      messages: req.chat.messages ?? [],
+      trajectories: candidates,
+      stream: req.streaming
+    };
+    if (req.chat.tools !== undefined) stepBody.tools = req.chat.tools;
+    if (req.chat.tool_choice !== undefined) stepBody.tool_choice = req.chat.tool_choice;
+    if (this.#judgeModel !== undefined) stepBody.judge_model = this.#judgeModel;
+    return JSON.stringify(stepBody);
+  }
+
+  #buildHeaders(req: FrontdoorRequestValue, session: Session): Record<string, string> {
     const headers: Record<string, string> = {
       "content-type": "application/json",
       [TRACE_ID_HEADER]: session.traceId
     };
-    if (options.modelCallId) headers["x-velum-model-call-id"] = options.modelCallId;
+    if (req.modelCallId) headers["x-velum-model-call-id"] = req.modelCallId;
+    return headers;
+  }
 
-    // The judge step is a child span of the session: emit the full prompt sent to
-    // the judge (the live conversation + candidate trajectories + tools) and the
-    // judge's final output, so the companion app can show exactly what the judge
-    // saw and produced.
-    const judgeSpan = newSpanId();
-    const traceEnabled = getTraceEmitter().isEnabled();
-    const sessionTraceId = session.traceId;
-    const sessionSpan = session.sessionSpan;
-    const judgeModel = this.#judgeModel;
-    // The user-turn index: a follow-up user message is a new turn, while the
-    // harness's internal tool-loop continuations (which append assistant/tool
-    // messages, not user ones) keep the same count and thus the same turn. The
-    // panel runs once per turn, so each new user request is fused over fresh
-    // candidates; the tool loop within a turn reuses them.
-    const turn = messages.filter((message) => message.role === "user").length;
+  #emitJudgeRequest(req: FrontdoorRequestValue, session: Session, candidates: readonly WireTrajectory[]): void {
+    if (!getTraceEmitter().isEnabled()) return;
+    emitTrace({
+      component: "judge",
+      event_type: "judge.request",
+      traceId: session.traceId,
+      spanId: req.judgeSpanId,
+      parentSpanId: session.sessionSpan,
+      payload: judgeRequestPayload({
+        ...(this.#judgeModel !== undefined ? { judgeModel: this.#judgeModel } : {}),
+        messages: req.chat.messages ?? [],
+        trajectories: [...candidates],
+        ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
+        ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
+        trajectoryIds: candidates.map((candidate) => candidate.trajectory_id),
+        turn: req.turn
+      })
+    });
+  }
+
+  #emitJudgeFinal(
+    req: FrontdoorRequestValue,
+    session: Session,
+    input: Parameters<typeof judgeFinalPayload>[0]
+  ): void {
+    if (!getTraceEmitter().isEnabled()) return;
+    emitTrace({
+      component: "judge",
+      event_type: "judge.final",
+      traceId: session.traceId,
+      spanId: req.judgeSpanId,
+      parentSpanId: session.sessionSpan,
+      payload: judgeFinalPayload({ ...input, turn: req.turn })
+    });
+  }
+
+  #emitJudgeStep(
+    req: FrontdoorRequestValue,
+    session: Session,
+    input: { content?: string; toolCalls?: unknown[]; usage?: unknown }
+  ): void {
+    if (!getTraceEmitter().isEnabled()) return;
+    const toolCallCount = input.toolCalls?.length ?? 0;
+    const rawAnalysis =
+      input.content !== undefined && input.content.length > 0
+        ? input.content
+        : `judge requested ${toolCallCount} tool call(s)`;
+    emitTrace({
+      component: "judge",
+      event_type: "judge.thinking",
+      traceId: session.traceId,
+      spanId: req.judgeSpanId,
+      parentSpanId: session.sessionSpan,
+      payload: judgeThinkingPayload({
+        rawAnalysis,
+        ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
+        ...(input.usage !== undefined ? { usage: input.usage } : {}),
+        turn: req.turn
+      })
+    });
+  }
+
+  async #resolvePanelCandidates(req: FrontdoorRequestValue): Promise<readonly WireTrajectory[]> {
+    const session = this.#ensureSession(req.sessionKey);
     const turnCandidates = this.#ensureTurnCandidates(
       session,
-      sessionKey,
-      turn,
-      messages,
-      opts.excludeModelIds
+      req.sessionKey,
+      req.turn,
+      req.chat.messages ?? [],
+      req.excludeModelIds
     );
-    const emitJudgeRequest = (candidates: WireTrajectory[]): void => {
-      if (!traceEnabled) return;
-      emitTrace({
-        component: "judge",
-        event_type: "judge.request",
-        traceId: sessionTraceId,
-        spanId: judgeSpan,
-        parentSpanId: sessionSpan,
-        payload: judgeRequestPayload({
-          ...(judgeModel !== undefined ? { judgeModel } : {}),
-          messages,
-          trajectories: candidates,
-          ...(chat.tools !== undefined ? { tools: chat.tools } : {}),
-          ...(chat.tool_choice !== undefined ? { toolChoice: chat.tool_choice } : {}),
-          trajectoryIds: candidates.map((candidate) => candidate.trajectory_id),
-          turn
-        })
-      });
-    };
-    const emitJudgeFinal = (input: Parameters<typeof judgeFinalPayload>[0]): void => {
-      if (!traceEnabled) return;
-      emitTrace({
-        component: "judge",
-        event_type: "judge.final",
-        traceId: sessionTraceId,
-        spanId: judgeSpan,
-        parentSpanId: sessionSpan,
-        payload: judgeFinalPayload({ ...input, turn })
-      });
-    };
-    // An intermediate tool-calling turn is NOT the final answer: the harness will
-    // execute the tool calls and call back. Emit it as `judge.thinking` so the
-    // companion app shows it as in-progress instead of marking the session done.
-    const emitJudgeStep = (input: { content?: string; toolCalls?: unknown[]; usage?: unknown }): void => {
-      if (!traceEnabled) return;
-      const toolCallCount = input.toolCalls?.length ?? 0;
-      const rawAnalysis =
-        input.content !== undefined && input.content.length > 0
-          ? input.content
-          : `judge requested ${toolCallCount} tool call(s)`;
-      emitTrace({
-        component: "judge",
-        event_type: "judge.thinking",
-        traceId: sessionTraceId,
-        spanId: judgeSpan,
-        parentSpanId: sessionSpan,
-        payload: judgeThinkingPayload({
-          rawAnalysis,
-          ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
-          ...(input.usage !== undefined ? { usage: input.usage } : {}),
-          turn
-        })
-      });
-    };
-
-    // Resolve the panel candidates (bounded), failing loudly so a panel crash or
-    // an empty/all-failed candidate set never silently fuses into a blank answer.
-    const resolveCandidates = async (): Promise<WireTrajectory[]> => {
-      const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel");
-      if (!hasUsableCandidates(candidates)) {
-        if (candidates.length === 0) {
-          throw new Error("fusion panel produced no candidates");
-        }
-        // Every candidate failed: attribute the failure per model so the error
-        // (and the companion app) points at which panel members went wrong.
-        const breakdown = candidates
-          .map((candidate) => `${candidate.model_id || candidate.trajectory_id}: ${candidate.status}`)
-          .join(", ");
-        throw new Error(
-          `fusion panel produced no usable candidates (every model failed) — ${breakdown}`
-        );
-      }
-      return candidates;
-    };
-
-    // Non-streaming: the panel phase can block before the single JSON reply.
-    if (!streaming) {
-      let candidates: WireTrajectory[];
-      try {
-        candidates = await resolveCandidates();
-      } catch (error) {
-        this.#evictTurn(session, turn);
-        console.error(`fusion: panel phase failed: ${errorText(error)}`);
-        return jsonError(502, errorText(error));
-      }
-      emitJudgeRequest(candidates);
-      const response = await fetch(this.#stepUrl, {
-        method: "POST",
-        headers,
-        body: buildStepBody(candidates),
-        signal: withDeadline(signal, this.#stepTimeoutMs)
-      });
-      // Failover handoff: prepend the notice to the single fused answer so the
-      // user sees why the turn moved to the ensemble. Consumes the body, so this
-      // returns before the (clone-based) trace capture below.
-      if (opts.notice !== undefined) {
-        if (!response.ok) return response;
-        let payload: Record<string, unknown>;
-        try {
-          payload = (await response.json()) as Record<string, unknown>;
-        } catch {
-          return jsonError(502, "fusion failover produced an unreadable response");
-        }
-        const choice = (Array.isArray(payload.choices) ? payload.choices[0] : undefined) as
-          | { message?: { content?: unknown } }
-          | undefined;
-        if (choice?.message !== undefined) {
-          const existing = typeof choice.message.content === "string" ? choice.message.content : "";
-          const merged = `${opts.notice}${existing}`;
-          choice.message.content = merged;
-          emitJudgeFinal({ httpStatus: 200, content: merged });
-        }
-        this.#meter(sessionKey, fusedCostModel, parseUsage(payload.usage), sessionTraceId, judgeSpan);
-        return new Response(JSON.stringify(payload), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
-      }
-      if (traceEnabled) {
-        // Capture the judge's output without consuming the piped response.
-        const clone = response.clone();
-        void (async () => {
-          try {
-            if (!clone.ok) {
-              emitJudgeFinal({ httpStatus: clone.status, error: (await clone.text()).slice(0, 2000) });
-              return;
-            }
-            const judged = (await clone.json()) as {
-              choices?: Array<{ message?: { content?: string; tool_calls?: unknown }; finish_reason?: string }>;
-              usage?: unknown;
-              fusion?: unknown;
-            };
-            const choice = judged.choices?.[0];
-            const message = choice?.message;
-            const content = typeof message?.content === "string" ? message.content : undefined;
-            const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
-            if (isTerminalJudgeStep(toolCalls, choice?.finish_reason)) {
-              const synthesis = synthesisOf(judged.fusion);
-              emitJudgeFinal({
-                httpStatus: clone.status,
-                ...(content !== undefined ? { content } : {}),
-                ...(synthesis !== undefined ? { synthesis } : {}),
-                ...(judged.usage !== undefined ? { usage: judged.usage } : {})
-              });
-            } else {
-              emitJudgeStep({
-                ...(content !== undefined ? { content } : {}),
-                toolCalls,
-                ...(judged.usage !== undefined ? { usage: judged.usage } : {})
-              });
-            }
-          } catch {
-            // best-effort judge.final
-          }
-        })();
-      }
-      await this.#meterResponseClone(response, sessionKey, fusedCostModel, sessionTraceId, judgeSpan);
-      return response;
+    // Bounded, failing loudly so a panel crash or an empty/all-failed candidate
+    // set never silently fuses into a blank answer.
+    const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel");
+    if (!hasUsableCandidates(candidates)) {
+      if (candidates.length === 0) throw new Error("fusion panel produced no candidates");
+      const breakdown = candidates
+        .map((candidate) => `${candidate.model_id || candidate.trajectory_id}: ${candidate.status}`)
+        .join(", ");
+      throw new Error(`fusion panel produced no usable candidates (every model failed) — ${breakdown}`);
     }
+    return candidates;
+  }
 
-    // Streaming: return immediately with a live SSE stream so the caller's HTTP
-    // client sees the response start right away. The (potentially slow) panel
-    // phase runs inside the stream behind keepalive comments, then the judge
-    // step's SSE is piped through. This avoids first-byte timeouts in real CLIs
-    // (e.g. codex) while the panel solves the task once. Because the 200 + SSE
-    // headers are already sent, failures surface as a terminal error event.
-    const stepUrl = this.#stepUrl;
-    const stepSignal = withDeadline(signal, this.#stepTimeoutMs);
-    const evictOnFailure = (): void => this.#evictTurn(session, turn);
-    // WS7: meter the fused turn from the judge step's `usage` (rides the SSE tail).
-    const meterStream = (buffer: string): void => {
-      this.#meter(sessionKey, fusedCostModel, parseUsageFromSse(buffer), sessionTraceId, judgeSpan);
-    };
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    const readable = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        let alive = true;
-        let sseBuffer = "";
-        const keepalive = setInterval(() => {
-          if (alive) {
-            try {
-              controller.enqueue(encoder.encode(": keepalive\n\n"));
-            } catch {
-              alive = false;
-            }
-          }
-        }, 3000);
-        const fail = (message: string): void => {
-          console.error(`fusion: ${message}`);
-          evictOnFailure();
-          controller.enqueue(encoder.encode(errorEvent(`fusion error: ${message}`)));
-        };
-        // Failover handoff: emit the notice as the first content delta so the
-        // user immediately sees the turn moved to the ensemble, before the
-        // (possibly slow) panel phase produces the fused answer.
-        if (opts.notice !== undefined) {
-          controller.enqueue(encoder.encode(noticeChunk(opts.notice)));
-        }
-        try {
-          let candidates: WireTrajectory[];
-          try {
-            candidates = await resolveCandidates();
-          } catch (error) {
-            fail(errorText(error));
-            return;
-          }
-          emitJudgeRequest(candidates);
-          if (process.env.FUSION_DEBUG) {
-            const toolNames = Array.isArray(chat.tools)
-              ? chat.tools.map((t) => {
-                  const tool = t as { type?: string; name?: string; function?: { name?: string } };
-                  return tool.function?.name ?? tool.name ?? tool.type ?? "?";
-                })
-              : [];
-            console.error(
-              `[fusion-debug] step: messages=${messages.length} roles=${messages.map((m) => m.role).join(",")} ` +
-                `candidates=${candidates.length} tools=[${toolNames.join(", ")}]`
-            );
-          }
-          const upstream = await fetch(stepUrl, {
-            method: "POST",
-            headers,
-            body: buildStepBody(candidates),
-            signal: stepSignal
-          });
-          if (!upstream.ok || upstream.body === null) {
-            const detail = upstream.body === null ? "no stream" : (await upstream.text()).slice(0, 800);
-            emitJudgeFinal({ httpStatus: upstream.status, error: detail });
-            fail(`trajectories:fuse ${upstream.status}: ${detail}`);
-            return;
-          }
-          const reader = upstream.body.getReader();
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value !== undefined) {
-              controller.enqueue(value);
-              // Always accumulate for WS7 cost metering (usage rides the SSE tail);
-              // the trace assembly below reuses the same buffer when enabled.
-              sseBuffer += decoder.decode(value, { stream: true });
-            }
-          }
-          meterStream(sseBuffer);
-          if (traceEnabled) {
-            const assembled = assembleSseContent(sseBuffer);
-            if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
-              const synthesis = synthesisOf(assembled.fusion);
-              emitJudgeFinal({
-                httpStatus: upstream.status,
-                ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
-                ...(synthesis !== undefined ? { synthesis } : {}),
-                ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
-              });
-            } else {
-              emitJudgeStep({
-                ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
-                toolCalls: assembled.toolCalls,
-                ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
-              });
-            }
-          }
-        } catch (error) {
-          emitJudgeFinal({ error: errorText(error) });
-          fail(errorText(error));
-        } finally {
-          alive = false;
-          clearInterval(keepalive);
-          try {
-            controller.close();
-          } catch {
-            // already closed
-          }
-        }
+  #runFuseStepBuffered(req: FrontdoorRequestValue, candidates: readonly WireTrajectory[]): Promise<Response> {
+    const session = this.#ensureSession(req.sessionKey);
+    this.#emitJudgeRequest(req, session, candidates);
+    return this.#runFuseStep({
+      stepUrl: this.#stepUrl,
+      headers: this.#buildHeaders(req, session),
+      body: this.#buildStepBody(req, candidates),
+      signal: withDeadline(this.#signalFor(req), this.#stepTimeoutMs),
+      streaming: false
+    });
+  }
+
+  #openFuseStream(req: FrontdoorRequestValue, candidates: readonly WireTrajectory[]): Promise<Response> {
+    const session = this.#ensureSession(req.sessionKey);
+    this.#emitJudgeRequest(req, session, candidates);
+    if (process.env.FUSION_DEBUG) {
+      const messages = req.chat.messages ?? [];
+      const toolNames = Array.isArray(req.chat.tools)
+        ? req.chat.tools.map((t) => {
+            const tool = t as { type?: string; name?: string; function?: { name?: string } };
+            return tool.function?.name ?? tool.name ?? tool.type ?? "?";
+          })
+        : [];
+      console.error(
+        `[fusion-debug] step: messages=${messages.length} roles=${messages.map((m) => m.role).join(",")} ` +
+          `candidates=${candidates.length} tools=[${toolNames.join(", ")}]`
+      );
+    }
+    return this.#runFuseStep({
+      stepUrl: this.#stepUrl,
+      headers: this.#buildHeaders(req, session),
+      body: this.#buildStepBody(req, candidates),
+      signal: withDeadline(this.#signalFor(req), this.#stepTimeoutMs),
+      streaming: true
+    });
+  }
+
+  async #finalizeFused(req: FrontdoorRequestValue, response: Response): Promise<Response> {
+    const session = this.#ensureSession(req.sessionKey);
+    const fusedCostModel = this.#fusedCostModel();
+    // Failover handoff: prepend the notice to the single fused answer so the user
+    // sees why the turn moved to the ensemble. Consumes the body, so this returns
+    // before the (clone-based) trace capture below.
+    if (req.notice !== undefined) {
+      if (!response.ok) return response;
+      let payload: Record<string, unknown>;
+      try {
+        payload = (await response.json()) as Record<string, unknown>;
+      } catch {
+        return jsonError(502, "fusion failover produced an unreadable response");
       }
-    });
-    return new Response(readable, {
-      status: 200,
-      headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
-    });
+      const choice = (Array.isArray(payload.choices) ? payload.choices[0] : undefined) as
+        | { message?: { content?: unknown } }
+        | undefined;
+      if (choice?.message !== undefined) {
+        const existing = typeof choice.message.content === "string" ? choice.message.content : "";
+        const merged = `${req.notice}${existing}`;
+        choice.message.content = merged;
+        this.#emitJudgeFinal(req, session, { httpStatus: 200, content: merged });
+      }
+      this.#meter(req.sessionKey, fusedCostModel, parseUsage(payload.usage), session.traceId, req.judgeSpanId);
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+    if (getTraceEmitter().isEnabled()) {
+      // Capture the judge's output without consuming the piped response.
+      const clone = response.clone();
+      void (async () => {
+        try {
+          if (!clone.ok) {
+            this.#emitJudgeFinal(req, session, {
+              httpStatus: clone.status,
+              error: (await clone.text()).slice(0, 2000)
+            });
+            return;
+          }
+          const judged = (await clone.json()) as {
+            choices?: Array<{ message?: { content?: string; tool_calls?: unknown }; finish_reason?: string }>;
+            usage?: unknown;
+            fusion?: unknown;
+          };
+          const choice = judged.choices?.[0];
+          const message = choice?.message;
+          const content = typeof message?.content === "string" ? message.content : undefined;
+          const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+          if (isTerminalJudgeStep(toolCalls, choice?.finish_reason)) {
+            const synthesis = synthesisOf(judged.fusion);
+            this.#emitJudgeFinal(req, session, {
+              httpStatus: clone.status,
+              ...(content !== undefined ? { content } : {}),
+              ...(synthesis !== undefined ? { synthesis } : {}),
+              ...(judged.usage !== undefined ? { usage: judged.usage } : {})
+            });
+          } else {
+            this.#emitJudgeStep(req, session, {
+              ...(content !== undefined ? { content } : {}),
+              toolCalls,
+              ...(judged.usage !== undefined ? { usage: judged.usage } : {})
+            });
+          }
+        } catch {
+          // best-effort judge.final
+        }
+      })();
+    }
+    await this.#meterResponseClone(response, req.sessionKey, fusedCostModel, session.traceId, req.judgeSpanId);
+    return response;
+  }
+
+  #meterAndTraceStream(req: FrontdoorRequestValue, sseBuffer: string): void {
+    const session = this.#ensureSession(req.sessionKey);
+    // WS7: meter the fused turn from the judge step's `usage` (rides the SSE tail).
+    this.#meter(req.sessionKey, this.#fusedCostModel(), parseUsageFromSse(sseBuffer), session.traceId, req.judgeSpanId);
+    if (!getTraceEmitter().isEnabled()) return;
+    const assembled = assembleSseContent(sseBuffer);
+    if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
+      const synthesis = synthesisOf(assembled.fusion);
+      this.#emitJudgeFinal(req, session, {
+        httpStatus: 200,
+        ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
+        ...(synthesis !== undefined ? { synthesis } : {}),
+        ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
+      });
+    } else {
+      this.#emitJudgeStep(req, session, {
+        ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
+        toolCalls: assembled.toolCalls,
+        ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
+      });
+    }
+  }
+
+  #onFuseUpstreamError(req: FrontdoorRequestValue, status: number, detail: string): void {
+    this.#emitJudgeFinal(req, this.#ensureSession(req.sessionKey), { httpStatus: status, error: detail });
+  }
+
+  #onFuseException(req: FrontdoorRequestValue, message: string): void {
+    this.#emitJudgeFinal(req, this.#ensureSession(req.sessionKey), { error: message });
+  }
+
+  #evictTurnFor(req: FrontdoorRequestValue): void {
+    const session = this.#kernelStateStore.get(req.sessionKey);
+    if (session !== undefined) this.#evictTurn(session, req.turn);
   }
 
   models(): Promise<Response> {
@@ -1338,8 +1373,8 @@ export class FusionBackend implements Backend {
 
   /** Remove expired sessions so a long-lived gateway does not grow unbounded. */
   #sweepExpired(now: number): void {
-    for (const [key, session] of this.#sessions) {
-      if (now - session.createdAt >= this.#ttlMs) this.#sessions.delete(key);
+    for (const [key, session] of this.#kernelStateStore.entries()) {
+      if (now - session.createdAt >= this.#ttlMs) this.#kernelStateStore.delete(key);
     }
   }
 
@@ -1355,7 +1390,7 @@ export class FusionBackend implements Backend {
   #ensureSession(sessionKey: string): Session {
     const now = Date.now();
     this.#sweepExpired(now);
-    const existing = this.#sessions.get(sessionKey);
+    const existing = this.#kernelStateStore.get(sessionKey);
     if (existing !== undefined && now - existing.createdAt < this.#ttlMs) return existing;
 
     if (this.#store !== undefined) {
@@ -1368,7 +1403,7 @@ export class FusionBackend implements Backend {
         const persisted = this.#store.load(resumeId);
         if (persisted !== undefined) {
           const session = this.#hydrate(persisted, now);
-          this.#sessions.set(sessionKey, session);
+          this.#kernelStateStore.set(sessionKey, session);
           return session;
         }
         console.error(`fusion: --resume target ${resumeId} not found; starting a fresh session.`);
@@ -1378,7 +1413,7 @@ export class FusionBackend implements Backend {
       const stored = this.#store.load(sessionKey);
       if (stored !== undefined) {
         const session = this.#hydrate(stored, now);
-        this.#sessions.set(sessionKey, session);
+        this.#kernelStateStore.set(sessionKey, session);
         return session;
       }
     }
@@ -1390,7 +1425,7 @@ export class FusionBackend implements Backend {
       turns: new Map(),
       createdAt: now
     };
-    this.#sessions.set(sessionKey, session);
+    this.#kernelStateStore.set(sessionKey, session);
     this.#persistMeta(session);
     return session;
   }
@@ -1448,11 +1483,11 @@ export class FusionBackend implements Backend {
 
   /** The running cost for a conversation, seeded once from the durable store. */
   #costFor(sessionId: string): SessionCost {
-    const cached = this.#sessionCost.get(sessionId);
+    const cached = this.#kernelStateStore.getCost(sessionId);
     if (cached !== undefined) return cached;
     const stored = this.#store?.load(sessionId)?.meta.cost;
     const seeded = stored ?? emptySessionCost();
-    this.#sessionCost.set(sessionId, seeded);
+    this.#kernelStateStore.setCost(sessionId, seeded);
     return seeded;
   }
 
@@ -1472,7 +1507,7 @@ export class FusionBackend implements Backend {
   ): TurnCost {
     const turnCost = meterTurn(model, usage, this.#pricing);
     const total = addTurnCost(this.#costFor(sessionId), turnCost);
-    this.#sessionCost.set(sessionId, total);
+    this.#kernelStateStore.setCost(sessionId, total);
     try {
       this.#store?.recordCost(sessionId, total);
     } catch (error) {

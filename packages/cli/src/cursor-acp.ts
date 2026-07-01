@@ -75,8 +75,9 @@ async function runCursorAcpOutcome(
     // WS5 cursorkit failover seam (DEFERRED — owned by WS6, cursorkit/tool-cursor).
     // For Codex/Claude, vendor rate-limit/credit handoff already works: those
     // harnesses send native passthrough requests to the gateway's
-    // /v1/chat/completions, where FusionBackend#proxyNative detects the
-    // classified `error_category` and reroutes the turn to the ensemble. Because
+    // /v1/chat/completions, where the `frontdoor.vendor-proxy` operator detects
+    // the classified `error_category` and the scheduler reroutes the turn to the
+    // ensemble. Because
     // MODEL_BASE_URL below also points the cursorkit bridge at that same gateway
     // endpoint, Cursor inherits the SAME pre-stream failover for its *model*
     // backend for free.

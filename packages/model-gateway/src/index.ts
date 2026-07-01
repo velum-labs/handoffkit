@@ -18,16 +18,63 @@ export type { Gateway, GatewayOptions } from "./server.js";
 export { joinPath, OpenAiBackend } from "./backend.js";
 export type { Backend, BackendRequestOptions, OpenAiBackendOptions } from "./backend.js";
 export { FusionBackend } from "./fusion-backend.js";
+export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";
+export {
+  FrontdoorArtifactTypes,
+  FrontdoorFuseError,
+  FrontdoorOperatorKinds,
+  FrontdoorPanelError,
+  frontdoorBudgetGateOperator,
+  frontdoorBudgetStopOperator,
+  frontdoorFinalizeOperator,
+  frontdoorFuseOperator,
+  frontdoorPanelOperator,
+  frontdoorResolveModelOperator,
+  frontdoorStreamingFuseOperator,
+  frontdoorVendorProxyOperator
+} from "./frontdoor/operators.js";
+export type {
+  BudgetValue,
+  CandidateSetValue,
+  FailoverValue,
+  RouteValue
+} from "./frontdoor/operators.js";
+export {
+  FUSION_FRONTDOOR_TURN_WORKFLOW,
+  frontdoorRequestArtifact,
+  runFusionFrontdoorTurn,
+  streamFusionFrontdoorTurn
+} from "./frontdoor/workflow.js";
+export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";
+export {
+  FUSION_FRONTDOOR_REQUEST_WORKFLOW,
+  FrontdoorRequestScheduler,
+  runFrontdoorRequest
+} from "./frontdoor/request.js";
+export { eventsToSseResponse } from "./frontdoor/sse.js";
+export type { EventsToSseOptions } from "./frontdoor/sse.js";
+export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
+export type {
+  FrontdoorChatBody,
+  FrontdoorRequestValue,
+  FrontdoorRoute,
+  FrontdoorServices,
+  VendorProxyOutcome
+} from "./frontdoor/types.js";
 export type {
   ChatMessageLike,
+  FuseStepRunInput,
+  FuseStepRunner,
+  FusionBackendKernelSessionState,
+  FusionBackendKernelStateStore,
   FusionBackendOptions,
   OnRateLimitPolicy,
   PanelRunInput,
   PanelRunner,
   PassthroughModel,
-  SessionMetaInput,
-  WireTrajectory
+  SessionMetaInput
 } from "./fusion-backend.js";
+export type { WireTrajectory } from "@fusionkit/protocol";
 export {
   defaultSessionsDir,
   FileSystemSessionStore,

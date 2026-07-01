@@ -238,9 +238,11 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
           ...(input.candidateId !== undefined ? { [TRACE_CANDIDATE_HEADER]: input.candidateId } : {})
         }
       : undefined;
+  let baseUrlEnd = input.baseUrl.length;
+  while (baseUrlEnd > 0 && input.baseUrl[baseUrlEnd - 1] === "/") baseUrlEnd -= 1;
   const provider = createOpenAICompatible({
     name: "fusion-panel-agent",
-    baseURL: `${input.baseUrl.replace(/\/+$/, "")}/v1`,
+    baseURL: `${input.baseUrl.slice(0, baseUrlEnd)}/v1`,
     apiKey: input.apiKey ?? "not-needed",
     ...(traceHeaders !== undefined ? { headers: traceHeaders } : {})
   });

@@ -106,3 +106,17 @@ reconnect before the first byte.
   the CLI.
 - Fusion quality is only as good as the panel and judge model behind it. A tiny
   local model proves the plumbing, not the answer quality.
+
+## Runtime kernel
+
+The long-term composition model is the FusionKit runtime kernel: typed artifacts,
+operators, explicit operator graphs, interchangeable schedulers, budgets, traces,
+evidence, and outcome/replay records.
+
+The production gateway uses the kernel for panel capture today. The live
+`trajectories:fuse` step still runs through the gateway/Python synthesizer path.
+Use the runtime kernel directly when composing custom workflows such as direct
+calls, panel -> judge -> synth, rank -> select -> fuse, and evidence-guided
+selection/repair.
+
+See [Runtime Kernel](./runtime-kernel).

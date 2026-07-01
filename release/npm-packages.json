@@ -18,6 +18,10 @@
       "name": "@fusionkit/protocol"
     },
     {
+      "path": "packages/kernel",
+      "name": "@fusionkit/kernel"
+    },
+    {
       "path": "packages/sdk",
       "name": "@fusionkit/sdk"
     },

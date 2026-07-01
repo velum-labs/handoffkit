@@ -21,6 +21,7 @@ export {
 export {
   buildPanelPrompt,
   createFusionKitJudgeSynthesizer,
+  runFusionPanelWorkflow,
   runFusionPanels,
   runUnifiedHarnessE2E,
   setToolHarnessProvider
@@ -59,6 +60,200 @@ export type {
   RunSynthesisInput,
   SynthesisResult
 } from "./synthesis.js";
+export { ArtifactTypes, OperatorKinds } from "./artifact-types.js";
+export type { ArtifactType, OperatorKind } from "./artifact-types.js";
+export {
+  artifactRef,
+  countOperatorKind,
+  dependenciesFor,
+  inputNodeIds,
+  nodeOutputRefs,
+  nodeRef,
+  nodesById,
+  terminalNodeIds,
+  topoLayers
+} from "./graph-utils.js";
+export {
+  assertValidOperatorGraph,
+  explainGraph,
+  validateOperatorGraph,
+  validateSchedulerGraph
+} from "./graph-validation.js";
+export type { GraphExplanation, GraphValidationIssue } from "./graph-validation.js";
+export {
+  GraphBuilder,
+  getWorkflow,
+  graph,
+  listWorkflows,
+  refs,
+  registerWorkflow,
+  runWorkflow
+} from "./kernel.js";
+export { KernelBackend } from "./kernel-backend.js";
+export { captureWireResponse, WireArtifactTypes } from "./wire-artifacts.js";
+export type { WireResponseValue } from "./wire-artifacts.js";
+export { createKernelFuseStepRunner, KERNEL_FUSE_STEP_WORKFLOW } from "./kernel-gateway.js";
+export type { FuseStepTransport } from "./kernel-gateway.js";
+export type { GraphNodeInput, KernelWorkflow, WorkflowFactory } from "./kernel.js";
+export {
+  artifactValue,
+  candidatesFromInputs,
+  consumeUsageFromOutput,
+  createTaskArtifact,
+  defineOperator,
+  firstArtifactByType,
+  operatorSpec,
+  taskFromInputs
+} from "./kernel-helpers.js";
+export type { CreateTaskArtifactInput } from "./kernel-helpers.js";
+export {
+  directModelWorkflow,
+  executionSelectWorkflow,
+  executionSelectRepairWorkflow,
+  panelCaptureWorkflow,
+  panelJudgeSynthWorkflow,
+  rankFuseWorkflow,
+  registerBuiltInWorkflows
+} from "./workflows.js";
+export {
+  LegacyRunEnsembleOperator,
+  PythonTrajectoryFuseOperator,
+  ensembleRunWorkflow,
+  pythonTrajectoryFuseWorkflow
+} from "./legacy-workflows.js";
+export type {
+  EnsembleRunWorkflowInput,
+  PythonTrajectoryFuseWorkflowInput,
+  TrajectoryFuseRequest
+} from "./legacy-workflows.js";
+export type {
+  DirectModelWorkflowInput,
+  ExecutionSelectWorkflowInput,
+  ExecutionSelectRepairWorkflowInput,
+  PanelCaptureWorkflowInput,
+  PanelJudgeSynthWorkflowInput,
+  RankFuseWorkflowInput
+} from "./workflows.js";
+export {
+  ArchitectureEvaluateOperator,
+  CalibrateSignalOperator,
+  DelegateOperator,
+  EvidenceSourceOperator,
+  GenFuserOperator,
+  OfflineModelMergeOperator,
+  PairRankOperator,
+  RepairOperator,
+  ReviewOperator,
+  RouteOperator,
+  SchemaValidationOperator,
+  SelectOperator,
+  TreeExpandOperator,
+  TreeScoreOperator
+} from "./advanced-operators.js";
+export type {
+  ArchitectureEvaluation,
+  CandidateRepairer,
+  CandidateSelector,
+  DelegationResult,
+  EvidenceBundle,
+  EvidenceSource,
+  MergeRecipe,
+  RankMatrix,
+  RepairPredicate,
+  RepairOutput,
+  ReviewResult,
+  RouteDecision,
+  SelectedCandidate,
+  SignalCalibrator,
+  TreeNodeValue
+} from "./advanced-operators.js";
+export {
+  JudgeCompareOperator,
+  ModelGenerateOperator,
+  PanelGenerateOperator,
+  SynthesizeOperator
+} from "./fusion-operators.js";
+export type {
+  CandidateArtifactValue,
+  ChatMessage,
+  JudgeComparator,
+  JudgeComparison,
+  ModelClient,
+  ModelGenerateOutput,
+  ModelGenerateRequest,
+  PanelCandidate,
+  PanelRunInput,
+  PanelRunner,
+  Synthesizer,
+  SynthesisOutput
+} from "./fusion-operators.js";
+export {
+  BudgetExceededError,
+  DirectFastPathScheduler,
+  FusionRuntime,
+  InMemoryKernelStateStore,
+  OperatorGraphError,
+  RuntimeCancelledError,
+  RuntimeExecutionError,
+  StaticDAGScheduler,
+  createRuntimeReplayRecord,
+  runtimeReplayRecordJson,
+  createArtifact
+} from "./runtime.js";
+export {
+  AdaptiveRouterScheduler,
+  AgenticDelegationScheduler,
+  BestOfNScheduler,
+  ExecutionSelectRepairScheduler,
+  FixedLayerMoAScheduler,
+  LearnedWorkflowScheduler,
+  OfflineArchitectureSearchScheduler,
+  RankFuseScheduler,
+  TreeSearchScheduler
+} from "./schedulers.js";
+export type { LearnedWorkflowPolicy } from "./schedulers.js";
+export type {
+  Artifact,
+  ArtifactInputRef,
+  ArtifactLeakage,
+  ArtifactVisibility,
+  BudgetLedger,
+  BudgetPolicy,
+  BudgetUsage,
+  CostEstimate,
+  CreateArtifactInput,
+  Observation,
+  Operator,
+  OperatorGraph,
+  OperatorGraphNode,
+  OperatorRunContext,
+  OperatorSideEffects,
+  OperatorSpec,
+  OutcomeRecord,
+  Provenance,
+  RecordObservationInput,
+  RecordSignalInput,
+  RetryPolicy,
+  KernelSessionState,
+  KernelStateStore,
+  KernelTurnState,
+  RuntimeEvent,
+  RuntimeExecutionResult,
+  RuntimeReplayRecord,
+  RuntimeState,
+  RuntimeStatus,
+  Scheduler,
+  SchedulerExecutionContext,
+  SchedulerRunResult,
+  Signal,
+  SignalCalibration,
+  SignalDimension,
+  StreamingOperator,
+  TaskSpec,
+  TraceEvent,
+  TraceEventInput,
+  TraceEventType
+} from "./runtime.js";
 export { createMockHarness } from "./mock.js";
 export type { MockCandidateFixture, MockHarnessOptions } from "./mock.js";
 export { traceCandidate } from "./candidate-trace.js";

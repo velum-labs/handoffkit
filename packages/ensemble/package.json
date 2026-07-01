@@ -14,6 +14,98 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "default": "./dist/runtime.js"
+    },
+    "./kernel": {
+      "types": "./dist/kernel.d.ts",
+      "default": "./dist/kernel.js"
+    },
+    "./kernel-backend": {
+      "types": "./dist/kernel-backend.d.ts",
+      "default": "./dist/kernel-backend.js"
+    },
+    "./kernel-gateway": {
+      "types": "./dist/kernel-gateway.d.ts",
+      "default": "./dist/kernel-gateway.js"
+    },
+    "./wire-artifacts": {
+      "types": "./dist/wire-artifacts.d.ts",
+      "default": "./dist/wire-artifacts.js"
+    },
+    "./schedulers": {
+      "types": "./dist/schedulers.d.ts",
+      "default": "./dist/schedulers.js"
+    },
+    "./operators/fusion": {
+      "types": "./dist/fusion-operators.d.ts",
+      "default": "./dist/fusion-operators.js"
+    },
+    "./operators/advanced": {
+      "types": "./dist/advanced-operators.d.ts",
+      "default": "./dist/advanced-operators.js"
+    },
+    "./operators/evidence": {
+      "types": "./dist/operators/evidence.d.ts",
+      "default": "./dist/operators/evidence.js"
+    },
+    "./operators/selection": {
+      "types": "./dist/operators/selection.d.ts",
+      "default": "./dist/operators/selection.js"
+    },
+    "./operators/agentic": {
+      "types": "./dist/operators/agentic.d.ts",
+      "default": "./dist/operators/agentic.js"
+    },
+    "./operators/search": {
+      "types": "./dist/operators/search.d.ts",
+      "default": "./dist/operators/search.js"
+    },
+    "./operators/offline": {
+      "types": "./dist/operators/offline.d.ts",
+      "default": "./dist/operators/offline.js"
+    },
+    "./scheduler-families/static": {
+      "types": "./dist/scheduler-families/static.d.ts",
+      "default": "./dist/scheduler-families/static.js"
+    },
+    "./scheduler-families/layered": {
+      "types": "./dist/scheduler-families/layered.d.ts",
+      "default": "./dist/scheduler-families/layered.js"
+    },
+    "./scheduler-families/rank-fuse": {
+      "types": "./dist/scheduler-families/rank-fuse.d.ts",
+      "default": "./dist/scheduler-families/rank-fuse.js"
+    },
+    "./scheduler-families/repair": {
+      "types": "./dist/scheduler-families/repair.d.ts",
+      "default": "./dist/scheduler-families/repair.js"
+    },
+    "./scheduler-families/agentic": {
+      "types": "./dist/scheduler-families/agentic.d.ts",
+      "default": "./dist/scheduler-families/agentic.js"
+    },
+    "./scheduler-families/search": {
+      "types": "./dist/scheduler-families/search.d.ts",
+      "default": "./dist/scheduler-families/search.js"
+    },
+    "./scheduler-families/learned": {
+      "types": "./dist/scheduler-families/learned.d.ts",
+      "default": "./dist/scheduler-families/learned.js"
+    },
+    "./scheduler-families/offline": {
+      "types": "./dist/scheduler-families/offline.d.ts",
+      "default": "./dist/scheduler-families/offline.js"
+    },
+    "./workflows": {
+      "types": "./dist/workflows.d.ts",
+      "default": "./dist/workflows.js"
+    },
+    "./workflows/legacy": {
+      "types": "./dist/legacy-workflows.d.ts",
+      "default": "./dist/legacy-workflows.js"
     }
   },
   "files": [
@@ -27,6 +119,7 @@
   },
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
+    "@fusionkit/kernel": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runner": "workspace:*",

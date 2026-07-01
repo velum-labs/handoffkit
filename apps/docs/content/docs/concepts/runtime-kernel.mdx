@@ -1,0 +1,105 @@
+---
+title: Runtime Kernel
+description: Compose typed model-fusion operator graphs under explicit schedulers.
+---
+
+FusionKit's runtime kernel is the programmatic substrate for model fusion. It
+executes typed operator graphs under explicit schedulers and emits replayable
+outcomes. The kernel is intentionally boring: artifacts, operators, graph
+execution, budgets, traces, evidence, and outcomes. SOTA behavior lives in
+schedulers and operators.
+
+Advanced scheduler-family exports are extension points. They define where
+adaptive routing, tree search, agentic delegation, learned workflow policies, and
+offline architecture search plug in; they should not be read as full
+AB-MCTS/TreeQuest, Devin Fusion, or Fugu-style implementations by themselves.
+
+## What it gives you
+
+- immutable typed artifacts;
+- operator specs with side effects and input/output contracts;
+- direct and DAG schedulers plus higher-level scheduler families;
+- budget enforcement and single-writer discipline;
+- public/private evidence leakage boundaries;
+- trace events, outcome records, and replay records;
+- a fluent graph builder and built-in workflow recipes.
+
+## Compose a direct fast path
+
+```ts
+import {
+  DirectFastPathScheduler,
+  ModelGenerateOperator,
+  createTaskArtifact,
+  graph,
+  refs
+} from "@fusionkit/ensemble";
+
+const task = createTaskArtifact({ id: "task", prompt: "Say hi." });
+
+const workflow = graph("direct")
+  .task(task)
+  .node("model", new ModelGenerateOperator({
+    model: "demo",
+    client: { generate: () => ({ model: "demo", content: "hi" }) }
+  }), { inputs: [refs.artifact(task.id)] })
+  .scheduler(new DirectFastPathScheduler())
+  .compile();
+
+const result = await workflow.run();
+```
+
+This path performs exactly one model call. It does not run hidden panel, judge,
+synthesis, ranker, verifier, or repair work.
+
+## Built-in recipes
+
+```ts
+import {
+  listWorkflows,
+  registerBuiltInWorkflows
+} from "@fusionkit/ensemble";
+
+registerBuiltInWorkflows();
+console.log(listWorkflows());
+```
+
+Built-ins:
+
+| Workflow | Shape |
+| --- | --- |
+| `direct` | task -> model |
+| `panel-capture` | task -> panel |
+| `panel-judge-synth` | task -> panel -> judge -> synth |
+| `rank-fuse` | task -> panel -> rank -> select -> fuse |
+| `execution-select-repair` | task -> panel -> evidence -> select -> repair |
+
+## CLI discovery
+
+```bash
+fusionkit runtime list
+fusionkit runtime explain rank-fuse
+```
+
+The CLI explains built-in workflows. Running arbitrary graph JSON requires an
+application-provided operator registry, because operators are functions.
+
+## Evidence and leakage
+
+Evidence sources record raw observations. Calibrators turn observations into
+signals. Public signals can guide runtime decisions; private labels are kept out
+of scheduler-visible state and belong in outcome/replay data.
+
+## Production status
+
+The production gateway uses the kernel for panel capture today. The live
+`trajectories:fuse` synthesis step still runs through the existing gateway and
+Python synthesizer path. The workflow registry is the migration point for moving
+more flows behind explicit workflow IDs while preserving current gateway
+behavior.
+
+## More
+
+- Repo guide: `docs/fusion/runtime-kernel.md`
+- Recipes: `docs/fusion/runtime-recipes.md`
+- Demo: `pnpm demo 15`

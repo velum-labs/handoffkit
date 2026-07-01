@@ -59,6 +59,7 @@ from fusionkit_core.credentials import (
 )
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import FuseResult, JudgeSynthesizer
+from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.producers import (
     AgentTrajectoryProducer,
     ChatTrajectoryProducer,
@@ -137,6 +138,7 @@ __all__ = [
     "FileSystemRunStore",
     "FusionConfig",
     "FusionEngine",
+    "FusionKernel",
     "FusionMode",
     "FusionRunEvent",
     "FusionRunManager",

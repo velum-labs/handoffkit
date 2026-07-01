@@ -327,7 +327,7 @@ function candidateHardening(
   return undefined;
 }
 
-export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<EnsembleRunResult> {
+export async function runEnsembleLegacy(descriptor: EnsembleDescriptor): Promise<EnsembleRunResult> {
   assertDescriptor(descriptor);
   const createdAt = new Date().toISOString();
   const capabilities = descriptor.harness.capabilities(descriptor);
@@ -583,6 +583,14 @@ export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<Ensem
       });
     }
   }
+}
+
+export async function runEnsemble(descriptor: EnsembleDescriptor): Promise<EnsembleRunResult> {
+  const { ensembleRunWorkflow } = await import("./legacy-workflows.js");
+  const result = await ensembleRunWorkflow({ descriptor }).run({ runId: `ensemble_${descriptor.id}` });
+  const output = result.finalArtifacts[0]?.value as EnsembleRunResult | undefined;
+  if (output === undefined) throw new Error("runEnsemble kernel wrapper produced no result");
+  return output;
 }
 
 export const ensemble = {

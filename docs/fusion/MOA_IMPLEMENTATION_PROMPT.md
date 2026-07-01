@@ -1,5 +1,10 @@
 # Cloud Agent Prompt: Implement FusionKit MoA Runtime Kernel
 
+> Status note: this was the implementation prompt that started the runtime-kernel work.
+> For current implementation status, use `docs/fusion/MOA_IMPLEMENTATION_STATUS.md`.
+> For developer-facing docs, use `docs/fusion/runtime-kernel.md` and
+> `docs/fusion/runtime-recipes.md`.
+
 You are working in the `handoffkit` repository. FusionKit has been merged into this repo, so do not
 work in the old standalone `fusionkit` checkout.
 

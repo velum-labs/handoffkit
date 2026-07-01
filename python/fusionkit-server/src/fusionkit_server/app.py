@@ -25,6 +25,7 @@ from fusionkit_core.contracts import (
 )
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import FuseResult
+from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.producers import PanelExhaustedError, trajectory_from_contract
 from fusionkit_core.run import (
     CreateRunResult,
@@ -132,6 +133,7 @@ def create_app(
     model_clients = clients or build_clients(config)
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
+    kernel = FusionKernel(engine, native_runs)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -151,7 +153,7 @@ def create_app(
         request: FusionRunRequestV1,
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ) -> JSONResponse:
-        result = await native_runs.create_and_run(request, idempotency_key=idempotency_key)
+        result = await kernel.create_and_run(request, idempotency_key=idempotency_key)
         if isinstance(result, CreateRunResult):
             if result.idempotency_outcome == "conflict":
                 return _native_error_response(result.terminal_error, status_code=409)
@@ -172,14 +174,14 @@ def create_app(
     @app.get("/v1/fusion/runs/{run_id}")
     async def get_fusion_run(run_id: str) -> JSONResponse:
         try:
-            return _json_response(native_runs.store.read_summary(run_id).model_dump(mode="json"))
+            return _json_response(kernel.read_summary(run_id).model_dump(mode="json"))
         except FileNotFoundError:
             return _run_not_found_response()
 
     @app.get("/v1/fusion/runs/{run_id}/inspect")
     async def inspect_fusion_run(run_id: str) -> JSONResponse:
         try:
-            return _json_response(native_runs.store.inspect_run(run_id).model_dump(mode="json"))
+            return _json_response(kernel.inspect_run(run_id).model_dump(mode="json"))
         except FileNotFoundError:
             return _run_not_found_response()
 
@@ -189,10 +191,10 @@ def create_app(
         after: int | None = Query(default=None, ge=0),
     ) -> JSONResponse:
         try:
-            native_runs.store.read_summary(run_id)
+            kernel.read_summary(run_id)
         except FileNotFoundError:
             return _run_not_found_response()
-        return _json_response(native_runs.store.event_page(run_id, after).model_dump(mode="json"))
+        return _json_response(kernel.event_page(run_id, after).model_dump(mode="json"))
 
     @app.post("/v1/fusion/runs/{run_id}/tool-results")
     async def submit_tool_results(
@@ -200,7 +202,7 @@ def create_app(
         submission: ToolResultSubmission,
     ) -> JSONResponse:
         try:
-            result = native_runs.submit_tool_result(run_id, submission)
+            result = kernel.submit_tool_result(run_id, submission)
         except FileNotFoundError:
             return _run_not_found_response()
         if isinstance(result, NativeRunError):
@@ -217,12 +219,12 @@ def create_app(
         # reserved `fusionkit/{router,panel,single,self}` names keep the fusion
         # path below.
         if _is_endpoint_model(config, request.model):
-            return await _passthrough_chat(engine, config, request)
+            return await _passthrough_chat(kernel, config, request)
         # Real SSE streaming on the fused path: the candidate trajectories are
         # generated, then the synthesizer turn streams tokens straight through
         # (no buffer-then-rechunk).
         if request.stream:
-            stream = engine.run_stream(
+            stream = kernel.run_stream(
                 request.messages,
                 mode=_mode_from_request(request),
                 sampling=_request_sampling(config, request),
@@ -240,8 +242,8 @@ def create_app(
         # (OpenAI Chat Completions semantics) rather than executing in-process;
         # the caller posts `tool` results back on the next request.
         if request.tools:
-            return await _fusion_tool_step(engine, config, request)
-        resolved = await _resolve_native_chat(native_runs, request, config)
+            return await _fusion_tool_step(kernel, config, request)
+        resolved = await _resolve_native_chat(kernel, request, config)
         if isinstance(resolved, JSONResponse):
             return resolved
         final_output, metadata = resolved
@@ -256,8 +258,8 @@ def create_app(
         judge_model = request.judge_model or config.resolved_judge_model
         synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
         try:
-            judge_client = engine.clients[judge_model]
-            synthesizer_client = engine.clients[synthesizer_model]
+            kernel.client(judge_model)
+            kernel.client(synthesizer_model)
         except KeyError as exc:
             return _openai_error_response(
                 "unknown_model",
@@ -282,11 +284,11 @@ def create_app(
         # Real streaming: the synthesizer turn streams tokens; the fused
         # trajectory metadata rides on the terminal SSE chunk.
         if request.stream:
-            stream = engine.judge_synthesizer.fuse_stream(
+            stream = kernel.fuse_trajectories_stream(
                 messages,
                 trajectories,
-                judge_client=judge_client,
-                synthesizer_client=synthesizer_client,
+                judge_model=judge_model,
+                synthesizer_model=synthesizer_model,
                 sampling=config.sampling,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -298,11 +300,11 @@ def create_app(
                 media_type="text/event-stream",
             )
         try:
-            result = await engine.judge_synthesizer.fuse(
+            result = await kernel.fuse_trajectories(
                 messages,
                 trajectories,
-                judge_client=judge_client,
-                synthesizer_client=synthesizer_client,
+                judge_model=judge_model,
+                synthesizer_model=synthesizer_model,
                 sampling=config.sampling,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -332,7 +334,7 @@ def _is_endpoint_model(config: FusionConfig, model: str) -> bool:
 
 
 async def _passthrough_chat(
-    engine: FusionEngine,
+    kernel: FusionKernel,
     config: FusionConfig,
     request: FusionRequest,
 ) -> dict[str, Any] | JSONResponse | StreamingResponse:
@@ -343,13 +345,12 @@ async def _passthrough_chat(
     an OpenAI-compatible caller (e.g. a per-candidate coding harness) can drive any
     panel model — including its tool-call loop — through the same base URL.
     """
-    client = engine.clients[request.model]
     sampling = _request_sampling(config, request)
     tools = _normalize_tools(request.tools)
     tool_choice = _normalize_tool_choice(request.tool_choice)
     if request.stream:
         # Real passthrough streaming straight from the provider's stream_chat.
-        stream = engine.stream_passthrough(
+        stream = kernel.stream_passthrough(
             request.model,
             request.messages,
             sampling,
@@ -361,7 +362,8 @@ async def _passthrough_chat(
             media_type="text/event-stream",
         )
     try:
-        response = await client.chat(
+        response = await kernel.passthrough_chat(
+            request.model,
             request.messages,
             sampling,
             tools=tools,
@@ -380,7 +382,7 @@ async def _passthrough_chat(
 
 
 async def _fusion_tool_step(
-    engine: FusionEngine,
+    kernel: FusionKernel,
     config: FusionConfig,
     request: FusionRequest,
 ) -> dict[str, Any] | JSONResponse:
@@ -393,7 +395,7 @@ async def _fusion_tool_step(
     back on the next request, which re-enter the panel + synthesizer.
     """
     try:
-        result = await engine.run_step(
+        result = await kernel.run_step(
             request.messages,
             mode=_mode_from_request(request),
             sampling=_request_sampling(config, request),
@@ -431,12 +433,12 @@ def _request_sampling(config: FusionConfig, request: FusionRequest) -> SamplingC
 
 
 async def _resolve_native_chat(
-    native_runs: FusionRunManager,
+    kernel: FusionKernel,
     request: FusionRequest,
     config: FusionConfig,
 ) -> tuple[str, dict[str, Any]] | JSONResponse:
     run_request = _fusion_request_to_run_request(request, config)
-    result = await native_runs.create_and_run(run_request)
+    result = await kernel.create_and_run(run_request)
     if isinstance(result, CreateRunResult):
         if result.idempotency_outcome == "conflict":
             return _openai_native_error_response(result.terminal_error, status_code=409)
@@ -446,7 +448,7 @@ async def _resolve_native_chat(
                 "Native run did not return a run id.",
                 status_code=500,
             )
-        result = native_runs.store.inspect_run(result.run_id)
+        result = kernel.inspect_run(result.run_id)
     if result.state != "completed" or result.final_output is None:
         return _openai_native_error_response(result.terminal_error, status_code=500)
     return result.final_output, _chat_fusion_metadata(result)
