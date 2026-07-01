@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from collections.abc import Sequence
 
 from fusionkit_core.clients import FakeModelClient
@@ -18,7 +20,12 @@ from fusionkit_evals.candidate_bank import (
     load_bank,
     save_bank,
 )
-from fusionkit_evals.livecodebench_data import LCB_PROMPT_SUFFIX, decode_tests, prepare_tasks
+from fusionkit_evals.livecodebench_data import (
+    LCB_PROMPT_SUFFIX,
+    decode_tests,
+    load_problems,
+    prepare_tasks,
+)
 from fusionkit_evals.prompt_tuning import (
     PromptVariant,
     StubProposer,
@@ -263,6 +270,24 @@ def test_decode_tests_filters_to_stdin_and_caps() -> None:
     }
     assert len(decode_tests(row, 0)) == 2  # only stdin
     assert len(decode_tests(row, 1)) == 1  # capped
+
+
+def test_load_problems_bounds_arrow_writer_batch(monkeypatch) -> None:
+    """Regression: unbounded writer batches OOM 16GB hosts on the ~100MB
+    private-test blobs during the one-time HF split generation."""
+    captured: dict[str, object] = {}
+
+    def fake_load_dataset(*args: object, **kwargs: object):
+        captured.update(kwargs)
+        return []
+
+    fake_datasets = types.ModuleType("datasets")
+    fake_datasets.load_dataset = fake_load_dataset  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
+
+    load_problems(5)
+    assert isinstance(captured.get("writer_batch_size"), int)
+    assert captured["writer_batch_size"] <= 100
 
 
 def test_prepare_tasks_builds_prompt_and_tests() -> None:

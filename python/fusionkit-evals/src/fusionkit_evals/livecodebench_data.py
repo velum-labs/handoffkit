@@ -51,6 +51,10 @@ def load_problems(
         split="test",
         version_tag=resolved_version,
         trust_remote_code=True,
+        # Some problems carry ~100MB private-test blobs; the default Arrow writer
+        # batch (1000 rows) buffers them all in RAM and OOM-kills 16GB hosts during
+        # the one-time split generation. Flush in small batches instead.
+        writer_batch_size=8,
     )
     if manifest is not None:
         return _select_from_manifest(ds, manifest)
