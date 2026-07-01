@@ -101,6 +101,23 @@ This document tracks the implementation status of the architecture in `docs/fusi
 Those consume the runtime's replay/outcome records or require an application-provided operator
 registry.
 
+## Known limitations
+
+- `KernelBackend` is a compatibility adapter: it wraps each gateway call as a one-node static-DAG
+  graph whose output artifact value is the raw `Response` object returned by the legacy backend.
+  This is enough for the "all product surfaces enter the kernel" boundary and for admission /
+  provenance / budget accounting, but a `Response` is **not** a replay-clean semantic wire artifact
+  (e.g. "OpenAI SSE stream", "final text", "usage", "tool-call delta"). Producing typed wire
+  artifacts for gateway surfaces is tracked as follow-up (see `kernel-migration.md`, Phase 2) and is
+  a prerequisite before claiming product-grade replay/outcome data for the gateway path.
+- Advanced scheduler families (adaptive router, tree search, agentic delegation, learned workflow)
+  are Phase 1 scaffolds: they validate and execute static graphs and provide the plug-in seam for
+  real adaptive control; they do not yet implement AB-MCTS/TreeQuest-style wider/deeper search,
+  Devin-style routing, or learned coordination.
+- `FusionRuntime.stream(...)` emits a single terminal event for workflows whose operators do not
+  implement `stream`; product streaming (direct/tool-call deltas, keepalives, fuse-step SSE) still
+  lives in `FusionBackend` until streaming operators are wired through the gateway path.
+
 ## Main migration seam
 
 The workflow registry is the migration seam for moving richer production flows behind explicit
