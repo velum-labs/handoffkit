@@ -252,15 +252,27 @@ type Session = {
 
 export type FusionBackendKernelSessionState = Session;
 
+/**
+ * The kernel-owned state store for the fusion front door. It is the single home
+ * for a conversation's turn state — session identity + per-turn candidate cache
+ * (TTL-scoped; swept by the backend so a stale turn re-runs the panel) — and its
+ * running cost ledger (process/durable-scoped; seeded from and written through to
+ * the durable {@link SessionStore}). Session and cost are distinct concerns with
+ * different lifetimes, so the store exposes them separately; the backend keeps no
+ * private session/cost maps of its own.
+ */
 export type FusionBackendKernelStateStore = {
   get(sessionKey: string): FusionBackendKernelSessionState | undefined;
   set(sessionKey: string, state: FusionBackendKernelSessionState): void;
   delete(sessionKey: string): void;
   entries(): IterableIterator<[string, FusionBackendKernelSessionState]>;
+  getCost(sessionKey: string): SessionCost | undefined;
+  setCost(sessionKey: string, cost: SessionCost): void;
 };
 
 export class InMemoryFusionBackendKernelStateStore implements FusionBackendKernelStateStore {
   readonly #sessions = new Map<string, FusionBackendKernelSessionState>();
+  readonly #cost = new Map<string, SessionCost>();
 
   get(sessionKey: string): FusionBackendKernelSessionState | undefined {
     return this.#sessions.get(sessionKey);
@@ -276,6 +288,14 @@ export class InMemoryFusionBackendKernelStateStore implements FusionBackendKerne
 
   entries(): IterableIterator<[string, FusionBackendKernelSessionState]> {
     return this.#sessions.entries();
+  }
+
+  getCost(sessionKey: string): SessionCost | undefined {
+    return this.#cost.get(sessionKey);
+  }
+
+  setCost(sessionKey: string, cost: SessionCost): void {
+    this.#cost.set(sessionKey, cost);
   }
 }
 
@@ -575,8 +595,6 @@ export class FusionBackend implements Backend {
   readonly #budgetUsd: number | undefined;
   readonly #pricing: Readonly<Record<string, ModelPricing>>;
   readonly #costModel: string | undefined;
-  /** Running per-session (= session-key) cost accumulation; seeded from the store. */
-  readonly #sessionCost = new Map<string, SessionCost>();
   /** Explicit resume target; consumed (cleared) when bound to the first session. */
   #resumeId: string | undefined;
 
@@ -1493,11 +1511,11 @@ export class FusionBackend implements Backend {
 
   /** The running cost for a conversation, seeded once from the durable store. */
   #costFor(sessionId: string): SessionCost {
-    const cached = this.#sessionCost.get(sessionId);
+    const cached = this.#kernelStateStore.getCost(sessionId);
     if (cached !== undefined) return cached;
     const stored = this.#store?.load(sessionId)?.meta.cost;
     const seeded = stored ?? emptySessionCost();
-    this.#sessionCost.set(sessionId, seeded);
+    this.#kernelStateStore.setCost(sessionId, seeded);
     return seeded;
   }
 
@@ -1517,7 +1535,7 @@ export class FusionBackend implements Backend {
   ): TurnCost {
     const turnCost = meterTurn(model, usage, this.#pricing);
     const total = addTurnCost(this.#costFor(sessionId), turnCost);
-    this.#sessionCost.set(sessionId, total);
+    this.#kernelStateStore.setCost(sessionId, total);
     try {
       this.#store?.recordCost(sessionId, total);
     } catch (error) {
