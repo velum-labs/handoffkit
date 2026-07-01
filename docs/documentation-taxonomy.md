@@ -42,7 +42,7 @@ Maintainer references go in `docs/`. They can link to package entry points, gene
 
 Planning prompts, research notes, and temporary implementation status notes should not live in visible docs unless they are intentionally kept as a design archive. Temporary planning material belongs in `.cursor/plans/`.
 
-Generated API pages should not be edited by hand except when regenerating from the OpenAPI source is part of the same change.
+Generated API pages should not be edited by hand. OpenAPI pages regenerate from the OpenAPI source. The generated code API reference regenerates from TypeScript JSDoc and Python docstrings with `pnpm docs:generate-code`.
 
 ## Maintainer documentation inventory
 
@@ -53,6 +53,7 @@ Generated API pages should not be edited by hand except when regenerating from t
 | `repository-coverage-map.md` | Orientation | Maps every major repository area to the documentation that owns it. |
 | `repository-reference.md` | Reference | Whole-repository map across packages, apps, specs, scripts, examples, and verification. |
 | `source-symbol-index.md` | Reference | Source-grounded TypeScript export and Python class/function inventory. |
+| `generated/code-api.md` | Reference | Generated API reference produced from package entry point JSDoc and Python package docstrings. |
 | `typescript-reference.md` | Reference | Package-by-package TypeScript ownership, public symbols, and examples. |
 | `python-reference.md` | Reference | Python package, module, class, function, and CLI ownership. |
 | `specs-and-apis.md` | Reference | Protocol schemas, generated bindings, routes, trace events, and schema workflow. |

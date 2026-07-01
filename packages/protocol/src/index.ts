@@ -1,19 +1,14 @@
 /**
- * @fusionkit/protocol — the open, versioned data contracts of the Warrant
- * platform plus the primitives needed to create and verify them offline:
+ * @fusionkit/protocol is the open, versioned data contract layer.
  *
- * - warrant.contract.v1   signed run authorization
- * - warrant.receipt.v1    signed record of what actually happened
- * - warrant.event.v1      hash-chained event log
- * - warrant.manifest.v1   workspace capture manifest
- * - warrant.policy.v1     org policy snapshot
- * - warrant.checkpoint.v1 resumable state at a semantic boundary
- * - warrant.envelope.v1   portable continuation (handoff) description
+ * It exports signed run contracts, receipts, hash-chained event logs, workspace
+ * manifests, policy snapshots, checkpoints, handoff envelopes, model-fusion
+ * schemas, generated OpenAPI clients, hashing, signing, verification, trace
+ * events, validators, and normalization helpers.
  *
- * Everything here is stable protocol surface: packages should consume these
+ * Everything here is stable protocol surface. Packages should consume these
  * interfaces instead of recreating local string lists or proof logic.
  */
-
 export {
   ACTOR_KINDS,
   AGENT_KINDS,

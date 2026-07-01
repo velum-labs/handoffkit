@@ -1,3 +1,11 @@
+"""Public API for FusionKit evaluation and optimization tools.
+
+The package re-exports benchmark runners, public benchmark registries, prompt
+tuning helpers, hill-climb utilities, candidate banks, scorers, reports, and
+sandbox helpers. Generated code documentation reads this docstring and the
+`__all__` list as the supported evaluation surface.
+"""
+
 from fusionkit_evals.bench_history import (
     BenchDrift,
     BenchRunRecord,

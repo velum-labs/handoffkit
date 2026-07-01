@@ -1,10 +1,11 @@
 /**
- * @fusionkit/workspace — git workspace capture, materialization, output
- * collection, and divergence-safe pull. Shared by the CLI (capture before
- * a run), the runner (materialize inside a session, collect the output),
- * and the handoff SDK (checkpoint the workspace before continuation).
+ * @fusionkit/workspace owns git workspace capture, materialization, output
+ * collection, safe path resolution, and divergence-safe pull.
+ *
+ * The CLI uses it to capture state before a run, the runner uses it to
+ * materialize state inside a session and collect output, and the handoff SDK
+ * uses it to checkpoint the workspace before continuation.
  */
-
 export {
   captureWorkspace,
   collectOutput,

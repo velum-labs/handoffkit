@@ -8,13 +8,15 @@ The root `package.json` is private and defines the TypeScript workspace commands
 
 | Command | What it does | When to run it |
 | --- | --- | --- |
-| `pnpm check` | Runs `scripts/check-repo.mjs`, protocol package checks, generated OpenAPI SDK checks, and release publish checks. | Before committing package, protocol, release, or documentation changes. |
+| `pnpm check` | Runs `scripts/check-repo.mjs`, protocol package checks, generated OpenAPI SDK checks, generated code docs checks, and release publish checks. | Before committing package, protocol, release, or documentation changes. |
 | `pnpm build` | Runs `tsc -b tsconfig.json` across TypeScript project references. | After changing TypeScript packages or examples. |
 | `pnpm clean` | Cleans TypeScript build outputs through project references. | When build output is stale or a package graph changed. |
 | `pnpm test` | Runs compiled Node tests under packages, examples, and root `test/`. | After `pnpm build` when TypeScript behavior changed. |
 | `pnpm verify` | Runs `pnpm check`, `pnpm build`, and `pnpm test`. | Before release or broad behavior changes. |
 | `pnpm demo` | Runs `scripts/demo.mjs`. | To execute one or more examples. |
 | `pnpm demo all` | Runs every manifest-enabled non-interactive example. | Before changing example infrastructure. |
+| `pnpm docs:generate-code` | Regenerates `docs/generated/code-api.md` from TypeScript JSDoc and Python docstrings. | After changing package entry point comments or Python package docstrings. |
+| `pnpm docs:check-code` | Checks that `docs/generated/code-api.md` is current. | Before committing source comment changes. |
 | `pnpm release:plan` | Runs release planning through `scripts/release.mjs plan`. | Before release state changes. |
 | `pnpm release:apply` | Applies release changes through `scripts/release.mjs apply`. | Only when intentionally performing a release workflow. |
 | `pnpm release:graph` | Prints release dependency graph information. | To inspect release ordering. |
@@ -38,7 +40,7 @@ uv run ruff check .
 
 ### `scripts/check-repo.mjs`
 
-This is the main repository invariant check. It validates required files, dependency policy, model-fusion protocol package state, generated OpenAPI SDK output, and release publishing assumptions. It should remain fast enough to run on documentation and package changes.
+This is the main repository invariant check. It validates required files, dependency policy, model-fusion protocol package state, generated OpenAPI SDK output, generated code documentation output, and release publishing assumptions. It should remain fast enough to run on documentation and package changes.
 
 Run:
 
@@ -90,6 +92,19 @@ uv run python scripts/generate_protocol_codegen.py
 ```
 
 After running it, inspect generated diffs and run protocol-related tests. Do not hand-edit generated protocol files.
+
+### `scripts/generate-code-docs.mjs`
+
+This script reads TypeScript package entry point JSDoc and Python package
+docstrings, then writes `docs/generated/code-api.md`. It also supports
+`--check`, which `pnpm check` runs to prevent comment-derived docs from drifting.
+When you change a public package entry point, update the source comment first,
+then run:
+
+```bash
+pnpm docs:generate-code
+pnpm docs:check-code
+```
 
 ### Fusion end-to-end scripts
 
@@ -156,7 +171,7 @@ The uv workspace covers `python/*` and shares one committed `uv.lock`. The root 
 
 Maintainer docs live under `docs/`. User-facing docs live under `apps/docs/content/docs/`. If a concept appears in both places, the public site should contain the user-facing path and the maintainer docs should contain implementation detail.
 
-For docs-only changes under `docs/`, run `pnpm check`. For content changes under `apps/docs`, also build the docs app. For generated API docs, regenerate OpenAPI content and inspect the generated output before committing.
+For docs-only changes under `docs/`, run `pnpm check`. For content changes under `apps/docs`, also build the docs app. For generated API docs, regenerate OpenAPI content or source-comment content and inspect the generated output before committing.
 
 ## Verification strategy
 

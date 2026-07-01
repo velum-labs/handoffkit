@@ -1,17 +1,14 @@
 /**
- * @fusionkit/model-gateway — a native local-model gateway.
+ * @fusionkit/model-gateway is the Fusion Harness Gateway entry point.
  *
- * It fronts a single OpenAI Chat Completions backend (the owned
- * `velum-labs/mlx-lm` fork by default — "mlx_lm.server first") and exposes the
- * wire dialects each agent harness needs so a local model can transparently
- * back them with no change to the user's workflow:
+ * It fronts OpenAI-compatible Chat Completions backends, local MLX servers, and
+ * fused panel routes, then exposes the wire dialects each agent harness needs.
+ * A local or fused model can back opencode, Claude Code, Codex, Cursor, and raw
+ * HTTP callers without changing their workflow.
  *
- *  - OpenAI Chat Completions (`/v1/chat/completions`) — opencode, Cursor IDE
- *    plan panel. Implemented (M1).
- *  - Anthropic Messages (`/v1/messages`) — Claude Code. Planned (M2).
- *  - OpenAI Responses (`/v1/responses`) — Codex. Planned (M3).
- *
- * See spec/2026-06-13-local-model-harness-bridge-spec.md.
+ * Public exports include server startup, backend implementations, frontdoor
+ * workflows, session stores, cost metering, rate-limit failover, dialect
+ * adapters, ACP helpers, provenance records, and trajectory capture.
  */
 export { startGateway } from "./server.js";
 export type { Gateway, GatewayOptions } from "./server.js";

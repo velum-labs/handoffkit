@@ -1,3 +1,6 @@
+/**
+ * Codex tool integration entry point. It exposes the Codex launcher and ensemble harness adapter used by the FusionKit CLI.
+ */
 import type { ToolIntegration } from "@fusionkit/tools";
 
 import { codexHarness, codexHarnessCredentialSkipReason, createCodexHarness } from "./harness.js";

@@ -2,7 +2,7 @@
 
 This index makes documentation coverage auditable against the repository source. It lists TypeScript exported declarations and Python classes and functions by source module. Use it with the narrative references when you need to find the exact file that owns a symbol.
 
-The index is intentionally source-shaped. It does not replace package guides, API guides, or examples. It gives maintainers a complete map from documented areas to concrete modules.
+The index is intentionally source-shaped. It does not replace package guides, API guides, or examples. It gives maintainers a complete map from documented areas to concrete modules. For the comment-derived public entry point reference, see [Generated code API reference](generated/code-api.md).
 
 ## TypeScript exported declarations
 

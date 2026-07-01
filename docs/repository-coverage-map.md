@@ -7,9 +7,9 @@ This map ties every major repository area to the documentation that owns it. Use
 | Area | Primary docs | Coverage expectation |
 | --- | --- | --- |
 | `README.md` | Root README, `docs/README.md`, public Introduction | Product narrative, quick tour, install path, architecture summary, and links into deeper docs. |
-| `packages/cli` | `docs/cli.md`, `docs/typescript-reference.md`, public Command Reference | Commands, flags, setup, config, sessions, models, launchers, doctor, status, and error behavior. |
-| `packages/model-gateway` | `docs/fusion-harness-gateway.md`, `docs/typescript-reference.md`, `docs/specs-and-apis.md`, public API Reference | Gateway routes, dialect adapters, streaming, sessions, cost, rate-limit handoff, provenance, frontdoor workflows, and trajectory capture. |
-| `packages/ensemble` | `docs/fusion-judge-trajectory.md`, `docs/fusion/runtime-kernel.md`, `docs/typescript-reference.md`, public Runtime Kernel | Panel execution, worktrees, harnesses, judge synthesis, kernel workflows, operators, schedulers, isolation, and tool execution. |
+| `packages/cli` | `docs/cli.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, public Command Reference | Commands, flags, setup, config, sessions, models, launchers, doctor, status, and error behavior. |
+| `packages/model-gateway` | `docs/fusion-harness-gateway.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, `docs/specs-and-apis.md`, public API Reference | Gateway routes, dialect adapters, streaming, sessions, cost, rate-limit handoff, provenance, frontdoor workflows, and trajectory capture. |
+| `packages/ensemble` | `docs/fusion-judge-trajectory.md`, `docs/fusion/runtime-kernel.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, public Runtime Kernel | Panel execution, worktrees, harnesses, judge synthesis, kernel workflows, operators, schedulers, isolation, and tool execution. |
 | `packages/kernel` | `docs/typescript-reference.md`, `docs/fusion/runtime-kernel.md`, public Runtime Kernel | Dependency-free runtime substrate, artifacts, operators, graphs, validation, wire artifacts, and replay records. |
 | `packages/protocol` | `docs/specs-and-apis.md`, `docs/model-fusion-protocol-consumption.md`, `docs/typescript-reference.md` | Contracts, validators, hashes, signing, generated OpenAPI SDKs, trace events, and protocol consumption. |
 | `packages/workspace` | `docs/typescript-reference.md`, `docs/repository-reference.md` | Git capture, materialization, safe paths, output collection, and divergence-safe pull. |
@@ -22,12 +22,12 @@ This map ties every major repository area to the documentation that owns it. Use
 | `packages/adapter-compute` | `docs/typescript-reference.md`, public Adapters | ComputeSDK-shaped sandbox surface backed by governed sessions. |
 | `packages/session-*` | `docs/typescript-reference.md`, `docs/architecture.md`, public Self-hosting | Hermetic sessions, Vercel Sandbox sessions, AI SDK harness sessions, transcript recording, and auth helpers. |
 | `packages/testkit` and `packages/example-utils` | `docs/typescript-reference.md`, `docs/apps-and-examples.md` | Test fixtures, in-process stacks, git fixtures, example manifests, narration, and mock models. |
-| `python/fusionkit-core` | `docs/python-reference.md`, `docs/specs-and-apis.md` | Config, clients, fusion engine, judge, run manager, contracts, run store, providers, prompts, traces, artifacts, metrics, and producers. |
-| `python/fusionkit-server` | `docs/python-reference.md`, public Inference endpoint, public API Reference | FastAPI app, OpenAI-compatible routes, trajectory fusion route, and native run endpoints. |
-| `python/fusionkit-cli` | `docs/python-reference.md`, public Inference endpoint | Python CLI commands, auth commands, prompt dumping, benchmarks, tuning, and hill climbing. |
-| `python/fusionkit-evals` | `docs/python-reference.md`, benchmark docs | Fusion bench, public bench, prompt tuning, hill climbing, scoring, reports, adapters, and execution selection. |
-| `python/fusionkit-mlx` | `docs/python-reference.md`, public Models and panels | Optional MLX launch helpers and local model serving integration. |
-| `python/uniroute` and `python/uniroute-mlx` | `docs/python-reference.md` | Routing research packages, local model bridge, router cards, evaluation helpers, and tests. |
+| `python/fusionkit-core` | `docs/python-reference.md`, `docs/generated/code-api.md`, `docs/specs-and-apis.md` | Config, clients, fusion engine, judge, run manager, contracts, run store, providers, prompts, traces, artifacts, metrics, and producers. |
+| `python/fusionkit-server` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Inference endpoint, public API Reference | FastAPI app, OpenAI-compatible routes, trajectory fusion route, and native run endpoints. |
+| `python/fusionkit-cli` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Inference endpoint | Python CLI commands, auth commands, prompt dumping, benchmarks, tuning, and hill climbing. |
+| `python/fusionkit-evals` | `docs/python-reference.md`, `docs/generated/code-api.md`, benchmark docs | Fusion bench, public bench, prompt tuning, hill climbing, scoring, reports, adapters, and execution selection. |
+| `python/fusionkit-mlx` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Models and panels | Optional MLX launch helpers and local model serving integration. |
+| `python/uniroute` and `python/uniroute-mlx` | `docs/python-reference.md`, `docs/generated/code-api.md` | Routing research packages, local model bridge, router cards, evaluation helpers, and tests. |
 | `apps/docs` | `docs/apps-and-examples.md`, `apps/docs/README.md`, public Documentation taxonomy | Public docs site structure, MDX content, OpenAPI generation, Fumadocs setup, Mermaid, build, and deployment. |
 | `apps/scope` | `docs/apps-and-examples.md`, public Observability | Trace dashboard, local install, tests, trace and session correlation, and observability workflow. |
 | `examples/*` | `docs/apps-and-examples.md`, public Examples | Every runnable example, scope, command, expected behavior, and maintenance rules. |
@@ -43,7 +43,7 @@ This map ties every major repository area to the documentation that owns it. Use
 
 ## Coverage rules
 
-Every new top-level directory or workspace package needs an entry in this map. Every new public CLI feature needs a task guide or command reference entry. Every new exported package symbol needs either a narrative reference entry or a source-symbol-index entry that points to its module. Every new schema, OpenAPI route, or generated binding needs coverage in `docs/specs-and-apis.md` and the public API section when user-facing.
+Every new top-level directory or workspace package needs an entry in this map. Every new public CLI feature needs a task guide or command reference entry. Every new exported package symbol needs either a narrative reference entry, a generated code API entry from source comments, or a source-symbol-index entry that points to its module. Every new schema, OpenAPI route, or generated binding needs coverage in `docs/specs-and-apis.md` and the public API section when user-facing.
 
 ## Audit workflow
 

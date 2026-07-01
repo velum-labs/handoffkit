@@ -1,6 +1,8 @@
 /**
- * @fusionkit/sdk — a thin client over the plane API. Protocol primitives
- * (verification, hashing, wire types) live in @fusionkit/protocol; consumers
- * import them from there rather than through this package.
+ * @fusionkit/sdk is a thin client over the governance plane API.
+ *
+ * Protocol primitives such as verification, hashing, and wire types live in
+ * @fusionkit/protocol. Consumers import them from the protocol package rather
+ * than through this SDK.
  */
 export { PlaneClient, PlaneClientError } from "./client.js";

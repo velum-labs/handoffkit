@@ -26,6 +26,7 @@ this tree.
 | [Repository coverage map](repository-coverage-map.md) | Orientation | Every major repo area mapped to its owning documentation. |
 | [Repository reference](repository-reference.md) | Reference | Comprehensive package, API, app, example, protocol, and operations map. |
 | [Source symbol index](source-symbol-index.md) | Reference | Source-grounded TypeScript export and Python symbol inventory. |
+| [Generated code API reference](generated/code-api.md) | Reference | API reference emitted from TypeScript JSDoc and Python docstrings. |
 | [Quickstart: inference endpoint](quickstart-inference.md) | Task guide | `fusionkit serve` as an OpenAI-compatible endpoint with curl streaming and tools. |
 | [Quickstart: coding harness](quickstart-harness.md) | Task guide | `fusionkit codex`, `claude`, `cursor`, `--ide`, auto-wiring, fused versus passthrough. |
 | [Quickstart: rate-limit handoff](quickstart-handoff.md) | Task guide | `--on-rate-limit`, failover behavior, and one-tap resume. |
@@ -87,6 +88,9 @@ The full inventory is in [Documentation taxonomy](documentation-taxonomy.md).
 ## Documentation conventions
 
 - Prefer linking to package entry points instead of duplicating API signatures.
+- Keep public package entry points annotated with module JSDoc or Python
+  docstrings, then run `pnpm docs:generate-code` to refresh
+  [Generated code API reference](generated/code-api.md).
 - Keep policy/security claims tied to implemented controls in `packages/plane`,
   `packages/runner`, `packages/protocol`, and the session backend packages.
 - Treat root `README.md` as the user-facing landing page; put deeper operational

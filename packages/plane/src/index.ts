@@ -1,7 +1,11 @@
 /**
- * @fusionkit/plane — control plane: contracts, policy evaluation, approvals,
- * receipt countersignature, secret broker, audit export, durable SQLite
- * storage, identity/auth, rate limiting, retention, and the control panel UI.
+ * @fusionkit/plane is the governance control plane.
+ *
+ * It owns contracts, policy evaluation, approvals, receipt countersignature,
+ * secret brokering, audit export, durable SQLite storage, identity, auth, rate
+ * limiting, retention, metrics, and the control panel UI. Product-facing fusion
+ * flows do not need to import every primitive here, but retained governance and
+ * VM packages rely on this stable surface.
  */
 export { Plane } from "./plane.js";
 export type { PlaneConfig, IssuedPrincipal } from "./plane.js";
