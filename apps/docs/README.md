@@ -33,11 +33,11 @@ pnpm start
 Docs live in `content/docs/**/*.mdx`, grouped into folder-based sidebar sections,
 each ordered by its own `meta.json` (and the root `content/docs/meta.json`):
 
-- **Get Started** — installation, quickstart, configuration (`.fusionkit/`)
-- **fusionkit CLI** — command reference, cost & models, observability, troubleshooting
-- **Concepts** — core concepts, architecture, model fusion
-- **SDKs & Packages** — handoff SDK, plane SDK, adapters, package map
-- **Self-Hosting** — operating the plane/runners, release publishing
+- **Get Started**: installation, quickstart, configuration (`.fusionkit/`)
+- **fusionkit CLI**: command reference, cost & models, observability, troubleshooting
+- **Concepts**: core concepts, architecture, model fusion
+- **SDKs & Packages**: handoff SDK, plane SDK, adapters, package map
+- **Self-Hosting**: operating the plane/runners, release publishing
 - **Examples** and the generated **API Reference**
 
 Mermaid code blocks render as diagrams (via `remarkMdxMermaid` plus the
