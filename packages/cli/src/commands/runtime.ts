@@ -22,20 +22,15 @@ const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[];
       "frontdoor.budget-gate",
       "frontdoor.budget-stop",
       "frontdoor.resolve-model",
-      "frontdoor.dispatch.fusion",
-      "frontdoor.dispatch.passthrough"
+      "frontdoor.vendor-proxy",
+      "frontdoor.dispatch.fusion"
     ],
-    description: "Top-level request graph: budget gate + requested-model resolution as first-class operators; a routing scheduler dispatches to budget-stop, the fusion turn, or the passthrough turn."
+    description: "Top-level request graph: budget gate + requested-model resolution are first-class operators, and a routing scheduler dispatches to budget-stop, the fusion turn, or the vendor proxy (whose pre-stream failover re-enters the fusion turn)."
   },
   "fusion-frontdoor-turn": {
     scheduler: "static-dag",
     operators: ["frontdoor.panel", "frontdoor.fuse", "frontdoor.fuse.stream", "frontdoor.finalize"],
     description: "Native fusion front-door turn: panel -> fuse -> finalize (buffered), or panel -> fuse.stream (streamed via the streaming runtime + SSE adapter)."
-  },
-  "fusion-passthrough-turn": {
-    scheduler: "static-dag",
-    operators: ["frontdoor.passthrough"],
-    description: "Native provider passthrough turn: proxy the vendor model, with rate-limit/credit failover into the fusion front-door turn."
   },
   "native-passthrough-turn": {
     scheduler: "static-dag",

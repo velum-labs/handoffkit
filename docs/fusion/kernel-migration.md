@@ -13,15 +13,17 @@ implementations, cost/trace/persistence) that the operators invoke.
 ```text
 fusionkit codex / claude / cursor / serve
   -> CLI launcher -> startFusionStack -> startFusionStepGateway
-  -> FusionBackend (kernel-native surface adapter)
+  -> FusionBackend (kernel-native surface adapter; builds the FrontdoorRequest
+     artifact + stable FrontdoorServices, no per-turn closures)
      -> fusion-frontdoor-request graph  (FrontdoorRequestScheduler)
         frontdoor.budget-gate -> (budget-stop)
                               -> frontdoor.resolve-model -> dispatch:
-           fusion-frontdoor-turn graph
-             buffered:  frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize  (FusionRuntime.run)
-             streamed:  frontdoor.panel -> frontdoor.fuse.stream                 (FusionRuntime.stream)
-           fusion-passthrough-turn graph
-             frontdoor.passthrough  (vendor proxy; failover re-enters the fusion turn)
+           fusion (fused model):
+             fusion-frontdoor-turn graph
+               buffered:  frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize  (FusionRuntime.run)
+               streamed:  frontdoor.panel -> frontdoor.fuse.stream                 (FusionRuntime.stream)
+           passthrough (native model):
+             frontdoor.vendor-proxy -> (response) | (failover -> fusion-frontdoor-turn, vendor excluded)
   -> frontdoor.panel         -> runFusionPanels / runFusionPanelWorkflow (kernel)
   -> frontdoor.fuse[.stream] -> createKernelFuseStepRunner -> Python trajectories:fuse (kernel operator)
   -> eventsToSseResponse     -> gateway streaming back to the tool
@@ -43,12 +45,15 @@ Surface adapters may own CLI flags, protocol dialects, auth headers, process
 launch, and HTTP route shape. They must not own fusion decisions such as direct
 vs panel, native passthrough, failover, candidate generation, evidence
 selection, repair, session candidate reuse, budget policy, or outcome logging.
-`FusionBackend.chat` no longer branches imperatively: it runs the whole request
-as the `fusion-frontdoor-request` graph, where `frontdoor.budget-gate` and
-`frontdoor.resolve-model` are first-class operators and `FrontdoorRequestScheduler`
-dispatches to budget-stop, the fusion turn, or the passthrough turn by inspecting
-their decision artifacts. The backend supplies only the wire those operators
-invoke.
+`FusionBackend.chat` no longer branches imperatively: it builds a single
+`FrontdoorRequest` artifact (all per-turn inputs as data; the abort signal rides a
+`Symbol` key so `deepFreeze` never touches it) and runs the `fusion-frontdoor-request`
+graph. `frontdoor.budget-gate` and `frontdoor.resolve-model` are first-class
+operators that compute their decisions from the stable `FrontdoorServices` + the
+request; `frontdoor.vendor-proxy` emits a classified outcome; and
+`FrontdoorRequestScheduler` inspects those artifacts to dispatch to budget-stop,
+the fusion turn, or (on a vendor pre-stream failover) back into the fusion turn
+with the throttled vendor excluded. The operators capture no per-turn closures.
 
 ## Current surface inventory
 
@@ -155,12 +160,13 @@ BudgetGate
 Implemented (see "Native cutover complete" below). Request routing is the
 `fusion-frontdoor-request` graph: `frontdoor.budget-gate` and
 `frontdoor.resolve-model` are first-class operators and `FrontdoorRequestScheduler`
-routes to budget-stop / fusion / passthrough. The fused turn graph is
+routes to budget-stop / fusion / vendor-proxy. The fused turn graph is
 `frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize` (buffered) /
 `frontdoor.panel -> frontdoor.fuse.stream` (streamed), and the vendor branch is
-the `fusion-passthrough-turn` graph (`frontdoor.passthrough`). Session resolution
-and turn candidate caching are the panel operator's implementation backed by the
-kernel state store.
+the `frontdoor.vendor-proxy` operator, whose pre-stream failover re-enters the
+fusion turn with the throttled vendor excluded. Session resolution and turn
+candidate caching are the panel service's implementation backed by the kernel
+state store.
 
 ### `tool-continuation-turn`
 
@@ -329,34 +335,37 @@ Status in PR #37:
 Native cutover complete: the `model-gateway` ↔ `ensemble` dependency was inverted
 by extracting the runtime substrate into the standalone `@fusionkit/kernel`
 package (both packages now depend on it), so `FusionBackend` composes the request
-and turn from runtime operators directly. Every request is dispatched as a named
-kernel graph:
+and turn from runtime operators directly. Every request is a fully data-driven
+kernel graph — all per-turn inputs travel as a `FrontdoorRequest` artifact and
+every side-effecting phase is a method on a stable `FrontdoorServices` object
+(built once), so operators capture no per-turn closures:
 
 - `fusion-frontdoor-request`: `frontdoor.budget-gate` and `frontdoor.resolve-model`
-  are first-class operators; `FrontdoorRequestScheduler` inspects their decision
-  artifacts and runs only the chosen branch (budget-stop / fusion / passthrough).
+  compute their decisions from the services + request; `frontdoor.vendor-proxy`
+  emits a classified outcome; `FrontdoorRequestScheduler` inspects those decision
+  artifacts and runs only the chosen branch (budget-stop / fusion / vendor, with a
+  vendor pre-stream failover re-entering the fusion turn).
 - `fusion-frontdoor-turn` (buffered): `frontdoor.panel -> frontdoor.fuse ->
   frontdoor.finalize`, run via `FusionRuntime.run`.
 - `fusion-frontdoor-turn` (streamed): `frontdoor.panel -> frontdoor.fuse.stream`,
   run via `FusionRuntime.stream` and serialized by `eventsToSseResponse`.
-- `fusion-passthrough-turn`: `frontdoor.passthrough` (vendor proxy), whose
-  rate-limit/credit failover re-enters the fusion front-door turn with the
-  throttled vendor excluded.
 
-`FusionBackend` is now a kernel-native surface adapter: it owns only the wire
-(session identity, panel/fuse implementations, cost/trace/persistence) that the
-operators invoke, while the runtime owns admission, provenance, budget, trace,
-and replay. The redundant outer `KernelBackend` wrapper around the fusion gateway
-was removed. The vendor-proxy SSE peeking used for mid-stream resume notices
-(`#proxyNativeStream`) remains the `frontdoor.passthrough` operator's transport
+`FusionBackend` is now a kernel-native surface adapter that owns only the stable
+services (session identity, panel/fuse implementations, cost/trace/persistence,
+vendor proxy) the operators invoke; the runtime owns admission, provenance,
+budget, trace, and replay. The redundant outer `KernelBackend` wrapper around the
+fusion gateway was removed. The vendor-proxy SSE peeking used for mid-stream
+resume notices (`#proxyVendorStream`) remains the vendor-proxy service's transport
 implementation, consistent with the operator pattern (an operator wraps its
-side-effecting wire, e.g. `ModelGenerateOperator` wrapping a `ModelClient`).
+side-effecting wire, e.g. `ModelGenerateOperator` wrapping a `ModelClient`); the
+failover *control*, however, is now a scheduler decision over a classified
+`VendorProxyOutcome`, not a recursive backend call.
 
 ### Phase 2: kernel-backed `FusionBackend` (done)
 
-Bespoke `FusionBackend` orchestration is replaced with the `fusion-frontdoor-turn`
-and `fusion-passthrough-turn` kernel workflows (see "Native cutover complete"
-above).
+Bespoke `FusionBackend` orchestration is replaced with the
+`fusion-frontdoor-request` / `fusion-frontdoor-turn` kernel graphs (see "Native
+cutover complete" above).
 
 Gate (all met):
 

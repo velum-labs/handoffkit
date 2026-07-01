@@ -83,8 +83,9 @@ This document tracks the implementation status of the architecture in `docs/fusi
 
 ## Partially integrated
 
-- The fusion front-door gateway turn is kernel-native: `FusionBackend` dispatches each turn as a
-  `fusion-frontdoor-turn` / `fusion-passthrough-turn` runtime graph (see Known limitations).
+- The fusion front-door gateway request is kernel-native: `FusionBackend` dispatches each request as
+  a `fusion-frontdoor-request` graph that routes into the `fusion-frontdoor-turn` graph (see Known
+  limitations).
 - Production `runFusionPanels` uses the runtime kernel for panel capture.
 - `runFusionPanelWorkflow` exposes the runtime result for callers needing traces/outcomes/replay.
 - Local direct and MLX/Codex harness leaf gateways enter the kernel through the `KernelBackend`
@@ -120,18 +121,21 @@ registry.
   `keepalive`, trace), then a terminal `final`/`error`.
 - The fusion front-door request and turn are now natively composed from kernel operators. The
   runtime substrate was extracted into the standalone `@fusionkit/kernel` package to invert the
-  `model-gateway` -> `ensemble` dependency, so `FusionBackend` dispatches every request as a named
-  runtime graph. `fusion-frontdoor-request` makes the budget gate (`frontdoor.budget-gate`) and
-  requested-model resolution (`frontdoor.resolve-model`) first-class operators, and
-  `FrontdoorRequestScheduler` routes to budget-stop, the fused turn, or the passthrough turn. The
-  fused turn is `fusion-frontdoor-turn` (`frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize`
-  buffered, or `frontdoor.panel -> frontdoor.fuse.stream` streamed via `eventsToSseResponse`); the
-  vendor branch is `fusion-passthrough-turn` (`frontdoor.passthrough`, whose rate-limit failover
-  re-enters the fusion turn). The redundant outer `KernelBackend` wrapper around the fusion gateway
-  was removed; `FusionBackend` is a kernel-native surface adapter. The panel/fuse/proxy operators
-  intentionally delegate their side-effecting wire to injected implementations (the operator
-  pattern, e.g. `ModelGenerateOperator` wrapping a `ModelClient`); the vendor-proxy SSE peeking for
-  mid-stream resume notices is the passthrough operator's transport implementation.
+  `model-gateway` -> `ensemble` dependency, so `FusionBackend` dispatches every request as a fully
+  data-driven runtime graph: all per-turn inputs travel as a `FrontdoorRequest` artifact and every
+  side-effecting phase is a method on a stable `FrontdoorServices` object (no per-turn closures).
+  `fusion-frontdoor-request` makes the budget gate (`frontdoor.budget-gate`), requested-model
+  resolution (`frontdoor.resolve-model`), and the vendor proxy (`frontdoor.vendor-proxy`) first-class
+  operators; `FrontdoorRequestScheduler` inspects their decision artifacts and routes to budget-stop,
+  the fused turn, or (on a vendor pre-stream failover) back into the fused turn with the throttled
+  vendor excluded. The fused turn is `fusion-frontdoor-turn`
+  (`frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize` buffered, or
+  `frontdoor.panel -> frontdoor.fuse.stream` streamed via `eventsToSseResponse`). The redundant outer
+  `KernelBackend` wrapper around the fusion gateway was removed; `FusionBackend` is a kernel-native
+  surface adapter. Operators delegate their side-effecting wire to the injected services (the
+  operator pattern, e.g. `ModelGenerateOperator` wrapping a `ModelClient`); the vendor-proxy SSE
+  peeking for mid-stream resume notices is the service's transport implementation, while the failover
+  control is a scheduler decision over a classified `VendorProxyOutcome`.
 
 ## Main migration seam
 

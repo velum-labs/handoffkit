@@ -386,11 +386,11 @@ export async function startFusionStepGateway(input: {
             : [{ modelId: model.model, endpointId: model.id, endpointUrl }];
         });
 
-  // FusionBackend is itself kernel-native: every turn (`fusion-frontdoor-turn`,
-  // `fusion-passthrough-turn`) is dispatched through `FusionRuntime` as a graph
-  // of named operators, and the fuse step runs through `createKernelFuseStepRunner`.
-  // No outer `KernelBackend` wrapper is needed here (that would only re-wrap the
-  // already-kernel-owned turn in a redundant single node).
+  // FusionBackend is itself kernel-native: every request is dispatched through
+  // `FusionRuntime` as the `fusion-frontdoor-request` graph (routing into the
+  // `fusion-frontdoor-turn` graph), and the fuse step runs through
+  // `createKernelFuseStepRunner`. No outer `KernelBackend` wrapper is needed here
+  // (that would only re-wrap the already-kernel-owned turn in a redundant single node).
   const backend = new FusionBackend({
     stepUrl,
     runPanels,

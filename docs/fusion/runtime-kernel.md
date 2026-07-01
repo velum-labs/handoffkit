@@ -246,8 +246,8 @@ See `examples/runtime-kernel/src/run.ts`.
 
 This guide describes the runtime substrate and composition API. The fusion
 front-door turn (`fusionkit codex / claude / cursor / serve`) is kernel-native:
-every turn runs as a `fusion-frontdoor-turn` or `fusion-passthrough-turn` graph
-of operators. Other surfaces (local/MLX/Codex leaf backends, `runEnsemble`, and
+every request runs as a `fusion-frontdoor-request` graph that routes into the
+`fusion-frontdoor-turn` graph of operators. Other surfaces (local/MLX/Codex leaf backends, `runEnsemble`, and
 the Python routes) still enter the kernel through compatibility wrappers. For the
 full migration plan, streaming/session-state requirements, and surface parity
 checklist, see `docs/fusion/kernel-migration.md`.

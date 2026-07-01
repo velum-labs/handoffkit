@@ -431,7 +431,17 @@ const kernelWrapperGuards = [
   },
   {
     file: "packages/model-gateway/src/fusion-backend.ts",
-    snippets: ["runFusionFrontdoorTurn", "streamFusionFrontdoorTurn", "runFusionPassthroughTurn"]
+    snippets: ["runFrontdoorRequest(this.#services", "#buildServices()", "#proxyVendor("]
+  },
+  {
+    file: "packages/model-gateway/src/frontdoor/request.ts",
+    snippets: [
+      "class FrontdoorRequestScheduler",
+      "frontdoorBudgetGateOperator",
+      "frontdoorResolveModelOperator",
+      "frontdoorVendorProxyOperator",
+      "runFusionTurnResponse"
+    ]
   },
   {
     file: "packages/model-gateway/src/frontdoor/workflow.ts",
@@ -473,6 +483,31 @@ for (const guard of kernelWrapperGuards) {
     if (!text.includes(snippet)) {
       fail(`kernel wrapper guard failed: ${guard.file} must include ${snippet}`);
     }
+  }
+}
+
+// Docs-consistency guard: the front-door workflow ids and operator kinds are the
+// product's public vocabulary, so the docs must name them. This fails CI if the
+// operators/workflows are renamed without updating the docs (fixes doc drift at
+// the process level).
+const docsConsistencyTerms = [
+  "fusion-frontdoor-request",
+  "fusion-frontdoor-turn",
+  "frontdoor.budget-gate",
+  "frontdoor.resolve-model",
+  "frontdoor.vendor-proxy",
+  "frontdoor.panel",
+  "frontdoor.fuse",
+  "frontdoor.finalize"
+];
+const docsConsistencyFiles = [
+  "docs/fusion/kernel-migration.md",
+  "packages/cli/src/commands/runtime.ts"
+];
+for (const term of docsConsistencyTerms) {
+  const documented = docsConsistencyFiles.some((file) => readFileSync(file, "utf8").includes(term));
+  if (!documented) {
+    fail(`docs-consistency guard failed: no doc/runtime-explain surface names "${term}"`);
   }
 }
 
