@@ -200,6 +200,9 @@ class TunerRuntime:
             "synth_id": self.synth_id,
             "checker": self.checker_mode,
             "timeout": self.test_timeout_s,
+            # Synthesis policy changes the fused output for the same prompts, so
+            # select-best and rewrite replays must never share cache entries.
+            "select_best": self.select_best,
         }
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 

@@ -257,6 +257,14 @@ async def test_replay_task_records_judge_pick(tmp_path) -> None:
     assert result.judge_pick_passed is False
 
 
+def test_sampling_hash_separates_select_best_from_rewrite(tmp_path) -> None:
+    """Regression: select-best and rewrite replays must never share cache entries."""
+    rewrite = _runtime(tmp_path)
+    select = _runtime(tmp_path)
+    select.select_best = True
+    assert rewrite._sampling_hash() != select._sampling_hash()
+
+
 async def test_evaluate_variant_reflects_prompt(tmp_path) -> None:
     runtime = _runtime(tmp_path)
     tasks = select_decision_tasks(_decision_bank(3))
