@@ -1,3 +1,4 @@
 {"phase":"0-smoke-keys","suite":"key-verification","tasks":3,"est_usd":0.01,"cum_usd":0.01,"note":"2 provider key smokes + 1 fused gateway round-trip","git_sha":"85257b86f2781d9744fcef8448788ae3a5a1eef0"}
 {"phase":"1-smoke","suite":"livecodebench subset-5","tasks":5,"est_usd":0.85,"cum_usd":0.86,"note":"cost_total_usd=0.566 solver candidates only; +~50% judge/synth estimate => ~0.17/task fused","git_sha":"9beaa5e"}
 {"phase":"3-baseline","suite":"livecodebench bank 86 + baseline replay","tasks":86,"est_usd":11.2,"cum_usd":12.1,"note":"bank build ~9.7 (86x0.113 solver) + judge/synth replays ~1.5","git_sha":"8b503b5"}
+{"phase":"4-ablations","suite":"bank replay: rewrite/select-best/exec-select + LOO + router","tasks":86,"est_usd":6.0,"cum_usd":18.1,"note":"judge+synth replays over frozen bank; exec-select local-only","git_sha":"8b503b5"}
