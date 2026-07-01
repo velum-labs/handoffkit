@@ -27,16 +27,20 @@ export {
   frontdoorFinalizeOperator,
   frontdoorFuseOperator,
   frontdoorPanelOperator,
+  frontdoorPassthroughOperator,
   frontdoorStreamingFuseOperator
 } from "./frontdoor/operators.js";
 export type {
   CandidateSetValue,
   FrontdoorFusionStreamTurn,
-  FrontdoorFusionTurn
+  FrontdoorFusionTurn,
+  FrontdoorPassthroughTurn
 } from "./frontdoor/operators.js";
 export {
   FUSION_FRONTDOOR_TURN_WORKFLOW,
+  FUSION_PASSTHROUGH_TURN_WORKFLOW,
   runFusionFrontdoorTurn,
+  runFusionPassthroughTurn,
   streamFusionFrontdoorTurn
 } from "./frontdoor/workflow.js";
 export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";

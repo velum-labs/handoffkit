@@ -26,6 +26,7 @@ export const FrontdoorArtifactTypes = {
 } as const;
 
 export const FrontdoorOperatorKinds = {
+  Passthrough: "frontdoor.passthrough",
   Panel: "frontdoor.panel",
   Fuse: "frontdoor.fuse",
   FuseStream: "frontdoor.fuse.stream",
@@ -70,6 +71,50 @@ export type FrontdoorFusionTurn = {
   /** Meter cost, emit judge.final/thinking, persist the turn, apply any notice. */
   finalize: (response: Response) => Promise<Response>;
 };
+
+/**
+ * The injected implementation of a native-passthrough turn: proxy the request to
+ * the vendor via the router. Rate-limit/credit failover (which re-enters the
+ * fusion workflow with the throttled vendor excluded) and mid-stream resume
+ * notices are owned by the proxy implementation, which returns the final
+ * `Response` (vendor reply, fused failover stream, or a clear error).
+ */
+export type FrontdoorPassthroughTurn = {
+  proxy: () => Promise<Response>;
+};
+
+/** passthrough: proxy the turn to a native vendor model. */
+export function frontdoorPassthroughOperator(turn: FrontdoorPassthroughTurn): Operator {
+  return {
+    spec: {
+      id: FrontdoorOperatorKinds.Passthrough,
+      kind: FrontdoorOperatorKinds.Passthrough,
+      requiredInputTypes: [FrontdoorArtifactTypes.Task],
+      outputTypes: [WireArtifactTypes.WireResponse, FrontdoorArtifactTypes.Response],
+      sideEffects: "external_tool"
+    },
+    run: async (_inputs, ctx) => {
+      const captured = await captureWireResponse(await turn.proxy());
+      return [
+        ctx.createArtifact({
+          id: `${ctx.nodeId}.wire`,
+          type: WireArtifactTypes.WireResponse,
+          value: captured.value,
+          visibility: "runtime",
+          leakage: "none",
+          ...(captured.value.contentType !== null ? { contentType: captured.value.contentType } : {})
+        }),
+        ctx.createArtifact({
+          id: `${ctx.nodeId}.response`,
+          type: FrontdoorArtifactTypes.Response,
+          value: captured.response,
+          visibility: "user",
+          leakage: "none"
+        })
+      ];
+    }
+  };
+}
 
 /** panel: resolve candidate trajectories for this turn. */
 export function frontdoorPanelOperator(turn: {

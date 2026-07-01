@@ -45,7 +45,11 @@ import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
 import { eventsToSseResponse } from "./frontdoor/sse.js";
-import { runFusionFrontdoorTurn, streamFusionFrontdoorTurn } from "./frontdoor/workflow.js";
+import {
+  runFusionFrontdoorTurn,
+  runFusionPassthroughTurn,
+  streamFusionFrontdoorTurn
+} from "./frontdoor/workflow.js";
 import {
   addTurnCost,
   emptySessionCost,
@@ -988,7 +992,13 @@ export class FusionBackend implements Backend {
     // failure, automatic (see #proxyNative's WS5 failover).
     const native = this.#passthroughFor(chat.model);
     if (native !== undefined) {
-      return this.#proxyNative(native, chat, signal, options);
+      // The native-passthrough turn runs as the `fusion-passthrough-turn` kernel
+      // graph; the proxy (and its rate-limit failover into the fusion workflow)
+      // is the operator's implementation.
+      return runFusionPassthroughTurn(
+        { proxy: () => this.#proxyNative(native, chat, signal, options) },
+        { runId: `${this.#sessionKey(messages)}:passthrough` }
+      );
     }
     return this.#runFusion(chat, signal, options, {});
   }
