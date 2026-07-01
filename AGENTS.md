@@ -37,6 +37,27 @@ Python workspace (`pyproject.toml`):
 - Lint: `uv run ruff check .`  |  Type-check: `uv run pyright`
 - Tests: `uv run pytest tests -q` (FusionKit) and `uv run pytest python -q` (uniroute)
 
+### Docker (legacy `warrant` compose stack)
+
+Docker is **not preinstalled** and does **not** work out of the box. The
+`docker-compose.yml` / `Dockerfile` build the legacy `warrant` governance stack
+(control plane + runner + control-panel UI on port 7172) — out of FusionKit
+product scope, and not needed for FusionKit dev/test. It does build and pass the
+CI docker smoke, but only after the Firecracker Docker-in-Docker workarounds:
+
+1. Install `docker-ce`, `docker-compose-plugin`, `fuse-overlayfs`, `iptables` (sudo is passwordless).
+2. `/etc/docker/daemon.json`: set `"storage-driver": "fuse-overlayfs"` **and**
+   `"features": { "containerd-snapshotter": false }` — on Docker 29 the snapshotter
+   must be disabled or fuse-overlayfs is ignored.
+3. `update-alternatives --set iptables /usr/sbin/iptables-legacy` (and `ip6tables`).
+4. Start the daemon manually (`sudo dockerd &`) — it is not a persisted service,
+   so it must be restarted each session. Do **not** put dockerd or `docker compose up`
+   in the startup update script.
+
+Then `sudo docker compose build` + `sudo docker compose up -d --wait plane runner`
+work; the Dockerfile's `node:22-bookworm-slim` base already satisfies the Node
+engine floor, so the host Node caveat above does not apply inside the image.
+
 ### Running the fusion endpoint (dev)
 
 The core product loop is easiest to exercise via the raw Python router rather
