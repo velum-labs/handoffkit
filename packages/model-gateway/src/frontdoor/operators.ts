@@ -1,26 +1,28 @@
 /**
- * Kernel operators for the fusion front-door turn.
+ * Kernel operators for the fusion front-door request and turn.
  *
- * The front-door turn is expressed as a runtime graph:
- *
- *   panel -> fuse -> finalize
- *
- * The operators are thin: they own graph structure, provenance, and typed
- * artifact boundaries, and delegate the actual side-effecting work (running the
- * panel, calling the Python `trajectories:fuse` step, metering/persisting the
- * result) to injected implementations supplied by {@link FusionBackend}. This is
- * the same pattern as `ModelGenerateOperator` wrapping a `ModelClient`: the
- * kernel owns admission/budget/trace/replay, the implementation owns the wire.
+ * Every operator is stable: it is constructed with the shared
+ * {@link FrontdoorServices} and reads the per-turn {@link FrontdoorRequestValue}
+ * from its input artifact. No operator captures a per-turn closure. The kernel
+ * owns admission/budget/trace/replay and the routing decision; the services own
+ * the side-effecting wire (panel, fuse step, vendor proxy, cost/trace).
  */
 
 import { captureWireResponse, WireArtifactTypes } from "@fusionkit/kernel";
-import type { Operator, RuntimeEvent, StreamingOperator } from "@fusionkit/kernel";
+import type { Artifact, Operator, RuntimeEvent, StreamingOperator } from "@fusionkit/kernel";
 import type { WireTrajectory } from "@fusionkit/protocol";
 
+import type {
+  FrontdoorRequestValue,
+  FrontdoorServices,
+  VendorProxyOutcome
+} from "./types.js";
+
 export const FrontdoorArtifactTypes = {
-  Task: "frontdoor_task",
+  Request: "frontdoor_request",
   Budget: "frontdoor_budget",
   Route: "frontdoor_route",
+  Failover: "frontdoor_failover",
   CandidateSet: "frontdoor_candidate_set",
   FuseResponse: "frontdoor_fuse_response",
   StreamComplete: "frontdoor_stream_complete",
@@ -31,9 +33,8 @@ export const FrontdoorOperatorKinds = {
   BudgetGate: "frontdoor.budget-gate",
   BudgetStop: "frontdoor.budget-stop",
   ResolveModel: "frontdoor.resolve-model",
+  VendorProxy: "frontdoor.vendor-proxy",
   DispatchFusion: "frontdoor.dispatch.fusion",
-  DispatchPassthrough: "frontdoor.dispatch.passthrough",
-  Passthrough: "frontdoor.passthrough",
   Panel: "frontdoor.panel",
   Fuse: "frontdoor.fuse",
   FuseStream: "frontdoor.fuse.stream",
@@ -63,45 +64,131 @@ export class FrontdoorPanelError extends Error {
   }
 }
 
+export type BudgetValue = { exceeded: boolean };
+export type RouteValue = { route: "fusion" | "passthrough" };
+export type FailoverValue = { excludeModelIds: readonly string[]; notice: string };
 export type CandidateSetValue = { candidates: readonly WireTrajectory[] };
 
-/**
- * The injected implementation of a single front-door fusion turn. Each field is
- * a phase the operators drive; {@link FusionBackend} supplies closures that reuse
- * its existing session/panel/fuse/cost/trace logic.
- */
-export type FrontdoorFusionTurn = {
-  /** Resolve the turn's candidate trajectories (panel phase). */
-  resolveCandidates: () => Promise<readonly WireTrajectory[]>;
-  /** Emit the judge.request trace and POST the fuse step; returns its response. */
-  runFuseStep: (candidates: readonly WireTrajectory[]) => Promise<Response>;
-  /** Meter cost, emit judge.final/thinking, persist the turn, apply any notice. */
-  finalize: (response: Response) => Promise<Response>;
-};
+function requestOf(inputs: readonly Artifact[]): FrontdoorRequestValue {
+  const request = inputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.Request)?.value as
+    | FrontdoorRequestValue
+    | undefined;
+  if (request === undefined) throw new Error("frontdoor operator missing request artifact");
+  return request;
+}
 
-/**
- * The injected implementation of a native-passthrough turn: proxy the request to
- * the vendor via the router. Rate-limit/credit failover (which re-enters the
- * fusion workflow with the throttled vendor excluded) and mid-stream resume
- * notices are owned by the proxy implementation, which returns the final
- * `Response` (vendor reply, fused failover stream, or a clear error).
- */
-export type FrontdoorPassthroughTurn = {
-  proxy: () => Promise<Response>;
-};
+function candidateSetOf(inputs: readonly Artifact[]): CandidateSetValue {
+  const set = inputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.CandidateSet)?.value as
+    | CandidateSetValue
+    | undefined;
+  if (set === undefined) throw new Error("frontdoor fuse operator missing candidate set artifact");
+  return set;
+}
 
-/** passthrough: proxy the turn to a native vendor model. */
-export function frontdoorPassthroughOperator(turn: FrontdoorPassthroughTurn): Operator {
+// --- request-level operators (decisions) ----------------------------------
+
+/** budget-gate: compute whether the conversation has exceeded the budget cap. */
+export function frontdoorBudgetGateOperator(services: FrontdoorServices): Operator {
   return {
     spec: {
-      id: FrontdoorOperatorKinds.Passthrough,
-      kind: FrontdoorOperatorKinds.Passthrough,
-      requiredInputTypes: [FrontdoorArtifactTypes.Task],
-      outputTypes: [WireArtifactTypes.WireResponse, FrontdoorArtifactTypes.Response],
+      id: FrontdoorOperatorKinds.BudgetGate,
+      kind: FrontdoorOperatorKinds.BudgetGate,
+      requiredInputTypes: [FrontdoorArtifactTypes.Request],
+      outputTypes: [FrontdoorArtifactTypes.Budget],
+      sideEffects: "none"
+    },
+    run: (inputs, ctx) => {
+      const req = requestOf(inputs);
+      const exceeded =
+        services.budgetUsd !== undefined && services.costTotalUsd(req.sessionKey) >= services.budgetUsd;
+      return [
+        ctx.createArtifact<BudgetValue>({
+          id: `${ctx.nodeId}.budget`,
+          type: FrontdoorArtifactTypes.Budget,
+          value: { exceeded },
+          visibility: "runtime",
+          leakage: "none"
+        })
+      ];
+    }
+  };
+}
+
+/** budget-stop: format the refusal response for an over-budget turn. */
+export function frontdoorBudgetStopOperator(services: FrontdoorServices): Operator {
+  return {
+    spec: {
+      id: FrontdoorOperatorKinds.BudgetStop,
+      kind: FrontdoorOperatorKinds.BudgetStop,
+      requiredInputTypes: [FrontdoorArtifactTypes.Request],
+      outputTypes: [FrontdoorArtifactTypes.Response],
+      sideEffects: "none"
+    },
+    run: (inputs, ctx) => [
+      ctx.createArtifact({
+        id: `${ctx.nodeId}.response`,
+        type: FrontdoorArtifactTypes.Response,
+        value: services.budgetStopResponse(requestOf(inputs)),
+        visibility: "user",
+        leakage: "none"
+      })
+    ]
+  };
+}
+
+/** resolve-model: decide whether the requested model routes to fusion or a vendor. */
+export function frontdoorResolveModelOperator(services: FrontdoorServices): Operator {
+  return {
+    spec: {
+      id: FrontdoorOperatorKinds.ResolveModel,
+      kind: FrontdoorOperatorKinds.ResolveModel,
+      requiredInputTypes: [FrontdoorArtifactTypes.Request],
+      outputTypes: [FrontdoorArtifactTypes.Route],
+      sideEffects: "none"
+    },
+    run: (inputs, ctx) => {
+      const req = requestOf(inputs);
+      const route = services.isNativeModel(req.chat.model) ? "passthrough" : "fusion";
+      return [
+        ctx.createArtifact<RouteValue>({
+          id: `${ctx.nodeId}.route`,
+          type: FrontdoorArtifactTypes.Route,
+          value: { route },
+          visibility: "runtime",
+          leakage: "none"
+        })
+      ];
+    }
+  };
+}
+
+/** vendor-proxy: proxy the turn to the native vendor; emit a classified outcome.
+ *  A `response` outcome carries the vendor/error reply; a `failover` outcome
+ *  hands control back to the scheduler to run the fusion turn. */
+export function frontdoorVendorProxyOperator(services: FrontdoorServices): Operator {
+  return {
+    spec: {
+      id: FrontdoorOperatorKinds.VendorProxy,
+      kind: FrontdoorOperatorKinds.VendorProxy,
+      requiredInputTypes: [FrontdoorArtifactTypes.Request],
+      outputTypes: [WireArtifactTypes.WireResponse, FrontdoorArtifactTypes.Response, FrontdoorArtifactTypes.Failover],
       sideEffects: "external_tool"
     },
-    run: async (_inputs, ctx) => {
-      const captured = await captureWireResponse(await turn.proxy());
+    run: async (inputs, ctx) => {
+      const req = requestOf(inputs);
+      const outcome: VendorProxyOutcome = await services.proxyVendor(req);
+      if (outcome.kind === "failover") {
+        return [
+          ctx.createArtifact<FailoverValue>({
+            id: `${ctx.nodeId}.failover`,
+            type: FrontdoorArtifactTypes.Failover,
+            value: { excludeModelIds: outcome.excludeModelIds, notice: outcome.notice },
+            visibility: "runtime",
+            leakage: "none"
+          })
+        ];
+      }
+      const captured = await captureWireResponse(outcome.response);
       return [
         ctx.createArtifact({
           id: `${ctx.nodeId}.wire`,
@@ -123,22 +210,23 @@ export function frontdoorPassthroughOperator(turn: FrontdoorPassthroughTurn): Op
   };
 }
 
+// --- fusion turn operators -------------------------------------------------
+
 /** panel: resolve candidate trajectories for this turn. */
-export function frontdoorPanelOperator(turn: {
-  resolveCandidates: () => Promise<readonly WireTrajectory[]>;
-}): Operator {
+export function frontdoorPanelOperator(services: FrontdoorServices): Operator {
   return {
     spec: {
       id: FrontdoorOperatorKinds.Panel,
       kind: FrontdoorOperatorKinds.Panel,
-      requiredInputTypes: [FrontdoorArtifactTypes.Task],
+      requiredInputTypes: [FrontdoorArtifactTypes.Request],
       outputTypes: [FrontdoorArtifactTypes.CandidateSet],
       sideEffects: "external_tool"
     },
-    run: async (_inputs, ctx) => {
+    run: async (inputs, ctx) => {
+      const req = requestOf(inputs);
       let candidates: readonly WireTrajectory[];
       try {
-        candidates = await turn.resolveCandidates();
+        candidates = await services.resolvePanelCandidates(req);
       } catch (error) {
         throw new FrontdoorPanelError(error);
       }
@@ -156,23 +244,20 @@ export function frontdoorPanelOperator(turn: {
   };
 }
 
-/** fuse: POST the candidate trajectories to `trajectories:fuse`. */
-export function frontdoorFuseOperator(turn: FrontdoorFusionTurn): Operator {
+/** fuse: POST the candidate trajectories to the buffered `trajectories:fuse`. */
+export function frontdoorFuseOperator(services: FrontdoorServices): Operator {
   return {
     spec: {
       id: FrontdoorOperatorKinds.Fuse,
       kind: FrontdoorOperatorKinds.Fuse,
-      requiredInputTypes: [FrontdoorArtifactTypes.CandidateSet],
+      requiredInputTypes: [FrontdoorArtifactTypes.Request, FrontdoorArtifactTypes.CandidateSet],
       outputTypes: [WireArtifactTypes.WireResponse, FrontdoorArtifactTypes.FuseResponse],
       sideEffects: "external_tool"
     },
     run: async (inputs, ctx) => {
-      const set = inputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.CandidateSet)?.value as
-        | CandidateSetValue
-        | undefined;
-      if (set === undefined) throw new Error("frontdoor.fuse missing candidate set artifact");
-      const raw = await turn.runFuseStep(set.candidates);
-      const captured = await captureWireResponse(raw);
+      const req = requestOf(inputs);
+      const set = candidateSetOf(inputs);
+      const captured = await captureWireResponse(await services.runFuseStep(req, set.candidates));
       return [
         ctx.createArtifact({
           id: `${ctx.nodeId}.wire`,
@@ -194,34 +279,16 @@ export function frontdoorFuseOperator(turn: FrontdoorFusionTurn): Operator {
   };
 }
 
-/**
- * The injected implementation of a streaming front-door fusion turn. The panel
- * phase reuses {@link FrontdoorFusionTurn.resolveCandidates}; the fuse phase
- * streams the Python step's SSE bytes and meters/traces on completion.
- */
-export type FrontdoorFusionStreamTurn = {
-  resolveCandidates: () => Promise<readonly WireTrajectory[]>;
-  /** Emit judge.request and POST the streaming fuse step; returns its response. */
-  openFuseStream: (candidates: readonly WireTrajectory[]) => Promise<Response>;
-  /** Non-2xx / bodyless fuse reply: emit judge.final error before failing. */
-  onUpstreamError: (status: number, detail: string) => void;
-  /** Clean completion: meter cost + emit judge.final/thinking from the SSE tail. */
-  onComplete: (sseBuffer: string) => void;
-  /** An exception mid-stream (e.g. an aborted fetch): emit judge.final error. */
-  onException?: (message: string) => void;
-};
-
 /** fuse (streaming): pipe the fuse step's SSE bytes as `sse.chunk` events. */
-export function frontdoorStreamingFuseOperator(turn: FrontdoorFusionStreamTurn): StreamingOperator {
-  const spec = {
-    id: FrontdoorOperatorKinds.FuseStream,
-    kind: FrontdoorOperatorKinds.FuseStream,
-    requiredInputTypes: [FrontdoorArtifactTypes.CandidateSet],
-    outputTypes: [FrontdoorArtifactTypes.StreamComplete],
-    sideEffects: "external_tool" as const
-  };
+export function frontdoorStreamingFuseOperator(services: FrontdoorServices): StreamingOperator {
   return {
-    spec,
+    spec: {
+      id: FrontdoorOperatorKinds.FuseStream,
+      kind: FrontdoorOperatorKinds.FuseStream,
+      requiredInputTypes: [FrontdoorArtifactTypes.Request, FrontdoorArtifactTypes.CandidateSet],
+      outputTypes: [FrontdoorArtifactTypes.StreamComplete],
+      sideEffects: "external_tool"
+    },
     run: (_inputs, ctx) => [
       ctx.createArtifact({
         id: `${ctx.nodeId}.complete`,
@@ -232,15 +299,13 @@ export function frontdoorStreamingFuseOperator(turn: FrontdoorFusionStreamTurn):
       })
     ],
     async *stream(inputs, _ctx): AsyncIterable<RuntimeEvent> {
-      const set = inputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.CandidateSet)?.value as
-        | CandidateSetValue
-        | undefined;
-      if (set === undefined) throw new Error("frontdoor.fuse.stream missing candidate set artifact");
+      const req = requestOf(inputs);
+      const set = candidateSetOf(inputs);
       try {
-        const response = await turn.openFuseStream(set.candidates);
+        const response = await services.openFuseStream(req, set.candidates);
         if (!response.ok || response.body === null) {
           const detail = response.body === null ? "no stream" : (await response.text()).slice(0, 800);
-          turn.onUpstreamError(response.status, detail);
+          services.onFuseUpstreamError(req, response.status, detail);
           throw new FrontdoorFuseError(`trajectories:fuse ${response.status}: ${detail}`);
         }
         const reader = response.body.getReader();
@@ -255,10 +320,10 @@ export function frontdoorStreamingFuseOperator(turn: FrontdoorFusionStreamTurn):
             yield { type: "sse.chunk", data: decoded };
           }
         }
-        turn.onComplete(buffer);
+        services.meterAndTraceStream(req, buffer);
       } catch (error) {
         if (!(error instanceof FrontdoorFuseError)) {
-          turn.onException?.(error instanceof Error ? error.message : String(error));
+          services.onFuseException(req, error instanceof Error ? error.message : String(error));
         }
         throw error;
       }
@@ -266,20 +331,21 @@ export function frontdoorStreamingFuseOperator(turn: FrontdoorFusionStreamTurn):
   };
 }
 
-/** finalize: meter/trace/persist the fused response and hand it back. */
-export function frontdoorFinalizeOperator(turn: FrontdoorFusionTurn): Operator {
+/** finalize: meter/trace/persist the buffered fused response and hand it back. */
+export function frontdoorFinalizeOperator(services: FrontdoorServices): Operator {
   return {
     spec: {
       id: FrontdoorOperatorKinds.Finalize,
       kind: FrontdoorOperatorKinds.Finalize,
-      requiredInputTypes: [FrontdoorArtifactTypes.FuseResponse],
+      requiredInputTypes: [FrontdoorArtifactTypes.Request, FrontdoorArtifactTypes.FuseResponse],
       outputTypes: [FrontdoorArtifactTypes.Response],
       sideEffects: "none"
     },
     run: async (inputs, ctx) => {
+      const req = requestOf(inputs);
       const response = inputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.FuseResponse)?.value;
       if (!(response instanceof Response)) throw new Error("frontdoor.finalize missing fuse response artifact");
-      const finalized = await turn.finalize(response);
+      const finalized = await services.finalizeFused(req, response);
       return [
         ctx.createArtifact({
           id: `${ctx.nodeId}.response`,

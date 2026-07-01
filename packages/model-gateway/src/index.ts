@@ -24,23 +24,25 @@ export {
   FrontdoorFuseError,
   FrontdoorOperatorKinds,
   FrontdoorPanelError,
+  frontdoorBudgetGateOperator,
+  frontdoorBudgetStopOperator,
   frontdoorFinalizeOperator,
   frontdoorFuseOperator,
   frontdoorPanelOperator,
-  frontdoorPassthroughOperator,
-  frontdoorStreamingFuseOperator
+  frontdoorResolveModelOperator,
+  frontdoorStreamingFuseOperator,
+  frontdoorVendorProxyOperator
 } from "./frontdoor/operators.js";
 export type {
+  BudgetValue,
   CandidateSetValue,
-  FrontdoorFusionStreamTurn,
-  FrontdoorFusionTurn,
-  FrontdoorPassthroughTurn
+  FailoverValue,
+  RouteValue
 } from "./frontdoor/operators.js";
 export {
   FUSION_FRONTDOOR_TURN_WORKFLOW,
-  FUSION_PASSTHROUGH_TURN_WORKFLOW,
+  frontdoorRequestArtifact,
   runFusionFrontdoorTurn,
-  runFusionPassthroughTurn,
   streamFusionFrontdoorTurn
 } from "./frontdoor/workflow.js";
 export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";
@@ -49,9 +51,16 @@ export {
   FrontdoorRequestScheduler,
   runFrontdoorRequest
 } from "./frontdoor/request.js";
-export type { FrontdoorRequestTurn, FrontdoorRoute } from "./frontdoor/request.js";
 export { eventsToSseResponse } from "./frontdoor/sse.js";
 export type { EventsToSseOptions } from "./frontdoor/sse.js";
+export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
+export type {
+  FrontdoorChatBody,
+  FrontdoorRequestValue,
+  FrontdoorRoute,
+  FrontdoorServices,
+  VendorProxyOutcome
+} from "./frontdoor/types.js";
 export type {
   ChatMessageLike,
   FuseStepRunInput,

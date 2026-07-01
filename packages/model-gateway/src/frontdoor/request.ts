@@ -1,15 +1,17 @@
 /**
- * The top-level `fusion-frontdoor-request` kernel graph.
+ * The top-level `fusion-frontdoor-request` kernel graph and its routing scheduler.
  *
- * This lifts the request-level routing that used to be imperative branching in
- * `FusionBackend.chat` into first-class operators and a routing scheduler:
+ * Request routing is expressed as first-class operators and a scheduler decision,
+ * not imperative backend branching:
  *
- *   budget-gate -> (budget-stop) | (resolve-model -> fusion | passthrough)
+ *   budget-gate -> (budget-stop)
+ *               -> resolve-model -> fusion
+ *                                -> vendor-proxy -> (response) | (failover -> fusion-failover)
  *
- * `FrontdoorRequestScheduler` inspects the `budget-gate` and `resolve-model`
- * decision artifacts and runs only the chosen branch — a genuine scheduler
- * decision rather than a static DAG. Each branch dispatches into a named turn
- * graph (`fusion-frontdoor-turn` / `fusion-passthrough-turn`).
+ * `FrontdoorRequestScheduler` inspects the `budget-gate` / `resolve-model` /
+ * `vendor-proxy` decision artifacts and runs only the chosen branch. Rate-limit
+ * failover is therefore a scheduler decision over a classified outcome artifact,
+ * not a recursive call inside the vendor proxy.
  */
 
 import { createArtifact, FusionRuntime, nodesById } from "@fusionkit/kernel";
@@ -23,106 +25,84 @@ import type {
   SchedulerRunResult
 } from "@fusionkit/kernel";
 
-import { FrontdoorArtifactTypes, FrontdoorOperatorKinds } from "./operators.js";
+import { eventsToSseResponse } from "./sse.js";
+import {
+  FrontdoorArtifactTypes,
+  FrontdoorOperatorKinds,
+  frontdoorBudgetGateOperator,
+  frontdoorBudgetStopOperator,
+  frontdoorResolveModelOperator,
+  frontdoorVendorProxyOperator
+} from "./operators.js";
+import type { BudgetValue, FailoverValue, RouteValue } from "./operators.js";
+import type { FrontdoorRequestValue, FrontdoorServices } from "./types.js";
+import { runFusionFrontdoorTurn, streamFusionFrontdoorTurn } from "./workflow.js";
 
 export const FUSION_FRONTDOOR_REQUEST_WORKFLOW = "fusion-frontdoor-request" as const;
 
-export type FrontdoorRoute = "passthrough" | "fusion";
-
-/** The injected implementation of a front-door request: the surface-level
- *  budget gate and requested-model resolution, plus the two turn dispatchers. */
-export type FrontdoorRequestTurn = {
-  isBudgetExceeded: () => boolean;
-  budgetStop: () => Response;
-  resolveRoute: () => FrontdoorRoute;
-  runFusion: () => Promise<Response>;
-  runPassthrough: () => Promise<Response>;
-};
-
-type BudgetValue = { exceeded: boolean };
-type RouteValue = { route: FrontdoorRoute };
-
-function budgetGateOperator(turn: FrontdoorRequestTurn): Operator {
-  return {
-    spec: {
-      id: FrontdoorOperatorKinds.BudgetGate,
-      kind: FrontdoorOperatorKinds.BudgetGate,
-      requiredInputTypes: [FrontdoorArtifactTypes.Task],
-      outputTypes: [FrontdoorArtifactTypes.Budget],
-      sideEffects: "none"
-    },
-    run: (_inputs, ctx) => [
-      ctx.createArtifact<BudgetValue>({
-        id: `${ctx.nodeId}.budget`,
-        type: FrontdoorArtifactTypes.Budget,
-        value: { exceeded: turn.isBudgetExceeded() },
-        visibility: "runtime",
-        leakage: "none"
-      })
-    ]
-  };
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
-function budgetStopOperator(turn: FrontdoorRequestTurn): Operator {
-  return {
-    spec: {
-      id: FrontdoorOperatorKinds.BudgetStop,
-      kind: FrontdoorOperatorKinds.BudgetStop,
-      requiredInputTypes: [FrontdoorArtifactTypes.Budget],
-      outputTypes: [FrontdoorArtifactTypes.Response],
-      sideEffects: "none"
-    },
-    run: (_inputs, ctx) => [
-      ctx.createArtifact({
-        id: `${ctx.nodeId}.response`,
-        type: FrontdoorArtifactTypes.Response,
-        value: turn.budgetStop(),
-        visibility: "user",
-        leakage: "none"
-      })
-    ]
-  };
+function jsonError(status: number, message: string): Response {
+  return new Response(JSON.stringify({ error: { message, type: "fusion_error" } }), {
+    status,
+    headers: { "content-type": "application/json" }
+  });
 }
 
-function resolveModelOperator(turn: FrontdoorRequestTurn): Operator {
-  return {
-    spec: {
-      id: FrontdoorOperatorKinds.ResolveModel,
-      kind: FrontdoorOperatorKinds.ResolveModel,
-      requiredInputTypes: [FrontdoorArtifactTypes.Task],
-      outputTypes: [FrontdoorArtifactTypes.Route],
-      sideEffects: "none"
-    },
-    run: (_inputs, ctx) => [
-      ctx.createArtifact<RouteValue>({
-        id: `${ctx.nodeId}.route`,
-        type: FrontdoorArtifactTypes.Route,
-        value: { route: turn.resolveRoute() },
-        visibility: "runtime",
-        leakage: "none"
-      })
-    ]
-  };
+/**
+ * Run the fused turn for a request and return its `Response`: a streamed SSE
+ * response (via the streaming runtime + SSE adapter) or a buffered JSON response
+ * (mapping a panel failure to a 502 + turn eviction).
+ */
+async function runFusionTurnResponse(
+  services: FrontdoorServices,
+  req: FrontdoorRequestValue
+): Promise<Response> {
+  const runId = `${req.sessionKey}:t${req.turn}`;
+  if (req.streaming) {
+    const events = streamFusionFrontdoorTurn(services, req, { runId });
+    return eventsToSseResponse(events, {
+      ...(req.notice !== undefined ? { notice: req.notice } : {}),
+      onError: () => services.evictTurn(req)
+    });
+  }
+  const outcome = await runFusionFrontdoorTurn(services, req, { runId });
+  if (outcome.kind === "panel_error") {
+    services.evictTurn(req);
+    console.error(`fusion: panel phase failed: ${errorText(outcome.error)}`);
+    return jsonError(502, errorText(outcome.error));
+  }
+  return outcome.response;
 }
 
-function dispatchOperator(
-  turn: FrontdoorRequestTurn,
-  route: FrontdoorRoute
+function requestOf(inputs: readonly Artifact[]): FrontdoorRequestValue {
+  const request = inputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.Request)?.value as
+    | FrontdoorRequestValue
+    | undefined;
+  if (request === undefined) throw new Error("frontdoor dispatch operator missing request artifact");
+  return request;
+}
+
+/** dispatch.fusion: run the fused turn for the (possibly failover-augmented) request. */
+function frontdoorDispatchFusionOperator(
+  services: FrontdoorServices,
+  augment: (req: FrontdoorRequestValue, inputs: readonly Artifact[]) => FrontdoorRequestValue
 ): Operator {
-  const kind = route === "passthrough" ? FrontdoorOperatorKinds.DispatchPassthrough : FrontdoorOperatorKinds.DispatchFusion;
   return {
     spec: {
-      id: kind,
-      kind,
-      requiredInputTypes: [FrontdoorArtifactTypes.Route],
+      id: FrontdoorOperatorKinds.DispatchFusion,
+      kind: FrontdoorOperatorKinds.DispatchFusion,
+      requiredInputTypes: [FrontdoorArtifactTypes.Request],
       outputTypes: [FrontdoorArtifactTypes.Response],
       sideEffects: "external_tool"
     },
-    run: async (_inputs, ctx) => [
+    run: async (inputs, ctx) => [
       ctx.createArtifact({
         id: `${ctx.nodeId}.response`,
         type: FrontdoorArtifactTypes.Response,
-        value: route === "passthrough" ? await turn.runPassthrough() : await turn.runFusion(),
+        value: await runFusionTurnResponse(services, augment(requestOf(inputs), inputs)),
         visibility: "user",
         leakage: "none"
       })
@@ -130,8 +110,9 @@ function dispatchOperator(
   };
 }
 
-/** Runs the budget gate, then routes to budget-stop, passthrough, or fusion by
- *  inspecting the decision artifacts — running only the chosen branch. */
+/** Runs the budget gate, then routes to budget-stop, fusion, or vendor-proxy —
+ *  with vendor pre-stream failover re-entering the fusion turn — by inspecting
+ *  the decision artifacts. Only the chosen branch runs. */
 export class FrontdoorRequestScheduler implements Scheduler {
   readonly id = FUSION_FRONTDOOR_REQUEST_WORKFLOW;
   readonly family = "frontdoor-request";
@@ -143,7 +124,7 @@ export class FrontdoorRequestScheduler implements Scheduler {
       if (found === undefined) throw new Error(`fusion-frontdoor-request graph missing node ${id}`);
       return found;
     };
-    const firstId = (artifacts: readonly Artifact[]): string[] => (artifacts[0] !== undefined ? [artifacts[0].id] : []);
+    const first = (artifacts: readonly Artifact[]): string[] => (artifacts[0] !== undefined ? [artifacts[0].id] : []);
 
     const [budget] = await ctx.runNode(node("budget-gate"));
     const exceeded = (budget?.value as BudgetValue | undefined)?.exceeded === true;
@@ -153,9 +134,7 @@ export class FrontdoorRequestScheduler implements Scheduler {
       operatorId: FrontdoorOperatorKinds.BudgetGate,
       payload: { budget_exceeded: exceeded }
     });
-    if (exceeded) {
-      return { finalArtifactIds: firstId(await ctx.runNode(node("budget-stop"))) };
-    }
+    if (exceeded) return { finalArtifactIds: first(await ctx.runNode(node("budget-stop"))) };
 
     const [route] = await ctx.runNode(node("resolve-model"));
     const decision = (route?.value as RouteValue | undefined)?.route ?? "fusion";
@@ -165,42 +144,67 @@ export class FrontdoorRequestScheduler implements Scheduler {
       operatorId: FrontdoorOperatorKinds.ResolveModel,
       payload: { route: decision }
     });
-    return { finalArtifactIds: firstId(await ctx.runNode(node(decision === "passthrough" ? "passthrough" : "fusion"))) };
+    if (decision === "fusion") return { finalArtifactIds: first(await ctx.runNode(node("fusion"))) };
+
+    const vendorOutputs = await ctx.runNode(node("vendor-proxy"));
+    const response = vendorOutputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.Response);
+    if (response !== undefined) return { finalArtifactIds: [response.id] };
+    ctx.recordTrace({
+      type: "scheduler.decision",
+      nodeId: "vendor-proxy",
+      operatorId: FrontdoorOperatorKinds.VendorProxy,
+      payload: { failover: true }
+    });
+    return { finalArtifactIds: first(await ctx.runNode(node("fusion-failover"))) };
   }
 }
 
 /**
  * Execute a full front-door request as the `fusion-frontdoor-request` kernel
- * graph and return the resulting `Response` (budget stop, passthrough reply, or
- * fused turn — streamed or buffered).
+ * graph and return the resulting `Response` (budget stop, fused turn, vendor
+ * reply, or fused failover).
  */
 export async function runFrontdoorRequest(
-  turn: FrontdoorRequestTurn,
-  options: { runId?: string } = {}
+  services: FrontdoorServices,
+  req: FrontdoorRequestValue
 ): Promise<Response> {
-  const task = createArtifact({
-    id: "frontdoor.request.task",
-    type: FrontdoorArtifactTypes.Task,
-    value: {},
+  const request = createArtifact<FrontdoorRequestValue>({
+    id: "frontdoor.request",
+    type: FrontdoorArtifactTypes.Request,
+    value: req,
     visibility: "runtime",
     leakage: "none"
   });
+  const fusionDispatch = frontdoorDispatchFusionOperator(services, (base) => base);
+  const failoverDispatch = frontdoorDispatchFusionOperator(services, (base, inputs) => {
+    const failover = inputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.Failover)?.value as
+      | FailoverValue
+      | undefined;
+    return failover === undefined
+      ? base
+      : { ...base, excludeModelIds: failover.excludeModelIds, notice: failover.notice };
+  });
   const graph: OperatorGraph = {
     id: FUSION_FRONTDOOR_REQUEST_WORKFLOW,
-    inputArtifactIds: [task.id],
+    inputArtifactIds: [request.id],
     nodes: [
-      { id: "budget-gate", operator: budgetGateOperator(turn), inputs: [{ artifactId: task.id }] },
-      { id: "budget-stop", operator: budgetStopOperator(turn), inputs: [{ nodeId: "budget-gate" }] },
-      { id: "resolve-model", operator: resolveModelOperator(turn), inputs: [{ artifactId: task.id }] },
-      { id: "fusion", operator: dispatchOperator(turn, "fusion"), inputs: [{ nodeId: "resolve-model" }] },
-      { id: "passthrough", operator: dispatchOperator(turn, "passthrough"), inputs: [{ nodeId: "resolve-model" }] }
+      { id: "budget-gate", operator: frontdoorBudgetGateOperator(services), inputs: [{ artifactId: request.id }] },
+      { id: "budget-stop", operator: frontdoorBudgetStopOperator(services), inputs: [{ artifactId: request.id }] },
+      { id: "resolve-model", operator: frontdoorResolveModelOperator(services), inputs: [{ artifactId: request.id }] },
+      { id: "fusion", operator: fusionDispatch, inputs: [{ artifactId: request.id }] },
+      { id: "vendor-proxy", operator: frontdoorVendorProxyOperator(services), inputs: [{ artifactId: request.id }] },
+      {
+        id: "fusion-failover",
+        operator: failoverDispatch,
+        inputs: [{ artifactId: request.id }, { nodeId: "vendor-proxy", type: FrontdoorArtifactTypes.Failover }]
+      }
     ]
   };
   const result = await new FusionRuntime().run({
     graph,
     scheduler: new FrontdoorRequestScheduler(),
-    artifacts: [task],
-    ...(options.runId !== undefined ? { runId: options.runId } : {})
+    artifacts: [request],
+    runId: `${req.sessionKey}:request`
   });
   const response = result.finalArtifacts.find(
     (artifact: Artifact): artifact is Artifact<Response> => artifact.value instanceof Response
