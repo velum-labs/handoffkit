@@ -27,6 +27,8 @@ root [`README.md`](../README.md) remains the product narrative and quick tour.
 | [Fusion Judge Trajectory](fusion-judge-trajectory.md) | How trajectories are produced and synthesized. |
 | [Product scope](scope.md) | Which packages are the ensemble product vs. out-of-scope governance/VM. |
 | [Getting started](getting-started.md) | Local install, build, demos, and verification commands. |
+| [Documentation rubric](documentation-rubric.md) | Quality criteria for every documentation entry in this repository. |
+| [Repository reference](repository-reference.md) | Comprehensive package, API, app, example, protocol, and operations map. |
 
 ## Out-of-product-scope topic docs
 
