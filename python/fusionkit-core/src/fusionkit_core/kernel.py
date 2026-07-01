@@ -3,8 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
-from fusionkit_core.config import FusionMode, SamplingConfig
-from fusionkit_core.config import FusionConfig
+from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import FuseResult
 from fusionkit_core.run import CreateRunResult, FusionRunManager

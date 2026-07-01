@@ -10,6 +10,7 @@ from typing import Annotated, cast
 
 import typer
 import uvicorn
+from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import build_clients
 from fusionkit_core.config import (
     EndpointAuth,
@@ -23,10 +24,9 @@ from fusionkit_core.config import (
 from fusionkit_core.credentials import SubscriptionStatus, subscription_status
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.kernel import FusionKernel
+from fusionkit_core.prompts import SYSTEM_PROMPT_DEFAULTS
 from fusionkit_core.run import FusionRunManager
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.artifacts import LocalArtifactStore
-from fusionkit_core.prompts import SYSTEM_PROMPT_DEFAULTS
 from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous
 from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
 from fusionkit_evals.benchmark_panel import get_benchmark_panel
@@ -133,7 +133,9 @@ auth_app = typer.Typer(help="Inspect and switch model authentication (API key / 
 app.add_typer(auth_app, name="auth")
 
 
-def _legacy_kernel(config: FusionConfig, clients: dict[str, object], run_root: Path) -> FusionKernel:
+def _legacy_kernel(
+    config: FusionConfig, clients: dict[str, object], run_root: Path
+) -> FusionKernel:
     engine = FusionEngine(config=config, clients=clients)  # type: ignore[arg-type]
     manager = FusionRunManager(
         engine,
@@ -458,7 +460,10 @@ def run_eval(
 ) -> None:
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, Path(".fusionkit/python-kernel-runs/eval")))
+    engine = cast(
+        FusionEngine,
+        _legacy_kernel(fusion_config, clients, Path(".fusionkit/python-kernel-runs/eval")),
+    )
     runner = BenchmarkRunner(engine)
     results = asyncio.run(runner.run_samples(load_jsonl_samples(samples), config_id, mode))
     write_jsonl_results(output, results)
@@ -484,7 +489,12 @@ def tiny_bench(
 ) -> None:
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, Path(".fusionkit/python-kernel-runs/tiny-bench")))
+    engine = cast(
+        FusionEngine,
+        _legacy_kernel(
+            fusion_config, clients, Path(".fusionkit/python-kernel-runs/tiny-bench")
+        ),
+    )
     results = asyncio.run(
         run_tiny_benchmark(
             engine,
