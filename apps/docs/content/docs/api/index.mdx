@@ -3,20 +3,53 @@ title: API Reference
 description: The model-fusion HTTP/service contract.
 ---
 
-The model-fusion service surface is defined by an **OpenAPI 3.1 contract** that
-lives with the protocol package
-(`packages/protocol/openapi/model-fusion-harness-executor.openapi.json`). It is
-the single source of truth, so the reference pages in this section are generated
-from it rather than written by hand.
+FusionKit has two API surfaces. The first is the runtime gateway surface that
+coding agents and OpenAI-compatible clients call locally. The second is the
+generated model-fusion harness-executor contract used by protocol consumers.
 
-## What it covers
+## Runtime gateway routes
+
+The gateway routes are served by `@fusionkit/model-gateway` when you run
+`fusionkit codex`, `fusionkit claude`, `fusionkit cursor`, or `fusionkit serve`.
+
+| Route | Purpose |
+| --- | --- |
+| `/v1/chat/completions` | OpenAI Chat Completions dialect for generic clients, Cursor bridge, and raw endpoint usage. |
+| `/v1/responses` | OpenAI Responses dialect used by Codex. |
+| `/v1/messages` | Anthropic Messages dialect used by Claude Code. |
+| `/v1/messages/count_tokens` | Anthropic token-count helper. |
+| `/v1/models` | Model listing in OpenAI or Anthropic shape. |
+| `/v1/embeddings` | Embeddings when the backend supports it. |
+| `/health` | Unauthenticated health check. |
+
+Use `fusion-panel` for fused answers. Use a panel member id, such as `gpt`,
+`sonnet`, or `gemini`, for direct passthrough behavior.
+
+```bash
+curl "$FUSION_URL/v1/chat/completions" \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "fusion-panel",
+    "messages": [
+      { "role": "user", "content": "Explain this repository." }
+    ]
+  }'
+```
+
+If the gateway was started with `--auth-token`, send
+`Authorization: Bearer <token>` or `x-api-key: <token>`.
+
+## Generated harness-executor contract
 
 The contract describes the HTTP/JSON harness-executor seam: FusionKit calls it to
 ask the executor to run a coding-harness task and return persisted JSON Schema
 audit records.
 
-- **[Execute a model-fusion harness task](/docs/api/v1/harness-executions)** —
+- **[Execute a model-fusion harness task](/docs/api/v1/harness-executions)**:
   `POST /v1/harness-executions`
+
+The OpenAPI 3.1 source lives with the protocol package and is the source of truth
+for generated pages in this section.
 
 ## Why generated?
 
@@ -31,3 +64,11 @@ audit records.
   references those records rather than re-declaring them. Regenerate the MDX with
   `pnpm generate:openapi` whenever the contract changes.
 </Callout>
+
+## Trace and evidence contracts
+
+Runtime observability uses `fusion-trace-event.v1`. Events include session
+start, candidate start and finish, trajectory steps, model-call start and finish,
+tool execution, judge thinking, and judge final output. See
+[Observability](/docs/cli/observability) for the user workflow and the protocol
+schemas in the repository for the durable event shape.

@@ -1,3 +1,6 @@
+/**
+ * Claude Code tool integration entry point. It exposes launcher environment helpers and the Claude Code ensemble harness adapter.
+ */
 import type { ToolIntegration } from "@fusionkit/tools";
 
 import {

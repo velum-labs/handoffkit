@@ -1,4 +1,4 @@
 {
   "title": "Get Started",
-  "pages": ["installation", "quickstart", "configuration"]
+  "pages": ["installation", "quickstart", "configuration", "inference-endpoint", "rate-limit-handoff"]
 }

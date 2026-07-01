@@ -1,7 +1,10 @@
 /**
- * @fusionkit/testkit — in-process plane + runner stacks and git fixtures,
- * shared by the integration tests and the demo series. Everything runs
- * locally with the built-in mock agent: no vendor CLIs, no API keys.
+ * @fusionkit/testkit provides in-process plane and runner stacks plus git
+ * fixtures shared by integration tests and demos.
+ *
+ * Everything runs locally with the built-in mock agent. It does not require
+ * vendor CLIs or API keys, which makes it the preferred harness for deterministic
+ * tests and examples.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

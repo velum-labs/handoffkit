@@ -1,7 +1,7 @@
 # Quickstart: inference endpoint
 
 Run an ensemble as a plain **OpenAI-compatible HTTP endpoint** that any client
-(curl, the OpenAI SDK, your app) can point at — no coding harness involved. Every
+(curl, the OpenAI SDK, your app) can point at with no coding harness involved. Every
 request fans out across the panel and is synthesized into one answer.
 
 See also: [coding harness](quickstart-harness.md) ·
@@ -40,7 +40,7 @@ The gateway exposes the usual surface under `/v1`:
 `/v1/embeddings`, and `/health`. The fused model id is **`fusion-panel`**; each
 panel member is also addressable as a direct (non-fused) passthrough by its id.
 
-## 3. Call it — streaming
+## 3. Call it with streaming
 
 ```bash
 curl -N "$FUSION_URL/v1/chat/completions" \
@@ -55,7 +55,7 @@ curl -N "$FUSION_URL/v1/chat/completions" \
 `-N` disables curl buffering so you see the Server-Sent Events as the synthesized
 answer streams. Drop `"stream": true` for a single JSON response.
 
-## 4. Call it — tool calling
+## 4. Call it with tool calling
 
 Tools flow through the panel and the judge, so the fused answer can emit
 function/tool calls in the OpenAI Chat shape:
@@ -88,7 +88,7 @@ continue the turn, exactly as you would against the OpenAI API.
 ## Notes
 
 - **Auth.** Add `--auth-token <token>` to require `Authorization: Bearer <token>`
-  (or `x-api-key: <token>`) on every request — recommended if you bind beyond
+  (or `x-api-key: <token>`) on every request. This is recommended if you bind beyond
   loopback.
 - **Raw router (advanced).** `fusionkit config export-yaml` prints the derived
   `fusionkit serve` router config if you want to run the Python router directly;

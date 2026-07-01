@@ -1,6 +1,6 @@
 # Product scope: ensemble vs. governance/VM
 
-This repository ships the **FusionKit ensemble product** — running ensembles of
+This repository ships the **FusionKit ensemble product**: running ensembles of
 local + cloud models, both as a raw inference endpoint and behind coding
 harnesses. It *also* still contains the older **governance plane** and
 **VM/sandbox isolation** packages. This page records exactly which packages are
@@ -21,7 +21,7 @@ The single front door is the Node `@fusionkit/cli`. Its command tree
   `status`
 
 No `warrant`/governance commands (`plane`, `runner`, `run`, `receipt`, `verify`,
-`bundle`, `handoff` continuation, `pull`, `secrets`) are registered any more —
+`bundle`, `handoff` continuation, `pull`, `secrets`) are registered any more,
 the README and `docs/cli.md` previously documented those; that drift has been
 removed.
 
@@ -65,7 +65,7 @@ and excluded from `release/npm-packages.json` (enforced by
 ## Reachability analysis (why this is entangled)
 
 The out-of-scope packages are **not merely dead weight reachable only by
-tests** — they are pulled into the *runtime dependency closure of product
+tests**. They are pulled into the *runtime dependency closure of product
 packages*. Concretely (source-level imports, not just declared deps):
 
 - `@fusionkit/tool-claude` (`src/harness.ts`) imports `prepareExecution`,
@@ -85,7 +85,7 @@ paths:
 - `packages/cli/src/config.ts` imports `MasterKey` from `@fusionkit/plane`. It is
   consumed only by `packages/cli/src/shared/plane.ts`.
 - `packages/cli/src/shared/plane.ts` imports `PlaneClient` from `@fusionkit/sdk`.
-  Nothing in `buildProgram` imports it — it is dead relative to the shipped
+  Nothing in `buildProgram` imports it. It is dead relative to the shipped
   command tree.
 - `packages/cli/src/render.ts` (the public `@fusionkit/cli` → `./render` export)
   type-imports `HandoffTraceEvent` from `@fusionkit/handoff`.

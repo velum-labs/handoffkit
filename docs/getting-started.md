@@ -10,8 +10,8 @@
 
 ## Portless (stable named URLs)
 
-Every service the fusion stack starts — the scope dashboard, the gateway your
-coding agent connects to, the `fusionkit serve` router, and the control panel —
+Every service the fusion stack starts, including the scope dashboard, the gateway
+your coding agent connects to, the `fusionkit serve` router, and the control panel,
 is registered with [portless](https://github.com/vercel-labs/portless) so it is
 reachable at a stable HTTPS name (e.g. `https://scope.localhost`,
 `https://gateway.fusion.localhost`) instead of a raw port. Named services are

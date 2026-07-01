@@ -1,4 +1,4 @@
-# FusionKit Model-Fusion Architecture — v1.0 Draft
+# FusionKit Model-Fusion Architecture, v1.0 Draft
 
 Status: design replacement for the earlier MoA controller-loop draft.
 

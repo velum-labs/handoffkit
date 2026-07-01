@@ -2,7 +2,7 @@
 
 The headline feature: when a vendor passthrough model hits a **rate limit, quota,
 or billing error**, the turn is transparently continued on the **ensemble**
-instead of failing — and you're told it happened.
+instead of failing, and you're told it happened.
 
 See also: [coding harness](quickstart-harness.md) ·
 [inference endpoint](quickstart-inference.md) · [model catalog](model-catalog.md) ·
@@ -44,8 +44,8 @@ Set it as a repo default via `onRateLimit` in
 
 ## What you see on failover
 
-When a handoff fires, the gateway logs a clear notice — the panel runs
-**excluding** the rate-limited vendor — e.g.:
+When a handoff fires, the gateway logs a clear notice. The panel runs
+**excluding** the rate-limited vendor, for example:
 
 ```
 fusion: running panel (gpt, gemini) for session <id> (excluding sonnet after a vendor rate-limit)...
@@ -58,9 +58,9 @@ visible difference is that the throttled vendor sat this turn out.
 
 The shared classifier maps upstream failures into three buckets:
 
-- **transient** — `429`, `overloaded`, `Retry-After` → eligible for handoff;
-- **quota-exhausted** — `insufficient_quota`, billing/credit errors → handoff;
-- **auth-permanent** — `401`/`403`/model-not-found → *not* a rate-limit; surfaced
+- **transient**: `429`, `overloaded`, `Retry-After` means eligible for handoff;
+- **quota-exhausted**: `insufficient_quota`, billing/credit errors means handoff;
+- **auth-permanent**: `401`/`403`/model-not-found is *not* a rate-limit; surfaced
   as a real error (a handoff wouldn't help).
 
 ## One-tap resume

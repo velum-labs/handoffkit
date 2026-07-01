@@ -1,3 +1,6 @@
+/**
+ * Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cursorkit bridge, and the Cursor ensemble harness adapter.
+ */
 import type { ToolIntegration } from "@fusionkit/tools";
 
 import { createCursorHarness, cursorHarnessUnavailableReason } from "./harness.js";

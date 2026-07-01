@@ -16,6 +16,8 @@
     "clean": "tsc -b tsconfig.json --clean",
     "test": "PORTLESS=0 node --test \"packages/*/dist/test/*.test.js\" \"examples/*/dist/test/*.test.js\" \"test/*.test.js\"",
     "demo": "node scripts/demo.mjs",
+    "docs:generate-code": "node scripts/generate-code-docs.mjs",
+    "docs:check-code": "node scripts/generate-code-docs.mjs --check",
     "mlx": "node examples/mlx/dist/run.js",
     "mlx:stress": "node examples/mlx/dist/stress.js",
     "bench": "node examples/bench/dist/run.js",

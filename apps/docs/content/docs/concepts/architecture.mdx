@@ -18,7 +18,7 @@ flowchart TD
   stack --> panel["panel servers (uvx fusionkit serve-endpoint / local MLX)"]
   stack --> synth["synthesizer (uvx fusionkit serve)"]
   stack --> gw["fusion gateway"]
-  cli --> agent["coding agent (codex / claude / cursor) — passthrough"]
+  cli --> agent["coding agent (codex / claude / cursor), passthrough"]
   agent --> gw
   gw --> panel
   gw --> synth
@@ -28,20 +28,20 @@ flowchart TD
 
 ### Lifecycle
 
-1. **Preflight** — verify binaries, keys, and that you're in a git repo.
-2. **Boot** — start one server per panel model (cloud servers in parallel), the
+1. **Preflight**: verify binaries, keys, and that you're in a git repo.
+2. **Boot**: start one server per panel model (cloud servers in parallel), the
    synthesizer, and the gateway, shown as a live checklist.
-3. **Passthrough** — the CLI settles the TUI, restores the terminal, silences
+3. **Passthrough**: the CLI settles the TUI, restores the terminal, silences
    per-turn status chatter, and hands the terminal to your coding agent. The
-   agent is never wrapped — only launched, pointed at the gateway.
-4. **Teardown** — one `Ctrl+C` (or normal exit) tears down the whole stack.
+   agent is never wrapped, only launched and pointed at the gateway.
+4. **Teardown**: one `Ctrl+C` or normal exit tears down the whole stack.
    Signal handlers are installed before the first spawn, so interrupting during
    boot never orphans processes.
 
 ### Identity: two "fusionkit"s
 
-- **`@fusionkit/cli`** (npm) — the `fusionkit` command you install and run.
-- **`fusionkit`** (PyPI) — the synthesizer, fetched and run automatically via
+- **`@fusionkit/cli`** (npm): the `fusionkit` command you install and run.
+- **`fusionkit`** (PyPI): the synthesizer, fetched and run automatically via
   `uvx`. You never install it by hand.
 
 ## The governed execution platform

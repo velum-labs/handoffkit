@@ -29,6 +29,10 @@ people start with the CLI; teams building their own agent products reach for the
 platform packages.
 
 <Cards>
+  <Card title="Documentation taxonomy" href="/docs/taxonomy">
+    Learn how the docs are organized by reader intent and where each section
+    belongs.
+  </Card>
   <Card title="The fusionkit CLI" href="/docs/getting-started/installation">
     Back Codex, Claude Code, or Cursor with a fused model panel from one command.
     Start here if you want better answers in your existing coding agent.
@@ -38,6 +42,10 @@ platform packages.
     offline-verifiable receipts. Build on `@fusionkit/handoff`, the SDK, and the
     AI SDK / compute adapters.
   </Card>
+  <Card title="Product scope" href="/docs/concepts/product-scope">
+    See which packages power the everyday CLI path and which packages are
+    retained platform depth.
+  </Card>
 </Cards>
 
 ## The platform underneath
@@ -46,7 +54,7 @@ Both surfaces sit on the same governed execution and provenance plane (the
 project's internal name is **Warrant**). Its two core objects are the **run
 contract** (a signed authorization to execute under stated conditions) and the
 **receipt** (a signed, offline-verifiable record of what actually happened).
-Continuation — handing local work to a governed runner and pulling it back — is
+Continuation, handing local work to a governed runner and pulling it back, is
 built from those same primitives and shipped as the [handoff
 SDK](/docs/sdks/handoff-sdk).
 
@@ -58,14 +66,14 @@ SDK](/docs/sdks/handoff-sdk).
 
 ## Find your way around
 
-- **[Get Started](/docs/getting-started/installation)** — install the CLI, meet
+- **[Get Started](/docs/getting-started/installation)**: install the CLI, meet
   the prerequisites, and run your first fused session.
-- **[fusionkit CLI](/docs/cli/commands)** — the full command and flag reference,
+- **[fusionkit CLI](/docs/cli/commands)**: the full command and flag reference,
   cost control, observability, and troubleshooting.
-- **[Concepts](/docs/concepts/overview)** — contracts, receipts, the plane and
+- **[Concepts](/docs/concepts/overview)**: contracts, receipts, the plane and
   runners, and how model fusion works.
-- **[SDKs & Packages](/docs/sdks/handoff-sdk)** — the handoff SDK, the plane
+- **[SDKs & Packages](/docs/sdks/handoff-sdk)**: the handoff SDK, the plane
   client, the AI SDK / compute adapters, and the package map.
-- **[Self-Hosting](/docs/operations/self-hosting)** — operate the plane and
+- **[Self-Hosting](/docs/operations/self-hosting)**: operate the plane and
   runners, and publish releases.
-- **[API Reference](/docs/api)** — the model-fusion HTTP contract.
+- **[API Reference](/docs/api)**: the model-fusion HTTP contract.

@@ -28,7 +28,7 @@ rt.calls();                    // [{ runId, contractHash, receiptVerified: true,
 ```
 
 `swarmTools(...)` gives a cloud orchestrator harness governed dispatch, status,
-pull, and escalate over a local worker swarm — each worker a signed governed run.
+pull, and escalate over a local worker swarm, with each worker a signed governed run.
 
 ### Managed local models
 
@@ -68,7 +68,7 @@ sandbox.runs();                          // evidence for every command
 
 Each command runs in a fresh governed session materialized from the current
 workspace; continuity flows through the workspace's git history, and the receipts
-— not a long-lived remote process — are what persists.
+and not a long-lived remote process, are what persists.
 
 ## Session isolation
 

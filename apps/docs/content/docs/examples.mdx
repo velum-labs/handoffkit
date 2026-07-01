@@ -7,7 +7,7 @@ The demo suite is the fastest way to understand how the platform packages fit
 together. Each demo is its own self-contained workspace project under
 `examples/`, driven by `examples/manifest.json` and shared helpers in
 `@fusionkit/example-utils`. Most run with an in-process plane + runner and a
-built-in mock agent — no vendor CLIs or API keys.
+built-in mock agent, with no vendor CLIs or API keys.
 
 ## Running demos
 
@@ -26,7 +26,7 @@ Apple Silicon MLX. The manifest labels interactive demos.
 | # | Demo | What it proves |
 | --- | --- | --- |
 | 01 | Governed run | Signed contract → governed session → receipt answering the five questions, verified offline. |
-| 02 | Dry run | The complete disclosure report — including provably denied `.env`/key captures — with nothing moved. |
+| 02 | Dry run | The complete disclosure report, including provably denied `.env`/key captures, with nothing moved. |
 | 03 | Consent + secrets | A secret-releasing run blocks on human approval; the value is injected at runtime and appears in no artifact. |
 | 04 | Egress policy | Fail-closed network policy at contract time, deny-by-default enforcement and evidence at the session boundary. |
 | 05 | Offline verification | Tampered event chains and forged receipts are detected with no trust in the plane. |

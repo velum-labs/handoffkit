@@ -2,8 +2,8 @@
 
 The `fusionkit` CLI is a front door that lets unmodified coding agents
 (Codex, Claude Code, Cursor) use model fusion as their backend. Each incoming
-request is translated into a unified harness run — multiple panel models, each
-in its own git worktree, executing a real coding harness — and the
+request is translated into a unified harness run: multiple panel models, each
+in its own git worktree, executing a real coding harness, and the
 FusionKit-synthesized answer is returned in the tool's native wire protocol.
 
 The tool never learns that fusion happened. It speaks its normal dialect and
@@ -15,21 +15,21 @@ Install the CLI globally and launch your agent backed by fusion:
 
 ```bash
 pnpm add -g @fusionkit/cli           # public npm; installs the `fusionkit` command
-export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...
+export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  GEMINI_API_KEY=...
 cd your-git-repo
 fusionkit codex                      # or: claude | cursor | serve
 ```
 
-`fusionkit codex` spawns everything and launches the agent for you — no manual
+`fusionkit codex` spawns everything and launches the agent for you. There is no manual
 gateway, no separate model servers, no juggling terminals. Omit the tool on a
 TTY to pick interactively. In one command it:
 
-1. starts the model panel — a **cloud** trio by default (one OpenAI + one
-   Anthropic model), or the local MLX trio with `--local` on Apple Silicon,
+1. starts the model panel, a **cloud** three-vendor trio by default (`gpt`,
+   `sonnet`, and `gemini`), or the local MLX trio with `--local` on Apple Silicon,
    all fronted by a **single `fusionkit serve` router** (one process routes every
    panel model by id and also performs synthesis),
 2. starts the Fusion Harness Gateway running the **launched harness** (every
-   panel model runs THROUGH the launched tool — codex / claude / cursor — in its
+   panel model runs THROUGH the launched tool, codex / claude / cursor, in its
    own git worktree, with that harness's real tools + context; only the routed
    model varies, and each run produces a full native **trajectory** reconstructed
    from the gateway wire traffic),
@@ -51,7 +51,7 @@ missing:
   <https://docs.astral.sh/uv/>
 - the **coding agent** you launch (`codex`, `claude`, or `cursor-agent`),
 - **API keys** for the default cloud panel (`OPENAI_API_KEY`,
-  `ANTHROPIC_API_KEY`) — not needed with `--local`,
+  `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`), not needed with `--local`,
 - a **git repository** (run inside it, or pass `--repo`),
 - optionally **[portless](https://github.com/vercel-labs/portless)** `>=0.14`
   (Node `>=24`) for stable named URLs. With it installed, the gateway requires
@@ -64,7 +64,7 @@ missing:
 Fusion operates on **trajectories**, not one-shot patches. Each panel model runs
 the launched harness over the repo and produces a `harness-trajectory.v1`
 (reasoning + tool calls + observations + final output). fusionkit owns no
-verification — any tests the harness runs are just observation steps, never a
+verification. Any tests the harness runs are just observation steps, never a
 pass/fail verdict. FusionKit's trajectory-aware, intent-agnostic synthesizer then
 produces the final response in the request's natural shape and **first person**:
 
@@ -72,8 +72,8 @@ produces the final response in the request's natural shape and **first person**:
 - a planning request gets a plan,
 - a code change gets the concrete edit,
 
-so every way you use the tool works — not just patch-shaped requests. The
-synthesis backend (`fusionkit serve`) is fetched from PyPI via `uvx` — no
+so every way you use the tool works, not just patch-shaped requests. The
+synthesis backend (`fusionkit serve`) is fetched from PyPI via `uvx`, so no
 checkout needed. Pass `--fusionkit-dir` to run a local FusionKit checkout
 instead (a dev override), or `--synthesis-url` to reuse an already-running
 `fusionkit serve`.
@@ -120,8 +120,7 @@ fusionkit codex \
   with `--model-endpoint ID=URL` (repeatable) and `--judge-endpoint URL`.
 
 With SOTA models the coding-harness output becomes genuinely good, and you get
-real cross-vendor diversity (a frontier OpenAI model and a frontier Anthropic
-model, judged).
+real cross-vendor diversity across OpenAI, Anthropic, and Google panel members.
 
 Notes:
 
@@ -130,7 +129,8 @@ Notes:
 - Cursor only needs a logged-in `cursor-agent`; Cursorkit ships bundled as an
   npm dependency, so no separate checkout is required.
 - Small local models produce imperfect patches; fusion quality scales with the
-  panel. The default is a fully real, local, zero-credential path.
+  panel. The default product path is the cloud trio; `--local` is the
+  zero-credential Apple Silicon path.
 
 For full control over the gateway itself (custom backends, ACP, acceptance
 suite), use `fusionkit ensemble gateway` directly as described below.
@@ -229,7 +229,7 @@ claude -p "..." --output-format text
 
 `cursor-agent` does not speak an OpenAI-compatible dialect directly. The
 Cursorkit bridge (`cursor-rpc serve`) intercepts Cursor's backend protocol and
-routes local-model inference to an OpenAI-compatible endpoint — point that
+routes local-model inference to an OpenAI-compatible endpoint. Point that
 endpoint at the gateway:
 
 ```bash

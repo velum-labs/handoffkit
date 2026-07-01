@@ -1,14 +1,12 @@
 /**
- * @fusionkit/session-hermetic — a hermetic session backend built on
- * just-bash: a simulated bash interpreter with a virtual filesystem and
- * interpreter-enforced network allowlists.
+ * @fusionkit/session-hermetic is a hermetic session backend built on just-bash.
  *
- * What this buys over the process backend: there are no real processes or
- * sockets inside the session, so there is nothing to escape with. Egress
- * is enforced by the interpreter (the `curl` builtin only exists for
- * allowlisted origins), not by environment variables a binary could
- * ignore. The trade-off, stated honestly: only the "command" harness runs
- * here — there is no real OS, so vendor CLIs and the node-based mock do not.
+ * just-bash provides a simulated bash interpreter with a virtual filesystem and
+ * interpreter-enforced network allowlists. There are no real processes or
+ * sockets inside the session, so there is nothing to escape with. Egress is
+ * enforced by the interpreter rather than by environment variables a binary
+ * could ignore. The trade-off is explicit: only command harnesses run here
+ * because there is no real OS for vendor CLIs or the node-based mock.
  */
 import type { NetworkPolicy } from "@fusionkit/protocol";
 import type {

@@ -1,3 +1,6 @@
+/**
+ * Tool integration entry point. It exposes the launcher and harness integration contract, registry helpers, process helpers, constants, environment compatibility helpers, and skipped-candidate utilities.
+ */
 export {
   distillLog,
   freePort,

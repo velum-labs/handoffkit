@@ -1,7 +1,7 @@
 # Model catalog & panel configuration
 
-How to choose and configure the models in your ensemble panel — cloud providers,
-any OpenAI-compatible / open-weight endpoint, and local MLX — plus pricing,
+How to choose and configure the models in your ensemble panel: cloud providers,
+any OpenAI-compatible / open-weight endpoint, and local MLX, plus pricing,
 budgets, and the decorrelated-trio guidance.
 
 See also: [coding harness](quickstart-harness.md) ·
@@ -46,7 +46,7 @@ member). Persist any of this in [`.fusionkit/fusion.json`](configuration.md) via
 ## The default cloud trio (decorrelated)
 
 With no `--model` flags and no `--local`, the panel is a genuine **three-vendor
-decorrelated trio** — three independent frontier voices rather than a single
+decorrelated trio**: three independent frontier voices rather than a single
 cross-vendor pair:
 
 | id | model | provider |
@@ -58,7 +58,7 @@ cross-vendor pair:
 It works cross-platform with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and
 `GEMINI_API_KEY` set. A member whose key is missing simply fails its slot;
 survivors are still fused. **Decorrelation guidance:** prefer models from
-*different* vendors/families so their errors are independent — that is what makes
+*different* vendors/families so their errors are independent. That is what makes
 fusion better than any single member.
 
 ## Local MLX (Apple Silicon)
@@ -80,7 +80,7 @@ yet available). `fusionkit doctor` reports per-platform capability.
 
 ## Mixed panels
 
-You can mix substrates — e.g. two cloud frontier models plus one local model:
+You can mix substrates, for example two cloud frontier models plus one local model:
 
 ```bash
 fusionkit codex \

@@ -1,6 +1,6 @@
 # FusionKit kernel migration and cutover plan
 
-Status: product cutover for the runtime kernel introduced in PR #37 — the fusion
+Status: product cutover for the runtime kernel introduced in PR #37. The fusion
 front-door turn is now native (this doc records the plan and its completed
 state).
 
@@ -29,7 +29,7 @@ fusionkit codex / claude / cursor / serve
   -> eventsToSseResponse     -> gateway streaming back to the tool
 ```
 
-This matches the target architecture — one canonical execution plane:
+This matches the target architecture, one canonical execution plane:
 
 ```text
 Surface adapter
@@ -323,7 +323,7 @@ Status in PR #37:
   the wrapper emits a typed `wire_response` artifact (not just a raw `Response`).
 - The gateway's `trajectories:fuse` step runs through the shared
   `createKernelFuseStepRunner` kernel operator (typed request/response wire
-  artifacts) as the product default — the gateway no longer direct-`fetch`es the
+  artifacts) as the product default. The gateway no longer direct-`fetch`es the
   Python step on the product path.
 - Panel capture runs through the kernel (`runFusionPanels` /
   `runFusionPanelWorkflow`).
@@ -336,7 +336,7 @@ Native cutover complete: the `model-gateway` ↔ `ensemble` dependency was inver
 by extracting the runtime substrate into the standalone `@fusionkit/kernel`
 package (both packages now depend on it), so `FusionBackend` composes the request
 and turn from runtime operators directly. Every request is a fully data-driven
-kernel graph — all per-turn inputs travel as a `FrontdoorRequest` artifact and
+kernel graph. All per-turn inputs travel as a `FrontdoorRequest` artifact and
 every side-effecting phase is a method on a stable `FrontdoorServices` object
 (built once), so operators capture no per-turn closures:
 

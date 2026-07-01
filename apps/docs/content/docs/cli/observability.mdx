@@ -6,7 +6,7 @@ description: Watch sessions, trajectories, and the judge with --observe.
 ## The trace dashboard
 
 Pass `--observe` to boot a local dashboard (the **scope** app) that streams live
-fusion-trace events — sessions, environments, per-panel-model trajectories, and
+fusion-trace events: sessions, environments, per-panel-model trajectories, and
 the judge's thinking-to-final flow:
 
 ```bash
@@ -42,6 +42,34 @@ the observability dashboard is not available in this install.
   It is a separate app and is not bundled with the npm package.
   To enable --observe, install its dependencies once: cd <scope-app> && pnpm install
 ```
+
+In this repository, the app lives at `apps/scope`.
+
+```bash
+cd apps/scope
+pnpm install
+pnpm test
+```
+
+When portless is enabled, the dashboard uses a stable local HTTPS name. Without
+portless, FusionKit prints the raw loopback URL. In both cases, the gateway,
+panel runner, Python synthesizer, and dashboard share the same trace id for a
+session.
+
+## Correlating a run
+
+Use the run id or trace id printed by the gateway to connect terminal output,
+session state, and dashboard events. Start with the session list when you are
+debugging after the process exits.
+
+```bash
+fusionkit sessions
+fusionkit sessions show <id>
+```
+
+The session record gives you the tool, panel, turn count, recent activity, and
+cost. The trace dashboard gives you the timing and event-level view for the same
+work.
 
 ## Logs
 

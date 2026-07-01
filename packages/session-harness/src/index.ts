@@ -1,15 +1,12 @@
 /**
- * @fusionkit/session-harness — drives vendor agent harnesses through the AI SDK
- * harness abstraction (`HarnessAgent`) inside a sandbox, under the same
- * governed-session contract as every other backend: workspace staged in,
- * structured evidence in the receipt, secrets via the broker.
+ * @fusionkit/session-harness drives vendor agent harnesses through the AI SDK
+ * harness abstraction inside a sandbox.
  *
- * The generic backend is binding-driven. Two bindings ship here:
- *
- *  - `claudeCodeBinding` / `aiSdkHarnessBackend`: Claude Code in a Vercel
- *    Sandbox microVM (vercel-sandbox tier).
- *  - `piBinding` / `piHarnessBackend`: Pi on a local just-bash sandbox driving
- *    a local model (hermetic tier) — the cheap worker for a local swarm.
+ * It runs under the same governed-session contract as every other backend:
+ * workspace staged in, structured evidence in the receipt, and secrets supplied
+ * through the broker. The generic backend is binding-driven. Shipped bindings
+ * cover Claude Code in a Vercel Sandbox microVM and Pi on a local just-bash
+ * sandbox for a cheap local swarm worker.
  */
 export { AiSdkHarnessBackend, harnessBackend, isAgentRunFor } from "./backend.js";
 export type {

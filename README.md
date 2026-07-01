@@ -1,6 +1,6 @@
 # FusionKit
 
-**Run ensembles of local and cloud models** — for normal inference *and* behind
+**Run ensembles of local and cloud models** for normal inference *and* behind
 your coding agent.
 
 FusionKit fans a single request out across a panel of models (local MLX, plus
@@ -9,7 +9,7 @@ and synthesizes the results into one answer. You can use it two ways:
 
 - as a **raw inference endpoint** (`fusionkit serve`) that any OpenAI- or
   Anthropic-compatible client can point at, and
-- as the **backend for an unmodified coding harness** — `fusionkit codex`,
+- as the **backend for an unmodified coding harness**: `fusionkit codex`,
   `fusionkit claude`, `fusionkit cursor` wire Codex, Claude Code, and Cursor to
   the ensemble over their own native wire protocols, so the tool never learns
   fusion happened.
@@ -23,22 +23,22 @@ under the hood.
 > is the product narrative and quick tour; the maintainer docs are in
 > [`docs/`](docs).
 
-## Install — one install story
+## Install: one install story
 
 ```bash
 pnpm add -g @fusionkit/cli           # or: npm i -g @fusionkit/cli  (installs the `fusionkit` command)
 fusionkit setup                      # pre-provision the Python engine so the first run is instant
 ```
 
-**Prerequisites:** [`uv`](https://docs.astral.sh/uv/) (ships `uvx`), `git`, and —
-for the coding-harness path — the agent CLI you want (`codex` / `claude` /
+**Prerequisites:** [`uv`](https://docs.astral.sh/uv/) (ships `uvx`), `git`, and,
+for the coding-harness path, the agent CLI you want (`codex` / `claude` /
 `cursor-agent`). No separate Python install: the `fusionkit serve` synthesizer is
 fetched from PyPI via `uvx` and **auto-provisioned**. `fusionkit setup` (or
 `fusionkit doctor --provision`) warms that `uvx` environment up front so the
 first real run doesn't pay a cold-start; without it, the engine provisions
 on first use. Prefer not to install globally? Use `npx @fusionkit/cli <command>`.
 
-## Quickstart — one command
+## Quickstart: one command
 
 Back a coding agent with a model ensemble:
 
@@ -48,7 +48,7 @@ cd your-git-repo
 fusionkit codex                      # or: claude | cursor | serve   (add --local for an Apple-Silicon MLX panel)
 ```
 
-`fusionkit codex` spawns everything for you — the model panel, a single
+`fusionkit codex` spawns everything for you: the model panel, a single
 `fusionkit serve` router that fronts each model and performs synthesis, the
 harness gateway, and Codex pre-wired to it. One `Ctrl+C` tears the whole stack
 down. See the
@@ -60,13 +60,13 @@ git, and per-platform capability), and `fusionkit init` to scaffold a committed
 
 ### Quickstarts
 
-- [Inference endpoint](docs/quickstart-inference.md) — `fusionkit serve` as an
+- [Inference endpoint](docs/quickstart-inference.md): `fusionkit serve` as an
   OpenAI-compatible ensemble endpoint, with curl streaming + tool-calling.
-- [Coding harness](docs/quickstart-harness.md) — `fusionkit codex` / `claude` /
+- [Coding harness](docs/quickstart-harness.md): `fusionkit codex` / `claude` /
   `cursor` (+ `--ide`), the auto-wiring, and fused vs. passthrough models.
-- [Rate-limit handoff](docs/quickstart-handoff.md) — how `--on-rate-limit` works,
+- [Rate-limit handoff](docs/quickstart-handoff.md): how `--on-rate-limit` works,
   what failover looks like, and one-tap resume.
-- [Model catalog](docs/model-catalog.md) — choosing/configuring panel models
+- [Model catalog](docs/model-catalog.md): choosing/configuring panel models
   (cloud, open-weight, local MLX), pricing/`--budget`, decorrelated-trio guidance.
 
 > **Cross-platform.** Cloud ensembles run on Linux, Windows, and macOS. Local MLX
@@ -84,7 +84,7 @@ The ensemble loop is real end-to-end today, with these headline features:
 | **Rate-limit / credit handoff** | When a vendor passthrough model hits a 429 / quota / billing error, the turn is transparently rerouted to the ensemble. `--on-rate-limit fusion\|passthrough\|fail`. | [cli](docs/cli.md), [config](docs/configuration.md) |
 | **Durable, resumable sessions** | Sessions persist under `~/.fusionkit/sessions/`; resume with `--resume <id>` / `--continue`, inspect with `fusionkit sessions`. | [cli](docs/cli.md#durable-sessions---resume----continue) |
 | **Cost metering + budgets** | Per-turn token + USD accounting, a running session total, and an optional `--budget <usd>` cap. | [cli](docs/cli.md#cost-metering-and-budgets---budget) |
-| **Turnkey Cursor IDE** | `fusionkit cursor --ide` wires the Cursor IDE to the gateway through a local desktop proxy — no manual public tunnel. | [cli](docs/cli.md) |
+| **Turnkey Cursor IDE** | `fusionkit cursor --ide` wires the Cursor IDE to the gateway through a local desktop proxy with no manual public tunnel. | [cli](docs/cli.md) |
 | **One config source of truth** | A committed `.fusionkit/fusion.json` (+ `prompts/*.md`); the Python router YAML is *derived* from it via `fusionkit config export-yaml`. | [config](docs/configuration.md) |
 
 ## The CLI surface
@@ -108,16 +108,16 @@ Full reference: [docs/cli.md](docs/cli.md).
 
 Two cooperating processes:
 
-1. **`fusionkit serve`** (Python, PyPI `fusionkit`) — the model **router + fusion
+1. **`fusionkit serve`** (Python, PyPI `fusionkit`): the model **router + fusion
    engine**: fronts every panel model by id (passthrough) and performs
    judge + synthesis (`/v1/fusion/trajectories:fuse`, `/v1/chat/completions`).
    This is the inference brain, and the documented raw endpoint.
-2. **`@fusionkit/cli`** (Node) — the **harness gateway + UX**: auto-wires
+2. **`@fusionkit/cli`** (Node): the **harness gateway + UX**: auto-wires
    Codex / Claude / Cursor, manages per-model git worktrees, spawns the Python
    router via `uvx`, and owns onboarding, config, sessions, and model management.
 
 Each panel model runs the launched harness in its own lightweight git worktree
-(parallel harnesses editing one repo — not VM isolation), producing a full
+(parallel harnesses editing one repo, not VM isolation), producing a full
 native **trajectory**; the synthesizer fuses those trajectories into one answer
 in the request's natural shape. See
 [Fusion Harness Gateway](docs/fusion-harness-gateway.md) and
@@ -127,7 +127,7 @@ in the request's natural shape. See
 
 | Package | What it is |
 | --- | --- |
-| [`@fusionkit/cli`](packages/cli) | The `fusionkit` CLI — the single front door and primary product surface. |
+| [`@fusionkit/cli`](packages/cli) | The `fusionkit` CLI, the single front door and primary product surface. |
 | [`@fusionkit/ensemble`](packages/ensemble) | The ensemble run engine: per-model worktrees, harness execution, judge synthesis, trajectory fusion. |
 | [`@fusionkit/model-gateway`](packages/model-gateway) | The harness gateway: dialect translation (OpenAI Responses / Anthropic Messages / OpenAI Chat), streaming, durable session store, cost metering, rate-limit handoff. |
 | [`@fusionkit/tools`](packages/tools) + [`tool-codex`](packages/tool-codex) / [`tool-claude`](packages/tool-claude) / [`tool-cursor`](packages/tool-cursor) / [`tool-opencode`](packages/tool-opencode) | The per-harness adapters that drive each vendor CLI. |
@@ -177,17 +177,17 @@ exact-pinned versions on the explicit allowlist in
 reviewed versions plus the `.npmrc` supply-chain controls (`save-exact`,
 `ignore-scripts`, `verify-store-integrity`, frozen-lockfile installs, and a
 24-hour `minimum-release-age`), not from the absence of dependencies. Bumping a
-dependency means updating the allowlist pin — the review checkpoint.
+dependency means updating the allowlist pin, the review checkpoint.
 
 ## Out of product scope
 
 These remain in the repository (and are still published from it for now) but are
 **not part of the FusionKit ensemble product**:
 
-- **Governance plane** — `@fusionkit/plane`, `@fusionkit/runner`,
+- **Governance plane**: `@fusionkit/plane`, `@fusionkit/runner`,
   `@fusionkit/sdk`, `@fusionkit/handoff` (contracts, receipts, policy,
   approvals, signed provenance).
-- **VM / sandbox isolation** — `@fusionkit/session-hermetic`,
+- **VM / sandbox isolation**: `@fusionkit/session-hermetic`,
   `@fusionkit/session-vercel-sandbox`, `@fusionkit/session-harness`,
   `@fusionkit/adapter-compute`.
 

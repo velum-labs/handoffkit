@@ -1,3 +1,12 @@
+"""Public API for the FusionKit Python engine.
+
+The package re-exports the configuration models, provider clients, fusion engine,
+judge synthesizer, run manager, contract models, artifact helpers, trace helpers,
+and trajectory producers used by the Python server, CLI, benchmarks, and tests.
+Keep this module documented because generated API docs read this docstring and
+the `__all__` list as the supported Python surface.
+"""
+
 from fusionkit_core.artifacts import LocalArtifactStore, hash_bytes, hash_text
 from fusionkit_core.clients import (
     AnthropicModelClient,

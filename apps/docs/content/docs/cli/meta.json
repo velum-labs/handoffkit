@@ -1,4 +1,4 @@
 {
   "title": "fusionkit CLI",
-  "pages": ["commands", "cost-and-models", "observability", "troubleshooting"]
+  "pages": ["commands", "cost-and-models", "models-and-panels", "observability", "troubleshooting"]
 }

@@ -1,23 +1,15 @@
 /**
- * @fusionkit/session-vercel-sandbox — a session backend that runs each
- * governed session inside a Vercel Sandbox (a Firecracker microVM).
+ * @fusionkit/session-vercel-sandbox runs governed sessions inside Vercel
+ * Sandbox Firecracker microVMs.
  *
- * This is the strongest isolation tier in the repo: VM-level separation
- * on the same infrastructure that powers Vercel's build system, with
- * domain-based egress policy applied at the VM boundary rather than via
- * environment variables a binary could ignore.
+ * This is the strongest isolation tier in the repository: VM-level separation
+ * with domain-based egress policy applied at the VM boundary. It compiles
+ * against the real @vercel/sandbox types, but live execution requires Vercel
+ * credentials. Without credentials, vercelSandboxBackend still constructs and
+ * execute throws a clear capability error.
  *
- * Status: experimental and integration-gated. It compiles against the
- * real @vercel/sandbox types, but running it requires Vercel credentials
- * (VERCEL_TOKEN / VERCEL_TEAM_ID / VERCEL_PROJECT_ID, or an OIDC token in
- * a Vercel environment). Without them, `vercelSandboxBackend()` still
- * constructs; `execute` throws a clear capability error. The kernel and
- * the other backends do not depend on it.
- *
- * This module also owns the sandbox-shaped helpers (file listing, shell
- * quoting, mirror-back writes, credential resolution) shared with
- * `@fusionkit/session-harness`, which drives the same microVM tier through
- * the AI SDK harness bridge.
+ * This module also owns sandbox-shaped helpers for file listing, shell quoting,
+ * mirror-back writes, credential resolution, and network policy mapping.
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";

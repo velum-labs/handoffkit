@@ -1,12 +1,12 @@
 /**
- * @fusionkit/adapter-ai-sdk — the AI SDK side of Warrant for app-owned loops.
+ * @fusionkit/adapter-ai-sdk is the AI SDK side of FusionKit for app-owned loops.
  *
- * The application keeps its own `generateText`/`streamText` loop and its own
- * model; Warrant governs the execution boundary. `remoteTools(...)` returns
- * AI SDK-compatible tools whose calls run as signed contracts in governed
- * runner sessions and return with offline-verifiable receipts. The model
- * surfaces (`withModel`, `routedModel`, `mlxServer`) route the caller's own
- * loop across local and cloud models with every decision recorded.
+ * The application keeps its own generateText or streamText loop and its own
+ * model; FusionKit governs the execution boundary. remoteTools returns AI
+ * SDK-compatible tools whose calls run as signed contracts in governed runner
+ * sessions and return with offline-verifiable receipts. The model surfaces
+ * withModel, routedModel, and mlxServer route the caller's own loop across
+ * local and cloud models with every decision recorded.
  */
 export { remoteTools } from "./remote-tools.js";
 export type {

@@ -20,7 +20,7 @@ benchmark tooling. Consume a versioned protocol artifact from this repo instead.
 
 The initial IDL prepares these minimum service seams:
 
-- `HarnessExecutorService`: FusionKit evals ask HandoffKit to execute coding tasks.
+- `HarnessExecutorService`: FusionKit evals ask a harness executor to execute coding tasks.
 - `CursorHarnessService`: CursorKit maps adapter output into harness contract records.
 - `MlxProviderService`: MLX provider adapters describe model capabilities and model-call
   metadata.

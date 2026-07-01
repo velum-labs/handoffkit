@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+/**
+ * Entry point for the FusionKit command line package. The executable itself lives in src/index.ts, while cli.ts builds the Commander command tree.
+ */
 import "./quiet-warnings.js";
 import { PolicyDeniedError } from "@fusionkit/protocol";
 

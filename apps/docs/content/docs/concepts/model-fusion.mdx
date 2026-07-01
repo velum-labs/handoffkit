@@ -5,8 +5,8 @@ description: How a panel of models and a judge become one coding agent.
 
 The Fusion Harness Gateway is the front door that lets unmodified coding agents
 (Codex, Claude Code, Cursor) use model fusion as their backend. Each incoming
-request is translated into a unified harness run — multiple panel models, each in
-its own git worktree, executing a real coding harness — and the synthesized
+request is translated into a unified harness run: multiple panel models, each in
+its own git worktree, executing a real coding harness, and the synthesized
 answer is returned in the tool's native wire protocol.
 
 The tool never learns that fusion happened. It speaks its normal dialect and gets
@@ -24,21 +24,21 @@ the request's natural shape and first person:
 - a planning request gets a plan,
 - a code change gets the concrete edit (with tests run as verification).
 
-So every way you use the tool works — not just patch-shaped requests.
+So every way you use the tool works, not just patch-shaped requests.
 
 ## Judge-streamed fusion
 
 The judge is the front-door agent. A panel of models each solves the task once to
 produce candidate trajectories, then the judge runs as a streaming, tool-calling
 agent whose trajectory the user's own harness executes. The judge reacts to what
-the harness observes and iterates until the task is done — there is no separate
+the harness observes and iterates until the task is done. There is no separate
 apply/verify/repair step in the gateway, because iteration is the harness's job.
 
-- **CandidateTrajectory** — one panel model's full reasoning / tool-call /
+- **CandidateTrajectory**: one panel model's full reasoning / tool-call /
   observation / result for the task (the reference solutions).
-- **Consolidated trajectory** — the live conversation the harness resends each
+- **Consolidated trajectory**: the live conversation the harness resends each
   turn (the judge's prior steps plus the tool results the harness fed back).
-- **FusionSession** — per front-door conversation: the candidate trajectories
+- **FusionSession**: per front-door conversation: the candidate trajectories
   (produced once) plus the running consolidated trajectory.
 
 When the judge emits a step with no tool calls, that is the final answer and the

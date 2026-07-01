@@ -1,3 +1,6 @@
+/**
+ * FusionKit ensemble runtime entry point. It exposes harness execution, panel workflows, judge synthesis, runtime-kernel workflows, operators, schedulers, worktrees, isolation helpers, and tool execution.
+ */
 export { createCommandHarness } from "./command.js";
 export type { CommandHarnessOptions } from "./command.js";
 export { resolveCursorkitCli } from "./cursorkit-path.js";

@@ -214,8 +214,8 @@ work starts. Use `"advisory"` when only observed usage should count.
 
 Evidence is not success. Operators can record:
 
-- `Observation` — raw evidence from tests, validators, tools, judges, rankers, etc.
-- `Signal` — calibrated score/confidence for a target artifact.
+- `Observation`: raw evidence from tests, validators, tools, judges, rankers, etc.
+- `Signal`: calibrated score/confidence for a target artifact.
 
 Signals carry `leakageRisk`. Public signals may guide runtime scheduling. Private signals are
 recorded in outcomes for evaluation and replay but are hidden from scheduler-visible state.

@@ -1,13 +1,13 @@
 /**
- * @fusionkit/handoff — the continuation-first SDK. Start work wherever it
- * naturally begins, continue it on a governed runner when conditions
- * change, preserve state across the boundary, and prove what moved, why
- * it moved, who approved it, and how to resume.
+ * @fusionkit/handoff is the continuation-first SDK.
  *
- * Everything here composes Warrant primitives and nothing else: a
- * continuation is a signed run contract, the moved state is a
- * content-addressed envelope pinned by that contract, and the result is
- * an offline-verifiable receipt.
+ * Start work wherever it naturally begins, continue it on a governed runner
+ * when conditions change, preserve state across the boundary, and prove what
+ * moved, why it moved, who approved it, and how to resume.
+ *
+ * Everything here composes FusionKit governance primitives. A continuation is a
+ * signed run contract, the moved state is a content-addressed envelope pinned
+ * by that contract, and the result is an offline-verifiable receipt.
  */
 export { defineHandoffConfig, Handoff, handoff } from "./handoff.js";
 export type {

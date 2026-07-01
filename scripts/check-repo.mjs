@@ -109,6 +109,7 @@ const requiredFiles = [
   "scripts/check-model-fusion-protocol.mjs",
   "scripts/check-generated-model-fusion-sdk.mjs",
   "scripts/generate-model-fusion-openapi-sdk.mjs",
+  "scripts/generate-code-docs.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "scripts/release.mjs",
   "scripts/monorepo.mjs",
@@ -117,6 +118,7 @@ const requiredFiles = [
   "release/desired.json",
   "docs/release-publishing.md",
   "docs/releasing.md",
+  "docs/generated/code-api.md",
   "CHANGELOG.md",
   "examples/manifest.json",
   "packages/example-utils/src/manifest.ts",
@@ -216,6 +218,21 @@ if (modelFusionProtocolCheck.stderr.trim()) {
 }
 if (modelFusionProtocolCheck.status !== 0) {
   fail("model-fusion protocol check failed");
+}
+
+const generatedCodeDocsCheck = spawnSync(
+  process.execPath,
+  ["scripts/generate-code-docs.mjs", "--check"],
+  { encoding: "utf8" }
+);
+if (generatedCodeDocsCheck.stdout.trim()) {
+  console.log(generatedCodeDocsCheck.stdout.trim());
+}
+if (generatedCodeDocsCheck.stderr.trim()) {
+  console.error(generatedCodeDocsCheck.stderr.trim());
+}
+if (generatedCodeDocsCheck.status !== 0) {
+  fail("generated code documentation check failed");
 }
 
 const releasePublishCheck = spawnSync(

@@ -90,6 +90,109 @@ Evidence sources record raw observations. Calibrators turn observations into
 signals. Public signals can guide runtime decisions; private labels are kept out
 of scheduler-visible state and belong in outcome/replay data.
 
+A good operator should declare whether its output is public evidence, private
+evidence, or a decision artifact. Public evidence can be shown to schedulers and
+downstream operators. Private evidence belongs in replay and outcome records, not
+in scheduler-visible state. This distinction matters when a workflow uses test
+results, benchmark labels, or provider-specific diagnostics that should not leak
+into a model prompt.
+
+## When to use the kernel
+
+Use the CLI and gateway when you want the normal product behavior: launch a
+coding agent, run a panel, synthesize a response, and persist session state. Use
+the kernel when you are building or testing a new fusion workflow and need
+explicit operators, typed artifacts, scheduler behavior, and replay records.
+
+The kernel is especially useful for:
+
+| Task | Kernel value |
+| --- | --- |
+| Direct model fast path | Prove that a workflow performs exactly one model call. |
+| Panel capture | Capture candidate artifacts before ranking or synthesis. |
+| Rank and fuse | Separate candidate generation from ranking and final synthesis. |
+| Execution-select-repair | Use execution evidence to choose a candidate and repair it. |
+| Offline workflow search | Compare scheduler policies without changing the gateway entry point. |
+
+## Recipe: panel capture
+
+Panel capture takes one task artifact and produces candidate artifacts. Use it
+when you want to inspect or store the independent panel outputs before a judge or
+synthesizer runs.
+
+```ts
+import {
+  panelCaptureWorkflow,
+  registerBuiltInWorkflows,
+  runWorkflow
+} from "@fusionkit/ensemble";
+
+registerBuiltInWorkflows();
+
+const result = await runWorkflow("panel-capture", {
+  task: { prompt: "Explain the release process." },
+  models: [{ id: "gpt" }, { id: "sonnet" }, { id: "gemini" }],
+  runner: async ({ model }) => ({
+    modelId: model.id,
+    content: `candidate from ${model.id}`
+  })
+});
+
+console.log(result.status);
+```
+
+## Recipe: rank and fuse
+
+Rank and fuse is the pattern to reach for when you want separate phases for
+candidate generation, pairwise or scalar ranking, candidate selection, and final
+fusion. This keeps ranking evidence inspectable instead of burying it inside one
+large synthesis call.
+
+```ts
+import {
+  rankFuseWorkflow,
+  registerBuiltInWorkflows,
+  runWorkflow
+} from "@fusionkit/ensemble";
+
+registerBuiltInWorkflows();
+
+await runWorkflow("rank-fuse", {
+  task: { prompt: "Design a retry policy for provider failures." },
+  models: [{ id: "gpt" }, { id: "sonnet" }, { id: "gemini" }],
+  panel: async ({ model }) => ({ modelId: model.id, content: "candidate" }),
+  rank: async ({ candidates }) => ({ candidates, scores: [] }),
+  fuse: async ({ selected }) => ({ content: selected?.content ?? "fallback" })
+});
+```
+
+## Recipe: execution-select-repair
+
+Execution-select-repair is useful for coding and benchmark tasks where execution
+evidence matters. The workflow generates candidates, collects evidence, selects
+the most promising candidate, and repairs it when the repair predicate says the
+candidate is incomplete.
+
+```ts
+import {
+  executionSelectRepairWorkflow,
+  registerBuiltInWorkflows,
+  runWorkflow
+} from "@fusionkit/ensemble";
+
+registerBuiltInWorkflows();
+
+await runWorkflow("execution-select-repair", {
+  task: { prompt: "Fix the parser and run the focused tests." },
+  models: [{ id: "gpt" }, { id: "sonnet" }],
+  panel: async ({ model }) => ({ modelId: model.id, content: "candidate" }),
+  evidence: async () => ({ observations: [] }),
+  selector: async ({ candidates }) => ({ candidateId: candidates[0]?.id }),
+  repairWhen: async () => true,
+  repair: async ({ candidate }) => candidate
+});
+```
+
 ## Production status
 
 The production gateway uses the kernel for panel capture today. The live
@@ -98,8 +201,11 @@ Python synthesizer path. The workflow registry is the migration point for moving
 more flows behind explicit workflow IDs while preserving current gateway
 behavior.
 
-## More
+## Demo
 
-- Repo guide: `docs/fusion/runtime-kernel.md`
-- Recipes: `docs/fusion/runtime-recipes.md`
-- Demo: `pnpm demo 15`
+Run the runtime-kernel example from the repository root:
+
+```bash
+pnpm build
+pnpm demo runtime-kernel
+```

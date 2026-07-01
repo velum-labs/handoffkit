@@ -32,11 +32,11 @@ visible in plans for version awareness, never published by this tool.
 
 ## State files
 
-- `release/workspace.release.json` — static topology (repos, ecosystems, tags,
+- `release/workspace.release.json`: static topology (repos, ecosystems, tags,
   publish workflows, version sources, dependency edges, tracked surfaces).
-- `release/desired.json` — target version per unit (the thing you edit).
-- `release/state.json` — last-applied cache, reconciled by `refresh`.
-- `release/.plans/*.plan.json` — generated plan artifacts (gitignored).
+- `release/desired.json`: target version per unit (the thing you edit).
+- `release/state.json`: last-applied cache, reconciled by `refresh`.
+- `release/.plans/*.plan.json`: generated plan artifacts (gitignored).
 
 ## Workflow
 
@@ -56,7 +56,7 @@ node scripts/release.mjs apply --auto-approve
 
 `apply` walks the DAG: for each releasing unit it propagates the protocol pin
 (if applicable), bumps versions, updates `CHANGELOG.md` (handoffkit), commits
-(staging only the files it changed — never `git add -A`), pushes, then either
+(staging only the files it changed, never `git add -A`), pushes, then either
 creates a published GitHub Release (handoffkit, cursorkit, fusionkit-pypi,
 mlx-lm) or pushes the `model-fusion-protocol-v*` tag, and waits for the publish
 workflow before starting dependents. Before mutating each unit it asserts a
