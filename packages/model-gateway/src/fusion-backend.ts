@@ -44,6 +44,7 @@ import type { WireTrajectory } from "@fusionkit/protocol";
 import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
+import { runFusionFrontdoorTurn } from "./frontdoor/workflow.js";
 import {
   addTurnCost,
   emptySessionCost,
@@ -1130,90 +1131,103 @@ export class FusionBackend implements Backend {
       return candidates;
     };
 
-    // Non-streaming: the panel phase can block before the single JSON reply.
+    // Non-streaming: run the turn as the `fusion-frontdoor-turn` kernel graph
+    // (panel -> fuse -> finalize). The runtime owns admission, provenance, and
+    // trace; these closures own the wire (panel, fuse step) and finalization
+    // (failover notice, cost metering, judge.final trace).
     if (!streaming) {
-      let candidates: WireTrajectory[];
-      try {
-        candidates = await resolveCandidates();
-      } catch (error) {
-        this.#evictTurn(session, turn);
-        console.error(`fusion: panel phase failed: ${errorText(error)}`);
-        return jsonError(502, errorText(error));
-      }
-      emitJudgeRequest(candidates);
-      const response = await this.#runFuseStep({
-        stepUrl: this.#stepUrl,
-        headers,
-        body: buildStepBody(candidates),
-        signal: withDeadline(signal, this.#stepTimeoutMs),
-        streaming
-      });
-      // Failover handoff: prepend the notice to the single fused answer so the
-      // user sees why the turn moved to the ensemble. Consumes the body, so this
-      // returns before the (clone-based) trace capture below.
-      if (opts.notice !== undefined) {
-        if (!response.ok) return response;
-        let payload: Record<string, unknown>;
-        try {
-          payload = (await response.json()) as Record<string, unknown>;
-        } catch {
-          return jsonError(502, "fusion failover produced an unreadable response");
-        }
-        const choice = (Array.isArray(payload.choices) ? payload.choices[0] : undefined) as
-          | { message?: { content?: unknown } }
-          | undefined;
-        if (choice?.message !== undefined) {
-          const existing = typeof choice.message.content === "string" ? choice.message.content : "";
-          const merged = `${opts.notice}${existing}`;
-          choice.message.content = merged;
-          emitJudgeFinal({ httpStatus: 200, content: merged });
-        }
-        this.#meter(sessionKey, fusedCostModel, parseUsage(payload.usage), sessionTraceId, judgeSpan);
-        return new Response(JSON.stringify(payload), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
-      }
-      if (traceEnabled) {
-        // Capture the judge's output without consuming the piped response.
-        const clone = response.clone();
-        void (async () => {
+      const finalizeNonStreaming = async (response: Response): Promise<Response> => {
+        // Failover handoff: prepend the notice to the single fused answer so the
+        // user sees why the turn moved to the ensemble. Consumes the body, so
+        // this returns before the (clone-based) trace capture below.
+        if (opts.notice !== undefined) {
+          if (!response.ok) return response;
+          let payload: Record<string, unknown>;
           try {
-            if (!clone.ok) {
-              emitJudgeFinal({ httpStatus: clone.status, error: (await clone.text()).slice(0, 2000) });
-              return;
-            }
-            const judged = (await clone.json()) as {
-              choices?: Array<{ message?: { content?: string; tool_calls?: unknown }; finish_reason?: string }>;
-              usage?: unknown;
-              fusion?: unknown;
-            };
-            const choice = judged.choices?.[0];
-            const message = choice?.message;
-            const content = typeof message?.content === "string" ? message.content : undefined;
-            const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
-            if (isTerminalJudgeStep(toolCalls, choice?.finish_reason)) {
-              const synthesis = synthesisOf(judged.fusion);
-              emitJudgeFinal({
-                httpStatus: clone.status,
-                ...(content !== undefined ? { content } : {}),
-                ...(synthesis !== undefined ? { synthesis } : {}),
-                ...(judged.usage !== undefined ? { usage: judged.usage } : {})
-              });
-            } else {
-              emitJudgeStep({
-                ...(content !== undefined ? { content } : {}),
-                toolCalls,
-                ...(judged.usage !== undefined ? { usage: judged.usage } : {})
-              });
-            }
+            payload = (await response.json()) as Record<string, unknown>;
           } catch {
-            // best-effort judge.final
+            return jsonError(502, "fusion failover produced an unreadable response");
           }
-        })();
+          const choice = (Array.isArray(payload.choices) ? payload.choices[0] : undefined) as
+            | { message?: { content?: unknown } }
+            | undefined;
+          if (choice?.message !== undefined) {
+            const existing = typeof choice.message.content === "string" ? choice.message.content : "";
+            const merged = `${opts.notice}${existing}`;
+            choice.message.content = merged;
+            emitJudgeFinal({ httpStatus: 200, content: merged });
+          }
+          this.#meter(sessionKey, fusedCostModel, parseUsage(payload.usage), sessionTraceId, judgeSpan);
+          return new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+        if (traceEnabled) {
+          // Capture the judge's output without consuming the piped response.
+          const clone = response.clone();
+          void (async () => {
+            try {
+              if (!clone.ok) {
+                emitJudgeFinal({ httpStatus: clone.status, error: (await clone.text()).slice(0, 2000) });
+                return;
+              }
+              const judged = (await clone.json()) as {
+                choices?: Array<{ message?: { content?: string; tool_calls?: unknown }; finish_reason?: string }>;
+                usage?: unknown;
+                fusion?: unknown;
+              };
+              const choice = judged.choices?.[0];
+              const message = choice?.message;
+              const content = typeof message?.content === "string" ? message.content : undefined;
+              const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+              if (isTerminalJudgeStep(toolCalls, choice?.finish_reason)) {
+                const synthesis = synthesisOf(judged.fusion);
+                emitJudgeFinal({
+                  httpStatus: clone.status,
+                  ...(content !== undefined ? { content } : {}),
+                  ...(synthesis !== undefined ? { synthesis } : {}),
+                  ...(judged.usage !== undefined ? { usage: judged.usage } : {})
+                });
+              } else {
+                emitJudgeStep({
+                  ...(content !== undefined ? { content } : {}),
+                  toolCalls,
+                  ...(judged.usage !== undefined ? { usage: judged.usage } : {})
+                });
+              }
+            } catch {
+              // best-effort judge.final
+            }
+          })();
+        }
+        await this.#meterResponseClone(response, sessionKey, fusedCostModel, sessionTraceId, judgeSpan);
+        return response;
+      };
+
+      const outcome = await runFusionFrontdoorTurn(
+        {
+          resolveCandidates,
+          runFuseStep: async (candidates) => {
+            emitJudgeRequest([...candidates]);
+            return this.#runFuseStep({
+              stepUrl: this.#stepUrl,
+              headers,
+              body: buildStepBody([...candidates]),
+              signal: withDeadline(signal, this.#stepTimeoutMs),
+              streaming: false
+            });
+          },
+          finalize: finalizeNonStreaming
+        },
+        { runId: `${session.traceId}:t${turn}` }
+      );
+      if (outcome.kind === "panel_error") {
+        this.#evictTurn(session, turn);
+        console.error(`fusion: panel phase failed: ${errorText(outcome.error)}`);
+        return jsonError(502, errorText(outcome.error));
       }
-      await this.#meterResponseClone(response, sessionKey, fusedCostModel, sessionTraceId, judgeSpan);
-      return response;
+      return outcome.response;
     }
 
     // Streaming: return immediately with a live SSE stream so the caller's HTTP

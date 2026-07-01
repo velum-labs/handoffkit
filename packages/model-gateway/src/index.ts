@@ -19,6 +19,17 @@ export { joinPath, OpenAiBackend } from "./backend.js";
 export type { Backend, BackendRequestOptions, OpenAiBackendOptions } from "./backend.js";
 export { FusionBackend } from "./fusion-backend.js";
 export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";
+export {
+  FrontdoorArtifactTypes,
+  FrontdoorOperatorKinds,
+  FrontdoorPanelError,
+  frontdoorFinalizeOperator,
+  frontdoorFuseOperator,
+  frontdoorPanelOperator
+} from "./frontdoor/operators.js";
+export type { CandidateSetValue, FrontdoorFusionTurn } from "./frontdoor/operators.js";
+export { FUSION_FRONTDOOR_TURN_WORKFLOW, runFusionFrontdoorTurn } from "./frontdoor/workflow.js";
+export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";
 export type {
   ChatMessageLike,
   FuseStepRunInput,
