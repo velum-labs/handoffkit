@@ -5,13 +5,14 @@ import hashlib
 import json
 import os
 import shlex
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, cast
 
 import typer
 import uvicorn
 from fusionkit_core.artifacts import LocalArtifactStore
-from fusionkit_core.clients import build_clients
+from fusionkit_core.clients import ChatClient, build_clients
 from fusionkit_core.config import (
     EndpointAuth,
     FusionConfig,
@@ -134,9 +135,9 @@ app.add_typer(auth_app, name="auth")
 
 
 def _legacy_kernel(
-    config: FusionConfig, clients: dict[str, object], run_root: Path
+    config: FusionConfig, clients: Mapping[str, ChatClient], run_root: Path
 ) -> FusionKernel:
-    engine = FusionEngine(config=config, clients=clients)  # type: ignore[arg-type]
+    engine = FusionEngine(config=config, clients=clients)
     manager = FusionRunManager(
         engine,
         FileSystemRunStore(run_root),

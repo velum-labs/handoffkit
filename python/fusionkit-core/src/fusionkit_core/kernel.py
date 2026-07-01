@@ -4,11 +4,11 @@ from collections.abc import AsyncIterator, Sequence
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
 from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
+from fusionkit_core.contracts import FusionRunRequestV1
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import FuseResult
-from fusionkit_core.run import CreateRunResult, FusionRunManager
+from fusionkit_core.run import CreateRunResult, FusionRunManager, NativeRunError
 from fusionkit_core.run_models import (
-    FusionRunRequestV1,
     RunEventPage,
     RunInspection,
     RunStateSummary,
@@ -81,7 +81,7 @@ class FusionKernel:
 
     def submit_tool_result(
         self, run_id: str, submission: ToolResultSubmission
-    ) -> RunInspection | object:
+    ) -> RunInspection | NativeRunError:
         return self._runs.submit_tool_result(run_id, submission)
 
     async def run_step(
