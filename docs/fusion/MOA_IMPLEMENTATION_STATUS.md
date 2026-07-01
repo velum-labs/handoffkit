@@ -83,13 +83,16 @@ This document tracks the implementation status of the architecture in `docs/fusi
 
 ## Partially integrated
 
+- The fusion front-door gateway turn is kernel-native: `FusionBackend` dispatches each turn as a
+  `fusion-frontdoor-turn` / `fusion-passthrough-turn` runtime graph (see Known limitations).
 - Production `runFusionPanels` uses the runtime kernel for panel capture.
 - `runFusionPanelWorkflow` exposes the runtime result for callers needing traces/outcomes/replay.
-- Product Node backends for local and fusion-step gateways enter the kernel through
-  compatibility backend operators while preserving legacy behavior.
+- Local direct and MLX/Codex harness leaf gateways enter the kernel through the `KernelBackend`
+  compatibility wrapper (those backends are not yet kernel-native).
 - Python server routes enter a Python `FusionKernel` compatibility wrapper around
   `FusionEngine` and `FusionRunManager`.
-- Live gateway synthesis still posts to `trajectories:fuse` through the gateway/Python synthesizer path.
+- Live gateway synthesis runs the `trajectories:fuse` step through the shared kernel fuse-step
+  operator (`createKernelFuseStepRunner`); the Python service remains the synthesis implementation.
 
 ## Not embedded in the kernel by design
 
@@ -113,11 +116,18 @@ registry.
   real adaptive control; they do not yet implement AB-MCTS/TreeQuest-style wider/deeper search,
   Devin-style routing, or learned coordination.
 - `FusionRuntime.stream(...)` is a real graph-level streaming engine: it runs the graph once and
-  forwards every streaming operator's live events, then a terminal `final`/`error`. The product
-  gateway's SSE framing, rate-limit/credit failover branching, and native-passthrough proxying still
-  live as procedural code inside `FusionBackend` (a deliberate boundary — see
-  `kernel-migration.md`, Phase 2). Its expensive phases (panel capture, `trajectories:fuse`) and all
-  turn state already execute through the kernel.
+  forwards every streaming operator's live events (`output.delta`, `tool_call.delta`, `sse.chunk`,
+  `keepalive`, trace), then a terminal `final`/`error`.
+- The fusion front-door turn is now natively composed from kernel operators. The runtime substrate
+  was extracted into the standalone `@fusionkit/kernel` package to invert the
+  `model-gateway` -> `ensemble` dependency, so `FusionBackend` dispatches every turn as a named
+  runtime graph: `fusion-frontdoor-turn` (`frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize`
+  buffered, or `frontdoor.panel -> frontdoor.fuse.stream` streamed via `eventsToSseResponse`) and
+  `fusion-passthrough-turn` (`frontdoor.passthrough`, whose rate-limit failover re-enters the fusion
+  turn). The redundant outer `KernelBackend` wrapper around the fusion gateway was removed;
+  `FusionBackend` is a kernel-native surface adapter. The vendor-proxy SSE peeking for mid-stream
+  resume notices remains the passthrough operator's transport implementation (the operator pattern:
+  an operator wraps its side-effecting wire).
 
 ## Main migration seam
 

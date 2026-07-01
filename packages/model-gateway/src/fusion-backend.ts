@@ -44,7 +44,12 @@ import type { WireTrajectory } from "@fusionkit/protocol";
 import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
-import { runFusionFrontdoorTurn } from "./frontdoor/workflow.js";
+import { eventsToSseResponse } from "./frontdoor/sse.js";
+import {
+  runFusionFrontdoorTurn,
+  runFusionPassthroughTurn,
+  streamFusionFrontdoorTurn
+} from "./frontdoor/workflow.js";
 import {
   addTurnCost,
   emptySessionCost,
@@ -577,6 +582,16 @@ function sseResponse(body: string): Response {
   });
 }
 
+/**
+ * The fusion front-door backend is a kernel-native surface adapter: it maps the
+ * gateway {@link Backend} contract onto named `FusionRuntime` workflows. Every
+ * turn is dispatched as a graph of operators — `fusion-frontdoor-turn`
+ * (panel -> fuse -> finalize, streaming or buffered) for the fused path and
+ * `fusion-passthrough-turn` for native vendor proxying. It owns only the wire
+ * (session identity, panel/fuse implementations, cost/trace/persistence), which
+ * the operators invoke; the runtime owns admission, provenance, budget, trace,
+ * and replay.
+ */
 export class FusionBackend implements Backend {
   readonly defaultModel: string | undefined;
 
@@ -987,7 +1002,13 @@ export class FusionBackend implements Backend {
     // failure, automatic (see #proxyNative's WS5 failover).
     const native = this.#passthroughFor(chat.model);
     if (native !== undefined) {
-      return this.#proxyNative(native, chat, signal, options);
+      // The native-passthrough turn runs as the `fusion-passthrough-turn` kernel
+      // graph; the proxy (and its rate-limit failover into the fusion workflow)
+      // is the operator's implementation.
+      return runFusionPassthroughTurn(
+        { proxy: () => this.#proxyNative(native, chat, signal, options) },
+        { runId: `${this.#sessionKey(messages)}:passthrough` }
+      );
     }
     return this.#runFusion(chat, signal, options, {});
   }
@@ -1230,55 +1251,21 @@ export class FusionBackend implements Backend {
       return outcome.response;
     }
 
-    // Streaming: return immediately with a live SSE stream so the caller's HTTP
-    // client sees the response start right away. The (potentially slow) panel
-    // phase runs inside the stream behind keepalive comments, then the judge
-    // step's SSE is piped through. This avoids first-byte timeouts in real CLIs
-    // (e.g. codex) while the panel solves the task once. Because the 200 + SSE
-    // headers are already sent, failures surface as a terminal error event.
-    const stepUrl = this.#stepUrl;
-    const runFuseStep = this.#runFuseStep;
+    // Streaming: run the turn as the streaming `fusion-frontdoor-turn` kernel
+    // graph (panel -> fuse.stream) and serialize its runtime events to SSE. The
+    // response returns immediately; the (slow) panel phase runs behind keepalive
+    // comments emitted by the adapter, then the fuse step's SSE bytes are piped
+    // through as `sse.chunk` events. Failures surface as a terminal error event
+    // and evict the turn.
     const stepSignal = withDeadline(signal, this.#stepTimeoutMs);
-    const evictOnFailure = (): void => this.#evictTurn(session, turn);
-    // WS7: meter the fused turn from the judge step's `usage` (rides the SSE tail).
     const meterStream = (buffer: string): void => {
       this.#meter(sessionKey, fusedCostModel, parseUsageFromSse(buffer), sessionTraceId, judgeSpan);
     };
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    const readable = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        let alive = true;
-        let sseBuffer = "";
-        const keepalive = setInterval(() => {
-          if (alive) {
-            try {
-              controller.enqueue(encoder.encode(": keepalive\n\n"));
-            } catch {
-              alive = false;
-            }
-          }
-        }, 3000);
-        const fail = (message: string): void => {
-          console.error(`fusion: ${message}`);
-          evictOnFailure();
-          controller.enqueue(encoder.encode(errorEvent(`fusion error: ${message}`)));
-        };
-        // Failover handoff: emit the notice as the first content delta so the
-        // user immediately sees the turn moved to the ensemble, before the
-        // (possibly slow) panel phase produces the fused answer.
-        if (opts.notice !== undefined) {
-          controller.enqueue(encoder.encode(noticeChunk(opts.notice)));
-        }
-        try {
-          let candidates: WireTrajectory[];
-          try {
-            candidates = await resolveCandidates();
-          } catch (error) {
-            fail(errorText(error));
-            return;
-          }
-          emitJudgeRequest(candidates);
+    const events = streamFusionFrontdoorTurn(
+      {
+        resolveCandidates,
+        openFuseStream: async (candidates) => {
+          emitJudgeRequest([...candidates]);
           if (process.env.FUSION_DEBUG) {
             const toolNames = Array.isArray(chat.tools)
               ? chat.tools.map((t) => {
@@ -1291,66 +1278,42 @@ export class FusionBackend implements Backend {
                 `candidates=${candidates.length} tools=[${toolNames.join(", ")}]`
             );
           }
-          const upstream = await runFuseStep({
-            stepUrl,
+          return this.#runFuseStep({
+            stepUrl: this.#stepUrl,
             headers,
-            body: buildStepBody(candidates),
+            body: buildStepBody([...candidates]),
             signal: stepSignal,
             streaming: true
           });
-          if (!upstream.ok || upstream.body === null) {
-            const detail = upstream.body === null ? "no stream" : (await upstream.text()).slice(0, 800);
-            emitJudgeFinal({ httpStatus: upstream.status, error: detail });
-            fail(`trajectories:fuse ${upstream.status}: ${detail}`);
-            return;
-          }
-          const reader = upstream.body.getReader();
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value !== undefined) {
-              controller.enqueue(value);
-              // Always accumulate for WS7 cost metering (usage rides the SSE tail);
-              // the trace assembly below reuses the same buffer when enabled.
-              sseBuffer += decoder.decode(value, { stream: true });
-            }
-          }
+        },
+        onUpstreamError: (status, detail) => emitJudgeFinal({ httpStatus: status, error: detail }),
+        onException: (message) => emitJudgeFinal({ error: message }),
+        onComplete: (sseBuffer) => {
           meterStream(sseBuffer);
-          if (traceEnabled) {
-            const assembled = assembleSseContent(sseBuffer);
-            if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
-              const synthesis = synthesisOf(assembled.fusion);
-              emitJudgeFinal({
-                httpStatus: upstream.status,
-                ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
-                ...(synthesis !== undefined ? { synthesis } : {}),
-                ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
-              });
-            } else {
-              emitJudgeStep({
-                ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
-                toolCalls: assembled.toolCalls,
-                ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
-              });
-            }
-          }
-        } catch (error) {
-          emitJudgeFinal({ error: errorText(error) });
-          fail(errorText(error));
-        } finally {
-          alive = false;
-          clearInterval(keepalive);
-          try {
-            controller.close();
-          } catch {
-            // already closed
+          if (!traceEnabled) return;
+          const assembled = assembleSseContent(sseBuffer);
+          if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
+            const synthesis = synthesisOf(assembled.fusion);
+            emitJudgeFinal({
+              httpStatus: 200,
+              ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
+              ...(synthesis !== undefined ? { synthesis } : {}),
+              ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
+            });
+          } else {
+            emitJudgeStep({
+              ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
+              toolCalls: assembled.toolCalls,
+              ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
+            });
           }
         }
-      }
-    });
-    return new Response(readable, {
-      status: 200,
-      headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
+      },
+      { runId: `${session.traceId}:t${turn}` }
+    );
+    return eventsToSseResponse(events, {
+      ...(opts.notice !== undefined ? { notice: opts.notice } : {}),
+      onError: () => this.#evictTurn(session, turn)
     });
   }
 

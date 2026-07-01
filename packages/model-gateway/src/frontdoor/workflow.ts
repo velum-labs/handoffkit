@@ -6,16 +6,24 @@
  */
 
 import { createArtifact, FusionRuntime, RuntimeExecutionError, StaticDAGScheduler } from "@fusionkit/kernel";
-import type { Artifact } from "@fusionkit/kernel";
+import type { Artifact, RuntimeEvent } from "@fusionkit/kernel";
 
 import {
   FrontdoorArtifactTypes,
   FrontdoorPanelError,
   frontdoorFinalizeOperator,
   frontdoorFuseOperator,
-  frontdoorPanelOperator
+  frontdoorPanelOperator,
+  frontdoorPassthroughOperator,
+  frontdoorStreamingFuseOperator
 } from "./operators.js";
-import type { FrontdoorFusionTurn } from "./operators.js";
+import type {
+  FrontdoorFusionStreamTurn,
+  FrontdoorFusionTurn,
+  FrontdoorPassthroughTurn
+} from "./operators.js";
+
+export const FUSION_PASSTHROUGH_TURN_WORKFLOW = "fusion-passthrough-turn" as const;
 
 export const FUSION_FRONTDOOR_TURN_WORKFLOW = "fusion-frontdoor-turn" as const;
 
@@ -69,4 +77,77 @@ export async function runFusionFrontdoorTurn(
     }
     throw error;
   }
+}
+
+/**
+ * Run a native-passthrough turn as a one-node kernel graph, so the vendor proxy
+ * (and its failover into the fusion workflow) is kernel-owned. Returns the live
+ * `Response` (vendor reply, fused failover stream, or error).
+ */
+export async function runFusionPassthroughTurn(
+  turn: FrontdoorPassthroughTurn,
+  options: { runId?: string } = {}
+): Promise<Response> {
+  const task = createArtifact({
+    id: "frontdoor.task",
+    type: FrontdoorArtifactTypes.Task,
+    value: {},
+    visibility: "runtime",
+    leakage: "none"
+  });
+  const result = await new FusionRuntime().run({
+    graph: {
+      id: FUSION_PASSTHROUGH_TURN_WORKFLOW,
+      inputArtifactIds: [task.id],
+      nodes: [
+        { id: "passthrough", operator: frontdoorPassthroughOperator(turn), inputs: [{ artifactId: task.id }] }
+      ]
+    },
+    scheduler: new StaticDAGScheduler(FUSION_PASSTHROUGH_TURN_WORKFLOW),
+    artifacts: [task],
+    ...(options.runId !== undefined ? { runId: options.runId } : {})
+  });
+  const response = result.finalArtifacts.find(
+    (artifact: Artifact): artifact is Artifact<Response> => artifact.value instanceof Response
+  )?.value;
+  if (!(response instanceof Response)) throw new Error("fusion-passthrough-turn produced no Response");
+  return response;
+}
+
+/**
+ * Run one streaming front-door fusion turn as a kernel graph
+ * (`panel -> fuse.stream`) and expose it as a runtime event stream. The panel
+ * runs first (the SSE adapter emits keepalives meanwhile); the streaming fuse
+ * operator then pipes the Python step's SSE bytes as `sse.chunk` events. A panel
+ * or fuse failure surfaces as a terminal `error` event.
+ */
+export function streamFusionFrontdoorTurn(
+  turn: FrontdoorFusionStreamTurn,
+  options: { runId?: string } = {}
+): AsyncIterable<RuntimeEvent> {
+  const task = createArtifact({
+    id: "frontdoor.task",
+    type: FrontdoorArtifactTypes.Task,
+    value: {},
+    visibility: "runtime",
+    leakage: "none"
+  });
+  const graph = {
+    id: FUSION_FRONTDOOR_TURN_WORKFLOW,
+    inputArtifactIds: [task.id],
+    nodes: [
+      {
+        id: "panel",
+        operator: frontdoorPanelOperator({ resolveCandidates: turn.resolveCandidates }),
+        inputs: [{ artifactId: task.id }]
+      },
+      { id: "fuse", operator: frontdoorStreamingFuseOperator(turn), inputs: [{ nodeId: "panel" }] }
+    ]
+  };
+  return new FusionRuntime().stream({
+    graph,
+    scheduler: new StaticDAGScheduler(FUSION_FRONTDOOR_TURN_WORKFLOW),
+    artifacts: [task],
+    ...(options.runId !== undefined ? { runId: options.runId } : {})
+  });
 }

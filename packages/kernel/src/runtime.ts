@@ -169,6 +169,7 @@ export type RuntimeEvent =
   | TraceEvent
   | { type: "output.delta"; artifactId?: string; content: string }
   | { type: "tool_call.delta"; callId: string; delta: unknown }
+  | { type: "sse.chunk"; data: string }
   | { type: "keepalive" }
   | { type: "final"; result: RuntimeExecutionResult }
   | { type: "error"; error: RuntimeExecutionError };

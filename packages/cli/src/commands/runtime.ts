@@ -18,13 +18,18 @@ const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[];
   },
   "fusion-frontdoor-turn": {
     scheduler: "static-dag",
-    operators: ["legacy.backend.chat"],
-    description: "Compatibility workflow for the fusion front-door turn while FusionBackend internals are decomposed."
+    operators: ["frontdoor.panel", "frontdoor.fuse", "frontdoor.fuse.stream", "frontdoor.finalize"],
+    description: "Native fusion front-door turn: panel -> fuse -> finalize (buffered), or panel -> fuse.stream (streamed via the streaming runtime + SSE adapter)."
+  },
+  "fusion-passthrough-turn": {
+    scheduler: "static-dag",
+    operators: ["frontdoor.passthrough"],
+    description: "Native provider passthrough turn: proxy the vendor model, with rate-limit/credit failover into the fusion front-door turn."
   },
   "native-passthrough-turn": {
     scheduler: "static-dag",
     operators: ["legacy.backend.chat"],
-    description: "Compatibility workflow for native provider passthrough turns."
+    description: "Compatibility workflow for direct native provider passthrough (Codex/MLX harness leaves) wrapped through KernelBackend."
   },
   "execution-select-repair": {
     scheduler: "execution-select-repair",

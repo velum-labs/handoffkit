@@ -427,7 +427,20 @@ const kernelWrapperGuards = [
   },
   {
     file: "packages/cli/src/gateway.ts",
-    snippets: ["new KernelBackend(new FusionBackend({", "runFuseStep: createKernelFuseStepRunner()", "fusion-frontdoor-turn"]
+    snippets: ["new FusionBackend({", "runFuseStep: createKernelFuseStepRunner()"]
+  },
+  {
+    file: "packages/model-gateway/src/fusion-backend.ts",
+    snippets: ["runFusionFrontdoorTurn", "streamFusionFrontdoorTurn", "runFusionPassthroughTurn"]
+  },
+  {
+    file: "packages/model-gateway/src/frontdoor/workflow.ts",
+    snippets: [
+      "frontdoorPanelOperator",
+      "frontdoorFuseOperator",
+      "frontdoorFinalizeOperator",
+      "frontdoorStreamingFuseOperator"
+    ]
   },
   {
     file: "packages/cli/src/fusion/stack.ts",
