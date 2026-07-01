@@ -636,12 +636,47 @@ export class FusionRuntime {
     signal?: AbortSignal;
     metadata?: Record<string, unknown>;
   }): AsyncIterable<RuntimeEvent> {
+    const runId = input.runId ?? `run_${this.#now().toString(36)}`;
     try {
-      // The substrate now exposes a streaming event contract. Until individual
-      // operators implement `stream`, non-streaming workflows still produce a
-      // single final event. Product gateway cutover can depend on this API and
-      // progressively replace legacy HTTP streaming with StreamingOperator nodes.
-      const result = await this.run(input);
+      const node = input.graph.nodes[0];
+      const stream = (node?.operator as StreamingOperator | undefined)?.stream;
+      if (input.scheduler.family === "direct-fast-path" && input.graph.nodes.length === 1 && node !== undefined && stream !== undefined) {
+        const artifacts = [...(input.artifacts ?? [])];
+        const ctx: OperatorRunContext = {
+          runId,
+          graphId: input.graph.id,
+          nodeId: node.id,
+          operator: node.operator.spec,
+          budget: input.budget ?? {},
+          ...(input.signal !== undefined ? { signal: input.signal } : {}),
+          getArtifact: (id) => artifacts.find((artifact) => artifact.id === id),
+          getObservation: () => undefined,
+          getSignal: () => undefined,
+          visibleObservations: () => Object.freeze([]),
+          visibleSignals: () => Object.freeze([]),
+          createArtifact,
+          consumeBudget: () => undefined,
+          recordObservation: () => {
+            throw new Error("streaming direct context does not support recording observations before finalization");
+          },
+          recordSignal: () => {
+            throw new Error("streaming direct context does not support recording signals before finalization");
+          },
+          recordTrace: (event) =>
+            Object.freeze({
+              ...event,
+              id: `${runId}.stream.trace`,
+              runId,
+              graphId: input.graph.id,
+              timestamp: new Date(this.#now()).toISOString()
+            })
+        };
+        const inputs = (node.inputs ?? []).flatMap((ref) => ("artifactId" in ref ? artifacts.filter((artifact) => artifact.id === ref.artifactId) : []));
+        for await (const event of stream.call(node.operator, inputs, ctx)) {
+          yield event;
+        }
+      }
+      const result = await this.run({ ...input, runId });
       yield { type: "final", result };
     } catch (error) {
       if (error instanceof RuntimeExecutionError) {

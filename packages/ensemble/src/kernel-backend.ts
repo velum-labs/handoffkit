@@ -9,6 +9,10 @@ type BackendRequestValue = {
   body?: unknown;
 };
 
+export type KernelBackendOptions = {
+  workflowIds?: Partial<Record<BackendOperation, string>>;
+};
+
 /**
  * Compatibility adapter that makes existing model-gateway backends execute as
  * kernel workflows without changing their wire behavior. The wrapped backend
@@ -17,10 +21,12 @@ type BackendRequestValue = {
  */
 export class KernelBackend implements Backend {
   readonly #inner: Backend;
+  readonly #workflowIds: Partial<Record<BackendOperation, string>>;
   readonly defaultModel: string | undefined;
 
-  constructor(inner: Backend) {
+  constructor(inner: Backend, options: KernelBackendOptions = {}) {
     this.#inner = inner;
+    this.#workflowIds = options.workflowIds ?? {};
     this.defaultModel = inner.defaultModel;
   }
 
@@ -89,14 +95,15 @@ export class KernelBackend implements Backend {
         ];
       }
     };
+    const workflowId = this.#workflowIds[operation] ?? `legacy-backend-${operation}`;
     const result = await new FusionRuntime().run({
       runId: `backend_${operation}_${Date.now().toString(36)}`,
       graph: {
-        id: `backend.${operation}`,
+        id: workflowId,
         inputArtifactIds: [requestArtifact.id],
         nodes: [{ id: operation, operator, inputs: [{ artifactId: requestArtifact.id }] }]
       },
-      scheduler: new StaticDAGScheduler(`legacy-backend-${operation}`),
+      scheduler: new StaticDAGScheduler(workflowId),
       artifacts: [requestArtifact],
       ...(signal !== undefined ? { signal } : {})
     });

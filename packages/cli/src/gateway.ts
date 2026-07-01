@@ -9,9 +9,17 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { runFusionPanels, runUnifiedHarnessE2E } from "@fusionkit/ensemble";
+import {
+  createArtifact,
+  FusionRuntime,
+  KernelBackend,
+  runFusionPanels,
+  runUnifiedHarnessE2E,
+  StaticDAGScheduler
+} from "@fusionkit/ensemble";
 import type {
   EnsembleModel,
+  Operator,
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
@@ -35,6 +43,7 @@ import type {
   FrontDoorRunner,
   FrontDoorRunnerResult,
   FusionGateway,
+  FuseStepRunner,
   Gateway,
   OnRateLimitPolicy,
   PanelRunner,
@@ -43,7 +52,6 @@ import type {
   SessionStore,
   WireTrajectory
 } from "@fusionkit/model-gateway";
-import { KernelBackend } from "@fusionkit/ensemble";
 
 import { buildCursorAcpProducer } from "./cursor-acp.js";
 
@@ -270,6 +278,58 @@ export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string):
   ].join("\n");
 }
 
+function buildKernelFuseStepRunner(): FuseStepRunner {
+  return async (request) => {
+    const requestArtifact = createArtifact({
+      id: "trajectory-fuse-step.request",
+      type: "trajectory_fuse_step_request",
+      value: request,
+      visibility: "runtime",
+      leakage: "none"
+    });
+    const operator: Operator = {
+      spec: {
+        id: "legacy.python-trajectory-fuse-response",
+        kind: "legacy.python.trajectory_fuse_response",
+        requiredInputTypes: ["trajectory_fuse_step_request"],
+        outputTypes: ["trajectory_fuse_step_response"],
+        sideEffects: "external_tool"
+      },
+      run: async (inputs, ctx) => {
+        const value = inputs[0]?.value as typeof request | undefined;
+        if (value === undefined) throw new Error("trajectory fuse step missing request artifact");
+        const response = await fetch(value.stepUrl, {
+          method: "POST",
+          headers: value.headers,
+          body: value.body,
+          ...(value.signal !== undefined ? { signal: value.signal } : {})
+        });
+        return [
+          ctx.createArtifact({
+            id: `${ctx.nodeId}.response`,
+            type: "trajectory_fuse_step_response",
+            value: response,
+            visibility: "runtime",
+            leakage: "none"
+          })
+        ];
+      }
+    };
+    const result = await new FusionRuntime().run({
+      graph: {
+        id: "trajectory-fuse-step",
+        inputArtifactIds: [requestArtifact.id],
+        nodes: [{ id: "fuse-step", operator, inputs: [{ artifactId: requestArtifact.id }] }]
+      },
+      scheduler: new StaticDAGScheduler("legacy-python-trajectory-fuse-response"),
+      artifacts: [requestArtifact]
+    });
+    const response = result.finalArtifacts[0]?.value;
+    if (!(response instanceof Response)) throw new Error("trajectory fuse step produced no Response");
+    return response;
+  };
+}
+
 /**
  * The judge-streamed-trajectory front door: the panel runs once per session to
  * produce candidate trajectories, then the judge acts as a streaming tool-calling
@@ -386,6 +446,7 @@ export async function startFusionStepGateway(input: {
   const backend = new KernelBackend(new FusionBackend({
     stepUrl,
     runPanels,
+    runFuseStep: buildKernelFuseStepRunner(),
     defaultModel,
     passthrough,
     ...(config.onRateLimit !== undefined ? { onRateLimit: config.onRateLimit } : {}),
@@ -403,7 +464,7 @@ export async function startFusionStepGateway(input: {
     // id. The Python fuse path already resolves the configured judge endpoint via
     // config.resolved_judge_model, so omitting this keeps routing correct while
     // the judge gap-analysis still runs on the configured judge.
-  }));
+  }), { workflowIds: { chat: "fusion-frontdoor-turn", models: "fusion-frontdoor-models", embeddings: "fusion-frontdoor-embeddings" } });
   return await startGateway({
     backend,
     host: input.host,

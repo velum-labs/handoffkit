@@ -115,6 +115,16 @@ export type PanelRunInput = {
 /** Runs the panel once for a session and returns its candidate trajectories. */
 export type PanelRunner = (input: PanelRunInput) => Promise<WireTrajectory[]>;
 
+export type FuseStepRunInput = {
+  stepUrl: string;
+  headers: Record<string, string>;
+  body: string;
+  signal?: AbortSignal;
+  streaming: boolean;
+};
+
+export type FuseStepRunner = (input: FuseStepRunInput) => Promise<Response>;
+
 /**
  * What the gateway does when a vendor passthrough model is rate-limited or out
  * of credits/quota part-way through a turn (WS5):
@@ -153,6 +163,8 @@ export type FusionBackendOptions = {
   stepUrl: string;
   /** Produces candidate trajectories for a new session (injected; uses ensemble). */
   runPanels: PanelRunner;
+  /** Executes the trajectory fuse step; defaults to direct fetch. */
+  runFuseStep?: FuseStepRunner;
   /** Model id echoed to clients and sent to the judge step. */
   defaultModel?: string;
   /** Judge model id forwarded to FusionKit (defaults to its configured judge). */
@@ -216,6 +228,8 @@ export type FusionBackendOptions = {
    * so this prices the gateway-observed judge step. Defaults to {@link defaultModel}.
    */
   costModel?: string;
+  /** Hot kernel session state store for in-process session/turn candidate state. */
+  kernelStateStore?: FusionBackendKernelStateStore;
 };
 
 /** Caller-supplied session header fields persisted on session creation. */
@@ -235,6 +249,35 @@ type Session = {
   turns: Map<number, Promise<WireTrajectory[]>>;
   createdAt: number;
 };
+
+export type FusionBackendKernelSessionState = Session;
+
+export type FusionBackendKernelStateStore = {
+  get(sessionKey: string): FusionBackendKernelSessionState | undefined;
+  set(sessionKey: string, state: FusionBackendKernelSessionState): void;
+  delete(sessionKey: string): void;
+  entries(): IterableIterator<[string, FusionBackendKernelSessionState]>;
+};
+
+export class InMemoryFusionBackendKernelStateStore implements FusionBackendKernelStateStore {
+  readonly #sessions = new Map<string, FusionBackendKernelSessionState>();
+
+  get(sessionKey: string): FusionBackendKernelSessionState | undefined {
+    return this.#sessions.get(sessionKey);
+  }
+
+  set(sessionKey: string, state: FusionBackendKernelSessionState): void {
+    this.#sessions.set(sessionKey, state);
+  }
+
+  delete(sessionKey: string): void {
+    this.#sessions.delete(sessionKey);
+  }
+
+  entries(): IterableIterator<[string, FusionBackendKernelSessionState]> {
+    return this.#sessions.entries();
+  }
+}
 
 const DEFAULT_SESSION_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_PANEL_TIMEOUT_MS = 15 * 60 * 1000;
@@ -518,12 +561,13 @@ export class FusionBackend implements Backend {
 
   readonly #stepUrl: string;
   readonly #runPanels: PanelRunner;
+  readonly #runFuseStep: FuseStepRunner;
   readonly #judgeModel: string | undefined;
   readonly #ttlMs: number;
   readonly #panelTimeoutMs: number;
   readonly #stepTimeoutMs: number;
   readonly #mintTraceId: () => string;
-  readonly #sessions = new Map<string, Session>();
+  readonly #kernelStateStore: FusionBackendKernelStateStore;
   readonly #passthrough: readonly PassthroughModel[];
   readonly #onRateLimit: OnRateLimitPolicy;
   readonly #store: SessionStore | undefined;
@@ -539,6 +583,15 @@ export class FusionBackend implements Backend {
   constructor(options: FusionBackendOptions) {
     this.#stepUrl = options.stepUrl;
     this.#runPanels = options.runPanels;
+    this.#runFuseStep =
+      options.runFuseStep ??
+      ((request) =>
+        fetch(request.stepUrl, {
+          method: "POST",
+          headers: request.headers,
+          body: request.body,
+          ...(request.signal ? { signal: request.signal } : {})
+        }));
     this.defaultModel = options.defaultModel;
     this.#judgeModel = options.judgeModel;
     this.#ttlMs = options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
@@ -548,6 +601,7 @@ export class FusionBackend implements Backend {
     this.#passthrough = options.passthrough ?? [];
     this.#onRateLimit = options.onRateLimit ?? "fusion";
     this.#store = options.store;
+    this.#kernelStateStore = options.kernelStateStore ?? new InMemoryFusionBackendKernelStateStore();
     this.#sessionMeta = options.sessionMeta ?? {};
     this.#budgetUsd = options.budgetUsd;
     this.#pricing = options.pricing ?? {};
@@ -1069,11 +1123,12 @@ export class FusionBackend implements Backend {
         return jsonError(502, errorText(error));
       }
       emitJudgeRequest(candidates);
-      const response = await fetch(this.#stepUrl, {
-        method: "POST",
+      const response = await this.#runFuseStep({
+        stepUrl: this.#stepUrl,
         headers,
         body: buildStepBody(candidates),
-        signal: withDeadline(signal, this.#stepTimeoutMs)
+        signal: withDeadline(signal, this.#stepTimeoutMs),
+        streaming
       });
       // Failover handoff: prepend the notice to the single fused answer so the
       // user sees why the turn moved to the ensemble. Consumes the body, so this
@@ -1150,6 +1205,7 @@ export class FusionBackend implements Backend {
     // (e.g. codex) while the panel solves the task once. Because the 200 + SSE
     // headers are already sent, failures surface as a terminal error event.
     const stepUrl = this.#stepUrl;
+    const runFuseStep = this.#runFuseStep;
     const stepSignal = withDeadline(signal, this.#stepTimeoutMs);
     const evictOnFailure = (): void => this.#evictTurn(session, turn);
     // WS7: meter the fused turn from the judge step's `usage` (rides the SSE tail).
@@ -1203,11 +1259,12 @@ export class FusionBackend implements Backend {
                 `candidates=${candidates.length} tools=[${toolNames.join(", ")}]`
             );
           }
-          const upstream = await fetch(stepUrl, {
-            method: "POST",
+          const upstream = await runFuseStep({
+            stepUrl,
             headers,
             body: buildStepBody(candidates),
-            signal: stepSignal
+            signal: stepSignal,
+            streaming: true
           });
           if (!upstream.ok || upstream.body === null) {
             const detail = upstream.body === null ? "no stream" : (await upstream.text()).slice(0, 800);
@@ -1326,8 +1383,8 @@ export class FusionBackend implements Backend {
 
   /** Remove expired sessions so a long-lived gateway does not grow unbounded. */
   #sweepExpired(now: number): void {
-    for (const [key, session] of this.#sessions) {
-      if (now - session.createdAt >= this.#ttlMs) this.#sessions.delete(key);
+    for (const [key, session] of this.#kernelStateStore.entries()) {
+      if (now - session.createdAt >= this.#ttlMs) this.#kernelStateStore.delete(key);
     }
   }
 
@@ -1343,7 +1400,7 @@ export class FusionBackend implements Backend {
   #ensureSession(sessionKey: string): Session {
     const now = Date.now();
     this.#sweepExpired(now);
-    const existing = this.#sessions.get(sessionKey);
+    const existing = this.#kernelStateStore.get(sessionKey);
     if (existing !== undefined && now - existing.createdAt < this.#ttlMs) return existing;
 
     if (this.#store !== undefined) {
@@ -1356,7 +1413,7 @@ export class FusionBackend implements Backend {
         const persisted = this.#store.load(resumeId);
         if (persisted !== undefined) {
           const session = this.#hydrate(persisted, now);
-          this.#sessions.set(sessionKey, session);
+          this.#kernelStateStore.set(sessionKey, session);
           return session;
         }
         console.error(`fusion: --resume target ${resumeId} not found; starting a fresh session.`);
@@ -1366,7 +1423,7 @@ export class FusionBackend implements Backend {
       const stored = this.#store.load(sessionKey);
       if (stored !== undefined) {
         const session = this.#hydrate(stored, now);
-        this.#sessions.set(sessionKey, session);
+        this.#kernelStateStore.set(sessionKey, session);
         return session;
       }
     }
@@ -1378,7 +1435,7 @@ export class FusionBackend implements Backend {
       turns: new Map(),
       createdAt: now
     };
-    this.#sessions.set(sessionKey, session);
+    this.#kernelStateStore.set(sessionKey, session);
     this.#persistMeta(session);
     return session;
   }

@@ -414,7 +414,9 @@ async function runProvider(input: {
           baseUrl: normalizeApiBaseUrl(input.provider.baseUrl),
           ...(apiKey !== undefined ? { apiKey } : {}),
           defaultModel: input.provider.defaultModel ?? input.model.model
-        })),
+        }), {
+          workflowIds: { chat: "native-passthrough-turn", models: "native-passthrough-models", embeddings: "native-passthrough-embeddings" }
+        }),
         provenance: {
           onModelCall(record) {
             records.push(record);

@@ -13,6 +13,8 @@ import type {
   OperatorRunContext,
   OperatorSideEffects,
   OperatorSpec,
+  RuntimeEvent,
+  StreamingOperator,
   TaskSpec
 } from "./runtime.js";
 
@@ -38,6 +40,10 @@ export type ModelGenerateOutput = {
 
 export type ModelClient = {
   generate(input: ModelGenerateRequest, ctx: OperatorRunContext): Promise<ModelGenerateOutput> | ModelGenerateOutput;
+  streamGenerate?(
+    input: ModelGenerateRequest,
+    ctx: OperatorRunContext
+  ): AsyncIterable<string | RuntimeEvent | ModelGenerateOutput>;
 };
 
 export type CandidateArtifactValue = {
@@ -161,13 +167,14 @@ function comparisonFromInputs(inputs: readonly Artifact[]): JudgeComparison | un
   return firstArtifactByType<JudgeComparison>(inputs, ArtifactTypes.JudgeComparison);
 }
 
-export class ModelGenerateOperator implements Operator {
+export class ModelGenerateOperator implements StreamingOperator {
   readonly spec: OperatorSpec;
   readonly #model: string;
   readonly #modelId: string;
   readonly #client: ModelClient;
   readonly #visibility: ArtifactVisibility;
   readonly #leakage: ArtifactLeakage;
+  readonly #streamed = new Map<string, ModelGenerateOutput>();
 
   constructor(options: {
     id?: string;
@@ -193,15 +200,56 @@ export class ModelGenerateOperator implements Operator {
 
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const task = taskFromInputs(inputs);
-    const output = await this.#client.generate(
-      {
+    const request = {
+      model: this.#model,
+      messages: messagesFromTask(task),
+      prompt: promptFromTask(task),
+      ...(task.metadata !== undefined ? { metadata: task.metadata } : {})
+    };
+    const streamKey = `${ctx.runId}:${ctx.nodeId}`;
+    const output = this.#streamed.get(streamKey) ?? (await this.#client.generate(request, ctx));
+    this.#streamed.delete(streamKey);
+    return this.#candidateArtifact(output, ctx);
+  }
+
+  async *stream(inputs: readonly Artifact[], ctx: OperatorRunContext): AsyncIterable<RuntimeEvent> {
+    const task = taskFromInputs(inputs);
+    const request = {
+      model: this.#model,
+      messages: messagesFromTask(task),
+      prompt: promptFromTask(task),
+      ...(task.metadata !== undefined ? { metadata: task.metadata } : {})
+    };
+    const streamGenerate = this.#client.streamGenerate;
+    if (streamGenerate === undefined) {
+      const output = await this.#client.generate(request, ctx);
+      this.#streamed.set(`${ctx.runId}:${ctx.nodeId}`, output);
+      yield { type: "output.delta", content: output.content };
+      return;
+    }
+    let content = "";
+    let finalOutput: ModelGenerateOutput | undefined;
+    for await (const item of streamGenerate(request, ctx)) {
+      if (typeof item === "string") {
+        content += item;
+        yield { type: "output.delta", content: item };
+      } else if ("type" in item) {
+        if (item.type === "output.delta") content += item.content;
+        yield item;
+      } else {
+        finalOutput = item;
+      }
+    }
+    this.#streamed.set(
+      `${ctx.runId}:${ctx.nodeId}`,
+      finalOutput ?? {
         model: this.#model,
-        messages: messagesFromTask(task),
-        prompt: promptFromTask(task),
-        ...(task.metadata !== undefined ? { metadata: task.metadata } : {})
-      },
-      ctx
+        content
+      }
     );
+  }
+
+  #candidateArtifact(output: ModelGenerateOutput, ctx: OperatorRunContext): readonly Artifact[] {
     const candidateId = `${this.#modelId}:sample:${ctx.nodeId}`;
     const value: CandidateArtifactValue = {
       candidateId,

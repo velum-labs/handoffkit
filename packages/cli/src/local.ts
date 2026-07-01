@@ -42,7 +42,9 @@ export { cursorInstructions } from "@fusionkit/tool-cursor";
 type GatewayHandle = { url: string; close: () => Promise<void> };
 
 async function startLocalGateway(config: BackendConfig, authToken?: string): Promise<GatewayHandle> {
-  const backend = new KernelBackend(createBackend(config));
+  const backend = new KernelBackend(createBackend(config), {
+    workflowIds: { chat: "direct-model-turn", models: "direct-model-models", embeddings: "direct-model-embeddings" }
+  });
   const gateway = await startGateway({
     backend,
     ...(authToken !== undefined ? { authToken } : {})

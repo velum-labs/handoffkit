@@ -18,8 +18,13 @@ export type { Gateway, GatewayOptions } from "./server.js";
 export { joinPath, OpenAiBackend } from "./backend.js";
 export type { Backend, BackendRequestOptions, OpenAiBackendOptions } from "./backend.js";
 export { FusionBackend } from "./fusion-backend.js";
+export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";
 export type {
   ChatMessageLike,
+  FuseStepRunInput,
+  FuseStepRunner,
+  FusionBackendKernelSessionState,
+  FusionBackendKernelStateStore,
   FusionBackendOptions,
   OnRateLimitPolicy,
   PanelRunInput,

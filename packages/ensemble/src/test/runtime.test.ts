@@ -807,10 +807,20 @@ test("graph builder and built-in workflow registry compose direct kernels", asyn
 
 test("runtime stream API emits a final event for non-streaming workflows", async () => {
   const task = taskArtifact();
+  let generateCalls = 0;
+  let streamCalls = 0;
   const model = new ModelGenerateOperator({
     model: "stream-compatible",
     client: {
-      generate: () => ({ model: "stream-compatible", content: "final" })
+      generate: () => {
+        generateCalls += 1;
+        return { model: "stream-compatible", content: "should-not-run" };
+      },
+      async *streamGenerate() {
+        streamCalls += 1;
+        yield "fi";
+        yield "nal";
+      }
     }
   });
   const events = [];
@@ -826,8 +836,14 @@ test("runtime stream API emits a final event for non-streaming workflows", async
     events.push(event);
   }
 
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.type, "final");
+  assert.equal(streamCalls, 1);
+  assert.equal(generateCalls, 0);
+  assert.deepEqual(events.map((event) => event.type), ["output.delta", "output.delta", "final"]);
+  const final = events.at(-1);
+  assert.equal(final?.type, "final");
+  if (final?.type === "final") {
+    assert.equal((final.result.finalArtifacts[0]?.value as CandidateArtifactValue).content, "final");
+  }
 });
 
 test("in-memory kernel state store persists session turn state", () => {

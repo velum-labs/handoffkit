@@ -420,5 +420,40 @@ if (tracked.status === 0) {
   }
 }
 
+const kernelWrapperGuards = [
+  {
+    file: "packages/cli/src/local.ts",
+    snippets: ["new KernelBackend(createBackend(config)", "direct-model-turn"]
+  },
+  {
+    file: "packages/cli/src/gateway.ts",
+    snippets: ["new KernelBackend(new FusionBackend({", "runFuseStep: buildKernelFuseStepRunner()", "fusion-frontdoor-turn"]
+  },
+  {
+    file: "packages/cli/src/fusion/stack.ts",
+    snippets: ["new KernelBackend(backend", "direct-model-turn"]
+  },
+  {
+    file: "packages/tool-codex/src/harness.ts",
+    snippets: ["new KernelBackend(new OpenAiBackend({", "native-passthrough-turn"]
+  },
+  {
+    file: "packages/ensemble/src/run.ts",
+    snippets: ["ensembleRunWorkflow({ descriptor })"]
+  },
+  {
+    file: "python/fusionkit-server/src/fusionkit_server/app.py",
+    snippets: ["kernel = FusionKernel(engine, native_runs)"]
+  }
+];
+for (const guard of kernelWrapperGuards) {
+  const text = readFileSync(guard.file, "utf8");
+  for (const snippet of guard.snippets) {
+    if (!text.includes(snippet)) {
+      fail(`kernel wrapper guard failed: ${guard.file} must include ${snippet}`);
+    }
+  }
+}
+
 if (process.exitCode) process.exit(process.exitCode);
 console.log("repo check passed");

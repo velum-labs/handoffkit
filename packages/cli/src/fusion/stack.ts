@@ -235,7 +235,11 @@ export async function startRouter(options: {
       if ((spec.provider ?? "mlx") !== "mlx") continue;
       const backend = new MlxBackend({ model: spec.model });
       await backend.start();
-      const gateway = await startGateway({ backend: new KernelBackend(backend) });
+      const gateway = await startGateway({
+        backend: new KernelBackend(backend, {
+          workflowIds: { chat: "direct-model-turn", models: "direct-model-models", embeddings: "direct-model-embeddings" }
+        })
+      });
       backends.push(backend);
       gateways.push(gateway);
       mlxUrls[spec.id] = gateway.url();
