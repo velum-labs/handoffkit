@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
+    "@fusionkit/kernel": "workspace:*",
     "@fusionkit/protocol": "workspace:*"
   }
 }

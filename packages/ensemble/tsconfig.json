@@ -6,6 +6,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
+    { "path": "../kernel" },
     { "path": "../model-gateway" },
     { "path": "../protocol" },
     { "path": "../runner" },

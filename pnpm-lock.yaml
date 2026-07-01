@@ -426,6 +426,9 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
+      '@fusionkit/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@fusionkit/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
@@ -469,11 +472,16 @@ importers:
         specifier: workspace:*
         version: link:../workspace
 
+  packages/kernel: {}
+
   packages/model-gateway:
     dependencies:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
+      '@fusionkit/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
