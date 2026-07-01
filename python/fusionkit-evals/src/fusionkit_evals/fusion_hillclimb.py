@@ -174,7 +174,9 @@ def best_single_baseline(bank: CandidateBank, task_ids: Sequence[str] | None = N
 
     ``task_ids`` restricts the comparison set (e.g. the val split); when omitted all
     bank tasks are used. The pass map is the per-task pass/fail for that model, ready
-    to pair against the fused answer in a McNemar test.
+    to pair against the fused answer in a McNemar test. With multi-sample banks
+    (deep panels) only each model's PRIMARY (first) sample counts — that is the
+    model's pass@1, the honest single-model baseline.
     """
     selected = set(task_ids) if task_ids is not None else None
     per_model: dict[str, dict[str, bool]] = {}
@@ -182,7 +184,9 @@ def best_single_baseline(bank: CandidateBank, task_ids: Sequence[str] | None = N
         if selected is not None and task.task_id not in selected:
             continue
         for candidate in task.candidates:
-            per_model.setdefault(candidate.model_id, {})[task.task_id] = candidate.passed
+            per_model.setdefault(candidate.model_id, {}).setdefault(
+                task.task_id, candidate.passed
+            )
     if not per_model:
         return BestSingle(model_id="", pass_rate=0.0)
     rates = {

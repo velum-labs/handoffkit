@@ -208,20 +208,7 @@ class ChatTrajectoryProducer:
         sample_count: int,
         tools: Sequence[ToolDefinition] | None = None,
     ) -> list[Trajectory]:
-        selected_temperatures = list(temperatures)[:sample_count]
-        if len(selected_temperatures) < sample_count:
-            missing_count = sample_count - len(selected_temperatures)
-            selected_temperatures.extend([base_sampling.temperature] * missing_count)
-
-        specs: list[tuple[str, int, SamplingConfig]] = []
-        for index, temperature in enumerate(selected_temperatures):
-            sampling = base_sampling.model_copy(
-                update={
-                    "temperature": temperature,
-                    "seed": None if base_sampling.seed is None else base_sampling.seed + index,
-                }
-            )
-            specs.append((model_id, index, sampling))
+        specs = _temperature_specs(model_id, base_sampling, temperatures, sample_count)
         return await self._settle(specs, messages, tools)
 
     async def generate_panel(
@@ -230,9 +217,31 @@ class ChatTrajectoryProducer:
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None = None,
+        *,
+        samples_per_model: int = 1,
+        temperatures: Sequence[float] | None = None,
     ) -> list[Trajectory]:
+        """Panel candidates: one trajectory per member, or a temperature-varied
+        pool of ``samples_per_model`` per member (deep panel).
+
+        The single-sample path keeps the historical ``{model}:{panel_index}``
+        trajectory ids; the multi-sample path uses per-model sample ordinals
+        (``{model}:{sample_index}``), mirroring self-fusion.
+        """
+        if samples_per_model <= 1:
+            specs = [
+                (model_id, index, sampling) for index, model_id in enumerate(model_ids)
+            ]
+            return await self._settle(specs, messages, tools)
         specs = [
-            (model_id, index, sampling) for index, model_id in enumerate(model_ids)
+            spec
+            for model_id in model_ids
+            for spec in _temperature_specs(
+                model_id,
+                sampling,
+                temperatures if temperatures is not None else [sampling.temperature],
+                samples_per_model,
+            )
         ]
         return await self._settle(specs, messages, tools)
 
@@ -287,6 +296,29 @@ class ChatTrajectoryProducer:
             return self._clients[model_id]
         except KeyError as exc:
             raise KeyError(f"No client configured for model: {model_id}") from exc
+
+
+def _temperature_specs(
+    model_id: str,
+    base_sampling: SamplingConfig,
+    temperatures: Sequence[float],
+    sample_count: int,
+) -> list[tuple[str, int, SamplingConfig]]:
+    """Sampling specs for ``sample_count`` temperature-varied samples of one model."""
+    selected_temperatures = list(temperatures)[:sample_count]
+    if len(selected_temperatures) < sample_count:
+        missing_count = sample_count - len(selected_temperatures)
+        selected_temperatures.extend([base_sampling.temperature] * missing_count)
+    specs: list[tuple[str, int, SamplingConfig]] = []
+    for index, temperature in enumerate(selected_temperatures):
+        sampling = base_sampling.model_copy(
+            update={
+                "temperature": temperature,
+                "seed": None if base_sampling.seed is None else base_sampling.seed + index,
+            }
+        )
+        specs.append((model_id, index, sampling))
+    return specs
 
 
 class ExternalTrajectoryProducer:

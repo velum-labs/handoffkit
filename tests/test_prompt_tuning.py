@@ -131,6 +131,28 @@ def test_bank_signature_ignores_judge_config() -> None:
     assert sig1 == sig2
 
 
+def test_bank_signature_changes_with_panel_depth() -> None:
+    engine = _panel_engine()
+    sig1 = bank_signature(engine, prompt_suffix="X")
+    engine.config.panel_samples_per_model = 3  # deeper pool -> different candidates
+    sig2 = bank_signature(engine, prompt_suffix="X")
+    assert sig1 != sig2
+
+
+async def test_build_candidate_bank_deep_panel_records_all_samples() -> None:
+    engine = _panel_engine()
+    engine.config.panel_samples_per_model = 2
+    engine.config.self_temperatures = [0.2, 0.8]
+    task = PreparedTask(task_id="d1", prompt="double", tests=DOUBLE_TEST, difficulty="easy")
+
+    bank = await build_candidate_bank(
+        engine, LocalSandbox(), [task], signature="sig", concurrency=1
+    )
+
+    models = [c.model_id for c in bank.tasks[0].candidates]
+    assert models == ["pass", "pass", "fail", "fail"]
+
+
 def test_bank_round_trips(tmp_path) -> None:
     bank = _decision_bank(2)
     save_bank(tmp_path / "bank.json", bank)

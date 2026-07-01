@@ -84,6 +84,8 @@ def bank_signature(
         "endpoints": sorted((e.id, e.model, e.provider) for e in config.endpoints),
         "panel_models": sorted(config.panel_models),
         "solver_sampling": config.sampling.model_dump(mode="json"),
+        "panel_samples_per_model": config.panel_samples_per_model,
+        "panel_temperatures": list(config.self_temperatures),
         "prompt_suffix": prompt_suffix,
         **(extra or {}),
     }
@@ -116,6 +118,8 @@ async def build_candidate_bank(
                     models,
                     [ChatMessage(role="user", content=task.prompt)],
                     engine.config.sampling,
+                    samples_per_model=engine.config.panel_samples_per_model,
+                    temperatures=engine.config.self_temperatures,
                 )
             except Exception as exc:  # noqa: BLE001 - skip tasks that fail to generate
                 _log(f"  {task.task_id}: candidate generation failed, skipping ({exc})")

@@ -31,7 +31,7 @@ from fusionkit_core.config import load_config
 from fusionkit_core.router import HeuristicRouter
 from fusionkit_core.types import ChatMessage
 from fusionkit_evals.bench_verify import verify_solution
-from fusionkit_evals.candidate_bank import BankTask, CandidateBank, load_bank
+from fusionkit_evals.candidate_bank import CandidateBank, load_bank
 from fusionkit_evals.code_extract import extract_code
 from fusionkit_evals.exec_select import CandidateSample, select_index
 from fusionkit_evals.fusion_hillclimb import best_single_baseline, regret_split

@@ -42,6 +42,23 @@ def test_best_single_baseline_picks_higher_rate_and_builds_pass_map() -> None:
     assert best.pass_map == {"t1": True, "t2": True, "t3": False, "t4": True}
 
 
+def test_best_single_baseline_uses_primary_sample_in_multi_sample_banks() -> None:
+    # Deep-panel bank: gpt's primary sample fails but a later sample passes; the
+    # model's pass@1 must count the PRIMARY sample only.
+    task = BankTask(
+        task_id="t1",
+        prompt="p",
+        tests=[{"input": "", "output": ""}],
+        candidates=[
+            BankCandidate(model_id="gpt", content="", passed=False),  # primary
+            BankCandidate(model_id="gpt", content="", passed=True),  # extra sample
+            BankCandidate(model_id="opus", content="", passed=False),
+        ],
+    )
+    best = best_single_baseline(_bank([task]))
+    assert best.pass_map == {"t1": False}
+
+
 def test_best_single_baseline_restricts_to_task_ids() -> None:
     bank = _bank([_task("t1", gpt=True, opus=False), _task("t2", gpt=False, opus=True)])
     best = best_single_baseline(bank, task_ids=["t2"])

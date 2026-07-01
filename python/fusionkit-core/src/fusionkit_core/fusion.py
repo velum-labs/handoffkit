@@ -116,7 +116,14 @@ class FusionEngine:
             models = list(panel_models or self.config.panel_models)
             if not models:
                 models = [endpoint.id for endpoint in self.config.endpoints]
-            return await self.producer.generate_panel(models, messages, sampling, tools=tools)
+            return await self.producer.generate_panel(
+                models,
+                messages,
+                sampling,
+                tools=tools,
+                samples_per_model=self.config.panel_samples_per_model,
+                temperatures=self.config.self_temperatures,
+            )
         raise ValueError(f"Unsupported fusion generation mode: {mode}")
 
     async def run_step(

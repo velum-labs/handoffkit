@@ -100,6 +100,12 @@ class FusionConfig(BaseModel):
     sample_count: int = 4
     self_temperatures: list[float] = Field(default_factory=lambda: [0.2, 0.4, 0.6, 0.8])
     panel_models: list[str] = Field(default_factory=list)
+    # Samples generated per panel member in panel mode (temperature-varied via
+    # self_temperatures, like self mode). 1 (default) keeps the classic one-shot
+    # panel; >1 deepens the candidate pool for the judge/synthesizer — measured
+    # to raise the ensemble's oracle ceiling on coding benchmarks at
+    # proportionally higher panel cost.
+    panel_samples_per_model: int = Field(default=1, ge=1)
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
     budget: RunBudget = Field(default_factory=RunBudget)
     prompts: PromptOverrides = Field(default_factory=PromptOverrides)
