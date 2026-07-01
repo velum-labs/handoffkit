@@ -27,6 +27,14 @@
       "types": "./dist/kernel-backend.d.ts",
       "default": "./dist/kernel-backend.js"
     },
+    "./kernel-gateway": {
+      "types": "./dist/kernel-gateway.d.ts",
+      "default": "./dist/kernel-gateway.js"
+    },
+    "./wire-artifacts": {
+      "types": "./dist/wire-artifacts.d.ts",
+      "default": "./dist/wire-artifacts.js"
+    },
     "./schedulers": {
       "types": "./dist/schedulers.d.ts",
       "default": "./dist/schedulers.js"

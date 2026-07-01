@@ -1,6 +1,7 @@
 import { createArtifact, FusionRuntime, StaticDAGScheduler } from "./runtime.js";
 import type { Backend, BackendRequestOptions } from "@fusionkit/model-gateway";
-import type { Operator } from "./runtime.js";
+import type { Artifact, Operator } from "./runtime.js";
+import { captureWireResponse, WireArtifactTypes } from "./wire-artifacts.js";
 
 type BackendOperation = "chat" | "models" | "embeddings";
 
@@ -71,23 +72,32 @@ export class KernelBackend implements Backend {
       spec: {
         id: `legacy.backend.${operation}`,
         kind: `legacy.backend.${operation}`,
-        requiredInputTypes: ["backend_request"],
-        outputTypes: ["backend_response"],
+        requiredInputTypes: [WireArtifactTypes.BackendRequest],
+        outputTypes: [WireArtifactTypes.WireResponse, WireArtifactTypes.BackendResponse],
         sideEffects: "external_tool"
       },
       run: async (inputs, ctx) => {
         const request = inputs[0]?.value as BackendRequestValue | undefined;
         if (request === undefined) throw new Error("kernel backend wrapper missing request artifact");
-        const response =
+        const raw =
           request.operation === "chat"
             ? await this.#inner.chat(request.body, signal, options)
             : request.operation === "models"
               ? await this.#inner.models(signal)
               : await this.#inner.embeddings(request.body, signal);
+        const { value, response } = await captureWireResponse(raw);
         return [
           ctx.createArtifact({
+            id: `${ctx.nodeId}.wire`,
+            type: WireArtifactTypes.WireResponse,
+            value,
+            visibility: "runtime",
+            leakage: "none",
+            ...(value.contentType !== null ? { contentType: value.contentType } : {})
+          }),
+          ctx.createArtifact({
             id: `${ctx.nodeId}.response`,
-            type: "backend_response",
+            type: WireArtifactTypes.BackendResponse,
             value: response,
             visibility: "runtime",
             leakage: "none"
@@ -107,7 +117,9 @@ export class KernelBackend implements Backend {
       artifacts: [requestArtifact],
       ...(signal !== undefined ? { signal } : {})
     });
-    const response = result.finalArtifacts[0]?.value;
+    const response = result.finalArtifacts.find(
+      (artifact: Artifact): artifact is Artifact<Response> => artifact.value instanceof Response
+    )?.value;
     if (!(response instanceof Response)) throw new Error(`kernel backend ${operation} produced no Response`);
     return response;
   }
