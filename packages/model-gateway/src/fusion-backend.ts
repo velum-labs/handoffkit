@@ -582,6 +582,16 @@ function sseResponse(body: string): Response {
   });
 }
 
+/**
+ * The fusion front-door backend is a kernel-native surface adapter: it maps the
+ * gateway {@link Backend} contract onto named `FusionRuntime` workflows. Every
+ * turn is dispatched as a graph of operators — `fusion-frontdoor-turn`
+ * (panel -> fuse -> finalize, streaming or buffered) for the fused path and
+ * `fusion-passthrough-turn` for native vendor proxying. It owns only the wire
+ * (session identity, panel/fuse implementations, cost/trace/persistence), which
+ * the operators invoke; the runtime owns admission, provenance, budget, trace,
+ * and replay.
+ */
 export class FusionBackend implements Backend {
   readonly defaultModel: string | undefined;
 

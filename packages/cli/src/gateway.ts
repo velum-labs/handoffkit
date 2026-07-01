@@ -11,7 +11,6 @@ import { join, resolve } from "node:path";
 
 import {
   createKernelFuseStepRunner,
-  KernelBackend,
   runFusionPanels,
   runUnifiedHarnessE2E
 } from "@fusionkit/ensemble";
@@ -387,7 +386,12 @@ export async function startFusionStepGateway(input: {
             : [{ modelId: model.model, endpointId: model.id, endpointUrl }];
         });
 
-  const backend = new KernelBackend(new FusionBackend({
+  // FusionBackend is itself kernel-native: every turn (`fusion-frontdoor-turn`,
+  // `fusion-passthrough-turn`) is dispatched through `FusionRuntime` as a graph
+  // of named operators, and the fuse step runs through `createKernelFuseStepRunner`.
+  // No outer `KernelBackend` wrapper is needed here (that would only re-wrap the
+  // already-kernel-owned turn in a redundant single node).
+  const backend = new FusionBackend({
     stepUrl,
     runPanels,
     runFuseStep: createKernelFuseStepRunner(),
@@ -408,7 +412,7 @@ export async function startFusionStepGateway(input: {
     // id. The Python fuse path already resolves the configured judge endpoint via
     // config.resolved_judge_model, so omitting this keeps routing correct while
     // the judge gap-analysis still runs on the configured judge.
-  }), { workflowIds: { chat: "fusion-frontdoor-turn", models: "fusion-frontdoor-models", embeddings: "fusion-frontdoor-embeddings" } });
+  });
   return await startGateway({
     backend,
     host: input.host,
