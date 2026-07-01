@@ -17,6 +17,15 @@ You are executing the audit protocol of `docs/fusion/FUSION_VALUE_RUBRIC.md`
 end to end, autonomously. Read that rubric first — it is the yardstick; this
 skill is the operating procedure.
 
+**What is actually being proven:** the fusion behind `fusionkit codex` (and
+`claude` / `cursor` / `serve`) is worth shipping — a user who points their
+coding agent at the ensemble gets measurably better results than the best
+single panel model would have given them. The eval engine
+(`public-bench` / `fusion-hillclimb`) is the instrument; the *shipped
+pipeline* is the claim. Tune on the instrument (cheap, replayable), but the
+final evidence must be validated on, or shown equivalent to, the path users
+actually run (Phase 6a).
+
 ## Objective (the ONLY success condition)
 
 All of the following, with reproducible artifacts committed and pushed:
@@ -45,8 +54,9 @@ All of the following, with reproducible artifacts committed and pushed:
 2. **Spend cap: $500 (hard).** Maintain `audit/<run-id>/spend-ledger.jsonl`
    (one JSON line per billed phase: phase, suite, tasks, est_usd, cum_usd).
    Update it after every billed run using the cost fields in bench reports
-   and gateway cost lines. Reserve the last $50 exclusively for the final
-   locked-test evaluation. Stop billed work at $450 spent; never exceed $500.
+   and gateway cost lines. Reserve the last $90 exclusively for Phase 6
+   (locked-test evaluation + shipped-path validation). Stop tuning spend at
+   $410; never exceed $500 total.
 3. **Providers: OpenAI + Anthropic only.** No Google/Gemini anywhere. Panel
    base config: `configs/benchmark-panel.gpt-opus.yaml` (GPT-5.5 + Opus 4.8;
    needs `OPENAI_API_KEY` + `ANTHROPIC_API_KEY`). Panel variants you may
@@ -179,7 +189,7 @@ From the frozen bank (cheap, no new panel calls except where noted):
 Set the default synthesis policy for the climb to the ablation winner
 (config-level change, committed with the evidence).
 
-## Phase 5 — Hill climb (budget: remainder minus $50 reserve)
+## Phase 5 — Hill climb (budget: remainder minus $90 reserve)
 
 Invoke the `fusion-hillclimb` skill (read
 `.cursor/skills/fusion-hillclimb/SKILL.md` and its `reference.md`) with the
@@ -188,23 +198,57 @@ changes, every acceptance gated by dev-improvement + McNemar + no
 locked-test regression + green tests. One commit per accepted change; copy
 reports/ledgers into `audit/<run-id>/` and push after each tier.
 
-## Phase 6 — Lock, score, roadmap ($50 reserve)
+**Precedence over the inner skill:** where `fusion-hillclimb` says "never
+push" and "default $100 budget", this runbook overrides — push accepted
+commits and artifacts after every tier (rule 5/6), and the budget is this
+audit's ledger, not $100. Every other hillclimb gate (locked-split law,
+McNemar acceptance, revert-on-failure) stands unweakened.
 
-1. Evaluate the final incumbent ONCE on the locked test split. This is the
-   Gate A number. If uplift > 0 and McNemar-significant: objective item 1 is
-   met. If not: report honestly with the full ledger — then, if budget
-   remains above the reserve floor, return to Phase 5; if not, terminal
-   state BUDGET EXHAUSTED.
-2. Fill in the scoring sheet in `docs/fusion/FUSION_VALUE_RUBRIC.md` §
+Accepted improvements must be changes a user actually receives: committed
+`.fusionkit/prompts/*.md`, config defaults, or source — never a bench-only
+tweak that the shipped `fusionkit codex` path would not pick up.
+
+## Phase 6 — Lock, validate on the shipped path, score, roadmap ($90 reserve)
+
+1. **Locked test ($50 of the reserve).** Evaluate the final incumbent ONCE
+   on the locked test split. This is the Gate A number. If uplift > 0 and
+   McNemar-significant: objective item 1 is met. If not: report honestly
+   with the full ledger — then, if budget remains above the reserve floor,
+   return to Phase 5; if not, terminal state BUDGET EXHAUSTED.
+2. **Shipped-path validation (Phase 6a, ~$40 of the reserve).** The claim is
+   about `fusionkit codex`, so confirm the tuned configuration transfers:
+   boot the real stack (`fusionkit serve` with the tuned panel/prompts) and
+   run a ~25-task subset of the benchmark through the gateway
+   (`/v1/chat/completions` or the aider runner pointed at the gateway).
+   Pass = fused results consistent with the engine-level numbers (no
+   significant degradation) and zero pipeline errors. If it degrades,
+   diagnose the gateway-vs-engine divergence, fix it (rule 7), and re-check
+   — do not report Gate A as met while the shipped path contradicts it.
+3. Fill in the scoring sheet in `docs/fusion/FUSION_VALUE_RUBRIC.md` §
    "Scoring sheet" — copy it to `audit/<run-id>/rubric-scorecard.md` with a
    one-line evidence pointer per criterion (artifact path). Unmeasured = 0.
-3. Write `audit/<run-id>/ROADMAP.md`: every criterion scoring < 2, ranked by
+4. Write `audit/<run-id>/ROADMAP.md`: every criterion scoring < 2, ranked by
    expected-uplift-per-effort, each with the concrete change, the file(s) it
    touches, and the measurement that would flip its score.
-4. Write `audit/<run-id>/REPORT.md`: headline numbers (fused vs best single
-   vs oracle, locked test), total spend vs cap, all fixes made (commit SHAs),
-   all issues found-not-fixed (with repros), and the gate checklist A–D.
-5. Final commit + push; update the PR description with the headline result.
+5. Write `audit/<run-id>/REPORT.md`: headline numbers (fused vs best single
+   vs oracle, locked test + shipped-path check), total spend vs cap, all
+   fixes made (commit SHAs), all issues found-not-fixed (with repros), and
+   the gate checklist A–D.
+6. Final commit + push; update the PR description with the headline result.
+
+## Terminal report format
+
+End the session with exactly one of these headers, then the evidence:
+
+- `OBJECTIVE ACHIEVED` — locked-test uplift +X.X pts (p=…), shipped-path
+  check passed, scorecard + roadmap committed at `audit/<run-id>/`,
+  total spend $X of $500.
+- `BUDGET EXHAUSTED` — best locked result achieved, what was tried (ledger),
+  scorecard + roadmap still committed, and the single next experiment you
+  would run with more budget.
+- `PROVABLY BLOCKED` — the exact blocker (e.g. missing secret name, or
+  lopsided-panel proof with correlation tables), and everything completed
+  up to it.
 
 ## Budget summary
 
@@ -213,6 +257,6 @@ reports/ledgers into `audit/<run-id>/` and push after each tier.
 | 1 smoke | $15 |
 | 3 baseline (+ panel ablation if lopsided) | $150 (+$60) |
 | 4 ablations | $40 |
-| 5 hill climb | remainder to $450 |
-| 6 locked final | $50 reserve |
+| 5 hill climb | remainder to $410 |
+| 6 locked final + shipped-path validation | $90 reserve ($50 + $40) |
 | **Hard total** | **$500** |
