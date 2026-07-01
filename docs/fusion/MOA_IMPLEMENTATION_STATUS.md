@@ -103,20 +103,21 @@ registry.
 
 ## Known limitations
 
-- `KernelBackend` is a compatibility adapter: it wraps each gateway call as a one-node static-DAG
-  graph whose output artifact value is the raw `Response` object returned by the legacy backend.
-  This is enough for the "all product surfaces enter the kernel" boundary and for admission /
-  provenance / budget accounting, but a `Response` is **not** a replay-clean semantic wire artifact
-  (e.g. "OpenAI SSE stream", "final text", "usage", "tool-call delta"). Producing typed wire
-  artifacts for gateway surfaces is tracked as follow-up (see `kernel-migration.md`, Phase 2) and is
-  a prerequisite before claiming product-grade replay/outcome data for the gateway path.
+- `KernelBackend` and the kernel fuse-step runner now emit a typed `wire_response` artifact
+  (status, headers, content type, streaming flag, and a buffered body for non-streaming replies) via
+  `captureWireResponse`, alongside the live `Response` handed back to the caller. Non-streaming
+  replies are therefore replay-clean; live streaming (`text/event-stream`) responses are passed
+  through untouched and captured only at the envelope level, which is inherent to a live stream.
 - Advanced scheduler families (adaptive router, tree search, agentic delegation, learned workflow)
   are Phase 1 scaffolds: they validate and execute static graphs and provide the plug-in seam for
   real adaptive control; they do not yet implement AB-MCTS/TreeQuest-style wider/deeper search,
   Devin-style routing, or learned coordination.
-- `FusionRuntime.stream(...)` emits a single terminal event for workflows whose operators do not
-  implement `stream`; product streaming (direct/tool-call deltas, keepalives, fuse-step SSE) still
-  lives in `FusionBackend` until streaming operators are wired through the gateway path.
+- `FusionRuntime.stream(...)` is a real graph-level streaming engine: it runs the graph once and
+  forwards every streaming operator's live events, then a terminal `final`/`error`. The product
+  gateway's SSE framing, rate-limit/credit failover branching, and native-passthrough proxying still
+  live as procedural code inside `FusionBackend` (a deliberate boundary — see
+  `kernel-migration.md`, Phase 2). Its expensive phases (panel capture, `trajectories:fuse`) and all
+  turn state already execute through the kernel.
 
 ## Main migration seam
 

@@ -427,7 +427,7 @@ const kernelWrapperGuards = [
   },
   {
     file: "packages/cli/src/gateway.ts",
-    snippets: ["new KernelBackend(new FusionBackend({", "runFuseStep: buildKernelFuseStepRunner()", "fusion-frontdoor-turn"]
+    snippets: ["new KernelBackend(new FusionBackend({", "runFuseStep: createKernelFuseStepRunner()", "fusion-frontdoor-turn"]
   },
   {
     file: "packages/cli/src/fusion/stack.ts",
@@ -444,6 +444,14 @@ const kernelWrapperGuards = [
   {
     file: "python/fusionkit-server/src/fusionkit_server/app.py",
     snippets: ["kernel = FusionKernel(engine, native_runs)"]
+  },
+  {
+    file: "packages/ensemble/src/kernel-gateway.ts",
+    snippets: ["createKernelFuseStepRunner", "captureWireResponse", "WireArtifactTypes.TrajectoryFuseStepResponse"]
+  },
+  {
+    file: "packages/ensemble/src/kernel-backend.ts",
+    snippets: ["captureWireResponse", "WireArtifactTypes.WireResponse"]
   }
 ];
 for (const guard of kernelWrapperGuards) {

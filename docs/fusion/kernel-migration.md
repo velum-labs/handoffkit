@@ -198,10 +198,14 @@ Product cutover is blocked until streaming operators are wired through the
 gateway path. Current product behavior depends on sending an SSE response
 immediately and emitting keepalive comments while panel work runs.
 
-PR #37 includes the public event contract and `FusionRuntime.stream(...)`.
-Non-streaming workflows emit a final event; product cutover still requires
-streaming-capable operators for direct model deltas, tool-call deltas, keepalive
-events, and Python/TS fuse-step streaming.
+PR #37 includes the public event contract and a real graph-level
+`FusionRuntime.stream(...)` engine: it executes the graph exactly once and
+forwards every streaming operator's live events (`output.delta`,
+`tool_call.delta`, `keepalive`, operator trace events) in order, then yields a
+terminal `final` (or `error`) event carrying the full result. `ModelGenerateOperator`
+implements `stream(...)` for provider token deltas. The remaining product cutover
+is to route the gateway's SSE assembly (currently in `FusionBackend`) through this
+engine so Codex/Claude/Cursor sessions stream through operators end to end.
 
 ```ts
 type RuntimeEvent =
@@ -247,9 +251,14 @@ type TurnState = {
 ```
 
 PR #37 includes `KernelSessionState`, `KernelTurnState`,
-`KernelStateStore`, and `InMemoryKernelStateStore`. The current
-`FusionBackend` session/candidate cache still needs to move behind that store
-before product cutover.
+`KernelStateStore`, and `InMemoryKernelStateStore`. `FusionBackend` no longer
+keeps private session/candidate/cost maps: session identity, the per-turn
+candidate cache, and the running cost ledger all live behind a single
+`FusionBackendKernelStateStore` (see `InMemoryFusionBackendKernelStateStore`),
+which is the structural equivalent of the runtime's canonical store for the
+gateway surface. Session identity and turn candidates are TTL-scoped; the cost
+ledger is process/durable-scoped and written through to the durable
+`SessionStore`.
 
 ## Migration phases
 
@@ -276,17 +285,33 @@ Add workflows that wrap current behavior without changing product semantics:
 
 Status in PR #37:
 
-- `runEnsemble` is a kernel wrapper around the legacy implementation.
+- `runEnsemble` runs through the named `ensembleRunWorkflow` kernel workflow.
 - `legacy-ensemble-run` and `legacy-trajectory-fuse-step`
   compatibility workflows/operators exist.
 - CLI local and fusion-step gateways wrap their backend calls in
-  `KernelBackend`, so the HTTP backend execution surface enters the kernel.
+  `KernelBackend`, so the HTTP backend execution surface enters the kernel, and
+  the wrapper emits a typed `wire_response` artifact (not just a raw `Response`).
+- The gateway's `trajectories:fuse` step runs through the shared
+  `createKernelFuseStepRunner` kernel operator (typed request/response wire
+  artifacts) as the product default — the gateway no longer direct-`fetch`es the
+  Python step on the product path.
+- Panel capture runs through the kernel (`runFusionPanels` /
+  `runFusionPanelWorkflow`).
+- `FusionBackend` session/candidate/cost state lives in a single kernel state
+  store (`FusionBackendKernelStateStore`).
 - Python FastAPI routes call `FusionKernel`, which wraps the current
   `FusionEngine` and `FusionRunManager` internals.
 
-Remaining follow-up: decompose these compatibility operators into native
-operators and replace the legacy `FusionBackend` internals with
-`fusion-frontdoor-turn`.
+Remaining follow-up (deliberate architectural boundary): `FusionBackend`'s
+imperative turn glue — SSE framing, rate-limit/credit failover branching, and
+native-passthrough proxying — is still expressed as procedural code rather than
+as discrete kernel operators. Operator-izing it requires inverting the
+`model-gateway` ↔ `ensemble` dependency (so the gateway turn can be composed from
+runtime operators) and re-plumbing the streaming inversion-of-control through the
+streaming engine above. The expensive, side-effecting phases (panel, fuse) and
+all turn state already run through the kernel; this last sliver is tracked as
+Phase 2 and is intentionally not rewritten in this PR to avoid regressing the
+heavily-tested gateway streaming/failover/cost paths.
 
 ### Phase 2: kernel-backed `FusionBackend`
 
