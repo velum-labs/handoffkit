@@ -36,7 +36,7 @@ from fusionkit_evals.candidate_bank import (
     PreparedTask,
     bank_signature,
     build_candidate_bank,
-    load_bank,
+    load_usable_bank,
     save_bank,
 )
 from fusionkit_evals.fusion_bench import (
@@ -769,8 +769,9 @@ def tune_prompts(
     engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
-    if bank.exists():
-        candidate_bank = load_bank(bank)
+    loaded_bank = load_usable_bank(bank)
+    if loaded_bank is not None:
+        candidate_bank = loaded_bank
     else:
         problems = load_problems(
             subset,
@@ -926,8 +927,9 @@ def fusion_hillclimb(
     engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
-    if bank.exists():
-        candidate_bank = load_bank(bank)
+    loaded_bank = load_usable_bank(bank)
+    if loaded_bank is not None:
+        candidate_bank = loaded_bank
     else:
         problems = load_problems(
             subset,
@@ -1122,8 +1124,9 @@ def fusion_hillclimb_polyglot(
     all_exercises = load_polyglot_exercises(root, languages=language_list)
     exercise_map = {exercise.task_id: exercise for exercise in all_exercises}
 
-    if bank.exists():
-        candidate_bank = load_bank(bank)
+    loaded_bank = load_usable_bank(bank)
+    if loaded_bank is not None:
+        candidate_bank = loaded_bank
     else:
         exercises = load_polyglot_exercises(root, languages=language_list, subset=subset)
         endpoints_sig = sorted((e.id, e.model, e.provider) for e in fusion_config.endpoints)

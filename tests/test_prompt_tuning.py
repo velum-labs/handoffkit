@@ -23,6 +23,7 @@ from fusionkit_evals.candidate_bank import (
     bank_signature,
     build_candidate_bank,
     load_bank,
+    load_usable_bank,
     save_bank,
 )
 from fusionkit_evals.livecodebench_data import (
@@ -134,6 +135,18 @@ def test_bank_round_trips(tmp_path) -> None:
     bank = _decision_bank(2)
     save_bank(tmp_path / "bank.json", bank)
     assert load_bank(tmp_path / "bank.json").tasks[0].task_id == bank.tasks[0].task_id
+
+
+def test_load_usable_bank_rejects_missing_and_empty_banks(tmp_path) -> None:
+    """Regression: an empty persisted bank (failed build) must trigger a rebuild,
+    not be silently loaded as an authoritative zero-task bank."""
+    path = tmp_path / "bank.json"
+    assert load_usable_bank(path) is None
+    save_bank(path, CandidateBank(signature="sig", panel_models=["a"], tasks=[]))
+    assert load_usable_bank(path) is None
+    save_bank(path, _decision_bank(1))
+    loaded = load_usable_bank(path)
+    assert loaded is not None and loaded.tasks
 
 
 # --- subset selection + split ------------------------------------------------

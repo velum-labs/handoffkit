@@ -166,6 +166,19 @@ def load_bank(path: str | Path) -> CandidateBank:
     return CandidateBank.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
 
+def load_usable_bank(path: str | Path) -> CandidateBank | None:
+    """Load a persisted bank, or None when absent OR empty.
+
+    An empty bank is a failed build (e.g. every candidate generation errored) and
+    must never be treated as authoritative — callers should rebuild instead of
+    silently proceeding with zero tasks."""
+    bank_path = Path(path)
+    if not bank_path.exists():
+        return None
+    bank = load_bank(bank_path)
+    return bank if bank.tasks else None
+
+
 __all__ = [
     "BankCandidate",
     "BankTask",
@@ -174,6 +187,7 @@ __all__ = [
     "bank_signature",
     "build_candidate_bank",
     "load_bank",
+    "load_usable_bank",
     "panel_model_ids",
     "save_bank",
 ]
