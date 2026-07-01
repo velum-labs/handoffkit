@@ -119,6 +119,13 @@ class FusionBenchTaskMetrics(BaseModel):
     random_success: float | None = None
     oracle_success: float | None = None
     judge_synthesis_regret: float | None = None
+    # Regret decomposition (rubric 3.2): the judge's own pick and the additive
+    # split oracle - fused = judge_pick_regret + synthesis_rewrite_regret, where
+    # the pick policy falls back to the synthesized output when no pick is named.
+    judge_pick_model_id: str | None = None
+    judge_pick_success: float | None = None
+    judge_pick_regret: float | None = None
+    synthesis_rewrite_regret: float | None = None
     cost_estimate: float | None = None
     latency_s: float | None = None
     tool_success: float | None = None
@@ -139,6 +146,11 @@ class FusionBenchAggregateMetrics(BaseModel):
     random_success: float | None = None
     oracle_success: float | None = None
     judge_synthesis_regret: float | None = None
+    judge_pick_regret: float | None = None
+    synthesis_rewrite_regret: float | None = None
+    # 3.1: over scored tasks where candidates disagree and the judge named a
+    # pick, how often the pick was a passing candidate.
+    judge_selection_accuracy: float | None = None
     cost_estimate: float | None = None
     latency_s: float | None = None
     tool_success: float | None = None
@@ -622,6 +634,12 @@ def score_fusion_bench_row(row: FusionBenchAttemptRow) -> FusionBenchTaskMetrics
         for model_id, score in candidate_scores.items()
         if score is not None
     }
+    judge_pick_model_id = _judge_pick_model_id(row.judge_synthesis_record)
+    judge_pick_success = candidate_scores.get(judge_pick_model_id or "")
+    oracle_success = max(oracle_scores, default=None)
+    judge_pick_regret, synthesis_rewrite_regret = _regret_split(
+        oracle_success, judge_pick_success, synthesized_success
+    )
     return FusionBenchTaskMetrics(
         task_id=row.task_id,
         category=row.category,
@@ -635,8 +653,12 @@ def score_fusion_bench_row(row: FusionBenchAttemptRow) -> FusionBenchTaskMetrics
         synthesized_success=synthesized_success,
         best_single_success=max(scored_candidates, default=None),
         random_success=_average(scored_candidates),
-        oracle_success=max(oracle_scores, default=None),
+        oracle_success=oracle_success,
         judge_synthesis_regret=_regret(oracle_scores, synthesized_success),
+        judge_pick_model_id=judge_pick_model_id,
+        judge_pick_success=judge_pick_success,
+        judge_pick_regret=judge_pick_regret,
+        synthesis_rewrite_regret=synthesis_rewrite_regret,
         cost_estimate=row.cost_estimate,
         latency_s=row.latency_s,
         tool_success=_tool_success(row.tool_records),
@@ -1062,6 +1084,48 @@ def _regret(oracle_scores: list[float], synthesized_success: float | None) -> fl
     return max(oracle_scores) - synthesized_success
 
 
+def _judge_pick_model_id(judge_synthesis_record: Mapping[str, Any] | None) -> str | None:
+    """The model behind the judge's ``best_trajectory`` pick, if recorded.
+
+    The synthesis metrics carry ``judge_best_trajectory`` (the analysis pick) and
+    ``trajectory_contributions`` (trajectory_id -> model_id), so the pick maps back
+    to a panel member without re-parsing the raw judge output.
+    """
+    if judge_synthesis_record is None:
+        return None
+    metrics = judge_synthesis_record.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return None
+    pick = metrics.get("judge_best_trajectory")
+    if not isinstance(pick, str) or not pick:
+        return None
+    contributions = metrics.get("trajectory_contributions")
+    if not isinstance(contributions, list):
+        return None
+    for contribution in contributions:
+        if isinstance(contribution, Mapping) and contribution.get("trajectory_id") == pick:
+            model_id = contribution.get("model_id")
+            return model_id if isinstance(model_id, str) else None
+    return None
+
+
+def _regret_split(
+    oracle_success: float | None,
+    judge_pick_success: float | None,
+    synthesized_success: float | None,
+) -> tuple[float | None, float | None]:
+    """Additive split: oracle - fused = judge_pick_regret + synthesis_rewrite_regret.
+
+    The pick policy falls back to the synthesized output when the judge named no
+    pick (matching ``synthesis_select_best`` runtime behavior), so the components
+    always sum to the total regret.
+    """
+    if oracle_success is None or synthesized_success is None:
+        return None, None
+    pick_policy = judge_pick_success if judge_pick_success is not None else synthesized_success
+    return oracle_success - pick_policy, pick_policy - synthesized_success
+
+
 def _tool_success(tool_records: list[dict[str, Any]]) -> float | None:
     execution_records = [
         record
@@ -1095,6 +1159,9 @@ def _aggregate_metrics(tasks: list[FusionBenchTaskMetrics]) -> FusionBenchAggreg
         random_success=_average_metric(tasks, "random_success"),
         oracle_success=_average_metric(tasks, "oracle_success"),
         judge_synthesis_regret=_average_metric(tasks, "judge_synthesis_regret"),
+        judge_pick_regret=_average_metric(tasks, "judge_pick_regret"),
+        synthesis_rewrite_regret=_average_metric(tasks, "synthesis_rewrite_regret"),
+        judge_selection_accuracy=_judge_selection_accuracy(tasks),
         cost_estimate=_average_metric(tasks, "cost_estimate"),
         latency_s=_average_metric(tasks, "latency_s"),
         tool_success=_average_metric(tasks, "tool_success"),
@@ -1105,6 +1172,22 @@ def _aggregate_metrics(tasks: list[FusionBenchTaskMetrics]) -> FusionBenchAggreg
         ),
         judge_parse_failures=sum(1 for task in tasks if task.judge_parse_failed),
     )
+
+
+def _judge_selection_accuracy(tasks: list[FusionBenchTaskMetrics]) -> float | None:
+    """Judge pick accuracy on decision tasks (candidates disagree, pick named)."""
+    picks = [
+        task.judge_pick_success
+        for task in tasks
+        if task.judge_pick_success is not None
+        and task.candidate_failures
+        and 0 < sum(1 for failed in task.candidate_failures.values() if failed)
+        < len(task.candidate_failures)
+    ]
+    if not picks:
+        return None
+    correct = sum(1 for pick_success in picks if pick_success >= 1.0)
+    return correct / len(picks)
 
 
 def _average_metric(tasks: list[FusionBenchTaskMetrics], field: str) -> float | None:

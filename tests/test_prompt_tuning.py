@@ -34,6 +34,7 @@ from fusionkit_evals.prompt_tuning import (
     mcnemar,
     optimize,
     regression_guard_tasks,
+    replay_task,
     select_decision_tasks,
     split_dev_val,
 )
@@ -195,6 +196,30 @@ def _runtime(tmp_path) -> TunerRuntime:
     )
 
 
+async def test_replay_task_records_judge_pick(tmp_path) -> None:
+    """The judge's best_trajectory pick is mapped back to the bank candidate."""
+    judge_json = json.dumps({"consensus": ["c"], "best_trajectory": "cand_1"})
+    clients = {
+        "judge": FakeModelClient("judge", [judge_json]),
+        "synth": _PromptSensitiveFake("synth"),
+    }
+    runtime = TunerRuntime(
+        clients=clients,
+        judge_id="judge",
+        synth_id="synth",
+        bank_signature="sig",
+        sandbox=LocalSandbox(),
+        cache_dir=tmp_path / "cache",
+        judge_sampling=SamplingConfig(temperature=0.0),
+        synth_sampling=SamplingConfig(),
+        concurrency=1,
+    )
+    task = _decision_bank(1).tasks[0]  # cand_0 = a (passed), cand_1 = b (failed)
+    result = await replay_task(runtime, task, PromptVariant())
+    assert result.judge_pick_model == "b"
+    assert result.judge_pick_passed is False
+
+
 async def test_evaluate_variant_reflects_prompt(tmp_path) -> None:
     runtime = _runtime(tmp_path)
     tasks = select_decision_tasks(_decision_bank(3))
@@ -286,8 +311,9 @@ def test_load_problems_bounds_arrow_writer_batch(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
 
     load_problems(5)
-    assert isinstance(captured.get("writer_batch_size"), int)
-    assert captured["writer_batch_size"] <= 100
+    batch_size = captured.get("writer_batch_size")
+    assert isinstance(batch_size, int)
+    assert batch_size <= 100
 
 
 def test_prepare_tasks_builds_prompt_and_tests() -> None:

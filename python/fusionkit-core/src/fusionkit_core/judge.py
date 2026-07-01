@@ -6,7 +6,7 @@ import uuid
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import PromptOverrides, SamplingConfig
@@ -39,6 +39,9 @@ class FuseResult(BaseModel):
     ``terminal`` is true when the step produced the final answer (no tool calls);
     only then is ``trajectory`` set - the consolidated output trajectory whose
     ``synthesis`` metadata carries the fusion decision/rationale/metrics.
+    ``stage_metrics`` carries the per-stage usage/latency breakdown (``judge`` and
+    ``synthesis`` keys; the panel stage lives on the candidate trajectories) so
+    cost and latency can be attributed per pipeline stage downstream.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -47,6 +50,7 @@ class FuseResult(BaseModel):
     terminal: bool
     analysis: FusionAnalysis
     trajectory: Trajectory | None = None
+    stage_metrics: dict[str, Any] = Field(default_factory=dict)
 
 
 class JudgeSynthesizer:
@@ -131,7 +135,7 @@ class JudgeSynthesizer:
         """
         synth_client = synthesizer_client or judge_client
         judge_span = span_id or new_span_id()
-        conversation, resolved_analysis = await self._prepare_conversation(
+        conversation, resolved_analysis, judge_usage = await self._prepare_conversation(
             messages,
             trajectories,
             judge_client=judge_client,
@@ -158,7 +162,12 @@ class JudgeSynthesizer:
                 tools=tools,
                 tool_choice=tool_choice,
             )
-        result = self._build_fuse_result(response, trajectories, resolved_analysis)
+        result = self._build_fuse_result(
+            response,
+            trajectories,
+            resolved_analysis,
+            stage_metrics=_stage_metrics(judge_usage, response, synthesized=selected is None),
+        )
         self._emit_step(
             trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
         )
@@ -188,7 +197,7 @@ class JudgeSynthesizer:
         """
         synth_client = synthesizer_client or judge_client
         judge_span = span_id or new_span_id()
-        conversation, resolved_analysis = await self._prepare_conversation(
+        conversation, resolved_analysis, judge_usage = await self._prepare_conversation(
             messages,
             trajectories,
             judge_client=judge_client,
@@ -208,7 +217,12 @@ class JudgeSynthesizer:
         )
         if selected is not None:
             yield StreamChunk(delta=selected.content)
-            result = self._build_fuse_result(selected, trajectories, resolved_analysis)
+            result = self._build_fuse_result(
+                selected,
+                trajectories,
+                resolved_analysis,
+                stage_metrics=_stage_metrics(judge_usage, selected, synthesized=False),
+            )
             self._emit_step(
                 trace_id,
                 judge_span,
@@ -250,7 +264,12 @@ class JudgeSynthesizer:
             usage=usage,
             tool_calls=tool_calls,
         )
-        result = self._build_fuse_result(response, trajectories, resolved_analysis)
+        result = self._build_fuse_result(
+            response,
+            trajectories,
+            resolved_analysis,
+            stage_metrics=_stage_metrics(judge_usage, response, synthesized=True),
+        )
         self._emit_step(
             trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
         )
@@ -304,16 +323,19 @@ class JudgeSynthesizer:
         analysis: FusionAnalysis | None,
         trace_id: str | None,
         judge_span: str | None,
-    ) -> tuple[list[ChatMessage], FusionAnalysis]:
+    ) -> tuple[list[ChatMessage], FusionAnalysis, dict[str, Any]]:
         """Build the synthesizer conversation (judge analysis + system + history).
 
         Shared by :meth:`fuse` and :meth:`fuse_stream` so the streaming and
         non-streaming paths cannot drift in how they ground the synthesizer.
+        The third element is the judge stage's usage payload (empty when a cached
+        ``analysis`` was reused and no judge call happened this step).
         """
         harness_system, body = self._split_harness_system(messages)
         resolved_analysis = analysis
+        judge_usage: dict[str, Any] = {}
         if resolved_analysis is None and trajectories:
-            resolved_analysis = await self.analyze(
+            resolved_analysis, judge_usage = await self._analyze_with_usage(
                 messages,
                 trajectories,
                 judge_client=judge_client,
@@ -333,13 +355,15 @@ class JudgeSynthesizer:
             tools_present=tools is not None,
         )
         conversation = [ChatMessage(role="system", content=system), *body]
-        return conversation, resolved_analysis
+        return conversation, resolved_analysis, judge_usage
 
     def _build_fuse_result(
         self,
         response: ModelResponse,
         trajectories: Sequence[Trajectory],
         resolved_analysis: FusionAnalysis,
+        *,
+        stage_metrics: dict[str, Any] | None = None,
     ) -> FuseResult:
         terminal = not response.tool_calls
         output_trajectory: Trajectory | None = None
@@ -359,6 +383,7 @@ class JudgeSynthesizer:
             terminal=terminal,
             analysis=resolved_analysis,
             trajectory=output_trajectory,
+            stage_metrics=stage_metrics or {},
         )
 
     async def analyze(
@@ -371,6 +396,26 @@ class JudgeSynthesizer:
         trace_id: str | None = None,
         judge_span: str | None = None,
     ) -> FusionAnalysis:
+        analysis, _usage = await self._analyze_with_usage(
+            messages,
+            trajectories,
+            judge_client=judge_client,
+            judge_sampling=judge_sampling,
+            trace_id=trace_id,
+            judge_span=judge_span,
+        )
+        return analysis
+
+    async def _analyze_with_usage(
+        self,
+        messages: Sequence[ChatMessage],
+        trajectories: Sequence[Trajectory],
+        *,
+        judge_client: ChatClient,
+        judge_sampling: SamplingConfig,
+        trace_id: str | None = None,
+        judge_span: str | None = None,
+    ) -> tuple[FusionAnalysis, dict[str, Any]]:
         harness_system, _ = self._split_harness_system(messages)
         response = await judge_client.chat(
             [
@@ -385,6 +430,7 @@ class JudgeSynthesizer:
             ],
             judge_sampling,
         )
+        usage = _usage_payload(response)
         _emit_judge(
             trace_id,
             judge_span,
@@ -392,10 +438,10 @@ class JudgeSynthesizer:
             payload={
                 "fusion_unit": "trajectory",
                 "raw_analysis": response.content,
-                "usage": _usage_payload(response),
+                "usage": usage,
             },
         )
-        return parse_analysis(response.content)
+        return parse_analysis(response.content), usage
 
     def _emit_step(
         self,
@@ -523,6 +569,11 @@ def _synthesis_metrics(
         "trajectory_contributions": contributions,
         "trajectory_rejections": rejections,
         "judge_structured_parse_status": _judge_parse_status(analysis),
+        # The judge's own pick (analysis.best_trajectory), distinct from
+        # selected_trajectory_id (verbatim content match on the fused output).
+        # Downstream evals use it to split judge-pick regret from
+        # synthesis-rewrite regret.
+        "judge_best_trajectory": analysis.best_trajectory,
         "fusion_unit": "trajectory",
     }
     if _judge_parse_failed(analysis):
@@ -581,6 +632,24 @@ def _judge_parse_status(analysis: FusionAnalysis) -> str:
 
 def _judge_parse_failed(analysis: FusionAnalysis) -> bool:
     return analysis.consensus == [_PARSE_FAILURE_CONSENSUS]
+
+
+def _stage_metrics(
+    judge_usage: dict[str, Any],
+    synth_response: ModelResponse,
+    *,
+    synthesized: bool,
+) -> dict[str, Any]:
+    """Per-stage usage/latency breakdown for one fuse step.
+
+    ``judge`` is empty when a cached analysis was reused (no judge call this step);
+    ``synthesis`` marks ``skipped: true`` when select-best returned a candidate
+    verbatim without a synthesizer call.
+    """
+    synthesis: dict[str, Any] = _usage_payload(synth_response)
+    if not synthesized:
+        synthesis["skipped"] = True
+    return {"judge": judge_usage, "synthesis": synthesis}
 
 
 def _synthesis_id() -> str:

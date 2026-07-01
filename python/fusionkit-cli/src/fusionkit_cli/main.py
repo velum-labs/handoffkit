@@ -51,10 +51,12 @@ from fusionkit_evals.fusion_bench import (
 from fusionkit_evals.fusion_hillclimb import (
     ClimbDiagnosis,
     ClimbResult,
+    RegretSplit,
     TargetCheck,
     best_single_baseline,
     check_target,
     diagnose_bank,
+    regret_split,
     run_climb,
 )
 from fusionkit_evals.fusion_reports import (
@@ -1018,6 +1020,7 @@ def fusion_hillclimb(
         candidate_bank, task_ids=[task.task_id for task in test_tasks]
     )
     target_test = check_target(best_single_test, fused_test.passes)
+    test_regret = regret_split(test_tasks, fused_test)
 
     tuned_prompt = result.best_prompt
     response: dict[str, object] = {
@@ -1039,6 +1042,7 @@ def fusion_hillclimb(
         "test_mcnemar_losses": target_test.mcnemar.losses,
         "test_significant": target_test.mcnemar.significant,
         "compound_beats_best_single": target_test.beats_best_single,
+        "test_regret_split": test_regret.model_dump(mode="json"),
         "budget_usd": budget_usd,
     }
     # Promote the tuned prompt only if it makes the compound beat the best single on
@@ -1051,7 +1055,9 @@ def fusion_hillclimb(
     if report is not None:
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(
-            _format_hillclimb_report(result, diagnosis, target_test, len(test_tasks), budget_usd),
+            _format_hillclimb_report(
+                result, diagnosis, target_test, len(test_tasks), budget_usd, test_regret
+            ),
             encoding="utf-8",
         )
         response["report"] = str(report)
@@ -1207,6 +1213,7 @@ def fusion_hillclimb_polyglot(
         candidate_bank, task_ids=[task.task_id for task in test_tasks]
     )
     target_test = check_target(best_single_test, fused_test.passes)
+    test_regret = regret_split(test_tasks, fused_test)
 
     tuned_prompt = result.best_prompt
     response: dict[str, object] = {
@@ -1223,6 +1230,7 @@ def fusion_hillclimb_polyglot(
         "test_uplift": target_test.uplift,
         "test_significant": target_test.mcnemar.significant,
         "compound_beats_best_single": target_test.beats_best_single,
+        "test_regret_split": test_regret.model_dump(mode="json"),
         "budget_usd": budget_usd,
     }
     if tuned_prompt is not None and target_test.uplift > 0:
@@ -1233,7 +1241,9 @@ def fusion_hillclimb_polyglot(
     if report is not None:
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(
-            _format_hillclimb_report(result, diagnosis, target_test, len(test_tasks), budget_usd),
+            _format_hillclimb_report(
+                result, diagnosis, target_test, len(test_tasks), budget_usd, test_regret
+            ),
             encoding="utf-8",
         )
         response["report"] = str(report)
@@ -1257,6 +1267,7 @@ def _format_hillclimb_report(
     target_test: TargetCheck,
     n_test: int,
     budget_usd: float,
+    regret: RegretSplit | None = None,
 ) -> str:
     # Use the full-bank diagnosis (not the train-subset one on result.diagnosis,
     # where decision tasks trivially give oracle 1.0) so the report is honest.
@@ -1290,6 +1301,21 @@ def _format_hillclimb_report(
         f"{'YES' if test.beats_best_single else 'no'}",
         "",
     ]
+    if regret is not None and regret.n > 0:
+        lines.extend(
+            [
+                "## Regret split (locked test)",
+                "",
+                f"- Oracle {_fmt_num(regret.oracle_rate)} -> judge pick "
+                f"{_fmt_num(regret.judge_pick_rate)} -> fused {_fmt_num(regret.fused_rate)}",
+                f"- Total regret: {_fmt_num(regret.total_regret)} = judge "
+                f"{_fmt_num(regret.judge_regret)} + synthesis {_fmt_num(regret.synthesis_regret)}",
+                f"- Judge picks named: {regret.picks_named}/{regret.n}; decision-task pick "
+                f"accuracy: {_fmt_num(regret.judge_pick_accuracy)} (strict exactly-one-correct: "
+                f"{_fmt_num(regret.judge_pick_accuracy_strict)})",
+                "",
+            ]
+        )
     return "\n".join(lines)
 
 

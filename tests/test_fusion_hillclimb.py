@@ -6,7 +6,9 @@ from fusionkit_evals.fusion_hillclimb import (
     best_single_baseline,
     check_target,
     diagnose_bank,
+    regret_split,
 )
+from fusionkit_evals.prompt_tuning import PerTaskResult, PromptEval
 
 
 def _task(task_id: str, gpt: bool, opus: bool) -> BankTask:
@@ -100,3 +102,64 @@ def test_check_target_not_significant_for_small_or_tied_gains() -> None:
     target = check_target(best, {"t1": True, "t2": True})
     assert target.uplift == 0.5
     assert target.beats_best_single is False  # only 1 discordant win, not significant
+
+
+def _eval(results: dict[str, PerTaskResult]) -> PromptEval:
+    successes = sum(1 for r in results.values() if r.passed)
+    return PromptEval(
+        prompt_hash="h",
+        n=len(results),
+        successes=successes,
+        score=successes / len(results) if results else 0.0,
+        ci_low=0.0,
+        ci_high=1.0,
+        passes={tid: r.passed for tid, r in results.items()},
+        task_results=results,
+    )
+
+
+def test_regret_split_is_additive_and_attributes_components() -> None:
+    tasks = [
+        # t1: judge picked the passing candidate but the rewrite failed -> synthesis regret.
+        _task("t1", gpt=True, opus=False),
+        # t2: judge picked the failing candidate and fused failed -> judge regret.
+        _task("t2", gpt=False, opus=True),
+        # t3: everything passed -> no regret.
+        _task("t3", gpt=True, opus=True),
+        # t4: oracle-impossible task, fused failed -> no regret to attribute.
+        _task("t4", gpt=False, opus=False),
+    ]
+    results = {
+        "t1": PerTaskResult(passed=False, judge_pick_model="gpt", judge_pick_passed=True),
+        "t2": PerTaskResult(passed=False, judge_pick_model="gpt", judge_pick_passed=False),
+        "t3": PerTaskResult(passed=True, judge_pick_model="gpt", judge_pick_passed=True),
+        "t4": PerTaskResult(passed=False, judge_pick_model="gpt", judge_pick_passed=False),
+    }
+    split = regret_split(tasks, _eval(results))
+    assert split.n == 4
+    assert split.oracle_rate == 0.75  # t1, t2, t3
+    assert split.judge_pick_rate == 0.5  # picks pass on t1, t3
+    assert split.fused_rate == 0.25  # only t3
+    assert split.total_regret == 0.5
+    assert split.judge_regret == 0.25  # oracle - pick
+    assert split.synthesis_regret == 0.25  # pick - fused
+    assert abs(split.total_regret - (split.judge_regret + split.synthesis_regret)) < 1e-9
+    # Decision tasks with a named pick: t1 (correct), t2 (wrong) -> 50%; both strict.
+    assert split.judge_pick_accuracy == 0.5
+    assert split.judge_pick_accuracy_strict == 0.5
+
+
+def test_regret_split_falls_back_to_fused_when_no_pick_named() -> None:
+    tasks = [_task("t1", gpt=True, opus=False)]
+    results = {"t1": PerTaskResult(passed=True)}  # no judge pick recorded
+    split = regret_split(tasks, _eval(results))
+    assert split.picks_named == 0
+    assert split.judge_pick_rate == split.fused_rate == 1.0
+    assert split.judge_regret == 0.0
+    assert split.judge_pick_accuracy is None
+
+
+def test_regret_split_empty_results() -> None:
+    split = regret_split([], _eval({}))
+    assert split.n == 0
+    assert split.total_regret == 0.0

@@ -553,6 +553,93 @@ def test_fusion_bench_scores_hand_checked_task_metrics() -> None:
     assert metrics.candidate_failures == {"fast": False, "slow": True}
 
 
+def test_fusion_bench_regret_split_attributes_judge_vs_synthesis() -> None:
+    # The judge picked the failing candidate ("slow"); the synthesizer also
+    # produced a failing output. Oracle=1 (fast passed), pick policy=0 ->
+    # judge_pick_regret=1.0, synthesis_rewrite_regret=0.0 (additive to total).
+    row = _report_row(
+        "task_judge_wrong_pick",
+        output="bad",
+        candidate_outputs={"fast": "good", "slow": "bad"},
+    ).model_copy(
+        update={
+            "judge_synthesis_record": {
+                "schema": "judge-synthesis-record.v1",
+                "metrics": {
+                    "judge_structured_parse_status": "parsed",
+                    "judge_best_trajectory": "traj_slow",
+                    "trajectory_contributions": [
+                        {"trajectory_id": "traj_fast", "model_id": "fast"},
+                        {"trajectory_id": "traj_slow", "model_id": "slow"},
+                    ],
+                },
+            }
+        }
+    )
+
+    metrics = score_fusion_bench_row(row)
+
+    assert metrics.judge_pick_model_id == "slow"
+    assert metrics.judge_pick_success == 0.0
+    assert metrics.oracle_success == 1.0
+    assert metrics.judge_synthesis_regret == 1.0
+    assert metrics.judge_pick_regret == 1.0
+    assert metrics.synthesis_rewrite_regret == 0.0
+
+    report = build_fusion_bench_report([row])
+    assert report.aggregate.judge_pick_regret == 1.0
+    assert report.aggregate.synthesis_rewrite_regret == 0.0
+    # Decision task (candidates disagree) with a named pick that failed -> 0%.
+    assert report.aggregate.judge_selection_accuracy == 0.0
+
+
+def test_fusion_bench_regret_split_synthesis_component() -> None:
+    # The judge picked the passing candidate but the rewrite ruined it:
+    # pick policy=1, fused=0 -> synthesis_rewrite_regret carries the loss.
+    row = _report_row(
+        "task_rewrite_ruined",
+        output="bad",
+        candidate_outputs={"fast": "good", "slow": "bad"},
+    ).model_copy(
+        update={
+            "judge_synthesis_record": {
+                "schema": "judge-synthesis-record.v1",
+                "metrics": {
+                    "judge_structured_parse_status": "parsed",
+                    "judge_best_trajectory": "traj_fast",
+                    "trajectory_contributions": [
+                        {"trajectory_id": "traj_fast", "model_id": "fast"},
+                        {"trajectory_id": "traj_slow", "model_id": "slow"},
+                    ],
+                },
+            }
+        }
+    )
+
+    metrics = score_fusion_bench_row(row)
+
+    assert metrics.judge_pick_success == 1.0
+    assert metrics.judge_pick_regret == 0.0
+    assert metrics.synthesis_rewrite_regret == 1.0
+
+
+def test_fusion_bench_regret_split_none_without_pick() -> None:
+    # No judge pick recorded -> pick policy falls back to the fused output, so
+    # the whole regret lands on the judge component (it named no winner).
+    row = _report_row(
+        "task_no_pick",
+        output="bad",
+        candidate_outputs={"fast": "good", "slow": "bad"},
+    )
+
+    metrics = score_fusion_bench_row(row)
+
+    assert metrics.judge_pick_model_id is None
+    assert metrics.judge_pick_success is None
+    assert metrics.judge_pick_regret == 1.0
+    assert metrics.synthesis_rewrite_regret == 0.0
+
+
 def test_fusion_bench_skipped_rows_do_not_contribute_candidate_metrics() -> None:
     row = _report_row(
         "task_skipped_with_calls",

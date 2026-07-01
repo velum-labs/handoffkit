@@ -81,6 +81,8 @@ class FusionEngine:
         fused = await self._judge_synthesize(messages, trajectories)
         answer = fused.response.content
         metrics: dict[str, object] = {**_trajectory_metrics(trajectories)}
+        if fused.stage_metrics:
+            metrics["stage_metrics"] = fused.stage_metrics
         synthesis = fused.trajectory.synthesis if fused.trajectory is not None else None
         if synthesis is not None:
             metrics["synthesis"] = synthesis.model_dump(mode="json")

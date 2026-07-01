@@ -62,6 +62,12 @@ class TaskSplit(BaseModel):
 class PerTaskResult(BaseModel):
     passed: bool
     fused_output: str = ""
+    # Judge instrumentation (rubric 3.1/3.2): the judge's own pick
+    # (analysis.best_trajectory mapped back to the bank candidate) and whether
+    # that candidate passed the task's tests. None when the judge named no pick
+    # (or for cached results predating this instrumentation).
+    judge_pick_model: str | None = None
+    judge_pick_passed: bool | None = None
 
 
 class PromptEval(BaseModel):
@@ -72,6 +78,7 @@ class PromptEval(BaseModel):
     ci_low: float
     ci_high: float
     passes: dict[str, bool] = Field(default_factory=dict)
+    task_results: dict[str, PerTaskResult] = Field(default_factory=dict)
 
 
 class McNemarResult(BaseModel):
@@ -226,7 +233,27 @@ async def replay_task(
     answer = result.response.content
     code = extract_code(answer).code
     passed = await asyncio.to_thread(runtime.verify, task, code)
-    return PerTaskResult(passed=passed, fused_output=answer[:4000])
+    pick_model, pick_passed = _judge_pick(task, result.analysis.best_trajectory)
+    return PerTaskResult(
+        passed=passed,
+        fused_output=answer[:4000],
+        judge_pick_model=pick_model,
+        judge_pick_passed=pick_passed,
+    )
+
+
+def _judge_pick(task: BankTask, best_trajectory: str | None) -> tuple[str | None, bool | None]:
+    """Map the judge's ``best_trajectory`` id (``cand_{index}``) to the bank candidate."""
+    if not best_trajectory:
+        return None, None
+    prefix, _, index_text = best_trajectory.partition("_")
+    if prefix != "cand" or not index_text.isdigit():
+        return None, None
+    index = int(index_text)
+    if index >= len(task.candidates):
+        return None, None
+    candidate = task.candidates[index]
+    return candidate.model_id, candidate.passed
 
 
 async def evaluate_variant(
@@ -258,6 +285,7 @@ async def evaluate_variant(
         ci_low=ci.low,
         ci_high=ci.high,
         passes=passes,
+        task_results=dict(pairs),
     )
 
 

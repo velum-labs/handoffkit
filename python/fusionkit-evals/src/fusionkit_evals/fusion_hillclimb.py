@@ -25,9 +25,10 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, Field
 
-from fusionkit_evals.candidate_bank import CandidateBank
+from fusionkit_evals.candidate_bank import BankTask, CandidateBank
 from fusionkit_evals.prompt_tuning import (
     McNemarResult,
+    PromptEval,
     PromptProposer,
     PromptVariant,
     TunableRole,
@@ -71,6 +72,91 @@ class TargetCheck(BaseModel):
     uplift: float
     mcnemar: McNemarResult
     beats_best_single: bool
+
+
+class RegretSplit(BaseModel):
+    """Total judge+synthesis regret decomposed per rubric criterion 3.2.
+
+    The decomposition is additive over the tasks with a recorded judge pick:
+    ``oracle - fused = (oracle - pick_policy) + (pick_policy - fused)`` where
+    ``pick_policy`` is the counterfactual "return the judge's pick verbatim"
+    (falling back to the fused output on tasks where the judge named no pick,
+    matching ``synthesis_select_best`` runtime behavior).
+    """
+
+    n: int
+    oracle_rate: float
+    judge_pick_rate: float
+    fused_rate: float
+    total_regret: float
+    judge_regret: float
+    synthesis_regret: float
+    picks_named: int
+    # 3.1: over decision tasks with a named pick, how often the pick was correct.
+    judge_pick_accuracy: float | None = None
+    # Strict rubric variant: tasks where exactly one candidate is correct.
+    judge_pick_accuracy_strict: float | None = None
+
+
+def regret_split(tasks: Sequence[BankTask], evaluation: PromptEval) -> RegretSplit:
+    """Decompose regret into judge-pick vs synthesis-rewrite components."""
+    by_id = {task.task_id: task for task in tasks}
+    n = 0
+    oracle_hits = 0
+    pick_hits = 0
+    fused_hits = 0
+    picks_named = 0
+    decision_picks = 0
+    decision_pick_correct = 0
+    strict_picks = 0
+    strict_pick_correct = 0
+    for task_id, result in evaluation.task_results.items():
+        task = by_id.get(task_id)
+        if task is None:
+            continue
+        n += 1
+        fused = result.passed
+        fused_hits += 1 if fused else 0
+        oracle_hits += 1 if task.oracle_pass else 0
+        if result.judge_pick_passed is None:
+            pick_hits += 1 if fused else 0  # no pick -> pick policy falls back to fused
+        else:
+            picks_named += 1
+            pick_hits += 1 if result.judge_pick_passed else 0
+            if task.is_decision_task:
+                decision_picks += 1
+                decision_pick_correct += 1 if result.judge_pick_passed else 0
+                if task.n_pass == 1:
+                    strict_picks += 1
+                    strict_pick_correct += 1 if result.judge_pick_passed else 0
+    if n == 0:
+        return RegretSplit(
+            n=0,
+            oracle_rate=0.0,
+            judge_pick_rate=0.0,
+            fused_rate=0.0,
+            total_regret=0.0,
+            judge_regret=0.0,
+            synthesis_regret=0.0,
+            picks_named=0,
+        )
+    oracle_rate = oracle_hits / n
+    pick_rate = pick_hits / n
+    fused_rate = fused_hits / n
+    return RegretSplit(
+        n=n,
+        oracle_rate=oracle_rate,
+        judge_pick_rate=pick_rate,
+        fused_rate=fused_rate,
+        total_regret=oracle_rate - fused_rate,
+        judge_regret=oracle_rate - pick_rate,
+        synthesis_regret=pick_rate - fused_rate,
+        picks_named=picks_named,
+        judge_pick_accuracy=(decision_pick_correct / decision_picks if decision_picks else None),
+        judge_pick_accuracy_strict=(
+            strict_pick_correct / strict_picks if strict_picks else None
+        ),
+    )
 
 
 class ClimbResult(BaseModel):
@@ -268,9 +354,11 @@ __all__ = [
     "BestSingle",
     "ClimbDiagnosis",
     "ClimbResult",
+    "RegretSplit",
     "TargetCheck",
     "best_single_baseline",
     "check_target",
     "diagnose_bank",
+    "regret_split",
     "run_climb",
 ]
