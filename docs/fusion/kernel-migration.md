@@ -44,11 +44,11 @@ selection, repair, session candidate reuse, budget policy, or outcome logging.
 
 | Surface | Current execution path | Kernel-backed today? | Cutover target |
 | --- | --- | ---: | --- |
-| `fusionkit codex` | CLI -> KernelBackend -> legacy FusionBackend -> panel capture -> Python fuse | Kernel-wrapped | native `fusion-frontdoor-turn` |
-| `fusionkit claude` | Same stack, Anthropic dialect | Kernel-wrapped | same workflow; dialect adapter only |
-| `fusionkit cursor` | Same stack, Cursor bridge/ACP/IDE | Kernel-wrapped | same workflow; Cursor adapter only |
-| `fusionkit fusion <tool>` | Generic dispatcher to `runFusion` | Kernel-wrapped | same as tool shortcuts |
-| `fusionkit serve` | Starts kernel-wrapped fusion gateway | Kernel-wrapped | gateway dispatches every turn into native workflow |
+| `fusionkit codex` | CLI -> FusionBackend -> `fusion-frontdoor-turn` graph (panel -> fuse -> finalize) | Kernel-native | done |
+| `fusionkit claude` | Same stack, Anthropic dialect | Kernel-native | done; dialect adapter only |
+| `fusionkit cursor` | Same stack, Cursor bridge/ACP/IDE | Kernel-native | done; Cursor adapter only |
+| `fusionkit fusion <tool>` | Generic dispatcher to `runFusion` | Kernel-native | done |
+| `fusionkit serve` | Fusion gateway dispatches every turn into a named workflow | Kernel-native | done |
 | `fusionkit local <tool>` | kernel-wrapped local gateway over direct backend | Kernel-wrapped | native `direct-model-turn` |
 | `fusionkit ensemble run` | `runEnsemble` wrapper -> legacy operator | Kernel-wrapped | decomposed `ensemble-run` |
 | `fusionkit ensemble e2e` | `runUnifiedHarnessE2E` -> `runEnsemble` wrapper | Kernel-wrapped | e2e adapter -> decomposed workflow |
@@ -201,11 +201,17 @@ immediately and emitting keepalive comments while panel work runs.
 PR #37 includes the public event contract and a real graph-level
 `FusionRuntime.stream(...)` engine: it executes the graph exactly once and
 forwards every streaming operator's live events (`output.delta`,
-`tool_call.delta`, `keepalive`, operator trace events) in order, then yields a
-terminal `final` (or `error`) event carrying the full result. `ModelGenerateOperator`
-implements `stream(...)` for provider token deltas. The remaining product cutover
-is to route the gateway's SSE assembly (currently in `FusionBackend`) through this
-engine so Codex/Claude/Cursor sessions stream through operators end to end.
+`tool_call.delta`, `sse.chunk`, `keepalive`, operator trace events) in order,
+then yields a terminal `final` (or `error`) event carrying the full result.
+`ModelGenerateOperator` implements `stream(...)` for provider token deltas.
+
+The gateway's streaming SSE assembly is now routed through this engine: the
+streaming front-door turn runs as `panel -> fuse.stream`, the
+`frontdoor.fuse.stream` operator pipes the Python step's SSE bytes as `sse.chunk`
+events, and the `eventsToSseResponse` surface adapter serializes them (with
+keepalives during the panel phase and a terminal error event on failure) into the
+exact wire the harnesses expect. Codex/Claude/Cursor sessions therefore stream
+through operators end to end.
 
 ```ts
 type RuntimeEvent =
@@ -302,25 +308,40 @@ Status in PR #37:
 - Python FastAPI routes call `FusionKernel`, which wraps the current
   `FusionEngine` and `FusionRunManager` internals.
 
-Remaining follow-up (deliberate architectural boundary): `FusionBackend`'s
-imperative turn glue — SSE framing, rate-limit/credit failover branching, and
-native-passthrough proxying — is still expressed as procedural code rather than
-as discrete kernel operators. Operator-izing it requires inverting the
-`model-gateway` ↔ `ensemble` dependency (so the gateway turn can be composed from
-runtime operators) and re-plumbing the streaming inversion-of-control through the
-streaming engine above. The expensive, side-effecting phases (panel, fuse) and
-all turn state already run through the kernel; this last sliver is tracked as
-Phase 2 and is intentionally not rewritten in this PR to avoid regressing the
-heavily-tested gateway streaming/failover/cost paths.
+Native cutover complete: the `model-gateway` ↔ `ensemble` dependency was inverted
+by extracting the runtime substrate into the standalone `@fusionkit/kernel`
+package (both packages now depend on it), so `FusionBackend` composes the turn
+from runtime operators directly. Every front-door turn is dispatched as a named
+kernel graph:
 
-### Phase 2: kernel-backed `FusionBackend`
+- `fusion-frontdoor-turn` (buffered): `frontdoor.panel -> frontdoor.fuse ->
+  frontdoor.finalize`, run via `FusionRuntime.run`.
+- `fusion-frontdoor-turn` (streamed): `frontdoor.panel -> frontdoor.fuse.stream`,
+  run via `FusionRuntime.stream` and serialized by `eventsToSseResponse`.
+- `fusion-passthrough-turn`: `frontdoor.passthrough` (vendor proxy), whose
+  rate-limit/credit failover re-enters the fusion front-door turn with the
+  throttled vendor excluded.
 
-Replace bespoke `FusionBackend` orchestration with `fusion-frontdoor-turn`.
+`FusionBackend` is now a kernel-native surface adapter: it owns only the wire
+(session identity, panel/fuse implementations, cost/trace/persistence) that the
+operators invoke, while the runtime owns admission, provenance, budget, trace,
+and replay. The redundant outer `KernelBackend` wrapper around the fusion gateway
+was removed. The vendor-proxy SSE peeking used for mid-stream resume notices
+(`#proxyNativeStream`) remains the `frontdoor.passthrough` operator's transport
+implementation, consistent with the operator pattern (an operator wraps its
+side-effecting wire, e.g. `ModelGenerateOperator` wrapping a `ModelClient`).
 
-Gate:
+### Phase 2: kernel-backed `FusionBackend` (done)
 
-- existing gateway tests pass unchanged;
-- streaming first-byte/keepalive behavior preserved;
+Bespoke `FusionBackend` orchestration is replaced with the `fusion-frontdoor-turn`
+and `fusion-passthrough-turn` kernel workflows (see "Native cutover complete"
+above).
+
+Gate (all met):
+
+- existing gateway tests pass unchanged (99 gateway tests + new frontdoor
+  operator tests);
+- streaming first-byte/keepalive behavior preserved (`eventsToSseResponse`);
 - native passthrough/failover tests pass;
 - durable session resume tests pass.
 
