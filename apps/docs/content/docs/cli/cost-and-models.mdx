@@ -6,11 +6,15 @@ description: Understand and control what a fused run spends.
 ## Why cost matters here
 
 The default panel runs **multiple frontier cloud models plus a judge** on every
-prompt. That is the point — fusion trades extra calls for better answers — but it
+prompt. That is the point: fusion trades extra calls for better answers, but it
 means usage adds up faster than a single-model session.
 
 fusionkit asks for a one-line confirmation before starting a cloud panel on an
 interactive terminal. Skip it with `--yes` (or in non-interactive contexts).
+
+For provider selection, model ids, local MLX cache commands, and mixed panels,
+read [Models and panels](/docs/cli/models-and-panels). This page focuses on
+spend control.
 
 ## Ways to control cost
 
@@ -40,6 +44,23 @@ Or commit it via the [`.fusionkit/` folder](/docs/getting-started/configuration)
 A panel can be a single model plus a judge if you want fusion's synthesis step
 without a wide fan-out.
 
+### Cap the session
+
+Use `--budget` to stop a session after gateway-observed spend crosses the cap.
+
+```bash
+fusionkit codex --budget 5
+```
+
+Persist the same cap in `.fusionkit/fusion.json`:
+
+```json
+{
+  "version": "fusionkit.fusion.v2",
+  "budgetUsd": 5
+}
+```
+
 ## Preview before you spend
 
 ```bash
@@ -47,6 +68,13 @@ fusionkit status
 ```
 
 shows the effective panel, judge, and a note when a run will use cloud models.
+
+Inspect accumulated cost later:
+
+```bash
+fusionkit sessions
+fusionkit sessions show <id>
+```
 
 <Callout type="warn">
   Model IDs in the defaults (e.g. `gpt-5.5`, `claude-sonnet-4-6`) must be enabled

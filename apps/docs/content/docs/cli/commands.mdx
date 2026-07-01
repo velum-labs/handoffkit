@@ -34,9 +34,49 @@ fusionkit codex --yes -- "fix the build" # everything after -- goes to codex
 | Command | What it does |
 | --- | --- |
 | `fusionkit init` | Scaffold a committed `.fusionkit/` folder (settings + prompts) for this repo (`--force` to overwrite). |
-| `fusionkit doctor` | Check prerequisites (uv/uvx, agent binaries, provider keys, git) with fix hints. |
+| `fusionkit setup` | Pre-provision the pinned Python fusion engine into the `uvx` cache. Use `--force` to refresh it. |
+| `fusionkit doctor` | Check prerequisites (uv/uvx, agent binaries, provider keys, git) with fix hints. Use `--provision` to warm the Python engine too. |
 | `fusionkit status` | Show the effective config and a dry-run preview of what a run will do. |
 | `fusionkit fusion stop` | Reap persistent portless singleton services (router, dashboard) left running by prior runs. |
+
+## Configuration commands
+
+The Node CLI owns the committed `.fusionkit/fusion.json` config. The Python
+router YAML is derived from it.
+
+| Command | What it does |
+| --- | --- |
+| `fusionkit config show` | Print the effective config and where each value came from. |
+| `fusionkit config path` | Print the `.fusionkit/fusion.json` path that will be used. |
+| `fusionkit config export-yaml` | Print the derived Python router YAML. Add `-o router.yaml` to write it. |
+
+## Durable session commands
+
+Gateway sessions are persisted under `~/.fusionkit/sessions/` unless
+`FUSIONKIT_SESSIONS_DIR` overrides the location.
+
+| Command | What it does |
+| --- | --- |
+| `fusionkit sessions` | List sessions, including id, tool, panel, turn count, last activity, and cost. |
+| `fusionkit sessions show <id>` | Show session metadata and recent turns. Unique id prefixes are accepted. |
+| `fusionkit sessions rm <id>` | Delete a stored session. |
+
+Resume sessions from the launch commands:
+
+```bash
+fusionkit codex --continue
+fusionkit codex --resume 1a2b3c
+```
+
+## Model cache commands
+
+These commands manage the local MLX model cache.
+
+| Command | What it does |
+| --- | --- |
+| `fusionkit models list` | Show the curated catalog, downloaded state, sizes, and RAM fit. |
+| `fusionkit models download <model>` | Download a local model. |
+| `fusionkit models rm <model>` | Remove a downloaded local model. |
 
 ## Local-model commands
 
@@ -90,6 +130,25 @@ These apply to the launch commands (`codex`, `claude`, `cursor`, `serve`,
 | `--port <n>` | Fixed gateway port (default: ephemeral). |
 | `--portless` / `--no-portless` | Route services through portless stable URLs, or force raw loopback ports. |
 | `--auth-token <token>` | Require a bearer token on the gateway. |
+| `--budget <usd>` | Stop the session when gateway-observed spend crosses this cap. |
+| `--on-rate-limit fusion\|passthrough\|fail` | Choose behavior when a passthrough vendor hits rate limits, quota, or billing errors. |
+| `--resume <id>` | Resume a stored session by id or unique prefix. |
+| `--continue` | Resume the most recently active stored session. |
+| `--ide` | Cursor only: wire the Cursor IDE through the local desktop proxy. |
+
+## Fused and passthrough model ids
+
+The gateway exposes `fusion-panel` for synthesized ensemble answers. It also
+exposes each panel member id, such as `gpt`, `sonnet`, or `gemini`, as a direct
+passthrough model. Use `fusion-panel` for normal fused work. Use a member id
+when comparing one provider against the ensemble or when deliberately relying on
+rate-limit handoff as a fallback.
+
+## Cost metering
+
+Each gateway turn records token usage and USD estimates when pricing metadata is
+available. `fusionkit sessions` shows the running total. Use `--budget <usd>` or
+`budgetUsd` in `.fusionkit/fusion.json` to cap a session.
 
 <Callout type="info">
   `fusionkit --version` (`-v`) prints both the npm CLI version and the pinned

@@ -14,7 +14,7 @@
       "post": {
         "operationId": "executeHarnessTask",
         "summary": "Execute a model-fusion harness task",
-        "description": "FusionKit calls this HTTP/JSON seam to ask HandoffKit to execute a coding harness task and return persisted JSON Schema audit records.",
+        "description": "FusionKit calls this HTTP/JSON seam to ask a harness executor to run a coding task and return persisted JSON Schema audit records.",
         "requestBody": {
           "required": true,
           "content": {

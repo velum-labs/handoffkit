@@ -56,7 +56,7 @@ Packages not listed in `release/npm-packages.json` must remain `private: true`.
 
 ## Authentication: trusted publishing (with one-time token bootstrap)
 
-The target steady state is **npm trusted publishing (OIDC)** — no stored token.
+The target steady state is **npm trusted publishing (OIDC)** with no stored token.
 The workflow already grants `id-token: write` and updates the npm CLI to a
 version that performs the OIDC exchange, so once a Trusted Publisher is
 configured on npmjs.com, `pnpm publish` authenticates via OIDC automatically
@@ -66,7 +66,7 @@ npm has one catch: a Trusted Publisher can only be attached to a package that
 **already exists**, so the very first publish of new packages cannot use OIDC.
 The bootstrap flow is therefore:
 
-1. **First release — token.** Add an `NPM_TOKEN` repository secret (a granular
+1. **First release with token.** Add an `NPM_TOKEN` repository secret (a granular
    token scoped to the `@fusionkit` scope with write access, short expiry). The
    first published GitHub Release creates all packages on npm. `NPM_TOKEN` is
    written to `~/.npmrc` only on `release` events; `workflow_dispatch` packs a

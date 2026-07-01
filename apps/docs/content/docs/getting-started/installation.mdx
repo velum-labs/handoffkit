@@ -9,7 +9,12 @@ description: Install the CLI and the tools it orchestrates.
 npm install -g @fusionkit/cli
 ```
 
-This provides the `fusionkit` command.
+This provides the `fusionkit` command. Pre-provision the Python fusion engine once
+so the first real run does not wait on a `uvx` cold start:
+
+```bash
+fusionkit setup
+```
 
 ## Prerequisites
 
@@ -26,9 +31,9 @@ gives you `uvx`; no manual Python setup is needed.
 
 At least one of:
 
-- [`codex`](https://github.com/openai/codex) — OpenAI Codex CLI
-- [`claude`](https://docs.anthropic.com/en/docs/claude-code/overview) — Claude Code
-- [`cursor-agent`](https://cursor.com/cli) — Cursor CLI (Cursorkit ships bundled
+- [`codex`](https://github.com/openai/codex): OpenAI Codex CLI
+- [`claude`](https://docs.anthropic.com/en/docs/claude-code/overview): Claude Code
+- [`cursor-agent`](https://cursor.com/cli): Cursor CLI (Cursorkit ships bundled
   with the npm package, so no separate checkout is needed; see
   [Troubleshooting](/docs/cli/troubleshooting))
 
@@ -39,9 +44,10 @@ The default panel uses cloud models, so export the relevant keys:
 ```bash
 export OPENAI_API_KEY=...
 export ANTHROPIC_API_KEY=...
+export GEMINI_API_KEY=...
 ```
 
-You can also put them in a project `.env` — fusionkit loads it automatically
+You can also put them in a project `.env`. fusionkit loads it automatically
 (already-exported values always win). The local MLX panel (`--local`, Apple
 Silicon) needs no keys.
 
@@ -54,13 +60,14 @@ your project, or pass `--repo <dir>`.
 
 ```bash
 fusionkit doctor
+fusionkit doctor --provision   # also warms the Python engine
 fusionkit --version   # prints the npm CLI and pinned PyPI synthesizer versions
 ```
 
 ## Optional: stable named URLs with portless
 
-Every service the stack starts — the panel servers, the gateway your agent
-connects to, and the observability dashboard — can be registered with
+Every service the stack starts, including the panel servers, the gateway your
+agent connects to, and the observability dashboard, can be registered with
 [portless](https://github.com/vercel-labs/portless) so it is reachable at a
 stable HTTPS name (for example `https://gateway.fusion.localhost`) instead of a
 raw port, and reused across runs.

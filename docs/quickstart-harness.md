@@ -32,7 +32,7 @@ fusionkit codex                 # or: claude | cursor
 
 That single command spawns everything and tears it all down on one `Ctrl+C`:
 
-- the **model panel** (a decorrelated cloud trio by default — see the
+- the **model panel** (a decorrelated cloud trio by default, see the
   [model catalog](model-catalog.md));
 - one **`fusionkit serve` router** that fronts each panel model and performs
   judge synthesis;
@@ -60,7 +60,7 @@ The gateway advertises the **fused** model (`fusion-panel`) *and* each panel
 member as a direct **passthrough**. Use the agent's own `/model` picker to switch
 between "run the ensemble" and "use this one vendor directly" mid-session. When a
 passthrough vendor hits a rate limit, the turn is transparently handed off to the
-ensemble — see [rate-limit handoff](quickstart-handoff.md).
+ensemble. See [rate-limit handoff](quickstart-handoff.md).
 
 ## Useful flags
 

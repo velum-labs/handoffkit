@@ -1,0 +1,116 @@
+---
+title: Inference endpoint
+description: Run FusionKit as an OpenAI-compatible HTTP endpoint without launching a coding harness.
+---
+
+You can run FusionKit as a plain HTTP endpoint. This mode is useful when you want model fusion from curl, the OpenAI SDK, a custom application, or a benchmark harness without launching Codex, Claude Code, or Cursor.
+
+`fusionkit serve` starts the same underlying stack as the harness launchers: the panel, the Python fusion router, and the gateway. The difference is that it prints endpoint details and stays running for your client instead of handing the terminal to a coding agent.
+
+## Prepare the engine
+
+Install the CLI and pre-provision the Python engine so the first request does not pay the `uvx` cold start.
+
+```bash
+npm install -g @fusionkit/cli
+fusionkit setup
+fusionkit doctor
+```
+
+For the default cloud panel, export all three provider keys.
+
+```bash
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
+export GEMINI_API_KEY=...
+```
+
+You can put the same values in a project `.env`. Already-exported environment variables take precedence.
+
+## Start the endpoint
+
+Run from inside the git repository you want the panel to see.
+
+```bash
+cd your-git-repo
+fusionkit serve --port 8787
+export FUSION_URL=http://127.0.0.1:8787
+```
+
+Omit `--port` for an ephemeral port. Use `--local` on Apple Silicon to run the MLX panel. Use repeated `--model ID=PROVIDER:MODEL` flags to define a custom panel.
+
+The fused model id is `fusion-panel`. Each panel member id is also exposed for direct passthrough calls when you want to compare the ensemble against one member.
+
+## HTTP surface
+
+The gateway exposes familiar routes under `/v1`.
+
+| Route | Purpose |
+| --- | --- |
+| `/v1/chat/completions` | OpenAI-compatible chat completions. |
+| `/v1/responses` | OpenAI Responses dialect used by Codex-style clients. |
+| `/v1/messages` | Anthropic Messages dialect used by Claude Code-style clients. |
+| `/v1/models` | Model listing in OpenAI or Anthropic shape. |
+| `/v1/embeddings` | Embeddings route when the configured backend supports it. |
+| `/health` | Unauthenticated health check. |
+
+## Streaming example
+
+```bash
+curl -N "$FUSION_URL/v1/chat/completions" \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "fusion-panel",
+    "stream": true,
+    "messages": [
+      { "role": "user", "content": "Explain a B-tree in two sentences." }
+    ]
+  }'
+```
+
+The `-N` flag disables curl buffering so you can see Server-Sent Events as they arrive. Remove `"stream": true` for a single JSON response.
+
+## Tool-calling example
+
+Tools are passed through the panel and judge. When the ensemble decides to call a tool, the response contains a `tool_calls` array in the OpenAI Chat shape.
+
+```bash
+curl "$FUSION_URL/v1/chat/completions" \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "fusion-panel",
+    "messages": [
+      { "role": "user", "content": "What is the weather in Paris?" }
+    ],
+    "tools": [{
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get the current weather for a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string" }
+          },
+          "required": ["city"]
+        }
+      }
+    }]
+  }'
+```
+
+Execute the tool in your application and continue the conversation with a `tool` message, the same way you would with the OpenAI API.
+
+## Auth and binding
+
+Loopback usage can run without auth. If you bind the gateway beyond loopback, require a token.
+
+```bash
+fusionkit serve --port 8787 --auth-token "$FUSIONKIT_GATEWAY_TOKEN"
+```
+
+Then send either `Authorization: Bearer <token>` or `x-api-key: <token>`.
+
+## When to use this instead of a harness launcher
+
+Use `fusionkit serve` when your application already owns the conversation loop, when you want to benchmark the endpoint directly, or when you want a familiar OpenAI-compatible URL. Use `fusionkit codex`, `fusionkit claude`, or `fusionkit cursor` when you want an existing coding agent to be wired automatically with its native protocol and tool loop.

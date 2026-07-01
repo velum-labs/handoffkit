@@ -45,16 +45,16 @@ fusionkit sessions                   # list durable sessions you can --resume
 | `config` | Inspect the one config source of truth: `config show` / `config path` / `config export-yaml`. | `packages/cli/src/commands/config.ts` |
 | `sessions` | List, inspect, and remove durable gateway sessions: `sessions [list]` / `sessions show <id>` / `sessions rm <id>`. | `packages/cli/src/commands/sessions.ts` |
 | `models` | Manage the local MLX model cache: `models list` / `models download` / `models rm`. | `packages/cli/src/commands/models.ts` |
-| `local <tool>` | Back a vendor agent (claude / codex / opencode / cursor) with a single local model — no fusion. | `packages/cli/src/commands/local.ts` |
+| `local <tool>` | Back a vendor agent (claude / codex / opencode / cursor) with a single local model and no fusion. | `packages/cli/src/commands/local.ts` |
 | `ensemble` | Lower-level ensemble + harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts` |
 | `setup` | Pre-provision (warm) the pinned `fusionkit` engine into the `uvx` cache; `--force` re-warms, `--fusionkit-dir` targets a local checkout. | `packages/cli/src/commands/setup.ts` |
 | `doctor`, `status` | Preflight the environment (prerequisites, per-platform capability, engine-cached state) and preview the effective fusion config + run plan. `doctor --provision` also warms the engine. | `packages/cli/src/commands/doctor.ts` |
 
 ## The ensemble launchers (`codex` / `claude` / `cursor` / `serve`)
 
-`fusionkit codex` (and its siblings) spawn the whole stack — the model panel, a
+`fusionkit codex` (and its siblings) spawn the whole stack: the model panel, a
 single `fusionkit serve` router that fronts each panel model and performs
-synthesis, the harness gateway, and the chosen agent pre-wired to it — in one
+synthesis, the harness gateway, and the chosen agent pre-wired to it in one
 command. fusionkit's own flags must precede the tool name; everything after the
 tool is forwarded to it.
 
@@ -114,7 +114,7 @@ stops. See [Configuration](configuration.md) for setting `budgetUsd` and
 
 ## Configuration
 
-`fusionkit` has one config source of truth — a committed `.fusionkit/` folder at
+`fusionkit` has one config source of truth: a committed `.fusionkit/` folder at
 your repo root. Flags win over `.fusionkit/fusion.json`, which wins over built-in
 defaults. Inspect and derive it:
 

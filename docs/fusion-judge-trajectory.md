@@ -8,21 +8,21 @@ routed model varies. Each panel run produces a native trajectory, reconstructed
 from the normalized provider wire traffic the gateway already proxies (no
 per-CLI stdout parsing). The **judge** (the configured `judgeModel`) compares
 the candidate trajectories and finds the gaps, and the **synthesizer** runs as
-the launched harness's own streaming tool-calling loop — fed the candidates plus
-the judge analysis — emitting the fused trajectory the harness executes in the
+the launched harness's own streaming tool-calling loop, fed the candidates plus
+the judge analysis, emitting the fused trajectory the harness executes in the
 user's repo. There is no apply/verify/repair step and fusionkit owns no
-verification — iteration (and any test runs) are the harness's job.
+verification. Iteration and any test runs are the harness's job.
 
 ## The abstraction
 
-- **CandidateTrajectory** — one panel model's full reasoning / tool-call /
+- **CandidateTrajectory**: one panel model's full reasoning / tool-call /
   observation / output for the task (the reference solutions), reconstructed at
   the gateway wire boundary ([trajectory-capture.ts](../packages/model-gateway/src/trajectory-capture.ts))
-  from the launched harness's model calls — three provider dialects, no per-CLI
+  from the launched harness's model calls. It supports three provider dialects, no per-CLI
   stdout parsing, no verification verdict.
-- **Consolidated trajectory** — the live conversation the harness resends each
+- **Consolidated trajectory**: the live conversation the harness resends each
   turn (the judge's prior steps plus the tool results the harness fed back).
-- **FusionSession** — per front-door conversation: the candidate trajectories
+- **FusionSession**: per front-door conversation: the candidate trajectories
   (produced once) plus the running consolidated trajectory.
 
 Each front-door turn, the judge is given the candidate trajectories + the
@@ -35,7 +35,7 @@ either tool calls for the harness to execute, or the final answer.
 flowchart TB
   cli["User harness CLI (codex / claude / cursor-agent)"]
   gw["Gateway /v1/responses|messages|chat -> FusionBackend"]
-  panels["Panel (once per session): gpt + opus -> candidate trajectories"]
+  panels["Panel (once per session): gpt + sonnet + gemini -> candidate trajectories"]
   step["FusionKit /v1/fusion/trajectories:fuse (judge agent)"]
   dash["scope dashboard (collector + UI)"]
 
@@ -91,27 +91,29 @@ it.
 ```bash
 cd /Users/alen/Documents/Development/handoffkit && pnpm build
 
-# One command: real cloud panel (gpt-5.5 + opus), judge gpt-5.5, codex as the
+# One command: real cloud panel (gpt-5.5 + sonnet + gemini), judge gpt-5.5, codex as the
 # front-door harness, and the scope dashboard observing it live on :4317.
 node packages/cli/dist/index.js fusion codex \
   --observe \
   --fusionkit-dir . \
   --model gpt=openai:gpt-5.5 \
-  --model opus=anthropic:claude-opus-4-8 \
+  --model sonnet=anthropic:claude-sonnet-4-6 \
+  --model gemini=google:gemini-2.5-pro \
   --judge-model gpt-5.5
 ```
 
-API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) are loaded from the FusionKit
-checkout's `.env`. Omit `--model` flags to use the default local MLX trio.
+API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) are loaded
+from the FusionKit checkout's `.env`. Omit `--model` flags to use the default
+cloud trio, or pass `--local` on Apple Silicon to use the local MLX trio.
 
 ### Automated end-to-end drivers
 
 Real, self-contained drivers live in [scripts/](../scripts):
 
-- `node scripts/fusion-step-e2e.mjs` — drives the new gateway with a built-in
+- `node scripts/fusion-step-e2e.mjs`: drives the new gateway with a built-in
   tool-loop harness against a buggy repo and asserts it ends green.
-- `node scripts/fusion-codex-e2e.mjs` — same, driven by the real `codex` CLI.
-- `node scripts/fusion-observe-verify.mjs` — boots the dashboard, runs a codex
+- `node scripts/fusion-codex-e2e.mjs`: same, driven by the real `codex` CLI.
+- `node scripts/fusion-observe-verify.mjs`: boots the dashboard, runs a codex
   session, and verifies the collector captured the full correlated session.
 
 Each requires `uv`, a FusionKit checkout (`WARRANT_FUSION_FK_DIR` or the default
