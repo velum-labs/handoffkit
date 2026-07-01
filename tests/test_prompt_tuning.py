@@ -4,10 +4,15 @@ import json
 import sys
 import types
 from collections.abc import Sequence
+from typing import cast
 
+from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.kernel import FusionKernel
+from fusionkit_core.run import FusionRunManager
+from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.types import ChatMessage
 from fusionkit_evals.bench_verify import verify_solution
 from fusionkit_evals.candidate_bank import (
@@ -96,6 +101,25 @@ async def test_build_candidate_bank_records_candidate_pass() -> None:
     assert bank_task.is_decision_task is True
     passed_by_model = {c.model_id: c.passed for c in bank_task.candidates}
     assert passed_by_model == {"pass": True, "fail": False}
+
+
+async def test_build_candidate_bank_works_through_kernel_facade(tmp_path) -> None:
+    """Regression: the CLI hands the bank builder a FusionKernel, which must
+    expose the engine's producer seam (it silently produced empty banks when
+    `.producer` was missing and every generation raised AttributeError)."""
+    engine = _panel_engine()
+    kernel = FusionKernel(
+        engine,
+        FusionRunManager(engine, FileSystemRunStore(tmp_path), LocalArtifactStore(tmp_path)),
+    )
+    task = PreparedTask(task_id="d1", prompt="double", tests=DOUBLE_TEST, difficulty="easy")
+
+    bank = await build_candidate_bank(
+        cast(FusionEngine, kernel), LocalSandbox(), [task], signature="sig", concurrency=1
+    )
+
+    assert len(bank.tasks) == 1
+    assert bank.tasks[0].is_decision_task is True
 
 
 def test_bank_signature_ignores_judge_config() -> None:
