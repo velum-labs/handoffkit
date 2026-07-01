@@ -627,6 +627,18 @@ export class FusionRuntime {
     this.#now = options.now ?? Date.now;
   }
 
+  /**
+   * Execute a graph and stream operator-level events as they happen.
+   *
+   * Any operator in the graph that implements {@link StreamingOperator.stream}
+   * has its live events (`output.delta`, `tool_call.delta`, `keepalive`, and any
+   * operator-emitted trace events) forwarded verbatim, in order, while the graph
+   * runs. When the run completes the stream yields a single terminal `final`
+   * event carrying the full {@link RuntimeExecutionResult}; a runtime failure
+   * yields a terminal `error` event instead. The graph is executed exactly once —
+   * a streaming operator's `stream(...)` produces the live deltas and its
+   * `run(...)` materializes the node's output artifacts from the same work.
+   */
   async *stream(input: {
     graph: OperatorGraph;
     scheduler: Scheduler;
@@ -636,67 +648,64 @@ export class FusionRuntime {
     signal?: AbortSignal;
     metadata?: Record<string, unknown>;
   }): AsyncIterable<RuntimeEvent> {
-    const runId = input.runId ?? `run_${this.#now().toString(36)}`;
-    try {
-      const node = input.graph.nodes[0];
-      const stream = (node?.operator as StreamingOperator | undefined)?.stream;
-      if (input.scheduler.family === "direct-fast-path" && input.graph.nodes.length === 1 && node !== undefined && stream !== undefined) {
-        const artifacts = [...(input.artifacts ?? [])];
-        const ctx: OperatorRunContext = {
-          runId,
-          graphId: input.graph.id,
-          nodeId: node.id,
-          operator: node.operator.spec,
-          budget: input.budget ?? {},
-          ...(input.signal !== undefined ? { signal: input.signal } : {}),
-          getArtifact: (id) => artifacts.find((artifact) => artifact.id === id),
-          getObservation: () => undefined,
-          getSignal: () => undefined,
-          visibleObservations: () => Object.freeze([]),
-          visibleSignals: () => Object.freeze([]),
-          createArtifact,
-          consumeBudget: () => undefined,
-          recordObservation: () => {
-            throw new Error("streaming direct context does not support recording observations before finalization");
-          },
-          recordSignal: () => {
-            throw new Error("streaming direct context does not support recording signals before finalization");
-          },
-          recordTrace: (event) =>
-            Object.freeze({
-              ...event,
-              id: `${runId}.stream.trace`,
-              runId,
-              graphId: input.graph.id,
-              timestamp: new Date(this.#now()).toISOString()
-            })
-        };
-        const inputs = (node.inputs ?? []).flatMap((ref) => ("artifactId" in ref ? artifacts.filter((artifact) => artifact.id === ref.artifactId) : []));
-        for await (const event of stream.call(node.operator, inputs, ctx)) {
-          yield event;
-        }
+    const events: RuntimeEvent[] = [];
+    let finished = false;
+    let notify: (() => void) | undefined;
+    const wake = (): void => {
+      const resume = notify;
+      notify = undefined;
+      resume?.();
+    };
+    const sink = (event: RuntimeEvent): void => {
+      events.push(event);
+      wake();
+    };
+    const settled = this.run(input, { sink })
+      .then((result): { ok: true; result: RuntimeExecutionResult } => ({ ok: true, result }))
+      .catch((error: unknown): { ok: false; error: unknown } => ({ ok: false, error }))
+      .finally(() => {
+        finished = true;
+        wake();
+      });
+    for (;;) {
+      while (events.length > 0) {
+        const next = events.shift();
+        if (next !== undefined) yield next;
       }
-      const result = await this.run({ ...input, runId });
-      yield { type: "final", result };
-    } catch (error) {
-      if (error instanceof RuntimeExecutionError) {
-        yield { type: "error", error };
-        return;
-      }
-      throw error;
+      if (finished) break;
+      await new Promise<void>((resolve) => {
+        notify = resolve;
+      });
     }
+    const outcome = await settled;
+    while (events.length > 0) {
+      const next = events.shift();
+      if (next !== undefined) yield next;
+    }
+    if (outcome.ok) {
+      yield { type: "final", result: outcome.result };
+      return;
+    }
+    if (outcome.error instanceof RuntimeExecutionError) {
+      yield { type: "error", error: outcome.error };
+      return;
+    }
+    throw outcome.error;
   }
 
-  async run(input: {
-    graph: OperatorGraph;
-    scheduler: Scheduler;
-    artifacts?: readonly Artifact[];
-    budget?: BudgetPolicy;
-    runId?: string;
-    signal?: AbortSignal;
-    failureMode?: "throw" | "return";
-    metadata?: Record<string, unknown>;
-  }): Promise<RuntimeExecutionResult> {
+  async run(
+    input: {
+      graph: OperatorGraph;
+      scheduler: Scheduler;
+      artifacts?: readonly Artifact[];
+      budget?: BudgetPolicy;
+      runId?: string;
+      signal?: AbortSignal;
+      failureMode?: "throw" | "return";
+      metadata?: Record<string, unknown>;
+    },
+    streamOptions?: { sink: (event: RuntimeEvent) => void }
+  ): Promise<RuntimeExecutionResult> {
     validateGraph(input.graph);
     const runId = input.runId ?? `run_${this.#now().toString(36)}`;
     const startedAtMs = this.#now();
@@ -1089,6 +1098,13 @@ export class FusionRuntime {
         },
         recordTrace
       };
+      const streamingOperator = node.operator as StreamingOperator;
+      if (streamOptions !== undefined && typeof streamingOperator.stream === "function") {
+        for await (const event of streamingOperator.stream(inputs, operatorContext)) {
+          if (event.type === "final" || event.type === "error") continue;
+          streamOptions.sink(event);
+        }
+      }
       const retry = node.operator.spec.retry ?? { maxAttempts: 1 };
       let outputs: readonly Artifact[] | undefined;
       let attempt = 0;
