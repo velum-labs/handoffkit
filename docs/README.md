@@ -15,24 +15,28 @@ root [`README.md`](../README.md) remains the product narrative and quick tour.
 
 ## Start here
 
-| Page | Use it for |
+Read [Documentation taxonomy](documentation-taxonomy.md) first if you are adding,
+moving, or auditing docs. It defines every category and justifies every entry in
+this tree.
+
+| Page | Category | Use it for |
 | --- | --- |
-| [Quickstart: inference endpoint](quickstart-inference.md) | `fusionkit serve` as an OpenAI-compatible endpoint (curl streaming + tools). |
-| [Quickstart: coding harness](quickstart-harness.md) | `fusionkit codex` / `claude` / `cursor` (+ `--ide`); auto-wiring; fused vs. passthrough. |
-| [Quickstart: rate-limit handoff](quickstart-handoff.md) | `--on-rate-limit`, failover behavior, and one-tap resume. |
-| [Model catalog](model-catalog.md) | Choosing/configuring panel models (cloud, open-weight, local MLX), pricing/`--budget`. |
-| [CLI reference](cli.md) | The shipped `fusionkit` command surface, flags, sessions, cost/budget. |
-| [Configuration](configuration.md) | The one config source of truth (`.fusionkit/`) and precedence. |
-| [Fusion Harness Gateway](fusion-harness-gateway.md) | The front door: dialect translation, streaming, per-harness wiring. |
-| [Fusion Judge Trajectory](fusion-judge-trajectory.md) | How trajectories are produced and synthesized. |
-| [Product scope](scope.md) | Which packages are the ensemble product vs. out-of-scope governance/VM. |
-| [Getting started](getting-started.md) | Local install, build, demos, and verification commands. |
-| [Repository reference](repository-reference.md) | Comprehensive package, API, app, example, protocol, and operations map. |
-| [TypeScript reference](typescript-reference.md) | Package-by-package TypeScript exports, functions, classes, and usage examples. |
-| [Python reference](python-reference.md) | Python packages, modules, public classes, functions, CLI commands, and examples. |
-| [Specs and APIs](specs-and-apis.md) | Protocol schemas, generated bindings, HTTP APIs, trace events, and contract workflow. |
-| [Apps and examples](apps-and-examples.md) | Standalone apps, every example package, demo commands, and expected behavior. |
-| [Operations and scripts](operations-and-scripts.md) | Root scripts, release files, CI workflows, dependency policy, and verification commands. |
+| [Documentation taxonomy](documentation-taxonomy.md) | Orientation | Category definitions, placement rules, and entry justification. |
+| [Product scope](scope.md) | Orientation | Which packages are the ensemble product versus retained governance and VM depth. |
+| [Repository reference](repository-reference.md) | Reference | Comprehensive package, API, app, example, protocol, and operations map. |
+| [Quickstart: inference endpoint](quickstart-inference.md) | Task guide | `fusionkit serve` as an OpenAI-compatible endpoint with curl streaming and tools. |
+| [Quickstart: coding harness](quickstart-harness.md) | Task guide | `fusionkit codex`, `claude`, `cursor`, `--ide`, auto-wiring, fused versus passthrough. |
+| [Quickstart: rate-limit handoff](quickstart-handoff.md) | Task guide | `--on-rate-limit`, failover behavior, and one-tap resume. |
+| [CLI reference](cli.md) | Reference | The shipped `fusionkit` command surface, flags, sessions, cost, and budget. |
+| [Configuration](configuration.md) | Reference | The one config source of truth (`.fusionkit/`) and precedence. |
+| [Model catalog](model-catalog.md) | Reference | Panel providers, local MLX, open-weight endpoints, pricing, and budgets. |
+| [Fusion Harness Gateway](fusion-harness-gateway.md) | Concepts and architecture | The front door: dialect translation, streaming, per-harness wiring. |
+| [Fusion Judge Trajectory](fusion-judge-trajectory.md) | Concepts and architecture | How trajectories are produced and synthesized. |
+| [TypeScript reference](typescript-reference.md) | Reference | Package-by-package TypeScript exports, functions, classes, and usage examples. |
+| [Python reference](python-reference.md) | Reference | Python packages, modules, public classes, functions, CLI commands, and examples. |
+| [Specs and APIs](specs-and-apis.md) | Reference | Protocol schemas, generated bindings, HTTP APIs, trace events, and contract workflow. |
+| [Apps and examples](apps-and-examples.md) | Reference | Standalone apps, every example package, demo commands, and expected behavior. |
+| [Operations and scripts](operations-and-scripts.md) | Operations | Root scripts, release files, CI workflows, dependency policy, and verification commands. |
 
 ## Out-of-product-scope topic docs
 
@@ -48,6 +52,20 @@ the tree but are not part of the ensemble product (see [Product scope](scope.md)
 
 - [FusionKit handoff executor](fusionkit-handoff-executor.md)
 - [Release publishing](release-publishing.md)
+
+## Taxonomy summary
+
+- Orientation pages route readers and define scope.
+- Task guides complete a concrete workflow with commands and expected results.
+- Concepts and architecture pages explain mental models and boundaries.
+- Reference pages document exact surfaces such as commands, fields, packages, APIs,
+  examples, and scripts.
+- Operations pages document CI, release, publishing, self-hosting, and recovery.
+- Evaluation and tuning pages document benchmark and optimization workflows.
+- Design archive pages preserve historical context without presenting it as
+  current product truth.
+
+The full inventory is in [Documentation taxonomy](documentation-taxonomy.md).
 
 ## Repository at a glance
 
