@@ -21,15 +21,27 @@ export { FusionBackend } from "./fusion-backend.js";
 export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";
 export {
   FrontdoorArtifactTypes,
+  FrontdoorFuseError,
   FrontdoorOperatorKinds,
   FrontdoorPanelError,
   frontdoorFinalizeOperator,
   frontdoorFuseOperator,
-  frontdoorPanelOperator
+  frontdoorPanelOperator,
+  frontdoorStreamingFuseOperator
 } from "./frontdoor/operators.js";
-export type { CandidateSetValue, FrontdoorFusionTurn } from "./frontdoor/operators.js";
-export { FUSION_FRONTDOOR_TURN_WORKFLOW, runFusionFrontdoorTurn } from "./frontdoor/workflow.js";
+export type {
+  CandidateSetValue,
+  FrontdoorFusionStreamTurn,
+  FrontdoorFusionTurn
+} from "./frontdoor/operators.js";
+export {
+  FUSION_FRONTDOOR_TURN_WORKFLOW,
+  runFusionFrontdoorTurn,
+  streamFusionFrontdoorTurn
+} from "./frontdoor/workflow.js";
 export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";
+export { eventsToSseResponse } from "./frontdoor/sse.js";
+export type { EventsToSseOptions } from "./frontdoor/sse.js";
 export type {
   ChatMessageLike,
   FuseStepRunInput,

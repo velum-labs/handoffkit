@@ -14,21 +14,33 @@
  */
 
 import { captureWireResponse, WireArtifactTypes } from "@fusionkit/kernel";
-import type { Operator } from "@fusionkit/kernel";
+import type { Operator, RuntimeEvent, StreamingOperator } from "@fusionkit/kernel";
 import type { WireTrajectory } from "@fusionkit/protocol";
 
 export const FrontdoorArtifactTypes = {
   Task: "frontdoor_task",
   CandidateSet: "frontdoor_candidate_set",
   FuseResponse: "frontdoor_fuse_response",
+  StreamComplete: "frontdoor_stream_complete",
   Response: "frontdoor_response"
 } as const;
 
 export const FrontdoorOperatorKinds = {
   Panel: "frontdoor.panel",
   Fuse: "frontdoor.fuse",
+  FuseStream: "frontdoor.fuse.stream",
   Finalize: "frontdoor.finalize"
 } as const;
+
+/** A fuse-phase failure whose message has already been surfaced (judge.final
+ *  error emitted). It marks the run failed so the gateway evicts the turn and
+ *  the SSE adapter emits the terminal error event. */
+export class FrontdoorFuseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FrontdoorFuseError";
+  }
+}
 
 /** A panel-phase failure. The gateway maps this to a 502 and evicts the turn,
  *  matching the legacy "panel produced no usable candidates" behavior, while a
@@ -60,7 +72,9 @@ export type FrontdoorFusionTurn = {
 };
 
 /** panel: resolve candidate trajectories for this turn. */
-export function frontdoorPanelOperator(turn: FrontdoorFusionTurn): Operator {
+export function frontdoorPanelOperator(turn: {
+  resolveCandidates: () => Promise<readonly WireTrajectory[]>;
+}): Operator {
   return {
     spec: {
       id: FrontdoorOperatorKinds.Panel,
@@ -124,6 +138,78 @@ export function frontdoorFuseOperator(turn: FrontdoorFusionTurn): Operator {
           leakage: "none"
         })
       ];
+    }
+  };
+}
+
+/**
+ * The injected implementation of a streaming front-door fusion turn. The panel
+ * phase reuses {@link FrontdoorFusionTurn.resolveCandidates}; the fuse phase
+ * streams the Python step's SSE bytes and meters/traces on completion.
+ */
+export type FrontdoorFusionStreamTurn = {
+  resolveCandidates: () => Promise<readonly WireTrajectory[]>;
+  /** Emit judge.request and POST the streaming fuse step; returns its response. */
+  openFuseStream: (candidates: readonly WireTrajectory[]) => Promise<Response>;
+  /** Non-2xx / bodyless fuse reply: emit judge.final error before failing. */
+  onUpstreamError: (status: number, detail: string) => void;
+  /** Clean completion: meter cost + emit judge.final/thinking from the SSE tail. */
+  onComplete: (sseBuffer: string) => void;
+  /** An exception mid-stream (e.g. an aborted fetch): emit judge.final error. */
+  onException?: (message: string) => void;
+};
+
+/** fuse (streaming): pipe the fuse step's SSE bytes as `sse.chunk` events. */
+export function frontdoorStreamingFuseOperator(turn: FrontdoorFusionStreamTurn): StreamingOperator {
+  const spec = {
+    id: FrontdoorOperatorKinds.FuseStream,
+    kind: FrontdoorOperatorKinds.FuseStream,
+    requiredInputTypes: [FrontdoorArtifactTypes.CandidateSet],
+    outputTypes: [FrontdoorArtifactTypes.StreamComplete],
+    sideEffects: "external_tool" as const
+  };
+  return {
+    spec,
+    run: (_inputs, ctx) => [
+      ctx.createArtifact({
+        id: `${ctx.nodeId}.complete`,
+        type: FrontdoorArtifactTypes.StreamComplete,
+        value: { streamed: true },
+        visibility: "runtime",
+        leakage: "none"
+      })
+    ],
+    async *stream(inputs, _ctx): AsyncIterable<RuntimeEvent> {
+      const set = inputs.find((artifact) => artifact.type === FrontdoorArtifactTypes.CandidateSet)?.value as
+        | CandidateSetValue
+        | undefined;
+      if (set === undefined) throw new Error("frontdoor.fuse.stream missing candidate set artifact");
+      try {
+        const response = await turn.openFuseStream(set.candidates);
+        if (!response.ok || response.body === null) {
+          const detail = response.body === null ? "no stream" : (await response.text()).slice(0, 800);
+          turn.onUpstreamError(response.status, detail);
+          throw new FrontdoorFuseError(`trajectories:fuse ${response.status}: ${detail}`);
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value !== undefined) {
+            const decoded = decoder.decode(value, { stream: true });
+            buffer += decoded;
+            yield { type: "sse.chunk", data: decoded };
+          }
+        }
+        turn.onComplete(buffer);
+      } catch (error) {
+        if (!(error instanceof FrontdoorFuseError)) {
+          turn.onException?.(error instanceof Error ? error.message : String(error));
+        }
+        throw error;
+      }
     }
   };
 }
