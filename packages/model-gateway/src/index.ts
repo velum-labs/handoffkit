@@ -44,6 +44,12 @@ export {
   streamFusionFrontdoorTurn
 } from "./frontdoor/workflow.js";
 export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";
+export {
+  FUSION_FRONTDOOR_REQUEST_WORKFLOW,
+  FrontdoorRequestScheduler,
+  runFrontdoorRequest
+} from "./frontdoor/request.js";
+export type { FrontdoorRequestTurn, FrontdoorRoute } from "./frontdoor/request.js";
 export { eventsToSseResponse } from "./frontdoor/sse.js";
 export type { EventsToSseOptions } from "./frontdoor/sse.js";
 export type {

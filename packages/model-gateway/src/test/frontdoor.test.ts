@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import type { WireTrajectory } from "@fusionkit/protocol";
 
+import { runFrontdoorRequest } from "../frontdoor/request.js";
 import { eventsToSseResponse } from "../frontdoor/sse.js";
 import {
   runFusionFrontdoorTurn,
@@ -127,4 +128,59 @@ test("runFusionPassthroughTurn returns the proxied vendor response", async () =>
   assert.equal(res.status, 200);
   const body = (await res.json()) as { choices: Array<{ message: { content: string } }> };
   assert.equal(body.choices[0]?.message.content, "native answer");
+});
+
+test("runFrontdoorRequest short-circuits to budget-stop before any turn runs", async () => {
+  let fusionRan = false;
+  let passthroughRan = false;
+  const res = await runFrontdoorRequest({
+    isBudgetExceeded: () => true,
+    budgetStop: () => new Response(JSON.stringify({ error: { message: "budget cap reached" } }), { status: 402 }),
+    resolveRoute: () => "fusion",
+    runFusion: async () => {
+      fusionRan = true;
+      return jsonResponse("fused");
+    },
+    runPassthrough: async () => {
+      passthroughRan = true;
+      return jsonResponse("native");
+    }
+  });
+  assert.equal(res.status, 402);
+  assert.equal(fusionRan, false, "budget stop runs no turn");
+  assert.equal(passthroughRan, false);
+});
+
+test("runFrontdoorRequest routes a native model to the passthrough turn (not fusion)", async () => {
+  let fusionRan = false;
+  const res = await runFrontdoorRequest({
+    isBudgetExceeded: () => false,
+    budgetStop: () => new Response("", { status: 402 }),
+    resolveRoute: () => "passthrough",
+    runFusion: async () => {
+      fusionRan = true;
+      return jsonResponse("fused");
+    },
+    runPassthrough: async () => jsonResponse("native answer")
+  });
+  const body = (await res.json()) as { choices: Array<{ message: { content: string } }> };
+  assert.equal(body.choices[0]?.message.content, "native answer");
+  assert.equal(fusionRan, false, "the fusion turn does not run for a native model");
+});
+
+test("runFrontdoorRequest routes the fused model to the fusion turn (not passthrough)", async () => {
+  let passthroughRan = false;
+  const res = await runFrontdoorRequest({
+    isBudgetExceeded: () => false,
+    budgetStop: () => new Response("", { status: 402 }),
+    resolveRoute: () => "fusion",
+    runFusion: async () => jsonResponse("fused answer"),
+    runPassthrough: async () => {
+      passthroughRan = true;
+      return jsonResponse("native");
+    }
+  });
+  const body = (await res.json()) as { choices: Array<{ message: { content: string } }> };
+  assert.equal(body.choices[0]?.message.content, "fused answer");
+  assert.equal(passthroughRan, false, "the passthrough turn does not run for the fused model");
 });

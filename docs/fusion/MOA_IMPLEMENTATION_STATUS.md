@@ -118,16 +118,20 @@ registry.
 - `FusionRuntime.stream(...)` is a real graph-level streaming engine: it runs the graph once and
   forwards every streaming operator's live events (`output.delta`, `tool_call.delta`, `sse.chunk`,
   `keepalive`, trace), then a terminal `final`/`error`.
-- The fusion front-door turn is now natively composed from kernel operators. The runtime substrate
-  was extracted into the standalone `@fusionkit/kernel` package to invert the
-  `model-gateway` -> `ensemble` dependency, so `FusionBackend` dispatches every turn as a named
-  runtime graph: `fusion-frontdoor-turn` (`frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize`
-  buffered, or `frontdoor.panel -> frontdoor.fuse.stream` streamed via `eventsToSseResponse`) and
-  `fusion-passthrough-turn` (`frontdoor.passthrough`, whose rate-limit failover re-enters the fusion
-  turn). The redundant outer `KernelBackend` wrapper around the fusion gateway was removed;
-  `FusionBackend` is a kernel-native surface adapter. The vendor-proxy SSE peeking for mid-stream
-  resume notices remains the passthrough operator's transport implementation (the operator pattern:
-  an operator wraps its side-effecting wire).
+- The fusion front-door request and turn are now natively composed from kernel operators. The
+  runtime substrate was extracted into the standalone `@fusionkit/kernel` package to invert the
+  `model-gateway` -> `ensemble` dependency, so `FusionBackend` dispatches every request as a named
+  runtime graph. `fusion-frontdoor-request` makes the budget gate (`frontdoor.budget-gate`) and
+  requested-model resolution (`frontdoor.resolve-model`) first-class operators, and
+  `FrontdoorRequestScheduler` routes to budget-stop, the fused turn, or the passthrough turn. The
+  fused turn is `fusion-frontdoor-turn` (`frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize`
+  buffered, or `frontdoor.panel -> frontdoor.fuse.stream` streamed via `eventsToSseResponse`); the
+  vendor branch is `fusion-passthrough-turn` (`frontdoor.passthrough`, whose rate-limit failover
+  re-enters the fusion turn). The redundant outer `KernelBackend` wrapper around the fusion gateway
+  was removed; `FusionBackend` is a kernel-native surface adapter. The panel/fuse/proxy operators
+  intentionally delegate their side-effecting wire to injected implementations (the operator
+  pattern, e.g. `ModelGenerateOperator` wrapping a `ModelClient`); the vendor-proxy SSE peeking for
+  mid-stream resume notices is the passthrough operator's transport implementation.
 
 ## Main migration seam
 

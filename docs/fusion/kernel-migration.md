@@ -14,14 +14,17 @@ implementations, cost/trace/persistence) that the operators invoke.
 fusionkit codex / claude / cursor / serve
   -> CLI launcher -> startFusionStack -> startFusionStepGateway
   -> FusionBackend (kernel-native surface adapter)
-     -> fusion-frontdoor-turn graph
-        buffered:  frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize   (FusionRuntime.run)
-        streamed:  frontdoor.panel -> frontdoor.fuse.stream                  (FusionRuntime.stream)
-     -> fusion-passthrough-turn graph
-        frontdoor.passthrough  (vendor proxy; failover re-enters the fusion turn)
-  -> frontdoor.panel      -> runFusionPanels / runFusionPanelWorkflow (kernel)
+     -> fusion-frontdoor-request graph  (FrontdoorRequestScheduler)
+        frontdoor.budget-gate -> (budget-stop)
+                              -> frontdoor.resolve-model -> dispatch:
+           fusion-frontdoor-turn graph
+             buffered:  frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize  (FusionRuntime.run)
+             streamed:  frontdoor.panel -> frontdoor.fuse.stream                 (FusionRuntime.stream)
+           fusion-passthrough-turn graph
+             frontdoor.passthrough  (vendor proxy; failover re-enters the fusion turn)
+  -> frontdoor.panel         -> runFusionPanels / runFusionPanelWorkflow (kernel)
   -> frontdoor.fuse[.stream] -> createKernelFuseStepRunner -> Python trajectories:fuse (kernel operator)
-  -> eventsToSseResponse  -> gateway streaming back to the tool
+  -> eventsToSseResponse     -> gateway streaming back to the tool
 ```
 
 This matches the target architecture — one canonical execution plane:
@@ -40,11 +43,12 @@ Surface adapters may own CLI flags, protocol dialects, auth headers, process
 launch, and HTTP route shape. They must not own fusion decisions such as direct
 vs panel, native passthrough, failover, candidate generation, evidence
 selection, repair, session candidate reuse, budget policy, or outcome logging.
-Today `FusionBackend.chat` still makes the first surface routing decision
-(budget gate + native-passthrough detection) before immediately dispatching to a
-named kernel graph; promoting `BudgetGate` and `ResolveRequestedModel` into a
-higher-level `frontdoor-request` graph is a possible future refinement, not a
-requirement.
+`FusionBackend.chat` no longer branches imperatively: it runs the whole request
+as the `fusion-frontdoor-request` graph, where `frontdoor.budget-gate` and
+`frontdoor.resolve-model` are first-class operators and `FrontdoorRequestScheduler`
+dispatches to budget-stop, the fusion turn, or the passthrough turn by inspecting
+their decision artifacts. The backend supplies only the wire those operators
+invoke.
 
 ## Current surface inventory
 
@@ -148,14 +152,15 @@ BudgetGate
        -> FinalizeWireResponse
 ```
 
-Implemented (see "Native cutover complete" below). The shipped graph is
+Implemented (see "Native cutover complete" below). Request routing is the
+`fusion-frontdoor-request` graph: `frontdoor.budget-gate` and
+`frontdoor.resolve-model` are first-class operators and `FrontdoorRequestScheduler`
+routes to budget-stop / fusion / passthrough. The fused turn graph is
 `frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize` (buffered) /
-`frontdoor.panel -> frontdoor.fuse.stream` (streamed), with the vendor branch as
-the `fusion-passthrough-turn` graph (`frontdoor.passthrough`). `BudgetGate` and
-`ResolveRequestedModel` remain surface routing in `FusionBackend.chat` that
-immediately dispatches into these named graphs; session resolution and turn
-candidate caching are the panel operator's implementation backed by the kernel
-state store.
+`frontdoor.panel -> frontdoor.fuse.stream` (streamed), and the vendor branch is
+the `fusion-passthrough-turn` graph (`frontdoor.passthrough`). Session resolution
+and turn candidate caching are the panel operator's implementation backed by the
+kernel state store.
 
 ### `tool-continuation-turn`
 
@@ -323,10 +328,13 @@ Status in PR #37:
 
 Native cutover complete: the `model-gateway` ↔ `ensemble` dependency was inverted
 by extracting the runtime substrate into the standalone `@fusionkit/kernel`
-package (both packages now depend on it), so `FusionBackend` composes the turn
-from runtime operators directly. Every front-door turn is dispatched as a named
+package (both packages now depend on it), so `FusionBackend` composes the request
+and turn from runtime operators directly. Every request is dispatched as a named
 kernel graph:
 
+- `fusion-frontdoor-request`: `frontdoor.budget-gate` and `frontdoor.resolve-model`
+  are first-class operators; `FrontdoorRequestScheduler` inspects their decision
+  artifacts and runs only the chosen branch (budget-stop / fusion / passthrough).
 - `fusion-frontdoor-turn` (buffered): `frontdoor.panel -> frontdoor.fuse ->
   frontdoor.finalize`, run via `FusionRuntime.run`.
 - `fusion-frontdoor-turn` (streamed): `frontdoor.panel -> frontdoor.fuse.stream`,

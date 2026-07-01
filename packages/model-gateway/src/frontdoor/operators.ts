@@ -19,6 +19,8 @@ import type { WireTrajectory } from "@fusionkit/protocol";
 
 export const FrontdoorArtifactTypes = {
   Task: "frontdoor_task",
+  Budget: "frontdoor_budget",
+  Route: "frontdoor_route",
   CandidateSet: "frontdoor_candidate_set",
   FuseResponse: "frontdoor_fuse_response",
   StreamComplete: "frontdoor_stream_complete",
@@ -26,6 +28,11 @@ export const FrontdoorArtifactTypes = {
 } as const;
 
 export const FrontdoorOperatorKinds = {
+  BudgetGate: "frontdoor.budget-gate",
+  BudgetStop: "frontdoor.budget-stop",
+  ResolveModel: "frontdoor.resolve-model",
+  DispatchFusion: "frontdoor.dispatch.fusion",
+  DispatchPassthrough: "frontdoor.dispatch.passthrough",
   Passthrough: "frontdoor.passthrough",
   Panel: "frontdoor.panel",
   Fuse: "frontdoor.fuse",

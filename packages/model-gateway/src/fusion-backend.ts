@@ -45,6 +45,7 @@ import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
 import { eventsToSseResponse } from "./frontdoor/sse.js";
+import { runFrontdoorRequest } from "./frontdoor/request.js";
 import {
   runFusionFrontdoorTurn,
   runFusionPassthroughTurn,
@@ -987,30 +988,37 @@ export class FusionBackend implements Backend {
 
   async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
     const chat = (body ?? {}) as ChatBody;
-    // WS7 budget cap: refuse a turn once the conversation has already accrued at
-    // least the configured --budget. Checked up front (before any provider call)
-    // for both the fused and passthrough paths, keyed by the same conversation
-    // session key the cost is accumulated under.
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
     const costSessionId = this.#sessionKey(messages);
-    if (this.#budgetExceeded(costSessionId)) {
-      return this.#budgetStop(chat.stream === true, costSessionId);
-    }
-    // Native model selected from the picker: proxy straight to its real provider
-    // (the fusion panel + judge are skipped). Falling back to fusion is just
-    // selecting the fused model again — or, on a vendor rate-limit/credit
-    // failure, automatic (see #proxyNative's WS5 failover).
-    const native = this.#passthroughFor(chat.model);
-    if (native !== undefined) {
-      // The native-passthrough turn runs as the `fusion-passthrough-turn` kernel
-      // graph; the proxy (and its rate-limit failover into the fusion workflow)
-      // is the operator's implementation.
-      return runFusionPassthroughTurn(
-        { proxy: () => this.#proxyNative(native, chat, signal, options) },
-        { runId: `${this.#sessionKey(messages)}:passthrough` }
-      );
-    }
-    return this.#runFusion(chat, signal, options, {});
+    const streaming = chat.stream === true;
+    // The whole request runs as the `fusion-frontdoor-request` kernel graph: the
+    // budget gate and requested-model resolution are first-class operators, and a
+    // routing scheduler dispatches to the budget-stop, native-passthrough, or
+    // fused turn. This backend supplies the surface wire (budget/route decisions,
+    // vendor proxy, and the fused turn) that those operators invoke.
+    return runFrontdoorRequest(
+      {
+        // WS7 budget cap: refuse a turn once the conversation has already accrued
+        // at least the configured --budget, keyed by the conversation session key.
+        isBudgetExceeded: () => this.#budgetExceeded(costSessionId),
+        budgetStop: () => this.#budgetStop(streaming, costSessionId),
+        // A native model selected from the picker is proxied to its real provider
+        // (panel + judge skipped); anything else is fused.
+        resolveRoute: () => (this.#passthroughFor(chat.model) !== undefined ? "passthrough" : "fusion"),
+        runPassthrough: () => {
+          const native = this.#passthroughFor(chat.model);
+          if (native === undefined) throw new Error("passthrough route resolved without a native model");
+          // The proxy (and its rate-limit/credit failover back into the fusion
+          // turn) is the passthrough operator's transport implementation.
+          return runFusionPassthroughTurn(
+            { proxy: () => this.#proxyNative(native, chat, signal, options) },
+            { runId: `${costSessionId}:passthrough` }
+          );
+        },
+        runFusion: () => this.#runFusion(chat, signal, options, {})
+      },
+      { runId: `${costSessionId}:request` }
+    );
   }
 
   /**

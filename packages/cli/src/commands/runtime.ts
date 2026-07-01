@@ -16,6 +16,17 @@ const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[];
     operators: ["legacy.backend.chat"],
     description: "Compatibility workflow for local/direct model HTTP turns."
   },
+  "fusion-frontdoor-request": {
+    scheduler: "frontdoor-request",
+    operators: [
+      "frontdoor.budget-gate",
+      "frontdoor.budget-stop",
+      "frontdoor.resolve-model",
+      "frontdoor.dispatch.fusion",
+      "frontdoor.dispatch.passthrough"
+    ],
+    description: "Top-level request graph: budget gate + requested-model resolution as first-class operators; a routing scheduler dispatches to budget-stop, the fusion turn, or the passthrough turn."
+  },
   "fusion-frontdoor-turn": {
     scheduler: "static-dag",
     operators: ["frontdoor.panel", "frontdoor.fuse", "frontdoor.fuse.stream", "frontdoor.finalize"],
