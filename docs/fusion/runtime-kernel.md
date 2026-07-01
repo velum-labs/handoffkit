@@ -244,7 +244,10 @@ See `examples/runtime-kernel/src/run.ts`.
 
 ## Product cutover
 
-This guide describes the runtime substrate and composition API. It does not mean
-every product surface is already kernel-native. For the single-right-way
-migration plan, streaming runtime requirements, session-state requirements, and
-surface parity checklist, see `docs/fusion/kernel-migration.md`.
+This guide describes the runtime substrate and composition API. The fusion
+front-door turn (`fusionkit codex / claude / cursor / serve`) is kernel-native:
+every turn runs as a `fusion-frontdoor-turn` or `fusion-passthrough-turn` graph
+of operators. Other surfaces (local/MLX/Codex leaf backends, `runEnsemble`, and
+the Python routes) still enter the kernel through compatibility wrappers. For the
+full migration plan, streaming/session-state requirements, and surface parity
+checklist, see `docs/fusion/kernel-migration.md`.

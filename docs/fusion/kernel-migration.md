@@ -1,35 +1,36 @@
 # FusionKit kernel migration and cutover plan
 
-Status: product cutover plan for the runtime kernel introduced in PR #37.
+Status: product cutover for the runtime kernel introduced in PR #37 — the fusion
+front-door turn is now native (this doc records the plan and its completed
+state).
 
-PR #37 makes the kernel real, but it does **not** make every product execution
-surface decomposed into native kernel operators. The current production path is
-now kernel-wrapped for the Node/CLI surfaces, while preserving conservative
-legacy behavior inside compatibility operators:
+The fusion front-door surfaces (`fusionkit codex / claude / cursor / serve`) now
+execute every turn as a named kernel graph. `FusionBackend` is a kernel-native
+surface adapter: it maps the gateway wire contract onto `FusionRuntime`
+workflows and owns only the side-effecting wire (session identity, panel/fuse
+implementations, cost/trace/persistence) that the operators invoke.
 
 ```text
 fusionkit codex / claude / cursor / serve
-  -> CLI launcher
-  -> startFusionStack
-  -> startFusionStepGateway
-  -> KernelBackend
-  -> legacy FusionBackend.chat operator
-  -> runFusionPanels
-  -> runtime kernel for panel capture only
-  -> runEnsemble kernel wrapper
-  -> legacy runEnsemble implementation operator
-  -> Python trajectories:fuse inside legacy backend turn
-  -> gateway streaming back to the tool
+  -> CLI launcher -> startFusionStack -> startFusionStepGateway
+  -> FusionBackend (kernel-native surface adapter)
+     -> fusion-frontdoor-turn graph
+        buffered:  frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize   (FusionRuntime.run)
+        streamed:  frontdoor.panel -> frontdoor.fuse.stream                  (FusionRuntime.stream)
+     -> fusion-passthrough-turn graph
+        frontdoor.passthrough  (vendor proxy; failover re-enters the fusion turn)
+  -> frontdoor.panel      -> runFusionPanels / runFusionPanelWorkflow (kernel)
+  -> frontdoor.fuse[.stream] -> createKernelFuseStepRunner -> Python trajectories:fuse (kernel operator)
+  -> eventsToSseResponse  -> gateway streaming back to the tool
 ```
 
-This is intentional for the substrate PR. The target architecture is one
-canonical execution plane:
+This matches the target architecture — one canonical execution plane:
 
 ```text
 Surface adapter
   -> request/task adapter
   -> workflow registry
-  -> FusionRuntime / StreamingFusionRuntime
+  -> FusionRuntime / streaming FusionRuntime
   -> operators
   -> stores: artifact, session, trace, outcome
   -> response adapter
@@ -39,6 +40,11 @@ Surface adapters may own CLI flags, protocol dialects, auth headers, process
 launch, and HTTP route shape. They must not own fusion decisions such as direct
 vs panel, native passthrough, failover, candidate generation, evidence
 selection, repair, session candidate reuse, budget policy, or outcome logging.
+Today `FusionBackend.chat` still makes the first surface routing decision
+(budget gate + native-passthrough detection) before immediately dispatching to a
+named kernel graph; promoting `BudgetGate` and `ResolveRequestedModel` into a
+higher-level `frontdoor-request` graph is a possible future refinement, not a
+requirement.
 
 ## Current surface inventory
 
@@ -142,7 +148,14 @@ BudgetGate
        -> FinalizeWireResponse
 ```
 
-This replaces the orchestration currently embedded in `FusionBackend`.
+Implemented (see "Native cutover complete" below). The shipped graph is
+`frontdoor.panel -> frontdoor.fuse -> frontdoor.finalize` (buffered) /
+`frontdoor.panel -> frontdoor.fuse.stream` (streamed), with the vendor branch as
+the `fusion-passthrough-turn` graph (`frontdoor.passthrough`). `BudgetGate` and
+`ResolveRequestedModel` remain surface routing in `FusionBackend.chat` that
+immediately dispatches into these named graphs; session resolution and turn
+candidate caching are the panel operator's implementation backed by the kernel
+state store.
 
 ### `tool-continuation-turn`
 
