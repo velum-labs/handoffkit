@@ -1,0 +1,1 @@
+{"phase":"0-smoke-keys","suite":"key-verification","tasks":3,"est_usd":0.01,"cum_usd":0.01,"note":"2 provider key smokes + 1 fused gateway round-trip","git_sha":"85257b86f2781d9744fcef8448788ae3a5a1eef0"}
