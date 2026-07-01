@@ -70,7 +70,11 @@ def _policy_summary(
     evaluation: PromptEval,
     best_single_passes: dict[str, bool],
 ) -> dict:
-    paired_best = {tid: best_single_passes[tid] for tid in evaluation.passes if tid in best_single_passes}
+    paired_best = {
+        tid: best_single_passes[tid]
+        for tid in evaluation.passes
+        if tid in best_single_passes
+    }
     paired_fused = {tid: evaluation.passes[tid] for tid in paired_best}
     mc = mcnemar(paired_best, paired_fused)
     split = regret_split(bank.tasks, evaluation)
