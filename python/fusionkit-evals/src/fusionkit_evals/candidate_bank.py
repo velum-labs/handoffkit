@@ -107,11 +107,23 @@ async def build_candidate_bank(
     checker_mode: CheckerMode = "exact",
     test_timeout_s: float = 8.0,
     concurrency: int = 4,
+    cache_dir: str | Path | None = None,
 ) -> CandidateBank:
+    """Generate + verify panel candidates for every task.
+
+    When ``cache_dir`` is set, each task's verified candidates are persisted as
+    soon as they exist (keyed by bank signature + task id) and reloaded on
+    rebuild — a crash mid-build (e.g. OOM while saving a huge bank) never loses
+    paid panel calls.
+    """
     models = panel_model_ids(engine)
     semaphore = asyncio.Semaphore(max(1, concurrency))
 
     async def build_one(task: PreparedTask) -> BankTask | None:
+        cached = _load_cached_task(cache_dir, signature, task)
+        if cached is not None:
+            _log(f"  {task.task_id}: candidates from build cache")
+            return cached
         async with semaphore:
             try:
                 candidates = await engine.producer.generate_panel(
@@ -124,21 +136,74 @@ async def build_candidate_bank(
             except Exception as exc:  # noqa: BLE001 - skip tasks that fail to generate
                 _log(f"  {task.task_id}: candidate generation failed, skipping ({exc})")
                 return None
+        survivors = [c for c in candidates if getattr(c, "status", "succeeded") == "succeeded"]
+        dropped = len(candidates) - len(survivors)
+        if dropped:
+            # Never record a provider failure as a model's wrong answer — that
+            # would silently distort pass@1. Drop it loudly instead.
+            _log(f"  {task.task_id}: dropped {dropped} failed candidate generation(s)")
         bank_candidates = await asyncio.to_thread(
-            _verify_candidates, sandbox, candidates, task, checker_mode, test_timeout_s
+            _verify_candidates, sandbox, survivors, task, checker_mode, test_timeout_s
         )
-        return BankTask(
+        bank_task = BankTask(
             task_id=task.task_id,
             prompt=task.prompt,
             tests=task.tests,
             difficulty=task.difficulty,
             candidates=bank_candidates,
         )
+        _save_cached_task(cache_dir, signature, bank_task)
+        return bank_task
 
     built = await asyncio.gather(*(build_one(task) for task in tasks))
     bank_tasks = [task for task in built if task is not None]
     _log(f"built candidate bank: {len(bank_tasks)} tasks, panel={models}")
     return CandidateBank(signature=signature, panel_models=models, tasks=bank_tasks)
+
+
+def _task_cache_path(cache_dir: str | Path, signature: str, task_id: str) -> Path:
+    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in task_id)
+    return Path(cache_dir) / signature / f"{safe}.json"
+
+
+def _load_cached_task(
+    cache_dir: str | Path | None,
+    signature: str,
+    task: PreparedTask,
+) -> BankTask | None:
+    if cache_dir is None:
+        return None
+    path = _task_cache_path(cache_dir, signature, task.task_id)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    candidates = [BankCandidate.model_validate(c) for c in payload.get("candidates", [])]
+    # Tests are rehydrated from the live task (they can be huge; the cache keeps
+    # only what the panel calls paid for: candidate contents + pass flags).
+    return BankTask(
+        task_id=task.task_id,
+        prompt=task.prompt,
+        tests=task.tests,
+        difficulty=task.difficulty,
+        candidates=candidates,
+    )
+
+
+def _save_cached_task(cache_dir: str | Path | None, signature: str, task: BankTask) -> None:
+    if cache_dir is None:
+        return
+    path = _task_cache_path(cache_dir, signature, task.task_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "task_id": task.task_id,
+        "candidates": [c.model_dump(mode="json") for c in task.candidates],
+    }
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    tmp.replace(path)
 
 
 def _verify_candidates(

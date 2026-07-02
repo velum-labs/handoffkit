@@ -791,6 +791,7 @@ def tune_prompts(
                 signature=signature,
                 test_timeout_s=test_timeout_s,
                 concurrency=concurrency,
+                cache_dir=bank.parent / "bank-build-cache",
             )
         )
         save_bank(bank, candidate_bank)
@@ -949,6 +950,7 @@ def fusion_hillclimb(
                 signature=signature,
                 test_timeout_s=test_timeout_s,
                 concurrency=concurrency,
+                cache_dir=bank.parent / "bank-build-cache",
             )
         )
         save_bank(bank, candidate_bank)

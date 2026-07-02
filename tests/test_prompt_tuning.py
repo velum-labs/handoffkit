@@ -139,6 +139,71 @@ def test_bank_signature_changes_with_panel_depth() -> None:
     assert sig1 != sig2
 
 
+async def test_build_candidate_bank_drops_failed_generations(tmp_path) -> None:
+    """A provider failure must be dropped, never recorded as a wrong answer."""
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="pass", model="m", base_url="http://x"),
+            ModelEndpoint(id="broken", model="m", base_url="http://x"),
+        ],
+        default_model="pass",
+        panel_models=["pass", "broken"],
+        default_mode="panel",
+    )
+    clients = {
+        "pass": FakeModelClient("pass", [CORRECT]),
+        "broken": _FailingClient("broken"),
+    }
+    engine = FusionEngine(config=config, clients=clients)
+    task = PreparedTask(task_id="d1", prompt="double", tests=DOUBLE_TEST)
+
+    bank = await build_candidate_bank(
+        engine, LocalSandbox(), [task], signature="sig", concurrency=1
+    )
+
+    assert [c.model_id for c in bank.tasks[0].candidates] == ["pass"]
+
+
+async def test_build_candidate_bank_reuses_build_cache(tmp_path) -> None:
+    """Verified candidates persist per task, so a crashed build never re-bills."""
+    engine = _panel_engine()
+    task = PreparedTask(task_id="d1", prompt="double", tests=DOUBLE_TEST)
+    cache = tmp_path / "build-cache"
+
+    first = await build_candidate_bank(
+        engine, LocalSandbox(), [task], signature="sig", concurrency=1, cache_dir=cache
+    )
+    # A fresh engine whose clients would give different answers must NOT be hit:
+    # the cached candidates win.
+    stale_clients = {
+        "pass": FakeModelClient("pass", [WRONG]),
+        "fail": FakeModelClient("fail", [WRONG]),
+    }
+    engine2 = FusionEngine(config=engine.config, clients=stale_clients)
+    second = await build_candidate_bank(
+        engine2, LocalSandbox(), [task], signature="sig", concurrency=1, cache_dir=cache
+    )
+
+    assert [c.passed for c in second.tasks[0].candidates] == [
+        c.passed for c in first.tasks[0].candidates
+    ]
+    assert second.tasks[0].candidates[0].content == CORRECT
+
+
+class _FailingClient:
+    def __init__(self, model_id: str) -> None:
+        self.model_id = model_id
+
+    async def chat(self, *args, **kwargs):
+        raise RuntimeError("provider exploded")
+
+    def stream_chat(self, *args, **kwargs):
+        raise RuntimeError("provider exploded")
+
+    async def aclose(self) -> None:
+        return None
+
+
 async def test_build_candidate_bank_deep_panel_records_all_samples() -> None:
     engine = _panel_engine()
     engine.config.panel_samples_per_model = 2
