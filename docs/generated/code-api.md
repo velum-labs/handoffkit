@@ -72,7 +72,7 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export type { JudgeCandidateEvidence, JudgeInput, JudgePatch, JudgeSynthesizer, JudgeSynthesisOutput, MockJudgeSynthesizerOptions, SynthesisFailureSummary } from "./judge.js";`
 - `export { ensemble, runEnsemble } from "./run.js";`
 - `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolHarnessProvider } from "./unified.js";`
-- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusionPanelOptions, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
+- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusionPanelOptions, PanelTrust, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
 - `export { ambientTraceId, emitTrace, getTraceEmitter, newSpanId, newTraceId, TRACE_CANDIDATE_HEADER, TRACE_ID_HEADER, TRACE_PARENT_SPAN_HEADER, TRACE_SPAN_HEADER, TraceEmitter } from "./trace.js";`
 - `export type { EmitInput, FusionTraceComponent, FusionTraceEvent, FusionTraceEventType } from "./trace.js";`
 - `export { runJudgeSynthesis } from "./synthesis.js";`

@@ -33,6 +33,7 @@ export type {
   CursorHarnessRunnerInput,
   CursorHarnessRunnerResult,
   FusionPanelOptions,
+  PanelTrust,
   ToolHarnessProvider,
   ToolHarnessResolveOptions,
   UnifiedHarnessE2EOptions,

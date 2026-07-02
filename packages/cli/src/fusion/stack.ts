@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { KernelBackend } from "@fusionkit/ensemble";
-import type { EnsembleModel, UnifiedHarnessKind } from "@fusionkit/ensemble";
+import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
 import { createChatNarrationWriter, MlxBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
   Gateway,
@@ -416,6 +416,8 @@ export type StartFusionStackOptions = {
    * launched tool's own system/custom instructions. Default off.
    */
   panelIdentity?: boolean;
+  /** Panel candidate trust level; unset means `full` (maximum autonomy). */
+  panelTrust?: PanelTrust;
   /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. Default on. */
   reasoning?: boolean;
   /** Optional local MLX model that writes the narration prose (Apple Silicon only). */
@@ -568,6 +570,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       ...(options.resumeId !== undefined ? { resumeId: options.resumeId } : {}),
       ...(options.sessionMeta !== undefined ? { sessionMeta: options.sessionMeta } : {}),
       ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+      ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
       ...(options.reasoning !== undefined ? { reasoningTraces: options.reasoning } : {}),
       ...(narrationWriter !== undefined ? { narrationWriter } : {})
     };

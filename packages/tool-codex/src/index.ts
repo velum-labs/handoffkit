@@ -27,6 +27,10 @@ export const codexTool: ToolIntegration = {
       ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
       ...(options.turn !== undefined ? { turn: options.turn } : {}),
       ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+      // Panel candidates run unattended in disposable worktrees, so default to
+      // maximum autonomy. `guarded` falls back to the side-effects-derived
+      // sandbox (workspace-write), which `sandboxModeFor` picks when unset.
+      ...(options.panelTrust === "guarded" ? {} : { sandboxMode: "danger-full-access" as const }),
       provider: {
         kind: "openai-compatible",
         baseUrl: options.fusionBackendUrl,

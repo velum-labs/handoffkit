@@ -495,6 +495,7 @@ export async function runFusion(
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
+      ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
       ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
       ...(options.reasoningModel !== undefined ? { reasoningModel: options.reasoningModel } : {}),
       sessionStore,

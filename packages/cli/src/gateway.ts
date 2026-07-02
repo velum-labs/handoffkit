@@ -16,6 +16,7 @@ import {
 } from "@fusionkit/ensemble";
 import type {
   EnsembleModel,
+  PanelTrust,
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
@@ -78,6 +79,12 @@ export type GatewayRunnerConfig = {
    * Default off (per-member identity reduces inter-member decorrelation).
    */
   panelIdentity?: boolean;
+  /**
+   * Panel candidate trust level; unset means `full` (maximum autonomy — e.g.
+   * Codex `danger-full-access`). `guarded` keeps each harness's
+   * side-effects-derived confinement.
+   */
+  panelTrust?: PanelTrust;
   /**
    * Reasoning traces: narrate panel/judge progress into a streaming fused
    * turn's response (rendered by the tool's native thinking UI). Default on.
@@ -393,6 +400,7 @@ export async function startFusionStepGateway(input: {
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
         ...(config.panelIdentity !== undefined ? { panelIdentity: config.panelIdentity } : {}),
+        ...(config.panelTrust !== undefined ? { panelTrust: config.panelTrust } : {}),
         ...(harnessSystem !== undefined ? { harnessSystem } : {})
       });
       const trajectories = normalizeWireTrajectories(wire);

@@ -17,6 +17,7 @@ import {
   parseIdValue,
   parseOnRateLimit,
   parsePanelModelSpec,
+  parsePanelTrust,
   parsePort
 } from "../shared/options.js";
 import { reapFusionServices } from "../shared/portless.js";
@@ -43,6 +44,7 @@ type FusionOpts = {
   ide?: boolean;
   onRateLimit?: string;
   budget?: string;
+  panelTrust?: string;
   resume?: string;
   continue?: boolean;
   dir?: string;
@@ -82,6 +84,10 @@ function applyFusionOptions(command: Command): Command {
       "vendor rate-limit/credit handoff: fusion (continue on the ensemble, default) | passthrough | fail"
     )
     .option("--budget <usd>", "stop the session once it has spent this much (gateway-observed USD)")
+    .option(
+      "--panel-trust <level>",
+      "panel candidate autonomy: full (max, default) | guarded (harness-fenced to the worktree)"
+    )
     .option("--resume <id>", "resume a stored session by id (or unique prefix); see `fusionkit sessions`")
     .option("--continue", "resume the most recently active stored session")
     .allowUnknownOption()
@@ -117,6 +123,8 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (onRateLimit !== undefined) options.onRateLimit = onRateLimit;
   const budgetUsd = parseBudget(opts.budget);
   if (budgetUsd !== undefined) options.budgetUsd = budgetUsd;
+  const panelTrust = parsePanelTrust(opts.panelTrust);
+  if (panelTrust !== undefined) options.panelTrust = panelTrust;
   if (opts.authToken !== undefined) options.authToken = opts.authToken;
   if (opts.port !== undefined) options.port = parsePort(opts.port, 0);
   if (opts.resume !== undefined) options.resume = opts.resume;
@@ -170,6 +178,9 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   }
   if (options.budgetUsd === undefined && config.budgetUsd !== undefined) {
     options.budgetUsd = config.budgetUsd;
+  }
+  if (options.panelTrust === undefined && config.panelTrust !== undefined) {
+    options.panelTrust = config.panelTrust;
   }
   if (options.prompts === undefined && config.prompts !== undefined) options.prompts = config.prompts;
 }

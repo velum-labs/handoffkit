@@ -1,4 +1,4 @@
-import type { EnsembleModel, UnifiedHarnessKind } from "@fusionkit/ensemble";
+import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 import { SESSION_ISOLATIONS } from "@fusionkit/protocol";
 import type { SessionIsolation } from "@fusionkit/protocol";
@@ -113,6 +113,17 @@ export function parseOnRateLimit(value: string | undefined): OnRateLimitPolicy |
     fail(`--on-rate-limit must be one of ${ON_RATE_LIMIT_POLICIES.join(" | ")}`);
   }
   return value as OnRateLimitPolicy;
+}
+
+/** Panel candidate trust levels (`--panel-trust`). `full` is the default. */
+export const PANEL_TRUST_LEVELS: readonly PanelTrust[] = ["full", "guarded"];
+
+export function parsePanelTrust(value: string | undefined): PanelTrust | undefined {
+  if (value === undefined) return undefined;
+  if (!(PANEL_TRUST_LEVELS as readonly string[]).includes(value)) {
+    fail(`--panel-trust must be one of ${PANEL_TRUST_LEVELS.join(" | ")}`);
+  }
+  return value as PanelTrust;
 }
 
 export function parseFusionTool(value: string | undefined): FusionTool {

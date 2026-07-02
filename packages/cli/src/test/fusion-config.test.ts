@@ -47,6 +47,20 @@ test("parseFusionConfig accepts a valid config", () => {
   assert.equal(config.port, 1234);
 });
 
+test("parseFusionConfig accepts panelTrust levels and rejects unknown ones", () => {
+  const full = parseFusionConfig({ version: FUSION_CONFIG_VERSION, panelTrust: "full" }, "test");
+  assert.equal(full.panelTrust, "full");
+  const guarded = parseFusionConfig({ version: FUSION_CONFIG_VERSION, panelTrust: "guarded" }, "test");
+  assert.equal(guarded.panelTrust, "guarded");
+  // Unset stays undefined (defaults to full downstream).
+  const unset = parseFusionConfig({ version: FUSION_CONFIG_VERSION }, "test");
+  assert.equal(unset.panelTrust, undefined);
+  assert.throws(
+    () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, panelTrust: "yolo" }, "test"),
+    FusionConfigError
+  );
+});
+
 test("parseFusionConfig accepts reasoning + reasoningModel and rejects bad values", () => {
   const config = parseFusionConfig(
     {

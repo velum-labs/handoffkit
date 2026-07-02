@@ -42,6 +42,14 @@ export type UnifiedHarnessKind =
   | "cursor-desktop";
 
 /**
+ * Trust level for unattended panel candidates. `full` (the default) gives each
+ * member the highest autonomy its harness offers (e.g. Codex
+ * `danger-full-access`); `guarded` keeps the harness's side-effects-derived
+ * confinement (e.g. Codex `workspace-write`, fenced to the worktree).
+ */
+export type PanelTrust = "full" | "guarded";
+
+/**
  * Options the unified runner passes to a tool's harness factory. The per-tool
  * packages map these onto their own harness options (provider base URL, etc.).
  */
@@ -67,6 +75,8 @@ export type ToolHarnessResolveOptions = {
   turn?: number;
   /** When true, the tool harness tells its model which panel member it is. */
   panelIdentity?: boolean;
+  /** Panel candidate trust level; unset means `full` (maximum autonomy). */
+  panelTrust?: PanelTrust;
 };
 
 /**
@@ -114,7 +124,8 @@ function resolveToolAdapter(
     ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
-    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
+    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+    ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {})
   });
 }
 
@@ -185,6 +196,8 @@ export type UnifiedHarnessE2EOptions = {
   turn?: number;
   /** When true, each harness tells its model which panel member it is (see FusionPanelOptions). */
   panelIdentity?: boolean;
+  /** Panel candidate trust level; unset means `full` (maximum autonomy). */
+  panelTrust?: PanelTrust;
 };
 
 function normalizeFusionBackendUrl(value: string): string {
@@ -535,6 +548,8 @@ export type FusionPanelOptions = {
    * prompts differ from each other (some inter-member decorrelation trade-off).
    */
   panelIdentity?: boolean;
+  /** Panel candidate trust level; unset means `full` (maximum autonomy). */
+  panelTrust?: PanelTrust;
 };
 
 /**
@@ -565,7 +580,8 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
-    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
+    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+    ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {})
   };
   const descriptor = descriptorFor(harness, e2eOptions);
   descriptor.judge = {

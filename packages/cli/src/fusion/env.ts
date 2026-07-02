@@ -6,6 +6,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
+import type { PanelTrust } from "@fusionkit/ensemble";
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 
 import type { PromptOverrides } from "../fusion-config.js";
@@ -85,6 +86,12 @@ export type RunFusionOptions = {
    * message (v1 = stop). Omit for no cap.
    */
   budgetUsd?: number;
+  /**
+   * Panel candidate trust level. `full` (default) gives each member the highest
+   * autonomy its harness offers (e.g. Codex `danger-full-access`); `guarded`
+   * keeps the harness's side-effects-derived confinement (worktree-fenced).
+   */
+  panelTrust?: PanelTrust;
   /** System-prompt overrides forwarded to the synthesizer's router config. */
   prompts?: PromptOverrides;
   /**
