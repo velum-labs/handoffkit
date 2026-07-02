@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from collections.abc import Sequence
+from typing import cast
 
+from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
+from fusionkit_core.kernel import FusionKernel
+from fusionkit_core.run import FusionRunManager
+from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.types import ChatMessage
 from fusionkit_evals.bench_verify import verify_solution
 from fusionkit_evals.candidate_bank import (
@@ -16,9 +23,15 @@ from fusionkit_evals.candidate_bank import (
     bank_signature,
     build_candidate_bank,
     load_bank,
+    load_usable_bank,
     save_bank,
 )
-from fusionkit_evals.livecodebench_data import LCB_PROMPT_SUFFIX, decode_tests, prepare_tasks
+from fusionkit_evals.livecodebench_data import (
+    LCB_PROMPT_SUFFIX,
+    decode_tests,
+    load_problems,
+    prepare_tasks,
+)
 from fusionkit_evals.prompt_tuning import (
     PromptVariant,
     StubProposer,
@@ -27,6 +40,7 @@ from fusionkit_evals.prompt_tuning import (
     mcnemar,
     optimize,
     regression_guard_tasks,
+    replay_task,
     select_decision_tasks,
     split_dev_val,
 )
@@ -90,6 +104,25 @@ async def test_build_candidate_bank_records_candidate_pass() -> None:
     assert passed_by_model == {"pass": True, "fail": False}
 
 
+async def test_build_candidate_bank_works_through_kernel_facade(tmp_path) -> None:
+    """Regression: the CLI hands the bank builder a FusionKernel, which must
+    expose the engine's producer seam (it silently produced empty banks when
+    `.producer` was missing and every generation raised AttributeError)."""
+    engine = _panel_engine()
+    kernel = FusionKernel(
+        engine,
+        FusionRunManager(engine, FileSystemRunStore(tmp_path), LocalArtifactStore(tmp_path)),
+    )
+    task = PreparedTask(task_id="d1", prompt="double", tests=DOUBLE_TEST, difficulty="easy")
+
+    bank = await build_candidate_bank(
+        cast(FusionEngine, kernel), LocalSandbox(), [task], signature="sig", concurrency=1
+    )
+
+    assert len(bank.tasks) == 1
+    assert bank.tasks[0].is_decision_task is True
+
+
 def test_bank_signature_ignores_judge_config() -> None:
     engine = _panel_engine()
     sig1 = bank_signature(engine, prompt_suffix="X")
@@ -98,10 +131,109 @@ def test_bank_signature_ignores_judge_config() -> None:
     assert sig1 == sig2
 
 
+def test_bank_signature_changes_with_panel_depth() -> None:
+    engine = _panel_engine()
+    sig1 = bank_signature(engine, prompt_suffix="X")
+    engine.config.panel_samples_per_model = 3  # deeper pool -> different candidates
+    sig2 = bank_signature(engine, prompt_suffix="X")
+    assert sig1 != sig2
+
+
+async def test_build_candidate_bank_drops_failed_generations(tmp_path) -> None:
+    """A provider failure must be dropped, never recorded as a wrong answer."""
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="pass", model="m", base_url="http://x"),
+            ModelEndpoint(id="broken", model="m", base_url="http://x"),
+        ],
+        default_model="pass",
+        panel_models=["pass", "broken"],
+        default_mode="panel",
+    )
+    clients = {
+        "pass": FakeModelClient("pass", [CORRECT]),
+        "broken": _FailingClient("broken"),
+    }
+    engine = FusionEngine(config=config, clients=clients)
+    task = PreparedTask(task_id="d1", prompt="double", tests=DOUBLE_TEST)
+
+    bank = await build_candidate_bank(
+        engine, LocalSandbox(), [task], signature="sig", concurrency=1
+    )
+
+    assert [c.model_id for c in bank.tasks[0].candidates] == ["pass"]
+
+
+async def test_build_candidate_bank_reuses_build_cache(tmp_path) -> None:
+    """Verified candidates persist per task, so a crashed build never re-bills."""
+    engine = _panel_engine()
+    task = PreparedTask(task_id="d1", prompt="double", tests=DOUBLE_TEST)
+    cache = tmp_path / "build-cache"
+
+    first = await build_candidate_bank(
+        engine, LocalSandbox(), [task], signature="sig", concurrency=1, cache_dir=cache
+    )
+    # A fresh engine whose clients would give different answers must NOT be hit:
+    # the cached candidates win.
+    stale_clients = {
+        "pass": FakeModelClient("pass", [WRONG]),
+        "fail": FakeModelClient("fail", [WRONG]),
+    }
+    engine2 = FusionEngine(config=engine.config, clients=stale_clients)
+    second = await build_candidate_bank(
+        engine2, LocalSandbox(), [task], signature="sig", concurrency=1, cache_dir=cache
+    )
+
+    assert [c.passed for c in second.tasks[0].candidates] == [
+        c.passed for c in first.tasks[0].candidates
+    ]
+    assert second.tasks[0].candidates[0].content == CORRECT
+
+
+class _FailingClient:
+    def __init__(self, model_id: str) -> None:
+        self.model_id = model_id
+
+    async def chat(self, *args, **kwargs):
+        raise RuntimeError("provider exploded")
+
+    def stream_chat(self, *args, **kwargs):
+        raise RuntimeError("provider exploded")
+
+    async def aclose(self) -> None:
+        return None
+
+
+async def test_build_candidate_bank_deep_panel_records_all_samples() -> None:
+    engine = _panel_engine()
+    engine.config.panel_samples_per_model = 2
+    engine.config.self_temperatures = [0.2, 0.8]
+    task = PreparedTask(task_id="d1", prompt="double", tests=DOUBLE_TEST, difficulty="easy")
+
+    bank = await build_candidate_bank(
+        engine, LocalSandbox(), [task], signature="sig", concurrency=1
+    )
+
+    models = [c.model_id for c in bank.tasks[0].candidates]
+    assert models == ["pass", "pass", "fail", "fail"]
+
+
 def test_bank_round_trips(tmp_path) -> None:
     bank = _decision_bank(2)
     save_bank(tmp_path / "bank.json", bank)
     assert load_bank(tmp_path / "bank.json").tasks[0].task_id == bank.tasks[0].task_id
+
+
+def test_load_usable_bank_rejects_missing_and_empty_banks(tmp_path) -> None:
+    """Regression: an empty persisted bank (failed build) must trigger a rebuild,
+    not be silently loaded as an authoritative zero-task bank."""
+    path = tmp_path / "bank.json"
+    assert load_usable_bank(path) is None
+    save_bank(path, CandidateBank(signature="sig", panel_models=["a"], tasks=[]))
+    assert load_usable_bank(path) is None
+    save_bank(path, _decision_bank(1))
+    loaded = load_usable_bank(path)
+    assert loaded is not None and loaded.tasks
 
 
 # --- subset selection + split ------------------------------------------------
@@ -188,6 +320,38 @@ def _runtime(tmp_path) -> TunerRuntime:
     )
 
 
+async def test_replay_task_records_judge_pick(tmp_path) -> None:
+    """The judge's best_trajectory pick is mapped back to the bank candidate."""
+    judge_json = json.dumps({"consensus": ["c"], "best_trajectory": "cand_1"})
+    clients = {
+        "judge": FakeModelClient("judge", [judge_json]),
+        "synth": _PromptSensitiveFake("synth"),
+    }
+    runtime = TunerRuntime(
+        clients=clients,
+        judge_id="judge",
+        synth_id="synth",
+        bank_signature="sig",
+        sandbox=LocalSandbox(),
+        cache_dir=tmp_path / "cache",
+        judge_sampling=SamplingConfig(temperature=0.0),
+        synth_sampling=SamplingConfig(),
+        concurrency=1,
+    )
+    task = _decision_bank(1).tasks[0]  # cand_0 = a (passed), cand_1 = b (failed)
+    result = await replay_task(runtime, task, PromptVariant())
+    assert result.judge_pick_model == "b"
+    assert result.judge_pick_passed is False
+
+
+def test_sampling_hash_separates_select_best_from_rewrite(tmp_path) -> None:
+    """Regression: select-best and rewrite replays must never share cache entries."""
+    rewrite = _runtime(tmp_path)
+    select = _runtime(tmp_path)
+    select.select_best = True
+    assert rewrite._sampling_hash() != select._sampling_hash()
+
+
 async def test_evaluate_variant_reflects_prompt(tmp_path) -> None:
     runtime = _runtime(tmp_path)
     tasks = select_decision_tasks(_decision_bank(3))
@@ -263,6 +427,25 @@ def test_decode_tests_filters_to_stdin_and_caps() -> None:
     }
     assert len(decode_tests(row, 0)) == 2  # only stdin
     assert len(decode_tests(row, 1)) == 1  # capped
+
+
+def test_load_problems_bounds_arrow_writer_batch(monkeypatch) -> None:
+    """Regression: unbounded writer batches OOM 16GB hosts on the ~100MB
+    private-test blobs during the one-time HF split generation."""
+    captured: dict[str, object] = {}
+
+    def fake_load_dataset(*args: object, **kwargs: object):
+        captured.update(kwargs)
+        return []
+
+    fake_datasets = types.ModuleType("datasets")
+    fake_datasets.load_dataset = fake_load_dataset  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
+
+    load_problems(5)
+    batch_size = captured.get("writer_batch_size")
+    assert isinstance(batch_size, int)
+    assert batch_size <= 100
 
 
 def test_prepare_tasks_builds_prompt_and_tests() -> None:

@@ -9,6 +9,7 @@ from fusionkit_core.judge import JudgeSynthesizer
 from fusionkit_core.prompts import (
     AGENT_STEP_CONTRACT,
     AGENT_WORKSPACE_GROUNDING,
+    FINAL_OUTPUT_TRUNCATION_LIMIT,
     FUSION_SYNTHESIZER_FRAMING,
     JUDGE_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
@@ -17,6 +18,7 @@ from fusionkit_core.prompts import (
     build_fuse_system,
     build_identity_block,
     build_judge_system,
+    format_trajectories,
 )
 from fusionkit_core.types import (
     ChatMessage,
@@ -254,6 +256,18 @@ def test_build_judge_system_layers_harness_then_judge() -> None:
     layered = build_judge_system(JUDGE_SYSTEM_PROMPT, harness_system=_HARNESS)
     assert layered.startswith(_HARNESS)
     assert JUDGE_SYSTEM_PROMPT in layered
+
+
+def test_format_trajectories_truncates_at_the_measured_limit() -> None:
+    """Audit 20260701-2027 (rubric 6.4): the 1200-char cap was ablated against
+    8000 and measured BETTER on both benchmark families; pin the winner."""
+    assert FINAL_OUTPUT_TRUNCATION_LIMIT == 1200
+    short = "x = 1\n" * 100  # 600 chars: untouched
+    rendered = format_trajectories([Trajectory(id="t1", model_id="m", content=short)])
+    assert short.strip() in rendered
+    huge = "y" * (FINAL_OUTPUT_TRUNCATION_LIMIT + 100)
+    rendered_huge = format_trajectories([Trajectory(id="t2", model_id="m", content=huge)])
+    assert "...[truncated]" in rendered_huge
 
 
 @pytest.mark.asyncio

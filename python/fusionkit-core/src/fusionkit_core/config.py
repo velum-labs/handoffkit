@@ -116,6 +116,12 @@ class FusionConfig(BaseModel):
     sample_count: int = 4
     self_temperatures: list[float] = Field(default_factory=lambda: [0.2, 0.4, 0.6, 0.8])
     panel_models: list[str] = Field(default_factory=list)
+    # Samples generated per panel member in panel mode (temperature-varied via
+    # self_temperatures, like self mode). 1 (default) keeps the classic one-shot
+    # panel; >1 deepens the candidate pool for the judge/synthesizer — measured
+    # to raise the ensemble's oracle ceiling on coding benchmarks at
+    # proportionally higher panel cost.
+    panel_samples_per_model: int = Field(default=1, ge=1)
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
     budget: RunBudget = Field(default_factory=RunBudget)
     context: ContextPolicy = Field(default_factory=ContextPolicy)
@@ -126,12 +132,16 @@ class FusionConfig(BaseModel):
     # Set false to fall back to the standalone fusion prompts (e.g. for a weak or
     # heterogeneous synthesizer model that the harness prompt does not fit).
     harness_prompt_passthrough: bool = True
-    # When true, text/code fusion (no tools) returns the judge-selected best candidate
-    # VERBATIM instead of having the synthesizer rewrite an answer. This best-of-N
-    # selection preserves a working candidate's solution (the LLM rewrite can regress
-    # passing code) and skips the synth call. Falls back to composition when the judge
-    # names no best candidate. No effect on tool-using agent fusion.
-    synthesis_select_best: bool = False
+    # When true (default), text/code fusion (no tools) returns the judge-selected best
+    # candidate VERBATIM instead of having the synthesizer rewrite an answer. This
+    # best-of-N selection preserves a working candidate's solution (the LLM rewrite
+    # can regress passing code) and skips the synth call. Falls back to composition
+    # when the judge names no best candidate. No effect on tool-using agent fusion.
+    # Default flipped to true by audit 20260701-2027 (rubric 4.1): on both measured
+    # coding families select-best tied the rewrite on pass rate with strictly fewer
+    # losses vs best-single (LCB dev 24W/0L vs 26W/2L), zero synthesis regressions,
+    # and ~71% fewer synthesizer calls.
+    synthesis_select_best: bool = True
 
     def endpoint_for(self, model_id: str) -> ModelEndpoint:
         for endpoint in self.endpoints:

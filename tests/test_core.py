@@ -44,6 +44,14 @@ def test_config_resolves_default_models() -> None:
     assert config.resolved_synthesizer_model == "judge"
 
 
+def test_synthesis_select_best_is_the_default_policy() -> None:
+    """Audit 20260701-2027 (rubric 4.1): select-best tied the LLM rewrite on pass
+    rate on both measured coding families with strictly fewer losses vs
+    best-single and zero synthesis regressions — the empirical winner is the
+    default. Rewrite composition remains the no-pick fallback."""
+    assert _config().synthesis_select_best is True
+
+
 @pytest.mark.asyncio
 async def test_panel_runner_generates_self_fusion_candidates() -> None:
     runner = ChatTrajectoryProducer({"fast": FakeModelClient("fast")})
@@ -59,6 +67,53 @@ async def test_panel_runner_generates_self_fusion_candidates() -> None:
     assert [candidate.model_id for candidate in candidates] == ["fast", "fast"]
     assert candidates[0].metadata["temperature"] == 0.2
     assert candidates[1].metadata["seed"] == 11
+
+
+@pytest.mark.asyncio
+async def test_panel_generates_temperature_varied_sample_pool() -> None:
+    runner = ChatTrajectoryProducer(
+        {"fast": FakeModelClient("fast"), "slow": FakeModelClient("slow")}
+    )
+
+    candidates = await runner.generate_panel(
+        ["fast", "slow"],
+        [ChatMessage(role="user", content="Explain model fusion")],
+        SamplingConfig(seed=10),
+        samples_per_model=3,
+        temperatures=[0.2, 0.6, 0.9],
+    )
+
+    assert [c.model_id for c in candidates] == ["fast"] * 3 + ["slow"] * 3
+    assert len({c.id for c in candidates}) == 6  # unique trajectory ids
+    assert [c.metadata["temperature"] for c in candidates[:3]] == [0.2, 0.6, 0.9]
+    assert candidates[1].metadata["seed"] == 11
+    # Primary (first) sample per model runs at the base pool's first temperature.
+    assert candidates[0].metadata["temperature"] == candidates[3].metadata["temperature"]
+
+
+@pytest.mark.asyncio
+async def test_fusion_engine_deep_panel_config_flows_to_producer() -> None:
+    config = _config(default_mode="panel")
+    config.panel_models = ["fast"]
+    config.panel_samples_per_model = 2
+    config.self_temperatures = [0.2, 0.8]
+    clients = {
+        "fast": FakeModelClient("fast", ["candidate answer with evidence"]),
+        "judge": FakeModelClient(
+            "judge",
+            [
+                '{"consensus":["agree"],"contradictions":[],"unique_insights":[],'
+                '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
+                "fused final answer",
+            ],
+        ),
+    }
+    engine = FusionEngine(config=config, clients=clients)
+
+    result = await engine.run([ChatMessage(role="user", content="Compare options")], mode="panel")
+
+    assert len(result.trajectories) == 2
+    assert [t.metadata["temperature"] for t in result.trajectories] == [0.2, 0.8]
 
 
 @pytest.mark.asyncio

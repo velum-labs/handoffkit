@@ -76,6 +76,74 @@ async def test_fuse_no_tools_is_terminal_and_folds_synthesis_onto_trajectory() -
 
 
 @pytest.mark.asyncio
+async def test_fuse_records_stage_metrics_and_judge_pick() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient(
+        "judge",
+        [
+            '{"consensus":["alpha is correct"],"contradictions":[],"unique_insights":[],'
+            '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[],'
+            '"best_trajectory":"traj_alpha"}',
+            "final answer",
+        ],
+    )
+    trajectories = [
+        _trajectory("traj_alpha", "alpha", "Changed add to left + right."),
+        _trajectory("traj_beta", "beta", "Rewrote add as a function."),
+    ]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix the failing add() test.")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=judge,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    # Per-stage usage breakdown for cost/latency attribution.
+    assert result.stage_metrics["judge"]["model_id"] == "judge"
+    assert result.stage_metrics["judge"]["completion_tokens"] is not None
+    assert result.stage_metrics["synthesis"]["model_id"] == "judge"
+    assert "skipped" not in result.stage_metrics["synthesis"]
+    # The judge's own pick is preserved into the synthesis metrics for the
+    # regret decomposition (distinct from the verbatim content match).
+    assert result.trajectory is not None
+    assert result.trajectory.synthesis is not None
+    assert result.trajectory.synthesis.metrics["judge_best_trajectory"] == "traj_alpha"
+
+
+@pytest.mark.asyncio
+async def test_fuse_stage_metrics_mark_skipped_synthesis_on_select_best() -> None:
+    synthesizer = JudgeSynthesizer(select_best=True)
+    judge = FakeModelClient(
+        "judge",
+        [
+            '{"consensus":[],"contradictions":[],"unique_insights":[],"coverage_gaps":[],'
+            '"likely_errors":[],"recommended_final_structure":[],'
+            '"best_trajectory":"traj_alpha"}',
+        ],
+    )
+    trajectories = [
+        _trajectory("traj_alpha", "alpha", "Changed add to left + right."),
+        _trajectory("traj_beta", "beta", "Rewrote add as a function."),
+    ]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix the failing add() test.")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=judge,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    assert result.response.content == "Changed add to left + right."
+    assert result.stage_metrics["judge"]["model_id"] == "judge"
+    assert result.stage_metrics["synthesis"]["skipped"] is True
+
+
+@pytest.mark.asyncio
 async def test_fuse_synthesis_metrics_carry_contributions_and_rejections() -> None:
     synthesizer = JudgeSynthesizer()
     judge = FakeModelClient(

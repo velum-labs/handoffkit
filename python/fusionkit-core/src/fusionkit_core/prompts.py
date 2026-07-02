@@ -85,6 +85,16 @@ AGENT_WORKSPACE_GROUNDING = (
 )
 
 
+# Candidate final-output cap in the judge/synthesizer prompts. Ablated in audit
+# 20260701-2027 (rubric 6.4): raising it to 8000 chars (~p90 of coding
+# candidates) was measured WORSE on both benchmark families — LCB dev rewrite
+# 0.6533 vs 0.6733, polyglot select-best 0.7379 vs 0.7767 (5W/8L) — the judge
+# picks better from concise heads than from full listings. 1200 is the
+# empirically winning setting, kept as a named constant so future ablations
+# bust the replay caches automatically.
+FINAL_OUTPUT_TRUNCATION_LIMIT = 1200
+
+
 def _truncate(text: str, limit: int = 1200) -> str:
     text = text or ""
     return text if len(text) <= limit else text[:limit] + "...[truncated]"
@@ -112,7 +122,7 @@ def format_trajectories(trajectories: Sequence[Trajectory]) -> str:
             f"Trajectory {trajectory.id} from model {trajectory.model_id} "
             f"(status={trajectory.status}):\n"
             f"{items}\n"
-            f"  final_output:\n{_truncate(trajectory.content)}"
+            f"  final_output:\n{_truncate(trajectory.content, FINAL_OUTPUT_TRUNCATION_LIMIT)}"
         )
     return "\n\n---\n\n".join(sections)
 

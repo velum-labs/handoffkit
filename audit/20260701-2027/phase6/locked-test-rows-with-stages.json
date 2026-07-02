@@ -1,0 +1,1894 @@
+{
+ "arc190_a": {
+  "task_id": "arc190_a",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.457877,
+  "latency_s": 166.39,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.457877,
+   "cost_panel_usd": 0.403416,
+   "cost_judge_usd": 0.009775,
+   "cost_synth_usd": 0.044686,
+   "latency_panel_s": 79.59,
+   "latency_judge_s": 11.38,
+   "latency_synth_s": 75.42
+  }
+ },
+ "abc397_f": {
+  "task_id": "abc397_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.390997,
+  "latency_s": 127.52,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.390997,
+   "cost_panel_usd": 0.349919,
+   "cost_judge_usd": 0.018866,
+   "cost_synth_usd": 0.022213,
+   "latency_panel_s": 78.65,
+   "latency_judge_s": 26.13,
+   "latency_synth_s": 22.73
+  }
+ },
+ "abc396_c": {
+  "task_id": "abc396_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.172949,
+  "latency_s": 38.7,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.172949,
+   "cost_panel_usd": 0.160196,
+   "cost_judge_usd": 0.012752,
+   "cost_synth_usd": null,
+   "latency_panel_s": 24.24,
+   "latency_judge_s": 14.45,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc195_b": {
+  "task_id": "arc195_b",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.35429,
+  "latency_s": 181.98,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.35429,
+   "cost_panel_usd": 0.287836,
+   "cost_judge_usd": 0.033919,
+   "cost_synth_usd": 0.032535,
+   "latency_panel_s": 80.93,
+   "latency_judge_s": 52.04,
+   "latency_synth_s": 48.99
+  }
+ },
+ "arc191_d": {
+  "task_id": "arc191_d",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.336314,
+  "latency_s": 173.77,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.336314,
+   "cost_panel_usd": 0.283653,
+   "cost_judge_usd": 0.008559,
+   "cost_synth_usd": 0.044103,
+   "latency_panel_s": 81.87,
+   "latency_judge_s": 9.88,
+   "latency_synth_s": 82.01
+  }
+ },
+ "abc395_c": {
+  "task_id": "abc395_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.034881,
+  "latency_s": 13.0,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.034881,
+   "cost_panel_usd": 0.028014,
+   "cost_judge_usd": 0.006867,
+   "cost_synth_usd": null,
+   "latency_panel_s": 4.63,
+   "latency_judge_s": 8.36,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc400_g": {
+  "task_id": "abc400_g",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.505355,
+  "latency_s": 171.87,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.505355,
+   "cost_panel_usd": 0.452809,
+   "cost_judge_usd": 0.008229,
+   "cost_synth_usd": 0.044318,
+   "latency_panel_s": 83.74,
+   "latency_judge_s": 7.7,
+   "latency_synth_s": 80.42
+  }
+ },
+ "abc389_f": {
+  "task_id": "abc389_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.403438,
+  "latency_s": 164.04,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.403438,
+   "cost_panel_usd": 0.33847,
+   "cost_judge_usd": 0.022984,
+   "cost_synth_usd": 0.041984,
+   "latency_panel_s": 72.2,
+   "latency_judge_s": 33.26,
+   "latency_synth_s": 58.58
+  }
+ },
+ "abc399_f": {
+  "task_id": "abc399_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.187071,
+  "latency_s": 31.96,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.187071,
+   "cost_panel_usd": 0.174374,
+   "cost_judge_usd": 0.012698,
+   "cost_synth_usd": null,
+   "latency_panel_s": 19.83,
+   "latency_judge_s": 12.12,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc389_e": {
+  "task_id": "abc389_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.251658,
+  "latency_s": 95.02,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.251658,
+   "cost_panel_usd": 0.233056,
+   "cost_judge_usd": 0.018601,
+   "cost_synth_usd": null,
+   "latency_panel_s": 71.27,
+   "latency_judge_s": 23.75,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc196_d": {
+  "task_id": "arc196_d",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.508603,
+  "latency_s": 178.75,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.508603,
+   "cost_panel_usd": 0.451436,
+   "cost_judge_usd": 0.012654,
+   "cost_synth_usd": 0.044513,
+   "latency_panel_s": 83.33,
+   "latency_judge_s": 16.23,
+   "latency_synth_s": 78.16
+  }
+ },
+ "abc394_e": {
+  "task_id": "abc394_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.295824,
+  "latency_s": 142.42,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.295824,
+   "cost_panel_usd": 0.245806,
+   "cost_judge_usd": 0.013374,
+   "cost_synth_usd": 0.036644,
+   "latency_panel_s": 73.12,
+   "latency_judge_s": 16.83,
+   "latency_synth_s": 52.47
+  }
+ },
+ "arc194_a": {
+  "task_id": "arc194_a",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.301201,
+  "latency_s": 81.87,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.301201,
+   "cost_panel_usd": 0.283396,
+   "cost_judge_usd": 0.017805,
+   "cost_synth_usd": null,
+   "latency_panel_s": 57.28,
+   "latency_judge_s": 24.59,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc399_e": {
+  "task_id": "abc399_e",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.379558,
+  "latency_s": 196.18,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.379558,
+   "cost_panel_usd": 0.31271,
+   "cost_judge_usd": 0.023029,
+   "cost_synth_usd": 0.043819,
+   "latency_panel_s": 78.58,
+   "latency_judge_s": 35.57,
+   "latency_synth_s": 82.03
+  }
+ },
+ "abc392_d": {
+  "task_id": "abc392_d",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.066738,
+  "latency_s": 24.53,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.066738,
+   "cost_panel_usd": 0.056743,
+   "cost_judge_usd": 0.009995,
+   "cost_synth_usd": null,
+   "latency_panel_s": 13.14,
+   "latency_judge_s": 11.39,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc393_f": {
+  "task_id": "abc393_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.240402,
+  "latency_s": 37.89,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.240402,
+   "cost_panel_usd": 0.22853,
+   "cost_judge_usd": 0.011872,
+   "cost_synth_usd": null,
+   "latency_panel_s": 25.06,
+   "latency_judge_s": 12.82,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc388_f": {
+  "task_id": "abc388_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.400151,
+  "latency_s": 150.57,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.400151,
+   "cost_panel_usd": 0.349331,
+   "cost_judge_usd": 0.012924,
+   "cost_synth_usd": 0.037896,
+   "latency_panel_s": 78.32,
+   "latency_judge_s": 16.08,
+   "latency_synth_s": 56.17
+  }
+ },
+ "abc391_d": {
+  "task_id": "abc391_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.414715,
+  "latency_s": 89.25,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.414715,
+   "cost_panel_usd": 0.395576,
+   "cost_judge_usd": 0.019139,
+   "cost_synth_usd": null,
+   "latency_panel_s": 63.29,
+   "latency_judge_s": 25.96,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc394_d": {
+  "task_id": "abc394_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.036309,
+  "latency_s": 13.16,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.036309,
+   "cost_panel_usd": 0.030018,
+   "cost_judge_usd": 0.006291,
+   "cost_synth_usd": null,
+   "latency_panel_s": 6.96,
+   "latency_judge_s": 6.2,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc388_d": {
+  "task_id": "abc388_d",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.254623,
+  "latency_s": 50.61,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.254623,
+   "cost_panel_usd": 0.241028,
+   "cost_judge_usd": 0.013595,
+   "cost_synth_usd": null,
+   "latency_panel_s": 34.45,
+   "latency_judge_s": 16.15,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc389_g": {
+  "task_id": "abc389_g",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.495395,
+  "latency_s": 167.11,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.495395,
+   "cost_panel_usd": 0.442283,
+   "cost_judge_usd": 0.00911,
+   "cost_synth_usd": 0.044002,
+   "latency_panel_s": 80.1,
+   "latency_judge_s": 9.95,
+   "latency_synth_s": 77.06
+  }
+ },
+ "abc388_g": {
+  "task_id": "abc388_g",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.415175,
+  "latency_s": 127.14,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.415175,
+   "cost_panel_usd": 0.373996,
+   "cost_judge_usd": 0.012653,
+   "cost_synth_usd": 0.028526,
+   "latency_panel_s": 72.28,
+   "latency_judge_s": 14.3,
+   "latency_synth_s": 40.56
+  }
+ },
+ "arc192_a": {
+  "task_id": "arc192_a",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.501931,
+  "latency_s": 152.43,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.501931,
+   "cost_panel_usd": 0.448537,
+   "cost_judge_usd": 0.009054,
+   "cost_synth_usd": 0.04434,
+   "latency_panel_s": 72.39,
+   "latency_judge_s": 9.4,
+   "latency_synth_s": 70.64
+  }
+ },
+ "arc196_b": {
+  "task_id": "arc196_b",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.504988,
+  "latency_s": 148.4,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.504988,
+   "cost_panel_usd": 0.452816,
+   "cost_judge_usd": 0.007883,
+   "cost_synth_usd": 0.044289,
+   "latency_panel_s": 74.65,
+   "latency_judge_s": 8.92,
+   "latency_synth_s": 64.08
+  }
+ },
+ "abc398_f": {
+  "task_id": "abc398_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.110688,
+  "latency_s": 41.64,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.110688,
+   "cost_panel_usd": 0.098565,
+   "cost_judge_usd": 0.012123,
+   "cost_synth_usd": null,
+   "latency_panel_s": 27.07,
+   "latency_judge_s": 14.58,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc398_g": {
+  "task_id": "abc398_g",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.374532,
+  "latency_s": 228.77,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.374532,
+   "cost_panel_usd": 0.292776,
+   "cost_judge_usd": 0.037696,
+   "cost_synth_usd": 0.04406,
+   "latency_panel_s": 88.3,
+   "latency_judge_s": 64.28,
+   "latency_synth_s": 76.18
+  }
+ },
+ "abc396_d": {
+  "task_id": "abc396_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.069362,
+  "latency_s": 18.29,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.069362,
+   "cost_panel_usd": 0.059255,
+   "cost_judge_usd": 0.010108,
+   "cost_synth_usd": null,
+   "latency_panel_s": 8.33,
+   "latency_judge_s": 9.96,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc190_c": {
+  "task_id": "arc190_c",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.518093,
+  "latency_s": 177.63,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.518093,
+   "cost_panel_usd": 0.461141,
+   "cost_judge_usd": 0.011697,
+   "cost_synth_usd": 0.045254,
+   "latency_panel_s": 84.9,
+   "latency_judge_s": 12.98,
+   "latency_synth_s": 79.75
+  }
+ },
+ "abc396_g": {
+  "task_id": "abc396_g",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.17346,
+  "latency_s": 34.66,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.17346,
+   "cost_panel_usd": 0.160823,
+   "cost_judge_usd": 0.012637,
+   "cost_synth_usd": null,
+   "latency_panel_s": 19.89,
+   "latency_judge_s": 14.76,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc194_c": {
+  "task_id": "arc194_c",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.386744,
+  "latency_s": 179.67,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.386744,
+   "cost_panel_usd": 0.325346,
+   "cost_judge_usd": 0.017225,
+   "cost_synth_usd": 0.044173,
+   "latency_panel_s": 79.21,
+   "latency_judge_s": 23.52,
+   "latency_synth_s": 76.93
+  }
+ },
+ "arc196_c": {
+  "task_id": "arc196_c",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.4981,
+  "latency_s": 168.97,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.4981,
+   "cost_panel_usd": 0.445031,
+   "cost_judge_usd": 0.009061,
+   "cost_synth_usd": 0.044008,
+   "latency_panel_s": 82.27,
+   "latency_judge_s": 9.46,
+   "latency_synth_s": 76.21
+  }
+ },
+ "abc397_e": {
+  "task_id": "abc397_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.37479,
+  "latency_s": 99.57,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.37479,
+   "cost_panel_usd": 0.358354,
+   "cost_judge_usd": 0.016436,
+   "cost_synth_usd": null,
+   "latency_panel_s": 77.98,
+   "latency_judge_s": 21.59,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc194_e": {
+  "task_id": "arc194_e",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.497805,
+  "latency_s": 157.99,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.497805,
+   "cost_panel_usd": 0.445733,
+   "cost_judge_usd": 0.007769,
+   "cost_synth_usd": 0.044304,
+   "latency_panel_s": 78.04,
+   "latency_judge_s": 7.68,
+   "latency_synth_s": 72.26
+  }
+ },
+ "abc390_f": {
+  "task_id": "abc390_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.441776,
+  "latency_s": 98.31,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.441776,
+   "cost_panel_usd": 0.417706,
+   "cost_judge_usd": 0.02407,
+   "cost_synth_usd": null,
+   "latency_panel_s": 67.32,
+   "latency_judge_s": 30.99,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc192_d": {
+  "task_id": "arc192_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.494116,
+  "latency_s": 139.63,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.494116,
+   "cost_panel_usd": 0.443156,
+   "cost_judge_usd": 0.013952,
+   "cost_synth_usd": 0.037007,
+   "latency_panel_s": 72.66,
+   "latency_judge_s": 17.11,
+   "latency_synth_s": 49.84
+  }
+ },
+ "abc387_c": {
+  "task_id": "abc387_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.119179,
+  "latency_s": 35.16,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.119179,
+   "cost_panel_usd": 0.105899,
+   "cost_judge_usd": 0.01328,
+   "cost_synth_usd": null,
+   "latency_panel_s": 19.08,
+   "latency_judge_s": 16.08,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc195_a": {
+  "task_id": "arc195_a",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.132596,
+  "latency_s": 26.46,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.132596,
+   "cost_panel_usd": 0.121524,
+   "cost_judge_usd": 0.011072,
+   "cost_synth_usd": null,
+   "latency_panel_s": 14.78,
+   "latency_judge_s": 11.67,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc191_a": {
+  "task_id": "arc191_a",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.445594,
+  "latency_s": 198.59,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.445594,
+   "cost_panel_usd": 0.379435,
+   "cost_judge_usd": 0.022495,
+   "cost_synth_usd": 0.043664,
+   "latency_panel_s": 83.9,
+   "latency_judge_s": 34.76,
+   "latency_synth_s": 79.92
+  }
+ },
+ "abc398_b": {
+  "task_id": "abc398_b",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.032601,
+  "latency_s": 11.88,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.032601,
+   "cost_panel_usd": 0.026909,
+   "cost_judge_usd": 0.005692,
+   "cost_synth_usd": null,
+   "latency_panel_s": 5.34,
+   "latency_judge_s": 6.54,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc390_g": {
+  "task_id": "abc390_g",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.431424,
+  "latency_s": 99.97,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.431424,
+   "cost_panel_usd": 0.408138,
+   "cost_judge_usd": 0.023286,
+   "cost_synth_usd": null,
+   "latency_panel_s": 66.82,
+   "latency_judge_s": 33.14,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc192_e": {
+  "task_id": "arc192_e",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.494968,
+  "latency_s": 144.26,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.494968,
+   "cost_panel_usd": 0.442091,
+   "cost_judge_usd": 0.009025,
+   "cost_synth_usd": 0.043851,
+   "latency_panel_s": 69.55,
+   "latency_judge_s": 10.13,
+   "latency_synth_s": 64.58
+  }
+ },
+ "abc390_c": {
+  "task_id": "abc390_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.06799,
+  "latency_s": 18.64,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.06799,
+   "cost_panel_usd": 0.059833,
+   "cost_judge_usd": 0.008157,
+   "cost_synth_usd": null,
+   "latency_panel_s": 10.7,
+   "latency_judge_s": 7.94,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc397_c": {
+  "task_id": "abc397_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.046535,
+  "latency_s": 13.7,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.046535,
+   "cost_panel_usd": 0.03816,
+   "cost_judge_usd": 0.008375,
+   "cost_synth_usd": null,
+   "latency_panel_s": 4.77,
+   "latency_judge_s": 8.93,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc388_e": {
+  "task_id": "abc388_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.078425,
+  "latency_s": 44.21,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.078425,
+   "cost_panel_usd": 0.062069,
+   "cost_judge_usd": 0.016356,
+   "cost_synth_usd": null,
+   "latency_panel_s": 22.64,
+   "latency_judge_s": 21.57,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc400_c": {
+  "task_id": "abc400_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.124468,
+  "latency_s": 26.01,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.124468,
+   "cost_panel_usd": 0.113813,
+   "cost_judge_usd": 0.010655,
+   "cost_synth_usd": null,
+   "latency_panel_s": 14.64,
+   "latency_judge_s": 10.34,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc399_d": {
+  "task_id": "abc399_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.416283,
+  "latency_s": 73.93,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.416283,
+   "cost_panel_usd": 0.396928,
+   "cost_judge_usd": 0.019355,
+   "cost_synth_usd": null,
+   "latency_panel_s": 48.85,
+   "latency_judge_s": 25.08,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc398_d": {
+  "task_id": "abc398_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.198299,
+  "latency_s": 38.96,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.198299,
+   "cost_panel_usd": 0.185887,
+   "cost_judge_usd": 0.012411,
+   "cost_synth_usd": null,
+   "latency_panel_s": 23.76,
+   "latency_judge_s": 15.19,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc195_e": {
+  "task_id": "arc195_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.458659,
+  "latency_s": 99.41,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.458659,
+   "cost_panel_usd": 0.432445,
+   "cost_judge_usd": 0.026214,
+   "cost_synth_usd": null,
+   "latency_panel_s": 68.1,
+   "latency_judge_s": 31.31,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc193_b": {
+  "task_id": "arc193_b",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.499324,
+  "latency_s": 167.01,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.499324,
+   "cost_panel_usd": 0.446771,
+   "cost_judge_usd": 0.008476,
+   "cost_synth_usd": 0.044076,
+   "latency_panel_s": 79.25,
+   "latency_judge_s": 9.32,
+   "latency_synth_s": 78.44
+  }
+ },
+ "abc394_g": {
+  "task_id": "abc394_g",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.515376,
+  "latency_s": 161.11,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.515376,
+   "cost_panel_usd": 0.459907,
+   "cost_judge_usd": 0.01055,
+   "cost_synth_usd": 0.044919,
+   "latency_panel_s": 79.36,
+   "latency_judge_s": 11.68,
+   "latency_synth_s": 70.07
+  }
+ },
+ "arc192_b": {
+  "task_id": "arc192_b",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.392226,
+  "latency_s": 226.64,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.392226,
+   "cost_panel_usd": 0.305491,
+   "cost_judge_usd": 0.043238,
+   "cost_synth_usd": 0.043498,
+   "latency_panel_s": 74.83,
+   "latency_judge_s": 72.32,
+   "latency_synth_s": 79.49
+  }
+ },
+ "abc395_e": {
+  "task_id": "abc395_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.1139,
+  "latency_s": 24.38,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.1139,
+   "cost_panel_usd": 0.101056,
+   "cost_judge_usd": 0.012844,
+   "cost_synth_usd": null,
+   "latency_panel_s": 12.71,
+   "latency_judge_s": 11.68,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc387_f": {
+  "task_id": "abc387_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.441594,
+  "latency_s": 145.51,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.441594,
+   "cost_panel_usd": 0.385472,
+   "cost_judge_usd": 0.024246,
+   "cost_synth_usd": 0.031875,
+   "latency_panel_s": 71.58,
+   "latency_judge_s": 30.32,
+   "latency_synth_s": 43.61
+  }
+ },
+ "arc195_d": {
+  "task_id": "arc195_d",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.402571,
+  "latency_s": 188.12,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.402571,
+   "cost_panel_usd": 0.346799,
+   "cost_judge_usd": 0.012005,
+   "cost_synth_usd": 0.043768,
+   "latency_panel_s": 86.71,
+   "latency_judge_s": 16.31,
+   "latency_synth_s": 85.1
+  }
+ },
+ "arc190_d": {
+  "task_id": "arc190_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.523616,
+  "latency_s": 171.47,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.523616,
+   "cost_panel_usd": 0.449089,
+   "cost_judge_usd": 0.03941,
+   "cost_synth_usd": 0.035117,
+   "latency_panel_s": 70.97,
+   "latency_judge_s": 55.58,
+   "latency_synth_s": 44.92
+  }
+ },
+ "abc397_d": {
+  "task_id": "abc397_d",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.101915,
+  "latency_s": 45.41,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.101915,
+   "cost_panel_usd": 0.087084,
+   "cost_judge_usd": 0.014831,
+   "cost_synth_usd": null,
+   "latency_panel_s": 27.02,
+   "latency_judge_s": 18.39,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc392_g": {
+  "task_id": "abc392_g",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.141258,
+  "latency_s": 80.21,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.141258,
+   "cost_panel_usd": 0.12903,
+   "cost_judge_usd": 0.012228,
+   "cost_synth_usd": null,
+   "latency_panel_s": 64.31,
+   "latency_judge_s": 15.9,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc393_e": {
+  "task_id": "abc393_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.269879,
+  "latency_s": 81.62,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.269879,
+   "cost_panel_usd": 0.256084,
+   "cost_judge_usd": 0.008341,
+   "cost_synth_usd": 0.005454,
+   "latency_panel_s": 69.54,
+   "latency_judge_s": 8.43,
+   "latency_synth_s": 3.64
+  }
+ },
+ "abc394_f": {
+  "task_id": "abc394_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.378036,
+  "latency_s": 131.79,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.378036,
+   "cost_panel_usd": 0.336859,
+   "cost_judge_usd": 0.041177,
+   "cost_synth_usd": null,
+   "latency_panel_s": 70.32,
+   "latency_judge_s": 61.47,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc391_e": {
+  "task_id": "abc391_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.204134,
+  "latency_s": 71.95,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.204134,
+   "cost_panel_usd": 0.189421,
+   "cost_judge_usd": 0.014712,
+   "cost_synth_usd": null,
+   "latency_panel_s": 55.51,
+   "latency_judge_s": 16.43,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc191_c": {
+  "task_id": "arc191_c",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.292093,
+  "latency_s": 93.6,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.292093,
+   "cost_panel_usd": 0.273168,
+   "cost_judge_usd": 0.018925,
+   "cost_synth_usd": null,
+   "latency_panel_s": 70.25,
+   "latency_judge_s": 23.34,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc193_d": {
+  "task_id": "arc193_d",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.50192,
+  "latency_s": 162.55,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.50192,
+   "cost_panel_usd": 0.449768,
+   "cost_judge_usd": 0.007954,
+   "cost_synth_usd": 0.044199,
+   "latency_panel_s": 77.14,
+   "latency_judge_s": 8.2,
+   "latency_synth_s": 77.21
+  }
+ },
+ "abc392_f": {
+  "task_id": "abc392_f",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.12041,
+  "latency_s": 30.85,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.12041,
+   "cost_panel_usd": 0.107229,
+   "cost_judge_usd": 0.013181,
+   "cost_synth_usd": null,
+   "latency_panel_s": 15.73,
+   "latency_judge_s": 15.11,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc397_g": {
+  "task_id": "abc397_g",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.439169,
+  "latency_s": 181.1,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.439169,
+   "cost_panel_usd": 0.368615,
+   "cost_judge_usd": 0.028186,
+   "cost_synth_usd": 0.042368,
+   "latency_panel_s": 78.22,
+   "latency_judge_s": 42.48,
+   "latency_synth_s": 60.39
+  }
+ },
+ "abc395_f": {
+  "task_id": "abc395_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.343661,
+  "latency_s": 88.97,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.343661,
+   "cost_panel_usd": 0.330192,
+   "cost_judge_usd": 0.013469,
+   "cost_synth_usd": null,
+   "latency_panel_s": 72.66,
+   "latency_judge_s": 16.31,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc388_c": {
+  "task_id": "abc388_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.054604,
+  "latency_s": 28.79,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.054604,
+   "cost_panel_usd": 0.040468,
+   "cost_judge_usd": 0.014136,
+   "cost_synth_usd": null,
+   "latency_panel_s": 9.71,
+   "latency_judge_s": 19.07,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc398_c": {
+  "task_id": "abc398_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.032394,
+  "latency_s": 9.88,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.032394,
+   "cost_panel_usd": 0.026614,
+   "cost_judge_usd": 0.00578,
+   "cost_synth_usd": null,
+   "latency_panel_s": 3.79,
+   "latency_judge_s": 6.09,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc396_e": {
+  "task_id": "abc396_e",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.242498,
+  "latency_s": 49.33,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.242498,
+   "cost_panel_usd": 0.227458,
+   "cost_judge_usd": 0.01504,
+   "cost_synth_usd": null,
+   "latency_panel_s": 32.43,
+   "latency_judge_s": 16.88,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc396_f": {
+  "task_id": "abc396_f",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.273184,
+  "latency_s": 47.69,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.273184,
+   "cost_panel_usd": 0.259219,
+   "cost_judge_usd": 0.013965,
+   "cost_synth_usd": null,
+   "latency_panel_s": 32.74,
+   "latency_judge_s": 14.94,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc400_d": {
+  "task_id": "abc400_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.365252,
+  "latency_s": 109.04,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.365252,
+   "cost_panel_usd": 0.340846,
+   "cost_judge_usd": 0.024406,
+   "cost_synth_usd": null,
+   "latency_panel_s": 74.8,
+   "latency_judge_s": 33.21,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc196_a": {
+  "task_id": "arc196_a",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.300689,
+  "latency_s": 99.63,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.300689,
+   "cost_panel_usd": 0.280804,
+   "cost_judge_usd": 0.019885,
+   "cost_synth_usd": null,
+   "latency_panel_s": 71.3,
+   "latency_judge_s": 27.29,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc390_d": {
+  "task_id": "abc390_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.224249,
+  "latency_s": 96.58,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.224249,
+   "cost_panel_usd": 0.211925,
+   "cost_judge_usd": 0.012324,
+   "cost_synth_usd": null,
+   "latency_panel_s": 82.47,
+   "latency_judge_s": 14.1,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc391_f": {
+  "task_id": "abc391_f",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.284309,
+  "latency_s": 104.24,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "opus",
+  "stages": {
+   "cost_total_usd": 0.284309,
+   "cost_panel_usd": 0.266537,
+   "cost_judge_usd": 0.017771,
+   "cost_synth_usd": null,
+   "latency_panel_s": 79.27,
+   "latency_judge_s": 24.97,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc193_a": {
+  "task_id": "arc193_a",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.515124,
+  "latency_s": 169.45,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.515124,
+   "cost_panel_usd": 0.452329,
+   "cost_judge_usd": 0.018316,
+   "cost_synth_usd": 0.044479,
+   "latency_panel_s": 80.25,
+   "latency_judge_s": 25.26,
+   "latency_synth_s": 63.94
+  }
+ },
+ "abc390_e": {
+  "task_id": "abc390_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.231711,
+  "latency_s": 49.8,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.231711,
+   "cost_panel_usd": 0.217056,
+   "cost_judge_usd": 0.014655,
+   "cost_synth_usd": null,
+   "latency_panel_s": 31.92,
+   "latency_judge_s": 17.88,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc400_e": {
+  "task_id": "abc400_e",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.094987,
+  "latency_s": 28.84,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.094987,
+   "cost_panel_usd": 0.081572,
+   "cost_judge_usd": 0.013415,
+   "cost_synth_usd": null,
+   "latency_panel_s": 11.2,
+   "latency_judge_s": 17.64,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc391_g": {
+  "task_id": "abc391_g",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.260486,
+  "latency_s": 59.63,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.260486,
+   "cost_panel_usd": 0.241065,
+   "cost_judge_usd": 0.019421,
+   "cost_synth_usd": null,
+   "latency_panel_s": 36.42,
+   "latency_judge_s": 23.21,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc194_b": {
+  "task_id": "arc194_b",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.368184,
+  "latency_s": 148.99,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.368184,
+   "cost_panel_usd": 0.321126,
+   "cost_judge_usd": 0.01107,
+   "cost_synth_usd": 0.035987,
+   "latency_panel_s": 81.98,
+   "latency_judge_s": 15.59,
+   "latency_synth_s": 51.42
+  }
+ },
+ "abc399_c": {
+  "task_id": "abc399_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.048599,
+  "latency_s": 17.67,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.048599,
+   "cost_panel_usd": 0.038285,
+   "cost_judge_usd": 0.010314,
+   "cost_synth_usd": null,
+   "latency_panel_s": 5.19,
+   "latency_judge_s": 12.48,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc394_c": {
+  "task_id": "abc394_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.151563,
+  "latency_s": 57.63,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.151563,
+   "cost_panel_usd": 0.132781,
+   "cost_judge_usd": 0.018781,
+   "cost_synth_usd": null,
+   "latency_panel_s": 30.83,
+   "latency_judge_s": 26.8,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc194_d": {
+  "task_id": "arc194_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.453915,
+  "latency_s": 112.19,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.453915,
+   "cost_panel_usd": 0.435737,
+   "cost_judge_usd": 0.018177,
+   "cost_synth_usd": null,
+   "latency_panel_s": 74.89,
+   "latency_judge_s": 37.29,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc393_d": {
+  "task_id": "abc393_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.045588,
+  "latency_s": 18.04,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.045588,
+   "cost_panel_usd": 0.036698,
+   "cost_judge_usd": 0.00889,
+   "cost_synth_usd": null,
+   "latency_panel_s": 7.2,
+   "latency_judge_s": 10.84,
+   "latency_synth_s": 0.0
+  }
+ },
+ "arc195_c": {
+  "task_id": "arc195_c",
+  "outcome": "scored",
+  "passed": false,
+  "score": 0.0,
+  "cost_usd": 0.511239,
+  "latency_s": 180.13,
+  "candidate_scores": {
+   "gpt": 0.0,
+   "opus": 0.0
+  },
+  "judge_pick_model": null,
+  "stages": {
+   "cost_total_usd": 0.511239,
+   "cost_panel_usd": 0.448954,
+   "cost_judge_usd": 0.017965,
+   "cost_synth_usd": 0.04432,
+   "latency_panel_s": 74.84,
+   "latency_judge_s": 32.22,
+   "latency_synth_s": 73.07
+  }
+ },
+ "abc392_c": {
+  "task_id": "abc392_c",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.050794,
+  "latency_s": 13.27,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.050794,
+   "cost_panel_usd": 0.043101,
+   "cost_judge_usd": 0.007692,
+   "cost_synth_usd": null,
+   "latency_panel_s": 5.73,
+   "latency_judge_s": 7.54,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc397_b": {
+  "task_id": "abc397_b",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.05005,
+  "latency_s": 27.13,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.05005,
+   "cost_panel_usd": 0.037564,
+   "cost_judge_usd": 0.012486,
+   "cost_synth_usd": null,
+   "latency_panel_s": 10.64,
+   "latency_judge_s": 16.49,
+   "latency_synth_s": 0.0
+  }
+ },
+ "abc389_d": {
+  "task_id": "abc389_d",
+  "outcome": "scored",
+  "passed": true,
+  "score": 1.0,
+  "cost_usd": 0.098475,
+  "latency_s": 42.98,
+  "candidate_scores": {
+   "gpt": 1.0,
+   "opus": 1.0
+  },
+  "judge_pick_model": "gpt",
+  "stages": {
+   "cost_total_usd": 0.098475,
+   "cost_panel_usd": 0.080464,
+   "cost_judge_usd": 0.018011,
+   "cost_synth_usd": null,
+   "latency_panel_s": 20.94,
+   "latency_judge_s": 22.04,
+   "latency_synth_s": 0.0
+  }
+ }
+}

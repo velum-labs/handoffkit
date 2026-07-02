@@ -256,6 +256,10 @@ class ExternalBenchmarkTaskRow(BaseModel):
     # Per-panel-member success on this task (when the adapter exposes candidates),
     # enabling oracle/diversity metrics from the run itself.
     candidate_scores: dict[str, float] = Field(default_factory=dict)
+    # Per-stage cost/latency breakdown (panel/judge/synth) and the judge's pick,
+    # when the adapter reports them — the audit's regret/economics evidence.
+    stages: dict[str, Any] | None = None
+    judge_pick_model: str | None = None
     error_reason: str | None = None
 
 

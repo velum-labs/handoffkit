@@ -334,6 +334,8 @@ async def build_polyglot_bank(
                         models,
                         [ChatMessage(role="user", content=build_prompt(exercise))],
                         engine.config.sampling,
+                        samples_per_model=engine.config.panel_samples_per_model,
+                        temperatures=engine.config.self_temperatures,
                     ),
                     timeout=gen_timeout_s,
                 )

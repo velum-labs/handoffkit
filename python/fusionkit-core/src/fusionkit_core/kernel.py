@@ -7,6 +7,7 @@ from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
 from fusionkit_core.contracts import FusionRunRequestV1
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import FuseResult
+from fusionkit_core.producers import ChatTrajectoryProducer
 from fusionkit_core.run import CreateRunResult, FusionRunManager, NativeRunError
 from fusionkit_core.run_models import (
     RunEventPage,
@@ -42,6 +43,12 @@ class FusionKernel:
     @property
     def clients(self) -> dict[str, ChatClient]:
         return self._engine.clients
+
+    @property
+    def producer(self) -> ChatTrajectoryProducer:
+        # The eval harness (candidate-bank builder) generates panel candidates
+        # via engine.producer; the kernel facade must expose the same seam.
+        return self._engine.producer
 
     def client(self, model_id: str) -> ChatClient:
         return self._engine.clients[model_id]

@@ -1,0 +1,38 @@
+# Self-consistency baseline for rubric 2.5: ONE model (gpt-5.5) with 6
+# temperature-varied samples — the same pool size as the deep two-provider
+# panel (2 members x 3 samples). If the multi-vendor panel does not beat this
+# single-vendor pool, the second provider is not paying for itself.
+endpoints:
+  - id: gpt
+    provider: openai
+    model: gpt-5.5
+    base_url: https://api.openai.com
+    api_key_env: OPENAI_API_KEY
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 1.25
+      output_per_1m_tokens: 10.0
+      currency: USD
+    tags: [cloud, peer]
+default_model: gpt
+judge_model: gpt
+synthesizer_model: gpt
+default_mode: panel
+panel_models: [gpt]
+panel_samples_per_model: 6
+self_temperatures: [0.2, 0.6, 0.9, 0.3, 0.7, 1.0]
+harness_prompt_passthrough: true
+synthesis_select_best: true
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 4096
+budget:
+  max_candidates: 6
+  wall_clock_s: 1800
+  max_cost: null
+  max_tool_rounds: 24
+  max_tool_calls: 200

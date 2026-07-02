@@ -50,7 +50,12 @@ if TYPE_CHECKING:
     from fusionkit_core.credentials import SubscriptionStatus
     from fusionkit_core.kernel import FusionKernel
     from fusionkit_evals.fusion_bench import FusionBenchReport
-    from fusionkit_evals.fusion_hillclimb import ClimbDiagnosis, ClimbResult, TargetCheck
+    from fusionkit_evals.fusion_hillclimb import (
+        ClimbDiagnosis,
+        ClimbResult,
+        RegretSplit,
+        TargetCheck,
+    )
     from fusionkit_evals.prompt_tuning import PromptEval, TuningResult
     from fusionkit_evals.public_bench import PublicBenchmarkSuite
 
@@ -792,7 +797,7 @@ def tune_prompts(
         PreparedTask,
         bank_signature,
         build_candidate_bank,
-        load_bank,
+        load_usable_bank,
         save_bank,
     )
     from fusionkit_evals.livecodebench_data import (
@@ -819,8 +824,9 @@ def tune_prompts(
     engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
-    if bank.exists():
-        candidate_bank = load_bank(bank)
+    loaded_bank = load_usable_bank(bank)
+    if loaded_bank is not None:
+        candidate_bank = loaded_bank
     else:
         problems = load_problems(
             subset,
@@ -840,6 +846,7 @@ def tune_prompts(
                 signature=signature,
                 test_timeout_s=test_timeout_s,
                 concurrency=concurrency,
+                cache_dir=bank.parent / "bank-build-cache",
             )
         )
         save_bank(bank, candidate_bank)
@@ -976,13 +983,14 @@ def fusion_hillclimb(
         PreparedTask,
         bank_signature,
         build_candidate_bank,
-        load_bank,
+        load_usable_bank,
         save_bank,
     )
     from fusionkit_evals.fusion_hillclimb import (
         best_single_baseline,
         check_target,
         diagnose_bank,
+        regret_split,
         run_climb,
     )
     from fusionkit_evals.livecodebench_data import (
@@ -1009,8 +1017,9 @@ def fusion_hillclimb(
     engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
-    if bank.exists():
-        candidate_bank = load_bank(bank)
+    loaded_bank = load_usable_bank(bank)
+    if loaded_bank is not None:
+        candidate_bank = loaded_bank
     else:
         problems = load_problems(
             subset,
@@ -1030,6 +1039,7 @@ def fusion_hillclimb(
                 signature=signature,
                 test_timeout_s=test_timeout_s,
                 concurrency=concurrency,
+                cache_dir=bank.parent / "bank-build-cache",
             )
         )
         save_bank(bank, candidate_bank)
@@ -1103,6 +1113,7 @@ def fusion_hillclimb(
         candidate_bank, task_ids=[task.task_id for task in test_tasks]
     )
     target_test = check_target(best_single_test, fused_test.passes)
+    test_regret = regret_split(test_tasks, fused_test)
 
     tuned_prompt = result.best_prompt
     response: dict[str, object] = {
@@ -1124,6 +1135,7 @@ def fusion_hillclimb(
         "test_mcnemar_losses": target_test.mcnemar.losses,
         "test_significant": target_test.mcnemar.significant,
         "compound_beats_best_single": target_test.beats_best_single,
+        "test_regret_split": test_regret.model_dump(mode="json"),
         "budget_usd": budget_usd,
     }
     # Promote the tuned prompt only if it makes the compound beat the best single on
@@ -1136,7 +1148,9 @@ def fusion_hillclimb(
     if report is not None:
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(
-            _format_hillclimb_report(result, diagnosis, target_test, len(test_tasks), budget_usd),
+            _format_hillclimb_report(
+                result, diagnosis, target_test, len(test_tasks), budget_usd, test_regret
+            ),
             encoding="utf-8",
         )
         response["report"] = str(report)
@@ -1189,11 +1203,12 @@ def fusion_hillclimb_polyglot(
     from fusionkit_core.clients import build_clients
     from fusionkit_core.fusion import FusionEngine
     from fusionkit_evals.bench_history import BenchRunRecord, append_run
-    from fusionkit_evals.candidate_bank import CandidateBank, load_bank, save_bank
+    from fusionkit_evals.candidate_bank import CandidateBank, load_usable_bank, save_bank
     from fusionkit_evals.fusion_hillclimb import (
         best_single_baseline,
         check_target,
         diagnose_bank,
+        regret_split,
         run_climb,
     )
     from fusionkit_evals.polyglot import (
@@ -1226,8 +1241,9 @@ def fusion_hillclimb_polyglot(
     all_exercises = load_polyglot_exercises(root, languages=language_list)
     exercise_map = {exercise.task_id: exercise for exercise in all_exercises}
 
-    if bank.exists():
-        candidate_bank = load_bank(bank)
+    loaded_bank = load_usable_bank(bank)
+    if loaded_bank is not None:
+        candidate_bank = loaded_bank
     else:
         exercises = load_polyglot_exercises(root, languages=language_list, subset=subset)
         endpoints_sig = sorted((e.id, e.model, e.provider) for e in fusion_config.endpoints)
@@ -1236,6 +1252,8 @@ def fusion_hillclimb_polyglot(
                 {
                     "endpoints": endpoints_sig,
                     "panel": sorted(fusion_config.panel_models),
+                    "panel_samples_per_model": fusion_config.panel_samples_per_model,
+                    "panel_temperatures": list(fusion_config.self_temperatures),
                     "languages": sorted(language_list),
                     "subset": subset,
                 },
@@ -1317,6 +1335,7 @@ def fusion_hillclimb_polyglot(
         candidate_bank, task_ids=[task.task_id for task in test_tasks]
     )
     target_test = check_target(best_single_test, fused_test.passes)
+    test_regret = regret_split(test_tasks, fused_test)
 
     tuned_prompt = result.best_prompt
     response: dict[str, object] = {
@@ -1333,6 +1352,7 @@ def fusion_hillclimb_polyglot(
         "test_uplift": target_test.uplift,
         "test_significant": target_test.mcnemar.significant,
         "compound_beats_best_single": target_test.beats_best_single,
+        "test_regret_split": test_regret.model_dump(mode="json"),
         "budget_usd": budget_usd,
     }
     if tuned_prompt is not None and target_test.uplift > 0:
@@ -1343,7 +1363,9 @@ def fusion_hillclimb_polyglot(
     if report is not None:
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(
-            _format_hillclimb_report(result, diagnosis, target_test, len(test_tasks), budget_usd),
+            _format_hillclimb_report(
+                result, diagnosis, target_test, len(test_tasks), budget_usd, test_regret
+            ),
             encoding="utf-8",
         )
         response["report"] = str(report)
@@ -1367,6 +1389,7 @@ def _format_hillclimb_report(
     target_test: TargetCheck,
     n_test: int,
     budget_usd: float,
+    regret: RegretSplit | None = None,
 ) -> str:
     # Use the full-bank diagnosis (not the train-subset one on result.diagnosis,
     # where decision tasks trivially give oracle 1.0) so the report is honest.
@@ -1400,6 +1423,21 @@ def _format_hillclimb_report(
         f"{'YES' if test.beats_best_single else 'no'}",
         "",
     ]
+    if regret is not None and regret.n > 0:
+        lines.extend(
+            [
+                "## Regret split (locked test)",
+                "",
+                f"- Oracle {_fmt_num(regret.oracle_rate)} -> judge pick "
+                f"{_fmt_num(regret.judge_pick_rate)} -> fused {_fmt_num(regret.fused_rate)}",
+                f"- Total regret: {_fmt_num(regret.total_regret)} = judge "
+                f"{_fmt_num(regret.judge_regret)} + synthesis {_fmt_num(regret.synthesis_regret)}",
+                f"- Judge picks named: {regret.picks_named}/{regret.n}; decision-task pick "
+                f"accuracy: {_fmt_num(regret.judge_pick_accuracy)} (strict exactly-one-correct: "
+                f"{_fmt_num(regret.judge_pick_accuracy_strict)})",
+                "",
+            ]
+        )
     return "\n".join(lines)
 
 

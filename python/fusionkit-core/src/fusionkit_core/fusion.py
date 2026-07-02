@@ -82,6 +82,8 @@ class FusionEngine:
         fused = await self._judge_synthesize(messages, trajectories)
         answer = fused.response.content
         metrics: dict[str, object] = {**_trajectory_metrics(trajectories)}
+        if fused.stage_metrics:
+            metrics["stage_metrics"] = fused.stage_metrics
         synthesis = fused.trajectory.synthesis if fused.trajectory is not None else None
         if synthesis is not None:
             metrics["synthesis"] = synthesis.model_dump(mode="json")
@@ -115,7 +117,14 @@ class FusionEngine:
             models = list(panel_models or self.config.panel_models)
             if not models:
                 models = [endpoint.id for endpoint in self.config.endpoints]
-            return await self.producer.generate_panel(models, messages, sampling, tools=tools)
+            return await self.producer.generate_panel(
+                models,
+                messages,
+                sampling,
+                tools=tools,
+                samples_per_model=self.config.panel_samples_per_model,
+                temperatures=self.config.self_temperatures,
+            )
         raise ValueError(f"Unsupported fusion generation mode: {mode}")
 
     async def run_step(

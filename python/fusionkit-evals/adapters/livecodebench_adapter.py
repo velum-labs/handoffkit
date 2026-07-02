@@ -58,7 +58,7 @@ from fusionkit_evals.provenance import build_provenance
 from fusionkit_evals.sandbox import Sandbox, SandboxConfig, build_sandbox
 
 # Bump when extraction/checker/execution logic changes so cached rows are recomputed.
-SCORING_VERSION = "2"
+SCORING_VERSION = "3"
 
 PROMPT_SUFFIX = LCB_PROMPT_SUFFIX
 
@@ -87,6 +87,9 @@ def panel_signature(engine: FusionEngine, max_tests: int) -> str:
         "judge": config.resolved_judge_model,
         "synthesizer": config.resolved_synthesizer_model,
         "panel_models": sorted(config.panel_models),
+        "panel_samples_per_model": config.panel_samples_per_model,
+        "panel_temperatures": list(config.self_temperatures),
+        "synthesis_select_best": config.synthesis_select_best,
         "max_tokens": config.sampling.max_tokens,
         "prompt_suffix": PROMPT_SUFFIX,
         "version": os.environ.get("LCB_VERSION", "release_v6"),
@@ -164,22 +167,24 @@ async def evaluate_problem(
             log(f"  {question_id}: {outcome} after retries ({exc})")
             return _terminal_row(signature, question_id, outcome, str(exc)[:500])
         latency = time.monotonic() - started
-    scored = await asyncio.to_thread(
-        _score_result, sandbox, result, tests, test_timeout, checker_mode
-    )
-    cost = 0.0
-    for cand in result.trajectories:
-        est = _candidate_cost(engine, cand.model_id, cand.metadata.get("usage"))
-        if est is not None:
-            cost += est
+    try:
+        scored = await asyncio.to_thread(
+            _score_result, sandbox, result, tests, test_timeout, checker_mode
+        )
+        stages = _stage_breakdown(engine, result)
+    except Exception as exc:  # noqa: BLE001 - a scoring bug must not abort the batch
+        log(f"  {question_id}: scoring failed ({exc})")
+        return _terminal_row(signature, question_id, "infra_error", f"scoring: {exc}"[:500])
     row = {
         "task_id": question_id,
         "outcome": "scored",
         "passed": scored["fused_pass"],
         "score": 1.0 if scored["fused_pass"] else 0.0,
-        "cost_usd": round(cost, 6),
+        "cost_usd": stages["cost_total_usd"],
         "latency_s": round(latency, 2),
         "candidate_scores": scored["candidate_scores"],
+        "judge_pick_model": _judge_pick_model(result),
+        "stages": stages,
     }
     _write_artifacts(
         signature,
@@ -234,6 +239,11 @@ def _score_result(
     candidate_scores: dict[str, float] = {}
     candidate_methods: dict[str, str] = {}
     for cand in result.trajectories:
+        # With multi-sample (deep) panels, a model's score is its PRIMARY
+        # (first, base-temperature) sample — the honest single-model pass@1
+        # baseline. Later temperature-varied samples only feed the fused pool.
+        if cand.model_id in candidate_scores:
+            continue
         extracted = extract_code(cand.content)
         run = verify_solution(
             sandbox, extracted.code, tests, timeout_s=test_timeout, checker_mode=checker_mode
@@ -323,8 +333,9 @@ async def main() -> None:
                 "scoring_version": SCORING_VERSION,
                 "contamination_window_min_date": os.environ.get("LCB_MIN_DATE", "2025-01-01"),
                 "manifest": os.environ.get("LCB_MANIFEST"),
-                # judge+synth token cost is not surfaced in-process today; see docs.
-                "cost_scope": "solver_candidates_only",
+                # Panel + judge + synthesizer usage, priced per endpoint (per-task
+                # breakdown in each row's `stages`).
+                "cost_scope": "full_fusion_pipeline",
             },
         ),
         "metadata": {
@@ -348,6 +359,71 @@ def _candidate_cost(engine: FusionEngine, model_id: str, usage: object) -> float
     except KeyError:
         return None
     return estimate_cost(endpoint, usage if isinstance(usage, dict) else None)
+
+
+def _judge_pick_model(result: Any) -> str | None:
+    """Map the judge's best_trajectory id back to the panel member's model id."""
+    analysis = getattr(result, "analysis", None)
+    pick = getattr(analysis, "best_trajectory", None)
+    if not pick:
+        return None
+    for cand in result.trajectories:
+        if cand.id == pick:
+            return cand.model_id
+    return None
+
+
+def _stage_breakdown(engine: FusionEngine, result: Any) -> dict[str, Any]:
+    """Per-stage (panel/judge/synthesis) cost + latency for one fused task.
+
+    Panel usage lives on the candidate trajectories; judge/synthesis usage comes
+    from the engine's ``stage_metrics``. Costs are priced with the endpoint
+    pricing table, so the row's ``cost_usd`` covers the FULL fusion pipeline
+    (previously solver candidates only).
+    """
+    panel_cost = 0.0
+    panel_latency = 0.0
+    for cand in result.trajectories:
+        est = _candidate_cost(engine, cand.model_id, cand.metadata.get("usage"))
+        if est is not None:
+            panel_cost += est
+        cand_latency = cand.metadata.get("latency_s")
+        if isinstance(cand_latency, int | float):
+            panel_latency = max(panel_latency, float(cand_latency))
+    stage_metrics = result.metrics.get("stage_metrics")
+    stage_metrics = stage_metrics if isinstance(stage_metrics, dict) else {}
+    judge_cost, judge_latency = _stage_cost_latency(engine, stage_metrics.get("judge"))
+    synth_cost, synth_latency = _stage_cost_latency(engine, stage_metrics.get("synthesis"))
+    total = panel_cost + (judge_cost or 0.0) + (synth_cost or 0.0)
+    return {
+        "cost_total_usd": round(total, 6),
+        "cost_panel_usd": round(panel_cost, 6),
+        "cost_judge_usd": round(judge_cost, 6) if judge_cost is not None else None,
+        "cost_synth_usd": round(synth_cost, 6) if synth_cost is not None else None,
+        "latency_panel_s": round(panel_latency, 2),
+        "latency_judge_s": round(judge_latency, 2) if judge_latency is not None else None,
+        "latency_synth_s": round(synth_latency, 2) if synth_latency is not None else None,
+    }
+
+
+def _stage_cost_latency(
+    engine: FusionEngine,
+    stage: Any,
+) -> tuple[float | None, float | None]:
+    if not isinstance(stage, dict):
+        return None, None
+    model_id = stage.get("model_id")
+    cost = None
+    if isinstance(model_id, str):
+        # The stage payload carries extra keys (model_id/latency_s/skipped) the
+        # usage contract rejects; pass only the token fields.
+        usage = {
+            key: stage.get(key)
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+        }
+        cost = _candidate_cost(engine, model_id, usage)
+    latency = stage.get("latency_s")
+    return cost, float(latency) if isinstance(latency, int | float) else None
 
 
 if __name__ == "__main__":
