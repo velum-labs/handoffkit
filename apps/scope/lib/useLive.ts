@@ -4,13 +4,16 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * Subscribe to the collector's SSE stream and invoke a callback whenever a new
- * event lands. Used to live-refresh the sessions list and an open session.
+ * event lands. Returns whether the stream is currently connected — the single
+ * "live" signal shown across the dashboard.
  */
-export function useTraceStream(onEvent: (event: Record<string, unknown>) => void): void {
+export function useTraceStream(onEvent: (event: Record<string, unknown>) => void): boolean {
   const handler = useRef(onEvent);
   handler.current = onEvent;
+  const [connected, setConnected] = useState(false);
   useEffect(() => {
     const source = new EventSource("/api/stream");
+    source.onopen = () => setConnected(true);
     source.onmessage = (message) => {
       try {
         handler.current(JSON.parse(message.data) as Record<string, unknown>);
@@ -19,10 +22,12 @@ export function useTraceStream(onEvent: (event: Record<string, unknown>) => void
       }
     };
     source.onerror = () => {
-      // EventSource auto-reconnects; nothing to do.
+      // EventSource auto-reconnects; reflect the drop until it does.
+      setConnected(false);
     };
     return () => source.close();
   }, []);
+  return connected;
 }
 
 /** Fetch JSON, returning data + a manual refetch and loading flag. */

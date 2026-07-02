@@ -528,5 +528,40 @@ for (const term of docsConsistencyTerms) {
   }
 }
 
+// FusionKit product versions must stay in lockstep across the npm CLI, the PyPI
+// synthesizer pin, and the release coordinator's desired versions.
+function readPyprojectVersion(relPath) {
+  const text = readFileSync(relPath, "utf8");
+  const match = text.match(/^\s*version\s*=\s*"([^"]+)"/m);
+  return match ? match[1] : null;
+}
+
+function readFusionkitPypiPin() {
+  const text = readFileSync("packages/cli/src/fusion/env.ts", "utf8");
+  const match = text.match(/export const FUSIONKIT_PYPI_VERSION = "([^"]+)"/);
+  return match ? match[1] : null;
+}
+
+const cliPackageVersion = JSON.parse(readFileSync("packages/cli/package.json", "utf8")).version;
+const pypiCliVersion = readPyprojectVersion("python/fusionkit-cli/pyproject.toml");
+const pypiPin = readFusionkitPypiPin();
+const desired = JSON.parse(readFileSync("release/desired.json", "utf8")).versions ?? {};
+
+const lockstepVersions = new Map([
+  ["packages/cli/package.json", cliPackageVersion],
+  ["python/fusionkit-cli/pyproject.toml", pypiCliVersion],
+  ["packages/cli/src/fusion/env.ts (FUSIONKIT_PYPI_VERSION)", pypiPin],
+  ["release/desired.json#handoffkit", desired.handoffkit ?? null],
+  ["release/desired.json#fusionkit-pypi", desired["fusionkit-pypi"] ?? null]
+]);
+
+const uniqueVersions = [...new Set([...lockstepVersions.values()].filter((value) => value != null))];
+if (uniqueVersions.length > 1) {
+  const detail = [...lockstepVersions.entries()]
+    .map(([source, value]) => `  ${source}: ${value ?? "(missing)"}`)
+    .join("\n");
+  fail(`FusionKit version lockstep violated:\n${detail}`);
+}
+
 if (process.exitCode) process.exit(process.exitCode);
 console.log("repo check passed");

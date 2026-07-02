@@ -41,7 +41,7 @@ export type ResponsesRequest = {
 // ---- OpenAI chat shapes we read back ----
 
 type OpenAiToolCall = { id?: string; index?: number; function?: { name?: string; arguments?: string } };
-type OpenAiDelta = { content?: string | null; tool_calls?: OpenAiToolCall[] };
+type OpenAiDelta = { content?: string | null; reasoning_content?: string | null; tool_calls?: OpenAiToolCall[] };
 type OpenAiChoice = {
   delta?: OpenAiDelta;
   message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
@@ -128,9 +128,15 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
         messages.push({ role: "tool", tool_call_id: out.call_id, content });
         continue;
       }
-      // message item (explicit type "message" or a bare {role, content})
-      const message = item as { role?: string; content?: string | ResponsesContentPart[] };
-      if (message.content === undefined) continue;
+      // Reasoning items round-trip: Codex echoes the fusion narration item back
+      // verbatim on the next request (with `summary`, and `content` that may be
+      // null). Drop it — narration must never leak into the panel prompt
+      // (mirrors the Anthropic adapter dropping thinking blocks).
+      if (item.type === "reasoning") continue;
+      // message item (explicit type "message" or a bare {role, content}); any
+      // other item type without string/array content is skipped, never iterated.
+      const message = item as { role?: string; content?: string | ResponsesContentPart[] | null };
+      if (typeof message.content !== "string" && !Array.isArray(message.content)) continue;
       const role = message.role === "developer" ? "system" : message.role ?? "user";
       messages.push({ role, content: contentToParts(message.content) });
     }
@@ -229,12 +235,17 @@ export function openAiSseToResponses(
   const decoder = new TextDecoder();
   const responseId = `resp_${randomId()}`;
   const messageItemId = `msg_${randomId()}`;
+  const reasoningItemId = `rs_${randomId()}`;
   const tools = new Map<number, ToolAccumulator>();
   let buffer = "";
   let created = false;
   let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
   let textOpen = false;
   let textValue = "";
+  let reasoningOpen = false;
+  let reasoningClosed = false;
+  let reasoningValue = "";
+  let reasoningOutputIndex = -1;
   let nextOutputIndex = 0;
   let messageOutputIndex = -1;
   let finished = false;
@@ -262,8 +273,64 @@ export function openAiSseToResponses(
     controller.enqueue(sse("response.created", { response: baseResponse("in_progress", []) }));
   };
 
+  // Reasoning summary item lifecycle (the fusion narration channel). Opened on
+  // the first `reasoning_content` delta, closed as soon as the first real
+  // output (text or tool call) begins — reasoning always precedes the answer.
+  const ensureReasoning = (controller: Controller): void => {
+    ensureCreated(controller);
+    if (reasoningOpen || reasoningClosed) return;
+    reasoningOpen = true;
+    reasoningOutputIndex = nextOutputIndex++;
+    controller.enqueue(
+      sse("response.output_item.added", {
+        output_index: reasoningOutputIndex,
+        item: { type: "reasoning", id: reasoningItemId, summary: [] }
+      })
+    );
+    controller.enqueue(
+      sse("response.reasoning_summary_part.added", {
+        item_id: reasoningItemId,
+        output_index: reasoningOutputIndex,
+        summary_index: 0,
+        part: { type: "summary_text", text: "" }
+      })
+    );
+  };
+
+  const closeReasoning = (controller: Controller): void => {
+    if (!reasoningOpen || reasoningClosed) return;
+    reasoningClosed = true;
+    controller.enqueue(
+      sse("response.reasoning_summary_text.done", {
+        item_id: reasoningItemId,
+        output_index: reasoningOutputIndex,
+        summary_index: 0,
+        text: reasoningValue
+      })
+    );
+    controller.enqueue(
+      sse("response.reasoning_summary_part.done", {
+        item_id: reasoningItemId,
+        output_index: reasoningOutputIndex,
+        summary_index: 0,
+        part: { type: "summary_text", text: reasoningValue }
+      })
+    );
+    controller.enqueue(
+      sse("response.output_item.done", {
+        output_index: reasoningOutputIndex,
+        item: {
+          type: "reasoning",
+          id: reasoningItemId,
+          summary: [{ type: "summary_text", text: reasoningValue }]
+        }
+      })
+    );
+  };
+
   const ensureText = (controller: Controller): void => {
     ensureCreated(controller);
+    closeReasoning(controller);
     if (textOpen) return;
     textOpen = true;
     messageOutputIndex = nextOutputIndex++;
@@ -285,6 +352,13 @@ export function openAiSseToResponses(
 
   const assembleOutput = (): Record<string, unknown>[] => {
     const output: Record<string, unknown>[] = [];
+    if (reasoningValue.length > 0) {
+      output.push({
+        type: "reasoning",
+        id: reasoningItemId,
+        summary: [{ type: "summary_text", text: reasoningValue }]
+      });
+    }
     if (textOpen) {
       output.push({
         type: "message",
@@ -311,6 +385,7 @@ export function openAiSseToResponses(
     if (finished) return;
     finished = true;
     if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
+    closeReasoning(controller);
     if (textOpen) {
       controller.enqueue(
         sse("response.output_text.done", {
@@ -375,6 +450,19 @@ export function openAiSseToResponses(
     if (choice === undefined) return;
     const delta = choice.delta ?? {};
 
+    if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0 && !reasoningClosed) {
+      ensureReasoning(controller);
+      reasoningValue += delta.reasoning_content;
+      controller.enqueue(
+        sse("response.reasoning_summary_text.delta", {
+          item_id: reasoningItemId,
+          output_index: reasoningOutputIndex,
+          summary_index: 0,
+          delta: delta.reasoning_content
+        })
+      );
+    }
+
     if (typeof delta.content === "string" && delta.content.length > 0) {
       ensureText(controller);
       textValue += delta.content;
@@ -394,6 +482,7 @@ export function openAiSseToResponses(
         let tool = tools.get(openAiIndex);
         if (tool === undefined) {
           ensureCreated(controller);
+          closeReasoning(controller);
           tool = {
             outputIndex: nextOutputIndex++,
             itemId: `fc_${randomId()}`,

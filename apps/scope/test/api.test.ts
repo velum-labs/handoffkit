@@ -31,12 +31,15 @@ test("POST /api/ingest then GET /api/sessions/[id] renders structured detail", a
   assert.equal(ingestBody.accepted, events.length);
   assert.equal(ingestBody.rejected, 0);
 
-  // Sessions list includes the new session.
+  // Sessions list includes the new session (with its prompt preview).
   const listResponse = await listSessionsRoute();
-  const listBody = (await listResponse.json()) as { sessions: Array<{ traceId: string; status: string }> };
+  const listBody = (await listResponse.json()) as {
+    sessions: Array<{ traceId: string; status: string; promptPreview: string | null }>;
+  };
   const summary = listBody.sessions.find((session) => session.traceId === traceId);
   assert.ok(summary);
   assert.equal(summary.status, "succeeded");
+  assert.equal(summary.promptPreview, "Fix the add() sign bug so npm test passes.");
 
   // Detail derives candidates, judge, and final output.
   const detailResponse = await getSessionRoute(new Request(`http://localhost/api/sessions/${traceId}`), {

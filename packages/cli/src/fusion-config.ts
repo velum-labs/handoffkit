@@ -68,6 +68,8 @@ export type FusionConfig = {
   onRateLimit?: OnRateLimitPolicy;
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
+  /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. */
+  reasoning?: boolean;
   /**
    * System-prompt overrides, loaded from `.fusionkit/prompts/*.md`. Not stored
    * inline in `config.json` — it is hydrated from the prompt files on load.
@@ -212,6 +214,12 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
       throw new FusionConfigError(`${source}: budgetUsd must be a positive number of USD`);
     }
     config.budgetUsd = raw.budgetUsd;
+  }
+  if (raw.reasoning !== undefined) {
+    if (typeof raw.reasoning !== "boolean") {
+      throw new FusionConfigError(`${source}: reasoning must be a boolean`);
+    }
+    config.reasoning = raw.reasoning;
   }
   return config;
 }

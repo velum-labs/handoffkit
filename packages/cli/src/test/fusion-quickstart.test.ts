@@ -7,7 +7,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 
-import { defaultKeyEnv, loadEnvFileInto, startFusionStack } from "../fusion-quickstart.js";
+import {
+  defaultKeyEnv,
+  fusionPreambleLines,
+  loadEnvFileInto,
+  panelMemberSummary,
+  startFusionStack
+} from "../fusion-quickstart.js";
 
 const SENTINEL = "FUSION_OK";
 
@@ -95,6 +101,63 @@ test("defaultKeyEnv maps cloud providers to their conventional key env vars", ()
   assert.equal(defaultKeyEnv("google"), "GEMINI_API_KEY");
   assert.equal(defaultKeyEnv("openai-compatible"), undefined);
   assert.equal(defaultKeyEnv("mlx"), undefined);
+});
+
+test("panelMemberSummary describes API key auth without exposing secret values", () => {
+  const summary = panelMemberSummary({
+    id: "gpt",
+    model: "gpt-5.5",
+    provider: "openai",
+    keyEnv: "OPENAI_API_KEY"
+  });
+
+  assert.equal(summary, "gpt=openai:gpt-5.5 [api key env OPENAI_API_KEY]");
+  assert.doesNotMatch(summary, /sk-/);
+});
+
+test("panelMemberSummary describes subscription and endpoint auth", () => {
+  assert.equal(
+    panelMemberSummary({ id: "cx", model: "gpt-5.5", auth: "codex" }),
+    "cx=codex:gpt-5.5 [codex login]"
+  );
+  assert.equal(
+    panelMemberSummary({
+      id: "cc",
+      model: "claude-sonnet-4-6",
+      provider: "anthropic",
+      auth: "claude-code"
+    }),
+    "cc=anthropic:claude-sonnet-4-6 [claude-code login]"
+  );
+  assert.equal(
+    panelMemberSummary(
+      { id: "alpha", model: "fake", provider: "openai-compatible" },
+      { alpha: "http://127.0.0.1:1234" }
+    ),
+    "alpha=openai-compatible:fake [pre-running endpoint]"
+  );
+});
+
+test("fusionPreambleLines includes Codex gateway auth method", () => {
+  const lines = fusionPreambleLines({
+    tool: "codex",
+    repo: "/repo",
+    models: [{ id: "gpt", model: "gpt-5.5", provider: "openai" }],
+    judgeLabel: "gpt-5.5",
+    budgetUsd: 2.5,
+    onRateLimit: "fusion"
+  });
+
+  assert.deepEqual(lines, [
+    "tool: codex -> FusionKit gateway",
+    "codex auth: ephemeral CODEX_HOME -> FusionKit local provider (Responses; requires_openai_auth=false)",
+    "model: fusion-panel",
+    "repo: /repo",
+    "judge: gpt-5.5",
+    "panel: gpt=openai:gpt-5.5 [api key env OPENAI_API_KEY]",
+    "budget: $2.5",
+    "rate limits: fusion"
+  ]);
 });
 
 test("materializeSampleRepo creates a real git repo whose tests fail until add() is fixed", () => {

@@ -37,8 +37,9 @@
         "python/fusionkit-cli/pyproject.toml#project.version",
         "python/fusionkit-evals/pyproject.toml#project.version",
         "python/fusionkit-mlx/pyproject.toml#project.version",
-        "python/fusionkit-server/pyproject.toml#project.version"
-      ],
+      "python/fusionkit-server/pyproject.toml#project.version",
+      "packages/cli/src/fusion/env.ts#FUSIONKIT_PYPI_VERSION"
+    ],
       "preflight": ["uv", "build", "--all-packages"],
       "dependsOn": ["fusionkit-protocol"]
     },

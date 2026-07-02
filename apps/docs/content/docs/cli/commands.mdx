@@ -33,7 +33,7 @@ fusionkit codex --yes -- "fix the build" # everything after -- goes to codex
 
 | Command | What it does |
 | --- | --- |
-| `fusionkit init` | Scaffold a committed `.fusionkit/` folder (settings + prompts) for this repo (`--force` to overwrite). |
+| `fusionkit init` | Scaffold a committed `.fusionkit/` folder (settings + prompts) for this repo (prompts to update if config exists; `--force` skips the prompt). |
 | `fusionkit setup` | Pre-provision the pinned Python fusion engine into the `uvx` cache. Use `--force` to refresh it. |
 | `fusionkit doctor` | Check prerequisites (uv/uvx, agent binaries, provider keys, git) with fix hints. Use `--provision` to warm the Python engine too. |
 | `fusionkit status` | Show the effective config and a dry-run preview of what a run will do. |
@@ -126,7 +126,8 @@ These apply to the launch commands (`codex`, `claude`, `cursor`, `serve`,
 | `--synthesis-url <url>` | Reuse an already-running `fusionkit serve` for synthesis. |
 | `--repo <dir>` | The coding workspace the panel fuses over (default: current git repo). |
 | `--observe` / `--no-observe` | Boot (or skip) the local trace dashboard. |
-| `--yes` | Skip the interactive cloud-panel cost confirmation. |
+| `--reasoning` / `--no-reasoning` | Narrate panel/judge progress in the tool's own thinking UI while a fused turn runs (default on). |
+| `--yes` | Skip the interactive cloud-panel cost confirmation. (An interactive approval is remembered per repo+panel in `~/.fusionkit/consent.json`, so the prompt is one-time either way.) |
 | `--port <n>` | Fixed gateway port (default: ephemeral). |
 | `--portless` / `--no-portless` | Route services through portless stable URLs, or force raw loopback ports. |
 | `--auth-token <token>` | Require a bearer token on the gateway. |
@@ -147,8 +148,10 @@ rate-limit handoff as a fallback.
 ## Cost metering
 
 Each gateway turn records token usage and USD estimates when pricing metadata is
-available. `fusionkit sessions` shows the running total. Use `--budget <usd>` or
-`budgetUsd` in `.fusionkit/fusion.json` to cap a session.
+available. `fusionkit sessions` shows the running total, and when the launched
+agent exits the CLI prints a session receipt (fused turns, gateway-observed
+spend, and the `--resume` id). Use `--budget <usd>` or `budgetUsd` in
+`.fusionkit/fusion.json` to cap a session.
 
 <Callout type="info">
   `fusionkit --version` (`-v`) prints both the npm CLI version and the pinned

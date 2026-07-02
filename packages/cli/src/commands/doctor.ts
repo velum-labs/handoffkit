@@ -18,6 +18,7 @@ import { FUSIONKIT_PYPI_VERSION } from "../fusion/env.js";
 import { platformCapabilities } from "../fusion/platform.js";
 import { engineCached, provisionEngineWithProgress } from "../fusion/provision.js";
 import { hasBinary, INSTALL_HINTS } from "../shared/preflight.js";
+import { probeBinaryVersion, readPackageVersion } from "../shared/package-version.js";
 import { formatBytes } from "../ui/progress.js";
 import { bold, brandBanner, brandHeader, cyan, dim, glyph, gray, green, red, yellow } from "../ui/theme.js";
 
@@ -80,6 +81,11 @@ async function runDoctor(opts: { provision?: boolean } = {}): Promise<number> {
 
   console.log(`\n${brandBanner("environment check")}\n`);
 
+  console.log(bold("versions"));
+  console.log(`  ${green(glyph.tick())} @fusionkit/cli ${readPackageVersion(import.meta.url, "../../package.json")}`);
+  console.log(`  ${green(glyph.tick())} synthesizer (pinned) fusionkit@${FUSIONKIT_PYPI_VERSION}`);
+  console.log(`  ${dim(`full matrix: ${bold("fusionkit version")}`)}`);
+
   const runner = hasBinary("uvx") || hasBinary("uv");
   const checks: Check[] = [];
   checks.push({
@@ -107,8 +113,15 @@ async function runDoctor(opts: { provision?: boolean } = {}): Promise<number> {
     ["cursor-agent", "cursor"]
   ] as const) {
     const ok = hasBinary(bin);
+    const version = ok ? probeBinaryVersion(bin) : undefined;
+    const detail = version !== null && version !== undefined ? version : undefined;
     console.log(
-      `  ${line({ label: `${tool} (${bin})`, ok, ...(ok ? {} : { hint: INSTALL_HINTS[bin] ?? `install ${bin}` }) })}`
+      `  ${line({
+        label: `${tool} (${bin})`,
+        ok,
+        ...(detail !== undefined ? { detail } : {}),
+        ...(ok ? {} : { hint: INSTALL_HINTS[bin] ?? `install ${bin}` })
+      })}`
     );
   }
 

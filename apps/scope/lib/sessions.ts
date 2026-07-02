@@ -53,6 +53,8 @@ export type ModelCallView = {
   contentPreview?: string;
   error?: string;
   ts: number;
+  /** User-turn index the call belongs to, when the emitter carried one. */
+  turn?: number;
 };
 
 export type JudgeView = {
@@ -107,7 +109,7 @@ export type EnvironmentView = {
   fusionBackendUrl?: string;
   harnesses?: string[];
   judgeModel?: string | null;
-  models?: Array<{ id: string; model: string; endpoint_id?: string }>;
+  models?: Array<{ id: string; model: string; endpoint_id?: string; provider?: string }>;
   modelEndpoints?: Record<string, string>;
 };
 
@@ -118,6 +120,8 @@ export type SessionDetail = {
   lastTs: number;
   dialect?: string;
   promptPreview?: string;
+  /** Full first-turn prompt, recovered from model.call.started / judge.request. */
+  prompt?: string;
   environment?: EnvironmentView;
   candidates: CandidateView[];
   modelCalls: ModelCallView[];
@@ -143,6 +147,26 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
+/** Recover the user's prompt text from a chat-message array (string or parts content). */
+function firstUserMessage(messages: unknown): string | undefined {
+  if (!Array.isArray(messages)) return undefined;
+  for (const message of messages) {
+    const entry = obj(message);
+    if (entry.role !== "user") continue;
+    if (typeof entry.content === "string") return entry.content;
+    if (Array.isArray(entry.content)) {
+      const texts = entry.content
+        .map((part) => {
+          const p = obj(part);
+          return typeof p.text === "string" ? p.text : undefined;
+        })
+        .filter((text): text is string => text !== undefined);
+      if (texts.length > 0) return texts.join("\n");
+    }
+  }
+  return undefined;
+}
+
 export function deriveSession(traceId: string, events: StoredEvent[]): SessionDetail {
   const sorted = [...events].sort((a, b) => a.ts - b.ts || a.id - b.id);
   const candidates = new Map<string, CandidateView>();
@@ -163,6 +187,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
   let status = "running";
   let dialect: string | undefined;
   let promptPreview: string | undefined;
+  let prompt: string | undefined;
   let environment: EnvironmentView | undefined;
   let finalOutput: string | undefined;
   let evidence: string[] | undefined;
@@ -191,7 +216,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           harnesses: Array.isArray(env.harnesses) ? (env.harnesses as string[]) : undefined,
           judgeModel: (env.judge_model as string | null | undefined) ?? undefined,
           models: Array.isArray(env.models)
-            ? (env.models as Array<{ id: string; model: string; endpoint_id?: string }>)
+            ? (env.models as Array<{ id: string; model: string; endpoint_id?: string; provider?: string }>)
             : undefined,
           modelEndpoints: typeof env.model_endpoints === "object" && env.model_endpoints !== null
             ? (env.model_endpoints as Record<string, string>)
@@ -247,8 +272,10 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           provider: str(payload.provider),
           model: str(payload.model),
           status: "running",
-          ts: event.ts
+          ts: event.ts,
+          turn: num(payload.turn)
         });
+        if (prompt === undefined) prompt = str(payload.prompt);
         if (event.candidate_id !== undefined) {
           const candidate = ensureCandidate(event.candidate_id);
           candidate.systemPrompt = str(payload.system_prompt) ?? candidate.systemPrompt;
@@ -270,6 +297,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
           model: str(payload.model) ?? existing.model,
           status: payload.error !== undefined ? "failed" : "succeeded",
           latencyS: num(payload.latency_s) ?? existing.latencyS,
+          turn: num(payload.turn) ?? existing.turn,
           finishReason: str(payload.finish_reason) ?? existing.finishReason,
           usage: typeof payload.usage === "object" && payload.usage !== null
             ? (payload.usage as Record<string, unknown>)
@@ -287,6 +315,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
         break;
       }
       case "judge.request": {
+        if (prompt === undefined) prompt = firstUserMessage(payload.messages);
         judge.prompt = {
           judgeModel: str(payload.judge_model),
           messages: payload.messages,
@@ -387,6 +416,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
     lastTs,
     ...(dialect !== undefined ? { dialect } : {}),
     ...(promptPreview !== undefined ? { promptPreview } : {}),
+    ...(prompt !== undefined ? { prompt } : {}),
     ...(environment !== undefined ? { environment } : {}),
     candidates: [...candidates.values()],
     modelCalls: [...modelCalls.values()].sort((a, b) => a.ts - b.ts),

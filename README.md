@@ -48,6 +48,9 @@ cd your-git-repo
 fusionkit codex                      # or: claude | cursor | serve   (add --local for an Apple-Silicon MLX panel)
 ```
 
+Any subset of the three keys works: a default-panel member whose key is missing
+is skipped with an explicit note, and the survivors are still fused.
+
 `fusionkit codex` spawns everything for you: the model panel, a single
 `fusionkit serve` router that fronts each model and performs synthesis, the
 harness gateway, and Codex pre-wired to it. One `Ctrl+C` tears the whole stack
@@ -162,6 +165,28 @@ pnpm install             # links all workspace packages from the frozen lockfile
 pnpm build               # tsc -b builds every package in dependency order
 pnpm verify              # repo checks + build + the full test suite
 ```
+
+To run this checkout's CLI globally while developing, link the dev command:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev:link-cli
+fusionkit-dev --version
+```
+
+`fusionkit-dev` points at your local checkout, rebuilds the local CLI before each
+run, and preserves the directory you launch it from. It does not replace the
+published `fusionkit` command, so you can use it from any target repo:
+
+```sh
+cd any-git-repo
+fusionkit-dev doctor
+fusionkit-dev codex
+```
+
+For faster repeated local checks after a build, set
+`FUSIONKIT_DEV_SKIP_BUILD=1`.
 
 ```sh
 pnpm check               # repo invariants (required files, dependency pins, ...)

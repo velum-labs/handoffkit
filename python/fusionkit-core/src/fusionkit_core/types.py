@@ -92,6 +92,11 @@ class StreamChunk(BaseModel):
     tool_call_delta: ToolCall | None = None
     finish_reason: str | None = None
     usage: Usage | None = None
+    # Out-of-band reasoning text (never part of the answer). The fused stream
+    # uses it to surface the judge's analysis before content tokens; the server
+    # maps it to the OpenAI ``delta.reasoning_content`` field, which coding
+    # agents render on their native thinking channel.
+    reasoning_delta: str | None = None
 
 
 class TrajectorySynthesis(BaseModel):

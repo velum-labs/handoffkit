@@ -1,6 +1,4 @@
-import { Card, CardContent } from "@/components/ui/card";
-
-/** A designed empty state for pages with no data yet. */
+/** A designed empty state for pages and sections with no data yet. */
 export function EmptyState({
   title,
   hint,
@@ -11,12 +9,10 @@ export function EmptyState({
   icon?: React.ReactNode;
 }) {
   return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-        {icon !== undefined ? <div className="text-muted-foreground">{icon}</div> : null}
-        <div className="font-medium">{title}</div>
-        {hint !== undefined ? <div className="text-muted-foreground max-w-md text-sm">{hint}</div> : null}
-      </CardContent>
-    </Card>
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
+      {icon !== undefined ? <div className="text-muted-foreground">{icon}</div> : null}
+      <div className="font-medium">{title}</div>
+      {hint !== undefined ? <div className="text-muted-foreground max-w-md text-sm">{hint}</div> : null}
+    </div>
   );
 }

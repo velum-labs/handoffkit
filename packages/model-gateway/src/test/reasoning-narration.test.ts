@@ -1,0 +1,565 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { emitTrace, judgeRequestPayload } from "@fusionkit/protocol";
+
+import { anthropicToChat, openAiSseToAnthropic } from "../adapters/anthropic.js";
+import { openAiSseToResponses, responsesToChat } from "../adapters/responses.js";
+import {
+  changedFiles,
+  createNarratorState,
+  createTurnNarrator,
+  diffStat,
+  mergeEventsWithNarration,
+  narrationBeat,
+  sanitizeGist
+} from "../frontdoor/narration.js";
+import type { ReasoningDeltaEvent } from "../frontdoor/narration.js";
+import { FusionBackend } from "../fusion-backend.js";
+import type { WireTrajectory } from "../fusion-backend.js";
+import { startGateway } from "../server.js";
+
+/**
+ * Reasoning traces to the front doors: the panel/judge phase is narrated as
+ * beats (bold present-tense headline + optional prose) that flow as
+ * `delta.reasoning_content` chat chunks, which the Responses and Anthropic
+ * translators render on their native reasoning/thinking channels.
+ */
+
+function sseStream(...chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    }
+  });
+}
+
+function chatChunk(delta: Record<string, unknown>, finish: string | null = null): string {
+  return `data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+}
+
+async function streamText(stream: ReadableStream<Uint8Array>): Promise<string> {
+  return await new Response(stream).text();
+}
+
+const CALC_DIFF = [
+  "diff --git a/calculator.js b/calculator.js",
+  "--- a/calculator.js",
+  "+++ b/calculator.js",
+  "@@",
+  "-exports.add = (l, r) => l - r;",
+  "+exports.add = (l, r) => l + r;",
+  ""
+].join("\n");
+
+// ---- Responses translator: reasoning item lifecycle ----
+
+test("openAiSseToResponses renders reasoning_content as a reasoning summary item before the answer", async () => {
+  const upstream = sseStream(
+    chatChunk({ reasoning_content: "**Fanning out to 2 models**\n\n" }),
+    chatChunk({ reasoning_content: "**Judging 2 candidates...**\n\n" }),
+    chatChunk({ content: "the answer" }),
+    chatChunk({}, "stop"),
+    "data: [DONE]\n\n"
+  );
+  const text = await streamText(openAiSseToResponses(upstream, "fusion-panel"));
+
+  assert.match(text, /event: response\.output_item\.added\ndata: \{[^\n]*"type":"reasoning"/);
+  assert.match(text, /event: response\.reasoning_summary_part\.added/);
+  assert.match(text, /event: response\.reasoning_summary_text\.delta/);
+  assert.match(text, /"delta":"\*\*Fanning out to 2 models\*\*\\n\\n"/);
+  assert.match(text, /event: response\.reasoning_summary_text\.done/);
+  assert.match(text, /event: response\.reasoning_summary_part\.done/);
+
+  // Reasoning opens, and closes, strictly before the first output text delta.
+  const reasoningDelta = text.indexOf("response.reasoning_summary_text.delta");
+  const reasoningDone = text.indexOf("response.reasoning_summary_text.done");
+  const firstText = text.indexOf("response.output_text.delta");
+  assert.ok(reasoningDelta >= 0 && reasoningDone >= 0 && firstText >= 0);
+  assert.ok(reasoningDelta < reasoningDone && reasoningDone < firstText);
+
+  // The final response object carries the reasoning item ahead of the message.
+  const completed = text.slice(text.indexOf("event: response.completed"));
+  const payload = JSON.parse(completed.slice(completed.indexOf("data: ") + 6, completed.indexOf("\n\n"))) as {
+    response: { output: Array<{ type: string; summary?: Array<{ text: string }> }> };
+  };
+  assert.equal(payload.response.output[0]?.type, "reasoning");
+  assert.match(payload.response.output[0]?.summary?.[0]?.text ?? "", /Fanning out to 2 models/);
+  assert.equal(payload.response.output[1]?.type, "message");
+});
+
+test("openAiSseToResponses closes reasoning before a tool call and ignores late reasoning", async () => {
+  const upstream = sseStream(
+    chatChunk({ reasoning_content: "**Judging...**\n\n" }),
+    chatChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "run", arguments: "{}" } }] }),
+    chatChunk({ reasoning_content: "late line (must be dropped)\n" }),
+    chatChunk({}, "tool_calls"),
+    "data: [DONE]\n\n"
+  );
+  const text = await streamText(openAiSseToResponses(upstream, "fusion-panel"));
+  const reasoningDone = text.indexOf("response.reasoning_summary_text.done");
+  const toolAdded = text.indexOf('"type":"function_call"');
+  assert.ok(reasoningDone >= 0 && toolAdded >= 0 && reasoningDone < toolAdded);
+  assert.ok(!text.includes("late line"), "reasoning after the answer starts is dropped");
+});
+
+test("openAiSseToResponses emits no reasoning events when the stream has none", async () => {
+  const upstream = sseStream(chatChunk({ content: "plain" }), chatChunk({}, "stop"), "data: [DONE]\n\n");
+  const text = await streamText(openAiSseToResponses(upstream, "fusion-panel"));
+  assert.ok(!text.includes("reasoning"), "no reasoning item or events on a reasoning-free stream");
+});
+
+test("responsesToChat drops round-tripped reasoning items and non-iterable content", () => {
+  // Codex echoes our reasoning item back verbatim on the next request, with
+  // `content: null` — it must be dropped, never iterated or forwarded.
+  const chat = responsesToChat(
+    {
+      input: [
+        { type: "message", role: "user", content: "task" },
+        {
+          type: "reasoning",
+          id: "rs_1",
+          summary: [{ type: "summary_text", text: "**Fanning out to 3 models**\n\n" }],
+          content: null
+        },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "answer" }] },
+        { type: "message", role: "user", content: "follow-up" }
+      ]
+    },
+    "fusion-panel"
+  );
+  const messages = chat.messages as Array<{ role: string; content: unknown }>;
+  assert.deepEqual(
+    messages.map((message) => message.role),
+    ["user", "assistant", "user"]
+  );
+  assert.ok(!JSON.stringify(messages).includes("Fanning out"), "narration never leaks into the prompt");
+});
+
+// ---- Anthropic translator: thinking block lifecycle ----
+
+test("openAiSseToAnthropic renders reasoning_content as a thinking block before the text block", async () => {
+  const upstream = sseStream(
+    chatChunk({ reasoning_content: "**Fanning out to the panel**\n\n" }),
+    chatChunk({ content: "the answer" }),
+    chatChunk({}, "stop"),
+    "data: [DONE]\n\n"
+  );
+  const text = await streamText(openAiSseToAnthropic(upstream, "fusion-panel"));
+
+  assert.match(text, /"content_block":\{"type":"thinking","thinking":""\}/);
+  // The canonical narration is bold markdown; Claude renders thinking as plain
+  // text, so the markers are stripped by the translator.
+  assert.match(text, /"delta":\{"type":"thinking_delta","thinking":"Fanning out to the panel\\n\\n"\}/);
+
+  const thinkingStart = text.indexOf('"type":"thinking"');
+  const thinkingStop = text.indexOf('"type":"content_block_stop","index":0');
+  const textStart = text.indexOf('"content_block":{"type":"text"');
+  assert.ok(thinkingStart >= 0 && thinkingStop >= 0 && textStart >= 0);
+  assert.ok(thinkingStart < thinkingStop && thinkingStop < textStart, "thinking closes before the text block opens");
+});
+
+test("openAiSseToAnthropic closes thinking before a tool_use block", async () => {
+  const upstream = sseStream(
+    chatChunk({ reasoning_content: "**Judging...**\n\n" }),
+    chatChunk({ tool_calls: [{ index: 0, id: "toolu_1", function: { name: "run", arguments: "{}" } }] }),
+    chatChunk({}, "tool_calls"),
+    "data: [DONE]\n\n"
+  );
+  const text = await streamText(openAiSseToAnthropic(upstream, "fusion-panel"));
+  const thinkingStop = text.indexOf('"type":"content_block_stop","index":0');
+  const toolStart = text.indexOf('"type":"tool_use"');
+  assert.ok(thinkingStop >= 0 && toolStart >= 0 && thinkingStop < toolStart);
+});
+
+test("anthropicToChat drops round-tripped thinking blocks from assistant messages", () => {
+  const chat = anthropicToChat(
+    {
+      messages: [
+        { role: "user", content: "task" },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Fanning out to 3 models\n" },
+            { type: "text", text: "the answer" }
+          ]
+        },
+        { role: "user", content: "follow-up" }
+      ]
+    },
+    "fusion-panel"
+  );
+  const messages = chat.messages as Array<{ role: string; content: unknown }>;
+  assert.equal(messages[1]?.role, "assistant");
+  assert.equal(messages[1]?.content, "the answer", "thinking text never leaks into the conversation");
+});
+
+// ---- formatting helpers ----
+
+test("sanitizeGist strips markdown, collapses whitespace, and caps hostile input", () => {
+  assert.equal(sanitizeGist("Fix `add()` to use **+**\nsecond line"), "Fix add() to use +");
+  assert.equal(sanitizeGist("\n\n   \n# Heading > quote | pipe"), "Heading quote pipe");
+  assert.equal(sanitizeGist(""), undefined);
+  const long = sanitizeGist(`${"x".repeat(500)} tail`);
+  assert.ok(long !== undefined && long.length === 90 && long.endsWith("…"), "hard length cap");
+});
+
+test("diffStat and changedFiles parse a unified diff", () => {
+  assert.deepEqual(diffStat(CALC_DIFF), { files: 1, added: 1, removed: 1 });
+  assert.deepEqual(changedFiles(CALC_DIFF), ["calculator.js"]);
+  assert.equal(diffStat(undefined), undefined);
+  assert.equal(diffStat(""), undefined);
+});
+
+// ---- the beat engine (pure) ----
+
+test("narrationBeat tells the race: fan-out, first finisher, survivors, judging", () => {
+  const state = createNarratorState({ turn: 1, judgeModel: "gpt-5.5" });
+  const roster = [
+    { id: "gpt", model: "gpt-5.5" },
+    { id: "sonnet", model: "claude-sonnet-4-6" },
+    { id: "gemini", model: "gemini-2.5-pro" }
+  ];
+
+  const fanout = narrationBeat(state, { kind: "fanout", roster, at: 0 });
+  assert.equal(fanout?.headline, "Fanning out to 3 models");
+  assert.equal(
+    fanout?.prose,
+    "gpt-5.5, claude-sonnet-4-6, and gemini-2.5-pro are each taking a shot in isolated worktrees."
+  );
+  assert.equal(narrationBeat(state, { kind: "fanout", roster, at: 1 }), null, "fan-out narrates once");
+
+  const first = narrationBeat(state, {
+    kind: "finish",
+    finish: { id: "sonnet", ok: true, elapsedMs: 42_000, steps: 14, gist: "switch add() to use +" },
+    at: 42_000
+  });
+  assert.equal(first?.headline, "sonnet is back first — 42s");
+  assert.equal(first?.prose, "Proposes: switch add() to use + (14 steps, 42s)");
+
+  const timeout = narrationBeat(state, {
+    kind: "finish",
+    finish: { id: "gemini", ok: false, finishReason: "timeout" },
+    at: 90_000
+  });
+  assert.equal(timeout?.headline, "gemini timed out — gpt still working");
+
+  const last = narrationBeat(state, {
+    kind: "finish",
+    finish: { id: "gpt", ok: true, elapsedMs: 51_000, steps: 9, gist: "same fix" },
+    at: 51_000
+  });
+  assert.equal(last?.headline, "All 3 candidates in");
+  assert.equal(last?.prose, "gpt proposes: same fix (9 steps, 51s)");
+
+  const judging = narrationBeat(state, {
+    kind: "judging",
+    candidates: [
+      { id: "sonnet", ok: true, diff: CALC_DIFF, verificationStatus: "passed" },
+      { id: "gpt", ok: true, diff: CALC_DIFF, verificationStatus: "passed" },
+      { id: "gemini", ok: false }
+    ],
+    at: 95_000
+  });
+  assert.equal(judging?.headline, "Judging the 2 survivors with gpt-5.5");
+  assert.equal(
+    judging?.prose,
+    "sonnet's patch: +1/-1 across 1 file, tests pass. gpt's patch: +1/-1 across 1 file, tests pass. " +
+      "sonnet and gpt touch the same files."
+  );
+});
+
+test("narrationBeat: ordinal progress headline names who is still out", () => {
+  const state = createNarratorState({ turn: 1 });
+  narrationBeat(state, {
+    kind: "fanout",
+    roster: [{ id: "gpt" }, { id: "sonnet" }, { id: "gemini" }],
+    at: 0
+  });
+  narrationBeat(state, { kind: "finish", finish: { id: "sonnet", ok: true }, at: 1 });
+  const second = narrationBeat(state, { kind: "finish", finish: { id: "gpt", ok: true, gist: "a fix" }, at: 2 });
+  assert.equal(second?.headline, "2 of 3 done — waiting on gemini");
+  assert.equal(second?.prose, "gpt proposes: a fix");
+});
+
+test("narrationBeat: cached-candidate continuation and last-pick opener", () => {
+  const continuation = createNarratorState({ turn: 3, judgeModel: "gpt-5.5" });
+  const judging = narrationBeat(continuation, { kind: "judging", candidates: [], at: 0 });
+  assert.equal(judging?.headline, "Continuing turn 3 — candidates cached, judging with gpt-5.5");
+
+  const opener = createNarratorState({ turn: 2, lastPick: "sonnet" });
+  const fanout = narrationBeat(opener, { kind: "fanout", roster: [{ id: "gpt" }], at: 0 });
+  assert.equal(fanout?.headline, "Last turn the judge picked sonnet — fanning out again");
+});
+
+test("narrationBeat: quiet beats name the stragglers and the judging phase", () => {
+  const state = createNarratorState({ turn: 1, judgeModel: "gpt-5.5" });
+  assert.equal(narrationBeat(state, { kind: "quiet", at: 0 }), null, "silent before any panel activity");
+  narrationBeat(state, { kind: "fanout", roster: [{ id: "gpt" }, { id: "sonnet" }], at: 0 });
+  narrationBeat(state, { kind: "finish", finish: { id: "gpt", ok: true }, at: 10_000 });
+  const quiet = narrationBeat(state, { kind: "quiet", at: 70_000 });
+  assert.equal(quiet?.headline, "Still working — waiting on sonnet (1m10s)");
+
+  narrationBeat(state, { kind: "finish", finish: { id: "sonnet", ok: true }, at: 80_000 });
+  assert.equal(narrationBeat(state, { kind: "quiet", at: 90_000 }), null, "silent once everyone is in");
+  narrationBeat(state, { kind: "judging", candidates: [], at: 95_000 });
+  const judgingQuiet = narrationBeat(state, { kind: "quiet", at: 130_000 });
+  assert.equal(judgingQuiet?.headline, "Still judging — gpt-5.5 at work (2m10s)");
+});
+
+// ---- the live narrator (trace events -> beats) ----
+
+test("createTurnNarrator narrates the race from trace events and filters other sessions/turns", async () => {
+  const narrator = createTurnNarrator({ traceId: "trace_narr", turn: 1, judgeModel: "gpt-5.5" });
+
+  emitTrace({
+    component: "gateway",
+    event_type: "session.started",
+    traceId: "trace_narr",
+    payload: {
+      dialect: "fusion-step",
+      environment: {
+        models: [
+          { id: "gpt", model: "gpt-5.5" },
+          { id: "sonnet", model: "claude-sonnet-4-6" }
+        ]
+      }
+    }
+  });
+  emitTrace({
+    component: "panel-model",
+    event_type: "harness.candidate.started",
+    traceId: "trace_narr",
+    candidateId: "cand_gpt",
+    modelId: "gpt",
+    payload: { turn: 1 }
+  });
+  emitTrace({
+    component: "panel-model",
+    event_type: "harness.candidate.finished",
+    traceId: "trace_narr",
+    candidateId: "cand_gpt",
+    modelId: "gpt",
+    payload: { turn: 1, status: "succeeded", step_count: 4, final_output_preview: "Fix `add()` to use +\nmore" }
+  });
+  // A different session and a different turn are both ignored.
+  emitTrace({
+    component: "panel-model",
+    event_type: "harness.candidate.finished",
+    traceId: "trace_other",
+    modelId: "intruder",
+    payload: { turn: 1, status: "succeeded" }
+  });
+  emitTrace({
+    component: "panel-model",
+    event_type: "harness.candidate.finished",
+    traceId: "trace_narr",
+    modelId: "stale",
+    payload: { turn: 7, status: "succeeded" }
+  });
+  emitTrace({
+    component: "judge",
+    event_type: "judge.request",
+    traceId: "trace_narr",
+    payload: judgeRequestPayload({
+      judgeModel: "gpt-5.5",
+      messages: [],
+      trajectories: [
+        { trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", diff: CALC_DIFF },
+        { trajectory_id: "t_sonnet", model_id: "sonnet", status: "succeeded" }
+      ],
+      trajectoryIds: ["t_gpt", "t_sonnet"],
+      turn: 1
+    })
+  });
+  narrator.close();
+
+  const beats: string[] = [];
+  for await (const event of narrator.events) beats.push(event.text);
+  assert.equal(beats.length, 3, "fan-out, one finisher, judging — starts and other sessions are silent");
+  assert.equal(
+    beats[0],
+    "**Fanning out to 2 models**\n\ngpt-5.5 and claude-sonnet-4-6 are each taking a shot in isolated worktrees.\n\n"
+  );
+  assert.match(beats[1] ?? "", /^\*\*gpt is back first — \d+s\*\*\n\nProposes: Fix add\(\) to use \+ \(4 steps, \d+s\)\n\n$/);
+  assert.equal(beats[2], "**Judging 2 candidates with gpt-5.5**\n\ngpt's patch: +1/-1 across 1 file.\n\n");
+});
+
+test("createTurnNarrator emits escalating quiet beats while candidates are out", async () => {
+  const narrator = createTurnNarrator({
+    traceId: "trace_quiet",
+    turn: 1,
+    quietDelaysMs: [60, 120, 240]
+  });
+  emitTrace({
+    component: "gateway",
+    event_type: "session.started",
+    traceId: "trace_quiet",
+    payload: { dialect: "fusion-step", environment: { models: [{ id: "gpt", model: "gpt-5.5" }] } }
+  });
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  narrator.close();
+
+  const beats: string[] = [];
+  for await (const event of narrator.events) beats.push(event.text);
+  const quiets = beats.filter((beat) => beat.includes("Still working"));
+  assert.ok(quiets.length >= 1, "at least one quiet beat fires during silence");
+  assert.match(quiets[0] ?? "", /\*\*Still working — waiting on gpt \(\d+s\)\*\*/);
+  assert.equal(new Set(beats).size, beats.length, "no beat is ever repeated verbatim");
+});
+
+test("closing the narrator detaches its listener (later events are dropped)", async () => {
+  const narrator = createTurnNarrator({ traceId: "trace_closed", turn: 1 });
+  narrator.close();
+  emitTrace({
+    component: "panel-model",
+    event_type: "harness.candidate.finished",
+    traceId: "trace_closed",
+    modelId: "gpt",
+    payload: { turn: 1, status: "succeeded" }
+  });
+  const beats: string[] = [];
+  for await (const event of narrator.events) beats.push(event.text);
+  assert.equal(beats.length, 0);
+});
+
+// ---- Merge: narration interleaves, then stops at the first judge byte ----
+
+test("mergeEventsWithNarration drains narration before judge chunks, never after", async () => {
+  const narrator = createTurnNarrator({ traceId: "trace_merge", turn: 1 });
+  async function* main(): AsyncGenerator<{ type: "sse.chunk"; data: string }> {
+    // Panel phase: narration lands while the main stream is pending.
+    emitTrace({
+      component: "panel-model",
+      event_type: "harness.candidate.finished",
+      traceId: "trace_merge",
+      modelId: "gpt",
+      payload: { turn: 1, status: "succeeded" }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    yield { type: "sse.chunk", data: "judge-bytes-1" };
+    // Narration arriving after the first judge chunk must be dropped.
+    emitTrace({
+      component: "panel-model",
+      event_type: "harness.candidate.finished",
+      traceId: "trace_merge",
+      modelId: "sonnet",
+      payload: { turn: 1, status: "succeeded" }
+    });
+    yield { type: "sse.chunk", data: "judge-bytes-2" };
+  }
+
+  const seen: string[] = [];
+  for await (const event of mergeEventsWithNarration(main(), narrator)) {
+    if (event.type === "sse.chunk") seen.push(`chunk:${event.data}`);
+    else if (event.type === "reasoning.delta") seen.push(`reasoning:${(event as ReasoningDeltaEvent).text.trim()}`);
+  }
+  assert.deepEqual(seen, ["reasoning:**gpt is back first**", "chunk:judge-bytes-1", "chunk:judge-bytes-2"]);
+});
+
+// ---- End to end: FusionBackend streaming turn narrates on both doors ----
+
+function fakePanelRunner(): (input: {
+  traceId: string;
+  turn: number;
+  sessionKey: string;
+}) => Promise<WireTrajectory[]> {
+  return async (input) => {
+    emitTrace({
+      component: "panel-model",
+      event_type: "harness.candidate.started",
+      traceId: input.traceId,
+      candidateId: "cand_gpt",
+      modelId: "gpt",
+      payload: { turn: input.turn }
+    });
+    emitTrace({
+      component: "panel-model",
+      event_type: "harness.candidate.finished",
+      traceId: input.traceId,
+      candidateId: "cand_gpt",
+      modelId: "gpt",
+      payload: { turn: input.turn, status: "succeeded", step_count: 2, final_output_preview: "ok patch" }
+    });
+    return [{ trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", final_output: "ok" }];
+  };
+}
+
+function fakeStreamingFuse(): () => Promise<Response> {
+  const sse =
+    `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "fused answer" }, finish_reason: null }] })}\n\n` +
+    `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n` +
+    "data: [DONE]\n\n";
+  return async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
+
+test("a streaming fused turn narrates reasoning before content on the chat door", async () => {
+  const backend = new FusionBackend({
+    stepUrl: "http://127.0.0.1:1/unused",
+    runPanels: fakePanelRunner(),
+    runFuseStep: fakeStreamingFuse(),
+    defaultModel: "fusion-panel",
+    judgeModel: "gpt-5.5"
+  });
+  const response = await backend.chat({
+    messages: [{ role: "user", content: "do the task" }],
+    stream: true
+  });
+  assert.equal(response.status, 200);
+  const text = await response.text();
+
+  assert.match(text, /"reasoning_content":"\*\*gpt is back first/);
+  assert.match(text, /\*\*Judging 1 candidate with gpt-5\.5\*\*/);
+  const firstReasoning = text.indexOf("reasoning_content");
+  const firstContent = text.indexOf('"content":"fused answer"');
+  assert.ok(firstReasoning >= 0 && firstContent >= 0 && firstReasoning < firstContent);
+  const lastReasoning = text.lastIndexOf("reasoning_content");
+  assert.ok(lastReasoning < firstContent, "no reasoning chunks after the judge's first content chunk");
+});
+
+test("a streaming fused turn narrates on the Responses door as a reasoning item", async () => {
+  const backend = new FusionBackend({
+    stepUrl: "http://127.0.0.1:1/unused",
+    runPanels: fakePanelRunner(),
+    runFuseStep: fakeStreamingFuse(),
+    defaultModel: "fusion-panel",
+    judgeModel: "gpt-5.5"
+  });
+  const gateway = await startGateway({ backend });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "fusion-panel", stream: true, input: "do the task" })
+    });
+    assert.equal(response.status, 200);
+    const text = await response.text();
+    assert.match(text, /event: response\.reasoning_summary_text\.delta/);
+    assert.match(text, /gpt is back first/);
+    const reasoningDone = text.indexOf("response.reasoning_summary_text.done");
+    const firstText = text.indexOf("response.output_text.delta");
+    assert.ok(reasoningDone >= 0 && firstText >= 0 && reasoningDone < firstText);
+    assert.match(text, /"delta":"fused answer"/);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("reasoningTraces: false keeps the stream silent until the judge's first token", async () => {
+  const backend = new FusionBackend({
+    stepUrl: "http://127.0.0.1:1/unused",
+    runPanels: fakePanelRunner(),
+    runFuseStep: fakeStreamingFuse(),
+    defaultModel: "fusion-panel",
+    reasoningTraces: false
+  });
+  const response = await backend.chat({
+    messages: [{ role: "user", content: "do the task" }],
+    stream: true
+  });
+  const text = await response.text();
+  assert.ok(!text.includes("reasoning_content"), "narration is off");
+  assert.match(text, /"content":"fused answer"/);
+});

@@ -490,6 +490,10 @@ async def _fused_completion_sse(
             if isinstance(item, FuseResult):
                 final_result = item
                 continue
+            if item.reasoning_delta:
+                # The judge's analysis rides the reasoning channel ahead of the
+                # answer; coding agents render it in their native thinking UI.
+                yield chunk({"reasoning_content": item.reasoning_delta}, None, None)
             if item.delta:
                 streamed_content = True
                 yield chunk({"content": item.delta}, None, None)

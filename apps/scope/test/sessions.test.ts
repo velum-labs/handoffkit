@@ -16,11 +16,12 @@ test("deriveSession folds a full session into structured detail", () => {
   assert.equal(detail.status, "succeeded");
   assert.equal(detail.dialect, "codex");
 
-  // Environment snapshot.
+  // Environment snapshot (including per-model provider).
   assert.equal(detail.environment?.repo, "/tmp/fusion-sample");
   assert.equal(detail.environment?.judgeModel, "gpt-5.5");
   assert.deepEqual(detail.environment?.harnesses, ["agent"]);
   assert.equal(detail.environment?.models?.length, 2);
+  assert.equal(detail.environment?.models?.find((model) => model.id === "gpt")?.provider, "openai");
 
   // Candidates with ordered trajectory steps.
   assert.equal(detail.candidates.length, 2);
@@ -119,6 +120,67 @@ test("deriveSession surfaces the judge prompt and full panel prompts", () => {
   assert.deepEqual(detail.judge.prompt?.trajectoryIds, ["c1"]);
   assert.equal(detail.judge.final?.content, "FUSED");
   assert.match(detail.finalOutput ?? "", /FUSED/);
+  // The full session prompt is recovered from the first model.call.started.
+  assert.equal(detail.prompt, "TASK");
+});
+
+test("deriveSession recovers the session prompt from judge.request messages", () => {
+  const mk = (partial: Omit<StoredEvent, "schema" | "trace_id">): StoredEvent => ({
+    schema: "fusion-trace-event.v1",
+    trace_id: "trace_judge_prompt",
+    ...partial
+  });
+  const events: StoredEvent[] = [
+    mk({
+      id: 1,
+      span_id: "j1",
+      seq: 0,
+      ts: 1,
+      component: "judge",
+      event_type: "judge.request",
+      payload: {
+        messages: [
+          { role: "system", content: "SYS" },
+          { role: "user", content: [{ type: "text", text: "USER PROMPT" }] }
+        ],
+        trajectories: []
+      }
+    })
+  ];
+  const detail = deriveSession("trace_judge_prompt", events);
+  assert.equal(detail.prompt, "USER PROMPT");
+});
+
+test("deriveSession threads the turn through model calls", () => {
+  const mk = (partial: Omit<StoredEvent, "schema" | "trace_id">): StoredEvent => ({
+    schema: "fusion-trace-event.v1",
+    trace_id: "trace_call_turns",
+    ...partial
+  });
+  const events: StoredEvent[] = [
+    mk({
+      id: 1,
+      span_id: "s1",
+      seq: 0,
+      ts: 1,
+      component: "panel-model",
+      event_type: "model.call.started",
+      model_id: "m1",
+      payload: { model: "m1", turn: 2 }
+    }),
+    mk({
+      id: 2,
+      span_id: "s1",
+      seq: 1,
+      ts: 2,
+      component: "panel-model",
+      event_type: "model.call.finished",
+      model_id: "m1",
+      payload: { model: "m1", turn: 2, latency_s: 0.1 }
+    })
+  ];
+  const detail = deriveSession("trace_call_turns", events);
+  assert.equal(detail.modelCalls[0]?.turn, 2);
 });
 
 test("deriveSession preserves per-step judge history across turns", () => {

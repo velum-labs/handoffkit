@@ -44,6 +44,8 @@ import type { WireTrajectory } from "@fusionkit/protocol";
 import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
+import { createTurnNarrator } from "./frontdoor/narration.js";
+import type { TurnNarration } from "./frontdoor/narration.js";
 import { runFrontdoorRequest } from "./frontdoor/request.js";
 import { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
 import type { FrontdoorRequestValue, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";
@@ -233,6 +235,13 @@ export type FusionBackendOptions = {
   costModel?: string;
   /** Hot kernel session state store for in-process session/turn candidate state. */
   kernelStateStore?: FusionBackendKernelStateStore;
+  /**
+   * Reasoning traces: narrate panel/judge progress into a streaming fused
+   * turn's response as `reasoning_content` deltas (rendered natively by each
+   * dialect — Codex reasoning summaries, Claude thinking). Default on; set
+   * false to keep the stream silent until the judge's first token.
+   */
+  reasoningTraces?: boolean;
 };
 
 /** Caller-supplied session header fields persisted on session creation. */
@@ -251,6 +260,8 @@ type Session = {
   /** Candidate trajectories cached per user turn (a follow-up is a new turn). */
   turns: Map<number, Promise<WireTrajectory[]>>;
   createdAt: number;
+  /** The panel member the judge picked on the most recent fused turn (narration color). */
+  lastJudgePick?: string;
 };
 
 export type FusionBackendKernelSessionState = Session;
@@ -611,6 +622,7 @@ export class FusionBackend implements Backend {
   readonly #budgetUsd: number | undefined;
   readonly #pricing: Readonly<Record<string, ModelPricing>>;
   readonly #costModel: string | undefined;
+  readonly #reasoningTraces: boolean;
   /** The stable front-door services the request/turn operators invoke. */
   readonly #services: FrontdoorServices;
   /** Explicit resume target; consumed (cleared) when bound to the first session. */
@@ -642,6 +654,7 @@ export class FusionBackend implements Backend {
     this.#budgetUsd = options.budgetUsd;
     this.#pricing = options.pricing ?? {};
     this.#costModel = options.costModel;
+    this.#reasoningTraces = options.reasoningTraces ?? true;
     this.#resumeId = options.resumeId;
     // Built once, after all fields are set: the stable wire the front-door
     // request/turn operators invoke with per-turn data.
@@ -1044,8 +1057,48 @@ export class FusionBackend implements Backend {
       onFuseUpstreamError: (req, status, detail) => this.#onFuseUpstreamError(req, status, detail),
       onFuseException: (req, message) => this.#onFuseException(req, message),
       proxyVendor: (req) => this.#proxyVendor(req),
-      evictTurn: (req) => this.#evictTurnFor(req)
+      evictTurn: (req) => this.#evictTurnFor(req),
+      openTurnNarration: (req) => this.#openTurnNarration(req)
     };
+  }
+
+  /**
+   * Reasoning traces: open the narration channel for one streaming fused turn.
+   * The narrator subscribes to the in-process trace stream filtered by this
+   * session's trace id, so the harnesses' candidate events and the judge
+   * kickoff surface live in the client's reasoning channel.
+   */
+  #openTurnNarration(req: FrontdoorRequestValue): TurnNarration | undefined {
+    if (!this.#reasoningTraces) return undefined;
+    const session = this.#ensureSession(req.sessionKey);
+    return createTurnNarrator({
+      traceId: session.traceId,
+      turn: req.turn,
+      ...(this.#judgeModel !== undefined ? { judgeModel: this.#judgeModel } : {}),
+      ...(session.lastJudgePick !== undefined ? { lastPick: session.lastJudgePick } : {})
+    });
+  }
+
+  /**
+   * Remember which panel member the judge picked (narration opener color for
+   * the next turn). The synthesis carries a trajectory id; map it to the
+   * member's model id via this turn's (already-settled) candidate cache.
+   */
+  #stashJudgePick(session: Session, turn: number, synthesis: unknown): void {
+    if (synthesis === null || typeof synthesis !== "object") return;
+    const selected = (synthesis as { selected_trajectory_id?: unknown }).selected_trajectory_id;
+    if (typeof selected !== "string" || selected.length === 0) return;
+    const candidates = session.turns.get(turn);
+    if (candidates === undefined) return;
+    void candidates.then(
+      (resolved) => {
+        const match = resolved.find((candidate) => candidate.trajectory_id === selected);
+        if (match !== undefined && typeof match.model_id === "string" && match.model_id.length > 0) {
+          session.lastJudgePick = match.model_id;
+        }
+      },
+      () => undefined
+    );
   }
 
   #signalFor(req: FrontdoorRequestValue): AbortSignal | undefined {
@@ -1280,8 +1333,11 @@ export class FusionBackend implements Backend {
     const session = this.#ensureSession(req.sessionKey);
     // WS7: meter the fused turn from the judge step's `usage` (rides the SSE tail).
     this.#meter(req.sessionKey, this.#fusedCostModel(), parseUsageFromSse(sseBuffer), session.traceId, req.judgeSpanId);
-    if (!getTraceEmitter().isEnabled()) return;
     const assembled = assembleSseContent(sseBuffer);
+    // Narration color for the next turn, independent of the trace-emitter gate
+    // (the narrator's own listener detaches when the judge starts streaming).
+    this.#stashJudgePick(session, req.turn, synthesisOf(assembled.fusion));
+    if (!getTraceEmitter().isEnabled()) return;
     if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
       const synthesis = synthesisOf(assembled.fusion);
       this.#emitJudgeFinal(req, session, {

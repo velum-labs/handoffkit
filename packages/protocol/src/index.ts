@@ -151,6 +151,7 @@ export type { BundleVerification } from "./receipt.js";
 export { buildReceiptStory, summarizeRunEvent } from "./receipt-story.js";
 export type { EventSummary, ReceiptStory } from "./receipt-story.js";
 export {
+  addTraceListener,
   ambientTraceId,
   assertFusionTraceEvent,
   emitTrace,
@@ -167,6 +168,7 @@ export {
   modelCallStartedPayload,
   newSpanId,
   newTraceId,
+  removeTraceListener,
   TRACE_CANDIDATE_HEADER,
   TRACE_ID_HEADER,
   TRACE_PARENT_SPAN_HEADER,
@@ -177,7 +179,8 @@ export type {
   EmitInput,
   FusionTraceComponent,
   FusionTraceEvent,
-  FusionTraceEventType
+  FusionTraceEventType,
+  TraceListener
 } from "./trace.js";
 export { PolicyDeniedError } from "./types.js";
 export type {

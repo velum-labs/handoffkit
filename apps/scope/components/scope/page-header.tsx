@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /** A consistent sticky page header: title, optional subtitle, and right-side slot. */
@@ -15,7 +16,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "bg-background/80 sticky top-0 z-10 flex items-center justify-between gap-4 border-b px-8 py-5 backdrop-blur",
+        "bg-background/80 sticky top-0 z-20 flex items-center justify-between gap-4 border-b px-8 py-5 backdrop-blur",
         className
       )}
     >
@@ -30,22 +31,32 @@ export function PageHeader({
   );
 }
 
-/** A small pulsing dot + label indicating an active SSE connection. */
-export function LiveDot({ active, label = "live" }: { active: boolean; label?: string }) {
+/**
+ * A small pulsing dot indicating the live event stream connection. One meaning
+ * everywhere: connected to the collector's SSE stream (not "no fetch error").
+ */
+export function LiveDot({ active }: { active: boolean }) {
   return (
-    <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
-      <span className="relative flex size-2">
-        {active ? (
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60 motion-reduce:animate-none" />
-        ) : null}
-        <span
-          className={cn(
-            "relative inline-flex size-2 rounded-full",
-            active ? "bg-emerald-500" : "bg-muted-foreground/40"
-          )}
-        />
-      </span>
-      {label}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+          <span className="relative flex size-2">
+            {active ? (
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60 motion-reduce:animate-none" />
+            ) : null}
+            <span
+              className={cn(
+                "relative inline-flex size-2 rounded-full",
+                active ? "bg-emerald-500" : "bg-muted-foreground/40"
+              )}
+            />
+          </span>
+          {active ? "live" : "offline"}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {active ? "Live event stream connected" : "Live event stream disconnected — reconnecting"}
+      </TooltipContent>
+    </Tooltip>
   );
 }

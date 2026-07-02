@@ -520,6 +520,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
     capabilities: () => ({
       workspace_read: "supported",
       apply_patch: "supported",
+      // TODO(@000alen): why degraded?
       shell_command: "degraded",
       artifact_capture: "supported",
       model_gateway_responses: "supported",

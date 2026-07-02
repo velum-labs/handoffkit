@@ -12,6 +12,8 @@
 
 import type { RuntimeEvent } from "@fusionkit/kernel";
 
+import type { ReasoningDeltaEvent } from "./narration.js";
+
 const KEEPALIVE_MS = 3000;
 
 /** A terminal SSE chunk that marks the turn as failed (not a normal stop). */
@@ -30,6 +32,18 @@ function noticeChunk(text: string): string {
   })}\n\n`;
 }
 
+/**
+ * An OpenAI chat chunk carrying reasoning (not answer) text, on the de-facto
+ * `reasoning_content` delta field. The chat door passes it through verbatim;
+ * the Responses/Anthropic translators map it onto their native reasoning /
+ * thinking channels. Clients that don't know the field ignore the chunk.
+ */
+function reasoningChunk(text: string): string {
+  return `data: ${JSON.stringify({
+    choices: [{ index: 0, delta: { reasoning_content: text }, finish_reason: null }]
+  })}\n\n`;
+}
+
 export type EventsToSseOptions = {
   /** A leading assistant content delta emitted before the panel phase (failover). */
   notice?: string;
@@ -40,7 +54,7 @@ export type EventsToSseOptions = {
 };
 
 export function eventsToSseResponse(
-  events: AsyncIterable<RuntimeEvent>,
+  events: AsyncIterable<RuntimeEvent | ReasoningDeltaEvent>,
   options: EventsToSseOptions = {}
 ): Response {
   const encoder = new TextEncoder();
@@ -64,6 +78,9 @@ export function eventsToSseResponse(
           switch (event.type) {
             case "sse.chunk":
               controller.enqueue(encoder.encode(event.data));
+              break;
+            case "reasoning.delta":
+              controller.enqueue(encoder.encode(reasoningChunk(event.text)));
               break;
             case "output.delta":
               controller.enqueue(encoder.encode(noticeChunk(event.content)));

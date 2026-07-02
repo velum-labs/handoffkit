@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+# CLI startup latency policy (documented exception to the no-inline-imports
+# rule): typer builds the whole command tree on EVERY invocation — including
+# `fusionkit --version` and the Node CLI's warm probe / `prompts dump` — so
+# module scope may only import what command *signatures* need at registration
+# time (typer + fusionkit_core.config for annotated params) plus cheap stdlib.
+# Everything heavy (uvicorn/fastapi, rich, the evals stack, provider clients)
+# is imported inside the one subcommand that uses it, with `TYPE_CHECKING`
+# imports covering the annotations.
 import asyncio
 import hashlib
 import json
 import os
 import shlex
-from collections.abc import Mapping
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Annotated, cast
+from typing import TYPE_CHECKING, Annotated, cast
 
 import typer
-import uvicorn
-from fusionkit_core.artifacts import LocalArtifactStore
-from fusionkit_core.clients import ChatClient, build_clients
 from fusionkit_core.config import (
     EndpointAuth,
     FusionConfig,
@@ -22,98 +28,10 @@ from fusionkit_core.config import (
     SubscriptionAuthMode,
     load_config,
 )
-from fusionkit_core.credentials import SubscriptionStatus, subscription_status
-from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.kernel import FusionKernel
-from fusionkit_core.prompts import SYSTEM_PROMPT_DEFAULTS
-from fusionkit_core.run import FusionRunManager
-from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous
-from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
-from fusionkit_evals.benchmark_panel import get_benchmark_panel
-from fusionkit_evals.candidate_bank import (
-    CandidateBank,
-    PreparedTask,
-    bank_signature,
-    build_candidate_bank,
-    load_bank,
-    save_bank,
-)
-from fusionkit_evals.fusion_bench import (
-    CommandHandoffKitExecutor,
-    FusionBenchReport,
-    FusionBenchRunner,
-    build_fusion_bench_report,
-    load_benchmark_tasks,
-    load_fusion_bench_jsonl,
-    write_fusion_bench_jsonl,
-)
-from fusionkit_evals.fusion_hillclimb import (
-    ClimbDiagnosis,
-    ClimbResult,
-    TargetCheck,
-    best_single_baseline,
-    check_target,
-    diagnose_bank,
-    run_climb,
-)
-from fusionkit_evals.fusion_reports import (
-    write_fusion_bench_html_report,
-    write_fusion_bench_markdown_report,
-    write_fusion_bench_report_jsonl,
-)
-from fusionkit_evals.livecodebench_data import (
-    LCB_PROMPT_SUFFIX,
-    load_manifest,
-    load_problems,
-    prepare_tasks,
-)
-from fusionkit_evals.pareto import load_points, write_pareto_report
-from fusionkit_evals.polyglot import (
-    build_polyglot_bank,
-    load_polyglot_exercises,
-    polyglot_verifier,
-)
-from fusionkit_evals.prompt_tuning import (
-    LLMProposer,
-    PromptEval,
-    TunableRole,
-    TunerRuntime,
-    TuningResult,
-    evaluate_variant,
-    optimize,
-    select_decision_tasks,
-    split_dev_val,
-)
-from fusionkit_evals.public_bench import (
-    PUBLIC_BENCHMARK_INFO,
-    PUBLIC_BENCHMARK_SUITES,
-    CommandExternalBenchmarkExecutor,
-    ExternalBenchmarkRequest,
-    PublicBenchmarkSuite,
-    baselines_for,
-    run_public_benchmark,
-    write_external_runs_jsonl,
-)
-from fusionkit_evals.public_bench_report import (
-    build_benchmark_comparison,
-    write_benchmark_comparison_markdown,
-)
-from fusionkit_evals.sandbox import SandboxConfig, build_sandbox
-from fusionkit_evals.tiny import (
-    load_tiny_tasks,
-    run_tiny_benchmark,
-    write_tiny_benchmark_report,
-    write_tiny_jsonl,
-)
-from fusionkit_server.app import create_app
-from fusionkit_server.openai_endpoint import (
-    PROVIDER_DEFAULT_BASE_URL,
-    build_endpoint,
-    serve_single_endpoint,
-)
-from rich.console import Console
-from rich.table import Table
+
+# stdlib-only module; kept at module scope both for cheapness and because tests
+# monkeypatch `fusionkit_cli.main.subscription_status`.
+from fusionkit_core.credentials import subscription_status
 
 from fusionkit_cli.onboarding import (
     API_KEY_ENVS,
@@ -125,7 +43,51 @@ from fusionkit_cli.onboarding import (
     write_config,
 )
 
-app = typer.Typer(help="Local model fusion toolkit.")
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from fusionkit_core.clients import ChatClient
+    from fusionkit_core.credentials import SubscriptionStatus
+    from fusionkit_core.kernel import FusionKernel
+    from fusionkit_evals.fusion_bench import FusionBenchReport
+    from fusionkit_evals.fusion_hillclimb import ClimbDiagnosis, ClimbResult, TargetCheck
+    from fusionkit_evals.prompt_tuning import PromptEval, TuningResult
+    from fusionkit_evals.public_bench import PublicBenchmarkSuite
+
+app = typer.Typer(help="Local model fusion toolkit.", invoke_without_command=True)
+
+
+def _fusionkit_distribution_version() -> str:
+    try:
+        return distribution_version("fusionkit")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"fusionkit {_fusionkit_distribution_version()}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    ctx: typer.Context,
+    version: Annotated[
+        bool | None,
+        typer.Option(
+            "--version",
+            "-V",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the fusionkit version and exit.",
+        ),
+    ] = None,
+) -> None:
+    if ctx.invoked_subcommand is None and version is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
+
 
 prompts_app = typer.Typer(help="Inspect and export the built-in fusion prompts.")
 app.add_typer(prompts_app, name="prompts")
@@ -137,6 +99,12 @@ app.add_typer(auth_app, name="auth")
 def _legacy_kernel(
     config: FusionConfig, clients: Mapping[str, ChatClient], run_root: Path
 ) -> FusionKernel:
+    from fusionkit_core.artifacts import LocalArtifactStore
+    from fusionkit_core.fusion import FusionEngine
+    from fusionkit_core.kernel import FusionKernel
+    from fusionkit_core.run import FusionRunManager
+    from fusionkit_core.run_store import FileSystemRunStore
+
     engine = FusionEngine(config=config, clients=clients)
     manager = FusionRunManager(
         engine,
@@ -160,6 +128,8 @@ def prompts_dump(
     ``<id>.md`` file per prompt. This keeps the CLI's scaffolded
     ``.fusionkit/prompts`` defaults in lockstep with this package's source.
     """
+    from fusionkit_core.prompts import SYSTEM_PROMPT_DEFAULTS
+
     if dir is not None:
         dir.mkdir(parents=True, exist_ok=True)
         for prompt_id, text in SYSTEM_PROMPT_DEFAULTS.items():
@@ -183,6 +153,9 @@ def serve(
             err=True,
         )
         raise typer.Exit(code=1)
+    import uvicorn
+    from fusionkit_server.app import create_app
+
     fusion_config = load_config(resolved)
     api = create_app(fusion_config)
     uvicorn.run(api, host=host, port=port)
@@ -215,12 +188,17 @@ def init(
     """Detect logged-in subscriptions + API keys and scaffold a config."""
     target = output or default_write_path(global_)
     if target.exists() and not force:
-        typer.secho(
-            f"{target} already exists; pass --force to overwrite or -o to choose another path.",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(code=1)
+        if yes:
+            typer.secho(
+                f"{target} already exists; pass --force to overwrite or -o to choose another path.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        if not typer.confirm(f"{target} already exists. Update it?", default=False):
+            typer.echo("Keeping existing config.")
+            raise typer.Exit(code=0)
+        force = True
 
     claude = subscription_status("claude-code")
     codex = subscription_status("codex")
@@ -284,6 +262,9 @@ def auth_status(
     config: Annotated[Path | None, typer.Option("--config", "-c")] = None,
 ) -> None:
     """Show subscription logins, API keys, and how the config authenticates."""
+    from rich.console import Console
+    from rich.table import Table
+
     console = Console()
     subs = Table(title="Subscriptions")
     subs.add_column("mode")
@@ -321,6 +302,8 @@ def _switch_endpoint(
     endpoint: ModelEndpoint, mode: SubscriptionAuthMode, api_key_env: str | None
 ) -> ModelEndpoint:
     """Return a copy of an endpoint with its auth mode changed (keeping provider coherent)."""
+    from fusionkit_server.openai_endpoint import PROVIDER_DEFAULT_BASE_URL
+
     provider: ProviderKind = endpoint.provider
     base_url = endpoint.base_url
     resolved_key_env = endpoint.api_key_env
@@ -438,6 +421,8 @@ def serve_endpoint(
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
 ) -> None:
     """Front a single provider model as an OpenAI Chat Completions endpoint."""
+    from fusionkit_server.openai_endpoint import build_endpoint, serve_single_endpoint
+
     endpoint = build_endpoint(
         id=id,
         model=model,
@@ -459,6 +444,10 @@ def run_eval(
     mode: FusionMode = "single",
     config_id: str = "local",
 ) -> None:
+    from fusionkit_core.clients import build_clients
+    from fusionkit_core.fusion import FusionEngine
+    from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
+
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
     engine = cast(
@@ -476,6 +465,8 @@ def pareto(
     points: Annotated[Path, typer.Option("--points", "-p")],
     output: Annotated[Path, typer.Option("--output", "-o")],
 ) -> None:
+    from fusionkit_evals.pareto import load_points, write_pareto_report
+
     write_pareto_report(output, load_points(points))
     typer.echo(json.dumps({"output": str(output)}))
 
@@ -488,6 +479,15 @@ def tiny_bench(
     mode: FusionMode = "panel",
     config_id: str = "local",
 ) -> None:
+    from fusionkit_core.clients import build_clients
+    from fusionkit_core.fusion import FusionEngine
+    from fusionkit_evals.tiny import (
+        load_tiny_tasks,
+        run_tiny_benchmark,
+        write_tiny_benchmark_report,
+        write_tiny_jsonl,
+    )
+
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
     engine = cast(
@@ -542,6 +542,16 @@ def fusion_bench(
     mode: FusionMode = "panel",
     config_id: str = "local",
 ) -> None:
+    from fusionkit_core.clients import build_clients
+    from fusionkit_core.fusion import FusionEngine
+    from fusionkit_evals.fusion_bench import (
+        CommandHandoffKitExecutor,
+        FusionBenchRunner,
+        build_fusion_bench_report,
+        load_benchmark_tasks,
+        write_fusion_bench_jsonl,
+    )
+
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
     engine = cast(FusionEngine, _legacy_kernel(fusion_config, clients, run_root / "kernel"))
@@ -582,6 +592,8 @@ def fusion_bench_report(
     report_markdown: Annotated[Path | None, typer.Option("--markdown", "-m")] = None,
     report_html: Annotated[Path | None, typer.Option("--html")] = None,
 ) -> None:
+    from fusionkit_evals.fusion_bench import build_fusion_bench_report, load_fusion_bench_jsonl
+
     rows = load_fusion_bench_jsonl(input_path)
     report = build_fusion_bench_report(rows)
     response: dict[str, int | str] = {
@@ -638,6 +650,19 @@ def public_bench(
     ] = None,
 ) -> None:
     """Run a public coding benchmark against the gateway and compare to leaderboards."""
+    from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous
+    from fusionkit_evals.benchmark_panel import get_benchmark_panel
+    from fusionkit_evals.public_bench import (
+        PUBLIC_BENCHMARK_INFO,
+        CommandExternalBenchmarkExecutor,
+        ExternalBenchmarkRequest,
+        run_public_benchmark,
+        write_external_runs_jsonl,
+    )
+    from fusionkit_evals.public_bench_report import (
+        build_benchmark_comparison,
+        write_benchmark_comparison_markdown,
+    )
 
     resolved_suite = _resolve_public_suite(suite)
     info = PUBLIC_BENCHMARK_INFO[resolved_suite]
@@ -717,6 +742,7 @@ def public_bench_baselines(
     ] = None,
 ) -> None:
     """Print the published leaderboard baselines used for comparison."""
+    from fusionkit_evals.public_bench import PUBLIC_BENCHMARK_SUITES, baselines_for
 
     suites = (PUBLIC_BENCHMARK_SUITES if suite is None else (_resolve_public_suite(suite),))
     payload = {
@@ -758,6 +784,31 @@ def tune_prompts(
     ledger: Annotated[Path | None, typer.Option("--ledger")] = None,
 ) -> None:
     """Automated LLM-driven tuning of judge/synth prompts over a frozen bank."""
+    from fusionkit_core.clients import build_clients
+    from fusionkit_core.fusion import FusionEngine
+    from fusionkit_evals.bench_history import BenchRunRecord, append_run
+    from fusionkit_evals.candidate_bank import (
+        PreparedTask,
+        bank_signature,
+        build_candidate_bank,
+        load_bank,
+        save_bank,
+    )
+    from fusionkit_evals.livecodebench_data import (
+        LCB_PROMPT_SUFFIX,
+        load_manifest,
+        load_problems,
+        prepare_tasks,
+    )
+    from fusionkit_evals.prompt_tuning import (
+        LLMProposer,
+        TunableRole,
+        TunerRuntime,
+        optimize,
+        select_decision_tasks,
+        split_dev_val,
+    )
+    from fusionkit_evals.sandbox import SandboxConfig, build_sandbox
 
     if role not in _ROLE_PROMPT_FILE:
         raise typer.BadParameter(f"role must be one of {sorted(_ROLE_PROMPT_FILE)}")
@@ -916,6 +967,39 @@ def fusion_hillclimb(
     (evaluated once). Tier-1 of the self-healing loop; Tier-2/3 are driven by the
     `fusion-hillclimb` skill, which calls this to re-measure after each change.
     """
+    from fusionkit_core.clients import build_clients
+    from fusionkit_core.fusion import FusionEngine
+    from fusionkit_evals.bench_history import BenchRunRecord, append_run
+    from fusionkit_evals.candidate_bank import (
+        CandidateBank,
+        PreparedTask,
+        bank_signature,
+        build_candidate_bank,
+        load_bank,
+        save_bank,
+    )
+    from fusionkit_evals.fusion_hillclimb import (
+        best_single_baseline,
+        check_target,
+        diagnose_bank,
+        run_climb,
+    )
+    from fusionkit_evals.livecodebench_data import (
+        LCB_PROMPT_SUFFIX,
+        load_manifest,
+        load_problems,
+        prepare_tasks,
+    )
+    from fusionkit_evals.prompt_tuning import (
+        LLMProposer,
+        TunableRole,
+        TunerRuntime,
+        evaluate_variant,
+        select_decision_tasks,
+        split_dev_val,
+    )
+    from fusionkit_evals.sandbox import SandboxConfig, build_sandbox
+
     if role not in _ROLE_PROMPT_FILE:
         raise typer.BadParameter(f"role must be one of {sorted(_ROLE_PROMPT_FILE)}")
     resolved_role = cast(TunableRole, role)
@@ -1101,6 +1185,31 @@ def fusion_hillclimb_polyglot(
     per-language test suites), then climbs the prompt for ``role`` with a
     polyglot-aware replay verifier, McNemar-gated, reporting the locked-test result.
     """
+    from fusionkit_core.clients import build_clients
+    from fusionkit_core.fusion import FusionEngine
+    from fusionkit_evals.bench_history import BenchRunRecord, append_run
+    from fusionkit_evals.candidate_bank import CandidateBank, load_bank, save_bank
+    from fusionkit_evals.fusion_hillclimb import (
+        best_single_baseline,
+        check_target,
+        diagnose_bank,
+        run_climb,
+    )
+    from fusionkit_evals.polyglot import (
+        build_polyglot_bank,
+        load_polyglot_exercises,
+        polyglot_verifier,
+    )
+    from fusionkit_evals.prompt_tuning import (
+        LLMProposer,
+        TunableRole,
+        TunerRuntime,
+        evaluate_variant,
+        select_decision_tasks,
+        split_dev_val,
+    )
+    from fusionkit_evals.sandbox import SandboxConfig, build_sandbox
+
     if role not in _ROLE_PROMPT_FILE:
         raise typer.BadParameter(f"role must be one of {sorted(_ROLE_PROMPT_FILE)}")
     resolved_role = cast(TunableRole, role)
@@ -1322,6 +1431,8 @@ def _format_tuning_report(result: TuningResult) -> str:
 
 
 def _resolve_public_suite(suite: str) -> PublicBenchmarkSuite:
+    from fusionkit_evals.public_bench import PUBLIC_BENCHMARK_SUITES, PublicBenchmarkSuite
+
     if suite not in PUBLIC_BENCHMARK_SUITES:
         known = ", ".join(PUBLIC_BENCHMARK_SUITES)
         raise typer.BadParameter(f"unknown suite {suite!r}; choose one of: {known}")
@@ -1335,6 +1446,12 @@ def _write_fusion_bench_reports(
     report_markdown: Path | None,
     report_html: Path | None,
 ) -> dict[str, str]:
+    from fusionkit_evals.fusion_reports import (
+        write_fusion_bench_html_report,
+        write_fusion_bench_markdown_report,
+        write_fusion_bench_report_jsonl,
+    )
+
     outputs = {}
     if report_jsonl is not None:
         write_fusion_bench_report_jsonl(report_jsonl, report)

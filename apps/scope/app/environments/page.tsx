@@ -1,17 +1,21 @@
 "use client";
 
-import { FolderGit2, Layers } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, FolderGit2, Layers } from "lucide-react";
 
 import { EmptyState } from "@/components/scope/empty-state";
+import { EnvironmentDetail } from "@/components/scope/environment-detail";
+import { ErrorBanner } from "@/components/scope/error-banner";
 import { LiveDot, PageHeader } from "@/components/scope/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Section } from "@/components/scope/section";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEnvironments } from "@/lib/api";
+import { fmtRelative } from "@/lib/format";
 
 export default function EnvironmentsPage() {
-  const { environments, loading, error } = useEnvironments();
+  const { environments, loading, error, live } = useEnvironments();
 
   return (
     <div>
@@ -19,14 +23,16 @@ export default function EnvironmentsPage() {
         title="Environments"
         subtitle="Distinct stack configurations observed across sessions."
       >
-        <LiveDot active={!error} />
+        <LiveDot active={live} />
       </PageHeader>
 
-      <div className="p-8">
+      <div className="space-y-4 px-8 py-6">
+        <ErrorBanner error={error} />
+
         {loading ? (
-          <div className="grid gap-6 md:grid-cols-2">
-            <Skeleton className="h-56 w-full" />
-            <Skeleton className="h-56 w-full" />
+          <div className="space-y-3">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
           </div>
         ) : environments.length === 0 ? (
           <EmptyState
@@ -35,60 +41,53 @@ export default function EnvironmentsPage() {
             hint="Each session.started snapshot contributes a panel/stack configuration here."
           />
         ) : (
-          <div className="grid gap-6 md:grid-cols-2">
+          <div>
             {environments.map((environment) => (
-              <Card key={environment.signature}>
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <FolderGit2 className="text-muted-foreground size-4" />
-                      <span className="mono truncate">{environment.repo ?? "unknown repo"}</span>
-                    </CardTitle>
-                    <Badge variant="secondary" className="font-normal">
-                      {environment.sessionCount} {environment.sessionCount === 1 ? "session" : "sessions"}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <div className="text-muted-foreground text-xs">Judge</div>
-                      <div className="mono truncate">{environment.judgeModel ?? "—"}</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground text-xs">Harness</div>
-                      <div className="mono truncate">
-                        {environment.harnesses && environment.harnesses.length > 0
-                          ? environment.harnesses.join(", ")
-                          : "—"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {environment.fusionBackendUrl ? (
-                    <div className="text-sm">
-                      <div className="text-muted-foreground text-xs">Synthesis backend</div>
-                      <div className="mono truncate">{environment.fusionBackendUrl}</div>
-                    </div>
-                  ) : null}
-
-                  <Separator />
-
-                  <div>
-                    <div className="text-muted-foreground mb-2 text-xs">
-                      Panel ({environment.models.length})
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {environment.models.map((model) => (
-                        <Badge key={model.id} variant="outline" className="gap-1 font-normal">
-                          <span className="font-medium">{model.id}</span>
-                          <span className="text-muted-foreground mono">{model.model}</span>
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <Section
+                key={environment.signature}
+                defaultOpen={environments.length === 1}
+                title={
+                  <span className="flex items-center gap-2">
+                    <FolderGit2 className="text-muted-foreground size-4" />
+                    <span className="mono">{environment.repo ?? "unknown repo"}</span>
+                  </span>
+                }
+                count={`${environment.sessionCount} ${environment.sessionCount === 1 ? "session" : "sessions"}`}
+                summary={[
+                  environment.judgeModel !== null && environment.judgeModel !== undefined
+                    ? `judge ${environment.judgeModel}`
+                    : undefined,
+                  `${environment.models.length} panel models`,
+                  environment.lastTs > 0 ? `last ${fmtRelative(environment.lastTs)}` : undefined
+                ]
+                  .filter((part) => part !== undefined)
+                  .join(" · ")}
+                meta={
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button asChild variant="ghost" size="xs">
+                        <Link href={`/?q=${encodeURIComponent(environment.repo ?? "")}`}>
+                          <ExternalLink className="size-3.5" /> Sessions
+                        </Link>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Show sessions from this environment</TooltipContent>
+                  </Tooltip>
+                }
+              >
+                <EnvironmentDetail
+                  repo={environment.repo}
+                  judgeModel={environment.judgeModel}
+                  harnesses={environment.harnesses}
+                  fusionBackendUrl={environment.fusionBackendUrl}
+                  models={environment.models.map((model) => ({
+                    id: model.id,
+                    model: model.model,
+                    provider: model.provider,
+                    endpoint: environment.modelEndpoints?.[model.id] ?? model.endpointId
+                  }))}
+                />
+              </Section>
             ))}
           </div>
         )}

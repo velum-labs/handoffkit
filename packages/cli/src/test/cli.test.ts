@@ -895,3 +895,23 @@ test("ensemble gateway test runs the unified front-door acceptance suite", async
   }
 });
 
+test("fusionkit --version prints the npm CLI and pinned synthesizer versions", async () => {
+  const result = spawnSync(process.execPath, [CLI, "--version"], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^@fusionkit\/cli \d+\.\d+\.\d+/);
+  assert.match(result.stdout, /synthesizer: fusionkit@\d+\.\d+\.\d+ from PyPI/);
+});
+
+test("fusionkit version --json emits the version matrix", async () => {
+  const result = spawnSync(process.execPath, [CLI, "version", "--json"], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const matrix = JSON.parse(result.stdout) as {
+    cli: string;
+    synthesizerPinned: string;
+    tools: Record<string, string | null>;
+  };
+  assert.match(matrix.cli, /^\d+\.\d+\.\d+$/);
+  assert.match(matrix.synthesizerPinned, /^\d+\.\d+\.\d+$/);
+  assert.ok(typeof matrix.tools.codex === "string");
+});
+

@@ -54,6 +54,13 @@ export type RunFusionOptions = {
   local?: boolean;
   /** Boot the local scope dashboard and stream trace events into it. */
   observe?: boolean;
+  /**
+   * Reasoning traces: narrate panel/judge progress into the launched tool's own
+   * thinking/reasoning UI while a fused turn runs. Default on; `--no-reasoning`
+   * (or `reasoning: false` in .fusionkit) keeps the stream silent until the
+   * judge's first token.
+   */
+  reasoning?: boolean;
   /** Skip the interactive cost/scope confirmation for the cloud panel. */
   yes?: boolean;
   /** Route services through portless (stable named URLs + singletons). Default on. */
@@ -92,6 +99,7 @@ export type RunFusionOptions = {
  */
 export type StackEvent =
   | { kind: "server.start"; id: string; label: string }
+  | { kind: "server.progress"; id: string; detail: string }
   | { kind: "server.ready"; id: string; detail: string }
   | { kind: "server.fail"; id: string; detail: string }
   | { kind: "synth.start" }
@@ -194,6 +202,29 @@ export function loadEnvFileInto(path: string, env: Record<string, string | undef
       value = value.slice(1, -1);
     }
     if (env[key] === undefined) env[key] = value;
+  }
+}
+
+/**
+ * Default provider base URL when a cloud spec carries no explicit `baseUrl`.
+ * Mirrors `PROVIDER_DEFAULT_BASE_URL` in fusionkit's openai_endpoint.py. Used
+ * both for the router config (fusionkit's `ModelEndpoint` requires `base_url`)
+ * and for the preflight key-validation probes.
+ */
+export function providerDefaultBaseUrl(provider: Exclude<PanelProvider, "mlx">): string {
+  switch (provider) {
+    case "openai":
+      return "https://api.openai.com";
+    case "anthropic":
+      return "https://api.anthropic.com";
+    case "google":
+      return "https://generativelanguage.googleapis.com";
+    case "openai-compatible":
+      return "http://127.0.0.1";
+    default: {
+      const exhaustive: never = provider;
+      throw new Error(`unknown provider ${String(exhaustive)}`);
+    }
   }
 }
 

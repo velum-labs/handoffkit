@@ -26,8 +26,8 @@ import { freePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js
 import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";
 
-import { defaultKeyEnv, fusionkitPyCommand, loadEnvFileInto } from "./env.js";
-import type { PanelModelSpec, PanelProvider, StackReporter } from "./env.js";
+import { defaultKeyEnv, fusionkitPyCommand, loadEnvFileInto, providerDefaultBaseUrl } from "./env.js";
+import type { PanelModelSpec, StackReporter } from "./env.js";
 
 /**
  * The single `fusionkit serve` router: one process that fronts every panel
@@ -58,29 +58,6 @@ function looksPermanentFailure(log: string): boolean {
   return /401|403|invalid[ _-]?api[ _-]?key|unauthorized|forbidden|authentication|permission|model[^\n]*(not found|does not exist)|no such model|model_not_found/i.test(
     log
   );
-}
-
-/**
- * Default provider base URL when a cloud spec carries no explicit `baseUrl`.
- * fusionkit's `ModelEndpoint` requires `base_url`, so the router config must
- * always set it (the `serve-endpoint` shim filled this in for us before). Mirrors
- * `PROVIDER_DEFAULT_BASE_URL` in fusionkit's openai_endpoint.py.
- */
-function providerDefaultBaseUrl(provider: Exclude<PanelProvider, "mlx">): string {
-  switch (provider) {
-    case "openai":
-      return "https://api.openai.com";
-    case "anthropic":
-      return "https://api.anthropic.com";
-    case "google":
-      return "https://generativelanguage.googleapis.com";
-    case "openai-compatible":
-      return "http://127.0.0.1";
-    default: {
-      const exhaustive: never = provider;
-      throw new Error(`unknown provider ${String(exhaustive)}`);
-    }
-  }
 }
 
 /** Pick the panel spec that backs the judge (by model name), else the first. */
@@ -267,6 +244,24 @@ export async function startRouter(options: {
     );
     proc.child.once("exit", () => rmSync(configDir, { recursive: true, force: true }));
     const url = `http://127.0.0.1:${port}`;
+    // Surface the engine's own boot chatter (uvx resolve/download on a cold
+    // first run, model loading, ...) as live sub-detail on the checklist row, so
+    // a slow cold start explains itself instead of spinning silently.
+    const progress =
+      report !== undefined
+        ? setInterval(() => {
+            const lines = proc
+              .log()
+              .split(/[\r\n]+/)
+              .map((line) => line.trim())
+              .filter((line) => line.length > 0);
+            const last = lines[lines.length - 1];
+            if (last === undefined) return;
+            const detail = last.length > 64 ? `${last.slice(0, 63)}…` : last;
+            report({ kind: "server.progress", id: "router", detail });
+          }, 500)
+        : undefined;
+    progress?.unref();
     try {
       await waitForHttp(`${url}/v1/models`, proc, {
         timeoutMs: 60_000,
@@ -279,6 +274,8 @@ export async function startRouter(options: {
       // retry, so surface the distilled cause with guidance.
       const hint = looksPermanentFailure(proc.log()) ? " (check model names and provider API keys)" : "";
       throw new Error(`${error instanceof Error ? error.message : String(error)}${hint}`);
+    } finally {
+      if (progress !== undefined) clearInterval(progress);
     }
     announceReady(url);
 
@@ -305,6 +302,8 @@ export async function startRouter(options: {
 export type FusionStack = {
   fusionUrl: string;
   endpoints: Record<string, string>;
+  /** True when a compatible running router was reused instead of spawned. */
+  reusedRouter: boolean;
   close: () => Promise<void>;
 };
 
@@ -344,6 +343,8 @@ export type StartFusionStackOptions = {
    * launched tool's own system/custom instructions. Default off.
    */
   panelIdentity?: boolean;
+  /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. Default on. */
+  reasoning?: boolean;
   logsDir?: string;
   report?: StackReporter;
   /** Active portless session; defaults to a disabled (loopback) session. */
@@ -363,6 +364,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
 
   let modelEndpoints: Record<string, string>;
   let fusionBackendUrl: string;
+  let reusedRouter = false;
   let routerClose: () => Promise<void> | void = () => {};
 
   if (override) {
@@ -411,7 +413,19 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     // portless name is for humans); see the CA-at-startup note in portless.ts.
     modelEndpoints = Object.fromEntries(options.models.map((spec) => [spec.id, resolved.loopbackUrl]));
     fusionBackendUrl = resolved.loopbackUrl;
+    reusedRouter = !resolved.owned;
     routerClose = resolved.close;
+    if (reusedRouter) {
+      // A compatible router from a previous run is reused (warm boot). Say so —
+      // otherwise the checklist row would sit "pending" forever and the speed
+      // win would be invisible.
+      if (report) {
+        report({ kind: "server.start", id: "router", label: "router" });
+        report({ kind: "server.ready", id: "router", detail: `${resolved.loopbackUrl} (reused running engine)` });
+      } else {
+        options.log(`fusion: reusing running fusion router on ${resolved.loopbackUrl}`);
+      }
+    }
   }
 
   try {
@@ -432,7 +446,8 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),
       ...(options.resumeId !== undefined ? { resumeId: options.resumeId } : {}),
       ...(options.sessionMeta !== undefined ? { sessionMeta: options.sessionMeta } : {}),
-      ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
+      ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+      ...(options.reasoning !== undefined ? { reasoningTraces: options.reasoning } : {})
     };
     const gateway = await startFusionStepGateway({
       config: gatewayConfig,
@@ -447,6 +462,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     return {
       fusionUrl,
       endpoints: modelEndpoints,
+      reusedRouter,
       close: async () => {
         await gateway.close();
         portless.unregister("gateway");

@@ -50,6 +50,8 @@ export {
 } from "./frontdoor/request.js";
 export { eventsToSseResponse } from "./frontdoor/sse.js";
 export type { EventsToSseOptions } from "./frontdoor/sse.js";
+export { createTurnNarrator, mergeEventsWithNarration } from "./frontdoor/narration.js";
+export type { ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";
 export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
 export type {
   FrontdoorChatBody,

@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
 import { Command } from "commander";
 
 import "./tools.js";
@@ -15,6 +12,8 @@ import { registerModels } from "./commands/models.js";
 import { registerRuntime } from "./commands/runtime.js";
 import { registerSessions } from "./commands/sessions.js";
 import { registerSetup } from "./commands/setup.js";
+import { registerVersion } from "./commands/version.js";
+import { readPackageVersion } from "./shared/package-version.js";
 
 /**
  * Build the `fusionkit` command tree. `enablePositionalOptions` keeps the
@@ -22,15 +21,7 @@ import { registerSetup } from "./commands/setup.js";
  * precede the tool name). Each `register*` helper attaches its command(s).
  */
 function cliVersion(): string {
-  // dist/cli.js -> ../package.json is the published package manifest.
-  try {
-    const pkg = JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")) as {
-      version?: string;
-    };
-    return pkg.version ?? "0.0.0";
-  } catch {
-    return "0.0.0";
-  }
+  return readPackageVersion(import.meta.url);
 }
 
 export function buildProgram(): Command {
@@ -54,6 +45,7 @@ export function buildProgram(): Command {
   registerConfig(program);
   registerSetup(program);
   registerDoctor(program);
+  registerVersion(program);
   registerDeployment(program);
 
   return program;

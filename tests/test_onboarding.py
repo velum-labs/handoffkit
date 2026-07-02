@@ -117,6 +117,40 @@ def test_init_refuses_overwrite_without_force(tmp_path, monkeypatch) -> None:
     assert "already exists" in result.output
 
 
+def test_init_prompt_decline_keeps_existing(tmp_path, monkeypatch) -> None:
+    clear_credential_cache()
+    monkeypatch.setattr(cli, "subscription_status", _available)
+    monkeypatch.setattr(cli, "detect_api_keys", lambda: {})
+    target = tmp_path / "fusionkit.yaml"
+    target.write_text("existing")
+
+    result = runner.invoke(app, ["init", "-o", str(target)], input="n\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Keeping existing config" in result.output
+    assert target.read_text() == "existing"
+
+
+def test_init_prompt_accept_overwrites(tmp_path, monkeypatch) -> None:
+    clear_credential_cache()
+    monkeypatch.setattr(cli, "subscription_status", lambda mode, path=None: _available(mode))
+    monkeypatch.setattr(cli, "detect_api_keys", lambda: {})
+    target = tmp_path / "fusionkit.yaml"
+    target.write_text("existing")
+
+    result = runner.invoke(
+        app,
+        ["init", "-o", str(target)],
+        input="y\ny\ny\n\n\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Wrote" in result.output
+    assert target.read_text() != "existing"
+    config = load_config(target)
+    assert config.default_model in {endpoint.id for endpoint in config.endpoints}
+
+
 # --- auth switch / set-default ---------------------------------------------
 
 

@@ -31,6 +31,7 @@ test("ingest + query round-trips a full session and derives detail", () => {
   assert.ok(session);
   assert.equal(session.status, "succeeded");
   assert.equal(session.repo, "/tmp/fusion-sample");
+  assert.equal(session.prompt_preview, "Fix the add() sign bug so npm test passes.");
   assert.equal(session.event_count, events.length);
 
   const detail = deriveSession("trace_rt", stored);
@@ -46,4 +47,6 @@ test("ingest + query round-trips a full session and derives detail", () => {
   assert.ok(gpt);
   assert.equal(gpt.succeeded, 1);
   assert.equal(gpt.totalTokens, 920);
+  assert.equal(gpt.promptTokens, 800);
+  assert.equal(gpt.completionTokens, 120);
 });
