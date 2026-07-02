@@ -8,3 +8,4 @@
 {"phase":"6a-shipped-path","suite":"25 locked tasks via fusionkit serve gateway","tasks":25,"est_usd":9.0,"cum_usd":169.0,"note":"0 pipeline errors; gateway 0.80 vs engine 0.84 same tasks (McNemar 0W/1L ns)","git_sha":"b66f41b"}
 {"phase":"6-self-baseline","suite":"self-mode gpt x6 dev bank + replays","tasks":150,"est_usd":30.0,"cum_usd":199.0,"note":"panel beats self +6.0 pts McNemar 11W/2L chi2=4.92 significant","git_sha":"b66f41b"}
 {"phase":"6-polyglot","suite":"aider-polyglot deep bank 103 + incumbent replay","tasks":103,"est_usd":25.0,"cum_usd":224.0,"note":"fused 0.7767 vs best single 0.7670 (+0.97pt, 7W/6L ns) - 1.2 NOT met, 1.4 holds","git_sha":"b66f41b"}
+{"phase":"6-truncation-ablation","suite":"trunc 8000 replays on poly + LCB dev (rejected)","tasks":253,"est_usd":16.0,"cum_usd":240.0,"note":"tier-3 change measured worse on both families; reverted","git_sha":"6577a9e"}
