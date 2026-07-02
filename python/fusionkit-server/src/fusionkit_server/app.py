@@ -924,6 +924,9 @@ def _status_for_category(category: ProviderErrorCategory) -> int:
             return 429
         case "auth_permanent":
             return 401
+        case "context_overflow":
+            # The payload as-is can never succeed; mirror the upstream 400.
+            return 400
         case "unknown":
             return 502
         case _ as unreachable:

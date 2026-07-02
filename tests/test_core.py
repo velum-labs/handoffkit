@@ -16,6 +16,7 @@ class FailingChatClient:
 
     def __init__(self, model_id: str, message: str = "provider exploded") -> None:
         self.model_id = model_id
+        self.max_context: int | None = None
         self._message = message
 
     async def chat(

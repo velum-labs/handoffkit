@@ -139,6 +139,60 @@ test("responsesToChat coalesces parallel function calls into one assistant messa
   assert.equal((messages[3] as { tool_call_id?: string }).tool_call_id, "call_b");
 });
 
+test("responsesToChat folds an assistant text item and its following function calls into one message", () => {
+  // A model that answers with text + tool calls in a single turn comes back
+  // from Codex as a message item followed by function_call items (with the
+  // echoed reasoning item in between). Replaying them as two assistant
+  // messages derails tool-calling models (qwen3-coder stops mid-task with a
+  // text-only "Now let me check X:" turn), so they must merge back into one.
+  const chat = responsesToChat(
+    {
+      input: [
+        { type: "message", role: "user", content: "what's in this repo?" },
+        { type: "message", role: "assistant", content: "Let me check the README:\n\n" },
+        { type: "reasoning", summary: [{ type: "summary_text", text: "beat" }] },
+        { type: "function_call", call_id: "call_1", name: "exec_command", arguments: '{"cmd":"cat README.md"}' },
+        { type: "function_call_output", call_id: "call_1", output: "# FusionKit" }
+      ]
+    },
+    "local-model"
+  );
+  const messages = chat.messages as Record<string, unknown>[];
+  // user, assistant(content + tool_calls), tool — NOT a separate tool_calls message.
+  assert.equal(messages.length, 3);
+  assert.equal(messages[1]?.role, "assistant");
+  assert.equal(messages[1]?.content, "Let me check the README:\n\n");
+  const toolCalls = (messages[1] as { tool_calls?: Array<{ id: string }> }).tool_calls ?? [];
+  assert.equal(toolCalls.length, 1);
+  assert.equal(toolCalls[0]?.id, "call_1");
+  assert.equal(messages[2]?.role, "tool");
+});
+
+test("responsesToChat does not fold function calls into a non-adjacent assistant message", () => {
+  // An earlier assistant answer separated from the calls by a user turn must
+  // stay text-only; the calls get their own assistant message in position.
+  const chat = responsesToChat(
+    {
+      input: [
+        { type: "message", role: "user", content: "hi" },
+        { type: "message", role: "assistant", content: "Done." },
+        { type: "message", role: "user", content: "now run ls" },
+        { type: "function_call", call_id: "call_2", name: "exec_command", arguments: '{"cmd":"ls"}' },
+        { type: "function_call_output", call_id: "call_2", output: "files" }
+      ]
+    },
+    "local-model"
+  );
+  const messages = chat.messages as Record<string, unknown>[];
+  // user, assistant(text), user, assistant(tool_calls), tool
+  assert.equal(messages.length, 5);
+  assert.equal((messages[1] as { tool_calls?: unknown }).tool_calls, undefined);
+  assert.equal(messages[3]?.role, "assistant");
+  assert.equal(messages[3]?.content, null);
+  const toolCalls = (messages[3] as { tool_calls?: Array<{ id: string }> }).tool_calls ?? [];
+  assert.equal(toolCalls[0]?.id, "call_2");
+});
+
 test("serves a non-streaming Responses object end to end", async () => {
   const mock = await startMock();
   const gateway = await startGateway({

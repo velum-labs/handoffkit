@@ -517,6 +517,8 @@ Public exports:
 - `ChatMessage`
 - `ChatTrajectoryProducer`
 - `CodexResponsesClient`
+- `ContextBudget`
+- `ContextPolicy`
 - `ContractMetadata`
 - `ContractRecord`
 - `CostMetadata`
@@ -551,6 +553,7 @@ Public exports:
 - `ModelResponse`
 - `NativeRunError`
 - `OpenAICompatibleClient`
+- `PackReport`
 - `ProviderCallError`
 - `ProviderErrorCategory`
 - `ProviderKind`
@@ -574,6 +577,7 @@ Public exports:
 - `ToolResultSubmission`
 - `Trajectory`
 - `TrajectoryInspection`
+- `TrajectoryPack`
 - `TrajectoryProducer`
 - `TrajectoryV1`
 - `TraceEmitter`
@@ -588,6 +592,8 @@ Public exports:
 - `emit`
 - `endpoint_to_contract`
 - `estimate_cost`
+- `estimate_messages_tokens`
+- `estimate_tokens`
 - `get_emitter`
 - `hash_bytes`
 - `hash_json`
@@ -598,6 +604,7 @@ Public exports:
 - `new_span_id`
 - `new_trace_id`
 - `normalize_usage`
+- `pack_trajectories`
 - `producer`
 - `producer_git_sha`
 - `producer_version`

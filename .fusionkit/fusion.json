@@ -3,13 +3,13 @@
   "tool": "codex",
   "panel": [
     {
-      "id": "openrouter",
+      "id": "kimi",
       "model": "moonshotai/kimi-k2",
       "provider": "openrouter",
       "keyEnv": "OPENROUTER_API_KEY"
     },
     {
-      "id": "openrouter-2",
+      "id": "qwen3",
       "model": "qwen/qwen3-coder",
       "provider": "openrouter",
       "keyEnv": "OPENROUTER_API_KEY"

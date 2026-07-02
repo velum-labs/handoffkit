@@ -277,6 +277,7 @@ class _RaisingClient:
 
     def __init__(self, model_id: str, error: ProviderCallError) -> None:
         self.model_id = model_id
+        self.max_context: int | None = None
         self._error = error
 
     async def chat(self, *args: Any, **kwargs: Any) -> Any:

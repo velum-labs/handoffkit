@@ -65,6 +65,7 @@ class _ToolCallClient:
     """A judge client that always proposes one tool call (executor-style step)."""
 
     model_id = "judge"
+    max_context: int | None = None
 
     def __init__(self) -> None:
         self.seen_tools: Sequence[Mapping[str, Any]] | None = None

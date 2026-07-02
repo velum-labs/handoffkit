@@ -166,6 +166,52 @@ _CASES: list[tuple[str, _FakeSDKError, ProviderKind, ProviderErrorCategory]] = [
         "quota_exhausted",
     ),
     (
+        "openai_context_length_exceeded",
+        _FakeSDKError(
+            status_code=400,
+            body={
+                "error": {
+                    "code": "context_length_exceeded",
+                    "message": "This model's maximum context length is 128000 tokens",
+                }
+            },
+        ),
+        "openai",
+        "context_overflow",
+    ),
+    (
+        # Delivered as HTTP 429; must beat the generic 429-is-transient rule
+        # (retrying the same oversized payload can never succeed).
+        "openai_request_too_large",
+        _FakeSDKError(
+            status_code=429,
+            body={"error": {"code": "request_too_large", "message": "Request too large"}},
+        ),
+        "openai",
+        "context_overflow",
+    ),
+    (
+        "anthropic_prompt_too_long",
+        _FakeSDKError(
+            status_code=400,
+            body={
+                "type": "error",
+                "error": {"type": "invalid_request_error", "message": "prompt is too long"},
+            },
+        ),
+        "anthropic",
+        "context_overflow",
+    ),
+    (
+        "google_input_tokens_exceed",
+        _FakeSDKError(
+            code=400,
+            message="400 INVALID_ARGUMENT The input token count exceeds the maximum",
+        ),
+        "google",
+        "context_overflow",
+    ),
+    (
         "unclassified_bad_request",
         _FakeSDKError(status_code=400, message="malformed request"),
         "openai",
@@ -295,6 +341,7 @@ class _RaisingClient:
 
     def __init__(self, model_id: str, error: ProviderCallError) -> None:
         self.model_id = model_id
+        self.max_context: int | None = None
         self._error = error
 
     async def chat(self, *args: Any, **kwargs: Any) -> Any:
@@ -310,6 +357,7 @@ class _RaisingClient:
 class _OkClient:
     def __init__(self, model_id: str) -> None:
         self.model_id = model_id
+        self.max_context: int | None = None
 
     async def chat(self, *args: Any, **kwargs: Any) -> Any:
         return ModelResponse(model_id=self.model_id, content="ok")

@@ -143,6 +143,29 @@ test("transcript: error parts and turn failures produce a non-zero exit code", (
   assert.equal(transcriptLines(thrown)[0]?.part, "turn-failed");
 });
 
+test("transcript: compaction parts keep trigger, summary, and token counts", () => {
+  const recorder = new TranscriptRecorder();
+  recorder.ingest({
+    type: "compaction",
+    trigger: "auto",
+    summary: "Earlier work summarized.",
+    tokensBefore: 180_000,
+    tokensAfter: 12_000
+  });
+  // Optional token counts are omitted entirely when absent.
+  recorder.ingest({ type: "compaction", trigger: "manual", summary: "s" });
+  const lines = transcriptLines(recorder);
+  assert.deepEqual(lines[0], {
+    part: "compaction",
+    trigger: "auto",
+    summary: "Earlier work summarized.",
+    tokensBefore: 180_000,
+    tokensAfter: 12_000
+  });
+  assert.deepEqual(lines[1], { part: "compaction", trigger: "manual", summary: "s" });
+  assert.equal(recorder.exitCode(), 0);
+});
+
 test("transcript: unknown part types are recorded by name without payload", () => {
   const recorder = new TranscriptRecorder();
   recorder.ingest({ type: "some-novel-part", giant: "x".repeat(4096) });

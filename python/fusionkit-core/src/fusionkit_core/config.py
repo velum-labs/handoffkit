@@ -48,6 +48,22 @@ class RunBudget(BaseModel):
     max_tool_calls: int | None = Field(default=None, ge=0)
 
 
+class ContextPolicy(BaseModel):
+    """How judge/synthesizer prompts are budgeted against a model's context window.
+
+    ``default_max_context`` is used when an endpoint declares no ``max_context``.
+    ``safety_margin_tokens`` absorbs token-estimation error (the estimator is a
+    chars/4 heuristic, which under-counts dense code). ``keep_head_items`` /
+    ``keep_tail_items`` control middle-out trajectory packing: the first items
+    (the plan) and the last items (the outcome) survive, the middle is elided.
+    """
+
+    default_max_context: int = Field(default=64_000, ge=1_024)
+    safety_margin_tokens: int = Field(default=2_048, ge=0)
+    keep_head_items: int = Field(default=8, ge=0)
+    keep_tail_items: int = Field(default=12, ge=0)
+
+
 class SamplingConfig(BaseModel):
     temperature: float = 0.2
     top_p: float = 0.95
@@ -108,6 +124,7 @@ class FusionConfig(BaseModel):
     panel_samples_per_model: int = Field(default=1, ge=1)
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
     budget: RunBudget = Field(default_factory=RunBudget)
+    context: ContextPolicy = Field(default_factory=ContextPolicy)
     prompts: PromptOverrides = Field(default_factory=PromptOverrides)
     # When true (default), a coding-harness system prompt arriving in the
     # conversation (e.g. Codex/Claude Code's agent prompt) is used as the primary
