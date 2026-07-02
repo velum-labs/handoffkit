@@ -53,6 +53,7 @@ class _ScriptedToolClient:
 
     def __init__(self, model_id: str) -> None:
         self.model_id = model_id
+        self.max_context: int | None = None
 
     @staticmethod
     def _has_tool_result(messages: Sequence[ChatMessage]) -> bool:
@@ -186,6 +187,7 @@ class _AnthropicShapedStreamClient:
 
     def __init__(self, model_id: str) -> None:
         self.model_id = model_id
+        self.max_context: int | None = None
 
     async def chat(
         self,
@@ -408,6 +410,7 @@ class _RaisingClient:
 
     def __init__(self, model_id: str, error: ProviderCallError) -> None:
         self.model_id = model_id
+        self.max_context: int | None = None
         self._error = error
 
     async def chat(self, *args: Any, **kwargs: Any) -> ModelResponse:

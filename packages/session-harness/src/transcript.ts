@@ -115,7 +115,15 @@ export class TranscriptRecorder {
         return;
       }
       case "compaction": {
-        this.push({ part: "compaction", trigger: part.trigger, summary: part.summary });
+        // tokensBefore/tokensAfter quantify how much context the runtime
+        // dropped — evidence for judging a candidate that "forgot" late in a run.
+        this.push({
+          part: "compaction",
+          trigger: part.trigger,
+          summary: part.summary,
+          ...(typeof part.tokensBefore === "number" ? { tokensBefore: part.tokensBefore } : {}),
+          ...(typeof part.tokensAfter === "number" ? { tokensAfter: part.tokensAfter } : {})
+        });
         return;
       }
       case "finish": {

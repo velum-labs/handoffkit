@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from typing import Any
+
 import pytest
-from fusionkit_core.clients import FakeModelClient
+from fusionkit_core.clients import FakeModelClient, ProviderCallError
 from fusionkit_core.config import SamplingConfig
 from fusionkit_core.contracts import TrajectoryItem
-from fusionkit_core.judge import JudgeSynthesizer, analysis_reasoning_markdown, parse_analysis
-from fusionkit_core.types import ChatMessage, FusionAnalysis, StreamChunk, Trajectory
+from fusionkit_core.judge import (
+    FuseResult,
+    JudgeSynthesizer,
+    analysis_reasoning_markdown,
+    parse_analysis,
+)
+from fusionkit_core.types import ChatMessage, FusionAnalysis, ModelResponse, StreamChunk, Trajectory
 
 
 def _trajectory(trajectory_id: str, model_id: str, final_output: str) -> Trajectory:
@@ -175,6 +183,243 @@ async def test_fuse_stream_yields_judge_reasoning_before_content() -> None:
     assert "alpha looks strongest." in reasoning
     assert "both fixed add" in reasoning
     assert "beta dropped the export" in reasoning
+
+
+def _overflow_error() -> ProviderCallError:
+    return ProviderCallError(
+        "prompt is too long", category="context_overflow", provider="openai", status_code=400
+    )
+
+
+class _FlakyOverflowClient:
+    """Raises a classified context overflow for the first ``fail_times`` calls."""
+
+    def __init__(self, model_id: str, responses: list[str], *, fail_times: int) -> None:
+        self.model_id = model_id
+        self.max_context: int | None = None
+        self.calls = 0
+        self._responses = responses
+        self._fail_times = fail_times
+
+    async def chat(self, *args: Any, **kwargs: Any) -> ModelResponse:
+        self.calls += 1
+        if self.calls <= self._fail_times:
+            raise _overflow_error()
+        content = self._responses[(self.calls - 1) % len(self._responses)]
+        return ModelResponse(model_id=self.model_id, content=content)
+
+    async def _stream(self, *args: Any, **kwargs: Any) -> AsyncIterator[StreamChunk]:
+        response = await self.chat(*args, **kwargs)
+        yield StreamChunk(delta=response.content)
+        yield StreamChunk(finish_reason="stop")
+
+    def stream_chat(self, *args: Any, **kwargs: Any) -> AsyncIterator[StreamChunk]:
+        return self._stream(*args, **kwargs)
+
+    async def aclose(self) -> None:
+        return None
+
+
+def _flaky(model_id: str, responses: list[str], *, fail_times: int) -> _FlakyOverflowClient:
+    return _FlakyOverflowClient(model_id, responses, fail_times=fail_times)
+
+
+_VALID_ANALYSIS_JSON = (
+    '{"consensus":["both fixed add"],"contradictions":[],"unique_insights":[],'
+    '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[],'
+    '"best_trajectory":"traj_alpha"}'
+)
+
+
+@pytest.mark.asyncio
+async def test_judge_overflow_degrades_to_empty_analysis_and_turn_still_fuses() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = _flaky("judge", [], fail_times=10)  # every judge call overflows
+    synth = FakeModelClient("synth", ["fused despite the judge"])
+    trajectories = [_trajectory("traj_alpha", "alpha", "Changed add to left + right.")]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix add().")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=synth,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    # The overflow was retried once (tighter pack), then degraded — never raised.
+    assert judge.calls == 2
+    assert result.response.content == "fused despite the judge"
+    assert result.trajectory is not None and result.trajectory.synthesis is not None
+    context_metrics = result.trajectory.synthesis.metrics["context"]
+    assert context_metrics["judge_degraded"] == "context_overflow"
+    # The degraded sentinel never leaks into the reasoning channel.
+    assert analysis_reasoning_markdown(result.analysis, trajectories) is None
+
+
+@pytest.mark.asyncio
+async def test_judge_non_overflow_provider_error_degrades_immediately() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = _flaky("judge", [], fail_times=10)
+    # Rewrite the error to a non-overflow category.
+    original_chat = judge.chat
+
+    async def _auth_error_chat(*args: Any, **kwargs: Any) -> ModelResponse:
+        try:
+            return await original_chat(*args, **kwargs)
+        except ProviderCallError:
+            raise ProviderCallError(
+                "bad key", category="auth_permanent", provider="openai"
+            ) from None
+
+    judge.chat = _auth_error_chat  # type: ignore[method-assign]
+    synth = FakeModelClient("synth", ["still answers"])
+    trajectories = [_trajectory("traj_alpha", "alpha", "Changed add.")]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix add().")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=synth,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    assert judge.calls == 1  # no pointless tighter retry for a non-overflow failure
+    assert result.response.content == "still answers"
+    assert result.trajectory is not None and result.trajectory.synthesis is not None
+    assert result.trajectory.synthesis.metrics["context"]["judge_degraded"] == "auth_permanent"
+
+
+@pytest.mark.asyncio
+async def test_judge_overflow_retry_succeeds_at_half_budget() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = _flaky("judge", [_VALID_ANALYSIS_JSON], fail_times=1)
+    synth = FakeModelClient("synth", ["fused"])
+    trajectories = [_trajectory("traj_alpha", "alpha", "Changed add.")]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix add().")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=synth,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    assert judge.calls == 2
+    assert result.analysis.best_trajectory == "traj_alpha"
+    assert result.response.content == "fused"
+
+
+@pytest.mark.asyncio
+async def test_synth_overflow_retries_with_reduced_evidence() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient("judge", [_VALID_ANALYSIS_JSON])
+    synth = _flaky("synth", ["fused on the retry"], fail_times=1)
+    trajectories = [_trajectory("traj_alpha", "alpha", "Changed add to left + right.")]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix add().")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=synth,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    assert synth.calls == 2
+    assert result.response.content == "fused on the retry"
+    assert result.trajectory is not None and result.trajectory.synthesis is not None
+    context_metrics = result.trajectory.synthesis.metrics["context"]
+    assert context_metrics["synth_fallback"] == "reduced_evidence_retry"
+
+
+@pytest.mark.asyncio
+async def test_synth_overflow_falls_back_to_judge_selected_candidate_verbatim() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient("judge", [_VALID_ANALYSIS_JSON])
+    synth = _flaky("synth", [], fail_times=10)  # every synth call overflows
+    trajectories = [
+        _trajectory("traj_alpha", "alpha", "Changed add to left + right."),
+        _trajectory("traj_beta", "beta", "Rewrote add as a function."),
+    ]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix add().")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=synth,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    assert synth.calls == 2  # initial + reduced-evidence retry, then verbatim fallback
+    assert result.terminal is True
+    assert result.response.content == "Changed add to left + right."
+    assert result.trajectory is not None and result.trajectory.synthesis is not None
+    metrics = result.trajectory.synthesis.metrics
+    assert metrics["context"]["synth_fallback"] == "select_best_verbatim"
+    # The fallback content matches a candidate, so the decision records selection.
+    assert result.trajectory.synthesis.decision == "select_trajectory"
+
+
+@pytest.mark.asyncio
+async def test_synth_non_overflow_error_still_propagates() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient("judge", [_VALID_ANALYSIS_JSON])
+
+    class _AuthFailingClient:
+        model_id = "synth"
+        max_context = None
+
+        async def chat(self, *args: Any, **kwargs: Any) -> ModelResponse:
+            raise ProviderCallError("bad key", category="auth_permanent", provider="openai")
+
+        def stream_chat(self, *args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError
+
+        async def aclose(self) -> None:
+            return None
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        await synthesizer.fuse(
+            [ChatMessage(role="user", content="Fix add().")],
+            [_trajectory("traj_alpha", "alpha", "Changed add.")],
+            judge_client=judge,
+            synthesizer_client=_AuthFailingClient(),
+            sampling=SamplingConfig(),
+            tools=None,
+        )
+    assert excinfo.value.category == "auth_permanent"
+
+
+@pytest.mark.asyncio
+async def test_fuse_stream_overflow_falls_back_to_candidate_as_single_chunk() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient("judge", [_VALID_ANALYSIS_JSON])
+    synth = _flaky("synth", [], fail_times=10)
+    trajectories = [_trajectory("traj_alpha", "alpha", "Changed add to left + right.")]
+
+    items = [
+        item
+        async for item in synthesizer.fuse_stream(
+            [ChatMessage(role="user", content="Fix add().")],
+            trajectories,
+            judge_client=judge,
+            synthesizer_client=synth,
+            sampling=SamplingConfig(),
+            tools=None,
+        )
+    ]
+
+    chunks = [item for item in items if isinstance(item, StreamChunk)]
+    deltas = [chunk.delta for chunk in chunks if chunk.delta]
+    assert deltas == ["Changed add to left + right."]
+    results = [item for item in items if isinstance(item, FuseResult)]
+    assert len(results) == 1
+    assert results[0].terminal is True
+    assert results[0].response.content == "Changed add to left + right."
 
 
 def test_analysis_reasoning_markdown_skips_unparseable_judge_output() -> None:

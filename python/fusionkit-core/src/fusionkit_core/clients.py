@@ -33,8 +33,13 @@ ToolChoice = str | Mapping[str, Any]
 #                    a failover layer should switch provider/key.
 #   auth_permanent   the request can never succeed as-is: 401/403, invalid API
 #                    key, ``model_not_found``. Do not retry, do not failover blind.
+#   context_overflow the prompt exceeded the model's context window. Retrying
+#                    the same payload can never succeed; the caller must shrink
+#                    the prompt (pack trajectories, drop evidence) or fall back.
 #   unknown          could not be classified; treated as non-retryable.
-ProviderErrorCategory = Literal["transient", "quota_exhausted", "auth_permanent", "unknown"]
+ProviderErrorCategory = Literal[
+    "transient", "quota_exhausted", "auth_permanent", "context_overflow", "unknown"
+]
 
 # Bounded exponential backoff defaults for ``transient`` failures only.
 DEFAULT_RETRY_MAX_ATTEMPTS = 3
@@ -68,6 +73,21 @@ _AUTH_MARKERS = (
     "does not exist",
     "no such model",
     "unauthorized",
+)
+# Context-window overflow spellings across providers (all delivered as HTTP
+# 400-family errors): OpenAI ``context_length_exceeded``, Anthropic "prompt is
+# too long", Google "input token count exceeds", OpenRouter/proxies "request
+# too large" / "maximum context length".
+_CONTEXT_OVERFLOW_MARKERS = (
+    "context_length_exceeded",
+    "context length exceeded",
+    "maximum context length",
+    "prompt is too long",
+    "input token count exceeds",
+    "input length exceeds",
+    "request too large",
+    "request_too_large",
+    "exceeds the context window",
 )
 _TRANSIENT_MARKERS = (
     "overloaded",
@@ -167,7 +187,13 @@ def _error_blob(exc: BaseException) -> str:
 
 
 def _category_for(status: int | None, blob: str) -> ProviderErrorCategory:
-    # Quota first: an OpenAI ``insufficient_quota`` is delivered as HTTP 429, so
+    # Context overflow first: it is the most specific signal, and some spellings
+    # arrive on status codes the generic rules below would misread (OpenAI's
+    # ``request_too_large`` rides HTTP 429/413, which is not transient here —
+    # retrying the same oversized payload can never succeed).
+    if any(marker in blob for marker in _CONTEXT_OVERFLOW_MARKERS):
+        return "context_overflow"
+    # Quota next: an OpenAI ``insufficient_quota`` is delivered as HTTP 429, so
     # it must win over the generic 429-is-transient rule below.
     if any(marker in blob for marker in _QUOTA_MARKERS):
         return "quota_exhausted"
@@ -282,6 +308,17 @@ ANTHROPIC_OAUTH_BETA = "oauth-2025-04-20"
 class ChatClient(Protocol):
     model_id: str
 
+    @property
+    def max_context(self) -> int | None:
+        """The model's context window (endpoint ``max_context``), or None.
+
+        Travels on the client so budget-aware callers (the judge/synthesizer
+        packing) see the limit of the *resolved* model even when it was
+        selected per request. A read-only property on the protocol so
+        implementations may use a plain attribute of any compatible type.
+        """
+        ...
+
     async def chat(
         self,
         messages: Sequence[ChatMessage],
@@ -320,6 +357,7 @@ class OpenAICompatibleClient:
     def __init__(self, endpoint: ModelEndpoint) -> None:
         self.endpoint = endpoint
         self.model_id = endpoint.id
+        self.max_context = endpoint.max_context
         default_headers = (
             OPENROUTER_ATTRIBUTION_HEADERS if endpoint.provider == "openrouter" else None
         )
@@ -455,6 +493,7 @@ class AnthropicModelClient:
     def __init__(self, endpoint: ModelEndpoint) -> None:
         self.endpoint = endpoint
         self.model_id = endpoint.id
+        self.max_context = endpoint.max_context
         self._auth_mode = endpoint.auth.mode
         if self._auth_mode == "claude-code":
             # `auth_token=` makes the SDK send `Authorization: Bearer` and never
@@ -643,6 +682,7 @@ class CodexResponsesClient:
     def __init__(self, endpoint: ModelEndpoint) -> None:
         self.endpoint = endpoint
         self.model_id = endpoint.id
+        self.max_context = endpoint.max_context
         self._client = AsyncOpenAI(
             base_url=endpoint.base_url or CODEX_BASE_URL,
             api_key="placeholder-oauth-token",
@@ -807,6 +847,7 @@ class GoogleModelClient:
     def __init__(self, endpoint: ModelEndpoint) -> None:
         self.endpoint = endpoint
         self.model_id = endpoint.id
+        self.max_context = endpoint.max_context
         self._client = genai.Client(api_key=resolve_api_key(endpoint))
 
     def _request(
@@ -919,8 +960,14 @@ class GoogleModelClient:
 
 
 class FakeModelClient:
-    def __init__(self, model_id: str, responses: Sequence[str] | None = None) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        responses: Sequence[str] | None = None,
+        max_context: int | None = None,
+    ) -> None:
         self.model_id = model_id
+        self.max_context = max_context
         self._responses = list(responses or [])
         self._calls = 0
 

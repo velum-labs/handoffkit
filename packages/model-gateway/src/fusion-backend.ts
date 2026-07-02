@@ -146,10 +146,15 @@ export type OnRateLimitPolicy = "fusion" | "passthrough" | "fail";
  * The failover-relevant classification of a vendor egress failure, mirroring
  * FusionKit's `error_category` taxonomy (see `clients.py`): `transient` (429 /
  * 5xx / overloaded) and `quota_exhausted` (out of credits) are failover-worthy;
- * `auth_permanent` (401/403, bad key) and `unknown` are not (a blind reroute
- * would not help).
+ * `auth_permanent` (401/403, bad key), `context_overflow` (the payload can
+ * never fit as-is) and `unknown` are not (a blind reroute would not help).
  */
-type FailoverCategory = "transient" | "quota_exhausted" | "auth_permanent" | "unknown";
+type FailoverCategory =
+  | "transient"
+  | "quota_exhausted"
+  | "auth_permanent"
+  | "context_overflow"
+  | "unknown";
 
 /** A vendor passthrough failure, normalized from the router's error body. */
 type ProxyFailure = {
@@ -480,6 +485,7 @@ function normalizeFailoverCategory(raw: unknown, status: number | undefined): Fa
     raw === "transient" ||
     raw === "quota_exhausted" ||
     raw === "auth_permanent" ||
+    raw === "context_overflow" ||
     raw === "unknown"
   ) {
     return raw;
@@ -497,6 +503,7 @@ function isFailoverWorthy(category: FailoverCategory): boolean {
     case "quota_exhausted":
       return true;
     case "auth_permanent":
+    case "context_overflow":
     case "unknown":
       return false;
     default: {

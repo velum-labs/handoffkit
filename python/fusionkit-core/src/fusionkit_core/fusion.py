@@ -34,6 +34,7 @@ class FusionEngine:
             config.prompts,
             harness_passthrough=config.harness_prompt_passthrough,
             select_best=config.synthesis_select_best,
+            context_policy=config.context,
         )
 
     async def run(
@@ -345,7 +346,17 @@ def _trajectory_metrics(trajectories: Sequence[Trajectory]) -> dict[str, object]
         completion_tokens += _optional_int(usage.get("completion_tokens"))
         prompt_tokens += _optional_int(usage.get("prompt_tokens"))
     succeeded_count = sum(1 for trajectory in trajectories if trajectory.status == "succeeded")
-    return {
+    # Why each failed member dropped out, by taxonomy category (recorded by
+    # ``failed_trajectory``). Makes a chronically overflowing/throttled panel
+    # member visible in run metrics instead of blending into a bare fail count.
+    failed_categories: dict[str, int] = {}
+    for trajectory in trajectories:
+        if trajectory.status == "succeeded":
+            continue
+        category = trajectory.metadata.get("error_category")
+        key = category if isinstance(category, str) else "unclassified"
+        failed_categories[key] = failed_categories.get(key, 0) + 1
+    metrics: dict[str, object] = {
         "trajectory_count": len(trajectories),
         "succeeded_trajectory_count": succeeded_count,
         "failed_trajectory_count": len(trajectories) - succeeded_count,
@@ -355,6 +366,9 @@ def _trajectory_metrics(trajectories: Sequence[Trajectory]) -> dict[str, object]
         "trajectory_prompt_tokens": prompt_tokens,
         "trajectory_completion_tokens": completion_tokens,
     }
+    if failed_categories:
+        metrics["failed_trajectory_categories"] = failed_categories
+    return metrics
 
 
 def _optional_int(value: object) -> int:

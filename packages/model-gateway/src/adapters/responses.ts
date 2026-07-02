@@ -197,10 +197,22 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
     // following tool messages before the next assistant message, so each call
     // must not become its own assistant turn.
     let pendingToolCalls: Array<Record<string, unknown>> = [];
+    // The assistant text message immediately preceding the pending function
+    // calls, if any. A model that answered with text + tool calls in one turn
+    // is replayed by Codex as a message item followed by function_call items;
+    // they must fold back into ONE assistant message (content + tool_calls).
+    // Split across two assistant messages, some models (qwen3-coder) read the
+    // text-only turn as a completed turn and stop calling tools entirely.
+    let pendingAssistantText: Record<string, unknown> | undefined;
     const flushToolCalls = (): void => {
       if (pendingToolCalls.length === 0) return;
-      messages.push({ role: "assistant", content: null, tool_calls: pendingToolCalls });
+      if (pendingAssistantText !== undefined) {
+        pendingAssistantText.tool_calls = pendingToolCalls;
+      } else {
+        messages.push({ role: "assistant", content: null, tool_calls: pendingToolCalls });
+      }
       pendingToolCalls = [];
+      pendingAssistantText = undefined;
     };
     for (const item of input) {
       if (item.type === "function_call") {
@@ -225,23 +237,29 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
         continue;
       }
       flushToolCalls();
+      // Reasoning items round-trip: Codex echoes the fusion narration item back
+      // verbatim on the next request (with `summary`, and `content` that may be
+      // null). Drop it — narration must never leak into the panel prompt
+      // (mirrors the Anthropic adapter dropping thinking blocks). A reasoning
+      // item may sit between an assistant message and its function calls, so
+      // dropping it must not break their adjacency (`pendingAssistantText`
+      // survives; every other item type invalidates it below).
+      if (item.type === "reasoning") continue;
+      pendingAssistantText = undefined;
       if (item.type === "function_call_output" || item.type === "custom_tool_call_output") {
         const out = item as { call_id: string; output: unknown };
         const content = typeof out.output === "string" ? out.output : JSON.stringify(out.output);
         messages.push({ role: "tool", tool_call_id: out.call_id, content });
         continue;
       }
-      // Reasoning items round-trip: Codex echoes the fusion narration item back
-      // verbatim on the next request (with `summary`, and `content` that may be
-      // null). Drop it — narration must never leak into the panel prompt
-      // (mirrors the Anthropic adapter dropping thinking blocks).
-      if (item.type === "reasoning") continue;
       // message item (explicit type "message" or a bare {role, content}); any
       // other item type without string/array content is skipped, never iterated.
       const message = item as { role?: string; content?: string | ResponsesContentPart[] | null };
       if (typeof message.content !== "string" && !Array.isArray(message.content)) continue;
       const role = message.role === "developer" ? "system" : message.role ?? "user";
-      messages.push({ role, content: contentToParts(message.content) });
+      const chatMessage: Record<string, unknown> = { role, content: contentToParts(message.content) };
+      messages.push(chatMessage);
+      if (role === "assistant") pendingAssistantText = chatMessage;
     }
     flushToolCalls();
   }

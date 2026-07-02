@@ -34,6 +34,7 @@ if TYPE_CHECKING:
         classify_provider_error,
     )
     from fusionkit_core.config import (
+        ContextPolicy,
         CostMetadata,
         EndpointAuth,
         EndpointCapabilities,
@@ -44,6 +45,14 @@ if TYPE_CHECKING:
         RunBudget,
         SamplingConfig,
         SubscriptionAuthMode,
+    )
+    from fusionkit_core.context import (
+        ContextBudget,
+        PackReport,
+        TrajectoryPack,
+        estimate_messages_tokens,
+        estimate_tokens,
+        pack_trajectories,
     )
     from fusionkit_core.contracts import (
         ArtifactRefV1,
@@ -157,6 +166,7 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
         "classify_provider_error",
     ),
     "config": (
+        "ContextPolicy",
         "CostMetadata",
         "EndpointAuth",
         "EndpointCapabilities",
@@ -167,6 +177,14 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
         "RunBudget",
         "SamplingConfig",
         "SubscriptionAuthMode",
+    ),
+    "context": (
+        "ContextBudget",
+        "PackReport",
+        "TrajectoryPack",
+        "estimate_messages_tokens",
+        "estimate_tokens",
+        "pack_trajectories",
     ),
     "contracts": (
         "ArtifactRefV1",
@@ -279,6 +297,8 @@ __all__ = [
     "ChatMessage",
     "ChatTrajectoryProducer",
     "CodexResponsesClient",
+    "ContextBudget",
+    "ContextPolicy",
     "ContractMetadata",
     "ContractRecord",
     "CostMetadata",
@@ -313,6 +333,7 @@ __all__ = [
     "ModelResponse",
     "NativeRunError",
     "OpenAICompatibleClient",
+    "PackReport",
     "ProviderCallError",
     "ProviderErrorCategory",
     "ProviderKind",
@@ -336,6 +357,7 @@ __all__ = [
     "ToolResultSubmission",
     "Trajectory",
     "TrajectoryInspection",
+    "TrajectoryPack",
     "TrajectoryProducer",
     "TrajectoryV1",
     "TraceEmitter",
@@ -350,6 +372,8 @@ __all__ = [
     "emit",
     "endpoint_to_contract",
     "estimate_cost",
+    "estimate_messages_tokens",
+    "estimate_tokens",
     "get_emitter",
     "hash_bytes",
     "hash_json",
@@ -360,6 +384,7 @@ __all__ = [
     "new_span_id",
     "new_trace_id",
     "normalize_usage",
+    "pack_trajectories",
     "producer",
     "producer_git_sha",
     "producer_version",

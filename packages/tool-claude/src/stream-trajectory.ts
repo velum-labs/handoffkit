@@ -16,6 +16,11 @@
  *     (observation), which carry the tool result for a prior `tool_use`.
  *   - `{type:"result", subtype, result, is_error}` — the terminal summary whose
  *     `result` is the final answer.
+ *   - `{type:"system", subtype:"compact_boundary", compact_metadata:{...}}` —
+ *     the CLI compacted its context mid-run. Recorded as a reasoning-step
+ *     marker so the judge can see the agent itself lost sight of earlier steps
+ *     (the reconstructed trajectory still has them: the parser sees the full
+ *     stream).
  *
  * fusionkit owns no verification, so reconstructed steps carry raw observations
  * only — never a computed verdict.
@@ -86,10 +91,33 @@ function parseStreamJsonLine(line: string): Record<string, unknown> | undefined 
   return asObject(event);
 }
 
+/**
+ * A compaction boundary as a reasoning-step marker. The wire trajectory item
+ * union has no compaction type, and an output step would pollute the
+ * final-output fallback; a reasoning step rides the existing shapes while
+ * telling the judge the agent's own context no longer holds the earlier steps.
+ */
+function compactionStep(event: Record<string, unknown>): Omit<TrajectoryStep, "index"> {
+  const meta = asObject(event.compact_metadata);
+  const trigger = asString(meta?.trigger) ?? "auto";
+  const preTokens = typeof meta?.pre_tokens === "number" ? meta.pre_tokens : undefined;
+  const tokens = preTokens !== undefined ? `; ~${preTokens} tokens before compaction` : "";
+  return {
+    type: "reasoning",
+    text:
+      `[context compacted (${trigger}${tokens}): the agent summarized and dropped its earlier ` +
+      "context here; steps above were no longer visible to it after this point]"
+  };
+}
+
 /** Parse a single stream-json event into zero or more (un-indexed) steps. */
 function stepsForEvent(event: Record<string, unknown>): Omit<TrajectoryStep, "index">[] {
   const out: Omit<TrajectoryStep, "index">[] = [];
   const type = asString(event.type);
+  if (type === "system" && asString(event.subtype) === "compact_boundary") {
+    out.push(compactionStep(event));
+    return out;
+  }
   const message = asObject(event.message);
   if (message === undefined) return out;
   const role = asString(message.role);

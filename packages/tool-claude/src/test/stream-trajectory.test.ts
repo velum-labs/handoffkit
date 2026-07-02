@@ -153,6 +153,42 @@ test("falls back to the last assistant output when no result event is present", 
   assert.equal(steps.length, 1);
 });
 
+test("records a compact_boundary as a reasoning marker, on both parse paths", () => {
+  const lines = [
+    line({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "working on it" }] }
+    }),
+    line({
+      type: "system",
+      subtype: "compact_boundary",
+      compact_metadata: { trigger: "auto", pre_tokens: 155000 }
+    }),
+    line({ type: "result", subtype: "success", result: "Done." })
+  ];
+
+  const { steps, finalOutput } = parseClaudeStreamJson(lines.join("\n"));
+  assert.deepEqual(
+    steps.map((step) => step.type),
+    ["output", "reasoning", "output"]
+  );
+  assert.match(steps[1]?.text ?? "", /context compacted \(auto; ~155000 tokens before compaction\)/);
+  // The marker never leaks into the final answer.
+  assert.equal(finalOutput, "Done.");
+
+  const live: TrajectoryStep[] = [];
+  const emit = createClaudeStreamStepEmitter((step) => live.push(step));
+  for (const item of lines) emit(item);
+  assert.deepEqual(live, steps);
+});
+
+test("compact_boundary without metadata degrades to a bare auto marker", () => {
+  const { steps } = parseClaudeStreamJson(line({ type: "system", subtype: "compact_boundary" }));
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0]?.type, "reasoning");
+  assert.match(steps[0]?.text ?? "", /context compacted \(auto\)/);
+});
+
 test("ignores non-JSON lines and irrelevant events", () => {
   const stdout = [
     "Warning: no stdin data received in 3s, proceeding without it.",
