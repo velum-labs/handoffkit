@@ -57,7 +57,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
-      writeJson(res, 502, {
+      // This catch must never throw: a throw here becomes an unhandled
+      // rejection that kills the process hosting the gateway (and, for the
+      // in-process fusion gateway, the whole CLI).
+      writeErrorSafely(res, 502, {
         error: { message: errorMessage(error), type: "upstream_error" }
       });
     });
@@ -218,6 +221,23 @@ function writeJson(res: ServerResponse, status: number, value: unknown): Buffer 
   return payload;
 }
 
+/**
+ * Report an error on a response that may already be mid-stream. Once headers
+ * are sent (e.g. an SSE turn whose upstream died — a crashed local model
+ * server), `writeJson` would throw ERR_HTTP_HEADERS_SENT, so instead destroy
+ * the socket: the client sees a clean disconnect for that one request while
+ * the gateway process stays alive. Never throws.
+ */
+function writeErrorSafely(res: ServerResponse, status: number, value: unknown): Buffer {
+  try {
+    if (!res.headersSent) return writeJson(res, status, value);
+    if (!res.writableEnded) res.destroy();
+  } catch {
+    // last resort: nothing we can do with this response, but the server lives
+  }
+  return Buffer.alloc(0);
+}
+
 type ModelCallRoute = {
   dialect: GatewayDialect;
   body: unknown;
@@ -262,7 +282,7 @@ async function handleModelCall(
     sink?.onModelCallRaw?.(context, result);
   } catch (error) {
     const statusCode = 502;
-    const payload = writeJson(res, statusCode, {
+    const payload = writeErrorSafely(res, statusCode, {
       error: { message: errorMessage(error), type: "upstream_error" }
     });
     const result = {
@@ -299,9 +319,14 @@ async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<Bu
         if (!res.write(chunk)) await once(res, "drain");
       }
     }
-  } finally {
-    res.end();
+  } catch (error) {
+    // The upstream stream died mid-response (e.g. a local model server was
+    // OOM-killed). Destroy instead of end so the client sees an abnormal
+    // disconnect for this request rather than a silently truncated body.
+    res.destroy();
+    throw error;
   }
+  res.end();
   return Buffer.concat(chunks);
 }
 

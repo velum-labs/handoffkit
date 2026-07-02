@@ -119,6 +119,15 @@ tool name; everything after the tool is forwarded to it.
   (Codex reasoning summaries, Claude thinking, `reasoning_content` on the chat
   API). Disable with `--no-reasoning` or `"reasoning": false` in
   `.fusionkit/fusion.json`.
+- **Local narration model (opt-in):** `--reasoning-model` (or `"reasoningModel"`
+  in `.fusionkit/fusion.json`) has a small local MLX model write the narration
+  prose — one-sentence gists of what each candidate did and a comparison line at
+  judge time — instead of the built-in templates. Bare flag uses
+  `mlx-community/Qwen3-1.7B-4bit` (~1 GB, the smallest model that reliably
+  handled both tasks in our benchmark; smaller models fabricated comparisons).
+  Apple Silicon only; zero API spend; guardrails always apply (400ms budget,
+  sanitization, template fallback), so a slow or weak model can only ever make
+  a line plainer, never wrong.
 - `--observe` boots a local dashboard that streams live trace events. It is a
   separate app and is not bundled in the npm package; fusionkit prints how to
   enable it if it isn't available.

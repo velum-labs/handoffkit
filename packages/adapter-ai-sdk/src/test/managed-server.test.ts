@@ -186,6 +186,35 @@ test("a stream holds its lease: no idle shutdown mid-stream", async () => {
   }
 });
 
+test("a killed server emits a crashed event with signal and output tail", async () => {
+  const events: ManagedServerEvent[] = [];
+  const model = managedModelServer({
+    prepare: fakePrepare(),
+    modelId: "fake-model",
+    idleShutdownMs: 0,
+    onEvent: (event) => events.push(event)
+  });
+
+  try {
+    await generateText({ model, prompt: "warm up" });
+    const ready = events.find((event) => event.type === "ready");
+    assert.ok(ready && ready.type === "ready");
+
+    // Simulate the OS killing the server under memory pressure.
+    process.kill(ready.pid, "SIGKILL");
+    await waitFor(() => events.some((event) => event.type === "crashed"));
+
+    const crashed = events.find((event) => event.type === "crashed");
+    assert.ok(crashed && crashed.type === "crashed");
+    assert.equal(crashed.signal, "SIGKILL", "the termination signal is reported");
+    assert.equal(crashed.exitCode, null, "a signal death carries no exit code");
+    assert.equal(typeof crashed.outputTail, "string", "diagnostics tail is attached");
+    assert.equal(model.status(), "stopped", "state resets so the next call respawns");
+  } finally {
+    await model.stop();
+  }
+});
+
 test("startup failure surfaces with server output in the message", async () => {
   const model = managedModelServer({
     prepare: () =>

@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
+import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
 import { initHome } from "../config.js";
 import { loadFusionConfig } from "../fusion-config.js";
@@ -34,6 +34,7 @@ type FusionOpts = {
   local?: boolean;
   observe?: boolean;
   reasoning?: boolean;
+  reasoningModel?: string | boolean;
   yes?: boolean;
   force?: boolean;
   authToken?: string;
@@ -66,6 +67,10 @@ function applyFusionOptions(command: Command): Command {
     .option("--no-observe", "override a .fusionkit default of observe=true")
     .option("--reasoning", "narrate panel/judge progress in the tool's thinking UI (default)")
     .option("--no-reasoning", "keep the stream silent until the judge's first token")
+    .option(
+      "--reasoning-model [repo]",
+      `write narration prose with a small local MLX model (default repo: ${DEFAULT_REASONING_MODEL}; Apple Silicon)`
+    )
     .option("--yes", "skip the interactive cloud-panel cost confirmation")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .option("--port <n>", "gateway port (default: ephemeral)")
@@ -101,6 +106,10 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.local !== undefined) options.local = opts.local;
   if (opts.observe !== undefined) options.observe = opts.observe;
   if (opts.reasoning !== undefined) options.reasoning = opts.reasoning;
+  // `--reasoning-model` without a value means "use the benchmark default".
+  if (opts.reasoningModel !== undefined) {
+    options.reasoningModel = opts.reasoningModel === true ? DEFAULT_REASONING_MODEL : String(opts.reasoningModel);
+  }
   if (opts.yes === true) options.yes = true;
   if (opts.portless !== undefined) options.portless = opts.portless;
   if (opts.ide === true) options.ide = true;
@@ -151,6 +160,9 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   if (options.local === undefined && config.local !== undefined) options.local = config.local;
   if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
   if (options.reasoning === undefined && config.reasoning !== undefined) options.reasoning = config.reasoning;
+  if (options.reasoningModel === undefined && config.reasoningModel !== undefined) {
+    options.reasoningModel = config.reasoningModel;
+  }
   if (options.portless === undefined && config.portless !== undefined) options.portless = config.portless;
   if (options.port === undefined && config.port != null) options.port = config.port;
   if (options.onRateLimit === undefined && config.onRateLimit !== undefined) {

@@ -127,6 +127,7 @@ These apply to the launch commands (`codex`, `claude`, `cursor`, `serve`,
 | `--repo <dir>` | The coding workspace the panel fuses over (default: current git repo). |
 | `--observe` / `--no-observe` | Boot (or skip) the local trace dashboard. |
 | `--reasoning` / `--no-reasoning` | Narrate panel/judge progress in the tool's own thinking UI while a fused turn runs (default on). |
+| `--reasoning-model [repo]` | Write the narration prose with a small local MLX model (bare flag uses `mlx-community/Qwen3-1.7B-4bit`; Apple Silicon only). Falls back to the built-in templated prose on timeout or weak output. |
 | `--yes` | Skip the interactive cloud-panel cost confirmation. (An interactive approval is remembered per repo+panel in `~/.fusionkit/consent.json`, so the prompt is one-time either way.) |
 | `--port <n>` | Fixed gateway port (default: ephemeral). |
 | `--portless` / `--no-portless` | Route services through portless stable URLs, or force raw loopback ports. |

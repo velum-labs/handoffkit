@@ -188,7 +188,9 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export { eventsToSseResponse } from "./frontdoor/sse.js";`
 - `export type { EventsToSseOptions } from "./frontdoor/sse.js";`
 - `export { createTurnNarrator, mergeEventsWithNarration } from "./frontdoor/narration.js";`
-- `export type { ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";`
+- `export type { NarrationWriter, ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";`
+- `export { createChatNarrationWriter } from "./frontdoor/narration-writer.js";`
+- `export type { ChatFn, ChatNarrationWriterOptions } from "./frontdoor/narration-writer.js";`
 - `export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";`
 - `export type { FrontdoorChatBody, FrontdoorRequestValue, FrontdoorRoute, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";`
 - `export type { ChatMessageLike, FuseStepRunInput, FuseStepRunner, FusionBackendKernelSessionState, FusionBackendKernelStateStore, FusionBackendOptions, OnRateLimitPolicy, PanelRunInput, PanelRunner, PassthroughModel, SessionMetaInput } from "./fusion-backend.js";`

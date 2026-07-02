@@ -61,6 +61,12 @@ export type RunFusionOptions = {
    * judge's first token.
    */
   reasoning?: boolean;
+  /**
+   * Optional local MLX model that writes the narration prose (candidate gists
+   * and the judging comparison). Off by default (templated prose); Apple
+   * Silicon only. The narrator's timeout/sanitize guardrails always apply.
+   */
+  reasoningModel?: string;
   /** Skip the interactive cost/scope confirmation for the cloud panel. */
   yes?: boolean;
   /** Route services through portless (stable named URLs + singletons). Default on. */
@@ -133,6 +139,13 @@ export const DEFAULT_CLOUD_PANEL: readonly PanelModelSpec[] = [
   { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic" },
   { id: "gemini", model: "gemini-2.5-pro", provider: "google" }
 ];
+
+/**
+ * The default narration-writer model for a bare `--reasoning-model` flag: the
+ * smallest local model that passed both narration tasks (gist + comparison) in
+ * the head-to-head benchmark. Already part of the curated local catalog.
+ */
+export const DEFAULT_REASONING_MODEL = "mlx-community/Qwen3-1.7B-4bit";
 
 /** The locally cached MLX trio (Apple Silicon only) used behind `--local`. */
 export const DEFAULT_TRIO: readonly PanelModelSpec[] = [

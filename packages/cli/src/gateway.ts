@@ -40,6 +40,7 @@ import type {
   FrontDoorRunnerResult,
   FusionGateway,
   Gateway,
+  NarrationWriter,
   OnRateLimitPolicy,
   PanelRunner,
   PassthroughModel,
@@ -82,6 +83,8 @@ export type GatewayRunnerConfig = {
    * turn's response (rendered by the tool's native thinking UI). Default on.
    */
   reasoningTraces?: boolean;
+  /** Optional narration prose writer (a small local model); advisory only. */
+  narrationWriter?: NarrationWriter;
 };
 
 /** Join the system-role messages (the launched tool's harness/custom prompt). */
@@ -436,6 +439,7 @@ export async function startFusionStepGateway(input: {
     ...(config.onRateLimit !== undefined ? { onRateLimit: config.onRateLimit } : {}),
     ...(config.budgetUsd !== undefined ? { budgetUsd: config.budgetUsd } : {}),
     ...(config.reasoningTraces !== undefined ? { reasoningTraces: config.reasoningTraces } : {}),
+    ...(config.narrationWriter !== undefined ? { narrationWriter: config.narrationWriter } : {}),
     // WS7 cost attribution: a fused turn's gateway-observed `usage` is the
     // judge/synthesis call's, so price it against the configured judge model
     // name (distinct from routing — see the judge_model note below). Where the

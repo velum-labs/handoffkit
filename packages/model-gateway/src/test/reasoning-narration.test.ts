@@ -14,7 +14,8 @@ import {
   narrationBeat,
   sanitizeGist
 } from "../frontdoor/narration.js";
-import type { ReasoningDeltaEvent } from "../frontdoor/narration.js";
+import type { NarrationWriter, ReasoningDeltaEvent } from "../frontdoor/narration.js";
+import { createChatNarrationWriter } from "../frontdoor/narration-writer.js";
 import { FusionBackend } from "../fusion-backend.js";
 import type { WireTrajectory } from "../fusion-backend.js";
 import { startGateway } from "../server.js";
@@ -425,6 +426,182 @@ test("closing the narrator detaches its listener (later events are dropped)", as
   assert.equal(beats.length, 0);
 });
 
+// ---- NarrationWriter: prose from a model, guardrails from the engine ----
+
+/** Drive one full turn (finish + judge.request) through a narrator with `writer`. */
+async function narrateTurnWith(writer: NarrationWriter, traceId: string, timeoutMs = 60): Promise<string[]> {
+  const narrator = createTurnNarrator({
+    traceId,
+    turn: 1,
+    judgeModel: "gpt-5.5",
+    writer,
+    writerTimeoutMs: timeoutMs
+  });
+  emitTrace({
+    component: "panel-model",
+    event_type: "harness.candidate.finished",
+    traceId,
+    modelId: "gpt",
+    payload: { turn: 1, status: "succeeded", final_output_preview: "raw model words" }
+  });
+  emitTrace({
+    component: "judge",
+    event_type: "judge.request",
+    traceId,
+    payload: judgeRequestPayload({
+      judgeModel: "gpt-5.5",
+      messages: [],
+      trajectories: [{ trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", diff: CALC_DIFF, final_output: "ok" }],
+      trajectoryIds: ["t_gpt"],
+      turn: 1
+    })
+  });
+  // Let the serialized chain drain (writer budget + slack), then close.
+  await new Promise((resolve) => setTimeout(resolve, timeoutMs * 3 + 60));
+  narrator.close();
+  const beats: string[] = [];
+  for await (const event of narrator.events) beats.push(event.text);
+  return beats;
+}
+
+test("a writer's sentences replace the templated prose (sanitized), in order", async () => {
+  const writer: NarrationWriter = {
+    candidateGist: async () => "rewrote **add()** to sum\nsecond line ignored",
+    compareCandidates: async () => "`gpt` stands alone with a verified one-line fix"
+  };
+  const beats = await narrateTurnWith(writer, "trace_writer_ok");
+  assert.equal(beats.length, 2);
+  assert.equal(beats[0], "**gpt is back first**\n\nProposes: rewrote add() to sum\n\n");
+  assert.equal(beats[1], "**Judging 1 candidate with gpt-5.5**\n\ngpt stands alone with a verified one-line fix\n\n");
+});
+
+test("a slow writer falls back to templated prose without reordering beats", async () => {
+  const writer: NarrationWriter = {
+    candidateGist: () => new Promise(() => {}), // never resolves; ignores its signal
+    compareCandidates: () => new Promise(() => {})
+  };
+  const beats = await narrateTurnWith(writer, "trace_writer_slow");
+  assert.equal(beats.length, 2);
+  assert.equal(beats[0], "**gpt is back first**\n\nProposes: raw model words\n\n", "template gist ships");
+  assert.match(beats[1] ?? "", /^\*\*Judging 1 candidate with gpt-5\.5\*\*\n\ngpt's patch/, "template comparison ships");
+});
+
+test("a throwing writer falls back to templated prose", async () => {
+  const writer: NarrationWriter = {
+    candidateGist: async () => {
+      throw new Error("writer boom");
+    },
+    compareCandidates: async () => {
+      throw new Error("writer boom");
+    }
+  };
+  const beats = await narrateTurnWith(writer, "trace_writer_throw");
+  assert.equal(beats.length, 2);
+  assert.match(beats[0] ?? "", /Proposes: raw model words/);
+  assert.match(beats[1] ?? "", /gpt's patch/);
+});
+
+test("close aborts an in-flight writer call and flushes the beat with template prose", async () => {
+  let sawAbort = false;
+  const writer: NarrationWriter = {
+    candidateGist: (_input, signal) =>
+      new Promise((_, reject) => {
+        signal.addEventListener("abort", () => {
+          sawAbort = true;
+          reject(new Error("aborted"));
+        });
+      }),
+    compareCandidates: async () => undefined
+  };
+  const narrator = createTurnNarrator({
+    traceId: "trace_writer_abort",
+    turn: 1,
+    writer,
+    writerTimeoutMs: 5_000
+  });
+  emitTrace({
+    component: "panel-model",
+    event_type: "harness.candidate.finished",
+    traceId: "trace_writer_abort",
+    modelId: "gpt",
+    payload: { turn: 1, status: "succeeded", final_output_preview: "x" }
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  narrator.close(); // aborts the writer; the enqueued beat flushes with template prose
+  const beats: string[] = [];
+  for await (const event of narrator.events) beats.push(event.text);
+  assert.equal(sawAbort, true, "close() aborted the in-flight writer call");
+  assert.deepEqual(beats, ["**gpt is back first**\n\nProposes: x\n\n"], "the beat still ships, templated");
+});
+
+// ---- the chat-backed writer ----
+
+function chatStub(reply: unknown, status = 200): { fn: (body: unknown) => Promise<Response>; bodies: unknown[] } {
+  const bodies: unknown[] = [];
+  return {
+    bodies,
+    fn: async (body: unknown) => {
+      bodies.push(body);
+      return new Response(JSON.stringify(reply), { status, headers: { "content-type": "application/json" } });
+    }
+  };
+}
+
+function chatReply(content: string): unknown {
+  return { choices: [{ message: { role: "assistant", content } }] };
+}
+
+test("createChatNarrationWriter sends one-sentence prompts with thinking disabled", async () => {
+  const stub = chatStub(chatReply("Fixed the retry loop."));
+  const writer = createChatNarrationWriter({ chat: stub.fn, model: "qwen-narrator" });
+
+  const gist = await writer.candidateGist({ id: "gpt", finalOutput: "long output" }, new AbortController().signal);
+  assert.equal(gist, "Fixed the retry loop.");
+
+  const body = stub.bodies[0] as {
+    model: string;
+    messages: Array<{ role: string; content: string }>;
+    max_tokens: number;
+    temperature: number;
+    chat_template_kwargs?: { enable_thinking?: boolean };
+  };
+  assert.equal(body.model, "qwen-narrator");
+  assert.equal(body.temperature, 0);
+  assert.ok(body.max_tokens <= 64);
+  assert.equal(body.chat_template_kwargs?.enable_thinking, false);
+  assert.match(body.messages[0]?.content ?? "", /exactly ONE plain sentence/);
+  assert.match(body.messages[1]?.content ?? "", /long output/);
+
+  const compare = await writer.compareCandidates(
+    { candidates: [{ id: "gpt", finalOutput: "fixed it", diff: CALC_DIFF, verificationStatus: "passed" }] },
+    new AbortController().signal
+  );
+  assert.equal(compare, "Fixed the retry loop.");
+  const compareBody = stub.bodies[1] as { messages: Array<{ content: string }> };
+  assert.match(compareBody.messages[1]?.content ?? "", /- gpt: verification: passed \| says: fixed it \| patch:/);
+});
+
+test("createChatNarrationWriter strips leading think blocks and rejects bad replies", async () => {
+  const thinking = chatStub(chatReply("<think>hmm let me think</think>\nRenamed the helper."));
+  const writer = createChatNarrationWriter({ chat: thinking.fn, model: "m" });
+  assert.equal(
+    await writer.candidateGist({ id: "a", finalOutput: "x" }, new AbortController().signal),
+    "Renamed the helper."
+  );
+
+  const empty = createChatNarrationWriter({ chat: chatStub(chatReply("")).fn, model: "m" });
+  assert.equal(await empty.candidateGist({ id: "a", finalOutput: "x" }, new AbortController().signal), undefined);
+
+  const error = createChatNarrationWriter({ chat: chatStub({ error: "boom" }, 500).fn, model: "m" });
+  assert.equal(await error.candidateGist({ id: "a", finalOutput: "x" }, new AbortController().signal), undefined);
+
+  const malformed = createChatNarrationWriter({
+    chat: async () => new Response("not json", { status: 200 }),
+    model: "m"
+  });
+  assert.equal(await malformed.candidateGist({ id: "a", finalOutput: "x" }, new AbortController().signal), undefined);
+});
+
 // ---- Merge: narration interleaves, then stops at the first judge byte ----
 
 test("mergeEventsWithNarration drains narration before judge chunks, never after", async () => {
@@ -492,7 +669,12 @@ function fakeStreamingFuse(): () => Promise<Response> {
     `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "fused answer" }, finish_reason: null }] })}\n\n` +
     `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n` +
     "data: [DONE]\n\n";
-  return async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+  return async () => {
+    // A touch of judge TTFT so the judging beat (an async chain hop) lands
+    // before the first content byte, as it does against the real engine.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+  };
 }
 
 test("a streaming fused turn narrates reasoning before content on the chat door", async () => {
@@ -545,6 +727,29 @@ test("a streaming fused turn narrates on the Responses door as a reasoning item"
   } finally {
     await gateway.close();
   }
+});
+
+test("an injected narration writer's sentences flow to the chat door", async () => {
+  const writer: NarrationWriter = {
+    candidateGist: async () => "handcrafted gist from the writer",
+    compareCandidates: async () => "handcrafted comparison from the writer"
+  };
+  const backend = new FusionBackend({
+    stepUrl: "http://127.0.0.1:1/unused",
+    runPanels: fakePanelRunner(),
+    runFuseStep: fakeStreamingFuse(),
+    defaultModel: "fusion-panel",
+    judgeModel: "gpt-5.5",
+    narrationWriter: writer
+  });
+  const response = await backend.chat({
+    messages: [{ role: "user", content: "do the task" }],
+    stream: true
+  });
+  const text = await response.text();
+  assert.match(text, /"reasoning_content":"\*\*gpt is back first[^"]*Proposes: handcrafted gist from the writer/);
+  assert.match(text, /handcrafted comparison from the writer/);
+  assert.match(text, /"content":"fused answer"/);
 });
 
 test("reasoningTraces: false keeps the stream silent until the judge's first token", async () => {

@@ -24,12 +24,34 @@
  * fail a turn.
  */
 
-import { addTraceListener, removeTraceListener } from "@fusionkit/protocol";
+import { addTraceListener, emitTrace, removeTraceListener } from "@fusionkit/protocol";
 import type { FusionTraceEvent } from "@fusionkit/protocol";
 import type { RuntimeEvent } from "@fusionkit/kernel";
 
 /** A narration delta for the client stream (serialized as `delta.reasoning_content`). */
 export type ReasoningDeltaEvent = { type: "reasoning.delta"; text: string };
+
+/**
+ * An optional prose writer for the narration beats (e.g. a small local model).
+ * Writers are strictly advisory: the beat engine enforces a time budget,
+ * sanitizes every returned sentence, and falls back to the templated prose on
+ * timeout, error, or `undefined`. Headlines are never writer-authored — they
+ * are the live status ticker and stay templated and deterministic.
+ */
+export type NarrationWriter = {
+  /** One factual sentence about a finished candidate; undefined -> template. */
+  candidateGist(
+    input: { id: string; finalOutput: string },
+    signal: AbortSignal
+  ): Promise<string | undefined>;
+  /** One sentence comparing the candidates at judge time; undefined -> template. */
+  compareCandidates(
+    input: {
+      candidates: Array<{ id: string; finalOutput?: string; diff?: string; verificationStatus?: string }>;
+    },
+    signal: AbortSignal
+  ): Promise<string | undefined>;
+};
 
 /** The live narration channel for one streaming fused turn. */
 export type TurnNarration = {
@@ -167,6 +189,7 @@ export type JudgeCandidate = {
   ok: boolean;
   diff?: string;
   verificationStatus?: string;
+  finalOutput?: string;
 };
 
 export type NarrationTrigger =
@@ -378,10 +401,17 @@ export type TurnNarratorInput = {
   lastPick?: string;
   /** Quiet-beat escalation delays; injectable for tests. */
   quietDelaysMs?: readonly number[];
+  /** Optional prose writer (e.g. a small local model); advisory only. */
+  writer?: NarrationWriter;
+  /** Per-writer-call time budget before falling back to the template. */
+  writerTimeoutMs?: number;
 };
 
 const DEFAULT_QUIET_DELAYS_MS: readonly number[] = [25_000, 60_000, 120_000];
 const QUIET_POLL_MS = 5_000;
+const DEFAULT_WRITER_TIMEOUT_MS = 400;
+/** Length cap for a writer-authored comparison sentence (longer than a gist). */
+const COMPARISON_MAX_LENGTH = 160;
 
 function candidateLabel(event: FusionTraceEvent): string | undefined {
   return event.model_id ?? event.candidate_id;
@@ -416,7 +446,8 @@ function judgeCandidatesOf(payload: Record<string, unknown>): JudgeCandidate[] {
         id,
         ok: wire.status !== "failed",
         ...(typeof wire.diff === "string" ? { diff: wire.diff } : {}),
-        ...(typeof verification?.status === "string" ? { verificationStatus: verification.status } : {})
+        ...(typeof verification?.status === "string" ? { verificationStatus: verification.status } : {}),
+        ...(typeof wire.final_output === "string" ? { finalOutput: wire.final_output } : {})
       };
     });
 }
@@ -425,6 +456,12 @@ function judgeCandidatesOf(payload: Record<string, unknown>): JudgeCandidate[] {
  * Subscribe to the in-process trace stream and narrate one turn as beats. Each
  * beat renders as a bold markdown headline (Codex's live status header — its
  * TUI hides reasoning without bold markers) plus an optional prose sentence.
+ *
+ * All beat work runs on one serialized chain, so beats always emit in event
+ * order even when an optional {@link NarrationWriter} is consulted for prose.
+ * A writer call is bounded by `writerTimeoutMs`; on timeout/error/undefined the
+ * templated prose ships instead, so a slow or broken writer can only ever make
+ * a beat later (by the budget) or plainer, never wrong, missing, or reordered.
  */
 export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
   const queue = createReasoningQueue();
@@ -434,9 +471,41 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     ...(input.lastPick !== undefined ? { lastPick: input.lastPick } : {})
   });
   const quietDelays = input.quietDelaysMs ?? DEFAULT_QUIET_DELAYS_MS;
+  const writer = input.writer;
+  const writerTimeoutMs = input.writerTimeoutMs ?? DEFAULT_WRITER_TIMEOUT_MS;
   const candidateStartedAt = new Map<string, number>();
   const emitted = new Set<string>();
+  const closeController = new AbortController();
   let closed = false;
+  // The serialized beat pipeline: state mutation + writer calls + emission all
+  // happen here, in event order. Tasks already enqueued when close() fires
+  // still flush (their writer calls are aborted, so they fall back to the
+  // template quickly); pushes after the queue ends are no-ops.
+  let chain: Promise<void> = Promise.resolve();
+  const enqueue = (task: () => void | Promise<void>): void => {
+    chain = chain
+      .then(async () => {
+        await task();
+      })
+      .catch(() => {
+        // narration must never fail a turn
+      });
+  };
+
+  /**
+   * Run one writer call within the time budget. Resolves undefined on timeout,
+   * abort, or error — even when the writer ignores its abort signal.
+   */
+  const withBudget = (
+    call: (signal: AbortSignal) => Promise<string | undefined>
+  ): Promise<string | undefined> => {
+    const signal = AbortSignal.any([closeController.signal, AbortSignal.timeout(writerTimeoutMs)]);
+    const expired = new Promise<undefined>((resolve) => {
+      const timer = setTimeout(() => resolve(undefined), writerTimeoutMs + 50);
+      timer.unref();
+    });
+    return Promise.race([call(signal).catch(() => undefined), expired]);
+  };
 
   const emitBeat = (beat: NarratorBeat | null, at: number, quiet: boolean): void => {
     if (beat === null) return;
@@ -444,6 +513,19 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     if (emitted.has(text)) return;
     emitted.add(text);
     queue.push(text);
+    // Mirror the beat onto the trace stream so the observability dashboard
+    // shows the narration alongside the run (fire-and-forget, never blocking).
+    emitTrace({
+      component: "gateway",
+      event_type: "log",
+      traceId: input.traceId,
+      payload: {
+        kind: "narration.beat",
+        turn: input.turn,
+        headline: beat.headline,
+        ...(beat.prose !== undefined ? { prose: beat.prose } : {})
+      }
+    });
     state.lastBeatAt = at;
     if (quiet) state.quietStage += 1;
     else state.quietStage = 0;
@@ -457,14 +539,18 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
       case "session.started": {
         // The per-turn panel kickoff (emitted right before the fan-out).
         if (payload.dialect !== "fusion-step") return;
-        emitBeat(narrationBeat(state, { kind: "fanout", roster: rosterOf(payload), at: event.ts }), event.ts, false);
+        const roster = rosterOf(payload);
+        enqueue(() => emitBeat(narrationBeat(state, { kind: "fanout", roster, at: event.ts }), event.ts, false));
         return;
       }
       case "harness.candidate.started": {
         // Silent: all members start together; the fan-out beat covers it. Only
-        // the start time is recorded (for per-candidate elapsed).
-        state.sawPanel = true;
+        // the start time is recorded (for per-candidate elapsed). The sawPanel
+        // mutation rides the chain so it cannot overtake a pending fan-out beat.
         if (event.candidate_id !== undefined) candidateStartedAt.set(event.candidate_id, event.ts);
+        enqueue(() => {
+          state.sawPanel = true;
+        });
         return;
       }
       case "harness.candidate.finished": {
@@ -472,24 +558,39 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
         if (id === undefined) return;
         const began = event.candidate_id !== undefined ? candidateStartedAt.get(event.candidate_id) : undefined;
         const preview = typeof payload.final_output_preview === "string" ? payload.final_output_preview : undefined;
-        const gist = preview !== undefined ? sanitizeGist(preview) : undefined;
-        const finish: CandidateFinish = {
-          id,
-          ok: payload.status === "succeeded",
-          ...(typeof payload.finish_reason === "string" ? { finishReason: payload.finish_reason } : {}),
-          ...(began !== undefined ? { elapsedMs: event.ts - began } : {}),
-          ...(typeof payload.step_count === "number" ? { steps: payload.step_count } : {}),
-          ...(gist !== undefined ? { gist } : {})
-        };
-        emitBeat(narrationBeat(state, { kind: "finish", finish, at: event.ts }), event.ts, false);
+        const ok = payload.status === "succeeded";
+        enqueue(async () => {
+          // The writer sees the raw preview; its sentence (and the fallback)
+          // both pass through the sanitize gate before entering the channel.
+          let gist = preview !== undefined ? sanitizeGist(preview) : undefined;
+          if (writer !== undefined && ok && preview !== undefined) {
+            const written = await withBudget((signal) => writer.candidateGist({ id, finalOutput: preview }, signal));
+            const sanitized = written !== undefined ? sanitizeGist(written) : undefined;
+            if (sanitized !== undefined) gist = sanitized;
+          }
+          const finish: CandidateFinish = {
+            id,
+            ok,
+            ...(typeof payload.finish_reason === "string" ? { finishReason: payload.finish_reason } : {}),
+            ...(began !== undefined ? { elapsedMs: event.ts - began } : {}),
+            ...(typeof payload.step_count === "number" ? { steps: payload.step_count } : {}),
+            ...(gist !== undefined ? { gist } : {})
+          };
+          emitBeat(narrationBeat(state, { kind: "finish", finish, at: event.ts }), event.ts, false);
+        });
         return;
       }
       case "judge.request": {
-        emitBeat(
-          narrationBeat(state, { kind: "judging", candidates: judgeCandidatesOf(payload), at: event.ts }),
-          event.ts,
-          false
-        );
+        const candidates = judgeCandidatesOf(payload);
+        enqueue(async () => {
+          const beat = narrationBeat(state, { kind: "judging", candidates, at: event.ts });
+          if (beat !== null && writer !== undefined && candidates.length > 0) {
+            const written = await withBudget((signal) => writer.compareCandidates({ candidates }, signal));
+            const sanitized = written !== undefined ? sanitizeGist(written, COMPARISON_MAX_LENGTH) : undefined;
+            if (sanitized !== undefined) beat.prose = sanitized;
+          }
+          emitBeat(beat, event.ts, false);
+        });
         return;
       }
       default:
@@ -505,11 +606,7 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     const since = now - (state.lastBeatAt ?? state.startedAt ?? now);
     const delay = quietDelays[Math.min(state.quietStage, quietDelays.length - 1)] ?? Number.POSITIVE_INFINITY;
     if (since < delay) return;
-    try {
-      emitBeat(narrationBeat(state, { kind: "quiet", at: now }), now, true);
-    } catch {
-      // narration must never fail a turn
-    }
+    enqueue(() => emitBeat(narrationBeat(state, { kind: "quiet", at: now }), now, true));
   }, Math.min(QUIET_POLL_MS, ...quietDelays.map((delay) => Math.max(50, Math.floor(delay / 2)))));
   quietTimer.unref();
 
@@ -519,7 +616,10 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     closed = true;
     clearInterval(quietTimer);
     removeTraceListener(listener);
-    queue.end();
+    // Abort any in-flight writer call so the chain settles promptly, flush the
+    // already-enqueued beats (template fallback), then end the queue.
+    closeController.abort();
+    void chain.finally(() => queue.end());
   };
   return { events: queue.iterable, close };
 }

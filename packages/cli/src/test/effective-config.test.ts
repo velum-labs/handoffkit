@@ -89,6 +89,31 @@ test("an empty panel array is treated as unset (default trio applies)", () => {
   assert.equal(effective.panel.value.length, DEFAULT_CLOUD_PANEL.length);
 });
 
+test("reasoning + reasoningModel resolve with full precedence", () => {
+  // Defaults: narration on, templated prose (no writer model).
+  const defaults = resolveEffectiveConfig(undefined);
+  assert.deepEqual(defaults.reasoning, { value: true, source: "default" });
+  assert.deepEqual(defaults.reasoningModel, { value: undefined, source: "default" });
+
+  const config: FusionConfig = {
+    version: FUSION_CONFIG_VERSION,
+    reasoning: true,
+    reasoningModel: "mlx-community/Qwen3-1.7B-4bit"
+  };
+  const fromConfig = resolveEffectiveConfig(config);
+  assert.deepEqual(fromConfig.reasoningModel, {
+    value: "mlx-community/Qwen3-1.7B-4bit",
+    source: "config"
+  });
+
+  const fromFlag = resolveEffectiveConfig(config, {
+    reasoning: false,
+    reasoningModel: "mlx-community/Qwen3-0.6B-4bit"
+  });
+  assert.deepEqual(fromFlag.reasoning, { value: false, source: "flag" });
+  assert.deepEqual(fromFlag.reasoningModel, { value: "mlx-community/Qwen3-0.6B-4bit", source: "flag" });
+});
+
 test("prompt overrides are sourced from config, never from a flag", () => {
   const config: FusionConfig = {
     version: FUSION_CONFIG_VERSION,

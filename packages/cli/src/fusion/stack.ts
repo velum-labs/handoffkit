@@ -9,9 +9,10 @@ import { join } from "node:path";
 
 import { KernelBackend } from "@fusionkit/ensemble";
 import type { EnsembleModel, UnifiedHarnessKind } from "@fusionkit/ensemble";
-import { MlxBackend, startGateway } from "@fusionkit/model-gateway";
+import { createChatNarrationWriter, MlxBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
   Gateway,
+  NarrationWriter,
   OnRateLimitPolicy,
   SessionMetaInput,
   SessionStore
@@ -28,6 +29,7 @@ import type { PromptOverrides } from "../fusion-config.js";
 
 import { defaultKeyEnv, fusionkitPyCommand, loadEnvFileInto, providerDefaultBaseUrl } from "./env.js";
 import type { PanelModelSpec, StackReporter } from "./env.js";
+import { detectHost } from "./local-catalog.js";
 
 /**
  * The single `fusionkit serve` router: one process that fronts every panel
@@ -58,6 +60,42 @@ function looksPermanentFailure(log: string): boolean {
   return /401|403|invalid[ _-]?api[ _-]?key|unauthorized|forbidden|authentication|permission|model[^\n]*(not found|does not exist)|no such model|model_not_found/i.test(
     log
   );
+}
+
+/**
+ * A run-time incident notice sink. While a coding agent owns the terminal
+ * the launcher queues these (and flashes the terminal title); before handover
+ * they go straight to the log line sink.
+ */
+export type StackNotify = (line: string) => void;
+
+/**
+ * Classify a crashed local server process into a one-line, actionable notice.
+ * A SIGKILL (or a signal-death with no exit code) on macOS almost always means
+ * the OS killed the process under memory pressure — the dominant failure mode
+ * for local MLX panels — so say "out of memory" and how to fix it instead of
+ * leaving the user with a bare stream-disconnect error in their tool.
+ */
+export function describeServerCrash(input: {
+  label: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  /** What happens next (defaults to the managed-server restart behavior). */
+  consequence?: string;
+  logPath?: string;
+}): string {
+  const oomLikely = input.signal === "SIGKILL" || input.exitCode === null;
+  const cause =
+    input.signal !== null ? `killed by ${input.signal}` : `exited with code ${input.exitCode ?? "unknown"}`;
+  const consequence = input.consequence ?? "it restarts on the next turn";
+  const logHint = input.logPath !== undefined ? ` Details: ${input.logPath}.` : "";
+  if (oomLikely) {
+    return (
+      `${input.label} was ${cause} mid-run — likely out of memory; ${consequence}. ` +
+      `Try a smaller model or quant (see \`fusionkit models\`).${logHint}`
+    );
+  }
+  return `${input.label} crashed mid-run (${cause}); ${consequence}.${logHint}`;
 }
 
 /** Pick the panel spec that backs the judge (by model name), else the first. */
@@ -169,6 +207,8 @@ export async function startRouter(options: {
   prompts?: PromptOverrides;
   logsDir?: string;
   report?: StackReporter;
+  /** Run-time incident sink (crashed model servers, a dead router, ...). */
+  notify?: StackNotify;
   log: (line: string) => void;
 }): Promise<Router> {
   const { specs, report } = options;
@@ -210,7 +250,22 @@ export async function startRouter(options: {
     // sequentially before the router that fronts them.
     for (const spec of specs) {
       if ((spec.provider ?? "mlx") !== "mlx") continue;
-      const backend = new MlxBackend({ model: spec.model });
+      const backend = new MlxBackend({
+        model: spec.model,
+        onEvent: (event) => {
+          // A local model server dying mid-run (usually OOM-killed by the OS)
+          // must be said out loud — the tool only sees a failed/disconnected
+          // turn and cannot explain itself.
+          if (event.type !== "crashed") return;
+          options.notify?.(
+            describeServerCrash({
+              label: `panel member ${spec.id} (${spec.model})`,
+              exitCode: event.exitCode,
+              signal: event.signal
+            })
+          );
+        }
+      });
       await backend.start();
       const gateway = await startGateway({
         backend: new KernelBackend(backend, {
@@ -279,6 +334,23 @@ export async function startRouter(options: {
     }
     announceReady(url);
 
+    // The router became ready: from here on an exit is a mid-run death (OOM,
+    // crash), not a startup failure — surface it instead of failing silently
+    // with 502s on every subsequent turn.
+    let routerClosing = false;
+    proc.child.once("exit", (code, signal) => {
+      if (routerClosing) return;
+      options.notify?.(
+        describeServerCrash({
+          label: "the fusion router (fusionkit serve)",
+          exitCode: code,
+          signal,
+          consequence: "fused turns will fail until you restart fusionkit",
+          ...(options.logsDir !== undefined ? { logPath: join(options.logsDir, "router.log") } : {})
+        })
+      );
+    });
+
     const endpoints: Record<string, string> = Object.fromEntries(specs.map((spec) => [spec.id, url]));
     return {
       url,
@@ -289,6 +361,7 @@ export async function startRouter(options: {
       judgeModel: judgeSpec.id,
       identity,
       close: async () => {
+        routerClosing = true;
         terminate(proc.child);
         await closeBackends();
       }
@@ -345,10 +418,14 @@ export type StartFusionStackOptions = {
   panelIdentity?: boolean;
   /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. Default on. */
   reasoning?: boolean;
+  /** Optional local MLX model that writes the narration prose (Apple Silicon only). */
+  reasoningModel?: string;
   logsDir?: string;
   report?: StackReporter;
   /** Active portless session; defaults to a disabled (loopback) session. */
   portless?: PortlessSession;
+  /** Run-time incident sink (crashed model servers, a dead router, ...). */
+  notify?: StackNotify;
   log: (line: string) => void;
 };
 
@@ -400,6 +477,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
           ...(options.prompts !== undefined ? { prompts: options.prompts } : {}),
           ...(options.logsDir !== undefined ? { logsDir: options.logsDir } : {}),
           ...(report !== undefined ? { report } : {}),
+          ...(options.notify !== undefined ? { notify: options.notify } : {}),
           log: options.log
         });
         return {
@@ -428,6 +506,49 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     }
   }
 
+  // Optional local narration writer (--reasoning-model): a small MLX model
+  // that writes the narration prose. Boots in the background — until it is
+  // warm, writer calls time out into the templated prose, so it never delays
+  // the stack or a turn. Off Apple Silicon it degrades to templates with a note.
+  let narrationWriter: NarrationWriter | undefined;
+  let narrationClose: () => Promise<void> = async () => {};
+  if (options.reasoningModel !== undefined && options.reasoning !== false) {
+    if (!detectHost().appleSilicon) {
+      options.log(
+        `fusion: --reasoning-model needs Apple Silicon; using templated narration (requested ${options.reasoningModel})`
+      );
+    } else {
+      const reasoningModel = options.reasoningModel;
+      const reasoningBackend = new MlxBackend({
+        model: reasoningModel,
+        onEvent: (event) => {
+          if (event.type !== "crashed") return;
+          options.notify?.(
+            describeServerCrash({
+              label: `the narration writer (${reasoningModel})`,
+              exitCode: event.exitCode,
+              signal: event.signal,
+              consequence: "narration falls back to templated prose"
+            })
+          );
+        }
+      });
+      void reasoningBackend.start().catch((error: unknown) => {
+        // Best-effort warm: a failed start just means templated narration, but
+        // say so — a silent fallback would read as the feature not working.
+        const first = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+        options.log(
+          `fusion: narration model ${reasoningModel} failed to start; using templated prose (${first})`
+        );
+      });
+      narrationWriter = createChatNarrationWriter({
+        chat: (body, signal) => reasoningBackend.chat(body, signal),
+        model: options.reasoningModel
+      });
+      narrationClose = () => reasoningBackend.close();
+    }
+  }
+
   try {
     if (report) report({ kind: "gateway.start" });
     // The judge-streamed-trajectory front door: each panel model produces a
@@ -447,7 +568,8 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       ...(options.resumeId !== undefined ? { resumeId: options.resumeId } : {}),
       ...(options.sessionMeta !== undefined ? { sessionMeta: options.sessionMeta } : {}),
       ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
-      ...(options.reasoning !== undefined ? { reasoningTraces: options.reasoning } : {})
+      ...(options.reasoning !== undefined ? { reasoningTraces: options.reasoning } : {}),
+      ...(narrationWriter !== undefined ? { narrationWriter } : {})
     };
     const gateway = await startFusionStepGateway({
       config: gatewayConfig,
@@ -466,10 +588,12 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       close: async () => {
         await gateway.close();
         portless.unregister("gateway");
+        await narrationClose();
         await routerClose();
       }
     };
   } catch (error) {
+    await narrationClose();
     await routerClose();
     throw error;
   }

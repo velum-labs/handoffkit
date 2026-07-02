@@ -183,6 +183,53 @@ test("deriveSession threads the turn through model calls", () => {
   assert.equal(detail.modelCalls[0]?.turn, 2);
 });
 
+test("deriveSession folds narration beats from gateway log events", () => {
+  const mk = (partial: Omit<StoredEvent, "schema" | "trace_id">): StoredEvent => ({
+    schema: "fusion-trace-event.v1",
+    trace_id: "trace_narration",
+    ...partial
+  });
+  const events: StoredEvent[] = [
+    mk({
+      id: 1,
+      span_id: "n1",
+      seq: 0,
+      ts: 10,
+      component: "gateway",
+      event_type: "log",
+      payload: { kind: "narration.beat", turn: 1, headline: "Fanning out to 2 models", prose: "x and y are racing." }
+    }),
+    mk({
+      id: 2,
+      span_id: "n2",
+      seq: 1,
+      ts: 20,
+      component: "gateway",
+      event_type: "log",
+      payload: { kind: "narration.beat", turn: 1, headline: "Judging 2 candidates" }
+    }),
+    // Unrelated log events are ignored.
+    mk({
+      id: 3,
+      span_id: "n3",
+      seq: 2,
+      ts: 30,
+      component: "gateway",
+      event_type: "log",
+      payload: { kind: "cost.metered", model: "gpt-5.5" }
+    })
+  ];
+  const detail = deriveSession("trace_narration", events);
+  assert.equal(detail.narration.length, 2);
+  assert.deepEqual(detail.narration[0], {
+    ts: 10,
+    turn: 1,
+    headline: "Fanning out to 2 models",
+    prose: "x and y are racing."
+  });
+  assert.deepEqual(detail.narration[1], { ts: 20, turn: 1, headline: "Judging 2 candidates" });
+});
+
 test("deriveSession preserves per-step judge history across turns", () => {
   const mk = (partial: Omit<StoredEvent, "schema" | "trace_id">): StoredEvent => ({
     schema: "fusion-trace-event.v1",

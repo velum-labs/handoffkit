@@ -70,6 +70,8 @@ export type FusionConfig = {
   budgetUsd?: number;
   /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. */
   reasoning?: boolean;
+  /** Local MLX model that writes the narration prose (Apple Silicon only). */
+  reasoningModel?: string;
   /**
    * System-prompt overrides, loaded from `.fusionkit/prompts/*.md`. Not stored
    * inline in `config.json` — it is hydrated from the prompt files on load.
@@ -220,6 +222,12 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
       throw new FusionConfigError(`${source}: reasoning must be a boolean`);
     }
     config.reasoning = raw.reasoning;
+  }
+  if (raw.reasoningModel !== undefined) {
+    if (typeof raw.reasoningModel !== "string" || raw.reasoningModel.length === 0) {
+      throw new FusionConfigError(`${source}: reasoningModel must be a non-empty string`);
+    }
+    config.reasoningModel = raw.reasoningModel;
   }
   return config;
 }

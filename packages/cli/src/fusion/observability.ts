@@ -4,10 +4,19 @@
  * port, and exposing the trace URLs the orchestrator injects into spawned
  * children.
  */
+import { createHash } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
@@ -44,8 +53,69 @@ export function findScopeAppDir(): string {
  * bundle is two levels up at `<cli-package>/scope/server.js`.
  */
 export function bundledScopeServer(): string | undefined {
+  if (process.env.FUSIONKIT_DEV === "1") return undefined;
   const serverJs = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scope", "server.js");
   return existsSync(serverJs) ? serverJs : undefined;
+}
+
+const SCOPE_SOURCE_DIRECTORIES = ["app", "components", "lib"];
+const SCOPE_SOURCE_FILES = [
+  "components.json",
+  "next.config.mjs",
+  "package.json",
+  "pnpm-lock.yaml",
+  "postcss.config.mjs",
+  "tsconfig.json"
+];
+const SCOPE_BUILD_IDENTITY_FILE = "scope-dashboard-id";
+
+export const SCOPE_BUNDLED_IDENTITY = "scope-dashboard:bundled";
+export const SCOPE_DEV_SERVER_IDENTITY = "scope-dashboard:dev";
+
+function addFileToHash(hash: ReturnType<typeof createHash>, scopeDir: string, file: string): void {
+  hash.update(relative(scopeDir, file));
+  hash.update("\0");
+  hash.update(readFileSync(file));
+  hash.update("\0");
+}
+
+function addDirectoryToHash(hash: ReturnType<typeof createHash>, scopeDir: string, dir: string): void {
+  if (!existsSync(dir)) return;
+  const entries = readdirSync(dir, { withFileTypes: true }).sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
+  for (const entry of entries) {
+    const child = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      addDirectoryToHash(hash, scopeDir, child);
+    } else if (entry.isFile()) {
+      addFileToHash(hash, scopeDir, child);
+    }
+  }
+}
+
+function readTrimmed(path: string): string | undefined {
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return undefined;
+  }
+}
+
+export function scopeSourceIdentity(scopeDir = findScopeAppDir()): string {
+  const hash = createHash("sha256");
+  for (const filename of SCOPE_SOURCE_FILES) {
+    const file = join(scopeDir, filename);
+    if (existsSync(file)) addFileToHash(hash, scopeDir, file);
+  }
+  for (const dirname of SCOPE_SOURCE_DIRECTORIES) {
+    addDirectoryToHash(hash, scopeDir, join(scopeDir, dirname));
+  }
+  return `scope-dashboard:${hash.digest("hex").slice(0, 16)}`;
+}
+
+export function expectedScopeIdentity(): string {
+  return bundledScopeServer() !== undefined ? SCOPE_BUNDLED_IDENTITY : scopeSourceIdentity();
 }
 
 /**
@@ -115,6 +185,7 @@ function startBundledDashboard(input: {
  */
 function startDevDashboard(input: {
   env: Record<string, string | undefined>;
+  identity: string;
   traceDir: string;
   logFile?: string;
 }): LoggedChild {
@@ -127,9 +198,11 @@ function startDevDashboard(input: {
     );
   }
 
-  // Rebuilding every run is slow; reuse a prior build when present. The build
-  // output is captured (never inherited) so it can't corrupt a live checklist.
-  const alreadyBuilt = existsSync(join(scopeDir, ".next", "BUILD_ID"));
+  // Rebuild only when the source identity changes. This keeps normal runs fast
+  // while making fusionkit-dev pick up companion edits automatically.
+  const buildIdentityFile = join(scopeDir, ".next", SCOPE_BUILD_IDENTITY_FILE);
+  const alreadyBuilt =
+    existsSync(join(scopeDir, ".next", "BUILD_ID")) && readTrimmed(buildIdentityFile) === input.identity;
   if (!alreadyBuilt) {
     try {
       const buildOut = execFileSync(nextBin, ["build"], {
@@ -139,6 +212,7 @@ function startDevDashboard(input: {
         stdio: ["ignore", "pipe", "pipe"]
       });
       if (input.logFile !== undefined) appendFileSync(input.logFile, buildOut);
+      writeFileSync(buildIdentityFile, `${input.identity}\n`);
     } catch (error) {
       if (input.logFile !== undefined) {
         appendFileSync(
@@ -160,8 +234,20 @@ function startDevDashboard(input: {
   });
 }
 
-/** Identity token of a reusable scope dashboard (any healthy instance qualifies). */
-const SCOPE_IDENTITY = "scope-dashboard";
+async function probeDashboardIdentity(loopbackUrl: string, expectedIdentity: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(`${loopbackUrl}/api/health`, { signal: AbortSignal.timeout(2000) });
+    if (!response.ok) return undefined;
+    const health = (await response.json()) as { identity?: unknown };
+    if (typeof health.identity !== "string") return undefined;
+    if (health.identity === SCOPE_DEV_SERVER_IDENTITY && process.env.FUSIONKIT_DEV === "1") {
+      return expectedIdentity;
+    }
+    return health.identity;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Start the scope dashboard on the fixed port, backed by a fresh per-run SQLite
@@ -178,6 +264,8 @@ export async function startObservability(input: {
 }): Promise<Observability> {
   const traceDir = mkdtempSync(join(tmpdir(), "fusion-trace-"));
   const dbPath = join(traceDir, "scope.db");
+  const bundled = bundledScopeServer();
+  const dashboardIdentity = bundled !== undefined ? SCOPE_BUNDLED_IDENTITY : scopeSourceIdentity();
 
   // The dashboard server loads node:sqlite; keep its experimental warnings out
   // of the log just like the parent CLI. The per-run db/trace dir isolate state.
@@ -186,16 +274,16 @@ export async function startObservability(input: {
       ...process.env,
       NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
       SCOPEKIT_DB: dbPath,
+      SCOPEKIT_DASHBOARD_ID: dashboardIdentity,
       FUSION_TRACE_DIR: traceDir
     },
     input.portless.caCertPath
   );
 
   const spawnDashboard = async (): Promise<{ port: number; pid?: number; close: () => void }> => {
-    const bundled = bundledScopeServer();
     if (input.report) input.report({ kind: "dashboard.start" });
     else if (bundled !== undefined) input.log("fusion: starting observability dashboard...");
-    else input.log("fusion: building observability dashboard (one-time)...");
+    else input.log("fusion: building observability dashboard if source changed...");
 
     let proc: LoggedChild;
     try {
@@ -208,6 +296,7 @@ export async function startObservability(input: {
             })
           : startDevDashboard({
               env: childEnv,
+              identity: dashboardIdentity,
               traceDir,
               ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
             });
@@ -234,15 +323,9 @@ export async function startObservability(input: {
   try {
     resolved = await input.portless.discoverOrSpawn({
       name: "scope",
-      identity: SCOPE_IDENTITY,
-      healthCheck: async (loopbackUrl) => {
-        try {
-          const response = await fetch(loopbackUrl, { signal: AbortSignal.timeout(2000) });
-          return response.ok ? SCOPE_IDENTITY : undefined;
-        } catch {
-          return undefined;
-        }
-      },
+      identity: dashboardIdentity,
+      healthCheck: (loopbackUrl) => probeDashboardIdentity(loopbackUrl, dashboardIdentity),
+      replaceStale: true,
       spawn: spawnDashboard
     });
   } catch (error) {

@@ -43,7 +43,14 @@ export type ManagedServerEvent =
   | { type: "starting"; port: number }
   | { type: "ready"; baseURL: string; pid: number; startupMs: number }
   | { type: "stopped"; reason: "idle" | "explicit" }
-  | { type: "crashed"; exitCode: number | null };
+  | {
+      type: "crashed";
+      exitCode: number | null;
+      /** Termination signal, when the process was killed (e.g. SIGKILL under memory pressure). */
+      signal: NodeJS.Signals | null;
+      /** Last captured server output, for diagnostics. */
+      outputTail: string;
+    };
 
 export type ManagedServerStatus = "stopped" | "starting" | "running";
 
@@ -182,7 +189,7 @@ export class ManagedModelServer implements LanguageModelV3 {
 
       let exited = false;
       let exitCode: number | null = null;
-      child.on("exit", (code) => {
+      child.on("exit", (code, signal) => {
         exited = true;
         exitCode = code;
         log?.end();
@@ -190,7 +197,12 @@ export class ManagedModelServer implements LanguageModelV3 {
         // reset so the next call respawns instead of hitting a dead URL.
         if (this.state === "running" && this.child === child && !this.stopping) {
           this.clearRunning();
-          this.options.onEvent?.({ type: "crashed", exitCode: code });
+          this.options.onEvent?.({
+            type: "crashed",
+            exitCode: code,
+            signal,
+            outputTail: this.outputTail.slice(-2000)
+          });
         }
       });
       child.on("error", (error) => {

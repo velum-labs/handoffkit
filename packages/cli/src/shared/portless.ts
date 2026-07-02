@@ -134,6 +134,11 @@ export type DiscoverOrSpawnInput = {
   identity: string;
   /** Probe a candidate instance on its loopback URL; return its identity token. */
   healthCheck: (loopbackUrl: string) => Promise<string | undefined>;
+  /**
+   * Terminate and remove an existing route whose health identity does not match.
+   * Use only for singleton fixed-port services where a stale owner blocks spawn.
+   */
+  replaceStale?: boolean;
   /** Start a fresh instance when none can be reused. */
   spawn: () => Promise<SpawnedService>;
 };
@@ -255,6 +260,7 @@ export async function createPortlessSession(input: CreateSessionInput): Promise<
 
   const discoverOrSpawn = async (req: DiscoverOrSpawnInput): Promise<DiscoverOrSpawnResult> => {
     const hostname = hostnameFor(portless, req.name);
+    let staleRoute: RouteMapping | undefined;
     // Discover: is a compatible instance already registered and alive?
     try {
       const existing = store.loadRoutes().find((route) => route.hostname === hostname);
@@ -270,9 +276,13 @@ export async function createPortlessSession(input: CreateSessionInput): Promise<
             close: () => {}
           };
         }
+        staleRoute = existing;
       }
     } catch (error) {
       input.log?.(`fusion: portless discover(${req.name}) failed: ${errorText(error)}`);
+    }
+    if (staleRoute !== undefined && req.replaceStale === true) {
+      await replaceStaleRoute(store, hostname, staleRoute, input.log);
     }
     // Spawn + register a fresh instance, owned by the service pid so the proxy's
     // liveness filter keeps the route across runs and only drops it when the
@@ -299,6 +309,43 @@ export async function createPortlessSession(input: CreateSessionInput): Promise<
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (!isAlive(pid)) return true;
+    await delay(50);
+  }
+  return !isAlive(pid);
+}
+
+async function replaceStaleRoute(
+  store: RouteStoreLike,
+  hostname: string,
+  route: RouteMapping,
+  log: ((line: string) => void) | undefined
+): Promise<void> {
+  try {
+    if (route.pid !== process.pid) {
+      process.kill(route.pid, "SIGTERM");
+      log?.(`fusion: stopped stale ${hostname} (pid ${route.pid})`);
+      if (!(await waitForExit(route.pid, 2_000))) {
+        log?.(`fusion: stale ${hostname} pid ${route.pid} did not exit before restart`);
+      }
+    }
+  } catch {
+    // Process already gone or not ours; the route should still be removed.
+  }
+  try {
+    store.removeRoute(hostname);
+  } catch {
+    // best-effort
+  }
 }
 
 /**

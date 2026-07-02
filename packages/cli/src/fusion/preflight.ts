@@ -7,6 +7,10 @@ import { toolRegistry } from "../tools.js";
 
 import { defaultKeyEnv, providerDefaultBaseUrl } from "./env.js";
 import type { FusionTool, PanelModelSpec, RunFusionOptions } from "./env.js";
+import { catalogEntry, detectHost, usableRamGB } from "./local-catalog.js";
+import type { HostInfo } from "./local-catalog.js";
+import { estimateModelSizing } from "./model-sizing.js";
+import type { EstimateOptions } from "./model-sizing.js";
 
 /** The PATH binary each coding agent launches as. `serve` launches nothing. */
 export function agentBinary(tool: FusionTool): string | undefined {
@@ -51,6 +55,59 @@ export function preflightRequirements(
   }
 
   return { requiredBins, requiredEnv };
+}
+
+/**
+ * Boot-time memory check for the local (MLX) members of a panel: every local
+ * member runs as its own resident server, so what matters is their *combined*
+ * footprint against the host's usable budget. Returns a one-line warning when
+ * the panel likely exceeds it (models get OOM-killed mid-run by macOS memory
+ * pressure — the user's tool only sees a bare stream disconnect), or undefined
+ * when it fits or cannot be verified (offline / unknown repos never block).
+ */
+export async function localPanelMemoryWarning(
+  models: readonly PanelModelSpec[],
+  options: {
+    /** Extra local model outside the panel (e.g. --reasoning-model). */
+    extraModels?: readonly string[];
+    host?: HostInfo;
+    sizing?: EstimateOptions;
+  } = {}
+): Promise<string | undefined> {
+  const repos = [
+    ...models.filter((spec) => (spec.provider ?? "mlx") === "mlx").map((spec) => spec.model),
+    ...(options.extraModels ?? [])
+  ];
+  if (repos.length === 0) return undefined;
+
+  const sizings = await Promise.all(
+    repos.map(async (repo) => {
+      const fallback = catalogEntry(repo)?.minRamGB;
+      const sizing = await estimateModelSizing(repo, {
+        ...(fallback !== undefined ? { catalogFallbackGB: fallback } : {}),
+        ...options.sizing
+      });
+      return { repo, sizing };
+    })
+  );
+
+  // Only sum members we could actually size; an unknown repo means "can't
+  // verify — don't block", not "assume zero and warn anyway".
+  const sized = sizings.filter(({ sizing }) => sizing.source !== "unknown");
+  if (sized.length === 0) return undefined;
+  const requiredGB = sized.reduce((sum, { sizing }) => sum + sizing.requiredGB, 0);
+  const host = options.host ?? detectHost();
+  const budgetGB = usableRamGB(host);
+  if (requiredGB <= budgetGB) return undefined;
+
+  const breakdown = sized
+    .map(({ repo, sizing }) => `${repo} ~${sizing.requiredGB.toFixed(1)}GB`)
+    .join(", ");
+  return (
+    `the local panel needs ~${requiredGB.toFixed(1)}GB (${breakdown}) but only ` +
+    `~${budgetGB.toFixed(1)}GB of this machine's ${host.totalRamGB.toFixed(0)}GB is usable — ` +
+    `models may be killed mid-run by memory pressure. Prefer smaller models or quants (see \`fusionkit models\`).`
+  );
 }
 
 /** One key-validation probe: where to call and how to authenticate. */

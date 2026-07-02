@@ -244,7 +244,7 @@ export function openAiSseToResponses(
   let textValue = "";
   let reasoningOpen = false;
   let reasoningClosed = false;
-  let reasoningValue = "";
+  const reasoningParts: string[] = [];
   let reasoningOutputIndex = -1;
   let nextOutputIndex = 0;
   let messageOutputIndex = -1;
@@ -273,10 +273,14 @@ export function openAiSseToResponses(
     controller.enqueue(sse("response.created", { response: baseResponse("in_progress", []) }));
   };
 
-  // Reasoning summary item lifecycle (the fusion narration channel). Opened on
-  // the first `reasoning_content` delta, closed as soon as the first real
-  // output (text or tool call) begins — reasoning always precedes the answer.
-  const ensureReasoning = (controller: Controller): void => {
+  // Reasoning summary item lifecycle (the fusion narration channel). The item
+  // opens on the first `reasoning_content` delta and closes as soon as the
+  // first real output (text or tool call) begins. Each delta is a complete
+  // narration beat, so each becomes its OWN summary part (added -> delta ->
+  // done): Codex flushes reasoning to the transcript on summary-part
+  // boundaries and promotes the newest part's bold header to its live status,
+  // so per-beat parts are what make the narration visible as it happens.
+  const ensureReasoningItem = (controller: Controller): void => {
     ensureCreated(controller);
     if (reasoningOpen || reasoningClosed) return;
     reasoningOpen = true;
@@ -287,43 +291,34 @@ export function openAiSseToResponses(
         item: { type: "reasoning", id: reasoningItemId, summary: [] }
       })
     );
+  };
+
+  const emitReasoningPart = (controller: Controller, text: string): void => {
+    ensureReasoningItem(controller);
+    if (reasoningClosed) return;
+    const summaryIndex = reasoningParts.length;
+    reasoningParts.push(text);
+    const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: summaryIndex };
     controller.enqueue(
-      sse("response.reasoning_summary_part.added", {
-        item_id: reasoningItemId,
-        output_index: reasoningOutputIndex,
-        summary_index: 0,
-        part: { type: "summary_text", text: "" }
-      })
+      sse("response.reasoning_summary_part.added", { ...base, part: { type: "summary_text", text: "" } })
+    );
+    controller.enqueue(sse("response.reasoning_summary_text.delta", { ...base, delta: text }));
+    controller.enqueue(sse("response.reasoning_summary_text.done", { ...base, text }));
+    controller.enqueue(
+      sse("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
     );
   };
+
+  const reasoningSummary = (): Array<Record<string, unknown>> =>
+    reasoningParts.map((text) => ({ type: "summary_text", text }));
 
   const closeReasoning = (controller: Controller): void => {
     if (!reasoningOpen || reasoningClosed) return;
     reasoningClosed = true;
     controller.enqueue(
-      sse("response.reasoning_summary_text.done", {
-        item_id: reasoningItemId,
-        output_index: reasoningOutputIndex,
-        summary_index: 0,
-        text: reasoningValue
-      })
-    );
-    controller.enqueue(
-      sse("response.reasoning_summary_part.done", {
-        item_id: reasoningItemId,
-        output_index: reasoningOutputIndex,
-        summary_index: 0,
-        part: { type: "summary_text", text: reasoningValue }
-      })
-    );
-    controller.enqueue(
       sse("response.output_item.done", {
         output_index: reasoningOutputIndex,
-        item: {
-          type: "reasoning",
-          id: reasoningItemId,
-          summary: [{ type: "summary_text", text: reasoningValue }]
-        }
+        item: { type: "reasoning", id: reasoningItemId, summary: reasoningSummary() }
       })
     );
   };
@@ -352,12 +347,8 @@ export function openAiSseToResponses(
 
   const assembleOutput = (): Record<string, unknown>[] => {
     const output: Record<string, unknown>[] = [];
-    if (reasoningValue.length > 0) {
-      output.push({
-        type: "reasoning",
-        id: reasoningItemId,
-        summary: [{ type: "summary_text", text: reasoningValue }]
-      });
+    if (reasoningParts.length > 0) {
+      output.push({ type: "reasoning", id: reasoningItemId, summary: reasoningSummary() });
     }
     if (textOpen) {
       output.push({
@@ -451,16 +442,7 @@ export function openAiSseToResponses(
     const delta = choice.delta ?? {};
 
     if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0 && !reasoningClosed) {
-      ensureReasoning(controller);
-      reasoningValue += delta.reasoning_content;
-      controller.enqueue(
-        sse("response.reasoning_summary_text.delta", {
-          item_id: reasoningItemId,
-          output_index: reasoningOutputIndex,
-          summary_index: 0,
-          delta: delta.reasoning_content
-        })
-      );
+      emitReasoningPart(controller, delta.reasoning_content);
     }
 
     if (typeof delta.content === "string" && delta.content.length > 0) {

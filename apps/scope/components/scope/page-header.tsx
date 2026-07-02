@@ -1,3 +1,5 @@
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -20,11 +22,15 @@ export function PageHeader({
         className
       )}
     >
-      <div className="min-w-0">
-        <h1 className="truncate text-xl font-semibold tracking-tight">{title}</h1>
-        {subtitle !== undefined ? (
-          <p className="text-muted-foreground mt-0.5 truncate text-sm">{subtitle}</p>
-        ) : null}
+      <div className="flex min-w-0 items-center gap-3">
+        <SidebarTrigger className="-ml-1 shrink-0" />
+        <Separator orientation="vertical" className="h-6 shrink-0" />
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold tracking-tight">{title}</h1>
+          {subtitle !== undefined ? (
+            <p className="text-muted-foreground mt-0.5 truncate text-sm">{subtitle}</p>
+          ) : null}
+        </div>
       </div>
       {children !== undefined ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
     </header>

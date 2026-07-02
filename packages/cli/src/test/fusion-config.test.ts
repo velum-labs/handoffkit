@@ -47,6 +47,27 @@ test("parseFusionConfig accepts a valid config", () => {
   assert.equal(config.port, 1234);
 });
 
+test("parseFusionConfig accepts reasoning + reasoningModel and rejects bad values", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      reasoning: true,
+      reasoningModel: "mlx-community/Qwen3-1.7B-4bit"
+    },
+    "test"
+  );
+  assert.equal(config.reasoning, true);
+  assert.equal(config.reasoningModel, "mlx-community/Qwen3-1.7B-4bit");
+  assert.throws(
+    () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, reasoningModel: 7 }, "test"),
+    FusionConfigError
+  );
+  assert.throws(
+    () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, reasoningModel: "" }, "test"),
+    FusionConfigError
+  );
+});
+
 test("parseFusionConfig accepts subscription panel entries with auth", () => {
   const config = parseFusionConfig(
     {

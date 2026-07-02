@@ -242,6 +242,30 @@ export default function SessionDetailPage() {
               />
             </Section>
 
+            {session.narration.length > 0 ? (
+              <Section
+                title="Narration"
+                count={`${session.narration.length} beats`}
+                summary="the reasoning trace streamed to the coding agent"
+              >
+                <ol className="space-y-3">
+                  {session.narration.map((beat, index) => (
+                    <li key={index} className="flex gap-3">
+                      <span className="mono text-muted-foreground w-14 shrink-0 pt-0.5 text-right text-xs">
+                        {fmtDuration(Math.max(0, beat.ts - session.startedAt))}
+                      </span>
+                      <div>
+                        <div className="text-sm font-semibold">{beat.headline}</div>
+                        {beat.prose !== undefined ? (
+                          <div className="text-muted-foreground text-sm">{beat.prose}</div>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </Section>
+            ) : null}
+
             <Section
               title="Run flow"
               count={

@@ -44,7 +44,7 @@ if (!existsSync(cliEntry)) {
 
 const child = spawn(process.execPath, [cliEntry, ...process.argv.slice(2)], {
   cwd: process.cwd(),
-  env: process.env,
+  env: { ...process.env, FUSIONKIT_DEV: "1" },
   stdio: "inherit"
 });
 

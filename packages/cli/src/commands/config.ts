@@ -96,6 +96,14 @@ function runShow(opts: ConfigOpts): number {
   console.log(row("observe", effective.observe.value ? "on" : "off", effective.observe.source));
   console.log(row("on-rate-limit", effective.onRateLimit.value, effective.onRateLimit.source));
   console.log(row("portless", effective.portless.value ? "on" : "off", effective.portless.source));
+  console.log(row("reasoning", effective.reasoning.value ? "on" : "off", effective.reasoning.source));
+  console.log(
+    row(
+      "reasoning-model",
+      effective.reasoningModel.value ?? "templated prose",
+      effective.reasoningModel.source
+    )
+  );
   const overrides = Object.keys(effective.prompts.value);
   console.log(row("prompts", overrides.length > 0 ? overrides.join(", ") : "built-in", effective.prompts.source));
 

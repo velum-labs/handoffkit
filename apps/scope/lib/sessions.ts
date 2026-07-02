@@ -113,6 +113,14 @@ export type EnvironmentView = {
   modelEndpoints?: Record<string, string>;
 };
 
+/** One reasoning-trace narration beat, as streamed to the coding agent. */
+export type NarrationBeatView = {
+  ts: number;
+  turn?: number;
+  headline: string;
+  prose?: string;
+};
+
 export type SessionDetail = {
   traceId: string;
   status: string;
@@ -128,6 +136,8 @@ export type SessionDetail = {
   judge: JudgeView;
   /** Per-step judge history (ordered), so multi-turn sessions don't collapse. */
   judgeSteps: JudgeStepView[];
+  /** The reasoning-trace narration, in the order the coding agent saw it. */
+  narration: NarrationBeatView[];
   finalOutput?: string;
   evidence?: string[];
   durationMs: number;
@@ -173,6 +183,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
   const modelCalls = new Map<string, ModelCallView>();
   const judge: JudgeView = {};
   const judgeStepMap = new Map<string, JudgeStepView>();
+  const narration: NarrationBeatView[] = [];
   const eventCounts: Record<string, number> = {};
 
   const ensureStep = (spanId: string, ts: number): JudgeStepView => {
@@ -397,6 +408,19 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
         };
         break;
       }
+      case "log": {
+        // Reasoning-trace narration beats, mirrored onto the trace stream by
+        // the gateway narrator (kind: "narration.beat").
+        if (payload.kind === "narration.beat" && typeof payload.headline === "string") {
+          narration.push({
+            ts: event.ts,
+            headline: payload.headline,
+            ...(num(payload.turn) !== undefined ? { turn: num(payload.turn) } : {}),
+            ...(str(payload.prose) !== undefined ? { prose: str(payload.prose) } : {})
+          });
+        }
+        break;
+      }
       default:
         break;
     }
@@ -422,6 +446,7 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
     modelCalls: [...modelCalls.values()].sort((a, b) => a.ts - b.ts),
     judge,
     judgeSteps: [...judgeStepMap.values()].sort((a, b) => a.ts - b.ts),
+    narration: narration.sort((a, b) => a.ts - b.ts),
     ...(finalOutput !== undefined ? { finalOutput } : {}),
     ...(evidence !== undefined ? { evidence } : {}),
     durationMs: Math.max(0, lastTs - startedAt),

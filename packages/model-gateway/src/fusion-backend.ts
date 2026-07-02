@@ -45,7 +45,7 @@ import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
 import { createTurnNarrator } from "./frontdoor/narration.js";
-import type { TurnNarration } from "./frontdoor/narration.js";
+import type { NarrationWriter, TurnNarration } from "./frontdoor/narration.js";
 import { runFrontdoorRequest } from "./frontdoor/request.js";
 import { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
 import type { FrontdoorRequestValue, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";
@@ -242,6 +242,11 @@ export type FusionBackendOptions = {
    * false to keep the stream silent until the judge's first token.
    */
   reasoningTraces?: boolean;
+  /**
+   * Optional narration prose writer (e.g. a small local model). Advisory only:
+   * the narrator's timeout/sanitize/fallback guardrails apply to every call.
+   */
+  narrationWriter?: NarrationWriter;
 };
 
 /** Caller-supplied session header fields persisted on session creation. */
@@ -623,6 +628,7 @@ export class FusionBackend implements Backend {
   readonly #pricing: Readonly<Record<string, ModelPricing>>;
   readonly #costModel: string | undefined;
   readonly #reasoningTraces: boolean;
+  readonly #narrationWriter: NarrationWriter | undefined;
   /** The stable front-door services the request/turn operators invoke. */
   readonly #services: FrontdoorServices;
   /** Explicit resume target; consumed (cleared) when bound to the first session. */
@@ -655,6 +661,7 @@ export class FusionBackend implements Backend {
     this.#pricing = options.pricing ?? {};
     this.#costModel = options.costModel;
     this.#reasoningTraces = options.reasoningTraces ?? true;
+    this.#narrationWriter = options.narrationWriter;
     this.#resumeId = options.resumeId;
     // Built once, after all fields are set: the stable wire the front-door
     // request/turn operators invoke with per-turn data.
@@ -1075,7 +1082,8 @@ export class FusionBackend implements Backend {
       traceId: session.traceId,
       turn: req.turn,
       ...(this.#judgeModel !== undefined ? { judgeModel: this.#judgeModel } : {}),
-      ...(session.lastJudgePick !== undefined ? { lastPick: session.lastJudgePick } : {})
+      ...(session.lastJudgePick !== undefined ? { lastPick: session.lastJudgePick } : {}),
+      ...(this.#narrationWriter !== undefined ? { writer: this.#narrationWriter } : {})
     });
   }
 

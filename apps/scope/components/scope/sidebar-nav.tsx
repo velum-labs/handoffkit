@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Boxes, Cpu, Layers } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 
 const NAV = [
-  { href: "/", label: "Sessions" },
-  { href: "/models", label: "Models" },
-  { href: "/environments", label: "Environments" }
+  { href: "/", label: "Sessions", icon: Boxes },
+  { href: "/models", label: "Models", icon: Cpu },
+  { href: "/environments", label: "Environments", icon: Layers }
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -16,29 +17,21 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Sidebar navigation with an active-route highlight. */
+/** Sidebar navigation with an active-route highlight and collapsed tooltips. */
 export function SidebarNav() {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-col gap-1">
-      {NAV.map((item) => {
-        const active = isActive(pathname, item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            )}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <SidebarMenu>
+      {NAV.map((item) => (
+        <SidebarMenuItem key={item.href}>
+          <SidebarMenuButton asChild isActive={isActive(pathname, item.href)} tooltip={item.label}>
+            <Link href={item.href}>
+              <item.icon />
+              <span>{item.label}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
   );
 }

@@ -16,7 +16,7 @@
  * and are re-exported here so existing import paths keep working.
  */
 
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -50,7 +50,7 @@ import { ensureLocalPanelSupported } from "./fusion/platform.js";
 import { provisionFusionEngine } from "./fusion/provision.js";
 import { startFusionStack } from "./fusion/stack.js";
 import type { FusionStack } from "./fusion/stack.js";
-import { preflightRequirements, validateProviderKeys } from "./fusion/preflight.js";
+import { localPanelMemoryWarning, preflightRequirements, validateProviderKeys } from "./fusion/preflight.js";
 
 export * from "./fusion/consent.js";
 export * from "./fusion/env.js";
@@ -262,6 +262,16 @@ export async function runFusion(
   // 60s readiness timeout. Awaited right before the stack boots.
   const keyValidation = spawnsRouter ? validateProviderKeys(models) : Promise.resolve([]);
 
+  // Size the local (MLX) members against this machine's usable memory,
+  // concurrently with the preamble like the key probes. A panel that does not
+  // fit gets a warning (not a hard block): the models would load, then be
+  // OOM-killed mid-run with only a bare stream error inside the tool.
+  const memoryCheck = spawnsRouter
+    ? localPanelMemoryWarning(models, {
+        ...(options.reasoningModel !== undefined ? { extraModels: [options.reasoningModel] } : {})
+      }).catch(() => undefined)
+    : Promise.resolve(undefined);
+
   // WS4 — durable sessions. The store persists every gateway session under
   // ~/.fusionkit/sessions (or $FUSIONKIT_SESSIONS_DIR) so it survives this
   // CLI process; `--resume <id>`/`--continue` rehydrate one into the new run.
@@ -347,6 +357,33 @@ export async function runFusion(
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
 
+  // Out-of-band per-turn status: while the coding agent owns the screen, the
+  // only channel that cannot corrupt its TUI is the terminal title.
+  const setTerminalTitle = (text: string | undefined): void => {
+    const stream = uiStream();
+    if (!stream.isTTY) return;
+    stream.write(`\u001b]2;${text ?? ""}\u0007`);
+  };
+
+  // Run-time incident notices (a panel model server OOM-killed mid-run, a dead
+  // router, ...). Before handover they log as ordinary lines; while the coding
+  // agent owns the terminal they are queued (and flashed in the terminal
+  // title), then printed once the tool exits — so a bare "stream disconnected"
+  // inside the tool always gets an explanation on the way out. Every notice is
+  // also appended to logs/incidents.log as durable evidence.
+  const noticeCounts = new Map<string, number>();
+  let passthroughActive = false;
+  const notify = (line: string): void => {
+    try {
+      appendFileSync(join(logsDir, "incidents.log"), `${new Date().toISOString()} ${line}\n`);
+    } catch {
+      // the notice itself must never fail the run
+    }
+    noticeCounts.set(line, (noticeCounts.get(line) ?? 0) + 1);
+    if (passthroughActive) setTerminalTitle(`fusionkit · ${line}`);
+    else log(`fusion: warning: ${line}`);
+  };
+
   // Cost/scope confirmation: the default cloud panel fans every prompt out
   // across multiple frontier models plus a judge. Make that explicit before we
   // spend — once per repo+panel: an interactive approval is persisted, so the
@@ -379,6 +416,14 @@ export async function runFusion(
   const keyProblems = await keyValidation;
   if (keyProblems.length > 0) {
     throw new PreflightError(`fusionkit preflight failed:\n${keyProblems.join("\n")}`);
+  }
+
+  // Local panel too big for this machine: warn (never block) before the slow
+  // model loads start, so a later OOM kill is at least foreshadowed.
+  const memoryWarning = await memoryCheck;
+  if (memoryWarning !== undefined) {
+    if (useBootView) uiStream().write(`${yellow(glyph.warn())} ${memoryWarning}\n`);
+    else log(`fusion: warning: ${memoryWarning}`);
   }
 
   // The live boot checklist, driven by structured stack events. The panel now
@@ -451,9 +496,11 @@ export async function runFusion(
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
+      ...(options.reasoningModel !== undefined ? { reasoningModel: options.reasoningModel } : {}),
       sessionStore,
       sessionMeta,
       ...(resumeId !== undefined ? { resumeId } : {}),
+      notify,
       log
     });
     disposers.push(() => stack.close());
@@ -485,20 +532,12 @@ export async function runFusion(
     log(`fusion: logs in ${logsDir}`);
   }
 
-  // Out-of-band per-turn status: while the coding agent owns the screen, the
-  // only channel that cannot corrupt its TUI is the terminal title. Render the
-  // fused turn's phase there so a multi-model turn never looks like a hang.
-  const setTerminalTitle = (text: string | undefined): void => {
-    const stream = uiStream();
-    if (!stream.isTTY) return;
-    stream.write(`\u001b]2;${text ?? ""}\u0007`);
-  };
-
   // Hand the terminal to the coding agent cleanly: silence the per-turn gateway
   // chatter (it would corrupt a full-screen agent TUI; trace events still flow
   // to --observe), move turn status to the terminal title, and make sure the
   // cursor is restored.
   const prepareForPassthrough = (): void => {
+    passthroughActive = true;
     setGatewayChatter(false);
     setGatewayStatusSink((status) => {
       switch (status.phase) {
@@ -561,6 +600,27 @@ export async function runFusion(
     };
     const launchedAt = Date.now();
     const code = await integration.launch(ctx);
+    passthroughActive = false;
+    // Incidents that happened while the agent owned the terminal (an OOM-killed
+    // panel server, a dead router): the tool could only show a bare stream
+    // error, so explain what actually happened now that we have the screen back.
+    // Best-effort: a notice failure must never change the exit code.
+    try {
+      if (noticeCounts.size > 0) {
+        const noticeLines = [...noticeCounts.entries()].map(
+          ([line, count]) => (count > 1 ? `${line} (x${count})` : line)
+        );
+        if (useBootView) {
+          uiStream().write("\n");
+          for (const line of noticeLines) uiStream().write(`${yellow(glyph.warn())} ${line}\n`);
+          uiStream().write(`${dim(`incident log: ${join(logsDir, "incidents.log")}`)}\n`);
+        } else {
+          for (const line of noticeLines) log(`fusion: warning: ${line}`);
+        }
+      }
+    } catch {
+      // never let notices mask the tool's exit
+    }
     // The end-of-run receipt: the engine worked invisibly while the agent owned
     // the terminal — this is the one place we say what it actually did.
     // Best-effort: a receipt failure must never change the exit code.

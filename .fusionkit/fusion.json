@@ -16,5 +16,6 @@
   ],
   "judgeModel": "gpt-5.5",
   "local": false,
-  "observe": true
+  "observe": true,
+  "reasoningModel": "mlx-community/Qwen3-1.7B-4bit"
 }

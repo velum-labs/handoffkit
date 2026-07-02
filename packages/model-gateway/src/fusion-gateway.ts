@@ -417,7 +417,18 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
-      writeJson(res, 502, { error: { message: errorMessage(error), type: "front_door_error" } });
+      // Must never throw: a throw here becomes an unhandled rejection that
+      // kills the hosting process. Once headers are sent (an SSE turn that
+      // failed mid-stream), destroy the response instead of writing JSON.
+      try {
+        if (!res.headersSent) {
+          writeJson(res, 502, { error: { message: errorMessage(error), type: "front_door_error" } });
+        } else if (!res.writableEnded) {
+          res.destroy();
+        }
+      } catch {
+        // last resort: drop the response, keep the server alive
+      }
     });
   });
 
