@@ -98,6 +98,7 @@ export const PANEL_PROVIDERS: readonly PanelProvider[] = [
   "openai",
   "anthropic",
   "google",
+  "openrouter",
   "openai-compatible"
 ];
 

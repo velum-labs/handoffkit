@@ -50,6 +50,7 @@ _QUOTA_MARKERS = (
     "billing_hard_limit_reached",
     "billing",
     "credit balance",
+    "insufficient credits",
     "out of credits",
     "payment required",
     "quota exceeded",
@@ -170,6 +171,10 @@ def _category_for(status: int | None, blob: str) -> ProviderErrorCategory:
     # it must win over the generic 429-is-transient rule below.
     if any(marker in blob for marker in _QUOTA_MARKERS):
         return "quota_exhausted"
+    # 402 Payment Required (e.g. OpenRouter with no credits): retrying the same
+    # key will not help.
+    if status == 402:
+        return "quota_exhausted"
     if status in (401, 403):
         return "auth_permanent"
     if status == 404 and "model" in blob:
@@ -255,6 +260,13 @@ async def _call_with_retries(
 ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 
+# OpenRouter app attribution (optional but recommended by OpenRouter): lets the
+# traffic show up as FusionKit on openrouter.ai rankings/analytics.
+OPENROUTER_ATTRIBUTION_HEADERS = {
+    "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
+    "X-Title": "FusionKit",
+}
+
 # The codex Responses backend rejects requests without `instructions`; this is
 # used when the conversation carries no system message.
 CODEX_DEFAULT_INSTRUCTIONS = "You are a helpful assistant."
@@ -300,17 +312,22 @@ class ChatClient(Protocol):
 class OpenAICompatibleClient:
     """Client for any OpenAI Chat Completions compatible endpoint.
 
-    Covers the ``openai``, ``openai-compatible``, ``mlx-lm`` and ``custom``
-    providers, all of which speak the OpenAI Chat Completions wire format.
+    Covers the ``openai``, ``openrouter``, ``openai-compatible``, ``mlx-lm``
+    and ``custom`` providers, all of which speak the OpenAI Chat Completions
+    wire format.
     """
 
     def __init__(self, endpoint: ModelEndpoint) -> None:
         self.endpoint = endpoint
         self.model_id = endpoint.id
+        default_headers = (
+            OPENROUTER_ATTRIBUTION_HEADERS if endpoint.provider == "openrouter" else None
+        )
         self._client = AsyncOpenAI(
             base_url=f"{endpoint.base_url}/v1",
             api_key=resolve_api_key(endpoint),
             timeout=endpoint.timeout_s,
+            default_headers=default_headers,
         )
 
     def _payload(
@@ -969,7 +986,7 @@ LocalModelClient = OpenAICompatibleClient
 def build_client(endpoint: ModelEndpoint) -> ChatClient:
     """Construct the right :class:`ChatClient` for an endpoint's provider."""
     match endpoint.provider:
-        case "openai" | "openai-compatible" | "mlx-lm" | "custom":
+        case "openai" | "openrouter" | "openai-compatible" | "mlx-lm" | "custom":
             return OpenAICompatibleClient(endpoint)
         case "anthropic":
             return AnthropicModelClient(endpoint)

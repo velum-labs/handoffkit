@@ -47,6 +47,7 @@ PROVIDER_DEFAULT_BASE_URL = {
     "openai": "https://api.openai.com",
     "anthropic": "https://api.anthropic.com",
     "google": "https://generativelanguage.googleapis.com",
+    "openrouter": "https://openrouter.ai/api",
     "codex": "https://chatgpt.com/backend-api/codex",
 }
 

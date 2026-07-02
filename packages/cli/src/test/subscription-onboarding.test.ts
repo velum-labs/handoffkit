@@ -49,6 +49,15 @@ test("parsePanelModelSpec still handles normal providers and bare mlx", () => {
   assert.equal(parsePanelModelSpec("q=some-model", {}).provider, "mlx");
 });
 
+test("parsePanelModelSpec keeps slashes and variant colons in openrouter model ids", () => {
+  const spec = parsePanelModelSpec("or=openrouter:deepseek/deepseek-chat:free", {});
+  assert.deepEqual(spec, {
+    id: "or",
+    model: "deepseek/deepseek-chat:free",
+    provider: "openrouter"
+  });
+});
+
 // --- router config generation ----------------------------------------------
 
 test("routerConfigYaml emits auth blocks and omits api_key_env for subscriptions", () => {
@@ -69,6 +78,20 @@ test("routerConfigYaml emits auth blocks and omits api_key_env for subscriptions
   // Subscription endpoints carry no api_key_env.
   const claudeBlock = yaml.slice(yaml.indexOf('id: "claude-code"'), yaml.indexOf('id: "codex"'));
   assert.doesNotMatch(claudeBlock, /api_key_env/);
+});
+
+test("routerConfigYaml emits the OpenRouter base URL and default key env", () => {
+  const yaml = routerConfigYaml({
+    specs: [{ id: "or", model: "deepseek/deepseek-chat:free", provider: "openrouter" }],
+    mlxUrls: {},
+    judgeId: "or"
+  });
+
+  assert.match(yaml, /provider: openrouter/);
+  // No trailing /v1: fusionkit's OpenAI-compatible client appends it.
+  assert.match(yaml, /base_url: "https:\/\/openrouter\.ai\/api"/);
+  assert.match(yaml, /api_key_env: "OPENROUTER_API_KEY"/);
+  assert.match(yaml, /model: "deepseek\/deepseek-chat:free"/);
 });
 
 // --- login detection -------------------------------------------------------

@@ -128,6 +128,14 @@ function keyProbeFor(spec: PanelModelSpec, key: string): KeyProbe | undefined {
         headers: { authorization: `Bearer ${key}` },
         invalidStatuses: [401, 403]
       };
+    case "openrouter":
+      // OpenRouter's /v1/models is public (200 regardless of auth), so probe
+      // the key-info endpoint, which rejects a bad key with 401.
+      return {
+        url: `${spec.baseUrl ?? providerDefaultBaseUrl(provider)}/v1/key`,
+        headers: { authorization: `Bearer ${key}` },
+        invalidStatuses: [401, 403]
+      };
     case "anthropic":
       return {
         url: `${spec.baseUrl ?? providerDefaultBaseUrl(provider)}/v1/models`,

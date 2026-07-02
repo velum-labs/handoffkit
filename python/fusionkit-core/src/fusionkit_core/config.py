@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 FusionMode = Literal["single", "self", "panel", "router"]
 ProviderKind = Literal[
-    "openai", "anthropic", "google", "openai-compatible", "mlx-lm", "custom", "codex"
+    "openai", "anthropic", "google", "openrouter", "openai-compatible", "mlx-lm", "custom", "codex"
 ]
 SubscriptionAuthMode = Literal["api_key", "claude-code", "codex"]
 

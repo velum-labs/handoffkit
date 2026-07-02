@@ -2,12 +2,12 @@
  * Reconstruct a native agent trajectory from the `claude` CLI's
  * `--output-format stream-json` stdout.
  *
- * Unlike codex (whose wire traffic we capture at an in-process gateway), the
- * headless `claude -p` CLI validates the selected model against the configured
- * endpoint's advertised model list and rejects a custom-gateway-advertised id,
- * so claude runs against its native Anthropic backend instead. We therefore
- * reconstruct the trajectory by parsing the CLI's structured stream-json events
- * rather than gateway wire capture.
+ * Unlike codex (whose trajectory comes from gateway wire capture), the headless
+ * `claude -p` CLI's trajectory is reconstructed by parsing its structured
+ * stream-json events: Anthropic-family panel members run against the native
+ * Anthropic backend, and other members run through a per-candidate translation
+ * gateway under a `claude-` alias (see `harness.ts`), but in both cases the
+ * stream-json stdout is the trajectory source.
  *
  * The stream emits one JSON object per line. The relevant events are:
  *   - `{type:"assistant", message:{content:[...]}}` whose content blocks are

@@ -32,11 +32,13 @@ API_KEY_ENVS: dict[ProviderKind, str] = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GEMINI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
 }
 DEFAULT_API_MODELS: dict[ProviderKind, str] = {
     "openai": "gpt-5.5",
     "anthropic": "claude-sonnet-4-5",
     "google": "gemini-2.5-flash",
+    "openrouter": "anthropic/claude-sonnet-4.5",
 }
 
 CONFIG_HEADER = (

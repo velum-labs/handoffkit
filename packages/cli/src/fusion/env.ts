@@ -16,7 +16,7 @@ export type { OnRateLimitPolicy };
 /** A launchable tool id from the registry, or the `serve` pseudo-tool. */
 export type FusionTool = string;
 
-export type PanelProvider = "mlx" | "openai" | "anthropic" | "google" | "openai-compatible";
+export type PanelProvider = "mlx" | "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible";
 
 /**
  * Subscription auth modes: instead of an API key, reuse the user's local Claude
@@ -27,7 +27,7 @@ export type PanelAuthMode = "claude-code" | "codex";
 
 /**
  * One panel model. `mlx` models run locally via the in-repo provisioner; cloud
- * providers (openai/anthropic/google/openai-compatible) are fronted as
+ * providers (openai/anthropic/google/openrouter/openai-compatible) are fronted as
  * OpenAI-compatible endpoints by FusionKit's `serve-endpoint` command, run via
  * `uvx fusionkit` (no checkout required). When `auth` is set, the model reuses
  * the matching subscription login instead of an API key (no `keyEnv`).
@@ -239,6 +239,10 @@ export function providerDefaultBaseUrl(provider: Exclude<PanelProvider, "mlx">):
       return "https://api.anthropic.com";
     case "google":
       return "https://generativelanguage.googleapis.com";
+    // No trailing /v1: fusionkit's OpenAI-compatible client appends it, so the
+    // effective URL is https://openrouter.ai/api/v1.
+    case "openrouter":
+      return "https://openrouter.ai/api";
     case "openai-compatible":
       return "http://127.0.0.1";
     default: {
@@ -257,6 +261,8 @@ export function defaultKeyEnv(provider: PanelProvider): string | undefined {
       return "ANTHROPIC_API_KEY";
     case "google":
       return "GEMINI_API_KEY";
+    case "openrouter":
+      return "OPENROUTER_API_KEY";
     case "openai-compatible":
     case "mlx":
       return undefined;

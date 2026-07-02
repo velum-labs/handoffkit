@@ -112,7 +112,7 @@ def _api_compatibility(endpoint: ModelEndpoint) -> str:
     # dedicated wire-format values.
     if endpoint.provider == "mlx-lm":
         return "mlx-lm-server"
-    if endpoint.provider in ("openai", "openai-compatible"):
+    if endpoint.provider in ("openai", "openrouter", "openai-compatible"):
         return "openai-chat-completions"
     if endpoint.provider == "codex":
         return "openai-responses"

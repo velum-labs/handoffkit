@@ -3,19 +3,19 @@
   "tool": "codex",
   "panel": [
     {
-      "id": "openai",
-      "model": "gpt-5.5",
-      "provider": "openai",
-      "keyEnv": "OPENAI_API_KEY"
+      "id": "openrouter",
+      "model": "moonshotai/kimi-k2",
+      "provider": "openrouter",
+      "keyEnv": "OPENROUTER_API_KEY"
     },
     {
-      "id": "local",
-      "model": "mlx-community/Qwen3-8B-4bit",
-      "provider": "mlx"
+      "id": "openrouter-2",
+      "model": "qwen/qwen3-coder",
+      "provider": "openrouter",
+      "keyEnv": "OPENROUTER_API_KEY"
     }
   ],
-  "judgeModel": "gpt-5.5",
+  "judgeModel": "moonshotai/kimi-k2",
   "local": false,
-  "observe": true,
-  "reasoningModel": "mlx-community/Qwen3-1.7B-4bit"
+  "observe": true
 }

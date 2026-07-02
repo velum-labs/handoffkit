@@ -151,6 +151,21 @@ _CASES: list[tuple[str, _FakeSDKError, ProviderKind, ProviderErrorCategory]] = [
         "auth_permanent",
     ),
     (
+        "openrouter_out_of_credits",
+        _FakeSDKError(
+            status_code=402,
+            body={"error": {"code": 402, "message": "Insufficient credits"}},
+        ),
+        "openrouter",
+        "quota_exhausted",
+    ),
+    (
+        "openrouter_payment_required_bare_402",
+        _FakeSDKError(status_code=402, message="Payment Required"),
+        "openrouter",
+        "quota_exhausted",
+    ),
+    (
         "unclassified_bad_request",
         _FakeSDKError(status_code=400, message="malformed request"),
         "openai",

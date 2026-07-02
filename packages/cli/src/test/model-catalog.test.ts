@@ -50,9 +50,14 @@ test("parsers tolerate malformed payloads", () => {
 
 // --- listModelsForAuth -----------------------------------------------------
 
-test("subscriptions and local always use the curated list", async () => {
-  for (const choice of ["claude-code", "codex", "local"] as const) {
-    const result = await listModelsForAuth(choice, { env: {}, fetchImpl: () => assert.fail("no fetch") });
+test("subscriptions, local, and openrouter always use the curated list", async () => {
+  // OpenRouter is curated on purpose: its live /models list has hundreds of
+  // entries, far too many for the terminal picker.
+  for (const choice of ["claude-code", "codex", "local", "openrouter"] as const) {
+    const result = await listModelsForAuth(choice, {
+      env: { OPENROUTER_API_KEY: "sk-or-test" },
+      fetchImpl: () => assert.fail("no fetch")
+    });
     assert.equal(result.source, "curated");
     assert.ok(result.models.length > 0);
   }

@@ -225,7 +225,8 @@ def init(
     if not endpoints:
         typer.secho(
             "Nothing selected. Log in with `claude` / `codex login`, or set "
-            "OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY, then re-run `fusionkit init`.",
+            "OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY, "
+            "then re-run `fusionkit init`.",
             fg=typer.colors.YELLOW,
             err=True,
         )

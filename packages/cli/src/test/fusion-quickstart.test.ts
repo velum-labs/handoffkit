@@ -99,6 +99,7 @@ test("defaultKeyEnv maps cloud providers to their conventional key env vars", ()
   assert.equal(defaultKeyEnv("openai"), "OPENAI_API_KEY");
   assert.equal(defaultKeyEnv("anthropic"), "ANTHROPIC_API_KEY");
   assert.equal(defaultKeyEnv("google"), "GEMINI_API_KEY");
+  assert.equal(defaultKeyEnv("openrouter"), "OPENROUTER_API_KEY");
   assert.equal(defaultKeyEnv("openai-compatible"), undefined);
   assert.equal(defaultKeyEnv("mlx"), undefined);
 });

@@ -5,7 +5,12 @@ import time
 
 import fusionkit_cli.main as cli
 from fusionkit_cli.main import app
-from fusionkit_cli.onboarding import resolve_config_path, write_config
+from fusionkit_cli.onboarding import (
+    api_key_endpoint,
+    detect_api_keys,
+    resolve_config_path,
+    write_config,
+)
 from fusionkit_core.config import EndpointAuth, FusionConfig, ModelEndpoint, load_config
 from fusionkit_core.credentials import (
     SubscriptionStatus,
@@ -85,6 +90,26 @@ def test_resolve_config_path_prefers_explicit_then_env_then_project(tmp_path, mo
 
     explicit = tmp_path / "explicit.yaml"
     assert resolve_config_path(explicit) == explicit
+
+
+# --- API-key provider scaffolding -------------------------------------------
+
+
+def test_detect_api_keys_includes_openrouter(monkeypatch) -> None:
+    for env_var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+
+    assert detect_api_keys() == {"openrouter": "OPENROUTER_API_KEY"}
+
+
+def test_api_key_endpoint_scaffolds_openrouter() -> None:
+    endpoint = api_key_endpoint("openrouter")
+
+    assert endpoint.provider == "openrouter"
+    assert endpoint.base_url == "https://openrouter.ai/api"
+    assert endpoint.api_key_env == "OPENROUTER_API_KEY"
+    assert "/" in endpoint.model  # OpenRouter ids are vendor/model
 
 
 # --- init wizard -----------------------------------------------------------

@@ -121,6 +121,26 @@ test("parseFusionConfig rejects an unsupported version", () => {
   assert.throws(() => parseFusionConfig({ version: "nope" }, "test"), FusionConfigError);
 });
 
+test("parseFusionConfig accepts an openrouter panel entry", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      panel: [
+        {
+          id: "or-sonnet",
+          model: "anthropic/claude-sonnet-4.5",
+          provider: "openrouter",
+          keyEnv: "OPENROUTER_API_KEY"
+        }
+      ]
+    },
+    "test"
+  );
+  assert.equal(config.panel?.[0]?.provider, "openrouter");
+  assert.equal(config.panel?.[0]?.model, "anthropic/claude-sonnet-4.5");
+  assert.equal(config.panel?.[0]?.keyEnv, "OPENROUTER_API_KEY");
+});
+
 test("parseFusionConfig rejects an unknown panel provider", () => {
   assert.throws(
     () =>

@@ -37,6 +37,19 @@ const CURATED: Record<AuthChoice, string[]> = {
   codex: ["gpt-5.5", "gpt-5.5-codex", "gpt-5.3-codex", "gpt-5.1-codex"],
   openai: ["gpt-5.5", "gpt-5.1", "gpt-5", "o4-mini", "gpt-4.1", "gpt-4.1-mini"],
   google: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+  // OpenRouter's live /models list has hundreds of entries — far too many for a
+  // terminal picker — so it stays curated (a cross-vendor sample); any
+  // `vendor/model` id works via the "other" escape hatch.
+  openrouter: [
+    "anthropic/claude-sonnet-4.5",
+    "openai/gpt-5.5",
+    "google/gemini-2.5-pro",
+    "moonshotai/kimi-k2",
+    "deepseek/deepseek-chat",
+    "qwen/qwen3-coder",
+    "x-ai/grok-4",
+    "meta-llama/llama-3.3-70b-instruct"
+  ],
   // Local models come from the hardware-aware curated catalog; the interactive
   // picker enriches these with download status + RAM fit (see fusion-init).
   local: [...LOCAL_CATALOG_REPOS]
