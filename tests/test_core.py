@@ -43,6 +43,14 @@ def test_config_resolves_default_models() -> None:
     assert config.resolved_synthesizer_model == "judge"
 
 
+def test_synthesis_select_best_is_the_default_policy() -> None:
+    """Audit 20260701-2027 (rubric 4.1): select-best tied the LLM rewrite on pass
+    rate on both measured coding families with strictly fewer losses vs
+    best-single and zero synthesis regressions — the empirical winner is the
+    default. Rewrite composition remains the no-pick fallback."""
+    assert _config().synthesis_select_best is True
+
+
 @pytest.mark.asyncio
 async def test_panel_runner_generates_self_fusion_candidates() -> None:
     runner = ChatTrajectoryProducer({"fast": FakeModelClient("fast")})
