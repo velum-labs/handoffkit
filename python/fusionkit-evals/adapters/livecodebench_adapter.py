@@ -167,10 +167,14 @@ async def evaluate_problem(
             log(f"  {question_id}: {outcome} after retries ({exc})")
             return _terminal_row(signature, question_id, outcome, str(exc)[:500])
         latency = time.monotonic() - started
-    scored = await asyncio.to_thread(
-        _score_result, sandbox, result, tests, test_timeout, checker_mode
-    )
-    stages = _stage_breakdown(engine, result)
+    try:
+        scored = await asyncio.to_thread(
+            _score_result, sandbox, result, tests, test_timeout, checker_mode
+        )
+        stages = _stage_breakdown(engine, result)
+    except Exception as exc:  # noqa: BLE001 - a scoring bug must not abort the batch
+        log(f"  {question_id}: scoring failed ({exc})")
+        return _terminal_row(signature, question_id, "infra_error", f"scoring: {exc}"[:500])
     row = {
         "task_id": question_id,
         "outcome": "scored",
@@ -411,7 +415,13 @@ def _stage_cost_latency(
     model_id = stage.get("model_id")
     cost = None
     if isinstance(model_id, str):
-        cost = _candidate_cost(engine, model_id, stage)
+        # The stage payload carries extra keys (model_id/latency_s/skipped) the
+        # usage contract rejects; pass only the token fields.
+        usage = {
+            key: stage.get(key)
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+        }
+        cost = _candidate_cost(engine, model_id, usage)
     latency = stage.get("latency_s")
     return cost, float(latency) if isinstance(latency, int | float) else None
 
