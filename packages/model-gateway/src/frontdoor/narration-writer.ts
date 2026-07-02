@@ -1,13 +1,15 @@
 /**
  * A {@link NarrationWriter} backed by any OpenAI-compatible chat function —
- * in practice a small local MLX model (the CLI wires `MlxBackend.chat` in),
- * but the shape (`Backend.chat`) works unchanged for any other endpoint.
+ * a small local MLX model (`MlxBackend.chat`), the fusion router fronting a
+ * cloud provider endpoint, or any other `Backend.chat`-shaped callable.
  *
  * Prompting follows the settings that won the narration benchmark: a strict
- * one-sentence system prompt, thinking disabled (Qwen3's hybrid mode burns the
- * whole budget otherwise), temperature 0, and a small token cap. Everything is
- * advisory: any transport/shape problem returns `undefined`, which the beat
- * engine turns into the templated prose.
+ * one-sentence system prompt, temperature 0, and a small token cap. Local
+ * hybrid-thinking models (Qwen3) additionally need thinking disabled via
+ * `chatTemplateKwargs` or they burn the whole budget; cloud providers reject
+ * unknown fields, so the kwarg is opt-in. Everything is advisory: any
+ * transport/shape problem returns `undefined`, which the beat engine turns
+ * into the templated prose.
  */
 
 import type { NarrationWriter } from "./narration.js";
@@ -19,6 +21,12 @@ export type ChatNarrationWriterOptions = {
   chat: ChatFn;
   /** The model id sent in the request body. */
   model: string;
+  /**
+   * Extra `chat_template_kwargs` for the request body (local vLLM/SGLang/MLX
+   * style servers only — e.g. `{ enable_thinking: false }` for Qwen3's hybrid
+   * mode). Omit for cloud providers, which reject unknown fields.
+   */
+  chatTemplateKwargs?: Record<string, unknown>;
 };
 
 const SYSTEM_PROMPT =
@@ -50,9 +58,11 @@ async function ask(options: ChatNarrationWriterOptions, task: string, signal: Ab
     max_tokens: MAX_TOKENS,
     temperature: 0,
     stream: false,
-    // Qwen3 hybrid-thinking off (vLLM/SGLang-style kwarg); servers that don't
-    // know the field ignore it, and stripThinking covers the rest.
-    chat_template_kwargs: { enable_thinking: false }
+    // Local-server template kwargs (e.g. Qwen3 hybrid-thinking off) only when
+    // the caller asked; stripThinking covers models that think anyway.
+    ...(options.chatTemplateKwargs !== undefined
+      ? { chat_template_kwargs: options.chatTemplateKwargs }
+      : {})
   };
   try {
     const response = await options.chat(body, signal);

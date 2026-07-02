@@ -185,6 +185,96 @@ async def test_fuse_stream_yields_judge_reasoning_before_content() -> None:
     assert "beta dropped the export" in reasoning
 
 
+@pytest.mark.asyncio
+async def test_fuse_non_stream_carries_judge_reasoning_on_response() -> None:
+    # Parity with fuse_stream's Act III: a non-stream terminal response carries
+    # the judge's analysis on its reasoning field (serialized by the server as
+    # `reasoning_content`), ahead of any synthesizer-model reasoning.
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient(
+        "judge",
+        [
+            '{"consensus":["both fixed add"],"contradictions":[],"unique_insights":[],'
+            '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[],'
+            '"best_trajectory":"traj_alpha"}',
+            "the fused answer",
+        ],
+    )
+    trajectories = [
+        _trajectory("traj_alpha", "alpha", "Changed add to left + right."),
+        _trajectory("traj_beta", "beta", "Rewrote add as a function."),
+    ]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix the failing add() test.")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=judge,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    assert result.terminal is True
+    assert result.response.reasoning is not None
+    assert result.response.reasoning.startswith("**Weighing the candidates**")
+    assert "alpha looks strongest." in result.response.reasoning
+
+
+@pytest.mark.asyncio
+async def test_fuse_non_stream_skips_reasoning_when_judge_degraded() -> None:
+    # Sentinel analyses (parse failure / degraded judge) must not leak into the
+    # reasoning channel — mirrors analysis_reasoning_markdown's guard.
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient("judge", ["not json", "fallback answer"])
+    trajectories = [_trajectory("traj_alpha", "alpha", "Changed add to left + right.")]
+
+    result = await synthesizer.fuse(
+        [ChatMessage(role="user", content="Fix it.")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=judge,
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    assert result.terminal is True
+    assert result.response.reasoning is None
+
+
+@pytest.mark.asyncio
+async def test_fuse_stream_folds_synth_model_reasoning_into_result() -> None:
+    # A streamed synthesizer's own reasoning tokens (model_reasoning_delta)
+    # accumulate onto the terminal FuseResult response — trace/session parity
+    # with the non-stream path.
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient("judge", [_VALID_ANALYSIS_JSON])
+    synth = FakeModelClient("synth", ["the fused answer"], reasoning="synth thinking")
+    trajectories = [_trajectory("traj_alpha", "alpha", "Changed add to left + right.")]
+
+    items = [
+        item
+        async for item in synthesizer.fuse_stream(
+            [ChatMessage(role="user", content="Fix it.")],
+            trajectories,
+            judge_client=judge,
+            synthesizer_client=synth,
+            sampling=SamplingConfig(),
+            tools=None,
+        )
+    ]
+
+    result = items[-1]
+    assert isinstance(result, FuseResult)
+    assert result.response.reasoning == "synth thinking"
+    # The raw model reasoning still streamed out-of-band as token deltas.
+    model_deltas = [
+        item.model_reasoning_delta
+        for item in items
+        if isinstance(item, StreamChunk) and item.model_reasoning_delta
+    ]
+    assert model_deltas == ["synth thinking"]
+
+
 def _overflow_error() -> ProviderCallError:
     return ProviderCallError(
         "prompt is too long", category="context_overflow", provider="openai", status_code=400

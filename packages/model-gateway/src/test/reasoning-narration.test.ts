@@ -553,7 +553,11 @@ function chatReply(content: string): unknown {
 
 test("createChatNarrationWriter sends one-sentence prompts with thinking disabled", async () => {
   const stub = chatStub(chatReply("Fixed the retry loop."));
-  const writer = createChatNarrationWriter({ chat: stub.fn, model: "qwen-narrator" });
+  const writer = createChatNarrationWriter({
+    chat: stub.fn,
+    model: "qwen-narrator",
+    chatTemplateKwargs: { enable_thinking: false }
+  });
 
   const gist = await writer.candidateGist({ id: "gpt", finalOutput: "long output" }, new AbortController().signal);
   assert.equal(gist, "Fixed the retry loop.");
@@ -579,6 +583,19 @@ test("createChatNarrationWriter sends one-sentence prompts with thinking disable
   assert.equal(compare, "Fixed the retry loop.");
   const compareBody = stub.bodies[1] as { messages: Array<{ content: string }> };
   assert.match(compareBody.messages[1]?.content ?? "", /- gpt: verification: passed \| says: fixed it \| patch:/);
+});
+
+test("createChatNarrationWriter keeps the body cloud-safe when no template kwargs are given", async () => {
+  // Cloud providers reject unknown fields, so the local-server kwarg must be
+  // strictly opt-in.
+  const stub = chatStub(chatReply("Compared the candidates."));
+  const writer = createChatNarrationWriter({ chat: stub.fn, model: "narrator" });
+
+  await writer.candidateGist({ id: "gpt", finalOutput: "output" }, new AbortController().signal);
+
+  const body = stub.bodies[0] as Record<string, unknown>;
+  assert.equal(body.model, "narrator");
+  assert.ok(!("chat_template_kwargs" in body));
 });
 
 test("createChatNarrationWriter strips leading think blocks and rejects bad replies", async () => {

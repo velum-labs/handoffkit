@@ -90,7 +90,7 @@ export type GatewayRunnerConfig = {
    * turn's response (rendered by the tool's native thinking UI). Default on.
    */
   reasoningTraces?: boolean;
-  /** Optional narration prose writer (a small local model); advisory only. */
+  /** Optional narration prose writer (any chat-capable model); advisory only. */
   narrationWriter?: NarrationWriter;
 };
 

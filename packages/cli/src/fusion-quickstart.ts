@@ -48,7 +48,7 @@ import { openUrl, startObservability } from "./fusion/observability.js";
 import type { Observability } from "./fusion/observability.js";
 import { ensureLocalPanelSupported } from "./fusion/platform.js";
 import { provisionFusionEngine } from "./fusion/provision.js";
-import { startFusionStack } from "./fusion/stack.js";
+import { resolveNarratorModel, startFusionStack } from "./fusion/stack.js";
 import type { FusionStack } from "./fusion/stack.js";
 import { localPanelMemoryWarning, preflightRequirements, validateProviderKeys } from "./fusion/preflight.js";
 
@@ -265,10 +265,16 @@ export async function runFusion(
   // Size the local (MLX) members against this machine's usable memory,
   // concurrently with the preamble like the key probes. A panel that does not
   // fit gets a warning (not a hard block): the models would load, then be
-  // OOM-killed mid-run with only a bare stream error inside the tool.
+  // OOM-killed mid-run with only a bare stream error inside the tool. The
+  // narration writer only counts when it resolves to a local MLX model (a
+  // panel member or provider/model token loads nothing locally).
+  const narratorResolution =
+    options.reasoningModel !== undefined && options.reasoning !== false
+      ? resolveNarratorModel(options.reasoningModel, models)
+      : undefined;
   const memoryCheck = spawnsRouter
     ? localPanelMemoryWarning(models, {
-        ...(options.reasoningModel !== undefined ? { extraModels: [options.reasoningModel] } : {})
+        ...(narratorResolution?.kind === "mlx" ? { extraModels: [narratorResolution.model] } : {})
       }).catch(() => undefined)
     : Promise.resolve(undefined);
 

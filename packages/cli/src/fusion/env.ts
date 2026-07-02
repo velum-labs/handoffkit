@@ -63,9 +63,13 @@ export type RunFusionOptions = {
    */
   reasoning?: boolean;
   /**
-   * Optional local MLX model that writes the narration prose (candidate gists
-   * and the judging comparison). Off by default (templated prose); Apple
-   * Silicon only. The narrator's timeout/sanitize guardrails always apply.
+   * Optional model that writes the narration prose (candidate gists and the
+   * judging comparison). Off by default (templated prose). Accepts a panel
+   * member id/model (reuses its router endpoint), a `provider/model` token for
+   * any supported provider (`openai/...`, `anthropic/...`, `google/...`,
+   * `openrouter/...`, `claude-code/...`, `codex/...`), or a local MLX model
+   * path (Apple Silicon only). The narrator's timeout/sanitize guardrails
+   * always apply.
    */
   reasoningModel?: string;
   /** Skip the interactive cost/scope confirmation for the cloud panel. */
@@ -163,9 +167,9 @@ export const DEFAULT_TRIO: readonly PanelModelSpec[] = [
 
 /**
  * How to invoke the `fusionkit` Python CLI: from PyPI via `uvx` by default
- * (no checkout), or from a local checkout via `uv run` when `fusionkitDir` is
- * given (a dev override). Returns the command plus the argv prefix that
- * precedes the subcommand (`serve`, `serve-endpoint`, ...).
+ * (no checkout), or from a local checkout via `uv run --package fusionkit` when
+ * `fusionkitDir` is given (a dev override). Returns the command plus the argv
+ * prefix that precedes the subcommand (`serve`, `serve-endpoint`, ...).
  */
 export function fusionkitPyCommand(fusionkitDir?: string): {
   command: string;
@@ -173,7 +177,7 @@ export function fusionkitPyCommand(fusionkitDir?: string): {
   cwd?: string;
 } {
   if (fusionkitDir !== undefined) {
-    return { command: "uv", prefix: ["run", "fusionkit"], cwd: fusionkitDir };
+    return { command: "uv", prefix: ["run", "--package", "fusionkit", "fusionkit"], cwd: fusionkitDir };
   }
   return { command: "uvx", prefix: [`fusionkit@${FUSIONKIT_PYPI_VERSION}`] };
 }
@@ -195,7 +199,11 @@ export function fusionkitWarmArgv(
 ): { command: string; args: string[]; cwd?: string } {
   const offline = options.offline === true ? ["--offline"] : [];
   if (fusionkitDir !== undefined) {
-    return { command: "uv", args: ["run", ...offline, "fusionkit", "--help"], cwd: fusionkitDir };
+    return {
+      command: "uv",
+      args: ["run", ...offline, "--package", "fusionkit", "fusionkit", "--help"],
+      cwd: fusionkitDir
+    };
   }
   return { command: "uvx", args: [...offline, `fusionkit@${FUSIONKIT_PYPI_VERSION}`, "--help"] };
 }

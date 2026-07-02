@@ -232,6 +232,115 @@ async def test_google_chat_normalizes_text_and_tool_calls() -> None:
     assert json.loads(response.tool_calls[0].arguments) == {"q": "x"}
 
 
+async def test_anthropic_chat_extracts_thinking_blocks() -> None:
+    # Extended-thinking blocks become out-of-band reasoning, never answer text;
+    # redacted blocks carry no readable text and are skipped.
+    client = AnthropicModelClient(_endpoint("anthropic"))
+    message = SimpleNamespace(
+        content=[
+            SimpleNamespace(type="thinking", thinking="let me check", signature="sig"),
+            SimpleNamespace(type="redacted_thinking", data="opaque"),
+            SimpleNamespace(type="text", text="the answer"),
+        ],
+        stop_reason="end_turn",
+        usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+        model_dump=lambda mode="json": {"ok": True},
+    )
+    client._client.messages.create = AsyncMock(return_value=message)
+
+    response = await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert response.content == "the answer"
+    assert response.reasoning == "let me check"
+
+
+async def test_anthropic_stream_chat_yields_thinking_deltas() -> None:
+    client = AnthropicModelClient(_endpoint("anthropic"))
+    events = [
+        SimpleNamespace(
+            type="content_block_delta",
+            delta=SimpleNamespace(type="thinking_delta", thinking="hmm, "),
+        ),
+        SimpleNamespace(
+            type="content_block_delta",
+            delta=SimpleNamespace(type="thinking_delta", thinking="checking"),
+        ),
+        SimpleNamespace(
+            type="content_block_delta",
+            delta=SimpleNamespace(type="text_delta", text="answer"),
+        ),
+        SimpleNamespace(
+            type="message_delta",
+            delta=SimpleNamespace(stop_reason="end_turn"),
+            usage=SimpleNamespace(output_tokens=3),
+        ),
+    ]
+    client._client.messages.create = AsyncMock(return_value=_aiter(events))
+
+    chunks = [chunk async for chunk in client.stream_chat([ChatMessage(role="user", content="hi")])]
+
+    reasoning = "".join(chunk.model_reasoning_delta or "" for chunk in chunks)
+    assert reasoning == "hmm, checking"
+    assert "".join(chunk.delta for chunk in chunks) == "answer"
+
+
+async def test_google_chat_separates_thought_parts_from_answer() -> None:
+    # Parts flagged `thought` (include_thoughts) are reasoning summaries and
+    # must not leak into the answer content.
+    client = GoogleModelClient(_endpoint("google"))
+    response_obj = SimpleNamespace(
+        candidates=[
+            SimpleNamespace(
+                finish_reason="STOP",
+                content=SimpleNamespace(
+                    parts=[
+                        SimpleNamespace(
+                            text="considering options", thought=True, function_call=None
+                        ),
+                        SimpleNamespace(text="the answer", function_call=None),
+                    ]
+                ),
+            )
+        ],
+        usage_metadata=None,
+        model_dump=lambda mode="json": {"ok": True},
+    )
+    client._client.aio.models.generate_content = AsyncMock(return_value=response_obj)
+
+    response = await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert response.content == "the answer"
+    assert response.reasoning == "considering options"
+
+
+async def test_google_stream_chat_yields_thought_deltas() -> None:
+    client = GoogleModelClient(_endpoint("google"))
+
+    def _chunk(parts: list[Any], finish: str | None = None) -> SimpleNamespace:
+        return SimpleNamespace(
+            candidates=[
+                SimpleNamespace(finish_reason=finish, content=SimpleNamespace(parts=parts))
+            ]
+        )
+
+    events = [
+        _chunk([SimpleNamespace(text="thinking...", thought=True, function_call=None)]),
+        _chunk([SimpleNamespace(text="answer", function_call=None)], finish="STOP"),
+    ]
+
+    async def fake_stream(**kwargs: Any) -> AsyncIterator[Any]:
+        return _aiter(events)
+
+    client._client.aio.models.generate_content_stream = fake_stream
+
+    chunks = [chunk async for chunk in client.stream_chat([ChatMessage(role="user", content="hi")])]
+
+    assert chunks[0].model_reasoning_delta == "thinking..."
+    assert chunks[0].delta == ""
+    assert chunks[1].delta == "answer"
+    assert chunks[1].model_reasoning_delta is None
+
+
 async def test_openai_stream_chat_yields_chunks() -> None:
     client = OpenAICompatibleClient(_endpoint("openai-compatible"))
     events = [
@@ -503,6 +612,36 @@ async def test_codex_chat_aggregates_streamed_tool_calls(monkeypatch) -> None:
         "parameters": {"type": "object", "properties": {"q": {"type": "string"}}},
     }
     assert kwargs["tool_choice"] == "auto"
+
+
+async def test_codex_chat_folds_reasoning_summary_deltas(monkeypatch) -> None:
+    # Reasoning summary/text deltas ride `model_reasoning_delta` on the stream
+    # and fold into `ModelResponse.reasoning`, with a blank line between
+    # summary parts (each part is a distinct thought).
+    clear_credential_cache()
+    monkeypatch.setenv("FK_CODEX_OAUTH", "header.payload.sig")
+    endpoint = ModelEndpoint(
+        id="codex-sub",
+        provider="codex",
+        model="gpt-5.5",
+        auth=EndpointAuth(mode="codex", token_env="FK_CODEX_OAUTH"),
+    )
+    client = CodexResponsesClient(endpoint)
+    events = [
+        SimpleNamespace(type="response.reasoning_summary_part.added", part=None),
+        SimpleNamespace(type="response.reasoning_summary_text.delta", delta="**Scanning**"),
+        SimpleNamespace(type="response.reasoning_summary_text.delta", delta=" the repo"),
+        SimpleNamespace(type="response.reasoning_summary_part.added", part=None),
+        SimpleNamespace(type="response.reasoning_summary_text.delta", delta="**Deciding**"),
+        SimpleNamespace(type="response.output_text.delta", delta="the answer"),
+        SimpleNamespace(type="response.completed", response=None),
+    ]
+    client._client.responses.create = AsyncMock(return_value=_aiter(events))
+
+    response = await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert response.content == "the answer"
+    assert response.reasoning == "**Scanning** the repo\n\n**Deciding**"
 
 
 async def test_codex_defaults_instructions_when_no_system_message(monkeypatch) -> None:

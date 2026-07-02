@@ -246,6 +246,16 @@ class JudgeSynthesizer:
         result = self._build_fuse_result(
             response, trajectories, resolved_analysis, prepared.diagnostics
         )
+        if result.terminal:
+            # Parity with fuse_stream's Act III: surface the judge's analysis on
+            # the reasoning channel of the terminal response (ahead of any of
+            # the synthesizer model's own reasoning). The stream path instead
+            # yields it as a reasoning_delta before content, so this stays
+            # non-stream only.
+            judged = analysis_reasoning_markdown(resolved_analysis, trajectories)
+            if judged is not None:
+                combined = (judged + (result.response.reasoning or "")).rstrip()
+                result.response.reasoning = combined
         self._emit_step(
             trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
         )
@@ -708,6 +718,7 @@ class _StreamAccumulator:
     def __init__(self) -> None:
         self.yielded = False
         self._content_parts: list[str] = []
+        self._reasoning_parts: list[str] = []
         self._tool_accumulator: list[dict[str, str]] = []
         self._seen_tool_ids: set[str] = set()
         self._finish_reason: str | None = None
@@ -717,6 +728,10 @@ class _StreamAccumulator:
         self.yielded = True
         if chunk.delta:
             self._content_parts.append(chunk.delta)
+        if chunk.model_reasoning_delta:
+            # The synthesizer model's own reasoning tokens: fold them so the
+            # terminal record matches what the non-stream path captures.
+            self._reasoning_parts.append(chunk.model_reasoning_delta)
         if chunk.tool_call_delta is not None:
             accumulate_tool_call(self._tool_accumulator, self._seen_tool_ids, chunk.tool_call_delta)
         if chunk.finish_reason is not None:
@@ -735,6 +750,7 @@ class _StreamAccumulator:
             finish_reason=self._finish_reason or ("tool_calls" if tool_calls else "stop"),
             usage=self._usage,
             tool_calls=tool_calls,
+            reasoning="".join(self._reasoning_parts) or None,
         )
 
 

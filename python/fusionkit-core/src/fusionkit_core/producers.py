@@ -32,6 +32,20 @@ from fusionkit_core.contracts import (
 )
 from fusionkit_core.types import ChatMessage, ModelResponse, Trajectory, TrajectorySynthesis
 
+# Cap on a single persisted reasoning item, mirroring the TS trajectory-capture
+# MAX_TEXT so evidence stays bounded regardless of how verbose a model thinks.
+_MAX_REASONING_TEXT = 4000
+
+
+def _reasoning_item(reasoning: str, index: int) -> TrajectoryItem:
+    """A model's out-of-band reasoning as a bounded ``reasoning`` item."""
+    text = (
+        reasoning
+        if len(reasoning) <= _MAX_REASONING_TEXT
+        else reasoning[:_MAX_REASONING_TEXT] + "...[truncated]"
+    )
+    return TrajectoryItem(index=index, type="reasoning", text=text)
+
 
 def trajectory_from_response(
     model_id: str,
@@ -43,7 +57,9 @@ def trajectory_from_response(
     """Single chokepoint that lifts a chat response into a zero-step trajectory.
 
     Every internally generated trajectory flows through here so the runtime
-    ``Trajectory`` shape is constructed in exactly one place.
+    ``Trajectory`` shape is constructed in exactly one place. Out-of-band model
+    reasoning (thinking) rides along as a ``reasoning`` item so the judge and
+    synthesizer see it as evidence.
     """
     metadata: dict[str, Any] = {
         "latency_s": response.latency_s,
@@ -53,11 +69,14 @@ def trajectory_from_response(
     if sampling is not None:
         metadata["temperature"] = sampling.temperature
         metadata["seed"] = sampling.seed
+    items: list[TrajectoryItem] = []
+    if response.reasoning:
+        items.append(_reasoning_item(response.reasoning, 0))
     return Trajectory(
         id=f"{model_id}:{ordinal}",
         model_id=model_id,
         content=response.content,
-        items=[],
+        items=items,
         status="succeeded",
         metadata=metadata,
     )
@@ -345,6 +364,11 @@ class AgentTrajectoryProducer:
                 sampling,
                 tools=self._tools,
             )
+            if response.reasoning:
+                # The model's out-of-band thinking for this round, ahead of its
+                # visible content.
+                items.append(_reasoning_item(response.reasoning, item_index))
+                item_index += 1
             if response.content.strip():
                 items.append(
                     TrajectoryItem(index=item_index, type="reasoning", text=response.content)

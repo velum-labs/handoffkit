@@ -7,7 +7,11 @@ import pytest
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.producers import ChatTrajectoryProducer, PanelExhaustedError
+from fusionkit_core.producers import (
+    ChatTrajectoryProducer,
+    PanelExhaustedError,
+    trajectory_from_response,
+)
 from fusionkit_core.types import ChatMessage, ModelResponse
 
 
@@ -59,6 +63,46 @@ async def test_panel_runner_generates_self_fusion_candidates() -> None:
     assert [candidate.model_id for candidate in candidates] == ["fast", "fast"]
     assert candidates[0].metadata["temperature"] == 0.2
     assert candidates[1].metadata["seed"] == 11
+
+
+def test_trajectory_from_response_persists_reasoning_as_item() -> None:
+    # A panel model's out-of-band reasoning becomes a `reasoning` trajectory
+    # item so the judge/synthesizer see it as evidence.
+    response = ModelResponse(model_id="fast", content="the answer", reasoning="thought first")
+    trajectory = trajectory_from_response("fast", response)
+
+    assert trajectory.content == "the answer"
+    assert len(trajectory.items) == 1
+    assert trajectory.items[0].type == "reasoning"
+    assert trajectory.items[0].text == "thought first"
+
+    # No reasoning -> the historical zero-item trajectory.
+    bare = trajectory_from_response("fast", ModelResponse(model_id="fast", content="x"))
+    assert bare.items == []
+
+
+def test_trajectory_from_response_caps_reasoning_length() -> None:
+    response = ModelResponse(model_id="fast", content="ok", reasoning="r" * 10_000)
+    trajectory = trajectory_from_response("fast", response)
+
+    text = trajectory.items[0].text
+    assert text is not None
+    assert text.endswith("...[truncated]")
+    assert len(text) < 5_000
+
+
+@pytest.mark.asyncio
+async def test_panel_reasoning_flows_into_trajectory_items() -> None:
+    producer = ChatTrajectoryProducer(
+        {"fast": FakeModelClient("fast", ["answer"], reasoning="panel thinking")}
+    )
+
+    trajectories = await producer.generate_panel(
+        ["fast"], [ChatMessage(role="user", content="hello")], SamplingConfig()
+    )
+
+    assert trajectories[0].items[0].type == "reasoning"
+    assert trajectories[0].items[0].text == "panel thinking"
 
 
 @pytest.mark.asyncio

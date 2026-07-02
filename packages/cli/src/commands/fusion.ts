@@ -70,8 +70,9 @@ function applyFusionOptions(command: Command): Command {
     .option("--reasoning", "narrate panel/judge progress in the tool's thinking UI (default)")
     .option("--no-reasoning", "keep the stream silent until the judge's first token")
     .option(
-      "--reasoning-model [repo]",
-      `write narration prose with a small local MLX model (default repo: ${DEFAULT_REASONING_MODEL}; Apple Silicon)`
+      "--reasoning-model [model]",
+      "write narration prose with a model: a panel member, provider/model " +
+        `(e.g. openai/gpt-5.5-mini), or a local MLX repo (default: ${DEFAULT_REASONING_MODEL}; Apple Silicon)`
     )
     .option("--yes", "skip the interactive cloud-panel cost confirmation")
     .option("--auth-token <token>", "require a bearer token on the gateway")

@@ -74,7 +74,10 @@ export type FusionConfig = {
   panelTrust?: PanelTrust;
   /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. */
   reasoning?: boolean;
-  /** Local MLX model that writes the narration prose (Apple Silicon only). */
+  /**
+   * Model that writes the narration prose: a panel member, `provider/model`
+   * (any supported provider), or a local MLX model path (Apple Silicon only).
+   */
   reasoningModel?: string;
   /**
    * System-prompt overrides, loaded from `.fusionkit/prompts/*.md`. Not stored

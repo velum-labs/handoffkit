@@ -587,11 +587,19 @@ class AnthropicModelClient:
         latency_s = time.perf_counter() - started
 
         text_parts: list[str] = []
+        thinking_parts: list[str] = []
         tool_calls: list[ToolCall] = []
         for block in message.content:
-            if getattr(block, "type", None) == "text":
+            block_type = getattr(block, "type", None)
+            if block_type == "text":
                 text_parts.append(block.text)
-            elif getattr(block, "type", None) == "tool_use":
+            elif block_type == "thinking":
+                # Extended-thinking block (present only when the caller enabled
+                # thinking). Redacted blocks carry no readable text and are skipped.
+                thinking = getattr(block, "thinking", None)
+                if isinstance(thinking, str) and thinking:
+                    thinking_parts.append(thinking)
+            elif block_type == "tool_use":
                 tool_calls.append(
                     ToolCall(id=block.id, name=block.name, arguments=json.dumps(block.input))
                 )
@@ -613,6 +621,7 @@ class AnthropicModelClient:
             latency_s=latency_s,
             tool_calls=tool_calls,
             raw=message.model_dump(mode="json"),
+            reasoning="".join(thinking_parts) or None,
         )
 
     async def stream_chat(
@@ -645,8 +654,15 @@ class AnthropicModelClient:
                     prompt_tokens = getattr(start_usage, "input_tokens", None)
             elif event_type == "content_block_delta":
                 delta = event.delta
-                if getattr(delta, "type", None) == "text_delta":
+                delta_type = getattr(delta, "type", None)
+                if delta_type == "text_delta":
                     yield StreamChunk(delta=delta.text)
+                elif delta_type == "thinking_delta":
+                    # Extended-thinking tokens: out-of-band reasoning, never
+                    # part of the answer text.
+                    thinking = getattr(delta, "thinking", None)
+                    if isinstance(thinking, str) and thinking:
+                        yield StreamChunk(model_reasoning_delta=thinking)
             elif event_type == "message_delta":
                 finish_reason = getattr(event.delta, "stop_reason", None)
                 usage = None
@@ -735,6 +751,7 @@ class CodexResponsesClient:
         del sampling
         started = time.perf_counter()
         text_parts: list[str] = []
+        reasoning_parts: list[str] = []
         usage = Usage()
         finish_reason: str | None = None
         # Aggregate streamed function-call fragments by call id, preserving the
@@ -743,6 +760,8 @@ class CodexResponsesClient:
         tool_order: list[str] = []
         async for chunk in self._stream(messages, tools, tool_choice, extra):
             text_parts.append(chunk.delta)
+            if chunk.model_reasoning_delta:
+                reasoning_parts.append(chunk.model_reasoning_delta)
             if chunk.tool_call_delta is not None:
                 fragment = tool_fragments.get(chunk.tool_call_delta.id)
                 if fragment is None:
@@ -771,6 +790,7 @@ class CodexResponsesClient:
             usage=usage,
             latency_s=time.perf_counter() - started,
             tool_calls=tool_calls,
+            reasoning="".join(reasoning_parts) or None,
         )
 
     async def stream_chat(
@@ -801,10 +821,29 @@ class CodexResponsesClient:
         # Argument deltas key off the output item id, but tool results must pair
         # back via the function `call_id`; map one to the other as items open.
         call_id_by_item: dict[str, str] = {}
+        reasoning_seen = False
+        pending_reasoning_break = False
         async for event in stream:
             event_type = getattr(event, "type", None)
             if event_type == "response.output_text.delta":
                 yield StreamChunk(delta=getattr(event, "delta", "") or "")
+            elif event_type in (
+                "response.reasoning_summary_text.delta",
+                "response.reasoning_text.delta",
+            ):
+                # The model's own reasoning tokens (summary parts or raw
+                # reasoning text). Out-of-band: never part of the answer.
+                reasoning_delta = getattr(event, "delta", "") or ""
+                if reasoning_delta:
+                    if pending_reasoning_break:
+                        pending_reasoning_break = False
+                        reasoning_delta = "\n\n" + reasoning_delta
+                    reasoning_seen = True
+                    yield StreamChunk(model_reasoning_delta=reasoning_delta)
+            elif event_type == "response.reasoning_summary_part.added":
+                # Summary parts are distinct thoughts; keep a blank line between
+                # them so folded text does not run parts together.
+                pending_reasoning_break = reasoning_seen
             elif event_type == "response.output_item.added":
                 item = getattr(event, "item", None)
                 if getattr(item, "type", None) == "function_call":
@@ -899,7 +938,7 @@ class GoogleModelClient:
         )
         latency_s = time.perf_counter() - started
 
-        text_parts, tool_calls, finish_reason = _google_extract(response)
+        text_parts, thought_parts, tool_calls, finish_reason = _google_extract(response)
         usage = Usage()
         usage_metadata = getattr(response, "usage_metadata", None)
         if usage_metadata is not None:
@@ -916,6 +955,7 @@ class GoogleModelClient:
             latency_s=latency_s,
             tool_calls=tool_calls,
             raw=response.model_dump(mode="json"),
+            reasoning="".join(thought_parts) or None,
         )
 
     async def stream_chat(
@@ -939,12 +979,13 @@ class GoogleModelClient:
             model_id=self.model_id,
         )
         async for chunk in stream:
-            text_parts, tool_calls, finish_reason = _google_extract(chunk)
+            text_parts, thought_parts, tool_calls, finish_reason = _google_extract(chunk)
             tool_call_delta = tool_calls[0] if tool_calls else None
             yield StreamChunk(
                 delta="".join(text_parts),
                 tool_call_delta=tool_call_delta,
                 finish_reason=finish_reason,
+                model_reasoning_delta="".join(thought_parts) or None,
             )
 
     async def aclose(self) -> None:
@@ -965,10 +1006,14 @@ class FakeModelClient:
         model_id: str,
         responses: Sequence[str] | None = None,
         max_context: int | None = None,
+        reasoning: str | None = None,
     ) -> None:
         self.model_id = model_id
         self.max_context = max_context
         self._responses = list(responses or [])
+        # Optional out-of-band reasoning attached to every reply, so tests can
+        # exercise the reasoning capture path without a real provider.
+        self._reasoning = reasoning
         self._calls = 0
 
     def _next_content(self, messages: Sequence[ChatMessage], sampling: SamplingConfig) -> str:
@@ -1002,6 +1047,7 @@ class FakeModelClient:
             content=content,
             latency_s=time.perf_counter() - started,
             usage=Usage(prompt_tokens=0, completion_tokens=len(content.split())),
+            reasoning=self._reasoning,
         )
 
     async def stream_chat(
@@ -1014,6 +1060,8 @@ class FakeModelClient:
     ) -> AsyncIterator[StreamChunk]:
         del tools, tool_choice, extra
         content = self._next_content(messages, sampling or SamplingConfig())
+        if self._reasoning is not None:
+            yield StreamChunk(model_reasoning_delta=self._reasoning)
         for token in content.split():
             yield StreamChunk(delta=f"{token} ")
         yield StreamChunk(
@@ -1349,8 +1397,17 @@ def _google_tool_config(tool_choice: ToolChoice) -> genai_types.ToolConfig:
     )
 
 
-def _google_extract(response: Any) -> tuple[list[str], list[ToolCall], str | None]:
+def _google_extract(
+    response: Any,
+) -> tuple[list[str], list[str], list[ToolCall], str | None]:
+    """Split a Gemini response into (text, thoughts, tool calls, finish reason).
+
+    Parts flagged ``thought`` (present when the caller enables
+    ``thinking_config.include_thoughts``) are the model's reasoning summaries
+    and must never leak into the answer text.
+    """
     text_parts: list[str] = []
+    thought_parts: list[str] = []
     tool_calls: list[ToolCall] = []
     finish_reason: str | None = None
     candidates = getattr(response, "candidates", None) or []
@@ -1360,7 +1417,10 @@ def _google_extract(response: Any) -> tuple[list[str], list[ToolCall], str | Non
         content = getattr(candidate, "content", None)
         for part in getattr(content, "parts", None) or []:
             if getattr(part, "text", None):
-                text_parts.append(part.text)
+                if getattr(part, "thought", None):
+                    thought_parts.append(part.text)
+                else:
+                    text_parts.append(part.text)
             function_call = getattr(part, "function_call", None)
             if function_call is not None:
                 tool_calls.append(
@@ -1370,7 +1430,7 @@ def _google_extract(response: Any) -> tuple[list[str], list[ToolCall], str | Non
                         arguments=json.dumps(dict(function_call.args or {})),
                     )
                 )
-    return text_parts, tool_calls, finish_reason
+    return text_parts, thought_parts, tool_calls, finish_reason
 
 
 def _loads_arguments(arguments: str) -> dict[str, Any]:

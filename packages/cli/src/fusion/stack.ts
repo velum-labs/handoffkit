@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { KernelBackend } from "@fusionkit/ensemble";
 import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
-import { createChatNarrationWriter, MlxBackend, startGateway } from "@fusionkit/model-gateway";
+import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
   Gateway,
   NarrationWriter,
@@ -28,7 +28,7 @@ import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";
 
 import { defaultKeyEnv, fusionkitPyCommand, loadEnvFileInto, providerDefaultBaseUrl } from "./env.js";
-import type { PanelModelSpec, StackReporter } from "./env.js";
+import type { PanelModelSpec, PanelProvider, StackReporter } from "./env.js";
 import { detectHost } from "./local-catalog.js";
 
 /**
@@ -104,6 +104,67 @@ function judgeSpecFor(specs: PanelModelSpec[], judgeModel: string | undefined): 
   if (first === undefined) throw new Error("at least one panel model is required");
   if (judgeModel === undefined) return first;
   return specs.find((spec) => spec.model === judgeModel) ?? first;
+}
+
+/** The router endpoint id reserved for a dedicated narration-writer model. */
+export const NARRATOR_ENDPOINT_ID = "narrator";
+
+/** Cloud providers a `provider/model` narrator token can name. */
+const NARRATOR_CLOUD_PROVIDERS = new Set<PanelProvider>(["openai", "anthropic", "google", "openrouter"]);
+
+/**
+ * How a `--reasoning-model` value is served:
+ * - `endpoint`: it names a panel member (by id or model), so the writer reuses
+ *   that member's existing router endpoint.
+ * - `extra-endpoint`: a `provider/model` token (`openai/gpt-5.5-mini`,
+ *   `claude-code/claude-haiku-4-5`, ...) served by a dedicated `narrator`
+ *   endpoint added to the router config (cloud endpoints are config-only, so
+ *   router startup cost is unchanged).
+ * - `mlx`: anything else is a local MLX model path (the historical behavior),
+ *   booted directly on Apple Silicon.
+ */
+export type NarratorResolution =
+  | { kind: "endpoint"; endpointId: string }
+  | { kind: "extra-endpoint"; spec: PanelModelSpec }
+  | { kind: "mlx"; model: string };
+
+/** Resolve a `--reasoning-model` value against the panel (see {@link NarratorResolution}). */
+export function resolveNarratorModel(
+  reasoningModel: string,
+  specs: readonly PanelModelSpec[]
+): NarratorResolution {
+  const member = specs.find((spec) => spec.id === reasoningModel || spec.model === reasoningModel);
+  if (member !== undefined) return { kind: "endpoint", endpointId: member.id };
+  const slash = reasoningModel.indexOf("/");
+  if (slash > 0 && slash < reasoningModel.length - 1) {
+    const prefix = reasoningModel.slice(0, slash);
+    const model = reasoningModel.slice(slash + 1);
+    if (NARRATOR_CLOUD_PROVIDERS.has(prefix as PanelProvider)) {
+      const provider = prefix as PanelProvider;
+      const keyEnv = defaultKeyEnv(provider);
+      return {
+        kind: "extra-endpoint",
+        spec: {
+          id: NARRATOR_ENDPOINT_ID,
+          model,
+          provider,
+          ...(keyEnv !== undefined ? { keyEnv } : {})
+        }
+      };
+    }
+    // Subscription prefixes reuse the local CLI login, like panel members do.
+    if (prefix === "claude-code") {
+      return {
+        kind: "extra-endpoint",
+        spec: { id: NARRATOR_ENDPOINT_ID, model, provider: "anthropic", auth: "claude-code" }
+      };
+    }
+    if (prefix === "codex") {
+      return { kind: "extra-endpoint", spec: { id: NARRATOR_ENDPOINT_ID, model, auth: "codex" } };
+    }
+  }
+  // A bare HF-style path (e.g. mlx-community/Qwen3-1.7B-4bit): local MLX.
+  return { kind: "mlx", model: reasoningModel };
 }
 
 /**
@@ -202,6 +263,13 @@ export function exportRouterYaml(input: {
  */
 export async function startRouter(options: {
   specs: PanelModelSpec[];
+  /**
+   * Extra non-panel endpoints (e.g. the dedicated `narrator` writer endpoint).
+   * They join the router config and its identity, but never the panel: no
+   * judge candidacy, no harness endpoint, no `models` entry. Cloud or
+   * subscription specs only (an MLX extra would need a loopback gateway).
+   */
+  extraSpecs?: PanelModelSpec[];
   judgeModel?: string;
   fusionkitDir?: string;
   prompts?: PromptOverrides;
@@ -212,9 +280,10 @@ export async function startRouter(options: {
   log: (line: string) => void;
 }): Promise<Router> {
   const { specs, report } = options;
+  const allSpecs = [...specs, ...(options.extraSpecs ?? [])];
   const judgeSpec = judgeSpecFor(specs, options.judgeModel);
   const models: EnsembleModel[] = specs.map((spec) => ({ id: spec.id, model: spec.model }));
-  const identity = specs.map((spec) => spec.id).sort().join(",");
+  const identity = allSpecs.map((spec) => spec.id).sort().join(",");
 
   const announceStart = (label: string): void => {
     if (report) report({ kind: "server.start", id: "router", label });
@@ -278,7 +347,7 @@ export async function startRouter(options: {
     }
 
     const config = routerConfigYaml({
-      specs,
+      specs: allSpecs,
       mlxUrls,
       judgeId: judgeSpec.id,
       ...(options.prompts !== undefined ? { prompts: options.prompts } : {})
@@ -420,7 +489,12 @@ export type StartFusionStackOptions = {
   panelTrust?: PanelTrust;
   /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. Default on. */
   reasoning?: boolean;
-  /** Optional local MLX model that writes the narration prose (Apple Silicon only). */
+  /**
+   * Optional model that writes the narration prose: a panel member id/model, a
+   * `provider/model` token (any supported provider, incl. `claude-code`/`codex`
+   * subscriptions), or a local MLX model path (Apple Silicon only). See
+   * {@link resolveNarratorModel}.
+   */
   reasoningModel?: string;
   logsDir?: string;
   report?: StackReporter;
@@ -441,6 +515,18 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
   const judgeModelName = options.judgeModel ?? options.models[0]?.model ?? "";
   const models: EnsembleModel[] = options.models.map((spec) => ({ id: spec.id, model: spec.model }));
 
+  // Resolve the narration-writer model (--reasoning-model) up front: a panel
+  // member reuses its router endpoint, a provider/model token needs a dedicated
+  // `narrator` endpoint folded into the router config (and its identity, so
+  // reuse detection distinguishes routers with and without it), and anything
+  // else is a local MLX model booted directly.
+  const narratorResolution =
+    options.reasoningModel !== undefined && options.reasoning !== false
+      ? resolveNarratorModel(options.reasoningModel, options.models)
+      : undefined;
+  const narratorSpec =
+    narratorResolution?.kind === "extra-endpoint" ? narratorResolution.spec : undefined;
+
   let modelEndpoints: Record<string, string>;
   let fusionBackendUrl: string;
   let reusedRouter = false;
@@ -452,7 +538,12 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
   } else {
     // Discover-or-spawn the single router (models + synthesis), reusing a
     // compatible running instance (same endpoint id set) across runs.
-    const expectedIdentity = options.models.map((spec) => spec.id).sort().join(",");
+    const expectedIdentity = [
+      ...options.models.map((spec) => spec.id),
+      ...(narratorSpec !== undefined ? [narratorSpec.id] : [])
+    ]
+      .sort()
+      .join(",");
     const resolved = await portless.discoverOrSpawn({
       name: "router",
       identity: expectedIdentity,
@@ -474,6 +565,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
         if (report) report({ kind: "server.start", id: "router", label: "router" });
         const router = await startRouter({
           specs: options.models,
+          ...(narratorSpec !== undefined ? { extraSpecs: [narratorSpec] } : {}),
           ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
           ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
           ...(options.prompts !== undefined ? { prompts: options.prompts } : {}),
@@ -508,46 +600,74 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     }
   }
 
-  // Optional local narration writer (--reasoning-model): a small MLX model
-  // that writes the narration prose. Boots in the background — until it is
-  // warm, writer calls time out into the templated prose, so it never delays
-  // the stack or a turn. Off Apple Silicon it degrades to templates with a note.
+  // Optional narration writer (--reasoning-model): the model that writes the
+  // narration prose. Router-served models (a panel member, or the dedicated
+  // `narrator` endpoint) need no extra process; a local MLX model boots in the
+  // background — until it is warm, writer calls time out into the templated
+  // prose, so it never delays the stack or a turn.
   let narrationWriter: NarrationWriter | undefined;
   let narrationClose: () => Promise<void> = async () => {};
-  if (options.reasoningModel !== undefined && options.reasoning !== false) {
-    if (!detectHost().appleSilicon) {
+  if (narratorResolution !== undefined && options.reasoningModel !== undefined) {
+    const reasoningModel = options.reasoningModel;
+    if (narratorResolution.kind === "mlx") {
+      // Local MLX path (the historical behavior). Off Apple Silicon it
+      // degrades to templates with a note.
+      if (!detectHost().appleSilicon) {
+        options.log(
+          `fusion: --reasoning-model ${reasoningModel} is a local MLX model and needs Apple Silicon; using templated narration`
+        );
+      } else {
+        const reasoningBackend = new MlxBackend({
+          model: narratorResolution.model,
+          onEvent: (event) => {
+            if (event.type !== "crashed") return;
+            options.notify?.(
+              describeServerCrash({
+                label: `the narration writer (${reasoningModel})`,
+                exitCode: event.exitCode,
+                signal: event.signal,
+                consequence: "narration falls back to templated prose"
+              })
+            );
+          }
+        });
+        void reasoningBackend.start().catch((error: unknown) => {
+          // Best-effort warm: a failed start just means templated narration, but
+          // say so — a silent fallback would read as the feature not working.
+          const first = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+          options.log(
+            `fusion: narration model ${reasoningModel} failed to start; using templated prose (${first})`
+          );
+        });
+        narrationWriter = createChatNarrationWriter({
+          chat: (body, signal) => reasoningBackend.chat(body, signal),
+          model: narratorResolution.model,
+          // Qwen3-style hybrid thinking burns the whole one-sentence budget;
+          // local servers accept the kwarg (cloud providers would reject it).
+          chatTemplateKwargs: { enable_thinking: false }
+        });
+        narrationClose = () => reasoningBackend.close();
+      }
+    } else if (narratorResolution.kind === "extra-endpoint" && override) {
+      // A dedicated narrator endpoint only exists on a router this stack
+      // configures; with pre-running endpoints there is nowhere to add it.
       options.log(
-        `fusion: --reasoning-model needs Apple Silicon; using templated narration (requested ${options.reasoningModel})`
+        `fusion: --reasoning-model ${reasoningModel} needs the managed fusion router; using templated narration`
       );
     } else {
-      const reasoningModel = options.reasoningModel;
-      const reasoningBackend = new MlxBackend({
-        model: reasoningModel,
-        onEvent: (event) => {
-          if (event.type !== "crashed") return;
-          options.notify?.(
-            describeServerCrash({
-              label: `the narration writer (${reasoningModel})`,
-              exitCode: event.exitCode,
-              signal: event.signal,
-              consequence: "narration falls back to templated prose"
-            })
-          );
-        }
-      });
-      void reasoningBackend.start().catch((error: unknown) => {
-        // Best-effort warm: a failed start just means templated narration, but
-        // say so — a silent fallback would read as the feature not working.
-        const first = (error instanceof Error ? error.message : String(error)).split("\n")[0];
-        options.log(
-          `fusion: narration model ${reasoningModel} failed to start; using templated prose (${first})`
-        );
+      // Router-served: the writer calls the router's OpenAI chat door with the
+      // endpoint id as the model. No process to manage, any provider works.
+      const endpointId =
+        narratorResolution.kind === "endpoint"
+          ? narratorResolution.endpointId
+          : narratorResolution.spec.id;
+      const routerBackend = new OpenAiBackend({
+        baseUrl: `${modelEndpoints[endpointId] ?? fusionBackendUrl}/v1`
       });
       narrationWriter = createChatNarrationWriter({
-        chat: (body, signal) => reasoningBackend.chat(body, signal),
-        model: options.reasoningModel
+        chat: (body, signal) => routerBackend.chat(body, signal),
+        model: endpointId
       });
-      narrationClose = () => reasoningBackend.close();
     }
   }
 

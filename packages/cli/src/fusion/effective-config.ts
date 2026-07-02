@@ -59,7 +59,7 @@ export type EffectiveFusionConfig = {
   onRateLimit: Provenance<OnRateLimitPolicy>;
   portless: Provenance<boolean>;
   reasoning: Provenance<boolean>;
-  /** The local narration-writer model; undefined = templated prose. */
+  /** The narration-writer model (panel member, provider/model, or local MLX); undefined = templated prose. */
   reasoningModel: Provenance<string | undefined>;
   prompts: Provenance<PromptOverrides>;
 };
