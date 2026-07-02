@@ -51,10 +51,23 @@ export type AnthropicRequest = {
 // ---- OpenAI shapes we read back ----
 
 type OpenAiToolCall = { id?: string; index?: number; function?: { name?: string; arguments?: string } };
-type OpenAiDelta = { content?: string | null; reasoning_content?: string | null; tool_calls?: OpenAiToolCall[] };
+// `reasoning_content` carries fusion narration beats; `reasoning` carries the
+// upstream model's raw thinking tokens (local MLX / router passthrough). Both
+// map onto Anthropic thinking blocks, which stream deltas continuously anyway.
+type OpenAiDelta = {
+  content?: string | null;
+  reasoning?: string | null;
+  reasoning_content?: string | null;
+  tool_calls?: OpenAiToolCall[];
+};
 type OpenAiChoice = {
   delta?: OpenAiDelta;
-  message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
+  message?: {
+    content?: string | null;
+    reasoning?: string | null;
+    reasoning_content?: string | null;
+    tool_calls?: OpenAiToolCall[];
+  };
   finish_reason?: string | null;
 };
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
@@ -224,6 +237,14 @@ export function chatToAnthropicMessage(openai: OpenAiResponse, model: string): R
   const choice = openai.choices?.[0];
   const message = choice?.message;
   const content: Record<string, unknown>[] = [];
+
+  const reasoning =
+    typeof message?.reasoning === "string" && message.reasoning.length > 0
+      ? message.reasoning
+      : typeof message?.reasoning_content === "string" && message.reasoning_content.length > 0
+        ? message.reasoning_content
+        : "";
+  if (reasoning.length > 0) content.push({ type: "thinking", thinking: reasoning, signature: "" });
 
   const text = typeof message?.content === "string" ? message.content : "";
   if (text.length > 0) content.push({ type: "text", text });
@@ -408,6 +429,19 @@ export function openAiSseToAnthropic(
           type: "content_block_delta",
           index: state.thinkingIndex,
           delta: { type: "thinking_delta", thinking: delta.reasoning_content.replace(/\*\*/g, "") }
+        })
+      );
+    }
+
+    if (typeof delta.reasoning === "string" && delta.reasoning.length > 0 && !state.thinkingClosed) {
+      // Raw model thinking tokens pass through verbatim: they are already
+      // plain text, and Anthropic thinking blocks stream token deltas natively.
+      ensureThinking(controller);
+      controller.enqueue(
+        sse("content_block_delta", {
+          type: "content_block_delta",
+          index: state.thinkingIndex,
+          delta: { type: "thinking_delta", thinking: delta.reasoning }
         })
       );
     }

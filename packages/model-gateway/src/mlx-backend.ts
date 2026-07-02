@@ -30,6 +30,20 @@ export type MlxBackendOptions = {
   onEvent?: (event: ManagedServerEvent) => void;
 };
 
+/**
+ * Default hybrid-thinking ON for chat requests to the local server. Qwen3-class
+ * templates honor `enable_thinking` and reason before answering (measurably
+ * better agentic behavior); templates that don't know the kwarg ignore it. A
+ * caller that sets `chat_template_kwargs` itself always wins — the narration
+ * writer explicitly sends `enable_thinking: false` and must stay off.
+ */
+export function withThinkingDefault(body: unknown): unknown {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return body;
+  const record = body as Record<string, unknown>;
+  if (record.chat_template_kwargs !== undefined) return body;
+  return { ...record, chat_template_kwargs: { enable_thinking: true } };
+}
+
 export class MlxBackend implements Backend {
   readonly #server: ReturnType<typeof mlxServer>;
   readonly #model: string;
@@ -98,7 +112,7 @@ export class MlxBackend implements Backend {
   }
 
   async chat(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return (await this.#ready()).chat(body, signal);
+    return (await this.#ready()).chat(withThinkingDefault(body), signal);
   }
 
   async models(signal?: AbortSignal): Promise<Response> {

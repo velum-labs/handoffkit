@@ -44,7 +44,14 @@ if (!existsSync(cliEntry)) {
 
 const child = spawn(process.execPath, [cliEntry, ...process.argv.slice(2)], {
   cwd: process.cwd(),
-  env: { ...process.env, FUSIONKIT_DEV: "1" },
+  env: {
+    ...process.env,
+    FUSIONKIT_DEV: "1",
+    // Point the Python engine at this checkout's uv workspace (unless the
+    // caller already chose one), so dev runs exercise the local
+    // `python/*` fusionkit instead of the pinned PyPI release.
+    FUSIONKIT_DIR: process.env.FUSIONKIT_DIR ?? repoRoot
+  },
   stdio: "inherit"
 });
 

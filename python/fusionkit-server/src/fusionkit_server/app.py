@@ -494,6 +494,12 @@ async def _fused_completion_sse(
                 # The judge's analysis rides the reasoning channel ahead of the
                 # answer; coding agents render it in their native thinking UI.
                 yield chunk({"reasoning_content": item.reasoning_delta}, None, None)
+            if item.model_reasoning_delta:
+                # The upstream model's own reasoning tokens (local MLX / vLLM
+                # style). Re-emitted on `reasoning` — the token-stream field —
+                # so downstream translators accumulate rather than treating
+                # every token as a narration beat.
+                yield chunk({"reasoning": item.model_reasoning_delta}, None, None)
             if item.delta:
                 streamed_content = True
                 yield chunk({"content": item.delta}, None, None)
@@ -866,6 +872,10 @@ def _openai_step_response(
     fusion: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
+    if response.reasoning:
+        # Out-of-band reasoning (local MLX / vLLM-style upstreams) surfaces on
+        # the de-facto ``reasoning_content`` field coding agents understand.
+        message["reasoning_content"] = response.reasoning
     tool_calls = _tool_calls_payload(response)
     if tool_calls:
         message["tool_calls"] = tool_calls

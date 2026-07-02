@@ -78,6 +78,27 @@ function contentText(content: unknown): string {
   return parts.join("");
 }
 
+/** Reasoning text carried on an OpenAI-style message or delta: the raw
+ *  `reasoning` field (local MLX / router passthrough) or the vLLM-style
+ *  `reasoning_content`. */
+function reasoningField(obj: Record<string, unknown> | undefined): string {
+  if (obj === undefined) return "";
+  const raw = asString(obj.reasoning);
+  if (raw !== undefined && raw.length > 0) return raw;
+  const content = asString(obj.reasoning_content);
+  return content !== undefined && content.length > 0 ? content : "";
+}
+
+/** Joined text of a Responses reasoning item's `summary` parts. */
+function summaryText(summary: unknown): string {
+  return asArray(summary)
+    .map((part) => {
+      const obj = asObject(part);
+      return obj?.type === "summary_text" ? asString(obj.text) ?? "" : "";
+    })
+    .join("");
+}
+
 /**
  * Reconstruct steps from an OpenAI chat-completions conversation: assistant
  * messages (text + tool_calls) interleaved with tool-result messages. The final
@@ -94,6 +115,10 @@ function fromOpenAiChat(messages: unknown[]): CapturedStep[] {
     if (obj === undefined) continue;
     const role = asString(obj.role);
     if (role === "assistant") {
+      const reasoning = reasoningField(obj);
+      if (reasoning.length > 0) {
+        push({ type: "reasoning", text: truncate(reasoning, MAX_TEXT) });
+      }
       const text = contentText(obj.content);
       const toolCalls = asArray(obj.tool_calls);
       if (text.length > 0 && toolCalls.length > 0) {
@@ -152,8 +177,13 @@ function fromResponses(input: unknown[]): CapturedStep[] {
         ...(asString(obj.call_id) !== undefined ? { tool_call_id: asString(obj.call_id) } : {}),
         text: truncate(contentText(obj.output ?? obj.content), MAX_TEXT)
       });
+    } else if (type === "reasoning") {
+      // A reasoning output item echoed back by the caller: text lives in
+      // `summary` parts ({type:"summary_text", text}), not `content`.
+      const text = summaryText(obj.summary);
+      if (text.length > 0) push({ type: "reasoning", text: truncate(text, MAX_TEXT) });
     } else {
-      // message item (role + content) or reasoning item.
+      // message item (role + content).
       const role = asString(obj.role);
       const text = contentText(obj.content);
       if (text.length === 0) continue;
@@ -337,6 +367,66 @@ function finalOutputFromSse(call: RawCall): string {
   }
 }
 
+/** Reasoning text carried in a response body (per dialect), stream or not.
+ *  Request items only carry reasoning once the caller echoes it back on the
+ *  next turn — a single-step run's reasoning exists solely in the response. */
+function reasoningFromResponse(call: RawCall): string {
+  const body = asObject(tryParseJson(call.responseText));
+  if (body !== undefined) {
+    if (call.dialect === "openai-chat") {
+      return reasoningField(asObject(asObject(asArray(body.choices)[0])?.message));
+    }
+    if (call.dialect === "openai-responses") {
+      return asArray(body.output)
+        .map((item) => {
+          const obj = asObject(item);
+          return obj?.type === "reasoning" ? summaryText(obj.summary) : "";
+        })
+        .join("");
+    }
+    if (call.dialect === "anthropic-messages") {
+      return asArray(body.content)
+        .map((block) => {
+          const obj = asObject(block);
+          return obj?.type === "thinking" ? asString(obj.thinking) ?? "" : "";
+        })
+        .join("");
+    }
+    return "";
+  }
+  const events = parseSseEvents(call.responseText);
+  if (call.dialect === "openai-responses") {
+    // The terminal response object carries the assembled reasoning summary.
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const type = asString(events[i]?.type);
+      if (type === "response.completed" || type === "response.incomplete") {
+        return asArray(asObject(events[i]?.response)?.output)
+          .map((item) => {
+            const obj = asObject(item);
+            return obj?.type === "reasoning" ? summaryText(obj.summary) : "";
+          })
+          .join("");
+      }
+    }
+    return "";
+  }
+  if (call.dialect === "openai-chat") {
+    let accumulated = "";
+    for (const event of events) {
+      const choice = asObject(asArray(event.choices)[0]);
+      accumulated += reasoningField(asObject(choice?.delta));
+    }
+    return accumulated;
+  }
+  let accumulated = "";
+  for (const event of events) {
+    if (asString(event.type) !== "content_block_delta") continue;
+    const delta = asObject(event.delta);
+    if (asString(delta?.type) === "thinking_delta") accumulated += asString(delta?.thinking) ?? "";
+  }
+  return accumulated;
+}
+
 /** Pull the final assistant text out of a model response body (per dialect). */
 function finalOutputForCall(call: RawCall): string {
   const body = asObject(tryParseJson(call.responseText));
@@ -371,6 +461,13 @@ export function reconstructTrajectory(calls: readonly RawCall[]): CapturedTrajec
   if (source === undefined) return { steps: [], finalOutput: "" };
   const steps = stepsForCall(source);
   const finalOutput = finalOutputForCall(source);
+  // The final turn's reasoning exists only in the response (the request items
+  // only ever carry echoed reasoning from *prior* turns); surface it as a
+  // reasoning step ahead of the final answer.
+  const finalReasoning = reasoningFromResponse(source);
+  if (finalReasoning.length > 0 && steps.at(-1)?.type !== "reasoning") {
+    steps.push({ index: steps.length, type: "reasoning", text: truncate(finalReasoning, MAX_TEXT) });
+  }
   // Ensure the final answer is the trailing output step.
   if (finalOutput.length > 0 && steps.at(-1)?.text !== finalOutput) {
     steps.push({ index: steps.length, type: "output", text: truncate(finalOutput, MAX_TEXT) });

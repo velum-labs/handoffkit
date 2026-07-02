@@ -378,6 +378,7 @@ class OpenAICompatibleClient:
             latency_s=latency_s,
             tool_calls=_openai_tool_calls(getattr(choice.message, "tool_calls", None)),
             raw=response.model_dump(mode="json"),
+            reasoning=_reasoning_text(choice.message),
         )
 
     async def stream_chat(
@@ -412,10 +413,11 @@ class OpenAICompatibleClient:
             choice = event.choices[0]
             delta = choice.delta
             yield StreamChunk(
-                delta=delta.content or "",
+                delta=(delta.content or "") if delta is not None else "",
                 tool_call_delta=_openai_stream_tool_call(getattr(delta, "tool_calls", None)),
                 finish_reason=choice.finish_reason,
                 usage=usage,
+                model_reasoning_delta=_reasoning_text(delta),
             )
 
     async def aclose(self) -> None:
@@ -1022,6 +1024,23 @@ def _openai_tool_choice(tool_choice: ToolChoice) -> Any:
     if isinstance(tool_choice, str):
         return tool_choice
     return {"type": "function", "function": {"name": tool_choice["name"]}}
+
+
+def _reasoning_text(message_or_delta: Any) -> str | None:
+    """Out-of-band reasoning from an OpenAI-compatible message or stream delta.
+
+    Local MLX (this repo's mlx-lm fork) emits ``reasoning``; vLLM/SGLang-style
+    servers emit ``reasoning_content``. Both ride as pydantic extra fields on
+    the SDK models, so plain ``getattr`` reads them. Returns ``None`` when
+    absent or empty so downstream ``if`` checks stay cheap.
+    """
+    if message_or_delta is None:
+        return None
+    for field in ("reasoning", "reasoning_content"):
+        value = getattr(message_or_delta, field, None)
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 def _openai_tool_calls(tool_calls: Any) -> list[ToolCall]:

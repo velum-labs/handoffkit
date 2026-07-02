@@ -55,10 +55,24 @@ export type ResponsesRequest = {
 // ---- OpenAI chat shapes we read back ----
 
 type OpenAiToolCall = { id?: string; index?: number; function?: { name?: string; arguments?: string } };
-type OpenAiDelta = { content?: string | null; reasoning_content?: string | null; tool_calls?: OpenAiToolCall[] };
+// Reasoning rides two distinct wire fields: `reasoning_content` carries
+// complete narration beats (the fusion judge channel — one summary part per
+// delta), while `reasoning` carries the upstream model's raw thinking tokens
+// (local MLX / router passthrough — accumulated into a single summary part).
+type OpenAiDelta = {
+  content?: string | null;
+  reasoning?: string | null;
+  reasoning_content?: string | null;
+  tool_calls?: OpenAiToolCall[];
+};
 type OpenAiChoice = {
   delta?: OpenAiDelta;
-  message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
+  message?: {
+    content?: string | null;
+    reasoning?: string | null;
+    reasoning_content?: string | null;
+    tool_calls?: OpenAiToolCall[];
+  };
   finish_reason?: string | null;
 };
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
@@ -285,6 +299,22 @@ function buildOutput(
   customTools: ReadonlySet<string>
 ): Record<string, unknown>[] {
   const output: Record<string, unknown>[] = [];
+  const reasoning =
+    typeof message?.reasoning === "string" && message.reasoning.length > 0
+      ? message.reasoning
+      : typeof message?.reasoning_content === "string" && message.reasoning_content.length > 0
+        ? message.reasoning_content
+        : "";
+  if (reasoning.length > 0) {
+    // A reasoning-only turn must still produce output: without this item an
+    // all-thinking response assembles as `output: []`, which callers (codex)
+    // treat as an empty turn and retry.
+    output.push({
+      type: "reasoning",
+      id: `rs_${randomId()}`,
+      summary: [{ type: "summary_text", text: reasoning }]
+    });
+  }
   const text = typeof message?.content === "string" ? message.content : "";
   if (text.length > 0) {
     output.push({
@@ -384,6 +414,8 @@ export function openAiSseToResponses(
   let reasoningClosed = false;
   const reasoningParts: string[] = [];
   let reasoningOutputIndex = -1;
+  /** Index into `reasoningParts` of the open token-accumulating part, or -1. */
+  let tokenPartIndex = -1;
   let nextOutputIndex = 0;
   let messageOutputIndex = -1;
   let finished = false;
@@ -411,13 +443,17 @@ export function openAiSseToResponses(
     controller.enqueue(sse("response.created", { response: baseResponse("in_progress", []) }));
   };
 
-  // Reasoning summary item lifecycle (the fusion narration channel). The item
-  // opens on the first `reasoning_content` delta and closes as soon as the
-  // first real output (text or tool call) begins. Each delta is a complete
-  // narration beat, so each becomes its OWN summary part (added -> delta ->
-  // done): Codex flushes reasoning to the transcript on summary-part
-  // boundaries and promotes the newest part's bold header to its live status,
-  // so per-beat parts are what make the narration visible as it happens.
+  // Reasoning summary item lifecycle. The item opens on the first reasoning
+  // delta and closes as soon as the first real output (text or tool call)
+  // begins. Two delta flavors share the item:
+  // - `reasoning_content` (fusion narration): each delta is a complete beat,
+  //   so each becomes its OWN summary part (added -> delta -> done). Codex
+  //   flushes reasoning to the transcript on summary-part boundaries and
+  //   promotes the newest part's bold header to its live status, so per-beat
+  //   parts are what make the narration visible as it happens.
+  // - `reasoning` (the model's raw thinking tokens): deltas are token
+  //   fragments, so they accumulate into ONE summary part that stays open
+  //   until a beat arrives or the reasoning item closes.
   const ensureReasoningItem = (controller: Controller): void => {
     ensureCreated(controller);
     if (reasoningOpen || reasoningClosed) return;
@@ -434,6 +470,7 @@ export function openAiSseToResponses(
   const emitReasoningPart = (controller: Controller, text: string): void => {
     ensureReasoningItem(controller);
     if (reasoningClosed) return;
+    closeTokenPart(controller);
     const summaryIndex = reasoningParts.length;
     reasoningParts.push(text);
     const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: summaryIndex };
@@ -447,11 +484,50 @@ export function openAiSseToResponses(
     );
   };
 
+  // The single accumulating part for raw thinking tokens (`delta.reasoning`).
+  const emitReasoningTokenDelta = (controller: Controller, text: string): void => {
+    ensureReasoningItem(controller);
+    if (reasoningClosed) return;
+    if (tokenPartIndex === -1) {
+      tokenPartIndex = reasoningParts.length;
+      reasoningParts.push("");
+      controller.enqueue(
+        sse("response.reasoning_summary_part.added", {
+          item_id: reasoningItemId,
+          output_index: reasoningOutputIndex,
+          summary_index: tokenPartIndex,
+          part: { type: "summary_text", text: "" }
+        })
+      );
+    }
+    reasoningParts[tokenPartIndex] += text;
+    controller.enqueue(
+      sse("response.reasoning_summary_text.delta", {
+        item_id: reasoningItemId,
+        output_index: reasoningOutputIndex,
+        summary_index: tokenPartIndex,
+        delta: text
+      })
+    );
+  };
+
+  const closeTokenPart = (controller: Controller): void => {
+    if (tokenPartIndex === -1) return;
+    const text = reasoningParts[tokenPartIndex] ?? "";
+    const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: tokenPartIndex };
+    tokenPartIndex = -1;
+    controller.enqueue(sse("response.reasoning_summary_text.done", { ...base, text }));
+    controller.enqueue(
+      sse("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
+    );
+  };
+
   const reasoningSummary = (): Array<Record<string, unknown>> =>
     reasoningParts.map((text) => ({ type: "summary_text", text }));
 
   const closeReasoning = (controller: Controller): void => {
     if (!reasoningOpen || reasoningClosed) return;
+    closeTokenPart(controller);
     reasoningClosed = true;
     controller.enqueue(
       sse("response.output_item.done", {
@@ -614,6 +690,10 @@ export function openAiSseToResponses(
 
     if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0 && !reasoningClosed) {
       emitReasoningPart(controller, delta.reasoning_content);
+    }
+
+    if (typeof delta.reasoning === "string" && delta.reasoning.length > 0 && !reasoningClosed) {
+      emitReasoningTokenDelta(controller, delta.reasoning);
     }
 
     if (typeof delta.content === "string" && delta.content.length > 0) {
