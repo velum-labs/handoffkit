@@ -1,0 +1,141 @@
+{
+ "gateway": "http://127.0.0.1:8091",
+ "n_tasks": 25,
+ "scored": 25,
+ "pipeline_errors": 0,
+ "gateway_pass_rate": 0.8,
+ "engine_pass_rate_same_tasks": 0.84,
+ "gateway_vs_engine_mcnemar": {
+  "wins": 0,
+  "losses": 1,
+  "statistic": 0.0,
+  "significant": false
+ },
+ "results": {
+  "abc388_c": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc387_c": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc388_d": {
+   "outcome": "scored",
+   "gateway_passed": false,
+   "engine_passed": false
+  },
+  "abc388_e": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc387_f": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc389_d": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc388_f": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc388_g": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc389_e": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc390_c": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc389_f": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc390_e": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc390_d": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc389_g": {
+   "outcome": "scored",
+   "gateway_passed": false,
+   "engine_passed": false
+  },
+  "abc390_f": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc391_d": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc390_g": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc391_e": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc392_c": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc392_d": {
+   "outcome": "scored",
+   "gateway_passed": false,
+   "engine_passed": false
+  },
+  "abc391_g": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc392_f": {
+   "outcome": "scored",
+   "gateway_passed": false,
+   "engine_passed": false
+  },
+  "abc391_f": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc393_d": {
+   "outcome": "scored",
+   "gateway_passed": true,
+   "engine_passed": true
+  },
+  "abc392_g": {
+   "outcome": "scored",
+   "gateway_passed": false,
+   "engine_passed": true
+  }
+ }
+}

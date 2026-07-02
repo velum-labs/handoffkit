@@ -1137,6 +1137,8 @@ def fusion_hillclimb_polyglot(
                 {
                     "endpoints": endpoints_sig,
                     "panel": sorted(fusion_config.panel_models),
+                    "panel_samples_per_model": fusion_config.panel_samples_per_model,
+                    "panel_temperatures": list(fusion_config.self_temperatures),
                     "languages": sorted(language_list),
                     "subset": subset,
                 },
