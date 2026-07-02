@@ -27,6 +27,8 @@ export type ClaudeStreamTrajectory = {
   finalOutput: string;
 };
 
+export type ClaudeStreamStepEmitter = (line: string) => void;
+
 const MAX_TEXT = 4000;
 const MAX_TOOL_INPUT = 600;
 
@@ -72,7 +74,19 @@ function resultContentText(content: unknown): string {
     .join("");
 }
 
-/** Parse a single stream-json line into zero or more (un-indexed) steps. */
+function parseStreamJsonLine(line: string): Record<string, unknown> | undefined {
+  const trimmed = line.trim();
+  if (trimmed.length === 0 || trimmed[0] !== "{") return undefined;
+  let event: unknown;
+  try {
+    event = JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+  return asObject(event);
+}
+
+/** Parse a single stream-json event into zero or more (un-indexed) steps. */
 function stepsForEvent(event: Record<string, unknown>): Omit<TrajectoryStep, "index">[] {
   const out: Omit<TrajectoryStep, "index">[] = [];
   const type = asString(event.type);
@@ -119,6 +133,30 @@ function stepsForEvent(event: Record<string, unknown>): Omit<TrajectoryStep, "in
   return out;
 }
 
+/** Create an incremental parser for `claude --output-format stream-json` lines. */
+export function createClaudeStreamStepEmitter(onStep: (step: TrajectoryStep) => void): ClaudeStreamStepEmitter {
+  let index = 0;
+  let lastText = "";
+  const push = (step: Omit<TrajectoryStep, "index">): void => {
+    const indexed = { index, ...step };
+    index += 1;
+    if (indexed.text !== undefined) lastText = indexed.text;
+    onStep(indexed);
+  };
+  return (line: string): void => {
+    const obj = parseStreamJsonLine(line);
+    if (obj === undefined) return;
+    if (asString(obj.type) === "result") {
+      const result = asString(obj.result);
+      if (result !== undefined && result.length > 0 && lastText !== result) {
+        push({ type: "output", text: truncate(result, MAX_TEXT) });
+      }
+      return;
+    }
+    for (const step of stepsForEvent(obj)) push(step);
+  };
+}
+
 /**
  * Reconstruct a trajectory from the full `claude -p --output-format stream-json`
  * stdout. Non-JSON lines (and irrelevant system/hook events) are ignored.
@@ -130,15 +168,7 @@ export function parseClaudeStreamJson(stdout: string): ClaudeStreamTrajectory {
     steps.push({ index: steps.length, ...step });
   };
   for (const line of stdout.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0 || trimmed[0] !== "{") continue;
-    let event: unknown;
-    try {
-      event = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-    const obj = asObject(event);
+    const obj = parseStreamJsonLine(line);
     if (obj === undefined) continue;
     if (asString(obj.type) === "result") {
       const result = asString(obj.result);

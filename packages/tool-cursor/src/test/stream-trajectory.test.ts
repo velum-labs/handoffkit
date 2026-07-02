@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseCursorStreamJson } from "../stream-trajectory.js";
+import type { TrajectoryStep } from "@fusionkit/ensemble";
+
+import { createCursorStreamStepEmitter, parseCursorStreamJson } from "../stream-trajectory.js";
 
 function line(value: unknown): string {
   return JSON.stringify(value);
@@ -66,6 +68,29 @@ test("reconstructs a cursor-agent tool loop (tool_call + tool_result)", () => {
   assert.equal(steps[0]?.tool_name, "read_file");
   assert.equal(steps[1]?.tool_call_id, "c1");
   assert.equal(finalOutput, "Done.");
+});
+
+test("incremental cursor stream-json emitter matches final parser step ordering", () => {
+  const lines = [
+    line({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_call", id: "c1", name: "read_file", arguments: { path: "a.js" } }]
+      }
+    }),
+    line({
+      type: "user",
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: "c1", content: "file body" }] }
+    }),
+    line({ type: "result", subtype: "success", is_error: false, result: "Done." })
+  ];
+  const live: TrajectoryStep[] = [];
+  const emit = createCursorStreamStepEmitter((step) => live.push(step));
+  for (const item of lines) emit(item);
+
+  const final = parseCursorStreamJson(lines.join("\n"));
+  assert.deepEqual(live, final.steps);
 });
 
 test("flags an errored cursor result", () => {

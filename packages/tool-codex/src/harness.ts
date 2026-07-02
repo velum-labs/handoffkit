@@ -392,6 +392,7 @@ async function runProvider(input: {
   provider: CodexProvider;
   env: Record<string, string>;
   model: EnsembleModel;
+  onCapturedTrajectory?: (trajectory: CapturedTrajectory) => void;
 }): Promise<CodexRunProvider> {
   switch (input.provider.kind) {
     case "ambient":
@@ -421,7 +422,10 @@ async function runProvider(input: {
           onModelCall(record) {
             records.push(record);
           },
-          onModelCallRaw: capture.sink.onModelCallRaw
+          onModelCallRaw(context, result) {
+            capture.sink.onModelCallRaw?.(context, result);
+            input.onCapturedTrajectory?.(capture.reconstruct());
+          }
         }
       });
       return {
@@ -568,7 +572,10 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
       const provider = await runProvider({
         provider: effectiveProvider,
         env: state.env,
-        model: effectiveModel
+        model: effectiveModel,
+        onCapturedTrajectory: (trajectory) => {
+          for (const step of trajectory.steps) tracer.step(step);
+        }
       });
       try {
         const env = { ...state.env };

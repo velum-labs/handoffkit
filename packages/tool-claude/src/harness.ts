@@ -10,7 +10,7 @@ import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
 import type { ClaudeCodeBindingOptions } from "@fusionkit/session-harness";
 
 import { hardeningToJson, traceCandidate } from "@fusionkit/ensemble";
-import { parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
+import { createClaudeStreamStepEmitter, parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
 import type {
   CandidateHardeningMetadata,
   EnsembleDescriptor,
@@ -421,6 +421,7 @@ function driveClaudePrint(input: {
   model: string;
   timeoutMs: number;
   env: Record<string, string>;
+  onStdoutLine?: (line: string) => void;
 }): Promise<ClaudePrintResult> {
   const args = [
     "-p",
@@ -446,19 +447,37 @@ function driveClaudePrint(input: {
     });
     let stdout = "";
     let stderr = "";
+    let pendingStdout = "";
     let timedOut = false;
+    const flushStdoutLines = (final = false): void => {
+      let newline = pendingStdout.indexOf("\n");
+      while (newline >= 0) {
+        const line = pendingStdout.slice(0, newline);
+        pendingStdout = pendingStdout.slice(newline + 1);
+        input.onStdoutLine?.(line);
+        newline = pendingStdout.indexOf("\n");
+      }
+      if (final && pendingStdout.length > 0) {
+        input.onStdoutLine?.(pendingStdout);
+        pendingStdout = "";
+      }
+    };
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
     }, input.timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
+      const text = chunk.toString("utf8");
+      stdout += text;
+      pendingStdout += text;
+      flushStdoutLines();
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf8");
     });
     child.on("error", (error) => {
       clearTimeout(timer);
+      flushStdoutLines(true);
       resolve({
         status: "failed",
         stdout,
@@ -468,6 +487,7 @@ function driveClaudePrint(input: {
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
+      flushStdoutLines(true);
       const transcript = [stdout, stderr].filter(Boolean).join("\n");
       if (timedOut) {
         resolve({ status: "failed", stdout, transcript, reason: "claude CLI timed out" });
@@ -555,13 +575,15 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
       // Claude runs against its native Anthropic backend (see driveClaudePrint).
       // Resolve the panel candidate's model id to a CLI-accepted claude model.
       const cliModel = resolveClaudeCliModel(model.model);
+      const emitStep = createClaudeStreamStepEmitter((step) => tracer.step(step));
       const result = await driveClaudePrint({
         command,
         cwd: worktree?.path ?? descriptor.workspace ?? process.cwd(),
         prompt: descriptor.prompt,
         model: cliModel,
         timeoutMs: options.timeoutMs ?? descriptor.policy.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        env: definedLocalEnv(env)
+        env: definedLocalEnv(env),
+        onStdoutLine: emitStep
       });
       const diff = worktree ? captureWorktreeDiff(worktree.path) : undefined;
       const outputHash = artifactHash(result.transcript.length > 0 ? result.transcript : candidate);

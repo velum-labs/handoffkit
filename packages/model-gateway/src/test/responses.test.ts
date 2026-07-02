@@ -5,7 +5,12 @@ import { test } from "node:test";
 
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
-import { responsesToChat } from "../adapters/responses.js";
+import {
+  chatToResponses,
+  customToolNames,
+  openAiSseToResponses,
+  responsesToChat
+} from "../adapters/responses.js";
 import { startGateway } from "../server.js";
 
 /**
@@ -163,6 +168,165 @@ test("serves a non-streaming Responses object end to end", async () => {
     await gateway.close();
     await mock.close();
   }
+});
+
+// ---- custom (freeform) tool round-trip: Codex apply_patch ----
+
+const PATCH = "*** Begin Patch\n*** Update File: a.md\n@@\n-old\n+new\n*** End Patch\n";
+
+function sseStream(...chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    }
+  });
+}
+
+function chatChunk(delta: Record<string, unknown>, finish: string | null = null): string {
+  return `data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+}
+
+test("responsesToChat forwards a custom tool as a function tool with an {input} schema", () => {
+  const body = {
+    input: "patch something",
+    tools: [
+      {
+        type: "custom",
+        name: "apply_patch",
+        description: "Use this to edit files.",
+        format: { type: "grammar", syntax: "lark", definition: "start: PATCH" }
+      },
+      { type: "function", name: "shell", parameters: { type: "object", properties: { cmd: {} } } }
+    ]
+  };
+  assert.deepEqual([...customToolNames(body)], ["apply_patch"]);
+  const chat = responsesToChat(body, "local-model");
+  const tools = chat.tools as Array<{
+    function: { name: string; description?: string; parameters: Record<string, unknown> };
+  }>;
+  assert.equal(tools.length, 2);
+  const patch = tools[0]?.function;
+  assert.equal(patch?.name, "apply_patch");
+  const properties = patch?.parameters.properties as { input?: { type: string } };
+  assert.equal(properties.input?.type, "string");
+  assert.deepEqual(patch?.parameters.required, ["input"]);
+  // The freeform contract and the grammar are folded into the description.
+  assert.match(patch?.description ?? "", /Use this to edit files\./);
+  assert.match(patch?.description ?? "", /"input" field/);
+  assert.match(patch?.description ?? "", /start: PATCH/);
+  // The plain function tool keeps its own schema untouched.
+  assert.deepEqual(tools[1]?.function.parameters, { type: "object", properties: { cmd: {} } });
+});
+
+test("responsesToChat maps echoed custom_tool_call / custom_tool_call_output items into chat history", () => {
+  const chat = responsesToChat(
+    {
+      input: [
+        { type: "message", role: "user", content: "apply the patch" },
+        { type: "custom_tool_call", call_id: "call_p", name: "apply_patch", input: PATCH },
+        { type: "custom_tool_call_output", call_id: "call_p", output: "Done" }
+      ]
+    },
+    "local-model"
+  );
+  const messages = chat.messages as Record<string, unknown>[];
+  assert.equal(messages.length, 3);
+  assert.equal(messages[1]?.role, "assistant");
+  const toolCalls = (messages[1] as { tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> })
+    .tool_calls ?? [];
+  assert.equal(toolCalls.length, 1);
+  assert.equal(toolCalls[0]?.id, "call_p");
+  assert.equal(toolCalls[0]?.function.name, "apply_patch");
+  assert.deepEqual(JSON.parse(toolCalls[0]?.function.arguments ?? ""), { input: PATCH });
+  assert.equal(messages[2]?.role, "tool");
+  assert.equal((messages[2] as { tool_call_id?: string }).tool_call_id, "call_p");
+  assert.equal(messages[2]?.content, "Done");
+});
+
+test("chatToResponses emits a custom_tool_call item with raw input for a custom-declared tool", () => {
+  const custom = new Set(["apply_patch"]);
+  const openai = {
+    id: "cmpl-3",
+    choices: [
+      {
+        message: {
+          content: null,
+          tool_calls: [
+            { id: "call_p", function: { name: "apply_patch", arguments: JSON.stringify({ input: PATCH }) } },
+            { id: "call_s", function: { name: "shell", arguments: '{"cmd":"ls"}' } }
+          ]
+        }
+      }
+    ]
+  };
+  const response = chatToResponses(openai, "fusion-panel", custom);
+  const output = response.output as Array<Record<string, unknown>>;
+  assert.equal(output.length, 2);
+  assert.equal(output[0]?.type, "custom_tool_call");
+  assert.equal(output[0]?.call_id, "call_p");
+  assert.equal(output[0]?.name, "apply_patch");
+  assert.equal(output[0]?.input, PATCH);
+  assert.equal(output[1]?.type, "function_call");
+  assert.equal(output[1]?.arguments, '{"cmd":"ls"}');
+});
+
+test("chatToResponses passes non-JSON custom tool arguments through as raw input", () => {
+  const openai = {
+    choices: [
+      {
+        message: {
+          content: null,
+          tool_calls: [{ id: "call_p", function: { name: "apply_patch", arguments: PATCH } }]
+        }
+      }
+    ]
+  };
+  const response = chatToResponses(openai, "fusion-panel", new Set(["apply_patch"]));
+  const output = response.output as Array<Record<string, unknown>>;
+  assert.equal(output[0]?.type, "custom_tool_call");
+  assert.equal(output[0]?.input, PATCH);
+});
+
+test("openAiSseToResponses streams a custom tool call as custom_tool_call events", async () => {
+  const args = JSON.stringify({ input: PATCH });
+  const upstream = sseStream(
+    chatChunk({ tool_calls: [{ index: 0, id: "call_p", function: { name: "apply_patch", arguments: args.slice(0, 12) } }] }),
+    chatChunk({ tool_calls: [{ index: 0, function: { arguments: args.slice(12) } }] }),
+    chatChunk({}, "tool_calls"),
+    "data: [DONE]\n\n"
+  );
+  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", new Set(["apply_patch"]))).text();
+  assert.ok(text.includes('"type":"custom_tool_call"'));
+  assert.ok(text.includes("event: response.custom_tool_call_input.delta"));
+  assert.ok(text.includes("event: response.custom_tool_call_input.done"));
+  // The raw patch text (not the JSON wrapper) is what reaches the caller.
+  assert.ok(text.includes(JSON.stringify(PATCH).slice(1, -1)));
+  assert.ok(!text.includes("response.function_call_arguments"), "custom calls emit no function-call argument events");
+  // The terminal response object carries the completed custom_tool_call item.
+  const completed = text
+    .split("\n\n")
+    .find((event) => event.startsWith("event: response.completed"));
+  assert.ok(completed !== undefined);
+  const payload = JSON.parse(completed.slice(completed.indexOf("data:") + 5)) as {
+    response: { output: Array<{ type: string; name?: string; input?: string }> };
+  };
+  const item = payload.response.output.find((entry) => entry.type === "custom_tool_call");
+  assert.equal(item?.name, "apply_patch");
+  assert.equal(item?.input, PATCH);
+});
+
+test("openAiSseToResponses keeps function tools on the incremental function_call path", async () => {
+  const upstream = sseStream(
+    chatChunk({ tool_calls: [{ index: 0, id: "call_s", function: { name: "shell", arguments: '{"cmd":"ls"}' } }] }),
+    chatChunk({}, "tool_calls"),
+    "data: [DONE]\n\n"
+  );
+  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", new Set(["apply_patch"]))).text();
+  assert.ok(text.includes('"type":"function_call"'));
+  assert.ok(text.includes("event: response.function_call_arguments.delta"));
+  assert.ok(!text.includes("custom_tool_call"));
 });
 
 test("translates a streamed Responses event sequence", async () => {

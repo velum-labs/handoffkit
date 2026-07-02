@@ -24,13 +24,27 @@ type ResponsesInputItem =
   | { type?: "message"; role: "user" | "assistant" | "system" | "developer"; content: string | ResponsesContentPart[] }
   | { type: "function_call"; call_id?: string; id?: string; name: string; arguments: string }
   | { type: "function_call_output"; call_id: string; output: unknown }
+  | { type: "custom_tool_call"; call_id?: string; id?: string; name: string; input?: string }
+  | { type: "custom_tool_call_output"; call_id: string; output: unknown }
   | { type: string; [key: string]: unknown };
+
+/** A tool declaration on a Responses request: a function tool (JSON-schema
+ *  `parameters`) or a freeform "custom" tool (a grammar/text `format` and raw
+ *  string input — e.g. Codex's `apply_patch` for GPT-5-family models). */
+type ResponsesTool = {
+  type?: string;
+  name: string;
+  description?: string;
+  parameters?: unknown;
+  strict?: boolean;
+  format?: { type?: string; syntax?: string; definition?: string };
+};
 
 export type ResponsesRequest = {
   model?: string;
   instructions?: string;
   input?: string | ResponsesInputItem[];
-  tools?: Array<{ type?: string; name: string; description?: string; parameters?: unknown; strict?: boolean }>;
+  tools?: ResponsesTool[];
   tool_choice?: "auto" | "none" | "required" | { type: "function"; name: string };
   max_output_tokens?: number;
   temperature?: number;
@@ -89,6 +103,69 @@ function mapToolChoice(choice: NonNullable<ResponsesRequest["tool_choice"]>): un
   return { type: "function", function: { name: choice.name } };
 }
 
+/**
+ * The names of the freeform ("custom") tools a Responses request declares.
+ * The chat core only speaks JSON function tools, so these are forwarded as
+ * function tools with an `{input: string}` schema — and on the way back, a
+ * call to one of these names must be emitted as a `custom_tool_call` item
+ * (raw string input), which is the shape the caller (Codex) expects.
+ */
+export function customToolNames(body: ResponsesRequest): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const tool of body.tools ?? []) {
+    if (tool.type === "custom" && typeof tool.name === "string" && tool.name.length > 0) {
+      names.add(tool.name);
+    }
+  }
+  return names;
+}
+
+/** The chat function-tool schema a custom tool is forwarded as. */
+const CUSTOM_TOOL_PARAMETERS = {
+  type: "object",
+  properties: {
+    input: {
+      type: "string",
+      description: "The complete raw text input for this tool (not JSON-encoded)."
+    }
+  },
+  required: ["input"],
+  additionalProperties: false
+} as const;
+
+/** Fold a custom tool's freeform contract (and grammar, if any) into a
+ *  description the chat-side model can actually follow. */
+function customToolDescription(tool: ResponsesTool): string {
+  const parts: string[] = [];
+  if (typeof tool.description === "string" && tool.description.length > 0) parts.push(tool.description);
+  parts.push(
+    `This is a freeform tool: put the ENTIRE raw tool input as one string in the "input" field. ` +
+      `Do not wrap it in any other JSON structure.`
+  );
+  const definition = tool.format?.definition;
+  if (typeof definition === "string" && definition.length > 0) {
+    const syntax = tool.format?.syntax;
+    parts.push(`The input must conform to this ${syntax ?? "grammar"}:\n${definition}`);
+  }
+  return parts.join("\n\n");
+}
+
+/** Extract the raw string input from a chat tool call's accumulated arguments.
+ *  The model was asked for `{"input": "..."}`; a model that emitted the raw
+ *  text directly (non-JSON) is passed through verbatim. */
+function customToolInput(args: string): string {
+  try {
+    const parsed: unknown = JSON.parse(args);
+    if (parsed !== null && typeof parsed === "object" && typeof (parsed as { input?: unknown }).input === "string") {
+      return (parsed as { input: string }).input;
+    }
+    if (typeof parsed === "string") return parsed;
+  } catch {
+    // not JSON: treat the whole argument string as the raw input
+  }
+  return args;
+}
+
 /** Translate a Responses request to an OpenAI Chat Completions body. */
 export function responsesToChat(body: ResponsesRequest, backendModel: string | undefined): Record<string, unknown> {
   const messages: Record<string, unknown>[] = [];
@@ -121,9 +198,21 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
         });
         continue;
       }
+      // A prior custom (freeform) tool call echoed back by the caller. Re-encode
+      // its raw input as the `{input}` JSON arguments the chat side uses, so the
+      // conversation round-trips losslessly.
+      if (item.type === "custom_tool_call") {
+        const call = item as Extract<ResponsesInputItem, { type: "custom_tool_call" }>;
+        pendingToolCalls.push({
+          id: call.call_id ?? call.id ?? `call_${randomId()}`,
+          type: "function",
+          function: { name: call.name, arguments: JSON.stringify({ input: call.input ?? "" }) }
+        });
+        continue;
+      }
       flushToolCalls();
-      if (item.type === "function_call_output") {
-        const out = item as Extract<ResponsesInputItem, { type: "function_call_output" }>;
+      if (item.type === "function_call_output" || item.type === "custom_tool_call_output") {
+        const out = item as { call_id: string; output: unknown };
         const content = typeof out.output === "string" ? out.output : JSON.stringify(out.output);
         messages.push({ role: "tool", tool_call_id: out.call_id, content });
         continue;
@@ -152,21 +241,34 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (Array.isArray(body.tools) && body.tools.length > 0) {
-    // Only forward function tools with a usable name. Codex advertises some
-    // tools (e.g. custom/freeform shapes) that translate to an empty function
-    // name, which OpenAI Chat Completions rejects outright.
+    // Only forward tools with a usable name (Chat Completions rejects an empty
+    // function name outright). A freeform "custom" tool (e.g. Codex's
+    // `apply_patch`) has no JSON schema — it becomes a function tool with an
+    // `{input: string}` schema and its grammar folded into the description, so
+    // the chat-side model knows exactly how to call it.
     const named = body.tools.filter(
       (tool) => typeof tool.name === "string" && tool.name.length > 0
     );
     if (named.length > 0) {
-      chat.tools = named.map((tool) => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          ...(tool.description !== undefined ? { description: tool.description } : {}),
-          parameters: tool.parameters ?? { type: "object", properties: {} }
-        }
-      }));
+      chat.tools = named.map((tool) =>
+        tool.type === "custom"
+          ? {
+              type: "function",
+              function: {
+                name: tool.name,
+                description: customToolDescription(tool),
+                parameters: CUSTOM_TOOL_PARAMETERS
+              }
+            }
+          : {
+              type: "function",
+              function: {
+                name: tool.name,
+                ...(tool.description !== undefined ? { description: tool.description } : {}),
+                parameters: tool.parameters ?? { type: "object", properties: {} }
+              }
+            }
+      );
     }
   }
   if (body.tool_choice !== undefined) chat.tool_choice = mapToolChoice(body.tool_choice);
@@ -176,7 +278,12 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
 
 // ---- non-streaming response translation ----
 
-function buildOutput(message: OpenAiChoice["message"]): Record<string, unknown>[] {
+const NO_CUSTOM_TOOLS: ReadonlySet<string> = new Set();
+
+function buildOutput(
+  message: OpenAiChoice["message"],
+  customTools: ReadonlySet<string>
+): Record<string, unknown>[] {
   const output: Record<string, unknown>[] = [];
   const text = typeof message?.content === "string" ? message.content : "";
   if (text.length > 0) {
@@ -190,12 +297,27 @@ function buildOutput(message: OpenAiChoice["message"]): Record<string, unknown>[
   }
   if (Array.isArray(message?.tool_calls)) {
     for (const call of message.tool_calls) {
+      const name = call.function?.name ?? "";
+      const args = call.function?.arguments ?? "";
+      if (customTools.has(name)) {
+        // The caller declared this tool as freeform: it expects a
+        // `custom_tool_call` item carrying the raw string input.
+        output.push({
+          type: "custom_tool_call",
+          id: `ctc_${randomId()}`,
+          call_id: call.id ?? `call_${randomId()}`,
+          name,
+          input: customToolInput(args),
+          status: "completed"
+        });
+        continue;
+      }
       output.push({
         type: "function_call",
         id: `fc_${randomId()}`,
         call_id: call.id ?? `call_${randomId()}`,
-        name: call.function?.name ?? "",
-        arguments: call.function?.arguments ?? "",
+        name,
+        arguments: args,
         status: "completed"
       });
     }
@@ -203,9 +325,13 @@ function buildOutput(message: OpenAiChoice["message"]): Record<string, unknown>[
   return output;
 }
 
-export function chatToResponses(openai: OpenAiResponse, model: string): Record<string, unknown> {
+export function chatToResponses(
+  openai: OpenAiResponse,
+  model: string,
+  customTools: ReadonlySet<string> = NO_CUSTOM_TOOLS
+): Record<string, unknown> {
   const message = openai.choices?.[0]?.message;
-  const output = buildOutput(message);
+  const output = buildOutput(message, customTools);
   const inputTokens = openai.usage?.prompt_tokens ?? 0;
   const outputTokens = openai.usage?.completion_tokens ?? 0;
   return {
@@ -225,11 +351,23 @@ function sse(type: string, data: Record<string, unknown>): Uint8Array {
   return ENCODER.encode(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
 }
 
-type ToolAccumulator = { outputIndex: number; itemId: string; callId: string; name: string; args: string };
+type ToolAccumulator = {
+  outputIndex: number;
+  itemId: string;
+  callId: string;
+  name: string;
+  args: string;
+  /** Declared by the caller as a freeform tool: emit `custom_tool_call` (raw
+   *  string input, extracted from the completed JSON arguments) instead of
+   *  `function_call`. Input is only extractable once the arguments are
+   *  complete, so custom calls stream no per-delta argument events. */
+  custom: boolean;
+};
 
 export function openAiSseToResponses(
   upstream: ReadableStream<Uint8Array>,
-  model: string
+  model: string,
+  customTools: ReadonlySet<string> = NO_CUSTOM_TOOLS
 ): ReadableStream<Uint8Array> {
   const reader = upstream.getReader();
   const decoder = new TextDecoder();
@@ -360,14 +498,25 @@ export function openAiSseToResponses(
       });
     }
     for (const tool of tools.values()) {
-      output.push({
-        type: "function_call",
-        id: tool.itemId,
-        call_id: tool.callId,
-        name: tool.name,
-        arguments: tool.args,
-        status: "completed"
-      });
+      output.push(
+        tool.custom
+          ? {
+              type: "custom_tool_call",
+              id: tool.itemId,
+              call_id: tool.callId,
+              name: tool.name,
+              input: customToolInput(tool.args),
+              status: "completed"
+            }
+          : {
+              type: "function_call",
+              id: tool.itemId,
+              call_id: tool.callId,
+              name: tool.name,
+              arguments: tool.args,
+              status: "completed"
+            }
+      );
     }
     return output;
   };
@@ -408,6 +557,28 @@ export function openAiSseToResponses(
       );
     }
     for (const tool of tools.values()) {
+      if (tool.custom) {
+        // The raw input is only extractable from the completed JSON arguments,
+        // so a custom call flushes its whole input here in one delta + done.
+        const input = customToolInput(tool.args);
+        const base = { item_id: tool.itemId, output_index: tool.outputIndex };
+        controller.enqueue(sse("response.custom_tool_call_input.delta", { ...base, delta: input }));
+        controller.enqueue(sse("response.custom_tool_call_input.done", { ...base, input }));
+        controller.enqueue(
+          sse("response.output_item.done", {
+            output_index: tool.outputIndex,
+            item: {
+              type: "custom_tool_call",
+              id: tool.itemId,
+              call_id: tool.callId,
+              name: tool.name,
+              input,
+              status: "completed"
+            }
+          })
+        );
+        continue;
+      }
       controller.enqueue(
         sse("response.function_call_arguments.done", {
           item_id: tool.itemId,
@@ -465,18 +636,23 @@ export function openAiSseToResponses(
         if (tool === undefined) {
           ensureCreated(controller);
           closeReasoning(controller);
+          const name = call.function?.name ?? "";
+          const custom = customTools.has(name);
           tool = {
             outputIndex: nextOutputIndex++,
-            itemId: `fc_${randomId()}`,
+            itemId: custom ? `ctc_${randomId()}` : `fc_${randomId()}`,
             callId: call.id ?? `call_${randomId()}`,
-            name: call.function?.name ?? "",
-            args: ""
+            name,
+            args: "",
+            custom
           };
           tools.set(openAiIndex, tool);
           controller.enqueue(
             sse("response.output_item.added", {
               output_index: tool.outputIndex,
-              item: { type: "function_call", id: tool.itemId, call_id: tool.callId, name: tool.name, arguments: "" }
+              item: custom
+                ? { type: "custom_tool_call", id: tool.itemId, call_id: tool.callId, name: tool.name, input: "" }
+                : { type: "function_call", id: tool.itemId, call_id: tool.callId, name: tool.name, arguments: "" }
             })
           );
         }
@@ -484,13 +660,16 @@ export function openAiSseToResponses(
         const args = call.function?.arguments;
         if (typeof args === "string" && args.length > 0) {
           tool.args += args;
-          controller.enqueue(
-            sse("response.function_call_arguments.delta", {
-              item_id: tool.itemId,
-              output_index: tool.outputIndex,
-              delta: args
-            })
-          );
+          // Custom calls buffer their arguments (input is extracted at finalize).
+          if (!tool.custom) {
+            controller.enqueue(
+              sse("response.function_call_arguments.delta", {
+                item_id: tool.itemId,
+                output_index: tool.outputIndex,
+                delta: args
+              })
+            );
+          }
         }
       }
     }
@@ -563,6 +742,7 @@ export async function handleResponses(
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
+  const customTools = customToolNames(body);
   const chat = responsesToChat(body, upstreamModel);
   const upstream = await backend.chat(chat, signal, { modelCallId });
 
@@ -574,12 +754,12 @@ export async function handleResponses(
   if (body.stream === true) {
     const source = upstream.body;
     if (source === null) return jsonResponse(502, { error: { type: "api_error", message: "no upstream stream" } });
-    return new Response(openAiSseToResponses(source, requestedModel), {
+    return new Response(openAiSseToResponses(source, requestedModel, customTools), {
       status: 200,
       headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
     });
   }
 
   const openai = (await upstream.json()) as OpenAiResponse;
-  return jsonResponse(200, chatToResponses(openai, requestedModel));
+  return jsonResponse(200, chatToResponses(openai, requestedModel, customTools));
 }

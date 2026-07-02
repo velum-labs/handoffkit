@@ -1,16 +1,42 @@
 ---
 title: Core Concepts
-description: Contracts, receipts, planes, runners, sessions, checkpoints, and handoffs.
+description: Panels, trajectories, synthesis, gateways, sessions, and the retained platform concepts in this repository.
 ---
 
-Beneath the fusionkit CLI is a governed execution and provenance plane (the
-project's internal name is **Warrant**). It lets a developer or application run
-vendor agents and model-driven tools on controlled runtimes, under policy, and
-then receive signed receipts that can be verified offline. The platform is built
-around a small set of signed, content-addressed objects and the services that
-exchange them.
+FusionKit's product concepts start with model fusion: a single request is routed
+to multiple model endpoints, each endpoint produces an independent candidate,
+and a judge synthesizes the final response. The same idea works as a raw
+inference endpoint and behind coding harnesses such as Codex, Claude Code, and
+Cursor.
 
-## Core objects
+The repository also contains older Warrant platform concepts: contracts,
+receipts, governed runners, handoff workflows, and VM isolation. Those are real
+maintained code paths, but they are not required for the normal `fusionkit codex`
+or `fusionkit serve` product path. Use [Product scope](/docs/concepts/product-scope)
+when deciding whether a page describes the shipped product or retained platform
+depth.
+
+## Product concepts
+
+| Concept | Meaning | Where to read more |
+| --- | --- | --- |
+| Panel | The set of model endpoints that receive the same task. A panel can mix OpenAI, Anthropic, Gemini, OpenAI-compatible endpoints, and local MLX models. | [Models and panels](/docs/cli/models-and-panels) |
+| Candidate | One panel member's answer or harness trajectory before synthesis. | [Model fusion](/docs/concepts/model-fusion) |
+| Trajectory | A structured record of a harness attempt: messages, tool calls, observations, failures, and final answer. | [Architecture](/docs/concepts/architecture) |
+| Judge | The model or process that compares candidates and writes the final response in the shape the caller asked for. | [Model fusion](/docs/concepts/model-fusion) |
+| Fusion gateway | The local HTTP gateway that speaks the caller's native dialect while routing fused and passthrough models. | [Command reference](/docs/cli/commands) |
+| Python engine | The PyPI `fusionkit` package that serves `/v1/chat/completions` and fusion APIs. The CLI provisions it through `uvx`. | [Inference endpoint](/docs/getting-started/inference-endpoint) |
+| `.fusionkit/` config | The committed per-repo source of truth for panels, judge, tool defaults, run defaults, and prompts. | [Configuration](/docs/getting-started/configuration) |
+| Durable session | Gateway state that can be resumed with `--resume <id>` or `--continue`. | [Command reference](/docs/cli/commands) |
+| Rate-limit handoff | Fallback from a throttled vendor passthrough model to the fused panel. | [Rate-limit handoff](/docs/getting-started/rate-limit-handoff) |
+
+## Retained platform concepts
+
+The following concepts belong to the Warrant governance and VM-isolation stack.
+They remain documented for contributors and platform builders, but most FusionKit
+users do not need them.
+
+### Core objects
 
 | Concept | Meaning | Where implemented |
 | --- | --- | --- |
@@ -22,7 +48,7 @@ exchange them.
 | Checkpoint | Portable continuation state: a workspace snapshot plus semantic state such as tool journals and model routing decisions. | `@fusionkit/protocol`, `@fusionkit/handoff` |
 | Handoff envelope | A portable description of continuation intent and the checkpoint to move across a runtime boundary. | `@fusionkit/protocol`, `@fusionkit/handoff` |
 
-## Runtime actors
+### Runtime actors
 
 - **Client** creates run requests through the CLI, SDK, handoff SDK, AI SDK
   adapter, compute adapter, or a demo.
@@ -37,7 +63,7 @@ exchange them.
 - **Verifier** checks signatures, hashes, event chains, and receipt bundles
   offline using `@fusionkit/protocol` and `@fusionkit/sdk`.
 
-## The five receipt questions
+### The five receipt questions
 
 Receipts are designed to answer, without trusting the online plane:
 
@@ -47,7 +73,7 @@ Receipts are designed to answer, without trusting the online plane:
 4. What happened during execution?
 5. What changed, and can the result be pulled or audited safely?
 
-## Continuation model
+### Continuation model
 
 Continuation is not a separate transport. The [handoff SDK](/docs/sdks/handoff-sdk)
 packages local work as a checkpoint, asks the plane for a governed run, and later

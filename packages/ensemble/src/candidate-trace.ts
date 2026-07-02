@@ -43,11 +43,13 @@ export type CandidateOutcome = {
 };
 
 export type CandidateTracer = {
-  /** Emit the reconstructed steps and the terminal `harness.candidate.finished`. */
+  /** Emit one trajectory step as soon as the harness observes it. */
+  step(step: TrajectoryStep): void;
+  /** Emit any not-yet-emitted reconstructed steps and the terminal `harness.candidate.finished`. */
   finished(outcome: CandidateOutcome): void;
 };
 
-const NOOP_TRACER: CandidateTracer = { finished: () => undefined };
+const NOOP_TRACER: CandidateTracer = { step: () => undefined, finished: () => undefined };
 
 /**
  * Emit `harness.candidate.started` for a panel candidate and return a tracer
@@ -60,6 +62,7 @@ export function traceCandidate(ctx: CandidateTraceContext, input: CandidateTrace
   if (traceId === undefined || !getTraceEmitter().isEnabled()) return NOOP_TRACER;
   const candidateSpan = newSpanId();
   const parentSpan = ctx.parentSpanId;
+  const emittedStepIndexes = new Set<number>();
 
   emitTrace({
     component: "panel-model",
@@ -78,18 +81,23 @@ export function traceCandidate(ctx: CandidateTraceContext, input: CandidateTrace
   });
 
   return {
+    step(step: TrajectoryStep): void {
+      if (emittedStepIndexes.has(step.index)) return;
+      emittedStepIndexes.add(step.index);
+      emitTrace({
+        component: "panel-model",
+        event_type: "trajectory.step",
+        traceId,
+        spanId: candidateSpan,
+        parentSpanId: candidateSpan,
+        candidateId: input.candidateId,
+        modelId: input.modelId,
+        payload: { step }
+      });
+    },
     finished(outcome: CandidateOutcome): void {
       for (const step of outcome.steps) {
-        emitTrace({
-          component: "panel-model",
-          event_type: "trajectory.step",
-          traceId,
-          spanId: candidateSpan,
-          parentSpanId: candidateSpan,
-          candidateId: input.candidateId,
-          modelId: input.modelId,
-          payload: { step }
-        });
+        this.step(step);
       }
       emitTrace({
         component: "panel-model",

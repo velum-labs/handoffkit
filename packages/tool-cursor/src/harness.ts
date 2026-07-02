@@ -15,7 +15,7 @@ import type {
 
 import { traceCandidate } from "@fusionkit/ensemble";
 
-import { parseCursorStreamJson } from "./stream-trajectory.js";
+import { createCursorStreamStepEmitter, parseCursorStreamJson } from "./stream-trajectory.js";
 import {
   CURSOR_BRIDGE_MODEL_NAME,
   FUSION_PANEL_MODEL,
@@ -48,6 +48,7 @@ export type CursorExecInput = {
   mode: CursorRunMode;
   timeoutMs?: number;
   env: Record<string, string>;
+  onStdoutLine?: (line: string) => void;
 };
 
 export type CursorExecResult = {
@@ -227,7 +228,8 @@ export async function defaultCursorRunner(
       mode: input.mode,
       cwd: input.cwd,
       prompt: input.prompt,
-      timeoutMs
+      timeoutMs,
+      onStdoutLine: input.onStdoutLine
     });
 
     const diff = captureWorktreeDiff(input.cwd);
@@ -275,6 +277,7 @@ async function driveCursorAgentPrint(input: {
   cwd: string;
   prompt: string;
   timeoutMs: number;
+  onStdoutLine?: (line: string) => void;
 }): Promise<PrintResult> {
   const args = [
     "-p",
@@ -299,19 +302,37 @@ async function driveCursorAgentPrint(input: {
     });
     let stdout = "";
     let stderr = "";
+    let pendingStdout = "";
     let timedOut = false;
+    const flushStdoutLines = (final = false): void => {
+      let newline = pendingStdout.indexOf("\n");
+      while (newline >= 0) {
+        const line = pendingStdout.slice(0, newline);
+        pendingStdout = pendingStdout.slice(newline + 1);
+        input.onStdoutLine?.(line);
+        newline = pendingStdout.indexOf("\n");
+      }
+      if (final && pendingStdout.length > 0) {
+        input.onStdoutLine?.(pendingStdout);
+        pendingStdout = "";
+      }
+    };
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
     }, input.timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
+      const text = chunk.toString("utf8");
+      stdout += text;
+      pendingStdout += text;
+      flushStdoutLines();
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf8");
     });
     child.on("error", (error) => {
       clearTimeout(timer);
+      flushStdoutLines(true);
       resolve({
         status: "failed",
         transcript: stdout,
@@ -320,6 +341,7 @@ async function driveCursorAgentPrint(input: {
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
+      flushStdoutLines(true);
       if (timedOut) {
         resolve({
           status: "failed",
@@ -443,6 +465,7 @@ export function createCursorHarness(
 
       const cwd = worktree?.path ?? descriptor.workspace ?? process.cwd();
       let result: CursorExecResult;
+      const emitStep = createCursorStreamStepEmitter((step) => tracer.step(step));
       try {
         result = await runner({
           prompt: descriptor.prompt,
@@ -462,7 +485,8 @@ export function createCursorHarness(
             : descriptor.policy.timeoutMs !== undefined
               ? { timeoutMs: descriptor.policy.timeoutMs }
               : {}),
-          env: state.env
+          env: state.env,
+          onStdoutLine: emitStep
         });
       } catch (error) {
         tracer.finished({ status: "failed", steps: [], finishReason: "error" });
