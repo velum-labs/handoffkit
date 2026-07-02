@@ -87,6 +87,9 @@ def panel_signature(engine: FusionEngine, max_tests: int) -> str:
         "judge": config.resolved_judge_model,
         "synthesizer": config.resolved_synthesizer_model,
         "panel_models": sorted(config.panel_models),
+        "panel_samples_per_model": config.panel_samples_per_model,
+        "panel_temperatures": list(config.self_temperatures),
+        "synthesis_select_best": config.synthesis_select_best,
         "max_tokens": config.sampling.max_tokens,
         "prompt_suffix": PROMPT_SUFFIX,
         "version": os.environ.get("LCB_VERSION", "release_v6"),
@@ -232,6 +235,11 @@ def _score_result(
     candidate_scores: dict[str, float] = {}
     candidate_methods: dict[str, str] = {}
     for cand in result.trajectories:
+        # With multi-sample (deep) panels, a model's score is its PRIMARY
+        # (first, base-temperature) sample — the honest single-model pass@1
+        # baseline. Later temperature-varied samples only feed the fused pool.
+        if cand.model_id in candidate_scores:
+            continue
         extracted = extract_code(cand.content)
         run = verify_solution(
             sandbox, extracted.code, tests, timeout_s=test_timeout, checker_mode=checker_mode
