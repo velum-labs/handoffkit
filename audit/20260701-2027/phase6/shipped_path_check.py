@@ -19,7 +19,6 @@ import json
 from pathlib import Path
 
 import httpx
-
 from fusionkit_evals.bench_verify import verify_solution
 from fusionkit_evals.code_extract import extract_code
 from fusionkit_evals.livecodebench_data import LCB_PROMPT_SUFFIX, decode_tests, load_problems
