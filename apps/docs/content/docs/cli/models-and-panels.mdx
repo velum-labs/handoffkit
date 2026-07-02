@@ -14,6 +14,7 @@ Each panel member has an `id`, `provider`, `model`, and optional credential fiel
 | `openai` | OpenAI models | `OPENAI_API_KEY` |
 | `anthropic` | Anthropic models | `ANTHROPIC_API_KEY` |
 | `google` | Gemini models | `GEMINI_API_KEY` |
+| `openrouter` | Any model on [OpenRouter](https://openrouter.ai/models) with one key | `OPENROUTER_API_KEY` |
 | `openai-compatible` | vLLM, LM Studio, Together, Fireworks, DeepInfra, self-hosted endpoints | Set with `--key-env` or config |
 | `mlx` | Local Apple Silicon models | None |
 
@@ -40,6 +41,18 @@ Use `--key-env` when a member's credential does not use the provider default.
 fusionkit codex \
   --model deepinfra=openai-compatible:meta-llama/Llama-3.3-70B \
   --key-env deepinfra=DEEPINFRA_API_KEY
+```
+
+## OpenRouter
+
+The `openrouter` provider reaches any model on [OpenRouter](https://openrouter.ai/models) with a single `OPENROUTER_API_KEY` — a convenient way to build a decorrelated panel across vendors you have no direct account with. The model name is OpenRouter's `vendor/model` id, optionally with a `:variant` suffix (for example `:free`).
+
+```bash
+export OPENROUTER_API_KEY=...
+fusionkit codex \
+  --model sonnet=openrouter:anthropic/claude-sonnet-4.5 \
+  --model kimi=openrouter:moonshotai/kimi-k2 \
+  --model deepseek=openrouter:deepseek/deepseek-chat
 ```
 
 ## Default cloud panel

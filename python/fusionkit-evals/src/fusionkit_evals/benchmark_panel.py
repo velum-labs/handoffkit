@@ -37,12 +37,14 @@ DEFAULT_PROVIDER_BASE_URLS: dict[ProviderKind, str] = {
     "openai": "https://api.openai.com",
     "anthropic": "https://api.anthropic.com",
     "google": "https://generativelanguage.googleapis.com",
+    "openrouter": "https://openrouter.ai/api",
 }
 
 DEFAULT_PROVIDER_KEY_ENVS: dict[ProviderKind, str] = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GEMINI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
 }
 
 

@@ -4,6 +4,7 @@
  * their defaults, so `fusion init` still produces a sensible config in CI.
  */
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 import type { LocalModelInfo } from "@fusionkit/adapter-ai-sdk";
@@ -452,6 +453,29 @@ function fetchDefaultPrompts(fusionkitDir?: string): PromptOverrides | undefined
   }
 }
 
+export type InitOverwriteResolution =
+  | { action: "proceed"; force: boolean }
+  | { action: "keep" }
+  | { action: "refuse" };
+
+/** Decide whether to overwrite an existing per-repo config before the wizard runs. */
+export async function resolveInitOverwrite(opts: {
+  configPath: string;
+  force: boolean;
+}): Promise<InitOverwriteResolution> {
+  if (!existsSync(opts.configPath) || opts.force) {
+    return { action: "proceed", force: opts.force };
+  }
+  if (canPromptInteractively()) {
+    const update = await confirm({
+      message: `${cyan(opts.configPath)} already exists. Update it?`,
+      defaultValue: false
+    });
+    return update ? { action: "proceed", force: true } : { action: "keep" };
+  }
+  return { action: "refuse" };
+}
+
 export async function runFusionInit(input: {
   repoRoot?: string;
   force?: boolean;
@@ -466,6 +490,18 @@ export async function runFusionInit(input: {
   }
 
   out.write(`\n${brandBanner("let's set up model fusion for this repo")}\n\n`);
+
+  const configPath = fusionConfigPath(input.repoRoot);
+  const overwrite = await resolveInitOverwrite({ configPath, force: input.force === true });
+  if (overwrite.action === "keep") {
+    note("keeping existing config");
+    return 0;
+  }
+  if (overwrite.action === "refuse") {
+    out.write(`${red("error:")} ${configPath} already exists (pass --force to overwrite)\n`);
+    return 1;
+  }
+  const force = overwrite.force;
 
   const host = detectHost();
 
@@ -507,7 +543,7 @@ export async function runFusionInit(input: {
 
   let path: string;
   try {
-    path = writeFusionConfig(input.repoRoot, config, { force: input.force === true });
+    path = writeFusionConfig(input.repoRoot, config, { force });
   } catch (error) {
     if (error instanceof FusionConfigError) {
       out.write(`${red("error:")} ${error.message}\n`);
@@ -523,7 +559,7 @@ export async function runFusionInit(input: {
   const defaultPrompts = fetchDefaultPrompts(input.fusionkitDir);
   const wrotePrompts =
     defaultPrompts !== undefined
-      ? writeFusionPrompts(input.repoRoot, defaultPrompts, { force: input.force === true })
+      ? writeFusionPrompts(input.repoRoot, defaultPrompts, { force })
       : [];
 
   out.write("\n");

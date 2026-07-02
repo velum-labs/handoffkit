@@ -4,13 +4,15 @@ import { delimiter, join } from "node:path";
 
 import { artifactHash } from "@fusionkit/protocol";
 import type { NetworkPolicy, RunContract, RunEvent } from "@fusionkit/protocol";
+import { claudeModelAlias, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import { CapabilityMismatchError, prepareExecution } from "@fusionkit/runner";
 import type { SessionBackend } from "@fusionkit/runner";
 import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
 import type { ClaudeCodeBindingOptions } from "@fusionkit/session-harness";
+import { normalizeApiBaseUrl } from "@fusionkit/tools";
 
-import { hardeningToJson, traceCandidate } from "@fusionkit/ensemble";
-import { parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
+import { hardeningToJson, KernelBackend, traceCandidate } from "@fusionkit/ensemble";
+import { createClaudeStreamStepEmitter, parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
 import type {
   CandidateHardeningMetadata,
   EnsembleDescriptor,
@@ -377,6 +379,47 @@ function failureOutput(input: {
 
 const DEFAULT_CLAUDE_COMMAND = "claude";
 
+/**
+ * True when the `claude` CLI can serve this panel model natively: an
+ * Anthropic-family id (`claude*`/`anthropic*`) or one `resolveClaudeCliModel`
+ * maps to a CLI family alias (opus/sonnet/haiku/fable).
+ */
+function isNativeAnthropicModel(model: string): boolean {
+  return claudeModelAlias(model) === model || resolveClaudeCliModel(model) !== model;
+}
+
+/**
+ * Per-candidate translation gateway for a non-Anthropic panel member: an
+ * in-process server speaking the Anthropic Messages dialect whose chat core
+ * forwards to the member's fusion router endpoint, always requesting the
+ * router endpoint id. The claude CLI selects the member via its `claude-`
+ * alias (Claude Code only accepts `claude`/`anthropic`-prefixed ids); the
+ * alias is mapped back here, never sent upstream.
+ */
+function startCandidateRouterGateway(input: {
+  endpointUrl: string;
+  endpointId: string;
+  apiKey: string;
+}): ReturnType<typeof startGateway> {
+  return startGateway({
+    backend: new KernelBackend(
+      new OpenAiBackend({
+        baseUrl: normalizeApiBaseUrl(input.endpointUrl),
+        apiKey: input.apiKey,
+        defaultModel: input.endpointId,
+        forceModel: input.endpointId
+      }),
+      {
+        workflowIds: {
+          chat: "native-passthrough-turn",
+          models: "native-passthrough-models",
+          embeddings: "native-passthrough-embeddings"
+        }
+      }
+    )
+  });
+}
+
 /** True when `command` resolves on PATH (or is an existing absolute path). */
 function commandOnPath(command: string, env: ClaudeCodeHarnessEnv): boolean {
   if (command.includes("/")) return existsSync(command);
@@ -408,11 +451,12 @@ type ClaudePrintResult = {
 };
 
 /**
- * Drive the `claude` CLI in headless print mode inside the worktree against its
- * native Anthropic backend. Headless `claude -p` validates the selected model
- * against the configured endpoint and rejects a custom-gateway-advertised id, so
- * (unlike codex's gateway wire-capture) we run claude natively and reconstruct
- * the trajectory by parsing its `--output-format stream-json` stdout.
+ * Drive the `claude` CLI in headless print mode inside the worktree and
+ * reconstruct the trajectory by parsing its `--output-format stream-json`
+ * stdout. Anthropic-family panel members run against the native Anthropic
+ * backend; other members are pointed at a per-candidate translation gateway
+ * (`gateway`) that speaks the Anthropic Messages dialect and routes to the
+ * member's fusion router endpoint (see `runViaRouterGateway`).
  */
 function driveClaudePrint(input: {
   command: string;
@@ -421,6 +465,9 @@ function driveClaudePrint(input: {
   model: string;
   timeoutMs: number;
   env: Record<string, string>;
+  /** When set, point the CLI at this Anthropic-dialect gateway instead of api.anthropic.com. */
+  gateway?: { baseUrl: string; authToken: string };
+  onStdoutLine?: (line: string) => void;
 }): Promise<ClaudePrintResult> {
   const args = [
     "-p",
@@ -433,11 +480,20 @@ function driveClaudePrint(input: {
     input.model,
     input.prompt
   ];
-  // Run against the native Anthropic backend: never point the CLI at the fusion
-  // gateway (it would 404 the model). Ambient ANTHROPIC_API_KEY (loaded by the
-  // fusion stack) authenticates the run; strip any inherited gateway base URL.
   const childEnv: Record<string, string> = { ...input.env };
-  delete childEnv.ANTHROPIC_BASE_URL;
+  if (input.gateway !== undefined) {
+    // Route this candidate through its translation gateway. Ambient Anthropic
+    // credentials must not win over the gateway token, so strip the API key.
+    childEnv.ANTHROPIC_BASE_URL = input.gateway.baseUrl;
+    childEnv.ANTHROPIC_AUTH_TOKEN = input.gateway.authToken;
+    childEnv.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
+    delete childEnv.ANTHROPIC_API_KEY;
+  } else {
+    // Run against the native Anthropic backend: ambient ANTHROPIC_API_KEY
+    // (loaded by the fusion stack) authenticates the run; strip any inherited
+    // gateway base URL.
+    delete childEnv.ANTHROPIC_BASE_URL;
+  }
   return new Promise<ClaudePrintResult>((resolve) => {
     const child = spawn(input.command, args, {
       cwd: input.cwd,
@@ -446,19 +502,37 @@ function driveClaudePrint(input: {
     });
     let stdout = "";
     let stderr = "";
+    let pendingStdout = "";
     let timedOut = false;
+    const flushStdoutLines = (final = false): void => {
+      let newline = pendingStdout.indexOf("\n");
+      while (newline >= 0) {
+        const line = pendingStdout.slice(0, newline);
+        pendingStdout = pendingStdout.slice(newline + 1);
+        input.onStdoutLine?.(line);
+        newline = pendingStdout.indexOf("\n");
+      }
+      if (final && pendingStdout.length > 0) {
+        input.onStdoutLine?.(pendingStdout);
+        pendingStdout = "";
+      }
+    };
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
     }, input.timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
+      const text = chunk.toString("utf8");
+      stdout += text;
+      pendingStdout += text;
+      flushStdoutLines();
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf8");
     });
     child.on("error", (error) => {
       clearTimeout(timer);
+      flushStdoutLines(true);
       resolve({
         status: "failed",
         stdout,
@@ -468,6 +542,7 @@ function driveClaudePrint(input: {
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
+      flushStdoutLines(true);
       const transcript = [stdout, stderr].filter(Boolean).join("\n");
       if (timedOut) {
         resolve({ status: "failed", stdout, transcript, reason: "claude CLI timed out" });
@@ -552,17 +627,40 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
           ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {})
         }
       );
-      // Claude runs against its native Anthropic backend (see driveClaudePrint).
-      // Resolve the panel candidate's model id to a CLI-accepted claude model.
-      const cliModel = resolveClaudeCliModel(model.model);
-      const result = await driveClaudePrint({
-        command,
-        cwd: worktree?.path ?? descriptor.workspace ?? process.cwd(),
-        prompt: descriptor.prompt,
-        model: cliModel,
-        timeoutMs: options.timeoutMs ?? descriptor.policy.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        env: definedLocalEnv(env)
-      });
+      // Anthropic-family members run against the native Anthropic backend with
+      // their id resolved to a CLI-accepted family alias. Any other panel
+      // member (an OpenAI or local MLX model) cannot be served by
+      // api.anthropic.com, so it runs through a per-candidate translation
+      // gateway that forwards to the member's fusion router endpoint — the
+      // same claude-alias passthrough trick the front door's model picker uses.
+      const endpointUrl = options.modelEndpoints?.[model.id] ?? options.fusionBackendUrl;
+      const viaRouter = !isNativeAnthropicModel(model.model) && endpointUrl !== undefined;
+      const routerGateway = viaRouter
+        ? await startCandidateRouterGateway({
+            endpointUrl,
+            endpointId: model.id,
+            apiKey: options.apiKey ?? "local"
+          })
+        : undefined;
+      const cliModel = viaRouter ? claudeModelAlias(model.id) : resolveClaudeCliModel(model.model);
+      const emitStep = createClaudeStreamStepEmitter((step) => tracer.step(step));
+      let result: ClaudePrintResult;
+      try {
+        result = await driveClaudePrint({
+          command,
+          cwd: worktree?.path ?? descriptor.workspace ?? process.cwd(),
+          prompt: descriptor.prompt,
+          model: cliModel,
+          timeoutMs: options.timeoutMs ?? descriptor.policy.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+          env: definedLocalEnv(env),
+          ...(routerGateway !== undefined
+            ? { gateway: { baseUrl: routerGateway.url(), authToken: options.apiKey ?? "local" } }
+            : {}),
+          onStdoutLine: emitStep
+        });
+      } finally {
+        await routerGateway?.close();
+      }
       const diff = worktree ? captureWorktreeDiff(worktree.path) : undefined;
       const outputHash = artifactHash(result.transcript.length > 0 ? result.transcript : candidate);
       const status: HarnessCandidateOutput["status"] = result.status;
@@ -634,7 +732,7 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
         metadata: {
           adapter: "claude-code",
           execution: "local",
-          backend: "anthropic-native",
+          backend: viaRouter ? "fusion-router" : "anthropic-native",
           requested_model: model.model,
           cli_model: cliModel,
           step_count: reconstructed.steps.length,

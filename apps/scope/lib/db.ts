@@ -22,6 +22,7 @@ export type SessionRow = {
   dialect: string | null;
   repo: string | null;
   environment: string | null;
+  prompt_preview: string | null;
   final_output: string | null;
   event_count: number;
 };
@@ -74,9 +75,16 @@ export function db(): DatabaseSync {
       dialect TEXT,
       repo TEXT,
       environment TEXT,
+      prompt_preview TEXT,
       final_output TEXT
     );
   `);
+  try {
+    // Migration for stores created before the prompt_preview column existed.
+    handle.exec(`ALTER TABLE sessions ADD COLUMN prompt_preview TEXT`);
+  } catch {
+    // column already present
+  }
   globalForDb.__scopekitDb = handle;
   return handle;
 }
@@ -144,7 +152,9 @@ function updateSession(event: FusionTraceEvent): void {
     const environment = (payload as { environment?: unknown }).environment;
     handle
       .prepare(
-        `UPDATE sessions SET started_at = min(started_at, ?), dialect = ?, repo = ?, environment = ?
+        `UPDATE sessions
+         SET started_at = min(started_at, ?), dialect = ?, repo = ?, environment = ?,
+             prompt_preview = coalesce(?, prompt_preview)
          WHERE trace_id = ?`
       )
       .run(
@@ -152,6 +162,7 @@ function updateSession(event: FusionTraceEvent): void {
         asString((payload as { dialect?: unknown }).dialect),
         asString((environment as { repo?: unknown } | undefined)?.repo),
         environment !== undefined ? JSON.stringify(environment) : null,
+        asString((payload as { prompt_preview?: unknown }).prompt_preview),
         event.trace_id
       );
   }

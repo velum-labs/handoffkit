@@ -25,7 +25,7 @@ from fusionkit_core.clients import (
     _openai_tools,
     build_client,
 )
-from fusionkit_core.config import EndpointAuth, ModelEndpoint, ProviderKind
+from fusionkit_core.config import EndpointAuth, ModelEndpoint, ProviderKind, SamplingConfig
 from fusionkit_core.credentials import clear_credential_cache
 from fusionkit_core.types import ChatMessage, ToolCall
 
@@ -57,12 +57,43 @@ def _endpoint(provider: ProviderKind, model: str = "model") -> ModelEndpoint:
 
 def test_build_client_dispatches_each_provider() -> None:
     assert isinstance(build_client(_endpoint("openai")), OpenAICompatibleClient)
+    assert isinstance(build_client(_endpoint("openrouter")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("openai-compatible")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("mlx-lm")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("custom")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("anthropic")), AnthropicModelClient)
     assert isinstance(build_client(_endpoint("google")), GoogleModelClient)
     assert isinstance(build_client(_endpoint("codex")), CodexResponsesClient)
+
+
+# --- openrouter -------------------------------------------------------------
+
+
+def test_openrouter_client_sends_attribution_headers() -> None:
+    client = OpenAICompatibleClient(_endpoint("openrouter"))
+    headers = client._client.default_headers
+    assert headers.get("X-Title") == "FusionKit"
+    assert "HTTP-Referer" in headers
+    # Other OpenAI-compatible providers must not carry the OpenRouter headers.
+    plain = OpenAICompatibleClient(_endpoint("openai-compatible"))
+    assert "X-Title" not in plain._client.default_headers
+
+
+def test_openrouter_payload_keeps_classic_sampling_params() -> None:
+    client = OpenAICompatibleClient(_endpoint("openrouter", model="deepseek/deepseek-chat:free"))
+    payload = client._payload(
+        [ChatMessage(role="user", content="hi")],
+        SamplingConfig(temperature=0.3, top_p=0.9, max_tokens=64),
+        None,
+        None,
+        None,
+    )
+    assert payload["model"] == "deepseek/deepseek-chat:free"
+    assert payload["temperature"] == 0.3
+    assert payload["top_p"] == 0.9
+    assert payload["max_tokens"] == 64
+    # The gpt-5.x-only knob is reserved for the first-party openai provider.
+    assert "max_completion_tokens" not in payload
 
 
 # --- message + tool translation --------------------------------------------

@@ -9,12 +9,18 @@ description: Install the CLI and the tools it orchestrates.
 npm install -g @fusionkit/cli
 ```
 
+Prefer not to install globally? Use `npx @fusionkit/cli <command>` for the same
+CLI surface, for example `npx @fusionkit/cli doctor`.
+
 This provides the `fusionkit` command. Pre-provision the Python fusion engine once
 so the first real run does not wait on a `uvx` cold start:
 
 ```bash
 fusionkit setup
 ```
+
+`setup` is optional but recommended for the first machine setup. Without it,
+FusionKit provisions the Python engine automatically on the first real run.
 
 ## Prerequisites
 
@@ -37,6 +43,9 @@ At least one of:
   with the npm package, so no separate checkout is needed; see
   [Troubleshooting](/docs/cli/troubleshooting))
 
+You only need the agent you plan to launch. For example, `fusionkit codex` does
+not require Claude Code or Cursor to be installed.
+
 ### Provider API keys (for the cloud panel)
 
 The default panel uses cloud models, so export the relevant keys:
@@ -51,6 +60,10 @@ You can also put them in a project `.env`. fusionkit loads it automatically
 (already-exported values always win). The local MLX panel (`--local`, Apple
 Silicon) needs no keys.
 
+If one cloud key is missing, the default panel skips that provider and continues
+with the available members. `fusionkit doctor` reports which keys are present
+before you launch.
+
 ### A git repository (required)
 
 The panel fuses over the code in your current repo. Run fusionkit from inside
@@ -62,6 +75,13 @@ your project, or pass `--repo <dir>`.
 fusionkit doctor
 fusionkit doctor --provision   # also warms the Python engine
 fusionkit --version   # prints the npm CLI and pinned PyPI synthesizer versions
+```
+
+After `doctor` passes, run the first session from inside a git repository:
+
+```bash
+cd your-git-repo
+fusionkit codex   # or: fusionkit claude | fusionkit cursor | fusionkit serve
 ```
 
 ## Optional: stable named URLs with portless

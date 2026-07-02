@@ -4,6 +4,7 @@ import type {
   EnsembleDescriptor,
   HarnessArtifact,
   HarnessCandidateOutput,
+  HarnessEndReason,
   HarnessToolRecord,
   HarnessTrajectory,
   ReviewEvidence
@@ -16,6 +17,7 @@ export type JudgeCandidateEvidence = {
   status: ModelFusionStatus;
   artifacts: readonly HarnessArtifact[];
   trajectory?: HarnessTrajectory;
+  endReason?: HarnessEndReason;
 };
 
 export type JudgeInput = {

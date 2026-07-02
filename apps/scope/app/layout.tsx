@@ -1,8 +1,18 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 
 import { SidebarNav } from "@/components/scope/sidebar-nav";
-import { Separator } from "@/components/ui/separator";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarHeader,
+  SidebarInset,
+  SidebarProvider,
+  SidebarRail
+} from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -16,28 +26,39 @@ export const metadata: Metadata = {
   description: "Live observability for the FusionKit + HandoffKit + Cursorkit stack"
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
+
   return (
     <html lang="en" className={cn("dark", geist.variable, geistMono.variable)}>
       <body className="antialiased">
         <TooltipProvider delayDuration={200}>
-          <div className="flex h-screen overflow-hidden">
-            <aside className="bg-sidebar text-sidebar-foreground flex w-60 shrink-0 flex-col overflow-y-auto border-r p-5">
-              <div className="flex items-center gap-2">
-                <span className="bg-primary inline-block size-2.5 rounded-full" />
-                <div>
-                  <div className="text-base font-semibold tracking-tight">scope</div>
-                  <div className="text-muted-foreground text-xs">fusion observability</div>
+          <SidebarProvider defaultOpen={defaultOpen}>
+            <Sidebar collapsible="icon">
+              <SidebarHeader>
+                <div className="flex items-center gap-2 px-1 py-1">
+                  <span className="bg-primary inline-block size-2.5 shrink-0 rounded-full" />
+                  <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                    <div className="truncate text-base font-semibold tracking-tight">scope</div>
+                    <div className="text-muted-foreground truncate text-xs">fusion observability</div>
+                  </div>
                 </div>
-              </div>
-              <Separator className="my-5" />
-              <SidebarNav />
-              <div className="text-muted-foreground mt-auto pt-8 text-[11px] leading-relaxed">
-                Tails the fusion-trace event spine across FusionKit, HandoffKit, and Cursorkit.
-              </div>
-            </aside>
-            <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
-          </div>
+              </SidebarHeader>
+              <SidebarContent>
+                <SidebarGroup>
+                  <SidebarNav />
+                </SidebarGroup>
+              </SidebarContent>
+              <SidebarFooter>
+                <div className="text-muted-foreground px-1 pb-1 text-[11px] leading-relaxed group-data-[collapsible=icon]:hidden">
+                  Tails the fusion-trace event spine across FusionKit, HandoffKit, and Cursorkit.
+                </div>
+              </SidebarFooter>
+              <SidebarRail />
+            </Sidebar>
+            <SidebarInset className="min-w-0 overflow-x-hidden">{children}</SidebarInset>
+          </SidebarProvider>
         </TooltipProvider>
       </body>
     </html>

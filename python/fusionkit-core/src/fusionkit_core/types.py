@@ -85,6 +85,11 @@ class ModelResponse(BaseModel):
     latency_s: float = 0.0
     tool_calls: list[ToolCall] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
+    # Out-of-band reasoning text (never part of the answer). Populated from
+    # upstream ``message.reasoning`` / ``message.reasoning_content`` fields
+    # (local MLX and vLLM/SGLang-style servers); the server surfaces it as
+    # ``reasoning_content`` so coding agents render it on their thinking channel.
+    reasoning: str | None = None
 
 
 class StreamChunk(BaseModel):
@@ -92,6 +97,18 @@ class StreamChunk(BaseModel):
     tool_call_delta: ToolCall | None = None
     finish_reason: str | None = None
     usage: Usage | None = None
+    # Out-of-band reasoning text (never part of the answer). The fused stream
+    # uses it to surface the judge's analysis before content tokens; the server
+    # maps it to the OpenAI ``delta.reasoning_content`` field, which coding
+    # agents render on their native thinking channel. Each value is a complete
+    # narration beat, not a token fragment.
+    reasoning_delta: str | None = None
+    # Raw reasoning *token* deltas from the upstream model itself (local MLX,
+    # vLLM-style servers). Kept separate from ``reasoning_delta`` because the
+    # wire contract differs: beats become one summary part each, while token
+    # deltas accumulate into a single part. The server re-emits these on the
+    # OpenAI ``delta.reasoning`` field.
+    model_reasoning_delta: str | None = None
 
 
 class TrajectorySynthesis(BaseModel):

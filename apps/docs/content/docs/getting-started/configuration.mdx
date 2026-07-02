@@ -91,9 +91,16 @@ the file.
 | --- | --- | --- |
 | `id` | string | Stable identifier for the panel member. |
 | `model` | string | The model name. |
-| `provider` | `mlx` \| `openai` \| `anthropic` \| `google` \| `openai-compatible` | Defaults to `mlx`. |
+| `provider` | `mlx` \| `openai` \| `anthropic` \| `google` \| `openrouter` \| `openai-compatible` | Defaults to `mlx`. |
 | `keyEnv` | string | Env var holding this model's API key (cloud only). |
 | `baseUrl` | string | Optional custom base URL. |
+
+An `openrouter` member uses OpenRouter's `vendor/model` id and defaults to
+`OPENROUTER_API_KEY`:
+
+```json
+{ "id": "kimi", "model": "moonshotai/kimi-k2", "provider": "openrouter" }
+```
 
 When `panel` is omitted, the default cloud panel is the three-vendor trio shown
 above. Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY` for the

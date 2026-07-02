@@ -118,25 +118,43 @@ export function ambientTraceId(): string | undefined {
   return value && value.length > 0 ? value : undefined;
 }
 
+/**
+ * An in-process trace subscriber. Called synchronously on every emitted event;
+ * exceptions are swallowed (a broken listener must never break a run). Used by
+ * the gateway to narrate panel/judge progress into the client stream without
+ * requiring the URL/DIR collector sinks to be configured.
+ */
+export type TraceListener = (event: FusionTraceEvent) => void;
+
 export class TraceEmitter {
   private readonly url?: string;
   private readonly dir?: string;
-  private readonly enabled: boolean;
+  private readonly sinksEnabled: boolean;
+  private readonly listeners = new Set<TraceListener>();
   private seq = 0;
   private dirReady = false;
 
   constructor(config?: { url?: string; dir?: string }) {
     this.url = config?.url ?? process.env.FUSION_TRACE_URL ?? undefined;
     this.dir = config?.dir ?? process.env.FUSION_TRACE_DIR ?? undefined;
-    this.enabled = Boolean(this.url || this.dir);
+    this.sinksEnabled = Boolean(this.url || this.dir);
   }
 
+  /** True when anything (collector sinks or an in-process listener) will see events. */
   isEnabled(): boolean {
-    return this.enabled;
+    return this.sinksEnabled || this.listeners.size > 0;
+  }
+
+  addListener(listener: TraceListener): void {
+    this.listeners.add(listener);
+  }
+
+  removeListener(listener: TraceListener): void {
+    this.listeners.delete(listener);
   }
 
   emit(input: EmitInput): void {
-    if (!this.enabled) return;
+    if (!this.isEnabled()) return;
     const traceId = input.traceId ?? ambientTraceId();
     if (traceId === undefined) return;
     const event: FusionTraceEvent = {
@@ -154,6 +172,14 @@ export class TraceEmitter {
       ...(input.modelId !== undefined ? { model_id: input.modelId } : {}),
       ...(input.payload !== undefined ? { payload: input.payload } : {})
     };
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch {
+        // a broken listener must never break a run
+      }
+    }
+    if (!this.sinksEnabled) return;
     this.writeJsonl(event);
     void this.post(event);
   }
@@ -198,6 +224,16 @@ export function getTraceEmitter(): TraceEmitter {
 
 export function emitTrace(input: EmitInput): void {
   getTraceEmitter().emit(input);
+}
+
+/** Subscribe an in-process listener on the default emitter. */
+export function addTraceListener(listener: TraceListener): void {
+  getTraceEmitter().addListener(listener);
+}
+
+/** Remove a listener previously added via {@link addTraceListener}. */
+export function removeTraceListener(listener: TraceListener): void {
+  getTraceEmitter().removeListener(listener);
 }
 
 // ---- runtime validation (the formalized fusion-trace-event.v1 contract) ----

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseClaudeStreamJson, resolveClaudeCliModel } from "../stream-trajectory.js";
+import type { TrajectoryStep } from "@fusionkit/ensemble";
+
+import { createClaudeStreamStepEmitter, parseClaudeStreamJson, resolveClaudeCliModel } from "../stream-trajectory.js";
 
 function line(value: unknown): string {
   return JSON.stringify(value);
@@ -113,6 +115,29 @@ test("appends the terminal result as a trailing output when not already last", (
   assert.equal(finalOutput, "All set.");
   assert.equal(steps.at(-1)?.type, "output");
   assert.equal(steps.at(-1)?.text, "All set.");
+});
+
+test("incremental claude stream-json emitter matches final parser step ordering", () => {
+  const lines = [
+    line({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "u1", name: "Read", input: { file_path: "a.js" } }]
+      }
+    }),
+    line({
+      type: "user",
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: "u1", content: "ok" }] }
+    }),
+    line({ type: "result", subtype: "success", result: "All set." })
+  ];
+  const live: TrajectoryStep[] = [];
+  const emit = createClaudeStreamStepEmitter((step) => live.push(step));
+  for (const item of lines) emit(item);
+
+  const final = parseClaudeStreamJson(lines.join("\n"));
+  assert.deepEqual(live, final.steps);
 });
 
 test("falls back to the last assistant output when no result event is present", () => {

@@ -61,9 +61,35 @@ test("traceCandidate emits started, per-step, and finished events under the sess
   assert.equal(fp.final_output_preview, "the answer");
 });
 
+test("traceCandidate emits live steps and does not replay them at finish", async () => {
+  const traceId = "trace_candidate_live_steps";
+  const tracer = traceCandidate(
+    { traceId, parentSpanId: "span_session", turn: 1 },
+    { candidateId: "cand_live", modelId: "live" }
+  );
+  tracer.step({ index: 0, type: "tool_call", tool_name: "read_file" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  tracer.finished({
+    status: "succeeded",
+    steps: [
+      { index: 0, type: "tool_call", tool_name: "read_file" },
+      { index: 1, type: "output", text: "done" }
+    ],
+    finalOutput: "done"
+  });
+
+  const events = readEvents(traceId);
+  const steps = events.filter((e) => e.event_type === "trajectory.step");
+  assert.equal(steps.length, 2, "finish only emits the not-yet-streamed step");
+  assert.equal((steps[0]?.payload as { step?: { index?: number } }).step?.index, 0);
+  assert.equal((steps[1]?.payload as { step?: { index?: number } }).step?.index, 1);
+  assert.ok((steps[0]?.ts as number) < (steps[1]?.ts as number), "live step timestamp precedes finish replay");
+});
+
 test("traceCandidate is a no-op when no traceId is set", () => {
   // No traceId -> nothing emitted, no throw (harnesses call it unconditionally).
   const tracer = traceCandidate({}, { candidateId: "cand_x", modelId: "x" });
+  assert.doesNotThrow(() => tracer.step({ index: 0, type: "output", text: "ignored" }));
   assert.doesNotThrow(() => tracer.finished({ status: "succeeded", steps: [] }));
 });
 

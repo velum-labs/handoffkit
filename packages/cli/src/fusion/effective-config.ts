@@ -31,6 +31,7 @@ export const DEFAULT_LOCAL = false;
 export const DEFAULT_OBSERVE = false;
 export const DEFAULT_ON_RATE_LIMIT: OnRateLimitPolicy = "fusion";
 export const DEFAULT_PORTLESS = true;
+export const DEFAULT_REASONING = true;
 
 /**
  * Explicit CLI-flag overrides (the top precedence layer). Only fields the user
@@ -45,6 +46,8 @@ export type EffectiveOverrides = {
   observe?: boolean;
   onRateLimit?: OnRateLimitPolicy;
   portless?: boolean;
+  reasoning?: boolean;
+  reasoningModel?: string;
 };
 
 export type EffectiveFusionConfig = {
@@ -55,6 +58,9 @@ export type EffectiveFusionConfig = {
   observe: Provenance<boolean>;
   onRateLimit: Provenance<OnRateLimitPolicy>;
   portless: Provenance<boolean>;
+  reasoning: Provenance<boolean>;
+  /** The local narration-writer model; undefined = templated prose. */
+  reasoningModel: Provenance<string | undefined>;
   prompts: Provenance<PromptOverrides>;
 };
 
@@ -95,8 +101,14 @@ export function resolveEffectiveConfig(
   const observe = pick(overrides.observe, config?.observe, DEFAULT_OBSERVE);
   const onRateLimit = pick(overrides.onRateLimit, config?.onRateLimit, DEFAULT_ON_RATE_LIMIT);
   const portless = pick(overrides.portless, config?.portless, DEFAULT_PORTLESS);
+  const reasoning = pick(overrides.reasoning, config?.reasoning, DEFAULT_REASONING);
+  const reasoningModel = pick<string | undefined>(
+    overrides.reasoningModel,
+    config?.reasoningModel,
+    undefined
+  );
   // Prompt overrides only ever come from `.fusionkit/prompts/*.md` (no flag).
   const prompts = pick<PromptOverrides>(undefined, config?.prompts, {});
 
-  return { tool, local, panel, judgeModel, observe, onRateLimit, portless, prompts };
+  return { tool, local, panel, judgeModel, observe, onRateLimit, portless, reasoning, reasoningModel, prompts };
 }

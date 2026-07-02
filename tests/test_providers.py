@@ -40,6 +40,13 @@ def test_provider_config_supports_required_families(monkeypatch) -> None:
         ModelEndpoint(id="openai", provider="openai", model="gpt", base_url="https://api.openai.com"),
         ModelEndpoint(id="anthropic", provider="anthropic", model="claude", base_url="https://api.anthropic.com"),
         ModelEndpoint(id="google", provider="google", model="gemini", base_url="https://generativelanguage.googleapis.com"),
+        ModelEndpoint(
+            id="openrouter",
+            provider="openrouter",
+            model="anthropic/claude-sonnet-4.5",
+            base_url="https://openrouter.ai/api",
+            api_key_env="OPENROUTER_API_KEY",
+        ),
         ModelEndpoint(id="compatible", provider="openai-compatible", model="local", base_url="http://localhost:9000"),
         ModelEndpoint(
             id="mlx",
@@ -59,10 +66,11 @@ def test_provider_config_supports_required_families(monkeypatch) -> None:
     ]
     config = FusionConfig(endpoints=endpoints, default_model="openai")
 
-    assert [endpoint.provider for endpoint in config.endpoints][:6] == [
+    assert [endpoint.provider for endpoint in config.endpoints][:7] == [
         "openai",
         "anthropic",
         "google",
+        "openrouter",
         "openai-compatible",
         "mlx-lm",
         "custom",
@@ -91,6 +99,7 @@ def test_api_compatibility_maps_providers_within_contract_enum() -> None:
         return endpoint_to_contract(endpoint).api_compatibility
 
     assert compatibility("openai") == "openai-chat-completions"
+    assert compatibility("openrouter") == "openai-chat-completions"
     assert compatibility("openai-compatible") == "openai-chat-completions"
     assert compatibility("mlx-lm") == "mlx-lm-server"
     assert compatibility("codex") == "openai-responses"

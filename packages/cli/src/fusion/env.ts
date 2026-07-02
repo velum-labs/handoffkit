@@ -6,6 +6,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
+import type { PanelTrust } from "@fusionkit/ensemble";
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 
 import type { PromptOverrides } from "../fusion-config.js";
@@ -15,7 +16,7 @@ export type { OnRateLimitPolicy };
 /** A launchable tool id from the registry, or the `serve` pseudo-tool. */
 export type FusionTool = string;
 
-export type PanelProvider = "mlx" | "openai" | "anthropic" | "google" | "openai-compatible";
+export type PanelProvider = "mlx" | "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible";
 
 /**
  * Subscription auth modes: instead of an API key, reuse the user's local Claude
@@ -26,7 +27,7 @@ export type PanelAuthMode = "claude-code" | "codex";
 
 /**
  * One panel model. `mlx` models run locally via the in-repo provisioner; cloud
- * providers (openai/anthropic/google/openai-compatible) are fronted as
+ * providers (openai/anthropic/google/openrouter/openai-compatible) are fronted as
  * OpenAI-compatible endpoints by FusionKit's `serve-endpoint` command, run via
  * `uvx fusionkit` (no checkout required). When `auth` is set, the model reuses
  * the matching subscription login instead of an API key (no `keyEnv`).
@@ -54,6 +55,19 @@ export type RunFusionOptions = {
   local?: boolean;
   /** Boot the local scope dashboard and stream trace events into it. */
   observe?: boolean;
+  /**
+   * Reasoning traces: narrate panel/judge progress into the launched tool's own
+   * thinking/reasoning UI while a fused turn runs. Default on; `--no-reasoning`
+   * (or `reasoning: false` in .fusionkit) keeps the stream silent until the
+   * judge's first token.
+   */
+  reasoning?: boolean;
+  /**
+   * Optional local MLX model that writes the narration prose (candidate gists
+   * and the judging comparison). Off by default (templated prose); Apple
+   * Silicon only. The narrator's timeout/sanitize guardrails always apply.
+   */
+  reasoningModel?: string;
   /** Skip the interactive cost/scope confirmation for the cloud panel. */
   yes?: boolean;
   /** Route services through portless (stable named URLs + singletons). Default on. */
@@ -72,6 +86,12 @@ export type RunFusionOptions = {
    * message (v1 = stop). Omit for no cap.
    */
   budgetUsd?: number;
+  /**
+   * Panel candidate trust level. `full` (default) gives each member the highest
+   * autonomy its harness offers (e.g. Codex `danger-full-access`); `guarded`
+   * keeps the harness's side-effects-derived confinement (worktree-fenced).
+   */
+  panelTrust?: PanelTrust;
   /** System-prompt overrides forwarded to the synthesizer's router config. */
   prompts?: PromptOverrides;
   /**
@@ -92,6 +112,7 @@ export type RunFusionOptions = {
  */
 export type StackEvent =
   | { kind: "server.start"; id: string; label: string }
+  | { kind: "server.progress"; id: string; detail: string }
   | { kind: "server.ready"; id: string; detail: string }
   | { kind: "server.fail"; id: string; detail: string }
   | { kind: "synth.start" }
@@ -125,6 +146,13 @@ export const DEFAULT_CLOUD_PANEL: readonly PanelModelSpec[] = [
   { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic" },
   { id: "gemini", model: "gemini-2.5-pro", provider: "google" }
 ];
+
+/**
+ * The default narration-writer model for a bare `--reasoning-model` flag: the
+ * smallest local model that passed both narration tasks (gist + comparison) in
+ * the head-to-head benchmark. Already part of the curated local catalog.
+ */
+export const DEFAULT_REASONING_MODEL = "mlx-community/Qwen3-1.7B-4bit";
 
 /** The locally cached MLX trio (Apple Silicon only) used behind `--local`. */
 export const DEFAULT_TRIO: readonly PanelModelSpec[] = [
@@ -197,6 +225,33 @@ export function loadEnvFileInto(path: string, env: Record<string, string | undef
   }
 }
 
+/**
+ * Default provider base URL when a cloud spec carries no explicit `baseUrl`.
+ * Mirrors `PROVIDER_DEFAULT_BASE_URL` in fusionkit's openai_endpoint.py. Used
+ * both for the router config (fusionkit's `ModelEndpoint` requires `base_url`)
+ * and for the preflight key-validation probes.
+ */
+export function providerDefaultBaseUrl(provider: Exclude<PanelProvider, "mlx">): string {
+  switch (provider) {
+    case "openai":
+      return "https://api.openai.com";
+    case "anthropic":
+      return "https://api.anthropic.com";
+    case "google":
+      return "https://generativelanguage.googleapis.com";
+    // No trailing /v1: fusionkit's OpenAI-compatible client appends it, so the
+    // effective URL is https://openrouter.ai/api/v1.
+    case "openrouter":
+      return "https://openrouter.ai/api";
+    case "openai-compatible":
+      return "http://127.0.0.1";
+    default: {
+      const exhaustive: never = provider;
+      throw new Error(`unknown provider ${String(exhaustive)}`);
+    }
+  }
+}
+
 /** Default env var holding the API key for each cloud provider. */
 export function defaultKeyEnv(provider: PanelProvider): string | undefined {
   switch (provider) {
@@ -206,6 +261,8 @@ export function defaultKeyEnv(provider: PanelProvider): string | undefined {
       return "ANTHROPIC_API_KEY";
     case "google":
       return "GEMINI_API_KEY";
+    case "openrouter":
+      return "OPENROUTER_API_KEY";
     case "openai-compatible":
     case "mlx":
       return undefined;

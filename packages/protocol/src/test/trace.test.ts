@@ -9,8 +9,10 @@ import {
   judgeRequestPayload,
   judgeThinkingPayload,
   modelCallFinishedPayload,
-  modelCallStartedPayload
+  modelCallStartedPayload,
+  TraceEmitter
 } from "../trace.js";
+import type { FusionTraceEvent } from "../trace.js";
 
 function validEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -73,6 +75,47 @@ test("judgeFinalPayload mirrors the final output into the record", () => {
   assert.equal(payload.final_output, "answer");
   assert.deepEqual(payload.record, { final_output: "answer" });
   assert.deepEqual(payload.usage, { total_tokens: 5 });
+});
+
+test("an in-process listener enables the emitter and receives events synchronously", () => {
+  const emitter = new TraceEmitter({});
+  assert.equal(emitter.isEnabled(), false, "no sinks, no listeners: disabled");
+
+  const seen: FusionTraceEvent[] = [];
+  const listener = (event: FusionTraceEvent): void => {
+    seen.push(event);
+  };
+  emitter.addListener(listener);
+  assert.equal(emitter.isEnabled(), true, "a listener enables emission without URL/DIR sinks");
+
+  emitter.emit({
+    component: "panel-model",
+    event_type: "harness.candidate.started",
+    traceId: "trace_listener",
+    modelId: "gpt"
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]?.trace_id, "trace_listener");
+  assert.equal(seen[0]?.event_type, "harness.candidate.started");
+  assert.equal(seen[0]?.model_id, "gpt");
+
+  emitter.removeListener(listener);
+  assert.equal(emitter.isEnabled(), false, "removing the last listener disables emission again");
+  emitter.emit({ component: "judge", event_type: "judge.request", traceId: "trace_listener" });
+  assert.equal(seen.length, 1, "a removed listener sees nothing");
+});
+
+test("a throwing listener never breaks emit (and other listeners still fire)", () => {
+  const emitter = new TraceEmitter({});
+  const seen: string[] = [];
+  emitter.addListener(() => {
+    throw new Error("broken listener");
+  });
+  emitter.addListener((event) => seen.push(event.event_type));
+  assert.doesNotThrow(() =>
+    emitter.emit({ component: "judge", event_type: "judge.request", traceId: "trace_x" })
+  );
+  assert.deepEqual(seen, ["judge.request"]);
 });
 
 test("model-call payloads use snake_case prompt + token fields", () => {

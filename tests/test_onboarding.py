@@ -5,7 +5,12 @@ import time
 
 import fusionkit_cli.main as cli
 from fusionkit_cli.main import app
-from fusionkit_cli.onboarding import resolve_config_path, write_config
+from fusionkit_cli.onboarding import (
+    api_key_endpoint,
+    detect_api_keys,
+    resolve_config_path,
+    write_config,
+)
 from fusionkit_core.config import EndpointAuth, FusionConfig, ModelEndpoint, load_config
 from fusionkit_core.credentials import (
     SubscriptionStatus,
@@ -87,6 +92,26 @@ def test_resolve_config_path_prefers_explicit_then_env_then_project(tmp_path, mo
     assert resolve_config_path(explicit) == explicit
 
 
+# --- API-key provider scaffolding -------------------------------------------
+
+
+def test_detect_api_keys_includes_openrouter(monkeypatch) -> None:
+    for env_var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+
+    assert detect_api_keys() == {"openrouter": "OPENROUTER_API_KEY"}
+
+
+def test_api_key_endpoint_scaffolds_openrouter() -> None:
+    endpoint = api_key_endpoint("openrouter")
+
+    assert endpoint.provider == "openrouter"
+    assert endpoint.base_url == "https://openrouter.ai/api"
+    assert endpoint.api_key_env == "OPENROUTER_API_KEY"
+    assert "/" in endpoint.model  # OpenRouter ids are vendor/model
+
+
 # --- init wizard -----------------------------------------------------------
 
 
@@ -115,6 +140,40 @@ def test_init_refuses_overwrite_without_force(tmp_path, monkeypatch) -> None:
 
     assert result.exit_code == 1
     assert "already exists" in result.output
+
+
+def test_init_prompt_decline_keeps_existing(tmp_path, monkeypatch) -> None:
+    clear_credential_cache()
+    monkeypatch.setattr(cli, "subscription_status", _available)
+    monkeypatch.setattr(cli, "detect_api_keys", lambda: {})
+    target = tmp_path / "fusionkit.yaml"
+    target.write_text("existing")
+
+    result = runner.invoke(app, ["init", "-o", str(target)], input="n\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Keeping existing config" in result.output
+    assert target.read_text() == "existing"
+
+
+def test_init_prompt_accept_overwrites(tmp_path, monkeypatch) -> None:
+    clear_credential_cache()
+    monkeypatch.setattr(cli, "subscription_status", lambda mode, path=None: _available(mode))
+    monkeypatch.setattr(cli, "detect_api_keys", lambda: {})
+    target = tmp_path / "fusionkit.yaml"
+    target.write_text("existing")
+
+    result = runner.invoke(
+        app,
+        ["init", "-o", str(target)],
+        input="y\ny\ny\n\n\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Wrote" in result.output
+    assert target.read_text() != "existing"
+    config = load_config(target)
+    assert config.default_model in {endpoint.id for endpoint in config.endpoints}
 
 
 # --- auth switch / set-default ---------------------------------------------

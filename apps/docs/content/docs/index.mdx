@@ -1,19 +1,20 @@
 ---
 title: Introduction
-description: What fusionkit is, the platform it runs on, and how to find your way around these docs.
+description: What FusionKit is, how the CLI and Python fusion engine fit together, and where to start.
 ---
 
-## What is fusionkit?
+## What is FusionKit?
 
-`fusionkit` puts **real model fusion** behind your coding agent. On every prompt it:
+FusionKit runs ensembles of local and cloud models as a raw inference endpoint
+and behind your existing coding agent. On every fused turn it:
 
-1. Spins up a **panel** of models (a cloud trio by default, or a local MLX trio).
-2. Has each panel model produce a **real candidate** by running a coding harness
-   over your repo.
-3. Runs a **judge** that synthesizes the answer your coding agent (Codex, Claude
-   Code, or Cursor) actually executes.
+1. Sends the request to a **panel** of models, usually a decorrelated cloud trio
+   or an Apple-Silicon local MLX panel.
+2. Captures each model's candidate response or harness trajectory.
+3. Runs a **judge** that synthesizes the candidates into the answer returned to
+   your client, Codex, Claude Code, or Cursor.
 
-You run one command and your agent is transparently backed by the fused panel:
+You run one command and your agent is transparently backed by the panel:
 
 ```bash
 npm install -g @fusionkit/cli
@@ -22,46 +23,41 @@ fusionkit doctor       # verify prerequisites
 fusionkit codex        # launch Codex backed by the panel
 ```
 
-## Two ways to use it
+## Two supported product paths
 
-fusionkit ships as a single CLI on top of a governed execution platform. Most
-people start with the CLI; teams building their own agent products reach for the
-platform packages.
+The Node `@fusionkit/cli` is the front door. It launches coding harnesses, owns
+configuration, sessions, cost controls, and model management, and starts the
+Python `fusionkit serve` engine when needed. The Python engine is also the raw
+OpenAI-compatible endpoint for inference clients.
 
 <Cards>
-  <Card title="Documentation taxonomy" href="/docs/taxonomy">
-    Learn how the docs are organized by reader intent and where each section
-    belongs.
-  </Card>
-  <Card title="The fusionkit CLI" href="/docs/getting-started/installation">
+  <Card title="Install the CLI" href="/docs/getting-started/installation">
     Back Codex, Claude Code, or Cursor with a fused model panel from one command.
-    Start here if you want better answers in your existing coding agent.
   </Card>
-  <Card title="The platform & SDKs" href="/docs/concepts/overview">
-    Run vendor agents under policy on runtimes you control, with signed,
-    offline-verifiable receipts. Build on `@fusionkit/handoff`, the SDK, and the
-    AI SDK / compute adapters.
+  <Card title="Use the endpoint" href="/docs/getting-started/inference-endpoint">
+    Point OpenAI-compatible clients at `fusionkit serve` for fused chat,
+    streaming, and tool-calling.
   </Card>
   <Card title="Product scope" href="/docs/concepts/product-scope">
-    See which packages power the everyday CLI path and which packages are
-    retained platform depth.
+    See which packages power the shipped product and which retained platform
+    packages are legacy or contributor-only.
+  </Card>
+  <Card title="Documentation taxonomy" href="/docs/taxonomy">
+    Learn how the docs are organized and where each section belongs.
   </Card>
 </Cards>
 
-## The platform underneath
+## What is in the repository?
 
-Both surfaces sit on the same governed execution and provenance plane (the
-project's internal name is **Warrant**). Its two core objects are the **run
-contract** (a signed authorization to execute under stated conditions) and the
-**receipt** (a signed, offline-verifiable record of what actually happened).
-Continuation, handing local work to a governed runner and pulling it back, is
-built from those same primitives and shipped as the [handoff
-SDK](/docs/sdks/handoff-sdk).
+The repository still contains older Warrant governance, handoff, SDK, Docker,
+and VM-isolation packages. They are real code and remain documented for
+contributors, but they are not the normal FusionKit product path and the shipped
+`fusionkit` CLI does not ask you to run the legacy plane or runner.
 
 <Callout type="info">
-  Two packages share the name "fusionkit": the npm CLI (`@fusionkit/cli`) and the
-  Python synthesizer (`fusionkit` on PyPI), which is fetched automatically via
-  `uvx`. `fusionkit --version` prints both.
+  Two packages share the name "fusionkit": the npm CLI (`@fusionkit/cli`) and
+  the Python synthesizer (`fusionkit` on PyPI), which the CLI fetches
+  automatically via `uvx`. `fusionkit --version` prints both.
 </Callout>
 
 ## Find your way around
@@ -70,10 +66,10 @@ SDK](/docs/sdks/handoff-sdk).
   the prerequisites, and run your first fused session.
 - **[fusionkit CLI](/docs/cli/commands)**: the full command and flag reference,
   cost control, observability, and troubleshooting.
-- **[Concepts](/docs/concepts/overview)**: contracts, receipts, the plane and
-  runners, and how model fusion works.
-- **[SDKs & Packages](/docs/sdks/handoff-sdk)**: the handoff SDK, the plane
-  client, the AI SDK / compute adapters, and the package map.
-- **[Self-Hosting](/docs/operations/self-hosting)**: operate the plane and
-  runners, and publish releases.
+- **[Concepts](/docs/concepts/overview)**: model fusion, architecture, runtime
+  kernel, and product boundaries.
+- **[SDKs & Packages](/docs/sdks/packages)**: package map and retained SDK
+  surfaces for contributors and platform builders.
+- **[Operations](/docs/operations/release-publishing)**: release and publishing
+  notes for maintainers.
 - **[API Reference](/docs/api)**: the model-fusion HTTP contract.

@@ -237,6 +237,14 @@ function writeVersionSource(repoAbs, spec, version) {
     writeFileSync(path, text);
     return true;
   }
+  if (file.endsWith(".ts")) {
+    text = text.replace(
+      /(export const FUSIONKIT_PYPI_VERSION = ")[^"]+(")/,
+      `$1${version}$2`
+    );
+    writeFileSync(path, text);
+    return true;
+  }
   return false;
 }
 
@@ -930,6 +938,7 @@ function applyBump(unit, version) {
       if (unit.ecosystem === "uv-monorepo") {
         touched.push(...repinUvInternalDeps(unit, version));
         touched.push(...regenerateUvLock(unit));
+        touched.push(...bumpFusionkitPypiPin(unit.absRepo, version));
       }
       break;
     default:
@@ -937,6 +946,15 @@ function applyBump(unit, version) {
   }
   log(`  bumped ${unit.key} -> ${version}`);
   return touched;
+}
+
+// Keep the npm CLI's uvx pin aligned with the PyPI distribution version.
+function bumpFusionkitPypiPin(repoAbs, version) {
+  const rel = "packages/cli/src/fusion/env.ts";
+  if (writeVersionSource(repoAbs, `${rel}#FUSIONKIT_PYPI_VERSION`, version)) {
+    return [rel];
+  }
+  return [];
 }
 
 // handoffkit: root + all publishable @fusionkit/* + release/npm-packages.json protocol.version.
@@ -965,6 +983,7 @@ function bumpPnpmMonorepo(unit, version) {
       touched.push("packages/protocol/model-fusion-bindings.json");
     }
   }
+  touched.push(...bumpFusionkitPypiPin(unit.absRepo, version));
   return touched;
 }
 

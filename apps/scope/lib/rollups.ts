@@ -14,6 +14,8 @@ export type ModelRollup = {
   running: number;
   avgLatencyS?: number;
   totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
   lastTs: number;
 };
 
@@ -21,7 +23,8 @@ function obj(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
 
-function tokensOf(usage: Record<string, unknown>): number {
+/** Total tokens carried by a usage payload (total, or prompt + completion). */
+export function tokensOf(usage: Record<string, unknown>): number {
   if (typeof usage.total_tokens === "number") return usage.total_tokens;
   const prompt = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
   const completion = typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0;
@@ -37,6 +40,8 @@ type ModelAcc = {
   running: number;
   latencies: number[];
   totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
   lastTs: number;
 };
 
@@ -53,6 +58,8 @@ export function rollupModels(events: StoredEvent[]): ModelRollup[] {
         running: 0,
         latencies: [],
         totalTokens: 0,
+        promptTokens: 0,
+        completionTokens: 0,
         lastTs: 0
       };
       byModel.set(modelId, acc);
@@ -76,7 +83,10 @@ export function rollupModels(events: StoredEvent[]): ModelRollup[] {
       if (payload.error !== undefined) acc.failed += 1;
       else acc.succeeded += 1;
       if (typeof payload.latency_s === "number") acc.latencies.push(payload.latency_s);
-      acc.totalTokens += tokensOf(obj(payload.usage));
+      const usage = obj(payload.usage);
+      acc.totalTokens += tokensOf(usage);
+      if (typeof usage.prompt_tokens === "number") acc.promptTokens += usage.prompt_tokens;
+      if (typeof usage.completion_tokens === "number") acc.completionTokens += usage.completion_tokens;
     }
   }
 
@@ -92,6 +102,8 @@ export function rollupModels(events: StoredEvent[]): ModelRollup[] {
         ? { avgLatencyS: acc.latencies.reduce((sum, value) => sum + value, 0) / acc.latencies.length }
         : {}),
       totalTokens: acc.totalTokens,
+      promptTokens: acc.promptTokens,
+      completionTokens: acc.completionTokens,
       lastTs: acc.lastTs
     }))
     .sort((a, b) => b.calls - a.calls || b.lastTs - a.lastTs);
@@ -102,7 +114,8 @@ export type EnvironmentRollup = {
   repo?: string;
   judgeModel?: string | null;
   harnesses?: string[];
-  models: Array<{ id: string; model: string }>;
+  models: Array<{ id: string; model: string; provider?: string; endpointId?: string }>;
+  modelEndpoints?: Record<string, string>;
   fusionBackendUrl?: string;
   sessionCount: number;
   lastTs: number;
@@ -119,7 +132,12 @@ export function rollupEnvironments(rows: EnvironmentInput[]): EnvironmentRollup[
   for (const row of rows) {
     const env = row.environment;
     if (env === null) continue;
-    const models = (env.models ?? []).map((model) => ({ id: model.id, model: model.model }));
+    const models = (env.models ?? []).map((model) => ({
+      id: model.id,
+      model: model.model,
+      ...(model.provider !== undefined ? { provider: model.provider } : {}),
+      ...(model.endpoint_id !== undefined ? { endpointId: model.endpoint_id } : {})
+    }));
     const signature = JSON.stringify({
       repo: env.repo ?? null,
       judge: env.judge_model ?? null,
@@ -139,6 +157,7 @@ export function rollupEnvironments(rows: EnvironmentInput[]): EnvironmentRollup[
       judgeModel: env.judge_model ?? null,
       ...(env.harnesses !== undefined ? { harnesses: env.harnesses } : {}),
       models,
+      ...(env.model_endpoints !== undefined ? { modelEndpoints: env.model_endpoints } : {}),
       ...(env.fusion_backend_url !== undefined ? { fusionBackendUrl: env.fusion_backend_url } : {}),
       sessionCount: 1,
       lastTs: row.lastTs

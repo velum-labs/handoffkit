@@ -25,6 +25,7 @@ import type {
   SchedulerRunResult
 } from "@fusionkit/kernel";
 
+import { mergeEventsWithNarration } from "./narration.js";
 import { eventsToSseResponse } from "./sse.js";
 import {
   FrontdoorArtifactTypes,
@@ -62,10 +63,18 @@ async function runFusionTurnResponse(
 ): Promise<Response> {
   const runId = `${req.sessionKey}:t${req.turn}`;
   if (req.streaming) {
+    // Reasoning traces: narrate panel/judge progress into the stream while the
+    // panel runs. Best-effort — a narration failure must never break the turn.
+    const narration = services.openTurnNarration?.(req);
     const events = streamFusionFrontdoorTurn(services, req, { runId });
-    return eventsToSseResponse(events, {
+    const merged = narration !== undefined ? mergeEventsWithNarration(events, narration) : events;
+    return eventsToSseResponse(merged, {
       ...(req.notice !== undefined ? { notice: req.notice } : {}),
-      onError: () => services.evictTurn(req)
+      onError: () => {
+        narration?.close();
+        services.evictTurn(req);
+      },
+      onComplete: () => narration?.close()
     });
   }
   const outcome = await runFusionFrontdoorTurn(services, req, { runId });

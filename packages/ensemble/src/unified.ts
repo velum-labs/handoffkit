@@ -21,6 +21,7 @@ import type {
   EnsembleRunResult,
   HarnessAdapter,
   HarnessArtifact,
+  HarnessEndReason,
   HarnessTrajectory,
   TrajectoryStep
 } from "./harness.js";
@@ -39,6 +40,14 @@ export type UnifiedHarnessKind =
   | "claude-code"
   | "cursor-acp"
   | "cursor-desktop";
+
+/**
+ * Trust level for unattended panel candidates. `full` (the default) gives each
+ * member the highest autonomy its harness offers (e.g. Codex
+ * `danger-full-access`); `guarded` keeps the harness's side-effects-derived
+ * confinement (e.g. Codex `workspace-write`, fenced to the worktree).
+ */
+export type PanelTrust = "full" | "guarded";
 
 /**
  * Options the unified runner passes to a tool's harness factory. The per-tool
@@ -66,6 +75,8 @@ export type ToolHarnessResolveOptions = {
   turn?: number;
   /** When true, the tool harness tells its model which panel member it is. */
   panelIdentity?: boolean;
+  /** Panel candidate trust level; unset means `full` (maximum autonomy). */
+  panelTrust?: PanelTrust;
 };
 
 /**
@@ -113,7 +124,8 @@ function resolveToolAdapter(
     ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
-    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
+    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+    ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {})
   });
 }
 
@@ -184,6 +196,8 @@ export type UnifiedHarnessE2EOptions = {
   turn?: number;
   /** When true, each harness tells its model which panel member it is (see FusionPanelOptions). */
   panelIdentity?: boolean;
+  /** Panel candidate trust level; unset means `full` (maximum autonomy). */
+  panelTrust?: PanelTrust;
 };
 
 function normalizeFusionBackendUrl(value: string): string {
@@ -201,12 +215,34 @@ const PANEL_MEMBER_SUFFIX =
   "(You are one model in a FusionKit panel answering this task independently.)";
 
 /**
+ * Fixed agent-loop contract appended to every panel candidate's prompt. Panel
+ * candidates run unattended in disposable worktrees where nobody can answer a
+ * question, yet smaller models routinely end their turn by asking the user for
+ * permission or direction after a single tool round (the "punt" failure mode
+ * documented for sub-10B agents). This is code-side mechanism, not a
+ * user-editable prompt: it states the one fact about the candidate's situation
+ * that the launched tool's own prompt cannot know. Harmless for models that
+ * already behave agentically.
+ */
+export const PANEL_CANDIDATE_CONTRACT =
+  "Panel candidate contract: you are one of several independent candidates attempting this " +
+  "request in a disposable scratch workspace. The user cannot see your work and cannot reply - " +
+  "never ask for permission or clarification, and never end your turn with a question. Act via " +
+  "your tools until the request is genuinely complete, then reply with your final result. If " +
+  "anything is ambiguous, choose the most reasonable interpretation and proceed. " +
+  "Run commands with default sandbox permissions: approvals are disabled, so any request for " +
+  "escalated permissions is auto-rejected - reading and editing files in your workspace never " +
+  "needs escalation. If a command is rejected or fails, fix the command and retry; do not " +
+  "conclude that access is blocked. Never end your turn by describing what you are about to " +
+  "do - either call a tool or report what you already did.";
+
+/**
  * Compose the shared panel-member prompt: optionally pass through the launched
  * coding tool's own system/custom instructions (so panel members follow the
  * user's developer guidance, not just the bare request), the task itself, and a
- * membership suffix. The per-member self-identity line is added separately at the
- * harness `run` (it needs the model id + ordinal). With `panelIdentity` off this
- * reduces to the prior behavior (task + the generic membership suffix).
+ * membership suffix, and the fixed candidate contract
+ * (`PANEL_CANDIDATE_CONTRACT`). The per-member self-identity line is added
+ * separately at the harness `run` (it needs the model id + ordinal).
  */
 export function buildPanelPrompt(input: {
   prompt: string;
@@ -229,6 +265,7 @@ export function buildPanelPrompt(input: {
   } else {
     parts.push(PANEL_MEMBER_SUFFIX);
   }
+  parts.push(PANEL_CANDIDATE_CONTRACT);
   return parts.join("\n\n");
 }
 
@@ -363,6 +400,15 @@ function stepToWireItem(step: TrajectoryStep): Record<string, unknown> {
   }
 }
 
+function endReasonToWire(endReason: HarnessEndReason): NonNullable<WireTrajectory["end_reason"]> {
+  return {
+    kind: endReason.kind,
+    ...(endReason.exitCode !== undefined ? { exit_code: endReason.exitCode } : {}),
+    ...(endReason.timedOut !== undefined ? { timed_out: endReason.timedOut } : {}),
+    ...(endReason.detail !== undefined ? { detail: endReason.detail } : {})
+  };
+}
+
 function trajectoryToWire(trajectory: HarnessTrajectory): WireTrajectory {
   return {
     trajectory_id: trajectory.trajectoryId,
@@ -373,7 +419,8 @@ function trajectoryToWire(trajectory: HarnessTrajectory): WireTrajectory {
     ...(trajectory.candidateId !== undefined ? { candidate_id: trajectory.candidateId } : {}),
     ...(trajectory.model !== undefined ? { model: trajectory.model } : {}),
     ...(trajectory.harnessKind !== undefined ? { harness_kind: trajectory.harnessKind } : {}),
-    ...(trajectory.diff !== undefined && trajectory.diff.length > 0 ? { diff: trajectory.diff } : {})
+    ...(trajectory.diff !== undefined && trajectory.diff.length > 0 ? { diff: trajectory.diff } : {}),
+    ...(trajectory.endReason !== undefined ? { end_reason: endReasonToWire(trajectory.endReason) } : {})
   };
 }
 
@@ -393,7 +440,8 @@ function failedEvidenceToWire(evidence: JudgeCandidateEvidence): WireTrajectory 
     items: [],
     final_output: `panel candidate ${label} produced no trajectory (status: ${evidence.status})`,
     candidate_id: evidence.candidateId,
-    ...(evidence.model.length > 0 ? { model: evidence.model } : {})
+    ...(evidence.model.length > 0 ? { model: evidence.model } : {}),
+    ...(evidence.endReason !== undefined ? { end_reason: endReasonToWire(evidence.endReason) } : {})
   };
 }
 
@@ -500,6 +548,8 @@ export type FusionPanelOptions = {
    * prompts differ from each other (some inter-member decorrelation trade-off).
    */
   panelIdentity?: boolean;
+  /** Panel candidate trust level; unset means `full` (maximum autonomy). */
+  panelTrust?: PanelTrust;
 };
 
 /**
@@ -530,7 +580,8 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
-    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
+    ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+    ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {})
   };
   const descriptor = descriptorFor(harness, e2eOptions);
   descriptor.judge = {
@@ -548,12 +599,18 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     }
   };
   await runEnsemble(descriptor);
-  if (captured.length > 0) return captured.map(trajectoryToWire);
-  // No candidate produced a trajectory. Rather than return an empty set (an
-  // opaque "fusion panel produced no candidates"), surface every candidate that
-  // ran as a failed trajectory carrying its model id and status, so the gateway
-  // reports which models failed and the companion app shows them.
-  return evidence.map(failedEvidenceToWire);
+  // Surface every candidate that ran: trajectories where captured, and failed
+  // placeholders (with model id, status, and end reason) where a candidate
+  // produced none — so a mixed panel never silently drops its failures and
+  // the session record can answer "why did this candidate stop?".
+  if (evidence.length > 0) {
+    return evidence.map((candidate) =>
+      candidate.trajectory !== undefined
+        ? trajectoryToWire(candidate.trajectory)
+        : failedEvidenceToWire(candidate)
+    );
+  }
+  return captured.map(trajectoryToWire);
 }
 
 /**

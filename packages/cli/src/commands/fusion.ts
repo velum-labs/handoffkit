@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
+import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
 import { initHome } from "../config.js";
 import { loadFusionConfig } from "../fusion-config.js";
@@ -17,6 +17,7 @@ import {
   parseIdValue,
   parseOnRateLimit,
   parsePanelModelSpec,
+  parsePanelTrust,
   parsePort
 } from "../shared/options.js";
 import { reapFusionServices } from "../shared/portless.js";
@@ -33,6 +34,8 @@ type FusionOpts = {
   repo?: string;
   local?: boolean;
   observe?: boolean;
+  reasoning?: boolean;
+  reasoningModel?: string | boolean;
   yes?: boolean;
   force?: boolean;
   authToken?: string;
@@ -41,6 +44,7 @@ type FusionOpts = {
   ide?: boolean;
   onRateLimit?: string;
   budget?: string;
+  panelTrust?: string;
   resume?: string;
   continue?: boolean;
   dir?: string;
@@ -63,6 +67,12 @@ function applyFusionOptions(command: Command): Command {
     .option("--no-local", "override a .fusionkit default of local=true")
     .option("--observe", "boot the local scope dashboard and stream live trace events")
     .option("--no-observe", "override a .fusionkit default of observe=true")
+    .option("--reasoning", "narrate panel/judge progress in the tool's thinking UI (default)")
+    .option("--no-reasoning", "keep the stream silent until the judge's first token")
+    .option(
+      "--reasoning-model [repo]",
+      `write narration prose with a small local MLX model (default repo: ${DEFAULT_REASONING_MODEL}; Apple Silicon)`
+    )
     .option("--yes", "skip the interactive cloud-panel cost confirmation")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .option("--port <n>", "gateway port (default: ephemeral)")
@@ -74,6 +84,10 @@ function applyFusionOptions(command: Command): Command {
       "vendor rate-limit/credit handoff: fusion (continue on the ensemble, default) | passthrough | fail"
     )
     .option("--budget <usd>", "stop the session once it has spent this much (gateway-observed USD)")
+    .option(
+      "--panel-trust <level>",
+      "panel candidate autonomy: full (max, default) | guarded (harness-fenced to the worktree)"
+    )
     .option("--resume <id>", "resume a stored session by id (or unique prefix); see `fusionkit sessions`")
     .option("--continue", "resume the most recently active stored session")
     .allowUnknownOption()
@@ -93,10 +107,15 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.synthesisUrl !== undefined) options.synthesisUrl = opts.synthesisUrl;
   if (opts.fusionkitDir !== undefined) options.fusionkitDir = resolve(opts.fusionkitDir);
   if (opts.repo !== undefined) options.repo = resolve(opts.repo);
-  // local/observe are tri-state: only set when the user passed --local/--no-local
-  // (or --observe/--no-observe), so an unset flag can fall through to the config.
+  // local/observe/reasoning are tri-state: only set when the user passed the
+  // flag (or its --no- form), so an unset flag can fall through to the config.
   if (opts.local !== undefined) options.local = opts.local;
   if (opts.observe !== undefined) options.observe = opts.observe;
+  if (opts.reasoning !== undefined) options.reasoning = opts.reasoning;
+  // `--reasoning-model` without a value means "use the benchmark default".
+  if (opts.reasoningModel !== undefined) {
+    options.reasoningModel = opts.reasoningModel === true ? DEFAULT_REASONING_MODEL : String(opts.reasoningModel);
+  }
   if (opts.yes === true) options.yes = true;
   if (opts.portless !== undefined) options.portless = opts.portless;
   if (opts.ide === true) options.ide = true;
@@ -104,6 +123,8 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (onRateLimit !== undefined) options.onRateLimit = onRateLimit;
   const budgetUsd = parseBudget(opts.budget);
   if (budgetUsd !== undefined) options.budgetUsd = budgetUsd;
+  const panelTrust = parsePanelTrust(opts.panelTrust);
+  if (panelTrust !== undefined) options.panelTrust = panelTrust;
   if (opts.authToken !== undefined) options.authToken = opts.authToken;
   if (opts.port !== undefined) options.port = parsePort(opts.port, 0);
   if (opts.resume !== undefined) options.resume = opts.resume;
@@ -146,6 +167,10 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   if (options.judgeModel === undefined && config.judgeModel !== undefined) options.judgeModel = config.judgeModel;
   if (options.local === undefined && config.local !== undefined) options.local = config.local;
   if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
+  if (options.reasoning === undefined && config.reasoning !== undefined) options.reasoning = config.reasoning;
+  if (options.reasoningModel === undefined && config.reasoningModel !== undefined) {
+    options.reasoningModel = config.reasoningModel;
+  }
   if (options.portless === undefined && config.portless !== undefined) options.portless = config.portless;
   if (options.port === undefined && config.port != null) options.port = config.port;
   if (options.onRateLimit === undefined && config.onRateLimit !== undefined) {
@@ -153,6 +178,9 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   }
   if (options.budgetUsd === undefined && config.budgetUsd !== undefined) {
     options.budgetUsd = config.budgetUsd;
+  }
+  if (options.panelTrust === undefined && config.panelTrust !== undefined) {
+    options.panelTrust = config.panelTrust;
   }
   if (options.prompts === undefined && config.prompts !== undefined) options.prompts = config.prompts;
 }
@@ -188,7 +216,7 @@ export function registerFusion(program: Command): void {
     .description("scaffold a committed .fusionkit/ folder for this repo")
     .option("--repo <dir>", "coding workspace the panel fuses over")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
-    .option("--force", "overwrite an existing .fusionkit/ config and prompts")
+    .option("--force", "overwrite an existing .fusionkit/ config and prompts without prompting")
     .option("--dir <dir>", "legacy plane home directory")
     .option("--host <host>", "legacy plane bind address")
     .option("--plane-url <url>", "legacy public plane URL")

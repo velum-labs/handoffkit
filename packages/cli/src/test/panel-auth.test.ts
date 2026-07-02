@@ -50,6 +50,12 @@ test("specForAuthChoice maps API-key providers to a keyEnv, no auth", () => {
   });
   assert.equal(specForAuthChoice("anthropic", "a", "claude-x").keyEnv, "ANTHROPIC_API_KEY");
   assert.equal(specForAuthChoice("google", "ge", "gemini-x").keyEnv, "GEMINI_API_KEY");
+  assert.deepEqual(specForAuthChoice("openrouter", "or", "moonshotai/kimi-k2"), {
+    id: "or",
+    model: "moonshotai/kimi-k2",
+    provider: "openrouter",
+    keyEnv: "OPENROUTER_API_KEY"
+  });
 });
 
 test("specForAuthChoice maps local to the mlx provider", () => {
@@ -64,6 +70,7 @@ test("defaultModelForAuthChoice gives a per-choice default", () => {
   assert.equal(defaultModelForAuthChoice("openai"), "gpt-5.5");
   assert.equal(defaultModelForAuthChoice("claude-code"), "claude-sonnet-4-5");
   assert.equal(defaultModelForAuthChoice("google"), "gemini-2.5-flash");
+  assert.equal(defaultModelForAuthChoice("openrouter"), "anthropic/claude-sonnet-4.5");
 });
 
 // --- buildAuthOptions: combinable methods, gated by detection --------------
@@ -71,7 +78,7 @@ test("defaultModelForAuthChoice gives a per-choice default", () => {
 test("buildAuthOptions always offers API-key providers and local", () => {
   process.env.HOME = freshHome();
   const values = buildAuthOptions({}).map((option) => option.value);
-  for (const expected of ["openai", "anthropic", "google", "local"] as const) {
+  for (const expected of ["openai", "anthropic", "google", "openrouter", "local"] as const) {
     assert.ok(values.includes(expected), `expected ${expected} in ${values.join(", ")}`);
   }
 });

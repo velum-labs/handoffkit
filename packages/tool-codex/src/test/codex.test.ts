@@ -8,6 +8,8 @@ import { test } from "node:test";
 
 import { createMockHarness, ensemble } from "@fusionkit/ensemble";
 import type { EnsembleDescriptor } from "@fusionkit/ensemble";
+import { addTraceListener, removeTraceListener } from "@fusionkit/protocol";
+import type { FusionTraceEvent } from "@fusionkit/protocol";
 
 import {
   codexConfigToml,
@@ -128,6 +130,52 @@ test("codexConfigToml declares a Responses provider without requiring auth", () 
   assert.ok(toml.includes('base_url = "http://127.0.0.1:9000/v1"'));
   assert.ok(toml.includes('wire_api = "responses"'));
   assert.ok(toml.includes("requires_openai_auth = false"));
+});
+
+test("codexConfigToml emits danger-full-access when the panel runs at full trust", () => {
+  const toml = codexConfigToml({
+    model: "local-model",
+    sandboxMode: "danger-full-access",
+    approvalPolicy: "never"
+  });
+  assert.ok(toml.includes('sandbox_mode = "danger-full-access"'));
+  assert.ok(toml.includes('approval_policy = "never"'));
+});
+
+test("full-trust codex harness writes danger-full-access; guarded falls back to workspace-write", async () => {
+  const { outputRoot, cleanup } = tempOutputRoot();
+  const configs: Record<string, string> = {};
+  const runnerFor = (label: string): CodexExecRunner => (input) => {
+    const codexHome = input.env.CODEX_HOME;
+    assert.ok(codexHome);
+    configs[label] = readFileSync(join(codexHome, "config.toml"), "utf8");
+    return { stdout: '{"type":"message","message":"codex-ok"}\n', stderr: "", exitCode: 0 };
+  };
+
+  try {
+    // Full trust: the panel path passes sandboxMode: danger-full-access.
+    await ensemble.run(
+      descriptor(outputRoot, {
+        harness: codexHarness({
+          env: { CODEX_API_KEY: "test-key" },
+          runner: runnerFor("full"),
+          sandboxMode: "danger-full-access"
+        })
+      })
+    );
+    // Guarded: no override, so sandboxModeFor derives from the writes_workspace
+    // policy (workspace-write), mirroring the guarded panel path.
+    await ensemble.run(
+      descriptor(outputRoot, {
+        harness: codexHarness({ env: { CODEX_API_KEY: "test-key" }, runner: runnerFor("guarded") })
+      })
+    );
+
+    assert.ok(configs.full?.includes('sandbox_mode = "danger-full-access"'));
+    assert.ok(configs.guarded?.includes('sandbox_mode = "workspace-write"'));
+  } finally {
+    cleanup();
+  }
 });
 
 test("codexLaunchConfigToml pins fusion as default and adds a profile per native model", () => {
@@ -324,6 +372,12 @@ test("defaultCodexRunner reports a non-zero exit code from the process", async (
 test("Codex OpenAI-compatible provider goes through Responses gateway records", async () => {
   const { outputRoot, cleanup } = tempOutputRoot();
   const upstream = await startOpenAiCompatibleServer();
+  const traceId = "trace_codex_live_capture";
+  const traceEvents: FusionTraceEvent[] = [];
+  const listener = (event: FusionTraceEvent): void => {
+    if (event.trace_id === traceId) traceEvents.push(event);
+  };
+  addTraceListener(listener);
   let gatewayBaseUrl: string | undefined;
   const runner: CodexExecRunner = async (input) => {
     const codexHome = input.env.CODEX_HOME;
@@ -342,6 +396,11 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
       })
     });
     assert.equal(response.status, 200);
+    await response.text();
+    assert.ok(
+      traceEvents.some((event) => event.event_type === "trajectory.step"),
+      "gateway capture emits a live trajectory step before Codex exits"
+    );
     return { stdout: "codex gateway ok", stderr: "", exitCode: 0 };
   };
 
@@ -355,6 +414,7 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
             baseUrl: `${upstream.url}/v1`,
             defaultModel: "local-model"
           },
+          traceId,
           runner
         })
       })
@@ -367,7 +427,11 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
     assert.equal(result.modelCallRecords[0]?.metadata?.dialect, "openai-responses");
     assert.equal(result.modelCallRecords[0]?.model, "local-model");
     assert.equal(result.candidates[0]?.metadata?.model_call_count, 1);
+    const stepIndex = traceEvents.findIndex((event) => event.event_type === "trajectory.step");
+    const finishedIndex = traceEvents.findIndex((event) => event.event_type === "harness.candidate.finished");
+    assert.ok(stepIndex >= 0 && finishedIndex >= 0 && stepIndex < finishedIndex);
   } finally {
+    removeTraceListener(listener);
     await upstream.close();
     cleanup();
   }

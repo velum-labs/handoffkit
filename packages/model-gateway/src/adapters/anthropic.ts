@@ -51,10 +51,23 @@ export type AnthropicRequest = {
 // ---- OpenAI shapes we read back ----
 
 type OpenAiToolCall = { id?: string; index?: number; function?: { name?: string; arguments?: string } };
-type OpenAiDelta = { content?: string | null; tool_calls?: OpenAiToolCall[] };
+// `reasoning_content` carries fusion narration beats; `reasoning` carries the
+// upstream model's raw thinking tokens (local MLX / router passthrough). Both
+// map onto Anthropic thinking blocks, which stream deltas continuously anyway.
+type OpenAiDelta = {
+  content?: string | null;
+  reasoning?: string | null;
+  reasoning_content?: string | null;
+  tool_calls?: OpenAiToolCall[];
+};
 type OpenAiChoice = {
   delta?: OpenAiDelta;
-  message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
+  message?: {
+    content?: string | null;
+    reasoning?: string | null;
+    reasoning_content?: string | null;
+    tool_calls?: OpenAiToolCall[];
+  };
   finish_reason?: string | null;
 };
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
@@ -225,6 +238,14 @@ export function chatToAnthropicMessage(openai: OpenAiResponse, model: string): R
   const message = choice?.message;
   const content: Record<string, unknown>[] = [];
 
+  const reasoning =
+    typeof message?.reasoning === "string" && message.reasoning.length > 0
+      ? message.reasoning
+      : typeof message?.reasoning_content === "string" && message.reasoning_content.length > 0
+        ? message.reasoning_content
+        : "";
+  if (reasoning.length > 0) content.push({ type: "thinking", thinking: reasoning, signature: "" });
+
   const text = typeof message?.content === "string" ? message.content : "";
   if (text.length > 0) content.push({ type: "text", text });
 
@@ -275,6 +296,9 @@ type StreamState = {
   started: boolean;
   textOpen: boolean;
   textIndex: number;
+  thinkingOpen: boolean;
+  thinkingClosed: boolean;
+  thinkingIndex: number;
   nextIndex: number;
   finished: boolean;
   outputTokens: number;
@@ -293,6 +317,9 @@ export function openAiSseToAnthropic(
     started: false,
     textOpen: false,
     textIndex: -1,
+    thinkingOpen: false,
+    thinkingClosed: false,
+    thinkingIndex: -1,
     nextIndex: 0,
     finished: false,
     outputTokens: 0,
@@ -322,8 +349,35 @@ export function openAiSseToAnthropic(
     );
   };
 
+  // Thinking block lifecycle (the fusion narration channel). Opened on the
+  // first `reasoning_content` delta, closed as soon as the first real output
+  // (text or tool_use) begins — thinking always precedes the answer. No
+  // signature is emitted: the gateway never verifies round-tripped thinking
+  // (the request translator drops thinking blocks entirely).
+  const ensureThinking = (controller: Controller): void => {
+    ensureStarted(controller);
+    if (state.thinkingOpen || state.thinkingClosed) return;
+    state.thinkingOpen = true;
+    state.thinkingIndex = state.nextIndex++;
+    controller.enqueue(
+      sse("content_block_start", {
+        type: "content_block_start",
+        index: state.thinkingIndex,
+        content_block: { type: "thinking", thinking: "" }
+      })
+    );
+  };
+
+  const closeThinking = (controller: Controller): void => {
+    if (!state.thinkingOpen || state.thinkingClosed) return;
+    state.thinkingClosed = true;
+    state.thinkingOpen = false;
+    controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index: state.thinkingIndex }));
+  };
+
   const ensureText = (controller: Controller): void => {
     ensureStarted(controller);
+    closeThinking(controller);
     if (state.textOpen) return;
     state.textOpen = true;
     state.textIndex = state.nextIndex++;
@@ -340,6 +394,7 @@ export function openAiSseToAnthropic(
     if (state.finished) return;
     state.finished = true;
     if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+    closeThinking(controller);
     if (state.textOpen) {
       controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index: state.textIndex }));
     }
@@ -364,6 +419,33 @@ export function openAiSseToAnthropic(
     }
     const delta = choice.delta ?? {};
 
+    if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0 && !state.thinkingClosed) {
+      ensureThinking(controller);
+      // The canonical narration is bold markdown (Codex's TUI requires bold
+      // markers to display reasoning); Claude renders thinking as plain text,
+      // so drop the markers here.
+      controller.enqueue(
+        sse("content_block_delta", {
+          type: "content_block_delta",
+          index: state.thinkingIndex,
+          delta: { type: "thinking_delta", thinking: delta.reasoning_content.replace(/\*\*/g, "") }
+        })
+      );
+    }
+
+    if (typeof delta.reasoning === "string" && delta.reasoning.length > 0 && !state.thinkingClosed) {
+      // Raw model thinking tokens pass through verbatim: they are already
+      // plain text, and Anthropic thinking blocks stream token deltas natively.
+      ensureThinking(controller);
+      controller.enqueue(
+        sse("content_block_delta", {
+          type: "content_block_delta",
+          index: state.thinkingIndex,
+          delta: { type: "thinking_delta", thinking: delta.reasoning }
+        })
+      );
+    }
+
     if (typeof delta.content === "string" && delta.content.length > 0) {
       ensureText(controller);
       controller.enqueue(
@@ -381,6 +463,7 @@ export function openAiSseToAnthropic(
         let index = tools.get(openAiIndex);
         if (index === undefined) {
           ensureStarted(controller);
+          closeThinking(controller);
           index = state.nextIndex++;
           tools.set(openAiIndex, index);
           controller.enqueue(

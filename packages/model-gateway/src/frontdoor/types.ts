@@ -11,6 +11,7 @@
 import type { WireTrajectory } from "@fusionkit/protocol";
 
 import type { ChatMessageLike } from "../fusion-backend.js";
+import type { TurnNarration } from "./narration.js";
 
 /** The parsed OpenAI Chat Completions body the front door reads (data only). */
 export type FrontdoorChatBody = {
@@ -99,4 +100,9 @@ export type FrontdoorServices = {
   proxyVendor: (req: FrontdoorRequestValue) => Promise<VendorProxyOutcome>;
   /** Evict a turn's cached candidates so a retry re-runs the panel. */
   evictTurn: (req: FrontdoorRequestValue) => void;
+  /**
+   * Open the live narration channel for a streaming fused turn (reasoning
+   * traces). Returns undefined when narration is disabled.
+   */
+  openTurnNarration?: (req: FrontdoorRequestValue) => TurnNarration | undefined;
 };

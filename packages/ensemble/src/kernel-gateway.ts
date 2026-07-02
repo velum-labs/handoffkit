@@ -36,10 +36,17 @@ const defaultTransport: FuseStepTransport = (request) =>
  */
 export function createKernelFuseStepRunner(transport: FuseStepTransport = defaultTransport): FuseStepRunner {
   return async (request) => {
-    const requestArtifact = createArtifact<FuseStepRunInput>({
+    // The abort signal is a live runtime handle, not serializable wire data —
+    // and `createArtifact` deep-freezes its value. A frozen composed signal
+    // breaks Node's fetch ("Cannot add property Symbol(kResultSignalWeakRef),
+    // object is not extensible"), so keep it out of the artifact and rejoin it
+    // at transport time — the same discipline as the frontdoor request
+    // artifact's symbol-keyed FRONTDOOR_SIGNAL.
+    const { signal, ...wireRequest } = request;
+    const requestArtifact = createArtifact<Omit<FuseStepRunInput, "signal">>({
       id: "trajectory-fuse-step.request",
       type: WireArtifactTypes.TrajectoryFuseStepRequest,
-      value: request,
+      value: wireRequest,
       visibility: "runtime",
       leakage: "none"
     });
@@ -52,9 +59,9 @@ export function createKernelFuseStepRunner(transport: FuseStepTransport = defaul
         sideEffects: "external_tool"
       },
       run: async (inputs, ctx) => {
-        const value = inputs[0]?.value as FuseStepRunInput | undefined;
+        const value = inputs[0]?.value as Omit<FuseStepRunInput, "signal"> | undefined;
         if (value === undefined) throw new Error("trajectory fuse step missing request artifact");
-        const raw = await transport(value);
+        const raw = await transport({ ...value, ...(signal !== undefined ? { signal } : {}) });
         const captured = await captureWireResponse(raw);
         return [
           ctx.createArtifact({

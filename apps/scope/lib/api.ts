@@ -23,6 +23,7 @@ export type SessionSummary = {
   dialect: string | null;
   repo: string | null;
   environment: RawEnvironment | null;
+  promptPreview: string | null;
   finalOutput: string | null;
   eventCount: number;
   durationMs: number;
@@ -34,6 +35,7 @@ export function useSessions(): {
   sessions: SessionSummary[];
   loading: boolean;
   error?: string;
+  live: boolean;
   refetch: () => void;
 } {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -57,17 +59,17 @@ export function useSessions(): {
   useEffect(() => refetch(), [refetch]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useTraceStream(
+  const live = useTraceStream(
     useCallback(() => {
       if (timer.current !== undefined) clearTimeout(timer.current);
       timer.current = setTimeout(refetch, REFRESH_DEBOUNCE_MS);
     }, [refetch])
   );
 
-  return { sessions, loading, error, refetch };
+  return { sessions, loading, error, live, refetch };
 }
 
-function useLiveResource<T>(url: string, key: string, initial: T): { data: T; loading: boolean; error?: string; refetch: () => void } {
+function useLiveResource<T>(url: string, key: string, initial: T): { data: T; loading: boolean; error?: string; live: boolean; refetch: () => void } {
   const [data, setData] = useState<T>(initial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -89,28 +91,33 @@ function useLiveResource<T>(url: string, key: string, initial: T): { data: T; lo
   useEffect(() => refetch(), [refetch]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useTraceStream(
+  const live = useTraceStream(
     useCallback(() => {
       if (timer.current !== undefined) clearTimeout(timer.current);
       timer.current = setTimeout(refetch, REFRESH_DEBOUNCE_MS);
     }, [refetch])
   );
 
-  return { data, loading, error, refetch };
+  return { data, loading, error, live, refetch };
 }
 
-export function useModels(): { models: ModelRollup[]; loading: boolean; error?: string } {
-  const { data, loading, error } = useLiveResource<ModelRollup[]>("/api/models", "models", []);
-  return { models: data, loading, error };
+export function useModels(): { models: ModelRollup[]; loading: boolean; error?: string; live: boolean } {
+  const { data, loading, error, live } = useLiveResource<ModelRollup[]>("/api/models", "models", []);
+  return { models: data, loading, error, live };
 }
 
-export function useEnvironments(): { environments: EnvironmentRollup[]; loading: boolean; error?: string } {
-  const { data, loading, error } = useLiveResource<EnvironmentRollup[]>(
+export function useEnvironments(): {
+  environments: EnvironmentRollup[];
+  loading: boolean;
+  error?: string;
+  live: boolean;
+} {
+  const { data, loading, error, live } = useLiveResource<EnvironmentRollup[]>(
     "/api/environments",
     "environments",
     []
   );
-  return { environments: data, loading, error };
+  return { environments: data, loading, error, live };
 }
 
 export function useSessionDetail(traceId: string): {
@@ -122,7 +129,6 @@ export function useSessionDetail(traceId: string): {
   const [session, setSession] = useState<SessionDetail | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [live, setLive] = useState(false);
 
   const refetch = useCallback(() => {
     fetch(`/api/sessions/${encodeURIComponent(traceId)}`)
@@ -141,11 +147,10 @@ export function useSessionDetail(traceId: string): {
   useEffect(() => refetch(), [refetch]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useTraceStream(
+  const live = useTraceStream(
     useCallback(
       (event: Record<string, unknown>) => {
         if (event.trace_id !== traceId) return;
-        setLive(true);
         if (timer.current !== undefined) clearTimeout(timer.current);
         timer.current = setTimeout(refetch, REFRESH_DEBOUNCE_MS);
       },

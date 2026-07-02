@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { panelMemberPreamble } from "../harness.js";
-import { buildPanelPrompt } from "../unified.js";
+import { PANEL_CANDIDATE_CONTRACT, buildPanelPrompt } from "../unified.js";
 
 const PANEL = [
   { id: "qwen-fast", model: "qwen" },
@@ -42,6 +42,21 @@ test("buildPanelPrompt: identity on without harness system still lists the roste
   const out = buildPanelPrompt({ prompt: "Do it.", panel: PANEL, panelIdentity: true });
   assert.ok(!out.includes("Custom instructions for this task"));
   assert.ok(out.includes("[qwen-fast, gemma-writer, codex]"));
+});
+
+test("buildPanelPrompt: the candidate contract is appended last in both identity modes", () => {
+  for (const panelIdentity of [false, true]) {
+    const out = buildPanelPrompt({
+      prompt: "Fix the bug.",
+      panel: PANEL,
+      harnessSystem: "You are Codex.",
+      panelIdentity
+    });
+    assert.ok(out.endsWith(PANEL_CANDIDATE_CONTRACT), `contract must close the prompt (identity=${panelIdentity})`);
+    assert.ok(out.includes("never ask for permission or clarification"));
+    // The contract follows the membership suffix, never precedes the task.
+    assert.ok(out.indexOf(PANEL_CANDIDATE_CONTRACT) > out.indexOf("Fix the bug."));
+  }
 });
 
 test("panelMemberPreamble: names the model and its 1-based peer index", () => {

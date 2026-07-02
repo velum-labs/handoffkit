@@ -23,9 +23,11 @@ import { join } from "node:path";
 
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 
+import type { PanelTrust } from "@fusionkit/ensemble";
+
 import { FUSION_TOOLS } from "./fusion-quickstart.js";
 import type { FusionTool, PanelAuthMode, PanelModelSpec, PanelProvider } from "./fusion-quickstart.js";
-import { ON_RATE_LIMIT_POLICIES, PANEL_AUTH_MODES, PANEL_PROVIDERS } from "./shared/options.js";
+import { ON_RATE_LIMIT_POLICIES, PANEL_AUTH_MODES, PANEL_PROVIDERS, PANEL_TRUST_LEVELS } from "./shared/options.js";
 
 export const FUSION_CONFIG_DIRNAME = ".fusionkit";
 // `fusion.json` (not `config.json`) so the fusion settings never collide with
@@ -68,6 +70,12 @@ export type FusionConfig = {
   onRateLimit?: OnRateLimitPolicy;
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
+  /** Panel candidate trust level; unset means `full` (maximum autonomy). */
+  panelTrust?: PanelTrust;
+  /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. */
+  reasoning?: boolean;
+  /** Local MLX model that writes the narration prose (Apple Silicon only). */
+  reasoningModel?: string;
   /**
    * System-prompt overrides, loaded from `.fusionkit/prompts/*.md`. Not stored
    * inline in `config.json` — it is hydrated from the prompt files on load.
@@ -212,6 +220,29 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
       throw new FusionConfigError(`${source}: budgetUsd must be a positive number of USD`);
     }
     config.budgetUsd = raw.budgetUsd;
+  }
+  if (raw.panelTrust !== undefined) {
+    if (
+      typeof raw.panelTrust !== "string" ||
+      !(PANEL_TRUST_LEVELS as readonly string[]).includes(raw.panelTrust)
+    ) {
+      throw new FusionConfigError(
+        `${source}: panelTrust must be one of ${PANEL_TRUST_LEVELS.join(", ")}`
+      );
+    }
+    config.panelTrust = raw.panelTrust as PanelTrust;
+  }
+  if (raw.reasoning !== undefined) {
+    if (typeof raw.reasoning !== "boolean") {
+      throw new FusionConfigError(`${source}: reasoning must be a boolean`);
+    }
+    config.reasoning = raw.reasoning;
+  }
+  if (raw.reasoningModel !== undefined) {
+    if (typeof raw.reasoningModel !== "string" || raw.reasoningModel.length === 0) {
+      throw new FusionConfigError(`${source}: reasoningModel must be a non-empty string`);
+    }
+    config.reasoningModel = raw.reasoningModel;
   }
   return config;
 }

@@ -16,6 +16,7 @@ import {
 } from "@fusionkit/ensemble";
 import type {
   EnsembleModel,
+  PanelTrust,
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
@@ -40,6 +41,7 @@ import type {
   FrontDoorRunnerResult,
   FusionGateway,
   Gateway,
+  NarrationWriter,
   OnRateLimitPolicy,
   PanelRunner,
   PassthroughModel,
@@ -77,6 +79,19 @@ export type GatewayRunnerConfig = {
    * Default off (per-member identity reduces inter-member decorrelation).
    */
   panelIdentity?: boolean;
+  /**
+   * Panel candidate trust level; unset means `full` (maximum autonomy — e.g.
+   * Codex `danger-full-access`). `guarded` keeps each harness's
+   * side-effects-derived confinement.
+   */
+  panelTrust?: PanelTrust;
+  /**
+   * Reasoning traces: narrate panel/judge progress into a streaming fused
+   * turn's response (rendered by the tool's native thinking UI). Default on.
+   */
+  reasoningTraces?: boolean;
+  /** Optional narration prose writer (a small local model); advisory only. */
+  narrationWriter?: NarrationWriter;
 };
 
 /** Join the system-role messages (the launched tool's harness/custom prompt). */
@@ -111,6 +126,34 @@ let gatewayChatter = true;
 /** Enable/disable the gateway's per-turn stderr chatter (default on). */
 export function setGatewayChatter(enabled: boolean): void {
   gatewayChatter = enabled;
+}
+
+/**
+ * A phase of a fused turn, for out-of-band status (e.g. the terminal title)
+ * while a coding agent owns the screen and the line chatter is off. `idle`
+ * means the turn's panel phase finished (or failed).
+ */
+export type GatewayTurnStatus =
+  | { phase: "panel"; models: string[]; turn: number }
+  | { phase: "judging"; candidates: number; turn: number }
+  | { phase: "idle" };
+
+// The launcher installs a sink that renders these somewhere that cannot corrupt
+// the agent's TUI (the terminal title). Distinct from `gatewayChatter`, which is
+// in-band stderr lines.
+let gatewayStatusSink: ((status: GatewayTurnStatus) => void) | undefined;
+
+/** Install (or clear, with undefined) the out-of-band per-turn status sink. */
+export function setGatewayStatusSink(sink: ((status: GatewayTurnStatus) => void) | undefined): void {
+  gatewayStatusSink = sink;
+}
+
+function emitGatewayStatus(status: GatewayTurnStatus): void {
+  try {
+    gatewayStatusSink?.(status);
+  } catch {
+    // A broken status sink must never fail a turn.
+  }
 }
 
 function mapStatus(status: string): FrontDoorRunnerResult["status"] {
@@ -338,6 +381,7 @@ export async function startFusionStepGateway(input: {
         `fusion: running panel (${panelModels.map((m) => m.id).join(", ")}) for session ${sessionKey}${excluded}...`
       );
     }
+    emitGatewayStatus({ phase: "panel", models: panelModels.map((m) => m.id), turn });
     try {
       const harnessSystem =
         config.panelIdentity === true ? harnessSystemFromMessages(messages) : undefined;
@@ -356,6 +400,7 @@ export async function startFusionStepGateway(input: {
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
         ...(config.panelIdentity !== undefined ? { panelIdentity: config.panelIdentity } : {}),
+        ...(config.panelTrust !== undefined ? { panelTrust: config.panelTrust } : {}),
         ...(harnessSystem !== undefined ? { harnessSystem } : {})
       });
       const trajectories = normalizeWireTrajectories(wire);
@@ -365,9 +410,11 @@ export async function startFusionStepGateway(input: {
             `(${trajectories.map((t) => `${t.model_id}:${t.status}`).join(", ")})`
         );
       }
+      emitGatewayStatus({ phase: "judging", candidates: trajectories.length, turn });
       return trajectories;
     } catch (error) {
       console.error(`fusion: panel run failed: ${error instanceof Error ? error.message : String(error)}`);
+      emitGatewayStatus({ phase: "idle" });
       throw error;
     }
   };
@@ -399,6 +446,8 @@ export async function startFusionStepGateway(input: {
     passthrough,
     ...(config.onRateLimit !== undefined ? { onRateLimit: config.onRateLimit } : {}),
     ...(config.budgetUsd !== undefined ? { budgetUsd: config.budgetUsd } : {}),
+    ...(config.reasoningTraces !== undefined ? { reasoningTraces: config.reasoningTraces } : {}),
+    ...(config.narrationWriter !== undefined ? { narrationWriter: config.narrationWriter } : {}),
     // WS7 cost attribution: a fused turn's gateway-observed `usage` is the
     // judge/synthesis call's, so price it against the configured judge model
     // name (distinct from routing — see the judge_model note below). Where the

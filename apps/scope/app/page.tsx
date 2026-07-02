@@ -1,16 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Activity, ArrowDown, ArrowUp, ArrowUpDown, Boxes, ChevronRight, Search } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, ChevronRight, RotateCcw, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/scope/empty-state";
+import { ErrorBanner } from "@/components/scope/error-banner";
 import { LiveDot, PageHeader } from "@/components/scope/page-header";
 import { StatusBadge } from "@/components/scope/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -95,11 +95,56 @@ function SortableHead({
   );
 }
 
-export default function SessionsPage() {
-  const router = useRouter();
-  const { sessions, loading, error, refetch } = useSessions();
+/** Backfill the collector from the FUSION_TRACE_DIR JSONL fallback. */
+function ReplayButton({ onDone }: { onDone: () => void }) {
+  const [state, setState] = useState<"idle" | "busy" | "done" | "failed">("idle");
+  const [detail, setDetail] = useState<string | undefined>(undefined);
 
-  const [query, setQuery] = useState("");
+  const onReplay = useCallback(() => {
+    setState("busy");
+    fetch("/api/replay", { method: "POST" })
+      .then(async (response) => {
+        const body = (await response.json()) as { ingested?: number; error?: string };
+        if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
+        setState("done");
+        setDetail(`${body.ingested ?? 0} new events`);
+        onDone();
+      })
+      .catch((error: unknown) => {
+        setState("failed");
+        setDetail(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        setTimeout(() => {
+          setState("idle");
+          setDetail(undefined);
+        }, 3000);
+      });
+  }, [onDone]);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="outline" size="sm" onClick={onReplay} disabled={state === "busy"}>
+          <RotateCcw className={cn("size-4", state === "busy" && "animate-spin")} />
+          {state === "done" ? (detail ?? "Replayed") : state === "failed" ? "Replay failed" : "Replay"}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {state === "failed" && detail !== undefined
+          ? detail
+          : "Backfill sessions from the FUSION_TRACE_DIR JSONL fallback"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SessionsPageBody() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { sessions, loading, error, live, refetch } = useSessions();
+
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("started");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -125,11 +170,14 @@ export default function SessionsPage() {
     if (statusFilter !== "all") rows = rows.filter((session) => session.status === statusFilter);
     if (q.length > 0) {
       rows = rows.filter((session) => {
-        const models = (session.environment?.models ?? []).map((model) => model.id).join(" ");
+        const models = (session.environment?.models ?? [])
+          .flatMap((model) => [model.id, model.model])
+          .join(" ");
         const haystack = [
           session.traceId,
           session.repo ?? session.environment?.repo ?? "",
           session.dialect ?? "",
+          session.promptPreview ?? "",
           models
         ]
           .join(" ")
@@ -158,13 +206,16 @@ export default function SessionsPage() {
         title="Sessions"
         subtitle="Every fusion run observed across the stack, correlated by trace id."
       >
-        <LiveDot active={!error} />
+        <LiveDot active={live} />
+        <ReplayButton onDone={refetch} />
         <Button variant="outline" size="sm" onClick={refetch}>
           Refresh
         </Button>
       </PageHeader>
 
-      <div className="p-8">
+      <div className="space-y-4 px-8 py-6">
+        <ErrorBanner error={error} />
+
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, index) => (
@@ -184,7 +235,7 @@ export default function SessionsPage() {
           />
         ) : (
           <>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-1.5">
                 {STATUS_FILTERS.map((status) => (
                   <Button
@@ -206,7 +257,7 @@ export default function SessionsPage() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Filter by trace, repo, model…"
+                  placeholder="Filter by trace, repo, model, prompt…"
                   aria-label="Filter sessions"
                   className="border-input bg-input/30 focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border pr-2.5 pl-8 text-sm outline-none focus-visible:ring-3"
                 />
@@ -216,52 +267,52 @@ export default function SessionsPage() {
             {visible.length === 0 ? (
               <EmptyState title="No matching sessions" hint="Try a different filter or search term." />
             ) : (
-              <Card className="overflow-hidden p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[120px]">Status</TableHead>
-                      <TableHead>Trace</TableHead>
-                      <TableHead>Repo</TableHead>
-                      <TableHead>Panel</TableHead>
-                      <SortableHead
-                        label="Duration"
-                        sortKey="duration"
-                        active={sortKey === "duration"}
-                        dir={sortDir}
-                        onSort={onSort}
-                        className="text-right"
-                      />
-                      <SortableHead
-                        label="Events"
-                        sortKey="events"
-                        active={sortKey === "events"}
-                        dir={sortDir}
-                        onSort={onSort}
-                        className="text-right"
-                      />
-                      <SortableHead
-                        label="Started"
-                        sortKey="started"
-                        active={sortKey === "started"}
-                        dir={sortDir}
-                        onSort={onSort}
-                        className="text-right"
-                      />
-                      <TableHead className="w-[40px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visible.map((session) => (
-                      <TableRow
-                        key={session.traceId}
-                        className="group cursor-pointer"
-                        onClick={() => router.push(`/sessions/${session.traceId}`)}
-                      >
-                        <TableCell>
-                          <StatusBadge status={session.status} />
-                        </TableCell>
-                        <TableCell>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-[120px]">Status</TableHead>
+                    <TableHead>Trace</TableHead>
+                    <TableHead>Repo</TableHead>
+                    <TableHead>Panel</TableHead>
+                    <SortableHead
+                      label="Duration"
+                      sortKey="duration"
+                      active={sortKey === "duration"}
+                      dir={sortDir}
+                      onSort={onSort}
+                      className="text-right"
+                    />
+                    <SortableHead
+                      label="Events"
+                      sortKey="events"
+                      active={sortKey === "events"}
+                      dir={sortDir}
+                      onSort={onSort}
+                      className="text-right"
+                    />
+                    <SortableHead
+                      label="Started"
+                      sortKey="started"
+                      active={sortKey === "started"}
+                      dir={sortDir}
+                      onSort={onSort}
+                      className="text-right"
+                    />
+                    <TableHead className="w-[40px]" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visible.map((session) => (
+                    <TableRow
+                      key={session.traceId}
+                      className="group cursor-pointer"
+                      onClick={() => router.push(`/sessions/${session.traceId}`)}
+                    >
+                      <TableCell>
+                        <StatusBadge status={session.status} />
+                      </TableCell>
+                      <TableCell className="max-w-[320px]">
+                        <div>
                           <Link
                             href={`/sessions/${session.traceId}`}
                             onClick={(event) => event.stopPropagation()}
@@ -272,45 +323,52 @@ export default function SessionsPage() {
                           {session.dialect ? (
                             <span className="text-muted-foreground ml-2 text-xs">{session.dialect}</span>
                           ) : null}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground max-w-[220px] truncate">
-                          {session.repo ?? session.environment?.repo ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          <PanelModels session={session} />
-                        </TableCell>
-                        <TableCell className="mono text-right text-sm">
-                          {fmtDuration(session.durationMs)}
-                        </TableCell>
-                        <TableCell className="mono text-muted-foreground text-right text-sm">
-                          {session.eventCount}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-right text-sm">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span>{fmtRelative(session.startedAt)}</span>
-                            </TooltipTrigger>
-                            <TooltipContent>{fmtDateTime(session.startedAt)}</TooltipContent>
-                          </Tooltip>
-                        </TableCell>
-                        <TableCell>
-                          <ChevronRight className="text-muted-foreground size-4 transition-transform group-hover:translate-x-0.5" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Card>
+                        </div>
+                        {session.promptPreview ?? session.finalOutput ? (
+                          <div className="text-muted-foreground mt-0.5 truncate text-xs">
+                            {session.promptPreview ?? session.finalOutput}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground max-w-[220px] truncate">
+                        {session.repo ?? session.environment?.repo ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <PanelModels session={session} />
+                      </TableCell>
+                      <TableCell className="mono text-right text-sm">
+                        {fmtDuration(session.durationMs)}
+                      </TableCell>
+                      <TableCell className="mono text-muted-foreground text-right text-sm">
+                        {session.eventCount}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-right text-sm">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>{fmtRelative(session.startedAt)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>{fmtDateTime(session.startedAt)}</TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell>
+                        <ChevronRight className="text-muted-foreground size-4 transition-transform group-hover:translate-x-0.5" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </>
         )}
-
-        {error ? (
-          <p className="text-muted-foreground mt-4 flex items-center gap-2 text-sm">
-            <Activity className="size-4" /> collector unreachable ({error}) — retrying live.
-          </p>
-        ) : null}
       </div>
     </div>
+  );
+}
+
+export default function SessionsPage() {
+  return (
+    <Suspense>
+      <SessionsPageBody />
+    </Suspense>
   );
 }

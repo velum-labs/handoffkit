@@ -19,7 +19,8 @@ import type {
   EnsembleDescriptor,
   EnsembleModel,
   HarnessAdapter,
-  HarnessCandidateOutput
+  HarnessCandidateOutput,
+  HarnessEndReason
 } from "@fusionkit/ensemble";
 
 const DEFAULT_CODEX_COMMAND = "codex";
@@ -356,6 +357,53 @@ function writeCodexHome(input: {
   return codexHome;
 }
 
+/**
+ * Why the candidate's `codex exec --json` run ended, derived from its own
+ * event stream: a `turn.completed` event means the model genuinely finished
+ * its turn; a clean exit *without* one means the CLI was stopped mid-turn
+ * (interrupt/abort) even though the exit code is 0. Persisted into the session
+ * record so early stops are attributable from the trace UI.
+ */
+export function codexEndReason(result: CodexExecResult): HarnessEndReason {
+  let sawTurnCompleted = false;
+  let failureDetail: string | undefined;
+  for (const line of result.stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const record = event as { type?: unknown; message?: unknown; error?: { message?: unknown } };
+    if (typeof record.type !== "string") continue;
+    // `turn.completed` is the current codex exec event; `task_complete` covers
+    // older CLIs whose exec stream mirrored the rollout event names.
+    if (record.type === "turn.completed" || record.type === "task_complete") sawTurnCompleted = true;
+    if (record.type === "turn.failed" || record.type === "error") {
+      const message = record.error?.message ?? record.message;
+      if (typeof message === "string" && message.length > 0) failureDetail = message;
+    }
+  }
+  if (result.timedOut === true) {
+    return { kind: "timeout", exitCode: result.exitCode, timedOut: true };
+  }
+  if (result.exitCode !== 0) {
+    return {
+      kind: "exit_error",
+      exitCode: result.exitCode,
+      ...(failureDetail !== undefined ? { detail: failureDetail } : {})
+    };
+  }
+  if (sawTurnCompleted) return { kind: "completed", exitCode: result.exitCode };
+  return {
+    kind: "aborted",
+    exitCode: result.exitCode,
+    detail: failureDetail ?? "process exited without reporting a completed turn"
+  };
+}
+
 export async function defaultCodexRunner(input: CodexExecInput): Promise<CodexExecResult> {
   return await new Promise<CodexExecResult>((resolve, reject) => {
     const child = spawn(input.command, input.args, {
@@ -392,6 +440,7 @@ async function runProvider(input: {
   provider: CodexProvider;
   env: Record<string, string>;
   model: EnsembleModel;
+  onCapturedTrajectory?: (trajectory: CapturedTrajectory) => void;
 }): Promise<CodexRunProvider> {
   switch (input.provider.kind) {
     case "ambient":
@@ -421,7 +470,10 @@ async function runProvider(input: {
           onModelCall(record) {
             records.push(record);
           },
-          onModelCallRaw: capture.sink.onModelCallRaw
+          onModelCallRaw(context, result) {
+            capture.sink.onModelCallRaw?.(context, result);
+            input.onCapturedTrajectory?.(capture.reconstruct());
+          }
         }
       });
       return {
@@ -492,13 +544,16 @@ function failedToSpawnCandidate(input: {
       : input.error instanceof Error
         ? input.error.message
         : String(input.error);
-  return skippedCandidate({
-    descriptor: input.descriptor,
-    model: input.model,
-    ordinal: input.ordinal,
-    reason,
-    provider: input.provider
-  });
+  return {
+    ...skippedCandidate({
+      descriptor: input.descriptor,
+      model: input.model,
+      ordinal: input.ordinal,
+      reason,
+      provider: input.provider
+    }),
+    endReason: { kind: "spawn_error", detail: reason }
+  };
 }
 
 export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAdapter {
@@ -520,6 +575,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
     capabilities: () => ({
       workspace_read: "supported",
       apply_patch: "supported",
+      // TODO(@000alen): why degraded?
       shell_command: "degraded",
       artifact_capture: "supported",
       model_gateway_responses: "supported",
@@ -567,7 +623,10 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
       const provider = await runProvider({
         provider: effectiveProvider,
         env: state.env,
-        model: effectiveModel
+        model: effectiveModel,
+        onCapturedTrajectory: (trajectory) => {
+          for (const step of trajectory.steps) tracer.step(step);
+        }
       });
       try {
         const env = { ...state.env };
@@ -609,6 +668,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         const transcript = [result.stdout, result.stderr].filter(Boolean).join("\n");
         const status: HarnessCandidateOutput["status"] =
           result.exitCode === 0 && result.timedOut !== true ? "succeeded" : "failed";
+        const endReason = codexEndReason(result);
         const outputHash = artifactHash(transcript);
         const modelCallRecord = provider.modelCallRecords.at(-1);
         const reconstructed = provider.reconstruct?.();
@@ -623,19 +683,23 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
                 status,
                 steps: reconstructed.steps,
                 finalOutput:
-                  reconstructed.finalOutput.length > 0 ? reconstructed.finalOutput : transcript
+                  reconstructed.finalOutput.length > 0 ? reconstructed.finalOutput : transcript,
+                endReason
               }
             : undefined;
         tracer.finished({
           status,
           steps: reconstructed?.steps ?? [],
           ...(trajectory !== undefined ? { finalOutput: trajectory.finalOutput } : {}),
-          ...(result.timedOut === true ? { finishReason: "timeout" } : {})
+          // The end-reason kind ("completed" | "aborted" | "timeout" | ...)
+          // surfaces live in the trace UI, matching the persisted end_reason.
+          finishReason: endReason.kind
         });
         return {
           candidateId,
           model,
           status,
+          endReason,
           ...(modelCallRecord ? { modelCallId: modelCallRecord.call_id, modelCallRecord } : {}),
           ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {}),
           ...(trajectory !== undefined ? { trajectory } : {}),

@@ -27,6 +27,15 @@ gateway come up. The cloud panel asks for a one-line cost confirmation unless yo
 pass `--yes`. Then your agent launches pre-wired to the gateway. One `Ctrl+C`
 tears the stack down.
 
+A healthy launch prints three useful things before handing control to the agent:
+
+- the gateway URL or portless name the agent will use;
+- the fused model id, normally `fusion-panel`;
+- a temp log directory for per-process output if anything later fails.
+
+If the first run pauses while provisioning the Python engine, let it finish once
+or run `fusionkit doctor --provision` ahead of time on new machines.
+
 ## 3. (Optional) Save per-repo defaults
 
 So your team can just run `fusionkit codex`:
@@ -93,6 +102,13 @@ and tool-calling examples.
 fusionkit's own flags must precede the tool name; everything after the tool is
 forwarded to it. See the full [command reference](/docs/cli/commands).
 
+For non-interactive environments, combine `--yes` with a fixed port or disabled
+portless registration:
+
+```bash
+fusionkit --yes --no-portless --port 8787 serve
+```
+
 ## Pick fused or direct models
 
 The gateway exposes `fusion-panel` as the fused model. It also exposes panel
@@ -100,3 +116,7 @@ member ids such as `gpt`, `sonnet`, and `gemini` as passthrough models. Choose
 `fusion-panel` when you want synthesis. Choose a member id when you want to
 compare the ensemble against one provider or use
 [rate-limit handoff](/docs/getting-started/rate-limit-handoff) as a fallback.
+
+Run `fusionkit models list` to inspect local MLX models, and use
+`fusionkit config show` to see the effective cloud panel that will be launched
+for the current repo.

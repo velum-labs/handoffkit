@@ -18,7 +18,6 @@ from fusionkit_core.config import (
     ProviderKind,
     SubscriptionAuthMode,
 )
-from fusionkit_server.openai_endpoint import PROVIDER_DEFAULT_BASE_URL
 
 CONFIG_ENV_VAR = "FUSIONKIT_CONFIG"
 PROJECT_CONFIG = Path("fusionkit.yaml")
@@ -33,11 +32,13 @@ API_KEY_ENVS: dict[ProviderKind, str] = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GEMINI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
 }
 DEFAULT_API_MODELS: dict[ProviderKind, str] = {
     "openai": "gpt-5.5",
     "anthropic": "claude-sonnet-4-5",
     "google": "gemini-2.5-flash",
+    "openrouter": "anthropic/claude-sonnet-4.5",
 }
 
 CONFIG_HEADER = (
@@ -125,6 +126,11 @@ def api_key_endpoint(
     model: str | None = None,
     endpoint_id: str | None = None,
 ) -> ModelEndpoint:
+    # Lazy on purpose (CLI startup latency): fusionkit_server.openai_endpoint
+    # drags the full provider-client stack, which `--version`/`prompts dump`
+    # must not pay for.
+    from fusionkit_server.openai_endpoint import PROVIDER_DEFAULT_BASE_URL
+
     return ModelEndpoint(
         id=endpoint_id or f"{provider}-api",
         provider=provider,

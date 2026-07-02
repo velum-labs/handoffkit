@@ -208,6 +208,11 @@ class JudgeSynthesizer:
             trace_id=trace_id,
             judge_span=judge_span,
         )
+        # Act III of the narrated turn: surface the judge's real analysis on the
+        # reasoning channel before any answer tokens stream.
+        reasoning = analysis_reasoning_markdown(resolved_analysis, trajectories)
+        if reasoning is not None:
+            yield StreamChunk(reasoning_delta=reasoning)
         # Best-of-N selection (no tools): emit the judge-picked candidate verbatim as
         # a single chunk and skip the synthesizer stream.
         selected = (
@@ -650,6 +655,60 @@ def _stage_metrics(
     if not synthesized:
         synthesis["skipped"] = True
     return {"judge": judge_usage, "synthesis": synthesis}
+
+
+def _reasoning_line(text: str, limit: int = 160) -> str:
+    """One safe prose line from judge-model text: markdown stripped, collapsed, capped."""
+    collapsed = re.sub(r"\s+", " ", text.replace("`", "").replace("*", "")).strip()
+    return collapsed if len(collapsed) <= limit else collapsed[: limit - 1] + "…"
+
+
+def analysis_reasoning_markdown(
+    analysis: FusionAnalysis, trajectories: Sequence[Trajectory]
+) -> str | None:
+    """The judge's analysis as a reasoning-channel markdown block, or None.
+
+    Rendered under a bold ``Weighing the candidates`` headline (coding agents —
+    Codex in particular — promote the latest bold segment to their live status
+    header and hide unbolded reasoning). Content is the judge's *real* analysis:
+    strongest candidate, consensus, disagreements, likely errors. Skipped
+    entirely when the judge's structured output failed to parse (raw model text
+    must not leak into the reasoning channel).
+    """
+    if _judge_parse_failed(analysis):
+        return None
+    model_by_id = {trajectory.id: trajectory.model_id for trajectory in trajectories}
+    sentences: list[str] = []
+    if analysis.best_trajectory:
+        best = model_by_id.get(analysis.best_trajectory, analysis.best_trajectory)
+        sentences.append(f"{_reasoning_line(best)} looks strongest.")
+    if analysis.consensus:
+        sentences.append(
+            "Consensus: "
+            + "; ".join(_reasoning_line(item) for item in analysis.consensus[:2])
+            + "."
+        )
+    if analysis.contradictions:
+        sentences.append(
+            "They disagree on: "
+            + "; ".join(_reasoning_line(item) for item in analysis.contradictions[:2])
+            + "."
+        )
+    if analysis.likely_errors:
+        sentences.append(
+            "Possible issues: "
+            + "; ".join(_reasoning_line(item) for item in analysis.likely_errors[:2])
+            + "."
+        )
+    if analysis.coverage_gaps:
+        sentences.append(
+            "Gaps to close: "
+            + "; ".join(_reasoning_line(item) for item in analysis.coverage_gaps[:2])
+            + "."
+        )
+    if not sentences:
+        return None
+    return "**Weighing the candidates**\n\n" + " ".join(sentences) + "\n\n"
 
 
 def _synthesis_id() -> str:

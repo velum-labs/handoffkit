@@ -47,6 +47,9 @@ export function createBootView(input: {
       case "server.start":
         list.setActive(`srv:${event.id}`);
         break;
+      case "server.progress":
+        list.setDetail(`srv:${event.id}`, event.detail);
+        break;
       case "server.ready":
         list.setDone(`srv:${event.id}`, event.detail);
         break;

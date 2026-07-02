@@ -47,6 +47,41 @@ test("parseFusionConfig accepts a valid config", () => {
   assert.equal(config.port, 1234);
 });
 
+test("parseFusionConfig accepts panelTrust levels and rejects unknown ones", () => {
+  const full = parseFusionConfig({ version: FUSION_CONFIG_VERSION, panelTrust: "full" }, "test");
+  assert.equal(full.panelTrust, "full");
+  const guarded = parseFusionConfig({ version: FUSION_CONFIG_VERSION, panelTrust: "guarded" }, "test");
+  assert.equal(guarded.panelTrust, "guarded");
+  // Unset stays undefined (defaults to full downstream).
+  const unset = parseFusionConfig({ version: FUSION_CONFIG_VERSION }, "test");
+  assert.equal(unset.panelTrust, undefined);
+  assert.throws(
+    () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, panelTrust: "yolo" }, "test"),
+    FusionConfigError
+  );
+});
+
+test("parseFusionConfig accepts reasoning + reasoningModel and rejects bad values", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      reasoning: true,
+      reasoningModel: "mlx-community/Qwen3-1.7B-4bit"
+    },
+    "test"
+  );
+  assert.equal(config.reasoning, true);
+  assert.equal(config.reasoningModel, "mlx-community/Qwen3-1.7B-4bit");
+  assert.throws(
+    () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, reasoningModel: 7 }, "test"),
+    FusionConfigError
+  );
+  assert.throws(
+    () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, reasoningModel: "" }, "test"),
+    FusionConfigError
+  );
+});
+
 test("parseFusionConfig accepts subscription panel entries with auth", () => {
   const config = parseFusionConfig(
     {
@@ -84,6 +119,26 @@ test("parseFusionConfig upgrades a legacy v1 version in memory", () => {
 
 test("parseFusionConfig rejects an unsupported version", () => {
   assert.throws(() => parseFusionConfig({ version: "nope" }, "test"), FusionConfigError);
+});
+
+test("parseFusionConfig accepts an openrouter panel entry", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      panel: [
+        {
+          id: "or-sonnet",
+          model: "anthropic/claude-sonnet-4.5",
+          provider: "openrouter",
+          keyEnv: "OPENROUTER_API_KEY"
+        }
+      ]
+    },
+    "test"
+  );
+  assert.equal(config.panel?.[0]?.provider, "openrouter");
+  assert.equal(config.panel?.[0]?.model, "anthropic/claude-sonnet-4.5");
+  assert.equal(config.panel?.[0]?.keyEnv, "OPENROUTER_API_KEY");
 });
 
 test("parseFusionConfig rejects an unknown panel provider", () => {

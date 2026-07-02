@@ -72,7 +72,7 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export type { JudgeCandidateEvidence, JudgeInput, JudgePatch, JudgeSynthesizer, JudgeSynthesisOutput, MockJudgeSynthesizerOptions, SynthesisFailureSummary } from "./judge.js";`
 - `export { ensemble, runEnsemble } from "./run.js";`
 - `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolHarnessProvider } from "./unified.js";`
-- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusionPanelOptions, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
+- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusionPanelOptions, PanelTrust, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
 - `export { ambientTraceId, emitTrace, getTraceEmitter, newSpanId, newTraceId, TRACE_CANDIDATE_HEADER, TRACE_ID_HEADER, TRACE_PARENT_SPAN_HEADER, TRACE_SPAN_HEADER, TraceEmitter } from "./trace.js";`
 - `export type { EmitInput, FusionTraceComponent, FusionTraceEvent, FusionTraceEventType } from "./trace.js";`
 - `export { runJudgeSynthesis } from "./synthesis.js";`
@@ -116,7 +116,7 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { cleanupCandidateWorktree, cleanupWorktreePlan, createWorktreePlan, defaultOutputRoot, diffCandidateWorktree, sealCandidateWorktree } from "./worktree.js";`
 - `export type { CandidateWorktree, WorktreePlan } from "./worktree.js";`
 - `export { hardeningToJson, panelMemberPreamble } from "./harness.js";`
-- `export type { EnsembleCandidateSummary, EnsembleDescriptor, EnsembleJudge, EnsembleModel, EnsemblePolicy, EnsembleRunResult, EnsembleRuntime, CandidateContainerDriver, CandidateContainerDriverInput, CandidateContainerDriverResult, CandidateHardeningMetadata, CandidateIsolationConfig, CandidateIsolationKind, CandidateIsolationMountPolicy, CandidateIsolationNetworkPolicy, CandidateIsolationSecretPolicy, HarnessAdapter, HarnessArtifact, HarnessCapabilities, HarnessCandidateOutput, HarnessCollectInput, HarnessPrepareInput, HarnessRunInput, HarnessToolRecord, HarnessTrajectory, TrajectoryStep, TrajectoryStepType, ReviewEvidence, EnsembleRunSummary, VerificationProfile } from "./harness.js";`
+- `export type { EnsembleCandidateSummary, EnsembleDescriptor, EnsembleJudge, EnsembleModel, EnsemblePolicy, EnsembleRunResult, EnsembleRuntime, CandidateContainerDriver, CandidateContainerDriverInput, CandidateContainerDriverResult, CandidateHardeningMetadata, CandidateIsolationConfig, CandidateIsolationKind, CandidateIsolationMountPolicy, CandidateIsolationNetworkPolicy, CandidateIsolationSecretPolicy, HarnessAdapter, HarnessArtifact, HarnessCapabilities, HarnessCandidateOutput, HarnessCollectInput, HarnessPrepareInput, HarnessRunInput, HarnessEndReason, HarnessToolRecord, HarnessTrajectory, TrajectoryStep, TrajectoryStepType, ReviewEvidence, EnsembleRunSummary, VerificationProfile } from "./harness.js";`
 
 ### `packages/example-utils/src/index.ts`
 
@@ -187,6 +187,10 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export { FUSION_FRONTDOOR_REQUEST_WORKFLOW, FrontdoorRequestScheduler, runFrontdoorRequest } from "./frontdoor/request.js";`
 - `export { eventsToSseResponse } from "./frontdoor/sse.js";`
 - `export type { EventsToSseOptions } from "./frontdoor/sse.js";`
+- `export { createTurnNarrator, mergeEventsWithNarration } from "./frontdoor/narration.js";`
+- `export type { NarrationWriter, ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";`
+- `export { createChatNarrationWriter } from "./frontdoor/narration-writer.js";`
+- `export type { ChatFn, ChatNarrationWriterOptions } from "./frontdoor/narration-writer.js";`
 - `export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";`
 - `export type { FrontdoorChatBody, FrontdoorRequestValue, FrontdoorRoute, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";`
 - `export type { ChatMessageLike, FuseStepRunInput, FuseStepRunner, FusionBackendKernelSessionState, FusionBackendKernelStateStore, FusionBackendOptions, OnRateLimitPolicy, PanelRunInput, PanelRunner, PassthroughModel, SessionMetaInput } from "./fusion-backend.js";`
@@ -294,8 +298,8 @@ interfaces instead of recreating local string lists or proof logic.
 - `export type { BundleVerification } from "./receipt.js";`
 - `export { buildReceiptStory, summarizeRunEvent } from "./receipt-story.js";`
 - `export type { EventSummary, ReceiptStory } from "./receipt-story.js";`
-- `export { ambientTraceId, assertFusionTraceEvent, emitTrace, FUSION_TRACE_COMPONENTS, FUSION_TRACE_EVENT_SCHEMA, FUSION_TRACE_EVENT_TYPES, FUSION_TRACE_EVENT_VERSION, getTraceEmitter, isFusionTraceEvent, judgeFinalPayload, judgeRequestPayload, judgeThinkingPayload, modelCallFinishedPayload, modelCallStartedPayload, newSpanId, newTraceId, TRACE_CANDIDATE_HEADER, TRACE_ID_HEADER, TRACE_PARENT_SPAN_HEADER, TRACE_SPAN_HEADER, TraceEmitter } from "./trace.js";`
-- `export type { EmitInput, FusionTraceComponent, FusionTraceEvent, FusionTraceEventType } from "./trace.js";`
+- `export { addTraceListener, ambientTraceId, assertFusionTraceEvent, emitTrace, FUSION_TRACE_COMPONENTS, FUSION_TRACE_EVENT_SCHEMA, FUSION_TRACE_EVENT_TYPES, FUSION_TRACE_EVENT_VERSION, getTraceEmitter, isFusionTraceEvent, judgeFinalPayload, judgeRequestPayload, judgeThinkingPayload, modelCallFinishedPayload, modelCallStartedPayload, newSpanId, newTraceId, removeTraceListener, TRACE_CANDIDATE_HEADER, TRACE_ID_HEADER, TRACE_PARENT_SPAN_HEADER, TRACE_SPAN_HEADER, TraceEmitter } from "./trace.js";`
+- `export type { EmitInput, FusionTraceComponent, FusionTraceEvent, FusionTraceEventType, TraceListener } from "./trace.js";`
 - `export { PolicyDeniedError } from "./types.js";`
 - `export type { ActorRef, AgentKind, AgentSpec, ArtifactKind, AttestationTier, BudgetSpec, ChainedEvent, Checkpoint, CheckpointTier, ConsentRule, ContinuationRef, DataClassRule, DisclosureMode, DisclosureRecord, FailureClass, HandoffEnvelope, HandoffSource, HandoffTargetRef, KeyRef, ManifestFile, ModelUsageRecord, NetworkAccessRecord, NetworkPolicy, Policy, Receipt, ReceiptBundle, RetentionPolicy, RunContract, RunEvent, RunnerIdentity, RunnerSelector, RunStatus, SecretClaim, SecretReleaseRecord, SecretScopeRule, SemanticState, SessionIsolation, Signature, TaskSpec, ToolCallRecord, ToolJournal, WorkspaceManifest } from "./types.js";`
 - `export type { ClaimResult, DisclosureReport, PolicyDecision, RunnerSummary, RunRequest, RunRequestInput, RunSummary, RunView } from "./api.js";`
@@ -433,7 +437,7 @@ Claude Code tool integration entry point. It exposes launcher environment helper
 Codex tool integration entry point. It exposes the Codex launcher and ensemble harness adapter used by the FusionKit CLI.
 
 - `export const codexTool: ToolIntegration ...`
-- `export { codexConfigToml, codexHarness, codexHarnessCredentialSkipReason, createCodexHarness, defaultCodexRunner } from "./harness.js";`
+- `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, createCodexHarness, defaultCodexRunner } from "./harness.js";`
 - `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
 - `export { codexLaunchConfigToml, codexModelCatalogJson, launchCodex, readCodexCatalogTemplate } from "./launch.js";`
 
@@ -494,8 +498,18 @@ and trajectory producers used by the Python server, CLI, benchmarks, and tests.
 Keep this module documented because generated API docs read this docstring and
 the `__all__` list as the supported Python surface.
 
+Re-exports are resolved lazily (PEP 562): importing any single submodule (for
+example ``fusionkit_core.config``) must not pay for the provider SDK stack that
+``fusionkit_core.clients`` drags in. This keeps CLI startup (``fusionkit
+--version``, ``fusionkit prompts dump``) fast while ``from fusionkit_core
+import X`` keeps working unchanged for every name in ``__all__``.
+
 Public exports:
 
+- `TRACE_ID_HEADER`
+- `TRACE_PARENT_SPAN_HEADER`
+- `TRACE_SPAN_HEADER`
+- `TRACE_TRAJECTORY_HEADER`
 - `AgentTrajectoryProducer`
 - `AnthropicModelClient`
 - `ArtifactRefV1`
@@ -513,13 +527,14 @@ Public exports:
 - `ExternalTrajectoryProducer`
 - `FakeModelClient`
 - `FileSystemRunStore`
+- `FuseResult`
 - `FusionConfig`
 - `FusionEngine`
 - `FusionKernel`
 - `FusionMode`
+- `FusionRecordV1`
 - `FusionRunEvent`
 - `FusionRunManager`
-- `FusionRecordV1`
 - `FusionRunRequestV1`
 - `FusionRunState`
 - `GoogleModelClient`
@@ -527,7 +542,6 @@ Public exports:
 - `HarnessRunResultV1`
 - `HeuristicRouter`
 - `IdempotencyRecord`
-- `FuseResult`
 - `JudgeSynthesizer`
 - `LocalArtifactStore`
 - `LocalModelClient`
@@ -540,9 +554,9 @@ Public exports:
 - `ProviderCallError`
 - `ProviderErrorCategory`
 - `ProviderKind`
+- `RunBudget`
 - `RunEventPage`
 - `RunInspection`
-- `RunBudget`
 - `RunStateSummary`
 - `SamplingConfig`
 - `StreamChunk`
@@ -550,23 +564,19 @@ Public exports:
 - `SubscriptionAuthMode`
 - `SubscriptionStatus`
 - `SubscriptionToken`
-- `TRACE_ID_HEADER`
-- `TRACE_PARENT_SPAN_HEADER`
-- `TRACE_SPAN_HEADER`
-- `TRACE_TRAJECTORY_HEADER`
-- `TraceEmitter`
 - `ToolCall`
+- `ToolCallPlanV1`
 - `ToolExecutionMode`
 - `ToolExecutionPolicy`
+- `ToolExecutionRecordV1`
 - `ToolExecutor`
 - `ToolPausePlaceholder`
 - `ToolResultSubmission`
-- `ToolCallPlanV1`
-- `ToolExecutionRecordV1`
 - `Trajectory`
 - `TrajectoryInspection`
 - `TrajectoryProducer`
 - `TrajectoryV1`
+- `TraceEmitter`
 - `Usage`
 - `ambient_trace_id`
 - `build_client`
@@ -594,12 +604,17 @@ Public exports:
 - `provider_metadata`
 - `resolve_api_key`
 - `resolve_credential`
-- `subscription_status`
 - `schema_bundle_hash`
 - `status_for_run_state`
+- `subscription_status`
 - `trajectory_from_contract`
 - `trajectory_from_response`
 - `trajectory_to_contract`
+
+Documented local symbols:
+
+- `__getattr__` (function): Resolve a re-exported name (or submodule) on first access.
+- `__dir__` (function)
 
 ### `python/fusionkit-server/src/fusionkit_server/__init__.py`
 

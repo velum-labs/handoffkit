@@ -4,8 +4,8 @@ import pytest
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import SamplingConfig
 from fusionkit_core.contracts import TrajectoryItem
-from fusionkit_core.judge import JudgeSynthesizer
-from fusionkit_core.types import ChatMessage, Trajectory
+from fusionkit_core.judge import JudgeSynthesizer, analysis_reasoning_markdown, parse_analysis
+from fusionkit_core.types import ChatMessage, FusionAnalysis, StreamChunk, Trajectory
 
 
 def _trajectory(trajectory_id: str, model_id: str, final_output: str) -> Trajectory:
@@ -200,3 +200,62 @@ async def test_fuse_marks_invalid_structured_json() -> None:
     metrics = result.trajectory.synthesis.metrics
     assert metrics["judge_structured_parse_status"] == "failed"
     assert metrics["judge_structured_parse_error"] == "invalid_json"
+
+
+@pytest.mark.asyncio
+async def test_fuse_stream_yields_judge_reasoning_before_content() -> None:
+    synthesizer = JudgeSynthesizer()
+    judge = FakeModelClient(
+        "judge",
+        [
+            '{"consensus":["both fixed add"],"contradictions":["beta rewrote the API"],'
+            '"unique_insights":[],"coverage_gaps":[],"likely_errors":["beta dropped the export"],'
+            '"recommended_final_structure":[],"best_trajectory":"traj_alpha"}',
+            "the fused answer",
+        ],
+    )
+    trajectories = [
+        _trajectory("traj_alpha", "alpha", "Changed add to left + right."),
+        _trajectory("traj_beta", "beta", "Rewrote add as a function."),
+    ]
+
+    items = [
+        item
+        async for item in synthesizer.fuse_stream(
+            [ChatMessage(role="user", content="Fix the failing add() test.")],
+            trajectories,
+            judge_client=judge,
+            synthesizer_client=judge,
+            sampling=SamplingConfig(),
+            tools=None,
+        )
+    ]
+
+    chunks = [item for item in items if isinstance(item, StreamChunk)]
+    reasoning_indexes = [i for i, c in enumerate(chunks) if c.reasoning_delta]
+    content_indexes = [i for i, c in enumerate(chunks) if c.delta]
+    assert reasoning_indexes, "the judge's analysis streams on the reasoning channel"
+    assert content_indexes, "the fused answer still streams as content"
+    assert max(reasoning_indexes) < min(content_indexes), "reasoning strictly precedes content"
+
+    reasoning = chunks[reasoning_indexes[0]].reasoning_delta or ""
+    assert reasoning.startswith("**Weighing the candidates**")
+    assert "alpha looks strongest." in reasoning
+    assert "both fixed add" in reasoning
+    assert "beta dropped the export" in reasoning
+
+
+def test_analysis_reasoning_markdown_skips_unparseable_judge_output() -> None:
+    failed = parse_analysis("not json at all")
+    assert analysis_reasoning_markdown(failed, []) is None
+    assert analysis_reasoning_markdown(FusionAnalysis(), []) is None
+
+
+def test_analysis_reasoning_markdown_sanitizes_judge_text() -> None:
+    hostile = "**bold**\n`code`\t " + "x" * 500
+    text = analysis_reasoning_markdown(FusionAnalysis(consensus=[hostile]), [])
+    assert text is not None
+    headline, body = text.split("\n\n", 1)
+    assert headline == "**Weighing the candidates**"
+    assert "*" not in body and "`" not in body and "\n" not in body.strip()
+    assert len(body) < 220, "judge text is hard-capped per line"

@@ -14,6 +14,7 @@ export async function GET(): Promise<NextResponse> {
     dialect: session.dialect,
     repo: session.repo,
     environment: session.environment !== null ? JSON.parse(session.environment) : null,
+    promptPreview: session.prompt_preview,
     finalOutput: session.final_output,
     eventCount: session.event_count,
     durationMs: Math.max(0, session.last_ts - session.started_at)
