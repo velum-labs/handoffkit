@@ -47,6 +47,14 @@ panel_models: [gpt, opus]
 panel_samples_per_model: 3
 self_temperatures: [0.2, 0.6, 0.9]
 harness_prompt_passthrough: true
+# Audit 20260701-2027 phase 4/5 ablation: judge-pick-verbatim ties LLM-rewrite on
+# pass rate on both banks (86-task locked-window bank and 150-task deep dev bank)
+# while taking zero McNemar losses vs best-single, zero synthesis regressions,
+# and skipping the synthesizer call whenever the judge names a pick (~71% of
+# tasks) — strictly cheaper at equal quality on code. Falls back to rewrite
+# composition when no pick is named (that fallback rescued 5/150 dev tasks where
+# every candidate failed).
+synthesis_select_best: true
 sampling:
   temperature: 0.2
   top_p: 0.95

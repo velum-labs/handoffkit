@@ -3,3 +3,4 @@
 {"phase":"3-baseline","suite":"livecodebench bank 86 + baseline replay","tasks":86,"est_usd":11.2,"cum_usd":12.1,"note":"bank build ~9.7 (86x0.113 solver) + judge/synth replays ~1.5","git_sha":"8b503b5"}
 {"phase":"4-ablations","suite":"bank replay: rewrite/select-best/exec-select + LOO + router","tasks":86,"est_usd":6.0,"cum_usd":18.1,"note":"judge+synth replays over frozen bank; exec-select local-only","git_sha":"8b503b5"}
 {"phase":"5-devbank-lost","suite":"deep dev bank build (OOM during save, candidates lost)","tasks":150,"est_usd":51.0,"cum_usd":69.1,"note":"900 panel calls completed then save_bank OOM-killed at 4GB JSON; fixed with per-task build cache + capped dev tests","git_sha":"b477429"}
+{"phase":"5-hillclimb","suite":"deep dev bank + policy/depth ablations","tasks":150,"est_usd":64.0,"cum_usd":133.0,"note":"tier2: panel depth 3x + select-best default; dev fused 0.6733 vs best single 0.5133","git_sha":"b477429"}
