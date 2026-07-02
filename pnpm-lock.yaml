@@ -195,8 +195,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/workspace
       '@vercel/sandbox':
-        specifier: 2.2.0
-        version: 2.2.0
+        specifier: 2.3.0
+        version: 2.3.0
 
   examples/mlx:
     dependencies:
@@ -289,7 +289,7 @@ importers:
         version: 1.0.0-canary.2
       '@ai-sdk/sandbox-vercel':
         specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
+        version: 1.0.0-canary.6(@vercel/sandbox@2.3.0)(ws@8.21.0)(zod@4.4.3)
       '@ai-sdk/tui':
         specifier: 1.0.0-canary.6
         version: 1.0.0-canary.6(zod@4.4.3)
@@ -537,7 +537,7 @@ importers:
         version: 1.0.0-canary.6(just-bash@3.0.1)(ws@8.21.0)(zod@4.4.3)
       '@ai-sdk/sandbox-vercel':
         specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
+        version: 1.0.0-canary.6(@vercel/sandbox@2.3.0)(ws@8.21.0)(zod@4.4.3)
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -604,8 +604,8 @@ importers:
         specifier: workspace:*
         version: link:../workspace
       '@vercel/sandbox':
-        specifier: 2.2.0
-        version: 2.2.0
+        specifier: 2.3.0
+        version: 2.3.0
       ms:
         specifier: 2.1.3
         version: 2.1.3
@@ -900,8 +900,8 @@ packages:
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
 
-  '@vercel/sandbox@2.2.0':
-    resolution: {integrity: sha512-i5af0bMBLfUp3U1bSewSm+duCc3fErxi3GGqv2F3/xFbI09BHw+HaRI0pHjwbi/+0sLNPTZn/0jkg/M1OWB0rg==}
+  '@vercel/sandbox@2.3.0':
+    resolution: {integrity: sha512-KLhc/sj2JuftgWEivPmmDq3iFLIoYU0XIv+44paTyhk5eGGaqNl6dQdxXSqOf+N31jh55m4UWY7i8oJy8oJRrQ==}
 
   '@workflow/serde@4.1.0':
     resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
@@ -1259,8 +1259,8 @@ packages:
   sql.js@1.14.1:
     resolution: {integrity: sha512-gcj8zBWU5cFsi9WUP+4bFNXAyF1iRpA3LLyS/DP5xlrNzGmPIizUeBggKa8DbDwdqaKwUcTEnChtd2grWo/x/A==}
 
-  streamx@2.27.0:
-    resolution: {integrity: sha512-WZ189TKnHoAokYHvwzaAQMpd55cgUmFIcJFzBSgGcb886jau5DL+XdDhTWV4ps3FLvk+OORp0dLRTPsLZ21CSA==}
+  streamx@2.28.0:
+    resolution: {integrity: sha512-1Yowhzjf0ivGMrTIkY9hav5TxobO9qIVqUE41fiCGMGgc3CLlf4MY+9AHmZqBWgDTue0fY9zWjYFVyf6Diuobw==}
 
   string_decoder@1.3.0:
     resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
@@ -1486,11 +1486,11 @@ snapshots:
       - ws
       - zod
 
-  '@ai-sdk/sandbox-vercel@1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)':
+  '@ai-sdk/sandbox-vercel@1.0.0-canary.6(@vercel/sandbox@2.3.0)(ws@8.21.0)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/harness': 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
       '@ai-sdk/provider-utils': 5.0.0-canary.47(zod@4.4.3)
-      '@vercel/sandbox': 2.2.0
+      '@vercel/sandbox': 2.3.0
     transitivePeerDependencies:
       - ws
       - zod
@@ -1673,7 +1673,7 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  '@vercel/sandbox@2.2.0':
+  '@vercel/sandbox@2.3.0':
     dependencies:
       '@vercel/oidc': 3.2.0
       '@workflow/serde': 4.1.0-beta.2
@@ -2069,7 +2069,7 @@ snapshots:
 
   sql.js@1.14.1: {}
 
-  streamx@2.27.0:
+  streamx@2.28.0:
     dependencies:
       events-universal: 1.0.1
       fast-fifo: 1.3.2
@@ -2115,7 +2115,7 @@ snapshots:
     dependencies:
       b4a: 1.8.1
       fast-fifo: 1.3.2
-      streamx: 2.27.0
+      streamx: 2.28.0
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a

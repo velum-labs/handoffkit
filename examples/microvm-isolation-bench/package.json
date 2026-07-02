@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
-    "@vercel/sandbox": "2.2.0",
+    "@vercel/sandbox": "2.3.0",
     "@fusionkit/adapter-compute": "workspace:*",
     "@fusionkit/ensemble": "workspace:*",
     "@fusionkit/session-vercel-sandbox": "workspace:*",
