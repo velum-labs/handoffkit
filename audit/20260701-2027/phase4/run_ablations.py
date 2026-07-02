@@ -35,7 +35,11 @@ from fusionkit_evals.candidate_bank import CandidateBank, load_bank
 from fusionkit_evals.code_extract import extract_code
 from fusionkit_evals.exec_select import CandidateSample, select_index
 from fusionkit_evals.fusion_hillclimb import best_single_baseline, regret_split
-from fusionkit_evals.livecodebench_data import decode_public_private, load_problems
+from fusionkit_evals.livecodebench_data import (
+    decode_public_private,
+    load_manifest,
+    load_problems,
+)
 from fusionkit_evals.prompt_tuning import (
     PromptEval,
     PromptVariant,
@@ -212,6 +216,7 @@ async def main() -> None:
     parser.add_argument("--bank", default=".fusionkit/hillclimb/bank.json")
     parser.add_argument("--config", default="configs/benchmark-panel.gpt-opus.yaml")
     parser.add_argument("--cache-dir", default=".fusionkit/hillclimb/cache")
+    parser.add_argument("--manifest", default=None, help="frozen LCB manifest for the bank window")
     parser.add_argument("--out", default="audit/20260701-2027/phase4/ablations.json")
     args = parser.parse_args()
 
@@ -220,7 +225,7 @@ async def main() -> None:
     print(f"bank: {len(bank.tasks)} tasks; best single {best.model_id} {best.pass_rate:.4f}")
 
     # Public/private splits straight from the dataset for exec-select.
-    problems = load_problems(10000)
+    problems = load_problems(10000, manifest=load_manifest(args.manifest))
     public_private = {
         str(p["question_id"]): decode_public_private(p, 0)
         for p in problems
