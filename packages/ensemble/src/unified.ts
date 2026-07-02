@@ -21,6 +21,7 @@ import type {
   EnsembleRunResult,
   HarnessAdapter,
   HarnessArtifact,
+  HarnessEndReason,
   HarnessTrajectory,
   TrajectoryStep
 } from "./harness.js";
@@ -215,7 +216,12 @@ export const PANEL_CANDIDATE_CONTRACT =
   "request in a disposable scratch workspace. The user cannot see your work and cannot reply - " +
   "never ask for permission or clarification, and never end your turn with a question. Act via " +
   "your tools until the request is genuinely complete, then reply with your final result. If " +
-  "anything is ambiguous, choose the most reasonable interpretation and proceed.";
+  "anything is ambiguous, choose the most reasonable interpretation and proceed. " +
+  "Run commands with default sandbox permissions: approvals are disabled, so any request for " +
+  "escalated permissions is auto-rejected - reading and editing files in your workspace never " +
+  "needs escalation. If a command is rejected or fails, fix the command and retry; do not " +
+  "conclude that access is blocked. Never end your turn by describing what you are about to " +
+  "do - either call a tool or report what you already did.";
 
 /**
  * Compose the shared panel-member prompt: optionally pass through the launched
@@ -381,6 +387,15 @@ function stepToWireItem(step: TrajectoryStep): Record<string, unknown> {
   }
 }
 
+function endReasonToWire(endReason: HarnessEndReason): NonNullable<WireTrajectory["end_reason"]> {
+  return {
+    kind: endReason.kind,
+    ...(endReason.exitCode !== undefined ? { exit_code: endReason.exitCode } : {}),
+    ...(endReason.timedOut !== undefined ? { timed_out: endReason.timedOut } : {}),
+    ...(endReason.detail !== undefined ? { detail: endReason.detail } : {})
+  };
+}
+
 function trajectoryToWire(trajectory: HarnessTrajectory): WireTrajectory {
   return {
     trajectory_id: trajectory.trajectoryId,
@@ -391,7 +406,8 @@ function trajectoryToWire(trajectory: HarnessTrajectory): WireTrajectory {
     ...(trajectory.candidateId !== undefined ? { candidate_id: trajectory.candidateId } : {}),
     ...(trajectory.model !== undefined ? { model: trajectory.model } : {}),
     ...(trajectory.harnessKind !== undefined ? { harness_kind: trajectory.harnessKind } : {}),
-    ...(trajectory.diff !== undefined && trajectory.diff.length > 0 ? { diff: trajectory.diff } : {})
+    ...(trajectory.diff !== undefined && trajectory.diff.length > 0 ? { diff: trajectory.diff } : {}),
+    ...(trajectory.endReason !== undefined ? { end_reason: endReasonToWire(trajectory.endReason) } : {})
   };
 }
 
@@ -411,7 +427,8 @@ function failedEvidenceToWire(evidence: JudgeCandidateEvidence): WireTrajectory 
     items: [],
     final_output: `panel candidate ${label} produced no trajectory (status: ${evidence.status})`,
     candidate_id: evidence.candidateId,
-    ...(evidence.model.length > 0 ? { model: evidence.model } : {})
+    ...(evidence.model.length > 0 ? { model: evidence.model } : {}),
+    ...(evidence.endReason !== undefined ? { end_reason: endReasonToWire(evidence.endReason) } : {})
   };
 }
 
@@ -566,12 +583,18 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     }
   };
   await runEnsemble(descriptor);
-  if (captured.length > 0) return captured.map(trajectoryToWire);
-  // No candidate produced a trajectory. Rather than return an empty set (an
-  // opaque "fusion panel produced no candidates"), surface every candidate that
-  // ran as a failed trajectory carrying its model id and status, so the gateway
-  // reports which models failed and the companion app shows them.
-  return evidence.map(failedEvidenceToWire);
+  // Surface every candidate that ran: trajectories where captured, and failed
+  // placeholders (with model id, status, and end reason) where a candidate
+  // produced none — so a mixed panel never silently drops its failures and
+  // the session record can answer "why did this candidate stop?".
+  if (evidence.length > 0) {
+    return evidence.map((candidate) =>
+      candidate.trajectory !== undefined
+        ? trajectoryToWire(candidate.trajectory)
+        : failedEvidenceToWire(candidate)
+    );
+  }
+  return captured.map(trajectoryToWire);
 }
 
 /**

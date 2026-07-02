@@ -10,6 +10,13 @@ export type WireTrajectory = {
   diff?: string;
   verification?: { status: string; evidence?: string[]; exit_code?: number };
   metadata?: Record<string, unknown>;
+  /**
+   * Why the candidate's harness run ended (`completed` = the tool reported a
+   * finished turn; `aborted` = clean exit without one, i.e. interrupted
+   * mid-turn; plus `timeout` / `exit_error` / `spawn_error`). Persisted so
+   * early stops are attributable from the session record.
+   */
+  end_reason?: { kind: string; exit_code?: number; timed_out?: boolean; detail?: string };
 };
 
 export function isWireTrajectory(value: unknown): value is WireTrajectory {

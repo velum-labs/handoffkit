@@ -81,7 +81,8 @@ function candidateEvidence(
       model: String(candidate.metadata?.model ?? output?.model.model ?? ""),
       status: candidate.status,
       artifacts: candidate.artifacts ?? [],
-      ...(output?.trajectory ? { trajectory: output.trajectory } : {})
+      ...(output?.trajectory ? { trajectory: output.trajectory } : {}),
+      ...(output?.endReason ? { endReason: output.endReason } : {})
     };
   });
 }

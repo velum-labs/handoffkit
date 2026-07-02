@@ -52,6 +52,21 @@ export type HarnessTrajectory = {
   steps: TrajectoryStep[];
   finalOutput: string;
   diff?: string;
+  endReason?: HarnessEndReason;
+};
+
+/**
+ * Why a candidate's harness run ended — persisted into the session record so
+ * "why did it stop?" is answerable from the trace UI instead of forensics on
+ * harness temp dirs. `completed` means the tool itself reported a finished
+ * turn; `aborted` means the process exited cleanly WITHOUT reporting one
+ * (e.g. the CLI was interrupted mid-turn and shut down gracefully).
+ */
+export type HarnessEndReason = {
+  kind: "completed" | "aborted" | "timeout" | "exit_error" | "spawn_error" | "unknown";
+  exitCode?: number;
+  timedOut?: boolean;
+  detail?: string;
 };
 
 export type CandidateIsolationKind = "process" | "container" | "microvm";
@@ -318,6 +333,7 @@ export type HarnessCandidateOutput = {
   candidateId?: string;
   model: EnsembleModel;
   status: ModelFusionStatus;
+  endReason?: HarnessEndReason;
   modelCallId?: string;
   modelCallRecord?: ModelCallRecordV1;
   branchName?: string;

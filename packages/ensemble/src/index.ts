@@ -331,6 +331,7 @@ export type {
   HarnessCollectInput,
   HarnessPrepareInput,
   HarnessRunInput,
+  HarnessEndReason,
   HarnessToolRecord,
   HarnessTrajectory,
   TrajectoryStep,

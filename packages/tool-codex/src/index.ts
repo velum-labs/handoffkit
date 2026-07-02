@@ -76,6 +76,7 @@ export const codexTool: ToolIntegration = {
 
 export {
   codexConfigToml,
+  codexEndReason,
   codexHarness,
   codexHarnessCredentialSkipReason,
   createCodexHarness,
