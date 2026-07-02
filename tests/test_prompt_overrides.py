@@ -9,6 +9,7 @@ from fusionkit_core.judge import JudgeSynthesizer
 from fusionkit_core.prompts import (
     AGENT_STEP_CONTRACT,
     AGENT_WORKSPACE_GROUNDING,
+    FINAL_OUTPUT_TRUNCATION_LIMIT,
     FUSION_SYNTHESIZER_FRAMING,
     JUDGE_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
@@ -17,6 +18,7 @@ from fusionkit_core.prompts import (
     build_fuse_system,
     build_identity_block,
     build_judge_system,
+    format_trajectories,
 )
 from fusionkit_core.types import (
     ChatMessage,
@@ -253,6 +255,19 @@ def test_build_judge_system_layers_harness_then_judge() -> None:
     layered = build_judge_system(JUDGE_SYSTEM_PROMPT, harness_system=_HARNESS)
     assert layered.startswith(_HARNESS)
     assert JUDGE_SYSTEM_PROMPT in layered
+
+
+def test_format_trajectories_keeps_code_sized_final_outputs_untruncated() -> None:
+    """Audit regression (rubric 6.4): judging truncated code blinds the judge —
+    coding candidates routinely exceed the old 1200-char cap."""
+    code = "x = 1\n" * 800  # ~4800 chars: a normal-sized code solution
+    trajectory = Trajectory(id="t1", model_id="m", content=code)
+    rendered = format_trajectories([trajectory])
+    assert code.strip() in rendered
+    assert FINAL_OUTPUT_TRUNCATION_LIMIT >= 8000
+    huge = "y" * (FINAL_OUTPUT_TRUNCATION_LIMIT + 100)
+    rendered_huge = format_trajectories([Trajectory(id="t2", model_id="m", content=huge)])
+    assert "...[truncated]" in rendered_huge
 
 
 @pytest.mark.asyncio

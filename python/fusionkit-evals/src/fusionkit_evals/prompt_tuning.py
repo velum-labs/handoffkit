@@ -20,6 +20,7 @@ from typing import Protocol
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import PromptOverrides, SamplingConfig
 from fusionkit_core.judge import JudgeSynthesizer
+from fusionkit_core.prompts import FINAL_OUTPUT_TRUNCATION_LIMIT
 from fusionkit_core.types import ChatMessage, Trajectory
 from pydantic import BaseModel, Field
 
@@ -203,6 +204,9 @@ class TunerRuntime:
             # Synthesis policy changes the fused output for the same prompts, so
             # select-best and rewrite replays must never share cache entries.
             "select_best": self.select_best,
+            # Prompt-construction source changes (candidate truncation) also
+            # change what the judge/synth see; bust replays when it moves.
+            "final_output_truncation": FINAL_OUTPUT_TRUNCATION_LIMIT,
         }
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 

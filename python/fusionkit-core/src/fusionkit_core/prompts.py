@@ -85,6 +85,14 @@ AGENT_WORKSPACE_GROUNDING = (
 )
 
 
+# Candidate final outputs are what the judge rules on; code solutions routinely
+# exceed 1200 chars (LCB dev p90 ~8.4k, polyglot p50 ~1.3k), and judging truncated
+# code blinds the judge — the audit measured every polyglot regret task as having
+# truncated candidates. 8000 covers ~p90 of observed coding candidates at a
+# bounded (~2k tokens/candidate) prompt cost. Item/argument snippets stay short.
+FINAL_OUTPUT_TRUNCATION_LIMIT = 8000
+
+
 def _truncate(text: str, limit: int = 1200) -> str:
     text = text or ""
     return text if len(text) <= limit else text[:limit] + "...[truncated]"
@@ -112,7 +120,7 @@ def format_trajectories(trajectories: Sequence[Trajectory]) -> str:
             f"Trajectory {trajectory.id} from model {trajectory.model_id} "
             f"(status={trajectory.status}):\n"
             f"{items}\n"
-            f"  final_output:\n{_truncate(trajectory.content)}"
+            f"  final_output:\n{_truncate(trajectory.content, FINAL_OUTPUT_TRUNCATION_LIMIT)}"
         )
     return "\n\n---\n\n".join(sections)
 
