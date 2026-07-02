@@ -85,12 +85,14 @@ AGENT_WORKSPACE_GROUNDING = (
 )
 
 
-# Candidate final outputs are what the judge rules on; code solutions routinely
-# exceed 1200 chars (LCB dev p90 ~8.4k, polyglot p50 ~1.3k), and judging truncated
-# code blinds the judge — the audit measured every polyglot regret task as having
-# truncated candidates. 8000 covers ~p90 of observed coding candidates at a
-# bounded (~2k tokens/candidate) prompt cost. Item/argument snippets stay short.
-FINAL_OUTPUT_TRUNCATION_LIMIT = 8000
+# Candidate final-output cap in the judge/synthesizer prompts. Ablated in audit
+# 20260701-2027 (rubric 6.4): raising it to 8000 chars (~p90 of coding
+# candidates) was measured WORSE on both benchmark families — LCB dev rewrite
+# 0.6533 vs 0.6733, polyglot select-best 0.7379 vs 0.7767 (5W/8L) — the judge
+# picks better from concise heads than from full listings. 1200 is the
+# empirically winning setting, kept as a named constant so future ablations
+# bust the replay caches automatically.
+FINAL_OUTPUT_TRUNCATION_LIMIT = 1200
 
 
 def _truncate(text: str, limit: int = 1200) -> str:
