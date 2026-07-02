@@ -201,12 +201,29 @@ const PANEL_MEMBER_SUFFIX =
   "(You are one model in a FusionKit panel answering this task independently.)";
 
 /**
+ * Fixed agent-loop contract appended to every panel candidate's prompt. Panel
+ * candidates run unattended in disposable worktrees where nobody can answer a
+ * question, yet smaller models routinely end their turn by asking the user for
+ * permission or direction after a single tool round (the "punt" failure mode
+ * documented for sub-10B agents). This is code-side mechanism, not a
+ * user-editable prompt: it states the one fact about the candidate's situation
+ * that the launched tool's own prompt cannot know. Harmless for models that
+ * already behave agentically.
+ */
+export const PANEL_CANDIDATE_CONTRACT =
+  "Panel candidate contract: you are one of several independent candidates attempting this " +
+  "request in a disposable scratch workspace. The user cannot see your work and cannot reply - " +
+  "never ask for permission or clarification, and never end your turn with a question. Act via " +
+  "your tools until the request is genuinely complete, then reply with your final result. If " +
+  "anything is ambiguous, choose the most reasonable interpretation and proceed.";
+
+/**
  * Compose the shared panel-member prompt: optionally pass through the launched
  * coding tool's own system/custom instructions (so panel members follow the
  * user's developer guidance, not just the bare request), the task itself, and a
- * membership suffix. The per-member self-identity line is added separately at the
- * harness `run` (it needs the model id + ordinal). With `panelIdentity` off this
- * reduces to the prior behavior (task + the generic membership suffix).
+ * membership suffix, and the fixed candidate contract
+ * (`PANEL_CANDIDATE_CONTRACT`). The per-member self-identity line is added
+ * separately at the harness `run` (it needs the model id + ordinal).
  */
 export function buildPanelPrompt(input: {
   prompt: string;
@@ -229,6 +246,7 @@ export function buildPanelPrompt(input: {
   } else {
     parts.push(PANEL_MEMBER_SUFFIX);
   }
+  parts.push(PANEL_CANDIDATE_CONTRACT);
   return parts.join("\n\n");
 }
 
