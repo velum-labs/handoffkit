@@ -26,7 +26,7 @@ DecorrelationEvidenceLevel = Literal[
     "aggregate_proxy",
     "none",
 ]
-ReliabilityGrade = Literal["high", "medium", "low", "exploratory"]
+ValidationSeverity = Literal["error", "warning"]
 ScoreDirection = Literal["higher_is_better", "lower_is_better"]
 ScoringMode = Literal["deterministic_tests", "objective", "human_preference", "llm_judge"]
 PanelProfile = Literal[
@@ -143,19 +143,6 @@ SCORING_WEIGHTS: dict[ScoringMode, float] = {
     "human_preference": 0.5,
     "llm_judge": 0.35,
 }
-SOURCE_QUALITY_WEIGHTS: dict[LiveSource, float] = {
-    "aider": 0.75,
-    "swe_bench": 0.65,
-    "terminal_bench": 0.55,
-    "livecodebench_generation": 0.9,
-    "livecodebench_execution": 0.9,
-    "livecodebench_repair": 0.9,
-    "livecodebench_testgen": 0.9,
-    "benchlm": 0.5,
-    "open_llm_leaderboard": 0.65,
-    "uibenchkit_dcgen": 0.75,
-    "uibenchkit_design2code": 0.75,
-}
 PROFILE_AREA_WEIGHTS: dict[PanelProfile, dict[str, float]] = {
     "coding-agent": {
         "coding_edit": 0.3,
@@ -255,7 +242,6 @@ class ModelAreaScore(BaseModel):
     contamination_weight: float = Field(default=1.0, ge=0.0, le=1.0)
     saturation_weight: float = Field(default=1.0, ge=0.0, le=1.0)
     freshness_weight: float = Field(default=1.0, ge=0.0, le=1.0)
-    source_quality_weight: float = Field(default=0.6, ge=0.0, le=1.0)
     same_harness_comparable: bool = False
 
     @model_validator(mode="after")
@@ -291,8 +277,6 @@ class AreaMatrixCell(BaseModel):
     benchmarks: list[str] = Field(default_factory=list)
     data_levels: list[CapabilityDataLevel] = Field(default_factory=list)
     decorrelation_evidence_level: DecorrelationEvidenceLevel = "none"
-    reliability_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    reliability_grade: ReliabilityGrade = "exploratory"
     cost_usd: float | None = None
     latency_s: float | None = None
     warnings: list[str] = Field(default_factory=list)
@@ -366,21 +350,24 @@ class LiveFetchResult(BaseModel):
     sources: list[SourceFetchResult]
 
 
-class ReliabilityAreaSummary(BaseModel):
-    area: str
-    cell_count: int
-    mean_reliability: float
-    grade_counts: dict[ReliabilityGrade, int] = Field(default_factory=dict)
-    task_vector_cells: int = 0
-    aggregate_proxy_cells: int = 0
+class ValidationIssue(BaseModel):
+    severity: ValidationSeverity
+    code: str
+    message: str
+    model_key: str | None = None
+    benchmark: str | None = None
+    area: str | None = None
+    source_url: str | None = None
 
 
-class ReliabilityReport(BaseModel):
-    cell_count: int
-    mean_reliability: float
-    grade_counts: dict[ReliabilityGrade, int] = Field(default_factory=dict)
-    areas: list[ReliabilityAreaSummary] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+class DataQualityReport(BaseModel):
+    checked_rows: int
+    error_count: int
+    warning_count: int
+    issue_counts: dict[str, int] = Field(default_factory=dict)
+    area_counts: dict[str, int] = Field(default_factory=dict)
+    source_counts: dict[str, int] = Field(default_factory=dict)
+    issues: list[ValidationIssue] = Field(default_factory=list)
 
 
 class FetchError(RuntimeError):
@@ -399,7 +386,6 @@ class SourceSpec:
     parser: SourceParser
     areas: tuple[str, ...]
     description: str
-    quality_weight: float = 0.6
 
 
 SOURCE_PARSERS: dict[LiveSource, SourceParser] = {}
@@ -431,12 +417,9 @@ def register_source(spec: SourceSpec) -> None:
         raise ValueError(f"source {spec.source!r} must have a URL")
     if not spec.areas:
         raise ValueError(f"source {spec.source!r} must advertise at least one area")
-    if not 0.0 <= spec.quality_weight <= 1.0:
-        raise ValueError(f"source {spec.source!r} quality_weight must be 0..1")
     SOURCE_URLS[spec.source] = spec.url
     SOURCE_AREAS[spec.source] = spec.areas
     SOURCE_DESCRIPTIONS[spec.source] = spec.description
-    SOURCE_QUALITY_WEIGHTS[spec.source] = spec.quality_weight
     SOURCE_PARSERS[spec.source] = spec.parser
     _refresh_live_sources()
 
@@ -449,7 +432,6 @@ def get_source_spec(source: LiveSource) -> SourceSpec:
             parser=SOURCE_PARSERS[source],
             areas=SOURCE_AREAS[source],
             description=SOURCE_DESCRIPTIONS.get(source, ""),
-            quality_weight=SOURCE_QUALITY_WEIGHTS.get(source, 0.6),
         )
     except KeyError as exc:
         known = ", ".join(LIVE_SOURCES)
@@ -611,50 +593,130 @@ def build_task_outcome_panel_metrics(
     )
 
 
-def build_reliability_report(matrix: ModelAreaMatrix) -> ReliabilityReport:
-    cells = [
-        cell
-        for row in matrix.rows.values()
-        for cell in row.cells.values()
-    ]
-    grade_counts = _grade_counts(cells)
-    area_summaries: list[ReliabilityAreaSummary] = []
-    for area in matrix.areas:
-        area_cells = [
-            row.cells[area]
-            for row in matrix.rows.values()
-            if area in row.cells
-        ]
-        area_summaries.append(
-            ReliabilityAreaSummary(
-                area=area,
-                cell_count=len(area_cells),
-                mean_reliability=_average([cell.reliability_score for cell in area_cells]),
-                grade_counts=_grade_counts(area_cells),
-                task_vector_cells=sum(
-                    1 for cell in area_cells if cell.decorrelation_evidence_level == "task_vector"
+def build_data_quality_report(
+    scores: Sequence[ModelAreaScore],
+    *,
+    max_issues: int = 200,
+) -> DataQualityReport:
+    """Validate normalized rows before they are trusted as matrix input."""
+
+    issues: list[ValidationIssue] = []
+    area_counts: dict[str, int] = {}
+    source_counts: dict[str, int] = {}
+    seen_keys: set[tuple[str, str, str, str, str | None, str]] = set()
+    known_urls = {spec.url: spec for spec in get_source_specs()}
+
+    for score in scores:
+        area_counts[score.area] = area_counts.get(score.area, 0) + 1
+        source_counts[score.source_url] = source_counts.get(score.source_url, 0) + 1
+        spec = known_urls.get(score.source_url)
+        if spec is None:
+            _add_issue(
+                issues,
+                ValidationIssue(
+                    severity="warning",
+                    code="unknown_source_url",
+                    message="row source URL is not registered",
+                    model_key=score.model_key,
+                    benchmark=score.benchmark,
+                    area=score.area,
+                    source_url=score.source_url,
                 ),
-                aggregate_proxy_cells=sum(
-                    1
-                    for cell in area_cells
-                    if cell.decorrelation_evidence_level == "aggregate_proxy"
-                ),
+                max_issues,
             )
+        elif score.area not in spec.areas:
+            _add_issue(
+                issues,
+                ValidationIssue(
+                    severity="error",
+                    code="source_area_mismatch",
+                    message=(
+                        f"source {spec.source!r} emitted unexpected area {score.area!r}"
+                    ),
+                    model_key=score.model_key,
+                    benchmark=score.benchmark,
+                    area=score.area,
+                    source_url=score.source_url,
+                ),
+                max_issues,
+            )
+        if score.provider == "unknown":
+            _add_issue(
+                issues,
+                ValidationIssue(
+                    severity="warning",
+                    code="unknown_provider",
+                    message="provider could not be inferred from public row",
+                    model_key=score.model_key,
+                    benchmark=score.benchmark,
+                    area=score.area,
+                    source_url=score.source_url,
+                ),
+                max_issues,
+            )
+        if score.data_level == "task_outcome" and not score.same_harness_comparable:
+            _add_issue(
+                issues,
+                ValidationIssue(
+                    severity="error",
+                    code="task_outcome_not_same_harness",
+                    message="task_outcome rows must be same-harness comparable",
+                    model_key=score.model_key,
+                    benchmark=score.benchmark,
+                    area=score.area,
+                    source_url=score.source_url,
+                ),
+                max_issues,
+            )
+        if score.n_tasks is None and score.data_level in ("task_outcome", "subtask"):
+            _add_issue(
+                issues,
+                ValidationIssue(
+                    severity="warning",
+                    code="missing_task_count",
+                    message="higher-evidence row is missing n_tasks",
+                    model_key=score.model_key,
+                    benchmark=score.benchmark,
+                    area=score.area,
+                    source_url=score.source_url,
+                ),
+                max_issues,
+            )
+        key = (
+            score.model_key,
+            score.benchmark,
+            score.benchmark_version,
+            score.area,
+            score.subarea,
+            score.source_snapshot_hash,
         )
-    warnings: list[str] = []
-    low_share = (
-        grade_counts.get("low", 0) + grade_counts.get("exploratory", 0)
-    ) / len(cells) if cells else 0.0
-    if low_share > 0.5:
-        warnings.append("more than half of cells are low or exploratory reliability")
-    if any(cell.decorrelation_evidence_level == "aggregate_proxy" for cell in cells):
-        warnings.append("aggregate-proxy cells are routing priors, not decorrelation evidence")
-    return ReliabilityReport(
-        cell_count=len(cells),
-        mean_reliability=_average([cell.reliability_score for cell in cells]),
-        grade_counts=grade_counts,
-        areas=area_summaries,
-        warnings=warnings,
+        if key in seen_keys:
+            _add_issue(
+                issues,
+                ValidationIssue(
+                    severity="warning",
+                    code="duplicate_row",
+                    message="duplicate model/benchmark/version/area/subarea/source row",
+                    model_key=score.model_key,
+                    benchmark=score.benchmark,
+                    area=score.area,
+                    source_url=score.source_url,
+                ),
+                max_issues,
+            )
+        seen_keys.add(key)
+
+    issue_counts: dict[str, int] = {}
+    for issue in issues:
+        issue_counts[issue.code] = issue_counts.get(issue.code, 0) + 1
+    return DataQualityReport(
+        checked_rows=len(scores),
+        error_count=sum(1 for issue in issues if issue.severity == "error"),
+        warning_count=sum(1 for issue in issues if issue.severity == "warning"),
+        issue_counts=issue_counts,
+        area_counts=dict(sorted(area_counts.items())),
+        source_counts=dict(sorted(source_counts.items())),
+        issues=issues,
     )
 
 
@@ -1272,6 +1334,15 @@ def _load_records(path: str | Path) -> list[Mapping[str, Any]]:
     return [record for record in records if isinstance(record, Mapping)]
 
 
+def _add_issue(
+    issues: list[ValidationIssue],
+    issue: ValidationIssue,
+    max_issues: int,
+) -> None:
+    if len(issues) < max_issues:
+        issues.append(issue)
+
+
 def _normalized_scores(records: Sequence[ModelAreaScore]) -> list[tuple[ModelAreaScore, float]]:
     grouped: dict[tuple[str, str, str, str, str, str, str], list[ModelAreaScore]] = {}
     for record in records:
@@ -1317,19 +1388,9 @@ def _record_weight(record: ModelAreaScore) -> float:
         * record.contamination_weight
         * record.saturation_weight
         * record.freshness_weight
-        * _record_source_quality(record)
         * task_count_weight
         * same_harness_weight
     )
-
-
-def _record_source_quality(record: ModelAreaScore) -> float:
-    if record.source_quality_weight != 0.6:
-        return record.source_quality_weight
-    for source, url in SOURCE_URLS.items():
-        if record.source_url == url:
-            return SOURCE_QUALITY_WEIGHTS.get(source, 0.6)
-    return record.source_quality_weight
 
 
 def _build_cell(
@@ -1344,10 +1405,6 @@ def _build_cell(
         warnings.append("aggregate proxy; not same-task decorrelation evidence")
     if len({record.source_snapshot_hash for record in records}) == 1:
         warnings.append("single-source cell; corroborate before making claims")
-    reliability_score = _cell_reliability(records)
-    reliability_grade = _reliability_grade(reliability_score)
-    if reliability_grade in ("low", "exploratory"):
-        warnings.append(f"{reliability_grade} reliability; use as weak prior")
     return AreaMatrixCell(
         area=area,
         raw_score=_weighted_average([record.score_raw for record in records], weights),
@@ -1361,8 +1418,6 @@ def _build_cell(
         benchmarks=sorted({record.benchmark for record in records}),
         data_levels=sorted({record.data_level for record in records}),
         decorrelation_evidence_level=_decorrelation_evidence(records),
-        reliability_score=reliability_score,
-        reliability_grade=reliability_grade,
         cost_usd=_optional_weighted_average(
             [(record.cost_usd, weight) for record, _, weight in weighted_records]
         ),
@@ -1382,58 +1437,6 @@ def _decorrelation_evidence(records: Sequence[ModelAreaScore]) -> DecorrelationE
     if levels & {"aggregate", "subtask"}:
         return "aggregate_proxy"
     return "none"
-
-
-def _cell_reliability(records: Sequence[ModelAreaScore]) -> float:
-    if not records:
-        return 0.0
-    data_score = max(DATA_LEVEL_WEIGHTS[record.data_level] for record in records)
-    scoring_score = _average([SCORING_WEIGHTS[record.scoring] for record in records])
-    quality_score = _average([_record_source_quality(record) for record in records])
-    task_counts = [record.n_tasks for record in records if record.n_tasks is not None]
-    task_score = min(1.0, math.sqrt(sum(task_counts) / 200.0)) if task_counts else 0.35
-    source_score = min(
-        1.0,
-        math.sqrt(len({record.source_snapshot_hash for record in records})) / 2.0,
-    )
-    same_harness_score = _average(
-        [1.0 if record.same_harness_comparable else 0.45 for record in records]
-    )
-    freshness_score = _average([record.freshness_weight for record in records])
-    return min(
-        1.0,
-        (
-            0.24 * data_score
-            + 0.15 * scoring_score
-            + 0.16 * quality_score
-            + 0.14 * task_score
-            + 0.12 * source_score
-            + 0.12 * same_harness_score
-            + 0.07 * freshness_score
-        ),
-    )
-
-
-def _reliability_grade(score: float) -> ReliabilityGrade:
-    if score >= 0.75:
-        return "high"
-    if score >= 0.55:
-        return "medium"
-    if score >= 0.35:
-        return "low"
-    return "exploratory"
-
-
-def _grade_counts(cells: Sequence[AreaMatrixCell]) -> dict[ReliabilityGrade, int]:
-    counts: dict[ReliabilityGrade, int] = {
-        "high": 0,
-        "medium": 0,
-        "low": 0,
-        "exploratory": 0,
-    }
-    for cell in cells:
-        counts[cell.reliability_grade] += 1
-    return {grade: count for grade, count in counts.items() if count}
 
 
 def _failure_correlations(
@@ -1650,7 +1653,6 @@ def _register_builtin_sources() -> None:
                 parser=parser,
                 areas=SOURCE_AREAS[source],
                 description=SOURCE_DESCRIPTIONS[source],
-                quality_weight=SOURCE_QUALITY_WEIGHTS[source],
             )
         )
 

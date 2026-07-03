@@ -8,8 +8,8 @@ from model_area_index import (
     ModelAreaScore,
     SourceSpec,
     TaskOutcome,
+    build_data_quality_report,
     build_model_area_matrix,
-    build_reliability_report,
     build_task_outcome_panel_metrics,
     fetch_live_model_area_scores,
     format_model_area_matrix_markdown,
@@ -67,20 +67,16 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     assert "instruction_following" in matrix.areas
     assert "hard_science_reasoning" in matrix.areas
     assert "agentic" in matrix.areas
-    report = build_reliability_report(matrix)
-    assert report.cell_count > 0
-    assert report.mean_reliability > 0
-    assert report.grade_counts
+    report = build_data_quality_report(fetched.scores)
+    assert report.checked_rows == len(fetched.scores)
+    assert report.error_count == 0
+    assert "unknown_provider" in report.issue_counts
     assert matrix.rows["gpt-5-high"].cells["coding_edit"].raw_score == pytest.approx(0.88)
     assert matrix.rows["claude-opus"].cells["swe_repair"].raw_score == pytest.approx(0.8)
     assert matrix.rows["gpt-5-5"].cells["terminal_agentic"].raw_score == pytest.approx(0.83)
     deepseek_cell = matrix.rows["deepseek-v3"].cells["competitive_programming"]
     gpt_cell = matrix.rows["gpt-5"].cells["competitive_programming"]
     assert deepseek_cell.decorrelation_evidence_level == "task_vector"
-    assert deepseek_cell.reliability_grade in ("medium", "high")
-    assert deepseek_cell.reliability_score > matrix.rows["gpt-5-high"].cells[
-        "coding_edit"
-    ].reliability_score
     assert deepseek_cell.raw_score is not None
     assert gpt_cell.raw_score is not None
     assert deepseek_cell.raw_score > gpt_cell.raw_score
@@ -247,7 +243,6 @@ def test_source_registry_is_discoverable_and_extensible(
                 parser=parse_custom,
                 areas=("custom_area",),
                 description="custom source for extension tests",
-                quality_weight=0.8,
             )
         )
         monkeypatch.setattr("model_area_index.core._fetch_url", lambda *_args, **_kwargs: b"{}")
@@ -257,7 +252,6 @@ def test_source_registry_is_discoverable_and_extensible(
         assert fetched.sources[0].source == "custom_source"
         assert fetched.scores[0].area == "custom_area"
         assert get_source_spec("custom_source").description == "custom source for extension tests"
-        assert get_source_spec("custom_source").quality_weight == pytest.approx(0.8)
     finally:
         model_area_core.SOURCE_URLS.clear()
         model_area_core.SOURCE_URLS.update(original_urls)
@@ -268,6 +262,41 @@ def test_source_registry_is_discoverable_and_extensible(
         model_area_core.SOURCE_PARSERS.clear()
         model_area_core.SOURCE_PARSERS.update(original_parsers)
         model_area_core.LIVE_SOURCES = original_live_sources
+
+
+def test_data_quality_report_flags_concrete_row_problems() -> None:
+    rows = [
+        _score("model-a", "unknown", "bench", "unexpected_area", 0.5).model_copy(
+            update={"source_url": "https://aider.chat/docs/leaderboards/"}
+        ),
+        _score("model-a", "unknown", "bench", "unexpected_area", 0.5).model_copy(
+            update={"source_url": "https://aider.chat/docs/leaderboards/"}
+        ),
+        ModelAreaScore(
+            model_key="task-model",
+            provider="openai",
+            model_family="task",
+            model_version_or_alias="task-model",
+            benchmark="task-bench",
+            benchmark_version="v1",
+            area="coding_edit",
+            score_raw=0.5,
+            date_observed="2026-07-03",
+            source_url="https://aider.chat/docs/leaderboards/",
+            source_snapshot_hash="task",
+            data_level="task_outcome",
+            scoring="objective",
+            same_harness_comparable=False,
+        ),
+    ]
+
+    report = build_data_quality_report(rows)
+
+    assert report.error_count >= 2
+    assert report.issue_counts["source_area_mismatch"] >= 1
+    assert report.issue_counts["duplicate_row"] >= 1
+    assert report.issue_counts["task_outcome_not_same_harness"] == 1
+    assert report.issue_counts["unknown_provider"] >= 1
 
 
 def _score(

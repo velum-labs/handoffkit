@@ -11,9 +11,11 @@ capability evidence separate from same-task outcome evidence.
 - `TaskOutcome`: per-task same-harness outcome rows, used only when true
   oracle/headroom or failure-correlation metrics are justified.
 - `ModelAreaMatrix`: rows are models, columns are areas, cells include raw
-  score, normalized score, confidence, source count, evidence level, and a
-  reliability score/grade.
+  score, normalized score, confidence, source count, evidence level, and
+  warnings.
 - `SourceSpec`: the extension point for live data sources.
+- `DataQualityReport`: concrete validation results for row-level issues before
+  a matrix is trusted.
 
 ## Built-in sources
 
@@ -64,7 +66,6 @@ register_source(
         parser=parse_my_source,
         areas=("systems_design",),
         description="Example systems-design benchmark.",
-        quality_weight=0.7,
     )
 )
 ```
@@ -77,18 +78,17 @@ Aggregate rows are useful for shortlisting and routing priors. They are not
 proof of uncorrelated errors. Use `TaskOutcome` rows with shared task ids and
 shared scoring rules when computing oracle headroom or failure correlations.
 
-## Reliability scoring
+## Data-quality validation
 
-Every matrix cell includes:
+Call `build_data_quality_report(scores)` before trusting a snapshot. The report
+checks concrete failure modes:
 
-- `reliability_score`: 0..1 rollup from evidence level, scoring mode, source
-  quality, task count, source diversity, same-harness comparability, and
-  freshness.
-- `reliability_grade`: `high`, `medium`, `low`, or `exploratory`.
-- `warnings`: human-readable caveats such as single-source evidence or
-  aggregate-proxy evidence.
+- rows from unknown source URLs;
+- sources emitting areas they did not advertise;
+- duplicate model/benchmark/version/area/subarea/source rows;
+- unknown providers;
+- task-outcome rows that are not marked same-harness comparable;
+- higher-evidence rows that are missing task counts.
 
-Call `build_reliability_report(matrix)` to summarize reliability by area and
-grade. Source quality is configured on `SourceSpec.quality_weight`, so adding a
-new source also requires declaring how trustworthy that source should be treated
-relative to the built-ins.
+The CLI includes `data_quality_report` in JSON output and supports
+`--fail-on-data-quality-errors` for CI gates.

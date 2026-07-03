@@ -11,8 +11,8 @@ from model_area_index.core import (
     LIVE_SOURCES,
     PROFILE_AREA_WEIGHTS,
     PanelProfile,
+    build_data_quality_report,
     build_model_area_matrix,
-    build_reliability_report,
     fetch_live_model_area_scores,
     format_model_area_matrix_markdown,
     load_model_area_scores,
@@ -47,6 +47,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=int,
         help="cap parsed rows per source for quick inspection",
     )
+    parser.add_argument(
+        "--fail-on-data-quality-errors",
+        action="store_true",
+        help="exit non-zero when validation finds data-quality errors",
+    )
     parser.add_argument("--timeout-s", type=float, default=30.0)
     parser.add_argument("--output", "-o", type=Path, help="write rendered matrix to this path")
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
@@ -72,7 +77,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.write_snapshot is not None:
         write_model_area_scores(args.write_snapshot, scores)
     matrix = build_model_area_matrix(scores)
-    reliability_report = build_reliability_report(matrix)
+    data_quality_report = build_data_quality_report(scores)
+    if args.fail_on_data_quality_errors and data_quality_report.error_count:
+        raise SystemExit(2)
     recommendation = (
         recommend_panel(matrix, target_profile=cast(PanelProfile, args.target_profile))
         if args.target_profile is not None
@@ -81,7 +88,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.format == "json":
         payload: dict[str, object] = matrix.model_dump(mode="json")
         payload["source_metadata"] = source_metadata
-        payload["reliability_report"] = reliability_report.model_dump(mode="json")
+        payload["data_quality_report"] = data_quality_report.model_dump(mode="json")
         if recommendation is not None:
             payload["recommendation"] = recommendation.model_dump(mode="json")
         rendered = json.dumps(payload, indent=2)
