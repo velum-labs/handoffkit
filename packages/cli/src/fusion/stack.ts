@@ -12,6 +12,8 @@ import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/e
 import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
   Gateway,
+  LocalComputePricing,
+  ModelPricing,
   NarrationWriter,
   OnRateLimitPolicy,
   SessionMetaInput,
@@ -205,6 +207,18 @@ export function routerConfigYaml(input: {
       const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);
       if (keyEnv !== undefined) lines.push(`    api_key_env: ${JSON.stringify(keyEnv)}`);
     }
+    if (spec.pricing !== undefined) {
+      lines.push("    pricing:");
+      if (spec.pricing.inputPer1mTokens !== undefined) {
+        lines.push(`      input_per_1m_tokens: ${spec.pricing.inputPer1mTokens}`);
+      }
+      if (spec.pricing.outputPer1mTokens !== undefined) {
+        lines.push(`      output_per_1m_tokens: ${spec.pricing.outputPer1mTokens}`);
+      }
+      if (spec.pricing.currency !== undefined) {
+        lines.push(`      currency: ${JSON.stringify(spec.pricing.currency)}`);
+      }
+    }
   }
   lines.push(`default_model: ${JSON.stringify(input.judgeId)}`);
   lines.push(`judge_model: ${JSON.stringify(input.judgeId)}`);
@@ -227,6 +241,32 @@ export function routerConfigYaml(input: {
   }
   lines.push("");
   return lines.join("\n");
+}
+
+function pricingOverrides(specs: readonly PanelModelSpec[]): Record<string, ModelPricing> {
+  const overrides: Record<string, ModelPricing> = {};
+  for (const spec of specs) {
+    const pricing = spec.pricing;
+    if (pricing?.inputPer1mTokens === undefined || pricing.outputPer1mTokens === undefined) continue;
+    const value = {
+      inputPer1mTokens: pricing.inputPer1mTokens,
+      outputPer1mTokens: pricing.outputPer1mTokens,
+      ...(pricing.currency !== undefined ? { currency: pricing.currency } : {})
+    };
+    overrides[spec.model] = value;
+    overrides[spec.id] = value;
+  }
+  return overrides;
+}
+
+function localComputePricing(specs: readonly PanelModelSpec[]): Record<string, LocalComputePricing> {
+  const localCompute: Record<string, LocalComputePricing> = {};
+  for (const spec of specs) {
+    if (spec.localCompute === undefined) continue;
+    localCompute[spec.model] = spec.localCompute;
+    localCompute[spec.id] = spec.localCompute;
+  }
+  return localCompute;
 }
 
 /**
@@ -514,6 +554,8 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
   const override = options.endpoints !== undefined && options.synthesisUrl !== undefined;
   const judgeModelName = options.judgeModel ?? options.models[0]?.model ?? "";
   const models: EnsembleModel[] = options.models.map((spec) => ({ id: spec.id, model: spec.model }));
+  const pricing = pricingOverrides(options.models);
+  const localCompute = localComputePricing(options.models);
 
   // Resolve the narration-writer model (--reasoning-model) up front: a panel
   // member reuses its router endpoint, a provider/model token needs a dedicated
@@ -684,6 +726,8 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       judgeModel: judgeModelName,
       modelEndpoints,
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(Object.keys(pricing).length > 0 ? { pricing } : {}),
+      ...(Object.keys(localCompute).length > 0 ? { localCompute } : {}),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),

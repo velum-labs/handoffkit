@@ -17,7 +17,12 @@ from fusionkit_core.clients import (
     ProviderErrorCategory,
     build_clients,
 )
-from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
+from fusionkit_core.config import (
+    FusionConfig,
+    FusionMode,
+    SamplingConfig,
+    model_sampling_defaults,
+)
 from fusionkit_core.contracts import (
     FusionRunRequestV1,
     TrajectoryV1,
@@ -345,7 +350,7 @@ async def _passthrough_chat(
     an OpenAI-compatible caller (e.g. a per-candidate coding harness) can drive any
     panel model — including its tool-call loop — through the same base URL.
     """
-    sampling = _request_sampling(config, request)
+    sampling = _passthrough_sampling(config, request)
     tools = _normalize_tools(request.tools)
     tool_choice = _normalize_tool_choice(request.tool_choice)
     if request.stream:
@@ -430,6 +435,27 @@ def _request_sampling(config: FusionConfig, request: FusionRequest) -> SamplingC
             if value is not None
         }
     )
+
+
+def _passthrough_sampling(config: FusionConfig, request: FusionRequest) -> SamplingConfig:
+    """Request sampling for a passthrough call, with per-model defaults.
+
+    Precedence: an explicit request value wins, then an operator-pinned value in
+    the config's ``sampling`` section, then the model-family default (qwen /
+    kimi-k2 anti-repetition tuning), then the generic default.
+    """
+    sampling = _request_sampling(config, request)
+    try:
+        endpoint = config.endpoint_for(request.model)
+    except KeyError:
+        return sampling
+    request_values = {"temperature": request.temperature, "top_p": request.top_p}
+    update = {
+        key: value
+        for key, value in model_sampling_defaults(endpoint.model).items()
+        if request_values.get(key) is None and key not in config.sampling.model_fields_set
+    }
+    return sampling.model_copy(update=update) if update else sampling
 
 
 async def _resolve_native_chat(
@@ -535,6 +561,10 @@ async def _fused_completion_sse(
     # non-streaming `_openai_step_response` body, which always includes `usage`.
     if response is not None:
         extra["usage"] = _usage_dict(response)
+        if response.provider_cost is not None:
+            extra["provider_cost"] = response.provider_cost.model_dump(
+                mode="json", exclude_none=True
+            )
     yield chunk({}, finish, extra or None)
     yield "data: [DONE]\n\n"
 
@@ -888,6 +918,8 @@ def _openai_step_response(
         "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
         "usage": _usage_dict(response),
     }
+    if response.provider_cost is not None:
+        payload["provider_cost"] = response.provider_cost.model_dump(mode="json", exclude_none=True)
     if fusion is not None:
         payload["fusion"] = fusion
     return payload

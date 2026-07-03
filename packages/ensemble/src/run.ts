@@ -21,6 +21,7 @@ import type {
   CandidateHardeningMetadata,
   EnsembleCandidateSummary,
   EnsembleDescriptor,
+  EnsembleModel,
   EnsembleRunResult,
   EnsembleRunSummary,
   HarnessArtifact,
@@ -37,6 +38,10 @@ import {
 } from "./worktree.js";
 
 type StoredHarnessArtifact = HarnessArtifact & { path?: string };
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 const DEFAULT_CONTAINER_IMAGE = "node:22";
 const DEFAULT_CONTAINER_ENGINE = "docker";
@@ -63,10 +68,73 @@ function metadata<S extends string>(input: ContractMetadataInput<S>) {
 }
 
 function terminalStatus(outputs: readonly HarnessCandidateOutput[]): ModelFusionStatus {
-  if (outputs.some((output) => output.status === "failed")) return "failed";
-  if (outputs.some((output) => output.status === "requires_action")) return "requires_action";
-  if (outputs.every((output) => output.status === "skipped")) return "skipped";
+  // An abandoned straggler must not fail the whole run: the surviving
+  // candidates are the run's result (that is the point of the policy).
+  const counted = outputs.filter((output) => !isAbandonedStraggler(output));
+  const considered = counted.length > 0 ? counted : outputs;
+  if (considered.some((output) => output.status === "failed")) return "failed";
+  if (considered.some((output) => output.status === "requires_action")) return "requires_action";
+  if (considered.every((output) => output.status === "skipped")) return "skipped";
   return "succeeded";
+}
+
+/** Abort reason + candidate finish reason for a straggler dropped by the grace policy. */
+export const STRAGGLER_ABANDONED = "straggler_abandoned";
+
+function isAbandonedStraggler(output: HarnessCandidateOutput): boolean {
+  return output.status === "failed" && output.endReason?.detail === STRAGGLER_ABANDONED;
+}
+
+/**
+ * Await all candidate runs with a straggler grace window: when the first
+ * usable (succeeded) candidate settles and others are still running, a timer
+ * of `graceMs` starts; on expiry every still-pending candidate is aborted via
+ * `abandon(ordinal)` and the wait continues until the aborted runs settle
+ * (harnesses kill their children on abort, so this is prompt). Without
+ * `graceMs` this is exactly `Promise.allSettled`.
+ */
+async function settleWithStragglerGrace<T>(
+  runs: readonly Promise<T>[],
+  options: {
+    graceMs: number | undefined;
+    isUsable: (value: T) => boolean;
+    abandon: (ordinal: number) => void;
+  }
+): Promise<{ settled: PromiseSettledResult<T>[]; abandonedOrdinals: ReadonlySet<number> }> {
+  const abandonedOrdinals = new Set<number>();
+  const graceMs = options.graceMs;
+  if (graceMs === undefined || graceMs <= 0 || runs.length <= 1) {
+    return { settled: await Promise.allSettled(runs), abandonedOrdinals };
+  }
+  const pending = new Set<number>(runs.keys());
+  let timer: NodeJS.Timeout | undefined;
+  const startGraceTimer = (): void => {
+    if (timer !== undefined || pending.size === 0) return;
+    timer = setTimeout(() => {
+      for (const ordinal of pending) {
+        abandonedOrdinals.add(ordinal);
+        options.abandon(ordinal);
+      }
+    }, graceMs);
+    timer.unref?.();
+  };
+  const settled = await Promise.all(
+    runs.map((run, ordinal) =>
+      run.then(
+        (value): PromiseSettledResult<T> => {
+          pending.delete(ordinal);
+          if (options.isUsable(value)) startGraceTimer();
+          return { status: "fulfilled", value };
+        },
+        (reason): PromiseSettledResult<T> => {
+          pending.delete(ordinal);
+          return { status: "rejected", reason };
+        }
+      )
+    )
+  );
+  if (timer !== undefined) clearTimeout(timer);
+  return { settled, abandonedOrdinals };
 }
 
 function assertDescriptor(descriptor: EnsembleDescriptor): void {
@@ -372,28 +440,60 @@ export async function runEnsembleLegacy(descriptor: EnsembleDescriptor): Promise
   let cleanupWorktrees = worktreePlan?.worktrees ?? [];
   try {
     prepared = await descriptor.harness.prepare({ descriptor, request });
-    // Settle every candidate before continuing so a single failure cannot leave
-    // siblings running while we tear down their worktrees. A hard failure still
-    // aborts the run (re-thrown below) once all candidates have stopped.
-    const settled = await Promise.allSettled(
-      descriptor.models.map((model, ordinal) =>
+    // Every candidate still settles before continuing so a failure cannot leave
+    // siblings running while we tear down their worktrees — but a straggler
+    // grace window (policy.stragglerGraceMs) bounds how long a stuck candidate
+    // can hold a finished sibling's result hostage: once the first candidate
+    // succeeds, remaining runs are aborted after the grace period and settle
+    // as failed (straggler_abandoned) instead of failing the whole turn.
+    const candidateAborts = descriptor.models.map(() => new AbortController());
+    const abortAll = (reason: unknown): void => {
+      for (const controller of candidateAborts) controller.abort(reason);
+    };
+    if (descriptor.signal !== undefined) {
+      if (descriptor.signal.aborted) abortAll(descriptor.signal.reason);
+      else {
+        const outerSignal = descriptor.signal;
+        outerSignal.addEventListener("abort", () => abortAll(outerSignal.reason), { once: true });
+      }
+    }
+    const runs = descriptor.models.map((model, ordinal) =>
+      Promise.resolve(
         descriptor.harness.run({
           descriptor,
           request,
           model,
           ordinal,
           prepared,
-          worktree: worktreePlan?.worktrees[ordinal]
+          worktree: worktreePlan?.worktrees[ordinal],
+          signal: candidateAborts[ordinal]?.signal as AbortSignal
         })
       )
     );
+    const { settled, abandonedOrdinals } = await settleWithStragglerGrace(runs, {
+      graceMs: descriptor.policy.stragglerGraceMs,
+      isUsable: (output) => output.status === "succeeded",
+      abandon: (ordinal) => candidateAborts[ordinal]?.abort(new Error(STRAGGLER_ABANDONED))
+    });
+    // A hard failure still aborts the run (re-thrown) once all candidates have
+    // stopped — unless the candidate was deliberately abandoned, in which case
+    // it settles as a failed output instead of poisoning the surviving results.
     const rejection = settled.find(
-      (result): result is PromiseRejectedResult => result.status === "rejected"
+      (result, ordinal): result is PromiseRejectedResult =>
+        result.status === "rejected" && !abandonedOrdinals.has(ordinal)
     );
     if (rejection !== undefined) throw rejection.reason;
-    outputs = settled.map(
-      (result) => (result as PromiseFulfilledResult<HarnessCandidateOutput>).value
-    );
+    outputs = settled.map((result, ordinal) => {
+      if (result.status === "fulfilled") return result.value;
+      const model = descriptor.models[ordinal] as EnsembleModel;
+      return {
+        candidateId: `${descriptor.id}_${model.id}_${ordinal}`,
+        model,
+        status: "failed",
+        endReason: { kind: "aborted", detail: STRAGGLER_ABANDONED },
+        summary: `abandoned after the straggler grace window (${errorMessage(result.reason)})`
+      } satisfies HarnessCandidateOutput;
+    });
     const collectedArtifacts = await descriptor.harness.collectArtifacts({
       descriptor,
       request,

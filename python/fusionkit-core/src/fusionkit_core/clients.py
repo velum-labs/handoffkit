@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from typing import Any, Literal, Protocol, TypeVar, assert_never, runtime_checkable
 
+import httpx
 from anthropic import AsyncAnthropic
 from google import genai
 from google.genai import types as genai_types
@@ -15,7 +17,14 @@ from openai import AsyncOpenAI
 from fusionkit_core.config import FusionConfig, ModelEndpoint, ProviderKind, SamplingConfig
 from fusionkit_core.credentials import resolve_credential
 from fusionkit_core.providers import resolve_api_key
-from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall, Usage
+from fusionkit_core.types import (
+    ChatMessage,
+    ModelResponse,
+    ProviderCost,
+    StreamChunk,
+    ToolCall,
+    Usage,
+)
 
 ToolDefinition = Mapping[str, Any]
 ToolChoice = str | Mapping[str, Any]
@@ -368,6 +377,49 @@ class OpenAICompatibleClient:
             default_headers=default_headers,
         )
 
+    async def _openrouter_provider_cost(self, generation_id: str | None) -> ProviderCost | None:
+        if self.endpoint.provider != "openrouter":
+            return None
+        if not generation_id:
+            return ProviderCost(source="provider", lookup_status="missing_generation_id")
+        url = f"{self.endpoint.base_url.rstrip('/')}/v1/generation"
+        headers = {
+            "Authorization": f"Bearer {resolve_api_key(self.endpoint)}",
+            **OPENROUTER_ATTRIBUTION_HEADERS,
+        }
+        last_status = "unavailable"
+        async with httpx.AsyncClient(timeout=min(self.endpoint.timeout_s, 10.0)) as client:
+            for attempt in range(3):
+                try:
+                    response = await client.get(url, params={"id": generation_id}, headers=headers)
+                except httpx.HTTPError as exc:
+                    return ProviderCost(
+                        source="provider",
+                        generation_id=generation_id,
+                        lookup_status=f"error:{exc.__class__.__name__}",
+                    )
+                if response.status_code == 200:
+                    payload = response.json()
+                    data = payload.get("data") if isinstance(payload, dict) else None
+                    if isinstance(data, dict):
+                        return _openrouter_provider_cost_from_generation(generation_id, data)
+                    return ProviderCost(
+                        source="provider",
+                        generation_id=generation_id,
+                        lookup_status="malformed_response",
+                    )
+                if response.status_code == 404:
+                    last_status = "not_ready"
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                    continue
+                last_status = f"http_{response.status_code}"
+                break
+        return ProviderCost(
+            source="provider",
+            generation_id=generation_id,
+            lookup_status=last_status,
+        )
+
     def _payload(
         self,
         messages: Sequence[ChatMessage],
@@ -397,8 +449,25 @@ class OpenAICompatibleClient:
             payload["tools"] = _openai_tools(tools)
         if tool_choice is not None:
             payload["tool_choice"] = _openai_tool_choice(tool_choice)
+        # TODO(@000alen): why is this hardcoded for kimi? There must be a better more generic way
+        # to enable reasoning for all models.
+        if _openrouter_kimi_reasoning_enabled(self.endpoint):
+            # OpenRouter exposes reasoning for Kimi via its unified `reasoning`
+            # request object. Keep this narrowly scoped so non-reasoning
+            # OpenRouter models preserve their current request shape, and let
+            # explicit caller overrides win below.
+            payload["reasoning"] = {"enabled": True, "exclude": False}
         if extra:
             payload.update(extra)
+        # `reasoning` is an OpenRouter extension, not an OpenAI parameter: the
+        # SDK's typed `create()` rejects unknown top-level kwargs, so it must
+        # ride in `extra_body` to reach the wire. An explicit
+        # `extra_body.reasoning` from the caller still wins.
+        reasoning = payload.pop("reasoning", None)
+        if reasoning is not None:
+            extra_body = dict(payload.get("extra_body") or {})
+            extra_body.setdefault("reasoning", reasoning)
+            payload["extra_body"] = extra_body
         return payload
 
     async def chat(
@@ -425,6 +494,9 @@ class OpenAICompatibleClient:
                 completion_tokens=response.usage.completion_tokens,
                 total_tokens=response.usage.total_tokens,
             )
+        provider_cost = await self._openrouter_provider_cost(getattr(response, "id", None))
+        if provider_cost is not None:
+            usage = _usage_with_provider_cost(usage, provider_cost)
         return ModelResponse(
             model_id=self.model_id,
             content=choice.message.content or "",
@@ -433,6 +505,7 @@ class OpenAICompatibleClient:
             latency_s=latency_s,
             tool_calls=_openai_tool_calls(getattr(choice.message, "tool_calls", None)),
             raw=response.model_dump(mode="json"),
+            provider_cost=provider_cost,
             reasoning=_reasoning_text(choice.message),
         )
 
@@ -453,7 +526,11 @@ class OpenAICompatibleClient:
             provider=self.endpoint.provider,
             model_id=self.model_id,
         )
+        generation_id: str | None = None
+        terminal_usage: Usage | None = None
         async for event in stream:
+            if generation_id is None:
+                generation_id = getattr(event, "id", None)
             usage = None
             if getattr(event, "usage", None) is not None:
                 usage = Usage(
@@ -461,18 +538,30 @@ class OpenAICompatibleClient:
                     completion_tokens=event.usage.completion_tokens,
                     total_tokens=event.usage.total_tokens,
                 )
+                terminal_usage = usage
             if not event.choices:
                 if usage is not None:
                     yield StreamChunk(usage=usage)
                 continue
             choice = event.choices[0]
             delta = choice.delta
+            fragments = _openai_stream_tool_calls(getattr(delta, "tool_calls", None))
             yield StreamChunk(
                 delta=(delta.content or "") if delta is not None else "",
-                tool_call_delta=_openai_stream_tool_call(getattr(delta, "tool_calls", None)),
+                tool_call_delta=fragments[0] if fragments else None,
                 finish_reason=choice.finish_reason,
                 usage=usage,
                 model_reasoning_delta=_reasoning_text(delta),
+            )
+            # A single SSE chunk may carry fragments for several tool-call
+            # slots (parallel calls); emit each one so none are dropped.
+            for fragment in fragments[1:]:
+                yield StreamChunk(tool_call_delta=fragment)
+        provider_cost = await self._openrouter_provider_cost(generation_id)
+        if provider_cost is not None:
+            yield StreamChunk(
+                usage=_usage_with_provider_cost(terminal_usage, provider_cost),
+                provider_cost=provider_cost,
             )
 
     async def aclose(self) -> None:
@@ -980,13 +1069,25 @@ class GoogleModelClient:
         )
         async for chunk in stream:
             text_parts, thought_parts, tool_calls, finish_reason = _google_extract(chunk)
-            tool_call_delta = tool_calls[0] if tool_calls else None
+            usage = None
+            usage_metadata = getattr(chunk, "usage_metadata", None)
+            if usage_metadata is not None:
+                usage = Usage(
+                    prompt_tokens=usage_metadata.prompt_token_count,
+                    completion_tokens=usage_metadata.candidates_token_count,
+                    total_tokens=usage_metadata.total_token_count,
+                )
             yield StreamChunk(
                 delta="".join(text_parts),
-                tool_call_delta=tool_call_delta,
+                tool_call_delta=tool_calls[0] if tool_calls else None,
                 finish_reason=finish_reason,
+                usage=usage,
                 model_reasoning_delta="".join(thought_parts) or None,
             )
+            # Gemini emits complete function calls; a chunk with several
+            # parallel calls must surface all of them, not just the first.
+            for call in tool_calls[1:]:
+                yield StreamChunk(tool_call_delta=call)
 
     async def aclose(self) -> None:
         # google-genai manages its own transport and exposes no stable public
@@ -1097,6 +1198,67 @@ def build_clients(config: FusionConfig) -> dict[str, ChatClient]:
     return {endpoint.id: build_client(endpoint) for endpoint in config.endpoints}
 
 
+def _optional_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def _optional_str(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _openrouter_provider_cost_from_generation(
+    generation_id: str,
+    data: dict[str, Any],
+) -> ProviderCost:
+    return ProviderCost(
+        source="provider",
+        cost_usd=_optional_float(data.get("total_cost")),
+        generation_id=_optional_str(data.get("id")) or generation_id,
+        provider_name=_optional_str(data.get("provider_name")),
+        upstream_inference_cost=_optional_float(data.get("upstream_inference_cost")),
+        cache_discount=_optional_float(data.get("cache_discount")),
+        lookup_status="ok",
+        tokens_prompt=_optional_int(data.get("tokens_prompt")),
+        tokens_completion=_optional_int(data.get("tokens_completion")),
+        native_tokens_prompt=_optional_int(data.get("native_tokens_prompt")),
+        native_tokens_completion=_optional_int(data.get("native_tokens_completion")),
+        raw=data,
+    )
+
+
+def _usage_with_provider_cost(usage: Usage | None, provider_cost: ProviderCost) -> Usage:
+    prompt_tokens = provider_cost.tokens_prompt
+    completion_tokens = provider_cost.tokens_completion
+    if prompt_tokens is None and usage is not None:
+        prompt_tokens = usage.prompt_tokens
+    if completion_tokens is None and usage is not None:
+        completion_tokens = usage.completion_tokens
+    total_tokens: int | None = None
+    if prompt_tokens is not None and completion_tokens is not None:
+        total_tokens = prompt_tokens + completion_tokens
+    elif usage is not None:
+        total_tokens = usage.total_tokens
+    return Usage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
+
+
 def _openai_messages(messages: Sequence[ChatMessage]) -> list[dict[str, Any]]:
     serialized: list[dict[str, Any]] = []
     for message in messages:
@@ -1138,13 +1300,41 @@ def _openai_tool_choice(tool_choice: ToolChoice) -> Any:
     return {"type": "function", "function": {"name": tool_choice["name"]}}
 
 
+def _openrouter_kimi_reasoning_enabled(endpoint: ModelEndpoint) -> bool:
+    """True when this OpenRouter endpoint should ask Kimi to generate reasoning."""
+    return endpoint.provider == "openrouter" and "kimi" in endpoint.model.lower()
+
+
+def _reasoning_details_text(details: Any) -> str | None:
+    """Readable text from OpenRouter `reasoning_details`, if any.
+
+    OpenRouter may return structured details such as
+    ``{"type": "reasoning.text", "text": "..."}``, plus encrypted/redacted
+    entries that intentionally carry no readable text. Preserve the readable
+    text and ignore opaque blocks.
+    """
+    if isinstance(details, str) and details:
+        return details
+    if not isinstance(details, Sequence) or isinstance(details, (bytes, bytearray, str)):
+        return None
+    parts: list[str] = []
+    for item in details:
+        if not isinstance(item, Mapping):
+            continue
+        text = item.get("text")
+        if isinstance(text, str) and text:
+            parts.append(text)
+    return "\n\n".join(parts) or None
+
+
 def _reasoning_text(message_or_delta: Any) -> str | None:
     """Out-of-band reasoning from an OpenAI-compatible message or stream delta.
 
     Local MLX (this repo's mlx-lm fork) emits ``reasoning``; vLLM/SGLang-style
-    servers emit ``reasoning_content``. Both ride as pydantic extra fields on
-    the SDK models, so plain ``getattr`` reads them. Returns ``None`` when
-    absent or empty so downstream ``if`` checks stay cheap.
+    servers emit ``reasoning_content``; OpenRouter can emit structured
+    ``reasoning_details``. These ride as pydantic extra fields on the SDK
+    models, so plain ``getattr`` reads them. Returns ``None`` when absent or
+    empty so downstream ``if`` checks stay cheap.
     """
     if message_or_delta is None:
         return None
@@ -1152,6 +1342,9 @@ def _reasoning_text(message_or_delta: Any) -> str | None:
         value = getattr(message_or_delta, field, None)
         if isinstance(value, str) and value:
             return value
+    details = _reasoning_details_text(getattr(message_or_delta, "reasoning_details", None))
+    if details:
+        return details
     return None
 
 
@@ -1171,16 +1364,29 @@ def _openai_tool_calls(tool_calls: Any) -> list[ToolCall]:
     return parsed
 
 
-def _openai_stream_tool_call(tool_calls: Any) -> ToolCall | None:
+def _openai_stream_tool_calls(tool_calls: Any) -> list[ToolCall]:
+    """Convert one streamed delta's `tool_calls` array into fragment ToolCalls.
+
+    Every entry is kept (a chunk may carry fragments for several parallel
+    calls) and the provider's stream-local `index` rides along so the
+    accumulator can fold fragments into the right call even when continuation
+    fragments arrive with empty ids.
+    """
     if not tool_calls:
-        return None
-    call = tool_calls[0]
-    function = getattr(call, "function", None)
-    return ToolCall(
-        id=getattr(call, "id", None) or "",
-        name=(getattr(function, "name", None) or "") if function else "",
-        arguments=(getattr(function, "arguments", None) or "") if function else "",
-    )
+        return []
+    fragments: list[ToolCall] = []
+    for call in tool_calls:
+        function = getattr(call, "function", None)
+        index = getattr(call, "index", None)
+        fragments.append(
+            ToolCall(
+                id=getattr(call, "id", None) or "",
+                name=(getattr(function, "name", None) or "") if function else "",
+                arguments=(getattr(function, "arguments", None) or "") if function else "",
+                index=index if isinstance(index, int) else None,
+            )
+        )
+    return fragments
 
 
 def _anthropic_messages(
@@ -1436,6 +1642,15 @@ def _google_extract(
 def _loads_arguments(arguments: str) -> dict[str, Any]:
     try:
         loaded = json.loads(arguments or "{}")
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        # Never silently swallow corruption: an empty input object downstream
+        # shows up as an inscrutable tool failure with no pointer back here.
+        logging.getLogger("fusionkit.tool_calls").warning(
+            "dropping malformed tool-call arguments during provider translation: "
+            "len=%d error=%s preview=%r",
+            len(arguments),
+            exc,
+            arguments[:120],
+        )
         return {}
     return loaded if isinstance(loaded, dict) else {}

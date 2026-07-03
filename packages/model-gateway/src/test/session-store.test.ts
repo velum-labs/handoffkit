@@ -9,6 +9,7 @@ import {
   FileSystemSessionStore,
   InMemorySessionStore
 } from "../session-store.js";
+import type { CostLedgerEntry } from "../cost.js";
 import type { SessionMeta, SessionTurnRecord } from "../session-store.js";
 
 const tempDirs: string[] = [];
@@ -48,6 +49,21 @@ function turn(index: number): SessionTurnRecord {
   };
 }
 
+function costEntry(stage: CostLedgerEntry["stage"]): CostLedgerEntry {
+  return {
+    entryId: `cost_${stage}`,
+    stage,
+    recordedAt: 1100,
+    model: "gpt-5.5",
+    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+    costUsd: 0.001,
+    providerCostUsd: 0.001,
+    unknownUsage: false,
+    unknownCost: false,
+    currency: "USD"
+  };
+}
+
 test("round-trips a session through a fresh store instance (persist → reload)", () => {
   const root = tempDir();
   const writer = new FileSystemSessionStore(root);
@@ -82,6 +98,31 @@ test("list summarizes sessions, most-recently-active first, with turn counts", (
   assert.deepEqual(list.map((entry) => entry.id), ["newer", "older"]);
   assert.equal(list[0]?.turnCount, 2);
   assert.equal(list[1]?.turnCount, 1);
+});
+
+test("cost ledger entries persist beside the running summary", () => {
+  const root = tempDir();
+  const writer = new FileSystemSessionStore(root);
+  writer.saveMeta(meta("costed"));
+  writer.recordCostEntry("costed", costEntry("panel"), {
+    totalUsd: 0.001,
+    providerUsd: 0.001,
+    localComputeUsd: 0,
+    localActiveMs: 0,
+    promptTokens: 10,
+    completionTokens: 5,
+    totalTokens: 15,
+    meteredTurns: 1,
+    unknownCostTurns: 0,
+    meteredEntries: 1,
+    unknownCostEntries: 0,
+    currency: "USD"
+  });
+
+  const loaded = new FileSystemSessionStore(root).load("costed");
+  assert.equal(loaded?.meta.cost?.totalUsd, 0.001);
+  assert.equal(loaded?.costLedger.length, 1);
+  assert.equal(loaded?.costLedger[0]?.stage, "panel");
 });
 
 test("remove deletes a session and is idempotent", () => {

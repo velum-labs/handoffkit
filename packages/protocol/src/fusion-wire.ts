@@ -3,6 +3,7 @@ export type WireTrajectory = {
   model_id: string;
   status: string;
   final_output: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   items?: Array<Record<string, unknown>>;
   candidate_id?: string;
   model?: string;

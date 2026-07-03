@@ -43,7 +43,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { SessionCost } from "./cost.js";
+import type { CostLedgerEntry, SessionCost } from "./cost.js";
 import type { ChatMessageLike, WireTrajectory } from "./fusion-backend.js";
 
 /** One persisted user turn: the messages that drove the panel + its candidates. */
@@ -93,6 +93,7 @@ export type SessionMeta = {
 export type PersistedSession = {
   meta: SessionMeta;
   turns: SessionTurnRecord[];
+  costLedger: CostLedgerEntry[];
 };
 
 /** A listing row: the header plus the turn count (for `sessions list`). */
@@ -112,6 +113,8 @@ export interface SessionStore {
   appendTurn(id: string, turn: SessionTurnRecord): void;
   /** Persist the session's running token + cost accounting (WS7). No-op if absent. */
   recordCost(id: string, cost: SessionCost): void;
+  /** Append one stage-aware cost ledger entry and persist the updated rollup. */
+  recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): void;
   /** Summaries of every stored session, most-recently-active first. */
   list(): SessionSummary[];
   /** Remove a session and all its data. Returns whether anything was removed. */
@@ -163,7 +166,20 @@ export class FileSystemSessionStore implements SessionStore {
       }
     }
     const turns = [...byTurn.values()].sort((left, right) => left.turn - right.turn);
-    return { meta, turns };
+    const costLedger: CostLedgerEntry[] = [];
+    const costPath = this.#costPath(id);
+    if (existsSync(costPath)) {
+      for (const line of readFileSync(costPath, "utf8").split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed.length === 0) continue;
+        try {
+          costLedger.push(JSON.parse(trimmed) as CostLedgerEntry);
+        } catch {
+          // Skip torn/partial lines.
+        }
+      }
+    }
+    return { meta, turns, costLedger };
   }
 
   saveMeta(meta: SessionMeta): void {
@@ -199,6 +215,12 @@ export class FileSystemSessionStore implements SessionStore {
     }
   }
 
+  recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): void {
+    mkdirSync(this.#dir(id), { recursive: true });
+    appendFileSync(this.#costPath(id), `${JSON.stringify(entry)}\n`, "utf8");
+    this.recordCost(id, cost);
+  }
+
   list(): SessionSummary[] {
     if (!existsSync(this.#root)) return [];
     const summaries: SessionSummary[] = [];
@@ -231,6 +253,10 @@ export class FileSystemSessionStore implements SessionStore {
     return join(this.#dir(id), "turns.jsonl");
   }
 
+  #costPath(id: string): string {
+    return join(this.#dir(id), "costs.jsonl");
+  }
+
   /** Write JSON via a temp file + rename so a reader never sees a half-written header. */
   #writeJsonAtomic(path: string, value: unknown): void {
     const tmp = `${path}.tmp`;
@@ -246,12 +272,20 @@ export class InMemorySessionStore implements SessionStore {
   load(id: string): PersistedSession | undefined {
     const session = this.#sessions.get(id);
     if (session === undefined) return undefined;
-    return { meta: { ...session.meta }, turns: session.turns.map((turn) => ({ ...turn })) };
+    return {
+      meta: { ...session.meta },
+      turns: session.turns.map((turn) => ({ ...turn })),
+      costLedger: session.costLedger.map((entry) => ({ ...entry }))
+    };
   }
 
   saveMeta(meta: SessionMeta): void {
     const existing = this.#sessions.get(meta.id);
-    this.#sessions.set(meta.id, { meta: { ...meta }, turns: existing?.turns ?? [] });
+    this.#sessions.set(meta.id, {
+      meta: { ...meta },
+      turns: existing?.turns ?? [],
+      costLedger: existing?.costLedger ?? []
+    });
   }
 
   appendTurn(id: string, turn: SessionTurnRecord): void {
@@ -266,6 +300,13 @@ export class InMemorySessionStore implements SessionStore {
   recordCost(id: string, cost: SessionCost): void {
     const existing = this.#sessions.get(id);
     if (existing === undefined) return;
+    existing.meta = { ...existing.meta, cost };
+  }
+
+  recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): void {
+    const existing = this.#sessions.get(id);
+    if (existing === undefined) return;
+    existing.costLedger = [...existing.costLedger, entry];
     existing.meta = { ...existing.meta, cost };
   }
 

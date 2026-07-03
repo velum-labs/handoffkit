@@ -66,6 +66,10 @@ def trajectory_from_response(
         "usage": response.usage.model_dump(),
         "finish_reason": response.finish_reason,
     }
+    if response.provider_cost is not None:
+        metadata["provider_cost"] = response.provider_cost.model_dump(
+            mode="json", exclude_none=True
+        )
     if sampling is not None:
         metadata["temperature"] = sampling.temperature
         metadata["seed"] = sampling.seed
@@ -162,6 +166,9 @@ def trajectory_to_contract(
 
 def trajectory_from_contract(record: TrajectoryV1) -> Trajectory:
     """Convert a wire contract record into a runtime trajectory."""
+    metadata = dict(record.metadata or {})
+    if record.usage is not None and "usage" not in metadata:
+        metadata["usage"] = record.usage.model_dump(mode="json", exclude_none=True)
     return Trajectory(
         id=record.trajectory_id,
         model_id=record.model_id,
@@ -173,7 +180,7 @@ def trajectory_from_contract(record: TrajectoryV1) -> Trajectory:
             if record.synthesis is not None
             else None
         ),
-        metadata=dict(record.metadata or {}),
+        metadata=metadata,
     )
 
 

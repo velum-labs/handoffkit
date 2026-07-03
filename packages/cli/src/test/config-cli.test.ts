@@ -106,6 +106,25 @@ test("config export-yaml stdout is exactly the derived router YAML (no drift)", 
   }
 });
 
+test("routerConfigYaml emits endpoint pricing when configured", () => {
+  const yaml = routerConfigYaml({
+    specs: [
+      {
+        id: "gpt",
+        model: "gpt-5.5",
+        provider: "openai",
+        pricing: { inputPer1mTokens: 1.25, outputPer1mTokens: 10, currency: "USD" }
+      }
+    ],
+    mlxUrls: {},
+    judgeId: "gpt"
+  });
+  assert.match(yaml, /pricing:/);
+  assert.match(yaml, /input_per_1m_tokens: 1\.25/);
+  assert.match(yaml, /output_per_1m_tokens: 10/);
+  assert.match(yaml, /currency: "USD"/);
+});
+
 test("config export-yaml -o writes the YAML to a file and reports it on stderr", () => {
   const fixture = makeConfigRepo(CLOUD_CONFIG);
   const outPath = join(fixture.dir, "router.yaml");

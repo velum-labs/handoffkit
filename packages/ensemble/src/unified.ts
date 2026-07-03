@@ -175,6 +175,10 @@ export type UnifiedHarnessE2EOptions = {
   models: EnsembleModel[];
   command?: string;
   timeoutMs?: number;
+  /** Aborts the whole run (all candidates); see EnsembleDescriptor.signal. */
+  signal?: AbortSignal;
+  /** Straggler grace window after the first success; see EnsemblePolicy.stragglerGraceMs. */
+  stragglerGraceMs?: number;
   judgeModel?: string;
   cursorRunner?: (input: CursorHarnessRunnerInput) => Promise<CursorHarnessRunnerResult>;
   /**
@@ -416,10 +420,19 @@ function trajectoryToWire(trajectory: HarnessTrajectory): WireTrajectory {
     status: trajectory.status,
     items: trajectory.steps.map(stepToWireItem),
     final_output: trajectory.finalOutput,
+    ...(trajectory.usage !== undefined ? { usage: trajectory.usage } : {}),
     ...(trajectory.candidateId !== undefined ? { candidate_id: trajectory.candidateId } : {}),
     ...(trajectory.model !== undefined ? { model: trajectory.model } : {}),
     ...(trajectory.harnessKind !== undefined ? { harness_kind: trajectory.harnessKind } : {}),
     ...(trajectory.diff !== undefined && trajectory.diff.length > 0 ? { diff: trajectory.diff } : {}),
+    ...(trajectory.latencyMs !== undefined || trajectory.providerMetadata !== undefined
+      ? {
+          metadata: {
+            ...(trajectory.providerMetadata ?? {}),
+            ...(trajectory.latencyMs !== undefined ? { latency_ms: trajectory.latencyMs } : {})
+          }
+        }
+      : {}),
     ...(trajectory.endReason !== undefined ? { end_reason: endReasonToWire(trajectory.endReason) } : {})
   };
 }
@@ -530,6 +543,10 @@ export type FusionPanelOptions = {
   fusionBackendUrl: string;
   fusionApiKey?: string;
   timeoutMs?: number;
+  /** Aborts the whole panel run (all candidates); see EnsembleDescriptor.signal. */
+  signal?: AbortSignal;
+  /** Straggler grace window after the first success; see EnsemblePolicy.stragglerGraceMs. */
+  stragglerGraceMs?: number;
   traceId?: string;
   /** Session root span so panel candidate spans nest under the session. */
   parentSpanId?: string;
@@ -577,6 +594,8 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
     ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    ...(options.stragglerGraceMs !== undefined ? { stragglerGraceMs: options.stragglerGraceMs } : {}),
     ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
@@ -725,8 +744,10 @@ function descriptorFor(
       id: "unified-e2e",
       allowedTools: ["read_file", "write_file", "apply_patch", "run_tests", "shell_command"],
       sideEffects: sideEffectsForHarness(kind),
-      timeoutMs: options.timeoutMs
+      timeoutMs: options.timeoutMs,
+      ...(options.stragglerGraceMs !== undefined ? { stragglerGraceMs: options.stragglerGraceMs } : {})
     },
+    ...(options.signal !== undefined ? { signal: options.signal } : {}),
     prompt: options.prompt,
     sourceRepo: "handoffkit",
     baseGitSha: gitText(options.repo, ["rev-parse", "HEAD"]).trim(),

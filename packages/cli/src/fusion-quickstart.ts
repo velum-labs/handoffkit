@@ -149,7 +149,7 @@ function formatElapsed(ms: number): string {
 
 /**
  * The end-of-run receipt: what the fusion engine actually did while the coding
- * agent owned the terminal (fused turns, gateway-observed spend, how to resume).
+  * agent owned the terminal (fused turns, provider spend/estimates, how to resume).
  * Empty when no turns were recorded (nothing to report). Exported for tests.
  */
 export function sessionReceiptLines(
@@ -158,19 +158,37 @@ export function sessionReceiptLines(
 ): string[] {
   const turns = sessions.reduce((sum, session) => sum + session.turnCount, 0);
   if (turns === 0) return [];
-  const totalUsd = sessions.reduce((sum, session) => sum + (session.cost?.totalUsd ?? 0), 0);
+  const providerUsd = sessions.reduce(
+    (sum, session) => sum + (session.cost?.providerUsd ?? session.cost?.totalUsd ?? 0),
+    0
+  );
+  const localComputeUsd = sessions.reduce((sum, session) => sum + (session.cost?.localComputeUsd ?? 0), 0);
+  const localActiveMs = sessions.reduce((sum, session) => sum + (session.cost?.localActiveMs ?? 0), 0);
   const totalTokens = sessions.reduce((sum, session) => sum + (session.cost?.totalTokens ?? 0), 0);
-  const metered = sessions.reduce((sum, session) => sum + (session.cost?.meteredTurns ?? 0), 0);
-  const unknown = sessions.reduce((sum, session) => sum + (session.cost?.unknownCostTurns ?? 0), 0);
+  const metered = sessions.reduce(
+    (sum, session) => sum + (session.cost?.meteredEntries ?? session.cost?.meteredTurns ?? 0),
+    0
+  );
+  const unknown = sessions.reduce(
+    (sum, session) => sum + (session.cost?.unknownCostEntries ?? session.cost?.unknownCostTurns ?? 0),
+    0
+  );
   const lines = [
     `fusion session complete — ${turns} fused turn(s) in ${formatElapsed(input.elapsedMs)}`
   ];
-  const spend =
-    metered > 0
-      ? `${formatUsd(totalUsd)}${unknown > 0 ? ` (+${unknown} unmetered turn(s))` : ""}`
-      : "unknown (no usage metered)";
+  const providerSpend =
+    metered > 0 || providerUsd > 0
+      ? formatUsd(providerUsd)
+      : "unknown";
+  const localSpend =
+    localActiveMs > 0
+      ? `${formatElapsed(localActiveMs)} active${localComputeUsd > 0 ? ` (${formatUsd(localComputeUsd)} est)` : " (estimate unknown)"}`
+      : "none";
   const tokens = totalTokens > 0 ? ` · ${totalTokens.toLocaleString("en-US")} tokens` : "";
-  lines.push(`spend (gateway-observed): ${spend}${tokens}`);
+  const unknownText = unknown > 0 ? ` (+${unknown} unknown-cost entr${unknown === 1 ? "y" : "ies"})` : "";
+  lines.push(
+    `spend: provider spend/est ${providerSpend}${unknownText} · local compute: ${localSpend}${tokens}`
+  );
   const latest = sessions[0];
   if (latest !== undefined) {
     lines.push(`resume this session: fusionkit ${input.tool} --resume ${latest.id.slice(0, 8)}`);

@@ -75,13 +75,25 @@ function candidateEvidence(
 ): JudgeCandidateEvidence[] {
   return candidates.map((candidate, index) => {
     const output = outputs[index];
+    const trajectory =
+      output?.trajectory !== undefined && output.modelCallRecord?.usage !== undefined && output.trajectory.usage === undefined
+        ? {
+            ...output.trajectory,
+            usage: output.modelCallRecord.usage,
+            ...(output.modelCallRecord.latency_ms !== undefined ? { latencyMs: output.modelCallRecord.latency_ms } : {}),
+            providerMetadata: {
+              ...(output.trajectory.providerMetadata ?? {}),
+              ...(output.modelCallRecord.metadata ?? {})
+            }
+          }
+        : output?.trajectory;
     return {
       candidateId: candidate.candidate_id,
       modelId: String(candidate.metadata?.model_id ?? output?.model.id ?? ""),
       model: String(candidate.metadata?.model ?? output?.model.model ?? ""),
       status: candidate.status,
       artifacts: candidate.artifacts ?? [],
-      ...(output?.trajectory ? { trajectory: output.trajectory } : {}),
+      ...(trajectory ? { trajectory } : {}),
       ...(output?.endReason ? { endReason: output.endReason } : {})
     };
   });

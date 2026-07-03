@@ -94,6 +94,39 @@ def test_openrouter_payload_keeps_classic_sampling_params() -> None:
     assert payload["max_tokens"] == 64
     # The gpt-5.x-only knob is reserved for the first-party openai provider.
     assert "max_completion_tokens" not in payload
+    # Reasoning is opt-in only for known OpenRouter reasoning models.
+    assert "reasoning" not in payload
+
+
+def test_openrouter_kimi_payload_enables_reasoning_by_default() -> None:
+    client = OpenAICompatibleClient(_endpoint("openrouter", model="moonshotai/kimi-k2"))
+    payload = client._payload(
+        [ChatMessage(role="user", content="hi")],
+        SamplingConfig(temperature=0.3, top_p=0.9, max_tokens=64),
+        None,
+        None,
+        None,
+    )
+
+    assert payload["model"] == "moonshotai/kimi-k2"
+    # The OpenAI SDK rejects unknown top-level kwargs, so the OpenRouter
+    # extension must ride in `extra_body`.
+    assert "reasoning" not in payload
+    assert payload["extra_body"]["reasoning"] == {"enabled": True, "exclude": False}
+
+
+def test_openrouter_kimi_reasoning_can_be_overridden() -> None:
+    client = OpenAICompatibleClient(_endpoint("openrouter", model="moonshotai/kimi-k2"))
+    payload = client._payload(
+        [ChatMessage(role="user", content="hi")],
+        SamplingConfig(),
+        None,
+        None,
+        {"reasoning": {"effort": "high"}},
+    )
+
+    assert "reasoning" not in payload
+    assert payload["extra_body"]["reasoning"] == {"effort": "high"}
 
 
 # --- message + tool translation --------------------------------------------
@@ -371,6 +404,133 @@ async def test_openai_stream_chat_yields_chunks() -> None:
     assert chunks[-1].finish_reason == "stop"
     assert chunks[-1].usage is not None
     assert chunks[-1].usage.total_tokens == 3
+
+
+async def test_openrouter_chat_attaches_generation_cost(monkeypatch) -> None:
+    client = OpenAICompatibleClient(_endpoint("openrouter", model="anthropic/claude-sonnet-4.5"))
+    response = SimpleNamespace(
+        id="gen-chat",
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content="hello", tool_calls=None),
+                finish_reason="stop",
+            )
+        ],
+        usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2, total_tokens=3),
+        model_dump=lambda mode="json": {"id": "gen-chat"},
+    )
+    client._client.chat.completions.create = AsyncMock(return_value=response)
+
+    class FakeGenerationResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, Any]:
+            return {
+                "data": {
+                    "id": "gen-chat",
+                    "total_cost": 0.0123,
+                    "tokens_prompt": 10,
+                    "tokens_completion": 5,
+                    "native_tokens_prompt": 11,
+                    "native_tokens_completion": 6,
+                    "provider_name": "OpenRouter",
+                    "upstream_inference_cost": 0.01,
+                    "cache_discount": 0.002,
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+        async def get(
+            self,
+            url: str,
+            params: dict[str, str],
+            headers: dict[str, str],
+        ) -> FakeGenerationResponse:
+            assert url == "https://example.test/v1/generation"
+            assert params == {"id": "gen-chat"}
+            assert headers["Authorization"].startswith("Bearer ")
+            return FakeGenerationResponse()
+
+    monkeypatch.setattr("fusionkit_core.clients.httpx.AsyncClient", FakeAsyncClient)
+
+    result = await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert result.provider_cost is not None
+    assert result.provider_cost.cost_usd == 0.0123
+    assert result.provider_cost.provider_name == "OpenRouter"
+    assert result.provider_cost.native_tokens_prompt == 11
+    assert result.usage.prompt_tokens == 10
+    assert result.usage.completion_tokens == 5
+    assert result.usage.total_tokens == 15
+
+
+async def test_openrouter_stream_emits_terminal_generation_cost(monkeypatch) -> None:
+    client = OpenAICompatibleClient(_endpoint("openrouter", model="anthropic/claude-sonnet-4.5"))
+    events = [
+        SimpleNamespace(
+            id="gen-stream",
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content="hi", tool_calls=None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2, total_tokens=3),
+        )
+    ]
+    client._client.chat.completions.create = AsyncMock(return_value=_aiter(events))
+
+    class FakeGenerationResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, Any]:
+            return {
+                "data": {
+                    "id": "gen-stream",
+                    "total_cost": 0.0042,
+                    "tokens_prompt": 7,
+                    "tokens_completion": 8,
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+        async def get(
+            self,
+            url: str,
+            params: dict[str, str],
+            headers: dict[str, str],
+        ) -> FakeGenerationResponse:
+            assert params == {"id": "gen-stream"}
+            return FakeGenerationResponse()
+
+    monkeypatch.setattr("fusionkit_core.clients.httpx.AsyncClient", FakeAsyncClient)
+
+    chunks = [chunk async for chunk in client.stream_chat([ChatMessage(role="user", content="hi")])]
+
+    assert chunks[0].delta == "hi"
+    terminal = chunks[-1]
+    assert terminal.provider_cost is not None
+    assert terminal.provider_cost.cost_usd == 0.0042
+    assert terminal.usage is not None
+    assert terminal.usage.total_tokens == 15
 
 
 async def test_anthropic_stream_chat_includes_prompt_tokens() -> None:

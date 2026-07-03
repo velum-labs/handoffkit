@@ -4,7 +4,7 @@
   "panel": [
     {
       "id": "kimi",
-      "model": "moonshotai/kimi-k2",
+      "model": "moonshotai/kimi-k2-thinking",
       "provider": "openrouter",
       "keyEnv": "OPENROUTER_API_KEY"
     },
@@ -15,7 +15,9 @@
       "keyEnv": "OPENROUTER_API_KEY"
     }
   ],
-  "judgeModel": "moonshotai/kimi-k2",
+  "judgeModel": "moonshotai/kimi-k2-thinking",
   "local": false,
-  "observe": true
+  "observe": true,
+  "reasoning": true,
+  "reasoningModel": "kimi"
 }

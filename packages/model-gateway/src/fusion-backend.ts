@@ -50,15 +50,25 @@ import { runFrontdoorRequest } from "./frontdoor/request.js";
 import { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
 import type { FrontdoorRequestValue, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";
 import {
-  addTurnCost,
+  addLedgerEntry,
   emptySessionCost,
   formatUsd,
-  meterTurn,
+  localComputeFromLatency,
+  meterCall,
   parseUsage,
   parseUsageFromSse,
   turnCostLine
 } from "./cost.js";
-import type { ModelPricing, SessionCost, TokenUsage, TurnCost } from "./cost.js";
+import type {
+  CostLedgerEntry,
+  CostStage,
+  LocalComputePricing,
+  ModelPricing,
+  ProviderCostMetadata,
+  SessionCost,
+  TokenUsage,
+  TurnCost
+} from "./cost.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
 
 export type { WireTrajectory } from "@fusionkit/protocol";
@@ -115,6 +125,12 @@ export type PanelRunInput = {
    * hit the same limit again — so the ensemble fuses over the healthy survivors.
    */
   excludeModelIds?: readonly string[];
+  /**
+   * Aborted when the panel run should stop (the turn's panel deadline fired).
+   * Runners must cancel in-flight candidate work — child processes included —
+   * instead of letting it burn tokens after the turn has already failed.
+   */
+  signal?: AbortSignal;
 };
 
 /** Runs the panel once for a session and returns its candidate trajectories. */
@@ -231,6 +247,8 @@ export type FusionBackendOptions = {
    * models the table does not know (or correct stale list prices).
    */
   pricing?: Readonly<Record<string, ModelPricing>>;
+  /** Optional local-compute rates keyed by model name or endpoint id. */
+  localCompute?: Readonly<Record<string, LocalComputePricing>>;
   /**
    * WS7 model name to attribute a *fused* turn's cost to — the judge/synthesizer
    * model whose `usage` the fused response carries. The gateway only sees this
@@ -269,6 +287,15 @@ type Session = {
   sessionSpan: string;
   /** Candidate trajectories cached per user turn (a follow-up is a new turn). */
   turns: Map<number, Promise<WireTrajectory[]>>;
+  /**
+   * Per-turn panel abort controllers. Owned by the turn (the panel promise is
+   * shared across tool-loop continuations of that turn), fired when the panel
+   * deadline expires so in-flight candidate work is cancelled instead of
+   * detaching, and dropped once the turn's panel promise settles.
+   */
+  turnAborts: Map<number, AbortController>;
+  /** Panel usage is metered once per user turn, even when a tool loop reuses candidates. */
+  meteredPanelTurns: Set<number>;
   createdAt: number;
   /** The panel member the judge picked on the most recent fused turn (narration color). */
   lastJudgePick?: string;
@@ -358,11 +385,34 @@ function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): Abort
   return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
 }
 
-/** Reject if `promise` does not settle within `timeoutMs` (the work detaches). */
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+/** Render a millisecond budget as a human-readable duration ("15m", "2m30s", "45s"). */
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds}s`;
+  return seconds === 0 ? `${minutes}m` : `${minutes}m${seconds}s`;
+}
+
+/**
+ * Reject if `promise` does not settle within `timeoutMs`. `onTimeout` runs when
+ * the deadline fires — the panel path uses it to abort the in-flight work so a
+ * timed-out turn cancels its candidates instead of leaving them burning tokens.
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+  onTimeout?: (error: Error) => void
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    timer = setTimeout(() => {
+      const error = new Error(`${label} timed out after ${formatDurationMs(timeoutMs)}`);
+      onTimeout?.(error);
+      reject(error);
+    }, timeoutMs);
   });
   try {
     return await Promise.race([promise, timeout]);
@@ -438,6 +488,124 @@ function synthesisOf(fusion: unknown): unknown {
 function isTerminalJudgeStep(toolCalls: unknown, finishReason?: string): boolean {
   const calls = Array.isArray(toolCalls) ? toolCalls : [];
   return calls.length === 0 && finishReason !== "tool_calls";
+}
+
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function optionalFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function trajectoryMetadata(trajectory: WireTrajectory): Record<string, unknown> {
+  return recordOf(trajectory.metadata) ?? {};
+}
+
+function trajectoryUsage(trajectory: WireTrajectory): TokenUsage | undefined {
+  const direct = parseUsage((trajectory as { usage?: unknown }).usage);
+  if (direct !== undefined) return direct;
+  return parseUsage(trajectoryMetadata(trajectory).usage);
+}
+
+function providerCostMetadata(value: unknown): ProviderCostMetadata | undefined {
+  const record = recordOf(value);
+  if (record === undefined) return undefined;
+  const rawSource = optionalString(record.source);
+  const source = rawSource === "provider" || rawSource === "estimate" ? rawSource : "provider";
+  const costUsd =
+    optionalFiniteNumber(record.cost_usd) ??
+    optionalFiniteNumber(record.costUsd) ??
+    optionalFiniteNumber(record.total_cost);
+  const generationId = optionalString(record.generation_id) ?? optionalString(record.generationId);
+  const providerName = optionalString(record.provider_name) ?? optionalString(record.providerName);
+  const upstreamInferenceCost =
+    optionalFiniteNumber(record.upstream_inference_cost) ??
+    optionalFiniteNumber(record.upstreamInferenceCost);
+  const cacheDiscount =
+    optionalFiniteNumber(record.cache_discount) ?? optionalFiniteNumber(record.cacheDiscount);
+  const lookupStatus = optionalString(record.lookup_status) ?? optionalString(record.lookupStatus);
+  const tokensPrompt = optionalNumber(record.tokens_prompt) ?? optionalNumber(record.tokensPrompt);
+  const tokensCompletion =
+    optionalNumber(record.tokens_completion) ?? optionalNumber(record.tokensCompletion);
+  const nativeTokensPrompt =
+    optionalNumber(record.native_tokens_prompt) ?? optionalNumber(record.nativeTokensPrompt);
+  const nativeTokensCompletion =
+    optionalNumber(record.native_tokens_completion) ?? optionalNumber(record.nativeTokensCompletion);
+  return {
+    source,
+    ...(costUsd !== undefined ? { costUsd } : {}),
+    ...(generationId !== undefined ? { generationId } : {}),
+    ...(providerName !== undefined ? { providerName } : {}),
+    ...(upstreamInferenceCost !== undefined ? { upstreamInferenceCost } : {}),
+    ...(cacheDiscount !== undefined ? { cacheDiscount } : {}),
+    ...(lookupStatus !== undefined ? { lookupStatus } : {}),
+    ...(tokensPrompt !== undefined ? { tokensPrompt } : {}),
+    ...(tokensCompletion !== undefined ? { tokensCompletion } : {}),
+    ...(nativeTokensPrompt !== undefined ? { nativeTokensPrompt } : {}),
+    ...(nativeTokensCompletion !== undefined ? { nativeTokensCompletion } : {})
+  };
+}
+
+function usageWithProviderCost(
+  usage: TokenUsage | undefined,
+  providerCost: ProviderCostMetadata | undefined
+): TokenUsage | undefined {
+  if (providerCost === undefined) return usage;
+  const promptTokens = providerCost.tokensPrompt ?? usage?.promptTokens;
+  const completionTokens = providerCost.tokensCompletion ?? usage?.completionTokens;
+  const totalTokens =
+    promptTokens !== undefined && completionTokens !== undefined
+      ? promptTokens + completionTokens
+      : usage?.totalTokens;
+  if (promptTokens === undefined && completionTokens === undefined && totalTokens === undefined) return usage;
+  return {
+    ...(promptTokens !== undefined ? { promptTokens } : {}),
+    ...(completionTokens !== undefined ? { completionTokens } : {}),
+    ...(totalTokens !== undefined ? { totalTokens } : {})
+  };
+}
+
+function providerCostFromPayload(payload: unknown): ProviderCostMetadata | undefined {
+  const record = recordOf(payload);
+  if (record === undefined) return undefined;
+  return providerCostMetadata(record.provider_cost ?? record.providerCost);
+}
+
+function providerCostFromSse(text: string): ProviderCostMetadata | undefined {
+  let providerCost: ProviderCostMetadata | undefined;
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const payload = trimmed.slice(5).trim();
+    if (payload.length === 0 || payload === "[DONE]") continue;
+    try {
+      const parsed = JSON.parse(payload) as unknown;
+      const candidate = providerCostFromPayload(parsed);
+      if (candidate !== undefined) providerCost = candidate;
+    } catch {
+      // partial / non-JSON line
+    }
+  }
+  return providerCost;
+}
+
+function trajectoryLatencyMs(trajectory: WireTrajectory): number | undefined {
+  const metadata = trajectoryMetadata(trajectory);
+  const latencyMs = optionalNumber(metadata.latency_ms);
+  if (latencyMs !== undefined) return latencyMs;
+  const latencyS = optionalNumber(metadata.latency_s);
+  return latencyS !== undefined ? latencyS * 1000 : undefined;
 }
 
 /** A terminal SSE chunk that marks the turn as failed (not a normal stop). */
@@ -633,6 +801,7 @@ export class FusionBackend implements Backend {
   readonly #sessionMeta: SessionMetaInput;
   readonly #budgetUsd: number | undefined;
   readonly #pricing: Readonly<Record<string, ModelPricing>>;
+  readonly #localCompute: Readonly<Record<string, LocalComputePricing>>;
   readonly #costModel: string | undefined;
   readonly #reasoningTraces: boolean;
   readonly #narrationWriter: NarrationWriter | undefined;
@@ -666,6 +835,7 @@ export class FusionBackend implements Backend {
     this.#sessionMeta = options.sessionMeta ?? {};
     this.#budgetUsd = options.budgetUsd;
     this.#pricing = options.pricing ?? {};
+    this.#localCompute = options.localCompute ?? {};
     this.#costModel = options.costModel;
     this.#reasoningTraces = options.reasoningTraces ?? true;
     this.#narrationWriter = options.narrationWriter;
@@ -966,7 +1136,13 @@ export class FusionBackend implements Backend {
     const fusedModel = this.defaultModel ?? "fusion-panel";
     // WS7: meter the vendor stream from the `usage` block riding its SSE tail.
     const meter = (text: string): void => {
-      this.#meter(sessionId, target.modelId, parseUsageFromSse(text));
+      const providerCost = providerCostFromSse(text);
+      this.#meterEntry(sessionId, {
+        model: target.modelId,
+        usage: usageWithProviderCost(parseUsageFromSse(text), providerCost),
+        stage: "passthrough",
+        ...(providerCost !== undefined ? { providerCost } : {})
+      });
     };
     const readable = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -1211,6 +1387,66 @@ export class FusionBackend implements Backend {
     });
   }
 
+  #localComputeFor(input: {
+    model: string;
+    endpointId: string;
+    provider?: string;
+    latencyMs?: number;
+  }): ReturnType<typeof localComputeFromLatency> {
+    const pricing = this.#localCompute[input.model] ?? this.#localCompute[input.endpointId];
+    const looksLocal =
+      input.model.startsWith("mlx-community/") ||
+      input.provider === "mlx-lm" ||
+      (input.provider === "openai-compatible" && input.model.includes("/"));
+    if (pricing === undefined && !looksLocal) return undefined;
+    return localComputeFromLatency({
+      latencyMs: input.latencyMs,
+      modelRepo: input.model,
+      deviceKind: looksLocal ? "local" : undefined,
+      ...(pricing !== undefined ? { pricing } : {})
+    });
+  }
+
+  #meterPanelCandidates(
+    req: FrontdoorRequestValue,
+    session: Session,
+    candidates: readonly WireTrajectory[]
+  ): void {
+    if (session.meteredPanelTurns.has(req.turn)) return;
+    session.meteredPanelTurns.add(req.turn);
+    for (const candidate of candidates) {
+      const metadata = trajectoryMetadata(candidate);
+      const model = optionalString(candidate.model) ?? candidate.model_id;
+      const endpointId = candidate.model_id;
+      const provider = optionalString(metadata.provider);
+      const latencyMs = trajectoryLatencyMs(candidate);
+      const providerCost = providerCostMetadata(metadata.provider_cost ?? metadata.providerCost);
+      const usage = usageWithProviderCost(trajectoryUsage(candidate), providerCost);
+      const localCompute = this.#localComputeFor({
+        model,
+        endpointId,
+        ...(provider !== undefined ? { provider } : {}),
+        ...(latencyMs !== undefined ? { latencyMs } : {})
+      });
+      this.#meterEntry(
+        session.id,
+        {
+          model,
+          usage,
+          stage: "panel",
+          turn: req.turn,
+          ...(provider !== undefined ? { provider } : {}),
+          endpointId,
+          ...(latencyMs !== undefined ? { latencyMs } : {}),
+          ...(providerCost !== undefined ? { providerCost } : {}),
+          ...(localCompute !== undefined ? { localCompute } : {})
+        },
+        session.traceId,
+        session.sessionSpan
+      );
+    }
+  }
+
   async #resolvePanelCandidates(req: FrontdoorRequestValue): Promise<readonly WireTrajectory[]> {
     const session = this.#ensureSession(req.sessionKey);
     const turnCandidates = this.#ensureTurnCandidates(
@@ -1221,8 +1457,13 @@ export class FusionBackend implements Backend {
       req.excludeModelIds
     );
     // Bounded, failing loudly so a panel crash or an empty/all-failed candidate
-    // set never silently fuses into a blank answer.
-    const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel");
+    // set never silently fuses into a blank answer. When the deadline fires the
+    // turn's abort controller cancels the in-flight candidates (child processes
+    // included) instead of leaving them running after the turn has failed.
+    const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel", (error) =>
+      session.turnAborts.get(req.turn)?.abort(error)
+    );
+    this.#meterPanelCandidates(req, session, candidates);
     if (!hasUsableCandidates(candidates)) {
       if (candidates.length === 0) throw new Error("fusion panel produced no candidates");
       const breakdown = candidates
@@ -1293,7 +1534,19 @@ export class FusionBackend implements Backend {
         choice.message.content = merged;
         this.#emitJudgeFinal(req, session, { httpStatus: 200, content: merged });
       }
-      this.#meter(req.sessionKey, fusedCostModel, parseUsage(payload.usage), session.traceId, req.judgeSpanId);
+      const providerCost = providerCostFromPayload(payload);
+      this.#meterEntry(
+        req.sessionKey,
+        {
+          model: fusedCostModel,
+          usage: usageWithProviderCost(parseUsage(payload.usage), providerCost),
+          stage: "judge_synth",
+          turn: req.turn,
+          ...(providerCost !== undefined ? { providerCost } : {})
+        },
+        session.traceId,
+        req.judgeSpanId
+      );
       return new Response(JSON.stringify(payload), {
         status: 200,
         headers: { "content-type": "application/json" }
@@ -1340,14 +1593,34 @@ export class FusionBackend implements Backend {
         }
       })();
     }
-    await this.#meterResponseClone(response, req.sessionKey, fusedCostModel, session.traceId, req.judgeSpanId);
+    await this.#meterResponseClone(
+      response,
+      req.sessionKey,
+      fusedCostModel,
+      session.traceId,
+      req.judgeSpanId,
+      "judge_synth",
+      req.turn
+    );
     return response;
   }
 
   #meterAndTraceStream(req: FrontdoorRequestValue, sseBuffer: string): void {
     const session = this.#ensureSession(req.sessionKey);
     // WS7: meter the fused turn from the judge step's `usage` (rides the SSE tail).
-    this.#meter(req.sessionKey, this.#fusedCostModel(), parseUsageFromSse(sseBuffer), session.traceId, req.judgeSpanId);
+    const providerCost = providerCostFromSse(sseBuffer);
+    this.#meterEntry(
+      req.sessionKey,
+      {
+        model: this.#fusedCostModel(),
+        usage: usageWithProviderCost(parseUsageFromSse(sseBuffer), providerCost),
+        stage: "judge_synth",
+        turn: req.turn,
+        ...(providerCost !== undefined ? { providerCost } : {})
+      },
+      session.traceId,
+      req.judgeSpanId
+    );
     const assembled = assembleSseContent(sseBuffer);
     // Narration color for the next turn, independent of the trace-emitter gate
     // (the narrator's own listener detaches when the judge starts streaming).
@@ -1494,6 +1767,8 @@ export class FusionBackend implements Backend {
       traceId: this.#mintTraceId(),
       sessionSpan: newSpanId(),
       turns: new Map(),
+      turnAborts: new Map(),
+      meteredPanelTurns: new Set(),
       createdAt: now
     };
     this.#kernelStateStore.set(sessionKey, session);
@@ -1508,11 +1783,18 @@ export class FusionBackend implements Backend {
     for (const record of persisted.turns) {
       turns.set(record.turn, Promise.resolve(record.candidates));
     }
+    const meteredPanelTurns = new Set(
+      persisted.costLedger
+        .filter((entry) => entry.stage === "panel" && entry.turn !== undefined)
+        .map((entry) => entry.turn as number)
+    );
     return {
       id: persisted.meta.id,
       traceId: persisted.meta.traceId,
       sessionSpan: persisted.meta.sessionSpan,
       turns,
+      turnAborts: new Map(),
+      meteredPanelTurns,
       // Reset the in-memory TTL clock so a freshly rehydrated session is hot.
       createdAt: now
     };
@@ -1569,23 +1851,43 @@ export class FusionBackend implements Backend {
    * `model` is what to price it against (the vendor for passthrough, the judge
    * for a fused turn). Best-effort: metering never fails a turn.
    */
-  #meter(
+  #meterEntry(
     sessionId: string,
-    model: string,
-    usage: TokenUsage | undefined,
+    input: {
+      model: string;
+      usage: TokenUsage | undefined;
+      stage: CostStage;
+      turn?: number;
+      provider?: string;
+      endpointId?: string;
+      latencyMs?: number;
+      providerCost?: ProviderCostMetadata;
+      localCompute?: ReturnType<typeof localComputeFromLatency>;
+    },
     traceId?: string,
     parentSpanId?: string
-  ): TurnCost {
-    const turnCost = meterTurn(model, usage, this.#pricing);
-    const total = addTurnCost(this.#costFor(sessionId), turnCost);
+  ): CostLedgerEntry {
+    const entry = meterCall({
+      model: input.model,
+      usage: input.usage,
+      stage: input.stage,
+      pricing: this.#pricing,
+      ...(input.turn !== undefined ? { turn: input.turn } : {}),
+      ...(input.provider !== undefined ? { provider: input.provider } : {}),
+      ...(input.endpointId !== undefined ? { endpointId: input.endpointId } : {}),
+      ...(input.latencyMs !== undefined ? { latencyMs: input.latencyMs } : {}),
+      ...(input.providerCost !== undefined ? { providerCost: input.providerCost } : {}),
+      ...(input.localCompute !== undefined ? { localCompute: input.localCompute } : {})
+    });
+    const total = addLedgerEntry(this.#costFor(sessionId), entry);
     this.#kernelStateStore.setCost(sessionId, total);
     try {
-      this.#store?.recordCost(sessionId, total);
+      this.#store?.recordCostEntry(sessionId, entry, total);
     } catch (error) {
       console.error(`fusion: could not persist cost for session ${sessionId}: ${errorText(error)}`);
     }
-    const line = turnCostLine(turnCost, total.totalUsd);
-    console.error(`fusion: ${line}`);
+    const line = turnCostLine(entry, total.totalUsd);
+    console.error(`fusion: ${input.stage} ${line}`);
     if (getTraceEmitter().isEnabled()) {
       emitTrace({
         component: "gateway",
@@ -1596,17 +1898,41 @@ export class FusionBackend implements Backend {
         sessionId,
         payload: {
           kind: "cost.metered",
-          model: turnCost.model,
-          usage: turnCost.usage,
-          turn_cost_usd: turnCost.costUsd ?? null,
-          unknown_cost: turnCost.unknownCost,
-          unknown_usage: turnCost.unknownUsage,
+          stage: input.stage,
+          model: entry.model,
+          usage: entry.usage,
+          turn_cost_usd: entry.costUsd ?? null,
+          provider_cost_usd: entry.providerCostUsd ?? null,
+          provider_cost: entry.providerCost ?? null,
+          local_compute_cost_usd: entry.localComputeCostUsd ?? null,
+          local_compute: entry.localCompute ?? null,
+          unknown_cost: entry.unknownCost,
+          unknown_usage: entry.unknownUsage,
           session_total_usd: total.totalUsd,
+          provider_total_usd: total.providerUsd ?? total.totalUsd,
+          local_compute_total_usd: total.localComputeUsd ?? 0,
           currency: total.currency
         }
       });
     }
-    return turnCost;
+    return entry;
+  }
+
+  #meter(
+    sessionId: string,
+    model: string,
+    usage: TokenUsage | undefined,
+    traceId?: string,
+    parentSpanId?: string,
+    stage: CostStage = "passthrough",
+    turn?: number
+  ): TurnCost {
+    return this.#meterEntry(
+      sessionId,
+      { model, usage, stage, ...(turn !== undefined ? { turn } : {}) },
+      traceId,
+      parentSpanId
+    );
   }
 
   /**
@@ -1621,13 +1947,27 @@ export class FusionBackend implements Backend {
     sessionId: string,
     model: string,
     traceId?: string,
-    parentSpanId?: string
+    parentSpanId?: string,
+    stage: CostStage = "passthrough",
+    turn?: number
   ): Promise<void> {
     if (!response.ok) return;
     const clone = response.clone();
     try {
       const json = (await clone.json()) as { usage?: unknown };
-      this.#meter(sessionId, model, parseUsage(json.usage), traceId, parentSpanId);
+      const providerCost = providerCostFromPayload(json);
+      this.#meterEntry(
+        sessionId,
+        {
+          model,
+          usage: usageWithProviderCost(parseUsage(json.usage), providerCost),
+          stage,
+          ...(turn !== undefined ? { turn } : {}),
+          ...(providerCost !== undefined ? { providerCost } : {})
+        },
+        traceId,
+        parentSpanId
+      );
     } catch {
       // best-effort: an unreadable body means the turn is left unmetered.
     }
@@ -1667,6 +2007,11 @@ export class FusionBackend implements Backend {
     const existing = session.turns.get(turn);
     if (existing !== undefined) return existing;
 
+    // Turn-owned panel cancellation: aborted when this turn's panel deadline
+    // fires (see #resolvePanelCandidates). Owned by the turn — not any single
+    // request — because tool-loop continuations share the same panel promise.
+    const abort = new AbortController();
+    session.turnAborts.set(turn, abort);
     const candidates = this.#runPanels({
       task: this.#task(messages),
       messages,
@@ -1674,6 +2019,7 @@ export class FusionBackend implements Backend {
       sessionSpanId: session.sessionSpan,
       sessionKey,
       turn,
+      signal: abort.signal,
       ...(excludeModelIds !== undefined && excludeModelIds.length > 0 ? { excludeModelIds } : {})
     });
     session.turns.set(turn, candidates);
@@ -1682,9 +2028,11 @@ export class FusionBackend implements Backend {
     // settle handler keeps both paths and avoids an unhandled rejection.
     void candidates.then(
       (resolved) => {
+        if (session.turnAborts.get(turn) === abort) session.turnAborts.delete(turn);
         if (hasUsableCandidates(resolved)) this.#persistTurn(session, turn, messages, resolved);
       },
       (error: unknown) => {
+        if (session.turnAborts.get(turn) === abort) session.turnAborts.delete(turn);
         console.error(`fusion: panel run failed for session ${sessionKey} turn ${turn}: ${errorText(error)}`);
         if (session.turns.get(turn) === candidates) session.turns.delete(turn);
       }

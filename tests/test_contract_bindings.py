@@ -27,6 +27,7 @@ from fusionkit_core.contracts import (
     schema_bundle_hash,
     status_for_run_state,
 )
+from fusionkit_core.producers import trajectory_from_contract
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = REPO_ROOT / "spec" / "model-fusion-contract" / "fixture"
@@ -87,6 +88,28 @@ def test_schema_bundle_hash_falls_back_to_pinned_constant_without_schema_dir(
 
 def test_contract_model_registry_covers_downstream_fusionkit_tickets() -> None:
     assert CONTRACT_MODEL_REGISTRY == FUSIONKIT_CONTRACT_SCHEMAS
+
+
+def test_trajectory_from_contract_preserves_usage_metadata() -> None:
+    record = TrajectoryV1.model_validate(
+        {
+            **contract_metadata("trajectory.v1"),
+            "trajectory_id": "traj_usage",
+            "model_id": "gpt",
+            "status": "succeeded",
+            "items": [],
+            "final_output": "ok",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+    )
+
+    trajectory = trajectory_from_contract(record)
+
+    assert trajectory.metadata["usage"] == {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15,
+    }
 
 
 def test_contract_model_registry_entries_are_backed_by_origin_schemas() -> None:

@@ -3,10 +3,13 @@ import { test } from "node:test";
 
 import {
   addTurnCost,
+  addLedgerEntry,
   emptySessionCost,
   estimateCost,
+  estimateLocalComputeCost,
   formatUsd,
   lookupPricing,
+  meterCall,
   meterTurn,
   parseUsage,
   parseUsageFromSse
@@ -92,6 +95,87 @@ test("addTurnCost accumulates a running session total and counts unknown turns",
   assert.equal(total.completionTokens, 1510);
   assert.equal(total.meteredTurns, 2);
   assert.equal(total.unknownCostTurns, 1);
+});
+
+test("meterCall and addLedgerEntry split provider and local compute dollars", () => {
+  const entry = meterCall({
+    model: "mlx-community/Qwen3-1.7B-4bit",
+    stage: "panel",
+    turn: 1,
+    usage: { promptTokens: 100, completionTokens: 50 },
+    pricing: {
+      "mlx-community/Qwen3-1.7B-4bit": { inputPer1mTokens: 0, outputPer1mTokens: 0 }
+    },
+    localCompute: {
+      activeInferenceMs: 10_000,
+      usdPerDeviceHour: 0.36,
+      estimatedCostUsd: estimateLocalComputeCost({ activeInferenceMs: 10_000, usdPerDeviceHour: 0.36 })
+    }
+  });
+  assert.equal(entry.providerCostUsd, 0);
+  assert.ok(Math.abs((entry.localComputeCostUsd ?? 0) - 0.001) < 1e-9);
+  const total = addLedgerEntry(emptySessionCost(), entry);
+  assert.ok(Math.abs(total.totalUsd - 0.001) < 1e-9);
+  assert.equal(total.providerUsd, 0);
+  assert.ok(Math.abs((total.localComputeUsd ?? 0) - 0.001) < 1e-9);
+  assert.equal(total.localActiveMs, 10_000);
+  assert.equal(total.totalTokens, 150);
+});
+
+test("meterCall prefers exact provider cost over configured price estimates", () => {
+  const entry = meterCall({
+    model: "openrouter/expensive-model",
+    stage: "panel",
+    usage: { promptTokens: 1000, completionTokens: 1000 },
+    pricing: {
+      "openrouter/expensive-model": { inputPer1mTokens: 100, outputPer1mTokens: 100 }
+    },
+    providerCost: {
+      source: "provider",
+      costUsd: 0.0123,
+      generationId: "gen_123",
+      providerName: "OpenRouter"
+    }
+  });
+
+  assert.equal(entry.providerCostUsd, 0.0123);
+  assert.equal(entry.costUsd, 0.0123);
+  assert.equal(entry.unknownCost, false);
+  assert.equal(entry.providerCost?.source, "provider");
+  assert.equal(entry.providerCost?.generationId, "gen_123");
+});
+
+test("meterCall leaves failed provider lookups unknown unless explicit pricing is configured", () => {
+  const failedLookup = meterCall({
+    model: "gpt-5.5",
+    stage: "judge_synth",
+    usage: { promptTokens: 1000, completionTokens: 1000 },
+    providerCost: {
+      source: "provider",
+      generationId: "gen_pending",
+      lookupStatus: "not_ready"
+    }
+  });
+  assert.equal(failedLookup.providerCostUsd, undefined);
+  assert.equal(failedLookup.unknownCost, true);
+
+  const explicitFallback = meterCall({
+    model: "gpt-5.5",
+    stage: "judge_synth",
+    usage: { promptTokens: 1000, completionTokens: 1000 },
+    pricing: {
+      "gpt-5.5": { inputPer1mTokens: 1, outputPer1mTokens: 2 }
+    },
+    providerCost: {
+      source: "provider",
+      generationId: "gen_pending",
+      lookupStatus: "not_ready"
+    }
+  });
+  assert.equal(explicitFallback.providerCostUsd, 0.003);
+  assert.equal(explicitFallback.providerCost?.source, "estimate");
+  assert.equal(explicitFallback.providerCost?.lookupStatus, "fallback_not_ready");
+  assert.equal(explicitFallback.unknownCost, false);
 });
 
 test("formatUsd renders compact dollars", () => {

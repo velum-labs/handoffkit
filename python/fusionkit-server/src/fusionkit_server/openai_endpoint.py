@@ -30,8 +30,9 @@ from fusionkit_core.config import (
     ProviderKind,
     SamplingConfig,
     SubscriptionAuthMode,
+    model_sampling_defaults,
 )
-from fusionkit_core.judge import accumulate_tool_call
+from fusionkit_core.judge import accumulate_tool_call, warn_malformed_tool_calls
 from fusionkit_core.trace import (
     TRACE_ID_HEADER,
     TRACE_SPAN_HEADER,
@@ -121,6 +122,8 @@ async def _astream_sse(
     tool_accumulator: list[dict[str, str]] = []
     seen_tool_ids: set[str] = set()
     finish_reason: str | None = None
+    usage: dict[str, Any] | None = None
+    provider_cost: dict[str, Any] | None = None
     async for piece in client.stream_chat(messages, sampling, tools=tools, tool_choice=tool_choice):
         if piece.delta:
             yield chunk({"content": piece.delta}, None)
@@ -128,6 +131,10 @@ async def _astream_sse(
             accumulate_tool_call(tool_accumulator, seen_tool_ids, piece.tool_call_delta)
         if piece.finish_reason is not None:
             finish_reason = piece.finish_reason
+        if piece.usage is not None:
+            usage = piece.usage.model_dump(mode="json", exclude_none=True)
+        if piece.provider_cost is not None:
+            provider_cost = piece.provider_cost.model_dump(mode="json", exclude_none=True)
     tool_calls = [
         {
             "id": item["id"] or f"call_{index}",
@@ -136,12 +143,36 @@ async def _astream_sse(
         }
         for index, item in enumerate(tool_accumulator)
     ]
+    warn_malformed_tool_calls(
+        [
+            ToolCall(id=item["id"], name=item["name"], arguments=item["arguments"] or "{}")
+            for item in tool_accumulator
+        ],
+        source=f"endpoint sse ({model})",
+    )
     if tool_calls:
         yield chunk(
             {"tool_calls": [{"index": index, **call} for index, call in enumerate(tool_calls)]},
             None,
         )
-    yield chunk({}, "tool_calls" if tool_calls else (finish_reason or "stop"))
+    payload = {
+        "id": completion_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {},
+                "finish_reason": "tool_calls" if tool_calls else (finish_reason or "stop"),
+            }
+        ],
+    }
+    if usage is not None:
+        payload["usage"] = usage
+    if provider_cost is not None:
+        payload["provider_cost"] = provider_cost
+    yield f"data: {json.dumps(payload)}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -231,9 +262,16 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                 tools = _to_tools(request.get("tools"))
                 raw_tool_choice = request.get("tool_choice")
                 tool_choice = raw_tool_choice if isinstance(raw_tool_choice, str) else None
+                # Per-model anti-repetition defaults (qwen/kimi) apply only when
+                # the caller did not set the knob itself.
+                model_defaults = model_sampling_defaults(endpoint.model)
+                default_temperature = model_defaults.get("temperature", 0.2)
+                default_top_p = model_defaults.get("top_p", 0.95)
                 sampling = SamplingConfig(
-                    temperature=float(request.get("temperature", 0.2) or 0.2),
-                    top_p=float(request.get("top_p", 0.95) or 0.95),
+                    temperature=float(
+                        request.get("temperature", default_temperature) or default_temperature
+                    ),
+                    top_p=float(request.get("top_p", default_top_p) or default_top_p),
                     max_tokens=int(request.get("max_tokens", 1024) or 1024),
                 )
                 if request.get("stream"):
@@ -299,6 +337,11 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                             "completion_tokens": response.usage.completion_tokens,
                             "total_tokens": response.usage.total_tokens,
                         },
+                        "provider_cost": (
+                            response.provider_cost.model_dump(mode="json", exclude_none=True)
+                            if response.provider_cost is not None
+                            else None
+                        ),
                     },
                 )
                 print(
@@ -322,27 +365,29 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                         }
                         for call in response.tool_calls
                     ]
-                self._send_json(
-                    200,
-                    {
-                        "id": f"chatcmpl-{uuid.uuid4()}",
-                        "object": "chat.completion",
-                        "created": int(time.time()),
-                        "model": endpoint.model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "message": message_body,
-                                "finish_reason": finish_reason,
-                            }
-                        ],
-                        "usage": {
-                            "prompt_tokens": response.usage.prompt_tokens,
-                            "completion_tokens": response.usage.completion_tokens,
-                            "total_tokens": response.usage.total_tokens,
-                        },
+                payload: dict[str, Any] = {
+                    "id": f"chatcmpl-{uuid.uuid4()}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": endpoint.model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": message_body,
+                            "finish_reason": finish_reason,
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": response.usage.prompt_tokens,
+                        "completion_tokens": response.usage.completion_tokens,
+                        "total_tokens": response.usage.total_tokens,
                     },
-                )
+                }
+                if response.provider_cost is not None:
+                    payload["provider_cost"] = response.provider_cost.model_dump(
+                        mode="json", exclude_none=True
+                    )
+                self._send_json(200, payload)
             except Exception as exc:  # noqa: BLE001 - surface as an OpenAI error body
                 traceback.print_exc()
                 trace_emit(

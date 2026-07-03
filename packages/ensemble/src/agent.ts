@@ -62,7 +62,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
       id: `${id}-verification`,
       requiredEvidence: ["agent trajectory", "final output"]
     }),
-    run: async ({ descriptor, model, ordinal, worktree }): Promise<HarnessCandidateOutput> => {
+    run: async ({ descriptor, model, ordinal, worktree, signal }): Promise<HarnessCandidateOutput> => {
       const baseUrl = options.modelEndpoints[model.id] ?? options.fallbackBaseUrl;
       if (baseUrl === undefined) {
         throw new Error(`no model endpoint configured for panel model "${model.id}"`);
@@ -101,7 +101,12 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         prompt,
         baseUrl,
         model: model.id,
-        abortSignal: AbortSignal.timeout(modelTimeoutMs),
+        // The candidate stops on whichever fires first: its own model-call
+        // budget or the ensemble's cancellation (panel timeout / straggler drop).
+        abortSignal:
+          signal !== undefined
+            ? AbortSignal.any([signal, AbortSignal.timeout(modelTimeoutMs)])
+            : AbortSignal.timeout(modelTimeoutMs),
         ...(options.turn !== undefined ? { turn: options.turn } : {}),
         ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
         ...(options.maxSteps !== undefined ? { maxSteps: options.maxSteps } : {}),

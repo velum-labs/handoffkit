@@ -380,8 +380,8 @@ export function chatToResponses(
 ): Record<string, unknown> {
   const message = openai.choices?.[0]?.message;
   const output = buildOutput(message, customTools);
-  const inputTokens = openai.usage?.prompt_tokens ?? 0;
-  const outputTokens = openai.usage?.completion_tokens ?? 0;
+  const inputTokens = openai.usage?.prompt_tokens;
+  const outputTokens = openai.usage?.completion_tokens;
   return {
     id: `resp_${openai.id ?? randomId()}`,
     object: "response",
@@ -389,7 +389,16 @@ export function chatToResponses(
     status: "completed",
     model,
     output,
-    usage: { input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: inputTokens + outputTokens }
+    usage:
+      inputTokens !== undefined || outputTokens !== undefined
+        ? {
+            ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+            ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+            ...(inputTokens !== undefined && outputTokens !== undefined
+              ? { total_tokens: inputTokens + outputTokens }
+              : {})
+          }
+        : null
   };
 }
 
@@ -437,8 +446,8 @@ export function openAiSseToResponses(
   let nextOutputIndex = 0;
   let messageOutputIndex = -1;
   let finished = false;
-  let inputTokens = 0;
-  let outputTokens = 0;
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
 
   type Controller = ReadableStreamDefaultController<Uint8Array>;
 
@@ -451,7 +460,15 @@ export function openAiSseToResponses(
     output,
     usage:
       status === "completed"
-        ? { input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: inputTokens + outputTokens }
+        ? inputTokens !== undefined || outputTokens !== undefined
+          ? {
+              ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+              ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+              ...(inputTokens !== undefined && outputTokens !== undefined
+                ? { total_tokens: inputTokens + outputTokens }
+                : {})
+            }
+          : null
         : null
   });
 

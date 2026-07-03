@@ -69,6 +69,11 @@ export type CodexExecInput = {
   cwd: string;
   env: Record<string, string>;
   timeoutMs?: number;
+  /**
+   * Aborts the codex child process (panel cancellation / straggler policy).
+   * The abort reason's message is surfaced as the result's `abortReason`.
+   */
+  signal?: AbortSignal;
 };
 
 export type CodexExecResult = {
@@ -76,6 +81,10 @@ export type CodexExecResult = {
   stderr: string;
   exitCode: number;
   timedOut?: boolean;
+  /** True when the run was stopped via the input's abort signal. */
+  aborted?: boolean;
+  /** The abort reason's message (e.g. `straggler_abandoned`). */
+  abortReason?: string;
 };
 
 export type CodexExecRunner = (
@@ -389,6 +398,13 @@ export function codexEndReason(result: CodexExecResult): HarnessEndReason {
   if (result.timedOut === true) {
     return { kind: "timeout", exitCode: result.exitCode, timedOut: true };
   }
+  if (result.aborted === true) {
+    return {
+      kind: "aborted",
+      exitCode: result.exitCode,
+      detail: result.abortReason ?? "aborted"
+    };
+  }
   if (result.exitCode !== 0) {
     return {
       kind: "exit_error",
@@ -404,7 +420,23 @@ export function codexEndReason(result: CodexExecResult): HarnessEndReason {
   };
 }
 
+function abortReasonText(signal: AbortSignal): string {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) return reason.message;
+  if (reason !== undefined && reason !== null) return String(reason);
+  return "aborted";
+}
+
 export async function defaultCodexRunner(input: CodexExecInput): Promise<CodexExecResult> {
+  if (input.signal?.aborted) {
+    return {
+      stdout: "",
+      stderr: "",
+      exitCode: 130,
+      aborted: true,
+      abortReason: abortReasonText(input.signal)
+    };
+  }
   return await new Promise<CodexExecResult>((resolve, reject) => {
     const child = spawn(input.command, input.args, {
       cwd: input.cwd,
@@ -414,6 +446,8 @@ export async function defaultCodexRunner(input: CodexExecInput): Promise<CodexEx
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let timedOut = false;
+    let aborted = false;
+    let abortReason: string | undefined;
     let timer: NodeJS.Timeout | undefined;
     if (input.timeoutMs !== undefined) {
       timer = setTimeout(() => {
@@ -421,16 +455,29 @@ export async function defaultCodexRunner(input: CodexExecInput): Promise<CodexEx
         child.kill("SIGTERM");
       }, input.timeoutMs);
     }
+    const signal = input.signal;
+    const onAbort = (): void => {
+      aborted = true;
+      abortReason = signal !== undefined ? abortReasonText(signal) : "aborted";
+      child.kill("SIGTERM");
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("error", reject);
+    child.on("error", (error) => {
+      signal?.removeEventListener("abort", onAbort);
+      reject(error);
+    });
     child.on("exit", (code) => {
       if (timer !== undefined) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
       resolve({
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8"),
-        exitCode: timedOut ? 124 : code ?? 0,
-        ...(timedOut ? { timedOut } : {})
+        // 124 mirrors coreutils `timeout`; 130 mirrors SIGINT-style interruption.
+        exitCode: timedOut ? 124 : aborted ? 130 : code ?? 0,
+        ...(timedOut ? { timedOut } : {}),
+        ...(aborted ? { aborted, abortReason } : {})
       });
     });
   });
@@ -585,7 +632,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
       id: `${id}-evidence`,
       requiredEvidence: ["codex transcript", "exit code", "optional model-call record"]
     }),
-    run: async ({ descriptor, model, ordinal, prepared, worktree }) => {
+    run: async ({ descriptor, model, ordinal, prepared, worktree, signal }) => {
       const state = prepared as PreparedCodexHarness;
       const missing = missingCredentialReason(state.provider, state.env);
       if (missing !== undefined) {
@@ -653,7 +700,14 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         const timeoutMs = options.timeoutMs ?? descriptor.policy.timeoutMs;
         let result: CodexExecResult;
         try {
-          result = await runner({ command, args, cwd, env, timeoutMs });
+          result = await runner({
+            command,
+            args,
+            cwd,
+            env,
+            timeoutMs,
+            ...(signal !== undefined ? { signal } : {})
+          });
         } catch (error) {
           tracer.finished({ status: "failed", steps: [], finishReason: "spawn_error" });
           return failedToSpawnCandidate({
@@ -693,7 +747,12 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
           ...(trajectory !== undefined ? { finalOutput: trajectory.finalOutput } : {}),
           // The end-reason kind ("completed" | "aborted" | "timeout" | ...)
           // surfaces live in the trace UI, matching the persisted end_reason.
-          finishReason: endReason.kind
+          // A straggler drop keeps its distinct reason so the narrator can say
+          // "dropped after the grace window" instead of a generic failure.
+          finishReason:
+            endReason.kind === "aborted" && endReason.detail === "straggler_abandoned"
+              ? "straggler_abandoned"
+              : endReason.kind
         });
         return {
           candidateId,

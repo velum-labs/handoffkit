@@ -267,7 +267,12 @@ function renderFinish(state: NarratorState, finish: CandidateFinish): NarratorBe
   const okCount = state.finishes.filter((entry) => entry.ok).length;
 
   if (!finish.ok) {
-    const verb = finish.finishReason === "timeout" ? "timed out" : `failed (${finish.finishReason ?? "error"})`;
+    const verb =
+      finish.finishReason === "timeout"
+        ? "timed out"
+        : finish.finishReason === "straggler_abandoned"
+          ? "was dropped (still running after the grace window)"
+          : `failed (${finish.finishReason ?? "error"})`;
     const headline =
       waiting.length > 0
         ? `${finish.id} ${verb} — ${joinNames(waiting)} still working`

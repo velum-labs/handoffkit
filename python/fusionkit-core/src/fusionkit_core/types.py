@@ -13,6 +13,11 @@ class ToolCall(BaseModel):
     id: str
     name: str
     arguments: str = "{}"
+    # Stream-local slot index for partial tool-call fragments (OpenAI Chat
+    # streaming keys fragments by `index`, with `id` present only on the first
+    # fragment of each call). Never serialized: it is reassembly metadata, not
+    # part of the finished call.
+    index: int | None = Field(default=None, exclude=True)
 
 
 class ChatMessage(BaseModel):
@@ -70,6 +75,21 @@ class Usage(BaseModel):
     total_tokens: int | None = None
 
 
+class ProviderCost(BaseModel):
+    source: Literal["provider", "estimate"] = "provider"
+    cost_usd: float | None = None
+    generation_id: str | None = None
+    provider_name: str | None = None
+    upstream_inference_cost: float | None = None
+    cache_discount: float | None = None
+    lookup_status: str = "unavailable"
+    tokens_prompt: int | None = None
+    tokens_completion: int | None = None
+    native_tokens_prompt: int | None = None
+    native_tokens_completion: int | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
 class CallMetrics(BaseModel):
     model_id: str
     latency_s: float
@@ -85,6 +105,7 @@ class ModelResponse(BaseModel):
     latency_s: float = 0.0
     tool_calls: list[ToolCall] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
+    provider_cost: ProviderCost | None = None
     # Out-of-band reasoning text (never part of the answer). Populated from
     # upstream ``message.reasoning`` / ``message.reasoning_content`` fields
     # (local MLX and vLLM/SGLang-style servers); the server surfaces it as
@@ -97,6 +118,7 @@ class StreamChunk(BaseModel):
     tool_call_delta: ToolCall | None = None
     finish_reason: str | None = None
     usage: Usage | None = None
+    provider_cost: ProviderCost | None = None
     # Out-of-band reasoning text (never part of the answer). The fused stream
     # uses it to surface the judge's analysis before content tokens; the server
     # maps it to the OpenAI ``delta.reasoning_content`` field, which coding

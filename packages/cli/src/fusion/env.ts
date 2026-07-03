@@ -25,6 +25,16 @@ export type PanelProvider = "mlx" | "openai" | "anthropic" | "google" | "openrou
  */
 export type PanelAuthMode = "claude-code" | "codex";
 
+export type PanelPricingSpec = {
+  inputPer1mTokens?: number;
+  outputPer1mTokens?: number;
+  currency?: string;
+};
+
+export type PanelLocalComputeSpec = {
+  usdPerDeviceHour?: number;
+};
+
 /**
  * One panel model. `mlx` models run locally via the in-repo provisioner; cloud
  * providers (openai/anthropic/google/openrouter/openai-compatible) are fronted as
@@ -39,6 +49,8 @@ export type PanelModelSpec = {
   baseUrl?: string;
   keyEnv?: string;
   auth?: PanelAuthMode;
+  pricing?: PanelPricingSpec;
+  localCompute?: PanelLocalComputeSpec;
 };
 
 export type RunFusionOptions = {

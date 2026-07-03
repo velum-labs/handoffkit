@@ -271,19 +271,22 @@ export function chatToAnthropicMessage(openai: OpenAiResponse, model: string): R
 
   if (content.length === 0) content.push({ type: "text", text: "" });
 
-  return {
+  const response: Record<string, unknown> = {
     id: openai.id !== undefined ? `msg_${openai.id}` : `msg_${randomId()}`,
     type: "message",
     role: "assistant",
     model,
     content,
     stop_reason: mapStopReason(choice?.finish_reason),
-    stop_sequence: null,
-    usage: {
-      input_tokens: openai.usage?.prompt_tokens ?? 0,
-      output_tokens: openai.usage?.completion_tokens ?? 0
-    }
+    stop_sequence: null
   };
+  if (openai.usage !== undefined) {
+    response.usage = {
+      ...(openai.usage.prompt_tokens !== undefined ? { input_tokens: openai.usage.prompt_tokens } : {}),
+      ...(openai.usage.completion_tokens !== undefined ? { output_tokens: openai.usage.completion_tokens } : {})
+    };
+  }
+  return response;
 }
 
 // ---- streaming translation (OpenAI chat SSE -> Anthropic Messages SSE) ----
@@ -301,7 +304,8 @@ type StreamState = {
   thinkingIndex: number;
   nextIndex: number;
   finished: boolean;
-  outputTokens: number;
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
   keepaliveTimer: ReturnType<typeof setInterval> | undefined;
 };
 
@@ -322,7 +326,8 @@ export function openAiSseToAnthropic(
     thinkingIndex: -1,
     nextIndex: 0,
     finished: false,
-    outputTokens: 0,
+    inputTokens: undefined,
+    outputTokens: undefined,
     keepaliveTimer: undefined
   };
   let buffer = "";
@@ -342,8 +347,7 @@ export function openAiSseToAnthropic(
           model,
           content: [],
           stop_reason: null,
-          stop_sequence: null,
-          usage: { input_tokens: 0, output_tokens: 0 }
+          stop_sequence: null
         }
       })
     );
@@ -405,7 +409,7 @@ export function openAiSseToAnthropic(
       sse("message_delta", {
         type: "message_delta",
         delta: { stop_reason: stopReason, stop_sequence: null },
-        usage: { output_tokens: state.outputTokens }
+        ...(state.outputTokens !== undefined ? { usage: { output_tokens: state.outputTokens } } : {})
       })
     );
     controller.enqueue(sse("message_stop", { type: "message_stop" }));
@@ -414,6 +418,7 @@ export function openAiSseToAnthropic(
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
     const choice = chunk.choices?.[0];
     if (choice === undefined) {
+      if (chunk.usage?.prompt_tokens !== undefined) state.inputTokens = chunk.usage.prompt_tokens;
       if (chunk.usage?.completion_tokens !== undefined) state.outputTokens = chunk.usage.completion_tokens;
       return;
     }
@@ -492,6 +497,7 @@ export function openAiSseToAnthropic(
       }
     }
 
+    if (chunk.usage?.prompt_tokens !== undefined) state.inputTokens = chunk.usage.prompt_tokens;
     if (chunk.usage?.completion_tokens !== undefined) state.outputTokens = chunk.usage.completion_tokens;
     if (choice.finish_reason !== null && choice.finish_reason !== undefined) {
       finalize(controller, mapStopReason(choice.finish_reason));

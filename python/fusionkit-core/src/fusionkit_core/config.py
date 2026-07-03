@@ -71,6 +71,27 @@ class SamplingConfig(BaseModel):
     seed: int | None = None
 
 
+def model_sampling_defaults(model: str) -> dict[str, float]:
+    """Per-model sampling defaults for panel/passthrough model calls.
+
+    Derived from opencode's production transform table
+    (references/opencode/provider/transform.ts, temperature/topP): qwen-family
+    models are prone to tool-call repetition loops at generic temperature
+    defaults and want temperature 0.55 / top_p 1.0; kimi-k2 wants 0.6 (1.0 for
+    the thinking / k2.5+ variants). Returns only the keys that should override
+    the generic :class:`SamplingConfig` defaults; callers apply them when
+    neither the request nor the operator config pinned a value.
+    """
+    lowered = model.lower()
+    if "qwen" in lowered:
+        return {"temperature": 0.55, "top_p": 1.0}
+    if "kimi-k2" in lowered:
+        if any(tag in lowered for tag in ("thinking", "k2.", "k2p", "k2-5")):
+            return {"temperature": 1.0}
+        return {"temperature": 0.6}
+    return {}
+
+
 class PromptOverrides(BaseModel):
     """Optional overrides for the built-in fusion system prompts.
 

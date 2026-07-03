@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -37,6 +38,32 @@ from fusionkit_core.types import (
     TrajectorySynthesis,
     Usage,
 )
+
+_TOOL_CALL_LOGGER = logging.getLogger("fusionkit.tool_calls")
+
+
+def warn_malformed_tool_calls(tool_calls: Sequence[ToolCall], *, source: str) -> None:
+    """Log loudly when a finished tool call carries unparseable JSON arguments.
+
+    The arguments still flow through unchanged — the harness owns the tool loop
+    and reports its own execution error — but a reassembly bug or a model
+    emitting broken JSON must be visible in the gateway logs instead of failing
+    silently downstream as an inscrutable shell/tool error.
+    """
+    for call in tool_calls:
+        try:
+            json.loads(call.arguments or "{}")
+        except json.JSONDecodeError as exc:
+            _TOOL_CALL_LOGGER.warning(
+                "malformed tool-call arguments from %s: call id=%s name=%s "
+                "len=%d error=%s preview=%r",
+                source,
+                call.id,
+                call.name,
+                len(call.arguments),
+                exc,
+                call.arguments[:120],
+            )
 
 
 class FuseResult(BaseModel):
@@ -744,6 +771,7 @@ class _StreamAccumulator:
             ToolCall(id=item["id"], name=item["name"], arguments=item["arguments"] or "{}")
             for item in self._tool_accumulator
         ]
+        warn_malformed_tool_calls(tool_calls, source=f"judge stream ({model_id})")
         return ModelResponse(
             model_id=model_id,
             content="".join(self._content_parts),
@@ -761,12 +789,37 @@ def accumulate_tool_call(
 ) -> None:
     """Fold a streamed tool-call fragment into the in-progress accumulator.
 
-    Handles both common streaming shapes: OpenAI Chat (the opening fragment
-    carries id+name, later fragments carry argument text with an empty id) and
-    Codex/Responses (every argument fragment repeats the same non-empty
-    ``call_id``). A new, previously unseen id starts a fresh call; anything else
-    appends argument text (and a late name) to the call already in flight.
+    Fragments carrying a stream-local ``index`` (OpenAI Chat streaming) are
+    folded by that index: continuation fragments arrive with empty ids and
+    parallel calls interleave, so the index — not the id, and not arrival
+    order — identifies which call a fragment belongs to. Folding by
+    ``accumulator[-1]`` here is exactly what corrupts large multi-fragment
+    arguments when a provider interleaves slots or batches several entries
+    into one chunk.
+
+    Index-less fragments keep the id-based behavior: OpenAI Chat's opening
+    fragment carries id+name with argument text following on empty-id
+    fragments, while Codex/Responses repeats the same non-empty ``call_id``
+    on every fragment. A new, previously unseen id starts a fresh call;
+    anything else appends argument text (and a late name) to the call already
+    in flight.
     """
+    if delta.index is not None:
+        slot = f"idx:{delta.index}"
+        current = next(
+            (item for item in accumulator if item.get("_slot") == slot),
+            None,
+        )
+        if current is None:
+            current = {"_slot": slot, "id": "", "name": "", "arguments": ""}
+            accumulator.append(current)
+        if delta.id:
+            current["id"] = delta.id
+            seen_ids.add(delta.id)
+        if delta.name:
+            current["name"] = delta.name
+        current["arguments"] += delta.arguments
+        return
     if delta.id and delta.id not in seen_ids:
         seen_ids.add(delta.id)
         accumulator.append({"id": delta.id, "name": delta.name, "arguments": delta.arguments})
@@ -1022,4 +1075,5 @@ __all__ = [
     "JudgeSynthesizer",
     "accumulate_tool_call",
     "parse_analysis",
+    "warn_malformed_tool_calls",
 ]

@@ -12,6 +12,7 @@ import {
   fusionPreambleLines,
   loadEnvFileInto,
   panelMemberSummary,
+  sessionReceiptLines,
   startFusionStack
 } from "../fusion-quickstart.js";
 
@@ -159,6 +160,40 @@ test("fusionPreambleLines includes Codex gateway auth method", () => {
     "budget: $2.5",
     "rate limits: fusion"
   ]);
+});
+
+test("sessionReceiptLines reports provider spend and local compute separately", () => {
+  const lines = sessionReceiptLines(
+    [
+      {
+        id: "abcdef123456",
+        traceId: "trace",
+        sessionSpan: "span",
+        createdAt: 0,
+        updatedAt: 0,
+        turnCount: 1,
+        cost: {
+          totalUsd: 0.011,
+          providerUsd: 0.01,
+          localComputeUsd: 0.001,
+          localActiveMs: 10_000,
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          meteredTurns: 2,
+          unknownCostTurns: 1,
+          meteredEntries: 2,
+          unknownCostEntries: 1,
+          currency: "USD"
+        }
+      }
+    ],
+    { elapsedMs: 12_000, tool: "codex" }
+  );
+
+  assert.match(lines[1] ?? "", /provider spend\/est \$0\.0100/);
+  assert.match(lines[1] ?? "", /local compute: 10s active \(\$0\.0010 est\)/);
+  assert.match(lines[1] ?? "", /150 tokens/);
 });
 
 test("materializeSampleRepo creates a real git repo whose tests fail until add() is fixed", () => {

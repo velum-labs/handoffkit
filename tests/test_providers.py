@@ -31,7 +31,7 @@ from fusionkit_core.providers import (
 )
 from fusionkit_core.run import FusionRunManager, NativeRunError, RunInspection
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.types import Usage
+from fusionkit_core.types import ProviderCost, Usage
 
 
 def test_provider_config_supports_required_families(monkeypatch) -> None:
@@ -107,6 +107,35 @@ def test_api_compatibility_maps_providers_within_contract_enum() -> None:
     # Google map to the generic "custom" wire format.
     assert compatibility("anthropic") == "custom"
     assert compatibility("google") == "custom"
+
+
+def test_provider_metadata_prefers_exact_provider_cost() -> None:
+    endpoint = ModelEndpoint(
+        id="openrouter",
+        provider="openrouter",
+        model="anthropic/claude-sonnet-4.5",
+        base_url="https://openrouter.ai/api",
+        pricing=CostMetadata(input_per_1m_tokens=100, output_per_1m_tokens=100),
+    )
+
+    metadata = provider_metadata(
+        endpoint,
+        Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        ProviderCost(
+            source="provider",
+            cost_usd=0.0123,
+            generation_id="gen-123",
+            provider_name="OpenRouter",
+            lookup_status="ok",
+            tokens_prompt=10,
+            tokens_completion=5,
+        ),
+    )
+
+    assert metadata["unknown_cost"] is False
+    assert metadata["cost_estimate"] == 0.0123
+    assert metadata["provider_cost"]["generation_id"] == "gen-123"
+    assert metadata["provider_cost"]["source"] == "provider"
 
 
 # --- subscription credentials ----------------------------------------------
@@ -264,10 +293,14 @@ def test_missing_usage_and_cost_are_unknown_not_zero() -> None:
     endpoint = ModelEndpoint(id="unknown", model="unknown", base_url="http://localhost:9000")
 
     metadata = provider_metadata(endpoint, None)
+    empty_metadata = provider_metadata(endpoint, Usage())
 
     assert metadata["cost_estimate"] is None
     assert metadata["unknown_usage"] is True
     assert metadata["unknown_cost"] is True
+    assert empty_metadata["cost_estimate"] is None
+    assert empty_metadata["unknown_usage"] is True
+    assert empty_metadata["unknown_cost"] is True
 
 
 @pytest.mark.asyncio

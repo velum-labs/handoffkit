@@ -5,7 +5,7 @@ from typing import Any
 
 from fusionkit_core.config import ModelEndpoint
 from fusionkit_core.contracts import ContractUsage, ModelEndpointV1, contract_metadata
-from fusionkit_core.types import Usage
+from fusionkit_core.types import ProviderCost, Usage
 
 
 def resolve_api_key(endpoint: ModelEndpoint) -> str:
@@ -48,12 +48,20 @@ def normalize_usage(usage: Usage | ContractUsage | dict[str, Any] | None) -> Con
     if usage is None:
         return None
     if isinstance(usage, ContractUsage):
-        return usage
-    if isinstance(usage, Usage):
-        return ContractUsage.model_validate(usage.model_dump(mode="json"))
-    if isinstance(usage, dict):
-        return ContractUsage.model_validate(usage)
-    return None
+        normalized = usage
+    elif isinstance(usage, Usage):
+        normalized = ContractUsage.model_validate(usage.model_dump(mode="json"))
+    elif isinstance(usage, dict):
+        normalized = ContractUsage.model_validate(usage)
+    else:
+        return None
+    if (
+        normalized.prompt_tokens is None
+        and normalized.completion_tokens is None
+        and normalized.total_tokens is None
+    ):
+        return None
+    return normalized
 
 
 def estimate_cost(
@@ -78,8 +86,10 @@ def estimate_cost(
 def provider_metadata(
     endpoint: ModelEndpoint | None,
     usage: Usage | ContractUsage | dict[str, Any] | None,
+    provider_cost: ProviderCost | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized = normalize_usage(usage)
+    normalized_provider_cost = normalize_provider_cost(provider_cost)
     metadata: dict[str, Any] = {
         "unknown_usage": normalized is None,
         "unknown_cost": True,
@@ -87,7 +97,8 @@ def provider_metadata(
     }
     if endpoint is None:
         return metadata
-    cost_estimate = estimate_cost(endpoint, normalized)
+    exact_cost = normalized_provider_cost.cost_usd if normalized_provider_cost is not None else None
+    cost_estimate = exact_cost if exact_cost is not None else estimate_cost(endpoint, normalized)
     metadata.update(
         {
             "provider": endpoint.provider,
@@ -102,7 +113,23 @@ def provider_metadata(
             "unknown_cost": cost_estimate is None,
         }
     )
+    if normalized_provider_cost is not None:
+        metadata["provider_cost"] = normalized_provider_cost.model_dump(
+            mode="json", exclude_none=True
+        )
     return metadata
+
+
+def normalize_provider_cost(
+    provider_cost: ProviderCost | dict[str, Any] | None,
+) -> ProviderCost | None:
+    if provider_cost is None:
+        return None
+    if isinstance(provider_cost, ProviderCost):
+        return provider_cost
+    if isinstance(provider_cost, dict):
+        return ProviderCost.model_validate(provider_cost)
+    return None
 
 
 def _api_compatibility(endpoint: ModelEndpoint) -> str:
@@ -131,6 +158,7 @@ __all__ = [
     "endpoint_to_contract",
     "estimate_cost",
     "normalize_usage",
+    "normalize_provider_cost",
     "provider_metadata",
     "resolve_api_key",
 ]

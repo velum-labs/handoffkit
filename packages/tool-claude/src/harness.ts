@@ -468,6 +468,8 @@ function driveClaudePrint(input: {
   /** When set, point the CLI at this Anthropic-dialect gateway instead of api.anthropic.com. */
   gateway?: { baseUrl: string; authToken: string };
   onStdoutLine?: (line: string) => void;
+  /** Aborts the claude child process (panel cancellation / straggler policy). */
+  signal?: AbortSignal;
 }): Promise<ClaudePrintResult> {
   const args = [
     "-p",
@@ -521,6 +523,14 @@ function driveClaudePrint(input: {
       timedOut = true;
       child.kill("SIGTERM");
     }, input.timeoutMs);
+    let abortedReason: string | undefined;
+    const onAbort = (): void => {
+      const reason: unknown = input.signal?.reason;
+      abortedReason = reason instanceof Error ? reason.message : reason !== undefined && reason !== null ? String(reason) : "aborted";
+      child.kill("SIGTERM");
+    };
+    if (input.signal?.aborted) onAbort();
+    else input.signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
       stdout += text;
@@ -542,10 +552,15 @@ function driveClaudePrint(input: {
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
+      input.signal?.removeEventListener("abort", onAbort);
       flushStdoutLines(true);
       const transcript = [stdout, stderr].filter(Boolean).join("\n");
       if (timedOut) {
         resolve({ status: "failed", stdout, transcript, reason: "claude CLI timed out" });
+        return;
+      }
+      if (abortedReason !== undefined) {
+        resolve({ status: "failed", stdout, transcript, reason: abortedReason });
         return;
       }
       const failureReason = stderr.trim().slice(0, 500) || transcript.trim().slice(-500);
@@ -656,7 +671,8 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
           ...(routerGateway !== undefined
             ? { gateway: { baseUrl: routerGateway.url(), authToken: options.apiKey ?? "local" } }
             : {}),
-          onStdoutLine: emitStep
+          onStdoutLine: emitStep,
+          ...(runInput.signal !== undefined ? { signal: runInput.signal } : {})
         });
       } finally {
         await routerGateway?.close();

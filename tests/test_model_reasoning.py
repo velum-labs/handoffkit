@@ -82,6 +82,33 @@ async def test_openai_chat_reads_vllm_reasoning_content_field() -> None:
     assert response.reasoning == "vllm thought"
 
 
+async def test_openai_chat_reads_openrouter_reasoning_details_text() -> None:
+    client = OpenAICompatibleClient(_endpoint())
+    response_obj = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content="answer",
+                    reasoning_details=[
+                        {"type": "reasoning.encrypted", "data": "opaque"},
+                        {"type": "reasoning.text", "text": "first thought"},
+                        {"type": "reasoning.text", "text": "second thought"},
+                    ],
+                    tool_calls=None,
+                ),
+                finish_reason="stop",
+            )
+        ],
+        usage=None,
+        model_dump=lambda mode="json": {"ok": True},
+    )
+    client._client.chat.completions.create = AsyncMock(return_value=response_obj)
+
+    response = await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert response.reasoning == "first thought\n\nsecond thought"
+
+
 async def test_openai_stream_chat_carries_model_reasoning_delta() -> None:
     client = OpenAICompatibleClient(_endpoint())
     events = [

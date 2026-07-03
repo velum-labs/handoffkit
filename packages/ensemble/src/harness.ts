@@ -8,6 +8,7 @@ import type {
   ModelFusionHarnessKind,
   ModelCallRecordV1,
   ModelFusionCapabilityStatus,
+  ModelFusionUsage,
   ModelFusionSideEffects,
   ModelFusionStatus,
   ToolExecutionRecordV1
@@ -51,6 +52,9 @@ export type HarnessTrajectory = {
   status: ModelFusionStatus;
   steps: TrajectoryStep[];
   finalOutput: string;
+  usage?: ModelFusionUsage;
+  latencyMs?: number;
+  providerMetadata?: Record<string, JsonValue>;
   diff?: string;
   endReason?: HarnessEndReason;
 };
@@ -312,6 +316,14 @@ export type EnsemblePolicy = {
   sideEffects: ModelFusionSideEffects;
   timeoutMs?: number;
   budgetUsd?: number;
+  /**
+   * Straggler policy: once the first candidate has *succeeded*, still-running
+   * siblings get this much longer before they are aborted and settled as
+   * failed (`straggler_abandoned`). Unset disables the policy (all candidates
+   * are awaited, the pre-existing behavior), so one stuck candidate can hold a
+   * finished sibling's result hostage until the caller's hard timeout.
+   */
+  stragglerGraceMs?: number;
 };
 
 export type VerificationProfile = {
@@ -363,6 +375,12 @@ export type HarnessRunInput = {
   ordinal: number;
   prepared: unknown;
   worktree?: CandidateWorktree;
+  /**
+   * Aborted when this candidate should stop: the whole panel was cancelled
+   * (descriptor signal / caller timeout) or the straggler policy dropped it.
+   * Harnesses that spawn child processes must kill them on abort.
+   */
+  signal?: AbortSignal;
 };
 
 export type HarnessCollectInput = {
@@ -411,6 +429,8 @@ export type EnsembleDescriptor = {
   runtime: EnsembleRuntime;
   judge: EnsembleJudge;
   policy: EnsemblePolicy;
+  /** Aborts the whole run: every candidate's per-run signal fires with this reason. */
+  signal?: AbortSignal;
   prompt: string;
   sourceRepo: string;
   baseGitSha: string;

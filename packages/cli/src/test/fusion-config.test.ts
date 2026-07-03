@@ -97,6 +97,37 @@ test("parseFusionConfig accepts subscription panel entries with auth", () => {
   assert.equal(config.panel?.[1]?.auth, "codex");
 });
 
+test("parseFusionConfig accepts panel pricing and local compute metadata", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      panel: [
+        {
+          id: "qwen",
+          model: "mlx-community/Qwen3-1.7B-4bit",
+          provider: "mlx",
+          pricing: { inputPer1mTokens: 0, outputPer1mTokens: 0, currency: "USD" },
+          localCompute: { usdPerDeviceHour: 0.36 }
+        }
+      ]
+    },
+    "test"
+  );
+  assert.equal(config.panel?.[0]?.pricing?.outputPer1mTokens, 0);
+  assert.equal(config.panel?.[0]?.localCompute?.usdPerDeviceHour, 0.36);
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        {
+          version: FUSION_CONFIG_VERSION,
+          panel: [{ id: "x", model: "m", pricing: { inputPer1mTokens: -1 } }]
+        },
+        "test"
+      ),
+    FusionConfigError
+  );
+});
+
 test("parseFusionConfig rejects an unknown auth mode", () => {
   assert.throws(
     () =>

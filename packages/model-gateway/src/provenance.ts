@@ -216,6 +216,68 @@ function usageFromSse(text: string): ModelFusionUsage | undefined {
   return usage;
 }
 
+function providerCostFromObject(value: unknown): JsonValue | undefined {
+  const obj = asObject(value);
+  const cost = asObject(obj?.provider_cost) ?? asObject(obj?.providerCost);
+  if (cost === undefined) return undefined;
+  return cost as JsonValue;
+}
+
+function providerCostFromSse(text: string): JsonValue | undefined {
+  let providerCost: JsonValue | undefined;
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const payload = trimmed.slice(5).trim();
+    if (payload === "[DONE]") continue;
+    const candidate = providerCostFromObject(parseJson(Buffer.from(payload)));
+    if (candidate !== undefined) providerCost = candidate;
+  }
+  return providerCost;
+}
+
+function providerCostFromResponse(body: Buffer | undefined): JsonValue | undefined {
+  const parsed = parseJson(body);
+  return providerCostFromObject(parsed) ?? providerCostFromSse(responseText(body));
+}
+
+function exactProviderCostUsd(providerCost: JsonValue | undefined): number | undefined {
+  const record = asObject(providerCost);
+  if (typeof record?.cost_usd === "number") return record.cost_usd;
+  if (typeof record?.costUsd === "number") return record.costUsd;
+  return undefined;
+}
+
+function usageWithProviderCost(
+  usage: ModelFusionUsage | undefined,
+  providerCost: JsonValue | undefined
+): ModelFusionUsage | undefined {
+  const record = asObject(providerCost);
+  if (record === undefined) return usage;
+  const prompt =
+    typeof record.tokens_prompt === "number"
+      ? record.tokens_prompt
+      : typeof record.tokensPrompt === "number"
+        ? record.tokensPrompt
+        : usage?.prompt_tokens;
+  const completion =
+    typeof record.tokens_completion === "number"
+      ? record.tokens_completion
+      : typeof record.tokensCompletion === "number"
+        ? record.tokensCompletion
+        : usage?.completion_tokens;
+  const total =
+    prompt !== undefined && completion !== undefined
+      ? prompt + completion
+      : usage?.total_tokens;
+  if (prompt === undefined && completion === undefined && total === undefined) return usage;
+  return {
+    ...(prompt !== undefined ? { prompt_tokens: prompt } : {}),
+    ...(completion !== undefined ? { completion_tokens: completion } : {}),
+    ...(total !== undefined ? { total_tokens: total } : {})
+  };
+}
+
 function usageFromResponse(body: Buffer | undefined): ModelFusionUsage | undefined {
   const parsed = parseJson(body);
   return usageFromObject(parsed) ?? usageFromSse(responseText(body));
@@ -245,7 +307,9 @@ export function buildModelCallRecord(
   context: ModelGatewayCallContext,
   result: ModelGatewayCallResult
 ): ModelCallRecord {
-  const usage = usageFromResponse(result.responseBody);
+  const providerCost = providerCostFromResponse(result.responseBody);
+  const exactCostUsd = exactProviderCostUsd(providerCost);
+  const usage = usageWithProviderCost(usageFromResponse(result.responseBody), providerCost);
   const status = statusFor(result.statusCode, result.error);
   const metadata: Record<string, JsonValue> = {
     dialect: context.dialect,
@@ -255,7 +319,9 @@ export function buildModelCallRecord(
     requested_model: context.requestedModel ?? null,
     observed_model: observedModel(result.responseBody) ?? null,
     unknown_usage: usage === undefined,
-    unknown_cost: true
+    unknown_cost: exactCostUsd === undefined,
+    ...(providerCost !== undefined ? { provider_cost: providerCost } : {}),
+    ...(exactCostUsd !== undefined ? { cost_estimate: exactCostUsd } : {})
   };
   const error: ModelFusionError | undefined =
     status === "failed"

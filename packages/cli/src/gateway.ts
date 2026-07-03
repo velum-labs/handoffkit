@@ -41,6 +41,8 @@ import type {
   FrontDoorRunnerResult,
   FusionGateway,
   Gateway,
+  LocalComputePricing,
+  ModelPricing,
   NarrationWriter,
   OnRateLimitPolicy,
   PanelRunner,
@@ -60,6 +62,19 @@ export type GatewayRunnerConfig = {
   models: EnsembleModel[];
   command?: string;
   timeoutMs?: number;
+  /**
+   * Wall-clock budget for the whole panel phase before the turn fails (and the
+   * in-flight candidates are aborted). Defaults to the backend's 15 minutes.
+   */
+  panelTimeoutMs?: number;
+  /**
+   * Straggler policy: once the first candidate succeeds, still-running siblings
+   * get this much longer before being aborted and settled as failed, so one
+   * stuck model cannot hold a finished sibling's result hostage until the panel
+   * timeout. Default 300s (long-running members are often the strongest ones);
+   * set 0 to disable (wait for every candidate).
+   */
+  stragglerGraceMs?: number;
   judgeModel?: string;
   fusionApiKey?: string;
   modelEndpoints?: Record<string, string>;
@@ -67,6 +82,10 @@ export type GatewayRunnerConfig = {
   onRateLimit?: OnRateLimitPolicy;
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
+  /** Per-model token pricing overrides. */
+  pricing?: Readonly<Record<string, ModelPricing>>;
+  /** Per-model local compute pricing overrides. */
+  localCompute?: Readonly<Record<string, LocalComputePricing>>;
   /** WS4 durable session store; when set the gateway persists/resumes sessions. */
   sessionStore?: SessionStore;
   /** WS4 resume target id bound to the first conversation this gateway serves. */
@@ -93,6 +112,20 @@ export type GatewayRunnerConfig = {
   /** Optional narration prose writer (any chat-capable model); advisory only. */
   narrationWriter?: NarrationWriter;
 };
+
+/**
+ * Default straggler grace window: once the first panel candidate succeeds,
+ * still-running siblings get this much longer before they are dropped.
+ *
+ * Sized generously (5 minutes) because slower panel members are often the
+ * stronger ones: a fast, shallow first finisher must not evict a deliberate
+ * sibling that is still doing useful work. Real-trace calibration: qwen3
+ * answered a docs-analysis turn in 27s while kimi-k2 took 4m to produce the
+ * better candidate — a 2-minute window would have dropped kimi. The hard
+ * `panelTimeoutMs` (default 15m) still bounds the whole phase, so the grace
+ * window only trades tail latency, never unbounded hangs.
+ */
+const DEFAULT_STRAGGLER_GRACE_MS = 300_000;
 
 /** Join the system-role messages (the launched tool's harness/custom prompt). */
 function harnessSystemFromMessages(messages: readonly ChatMessageLike[]): string | undefined {
@@ -342,7 +375,8 @@ export async function startFusionStepGateway(input: {
     sessionSpanId,
     sessionKey,
     turn,
-    excludeModelIds
+    excludeModelIds,
+    signal
   }) => {
     // WS5 failover excludes the throttled vendor (by router endpoint id == panel
     // model id) so the ensemble fuses over the healthy survivors this turn.
@@ -399,6 +433,8 @@ export async function startFusionStepGateway(input: {
         ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
+        ...(signal !== undefined ? { signal } : {}),
+        stragglerGraceMs: config.stragglerGraceMs ?? DEFAULT_STRAGGLER_GRACE_MS,
         ...(config.panelIdentity !== undefined ? { panelIdentity: config.panelIdentity } : {}),
         ...(config.panelTrust !== undefined ? { panelTrust: config.panelTrust } : {}),
         ...(harnessSystem !== undefined ? { harnessSystem } : {})
@@ -445,7 +481,10 @@ export async function startFusionStepGateway(input: {
     defaultModel,
     passthrough,
     ...(config.onRateLimit !== undefined ? { onRateLimit: config.onRateLimit } : {}),
+    ...(config.panelTimeoutMs !== undefined ? { panelTimeoutMs: config.panelTimeoutMs } : {}),
     ...(config.budgetUsd !== undefined ? { budgetUsd: config.budgetUsd } : {}),
+    ...(config.pricing !== undefined ? { pricing: config.pricing } : {}),
+    ...(config.localCompute !== undefined ? { localCompute: config.localCompute } : {}),
     ...(config.reasoningTraces !== undefined ? { reasoningTraces: config.reasoningTraces } : {}),
     ...(config.narrationWriter !== undefined ? { narrationWriter: config.narrationWriter } : {}),
     // WS7 cost attribution: a fused turn's gateway-observed `usage` is the

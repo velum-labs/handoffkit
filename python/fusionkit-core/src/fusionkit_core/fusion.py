@@ -4,7 +4,12 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
 from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
-from fusionkit_core.judge import FuseResult, JudgeSynthesizer, accumulate_tool_call
+from fusionkit_core.judge import (
+    FuseResult,
+    JudgeSynthesizer,
+    accumulate_tool_call,
+    warn_malformed_tool_calls,
+)
 from fusionkit_core.producers import ChatTrajectoryProducer
 from fusionkit_core.router import HeuristicRouter
 from fusionkit_core.types import (
@@ -254,6 +259,7 @@ class FusionEngine:
         seen_tool_ids: set[str] = set()
         finish_reason: str | None = None
         usage = Usage()
+        provider_cost = None
         async for chunk in client.stream_chat(
             messages, sampling, tools=tools, tool_choice=tool_choice
         ):
@@ -265,11 +271,14 @@ class FusionEngine:
                 finish_reason = chunk.finish_reason
             if chunk.usage is not None:
                 usage = chunk.usage
+            if chunk.provider_cost is not None:
+                provider_cost = chunk.provider_cost
             yield chunk
         tool_calls = [
             ToolCall(id=item["id"], name=item["name"], arguments=item["arguments"] or "{}")
             for item in tool_accumulator
         ]
+        warn_malformed_tool_calls(tool_calls, source=f"passthrough stream ({client.model_id})")
         # A terminal FuseResult keeps the server's streaming consumer uniform;
         # a single endpoint has no panel to fuse, so it carries no fused trajectory.
         yield FuseResult(
@@ -279,6 +288,7 @@ class FusionEngine:
                 finish_reason=finish_reason or ("tool_calls" if tool_calls else "stop"),
                 usage=usage,
                 tool_calls=tool_calls,
+                provider_cost=provider_cost,
             ),
             terminal=not tool_calls,
             analysis=FusionAnalysis(),

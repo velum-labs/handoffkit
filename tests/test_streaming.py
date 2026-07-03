@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
@@ -7,7 +8,14 @@ from typing import Any
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient, ProviderCallError
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
-from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall, Usage
+from fusionkit_core.types import (
+    ChatMessage,
+    ModelResponse,
+    ProviderCost,
+    StreamChunk,
+    ToolCall,
+    Usage,
+)
 from fusionkit_server import create_app
 from fusionkit_server.openai_endpoint import _astream_sse
 
@@ -139,6 +147,66 @@ def test_passthrough_streaming_is_real_token_stream(tmp_path) -> None:
     assert len(content_deltas) > 1
     assert _streamed_text(chunks) == "hello there from passthrough "
     assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
+
+
+def test_endpoint_sse_carries_terminal_provider_cost() -> None:
+    class ProviderCostClient:
+        model_id = "openrouter"
+        max_context = None
+
+        async def chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Mapping[str, Any]] | None = None,
+            tool_choice: str | Mapping[str, Any] | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> ModelResponse:
+            return ModelResponse(model_id=self.model_id, content="hi")
+
+        async def stream_chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Mapping[str, Any]] | None = None,
+            tool_choice: str | Mapping[str, Any] | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            yield StreamChunk(delta="hi")
+            yield StreamChunk(
+                finish_reason="stop",
+                usage=Usage(prompt_tokens=7, completion_tokens=8, total_tokens=15),
+                provider_cost=ProviderCost(
+                    source="provider",
+                    cost_usd=0.0042,
+                    generation_id="gen-stream",
+                    lookup_status="ok",
+                ),
+            )
+
+        async def aclose(self) -> None:
+            return None
+
+    async def collect() -> str:
+        client = ProviderCostClient()
+        chunks = [
+            chunk
+            async for chunk in _astream_sse(
+                client,
+                "anthropic/claude-sonnet-4.5",
+                [ChatMessage(role="user", content="hi")],
+                SamplingConfig(),
+                None,
+                None,
+            )
+        ]
+        return "".join(chunks)
+
+    chunks = _sse_chunks(asyncio.run(collect()))
+    terminal = chunks[-1]
+    assert terminal["usage"]["total_tokens"] == 15
+    assert terminal["provider_cost"]["cost_usd"] == 0.0042
+    assert terminal["provider_cost"]["generation_id"] == "gen-stream"
 
 
 def test_fused_streaming_streams_synthesizer_and_carries_fusion_metadata(tmp_path) -> None:

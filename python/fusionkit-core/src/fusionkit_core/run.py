@@ -903,10 +903,15 @@ def _model_call_record(
 ) -> ModelCallRecordV1:
     latency_s = trajectory.metadata.get("latency_s")
     usage = trajectory.metadata.get("usage")
+    provider_cost = trajectory.metadata.get("provider_cost")
     latency_ms = latency_s * 1000 if isinstance(latency_s, int | float) else None
     endpoint = _endpoint_for_trajectory(config, trajectory.model_id)
     metadata = {
-        **provider_metadata(endpoint, usage if isinstance(usage, dict) else None),
+        **provider_metadata(
+            endpoint,
+            usage if isinstance(usage, dict) else None,
+            provider_cost if isinstance(provider_cost, dict) else None,
+        ),
         "finish_reason": trajectory.metadata.get("finish_reason"),
     }
     failed = trajectory.status == "failed"

@@ -122,6 +122,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function optionalNonNegativeNumber(value: unknown, path: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new FusionConfigError(`${path} must be a non-negative number`);
+  }
+  return value;
+}
+
 function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
   if (!isRecord(entry)) {
     throw new FusionConfigError(`panel[${index}] must be an object`);
@@ -157,6 +165,40 @@ function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
       );
     }
     spec.auth = auth as PanelAuthMode;
+  }
+  if (entry.pricing !== undefined) {
+    if (!isRecord(entry.pricing)) {
+      throw new FusionConfigError(`panel[${index}].pricing must be an object`);
+    }
+    const inputPer1mTokens = optionalNonNegativeNumber(
+      entry.pricing.inputPer1mTokens,
+      `panel[${index}].pricing.inputPer1mTokens`
+    );
+    const outputPer1mTokens = optionalNonNegativeNumber(
+      entry.pricing.outputPer1mTokens,
+      `panel[${index}].pricing.outputPer1mTokens`
+    );
+    const currency = entry.pricing.currency;
+    if (currency !== undefined && typeof currency !== "string") {
+      throw new FusionConfigError(`panel[${index}].pricing.currency must be a string`);
+    }
+    spec.pricing = {
+      ...(inputPer1mTokens !== undefined ? { inputPer1mTokens } : {}),
+      ...(outputPer1mTokens !== undefined ? { outputPer1mTokens } : {}),
+      ...(currency !== undefined ? { currency } : {})
+    };
+  }
+  if (entry.localCompute !== undefined) {
+    if (!isRecord(entry.localCompute)) {
+      throw new FusionConfigError(`panel[${index}].localCompute must be an object`);
+    }
+    const usdPerDeviceHour = optionalNonNegativeNumber(
+      entry.localCompute.usdPerDeviceHour,
+      `panel[${index}].localCompute.usdPerDeviceHour`
+    );
+    spec.localCompute = {
+      ...(usdPerDeviceHour !== undefined ? { usdPerDeviceHour } : {})
+    };
   }
   return spec;
 }

@@ -14,11 +14,10 @@
  * `unknownCost` rather than silently reported as $0 — the same "clearly mark
  * unknown" discipline FusionKit's Python `provider_metadata` uses.
  *
- * Scope. The Node gateway meters only the usage that flows through it. For a
- * fused turn that is the judge/synthesis call; the individual panel members run
- * inside the Python engine, which meters their own usage/cost
- * (`fusionkit_core.providers.estimate_cost`). The gateway total is therefore the
- * gateway-observed cost, not a whole-pipeline bill — surfaced as such.
+ * Scope. The Node gateway meters stage-aware calls that cross the FusionKit
+ * contract: panel candidates, judge/synthesis, passthrough, and local compute
+ * estimates. Provider-reported spend (for example OpenRouter generation
+ * metadata) wins; configured/static pricing is treated as an estimate fallback.
  */
 
 /** USD price for a model, per 1,000,000 tokens. */
@@ -29,6 +28,41 @@ export type ModelPricing = {
   currency?: string;
 };
 
+/** Optional local-compute pricing/usage for a model call. */
+export type LocalComputeUsage = {
+  /** Active generation wall time. Prefer this over server uptime for cost estimates. */
+  activeInferenceMs?: number;
+  /** Cold-load time, recorded separately so callers can choose an amortization policy. */
+  loadMs?: number;
+  /** Time the local server was held up for this call/session, when known. */
+  serverUptimeMs?: number;
+  tokensPerSecond?: number;
+  modelRepo?: string;
+  deviceKind?: string;
+  /** Optional operator-defined hourly rate for local compute estimates. */
+  usdPerDeviceHour?: number;
+  /** Derived estimate from activeInferenceMs and usdPerDeviceHour. */
+  estimatedCostUsd?: number;
+};
+
+export type LocalComputePricing = {
+  usdPerDeviceHour?: number;
+};
+
+export type ProviderCostMetadata = {
+  source: "provider" | "estimate";
+  costUsd?: number;
+  generationId?: string;
+  providerName?: string;
+  upstreamInferenceCost?: number;
+  cacheDiscount?: number;
+  lookupStatus?: string;
+  tokensPrompt?: number;
+  tokensCompletion?: number;
+  nativeTokensPrompt?: number;
+  nativeTokensCompletion?: number;
+};
+
 /** Prompt / completion / total token counts parsed from a `usage` block. */
 export type TokenUsage = {
   promptTokens?: number;
@@ -36,20 +70,43 @@ export type TokenUsage = {
   totalTokens?: number;
 };
 
+export type CostStage = "panel" | "judge_synth" | "passthrough" | "narrator" | "local";
+
 /** The cost of a single metered turn. */
 export type TurnCost = {
   model: string;
   usage: TokenUsage;
   /** Resolved USD cost, or `undefined` when usage or pricing is unknown. */
   costUsd?: number;
+  /** Token-priced provider spend. Local compute estimates are kept separate. */
+  providerCostUsd?: number;
+  /** Local compute estimate, when a local hourly rate is configured. */
+  localComputeCostUsd?: number;
   unknownUsage: boolean;
   unknownCost: boolean;
   currency: string;
 };
 
+export type CostLedgerEntry = TurnCost & {
+  entryId: string;
+  stage: CostStage;
+  recordedAt: number;
+  turn?: number;
+  provider?: string;
+  endpointId?: string;
+  latencyMs?: number;
+  providerCost?: ProviderCostMetadata;
+  localCompute?: LocalComputeUsage;
+};
+
 /** The running per-session accumulation persisted with the session header. */
 export type SessionCost = {
   totalUsd: number;
+  /** Token-priced provider spend only; absent on sessions written before this field existed. */
+  providerUsd?: number;
+  /** Local compute estimates only; absent on sessions written before this field existed. */
+  localComputeUsd?: number;
+  localActiveMs?: number;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
@@ -57,6 +114,9 @@ export type SessionCost = {
   meteredTurns: number;
   /** Turns whose cost could not be resolved (no usage or no pricing). */
   unknownCostTurns: number;
+  /** Stage-aware call count. Newer code uses this; meteredTurns remains for compatibility. */
+  meteredEntries?: number;
+  unknownCostEntries?: number;
   currency: string;
 };
 
@@ -144,15 +204,43 @@ export function lookupPricing(
   overrides: Readonly<Record<string, ModelPricing>> = {}
 ): ModelPricing | undefined {
   const table = { ...DEFAULT_MODEL_PRICING, ...overrides };
+  return lookupPricingIn(model, table);
+}
+
+function lookupPricingIn(
+  model: string,
+  table: Readonly<Record<string, ModelPricing>>
+): ModelPricing | undefined {
   const key = model.toLowerCase();
-  if (table[key] !== undefined) return table[key];
+  for (const [candidate, pricing] of Object.entries(table)) {
+    if (candidate.toLowerCase() === key) return pricing;
+  }
   let best: { length: number; pricing: ModelPricing } | undefined;
   for (const [candidate, pricing] of Object.entries(table)) {
-    if (key.startsWith(candidate) && (best === undefined || candidate.length > best.length)) {
-      best = { length: candidate.length, pricing };
+    const normalized = candidate.toLowerCase();
+    if (key.startsWith(normalized) && (best === undefined || normalized.length > best.length)) {
+      best = { length: normalized.length, pricing };
     }
   }
   return best?.pricing;
+}
+
+function meterTurnWithPricing(
+  model: string,
+  usage: TokenUsage | undefined,
+  pricing: ModelPricing | undefined
+): TurnCost {
+  const resolved = usage ?? {};
+  const unknownUsage = usage === undefined;
+  const providerCostUsd = unknownUsage ? undefined : estimateCost(resolved, pricing);
+  return {
+    model,
+    usage: resolved,
+    ...(providerCostUsd !== undefined ? { costUsd: providerCostUsd, providerCostUsd } : {}),
+    unknownUsage,
+    unknownCost: providerCostUsd === undefined,
+    currency: pricing?.currency ?? DEFAULT_CURRENCY
+  };
 }
 
 /** Compute the USD cost of `usage` under `pricing`, or `undefined` if not derivable. */
@@ -162,6 +250,31 @@ export function estimateCost(usage: TokenUsage, pricing: ModelPricing | undefine
   const input = (usage.promptTokens * pricing.inputPer1mTokens) / 1_000_000;
   const output = (usage.completionTokens * pricing.outputPer1mTokens) / 1_000_000;
   return input + output;
+}
+
+export function estimateLocalComputeCost(input: LocalComputeUsage | undefined): number | undefined {
+  if (input?.activeInferenceMs === undefined || input.usdPerDeviceHour === undefined) return undefined;
+  return (input.activeInferenceMs / 3_600_000) * input.usdPerDeviceHour;
+}
+
+export function localComputeFromLatency(input: {
+  latencyMs?: number;
+  modelRepo?: string;
+  deviceKind?: string;
+  pricing?: LocalComputePricing;
+}): LocalComputeUsage | undefined {
+  if (input.latencyMs === undefined && input.pricing?.usdPerDeviceHour === undefined) return undefined;
+  const localCompute: LocalComputeUsage = {
+    ...(input.latencyMs !== undefined ? { activeInferenceMs: input.latencyMs } : {}),
+    ...(input.modelRepo !== undefined ? { modelRepo: input.modelRepo } : {}),
+    ...(input.deviceKind !== undefined ? { deviceKind: input.deviceKind } : {}),
+    ...(input.pricing?.usdPerDeviceHour !== undefined ? { usdPerDeviceHour: input.pricing.usdPerDeviceHour } : {})
+  };
+  const estimated = estimateLocalComputeCost(localCompute);
+  return {
+    ...localCompute,
+    ...(estimated !== undefined ? { estimatedCostUsd: estimated } : {})
+  };
 }
 
 /**
@@ -175,17 +288,73 @@ export function meterTurn(
   usage: TokenUsage | undefined,
   overrides: Readonly<Record<string, ModelPricing>> = {}
 ): TurnCost {
-  const resolved = usage ?? {};
-  const unknownUsage = usage === undefined;
   const pricing = lookupPricing(model, overrides);
-  const costUsd = unknownUsage ? undefined : estimateCost(resolved, pricing);
+  return meterTurnWithPricing(model, usage, pricing);
+}
+
+export function meterCall(input: {
+  model: string;
+  usage: TokenUsage | undefined;
+  stage: CostStage;
+  pricing?: Readonly<Record<string, ModelPricing>>;
+  turn?: number;
+  provider?: string;
+  endpointId?: string;
+  latencyMs?: number;
+  providerCost?: ProviderCostMetadata;
+  localCompute?: LocalComputeUsage;
+  recordedAt?: number;
+}): CostLedgerEntry {
+  const providerLookupFailed =
+    input.providerCost?.source === "provider" &&
+    input.providerCost.costUsd === undefined &&
+    input.providerCost.lookupStatus !== undefined;
+  const pricing = providerLookupFailed
+    ? lookupPricingIn(input.model, input.pricing ?? {})
+    : lookupPricing(input.model, input.pricing ?? {});
+  const tokenCost = meterTurnWithPricing(input.model, input.usage, pricing);
+  const exactProviderCostUsd =
+    input.providerCost?.source === "provider" ? input.providerCost.costUsd : undefined;
+  const providerCostUsd = exactProviderCostUsd ?? tokenCost.providerCostUsd;
+  const localComputeCostUsd =
+    input.localCompute?.estimatedCostUsd ?? estimateLocalComputeCost(input.localCompute);
+  const costUsd =
+    providerCostUsd !== undefined || localComputeCostUsd !== undefined
+      ? (providerCostUsd ?? 0) + (localComputeCostUsd ?? 0)
+      : undefined;
+  const providerCost =
+    input.providerCost !== undefined
+      ? providerLookupFailed && providerCostUsd !== undefined
+        ? {
+            ...input.providerCost,
+            source: "estimate" as const,
+            costUsd: providerCostUsd,
+            lookupStatus: `fallback_${input.providerCost.lookupStatus}`
+          }
+        : input.providerCost
+      : tokenCost.providerCostUsd !== undefined
+        ? {
+            source: "estimate" as const,
+            costUsd: tokenCost.providerCostUsd,
+            lookupStatus: "estimated_from_pricing"
+          }
+        : undefined;
   return {
-    model,
-    usage: resolved,
+    ...tokenCost,
+    entryId: `${input.stage}_${input.turn ?? "na"}_${Math.random().toString(36).slice(2, 10)}`,
+    stage: input.stage,
+    recordedAt: input.recordedAt ?? Date.now(),
+    ...(input.turn !== undefined ? { turn: input.turn } : {}),
+    ...(input.provider !== undefined ? { provider: input.provider } : {}),
+    ...(input.endpointId !== undefined ? { endpointId: input.endpointId } : {}),
+    ...(input.latencyMs !== undefined ? { latencyMs: input.latencyMs } : {}),
+    ...(providerCost !== undefined ? { providerCost } : {}),
+    ...(input.localCompute !== undefined ? { localCompute: input.localCompute } : {}),
     ...(costUsd !== undefined ? { costUsd } : {}),
-    unknownUsage,
+    ...(providerCostUsd !== undefined ? { providerCostUsd } : {}),
+    ...(localComputeCostUsd !== undefined ? { localComputeCostUsd } : {}),
     unknownCost: costUsd === undefined,
-    currency: pricing?.currency ?? DEFAULT_CURRENCY
+    currency: tokenCost.currency
   };
 }
 
@@ -193,11 +362,16 @@ export function meterTurn(
 export function emptySessionCost(currency = DEFAULT_CURRENCY): SessionCost {
   return {
     totalUsd: 0,
+    providerUsd: 0,
+    localComputeUsd: 0,
+    localActiveMs: 0,
     promptTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
     meteredTurns: 0,
     unknownCostTurns: 0,
+    meteredEntries: 0,
+    unknownCostEntries: 0,
     currency
   };
 }
@@ -209,11 +383,39 @@ export function addTurnCost(total: SessionCost, turn: TurnCost): SessionCost {
     (turn.usage.promptTokens ?? 0) + (turn.usage.completionTokens ?? 0);
   return {
     totalUsd: total.totalUsd + (turn.costUsd ?? 0),
+    providerUsd: (total.providerUsd ?? total.totalUsd) + (turn.providerCostUsd ?? turn.costUsd ?? 0),
+    localComputeUsd: total.localComputeUsd ?? 0,
+    localActiveMs: total.localActiveMs ?? 0,
     promptTokens: total.promptTokens + (turn.usage.promptTokens ?? 0),
     completionTokens: total.completionTokens + (turn.usage.completionTokens ?? 0),
     totalTokens: total.totalTokens + totalTokens,
     meteredTurns: total.meteredTurns + (turn.unknownCost ? 0 : 1),
     unknownCostTurns: total.unknownCostTurns + (turn.unknownCost ? 1 : 0),
+    meteredEntries: (total.meteredEntries ?? total.meteredTurns) + (turn.unknownCost ? 0 : 1),
+    unknownCostEntries: (total.unknownCostEntries ?? total.unknownCostTurns) + (turn.unknownCost ? 1 : 0),
+    currency: total.currency
+  };
+}
+
+export function addLedgerEntry(total: SessionCost, entry: CostLedgerEntry): SessionCost {
+  const totalTokens =
+    entry.usage.totalTokens ??
+    (entry.usage.promptTokens ?? 0) + (entry.usage.completionTokens ?? 0);
+  const providerUsd = entry.providerCostUsd ?? 0;
+  const localUsd = entry.localComputeCostUsd ?? 0;
+  return {
+    totalUsd: total.totalUsd + (entry.costUsd ?? 0),
+    providerUsd: (total.providerUsd ?? total.totalUsd) + providerUsd,
+    localComputeUsd: (total.localComputeUsd ?? 0) + localUsd,
+    localActiveMs:
+      (total.localActiveMs ?? 0) + (entry.localCompute?.activeInferenceMs ?? 0),
+    promptTokens: total.promptTokens + (entry.usage.promptTokens ?? 0),
+    completionTokens: total.completionTokens + (entry.usage.completionTokens ?? 0),
+    totalTokens: total.totalTokens + totalTokens,
+    meteredTurns: total.meteredTurns + (entry.unknownCost ? 0 : 1),
+    unknownCostTurns: total.unknownCostTurns + (entry.unknownCost ? 1 : 0),
+    meteredEntries: (total.meteredEntries ?? total.meteredTurns) + (entry.unknownCost ? 0 : 1),
+    unknownCostEntries: (total.unknownCostEntries ?? total.unknownCostTurns) + (entry.unknownCost ? 1 : 0),
     currency: total.currency
   };
 }
