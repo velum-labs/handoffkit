@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import json
 
+import model_area_index.core as model_area_core
 import pytest
 from model_area_index import (
     ModelAreaScore,
+    SourceSpec,
     TaskOutcome,
     build_model_area_matrix,
     build_task_outcome_panel_metrics,
     fetch_live_model_area_scores,
     format_model_area_matrix_markdown,
+    get_source_spec,
+    get_source_specs,
     recommend_panel,
+    register_source,
     write_model_area_scores,
 )
 from model_area_index.cli import main as model_area_index_main
@@ -183,6 +188,75 @@ def test_cli_loads_snapshot_and_outputs_recommendation(
     payload = json.loads(capsys.readouterr().out)
     assert payload["source_metadata"]["loaded_snapshot"] == str(snapshot)
     assert payload["recommendation"]["target_profile"] == "coding-agent"
+
+
+def test_source_registry_is_discoverable_and_extensible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    specs = get_source_specs()
+    assert len(specs) >= 11
+    assert get_source_spec("benchlm").areas
+
+    original_urls = dict(model_area_core.SOURCE_URLS)
+    original_areas = dict(model_area_core.SOURCE_AREAS)
+    original_descriptions = dict(model_area_core.SOURCE_DESCRIPTIONS)
+    original_parsers = dict(model_area_core.SOURCE_PARSERS)
+    original_live_sources = model_area_core.LIVE_SOURCES
+
+    def parse_custom(
+        text: str,
+        source_url: str,
+        snapshot_hash: str,
+        retrieved_at: str,
+        limit: int | None,
+    ) -> list[ModelAreaScore]:
+        del text, limit
+        return [
+            ModelAreaScore(
+                model_key="custom-model",
+                provider="custom-provider",
+                model_family="custom",
+                model_version_or_alias="custom-model",
+                benchmark="custom-benchmark",
+                benchmark_version="v1",
+                area="custom_area",
+                score_raw=0.75,
+                score_normalized=0.75,
+                date_observed=retrieved_at,
+                source_url=source_url,
+                source_snapshot_hash=snapshot_hash,
+                data_level="aggregate",
+                scoring="objective",
+            )
+        ]
+
+    try:
+        register_source(
+            SourceSpec(
+                source="custom_source",
+                url="https://example.com/custom.json",
+                parser=parse_custom,
+                areas=("custom_area",),
+                description="custom source for extension tests",
+            )
+        )
+        monkeypatch.setattr("model_area_index.core._fetch_url", lambda *_args, **_kwargs: b"{}")
+
+        fetched = fetch_live_model_area_scores(sources=("custom_source",))
+
+        assert fetched.sources[0].source == "custom_source"
+        assert fetched.scores[0].area == "custom_area"
+        assert get_source_spec("custom_source").description == "custom source for extension tests"
+    finally:
+        model_area_core.SOURCE_URLS.clear()
+        model_area_core.SOURCE_URLS.update(original_urls)
+        model_area_core.SOURCE_AREAS.clear()
+        model_area_core.SOURCE_AREAS.update(original_areas)
+        model_area_core.SOURCE_DESCRIPTIONS.clear()
+        model_area_core.SOURCE_DESCRIPTIONS.update(original_descriptions)
+        model_area_core.SOURCE_PARSERS.clear()
+        model_area_core.SOURCE_PARSERS.update(original_parsers)
+        model_area_core.LIVE_SOURCES = original_live_sources
 
 
 def _score(

@@ -2,6 +2,7 @@
 name = "model-area-index"
 version = "0.1.0"
 description = "No-run public model capability index and model-by-area matrix builder."
+readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = [

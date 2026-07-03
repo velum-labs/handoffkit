@@ -9,7 +9,8 @@ import io
 import json
 import math
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -34,19 +35,7 @@ PanelProfile = Literal[
     "local-mlx",
     "mixed-frontier-open",
 ]
-LiveSource = Literal[
-    "aider",
-    "swe_bench",
-    "terminal_bench",
-    "livecodebench_generation",
-    "livecodebench_execution",
-    "livecodebench_repair",
-    "livecodebench_testgen",
-    "benchlm",
-    "open_llm_leaderboard",
-    "uibenchkit_dcgen",
-    "uibenchkit_design2code",
-]
+LiveSource = str
 
 LIVE_SOURCES: tuple[LiveSource, ...] = (
     "aider",
@@ -96,6 +85,47 @@ SOURCE_URLS: dict[LiveSource, str] = {
     "uibenchkit_design2code": (
         "https://raw.githubusercontent.com/chinh02/uibenchkit-experiments/main/"
         "leaderboard/comparison_design2code.csv"
+    ),
+}
+SOURCE_AREAS: dict[LiveSource, tuple[str, ...]] = {
+    "aider": ("coding_edit",),
+    "swe_bench": ("swe_repair",),
+    "terminal_bench": ("terminal_agentic",),
+    "livecodebench_generation": ("competitive_programming",),
+    "livecodebench_execution": ("code_execution",),
+    "livecodebench_repair": ("code_repair",),
+    "livecodebench_testgen": ("test_generation",),
+    "benchlm": (
+        "agentic",
+        "coding_general",
+        "reasoning",
+        "multimodal_grounded",
+        "knowledge",
+        "multilingual",
+        "instruction_following",
+        "math",
+    ),
+    "open_llm_leaderboard": (
+        "instruction_following",
+        "reasoning",
+        "math",
+        "hard_science_reasoning",
+        "multi_step_reasoning",
+        "knowledge",
+    ),
+    "uibenchkit_dcgen": (
+        "ui_to_code",
+        "ui_visual_fidelity",
+        "ui_layout_structure",
+        "ui_text_fidelity",
+        "ui_color_fidelity",
+    ),
+    "uibenchkit_design2code": (
+        "ui_to_code",
+        "ui_visual_fidelity",
+        "ui_layout_structure",
+        "ui_text_fidelity",
+        "ui_color_fidelity",
     ),
 }
 USER_AGENT = "model-area-index/0.1 (+https://github.com/velum-labs/handoffkit)"
@@ -323,6 +353,79 @@ class FetchError(RuntimeError):
     """A live public benchmark source could not be fetched or parsed."""
 
 
+SourceParser = Callable[[str, str, str, str, int | None], list[ModelAreaScore]]
+
+
+@dataclass(frozen=True)
+class SourceSpec:
+    """Description and parser binding for one live model-area source."""
+
+    source: LiveSource
+    url: str
+    parser: SourceParser
+    areas: tuple[str, ...]
+    description: str
+
+
+SOURCE_PARSERS: dict[LiveSource, SourceParser] = {}
+SOURCE_DESCRIPTIONS: dict[LiveSource, str] = {
+    "aider": "Aider polyglot coding-edit leaderboard.",
+    "swe_bench": "SWE-bench leaderboard JSON for repository repair tasks.",
+    "terminal_bench": "Terminal-Bench 2.1 rendered leaderboard data.",
+    "livecodebench_generation": "LiveCodeBench code-generation raw performances.",
+    "livecodebench_execution": "LiveCodeBench code-execution raw performances.",
+    "livecodebench_repair": "LiveCodeBench code-repair raw performances.",
+    "livecodebench_testgen": "LiveCodeBench test-generation raw performances.",
+    "benchlm": "BenchLM broad category leaderboard JSON.",
+    "open_llm_leaderboard": "Hugging Face Open LLM Leaderboard formatted API.",
+    "uibenchkit_dcgen": "UIBenchKit DCGen UI-to-code leaderboard CSV.",
+    "uibenchkit_design2code": "UIBenchKit Design2Code leaderboard CSV.",
+}
+
+
+def register_source(spec: SourceSpec) -> None:
+    """Register or replace a live source.
+
+    External callers can extend the package without editing the built-in
+    dispatch path by providing a source id, URL, parser, and advertised areas.
+    """
+
+    if not spec.source:
+        raise ValueError("source id must not be empty")
+    if not spec.url:
+        raise ValueError(f"source {spec.source!r} must have a URL")
+    if not spec.areas:
+        raise ValueError(f"source {spec.source!r} must advertise at least one area")
+    SOURCE_URLS[spec.source] = spec.url
+    SOURCE_AREAS[spec.source] = spec.areas
+    SOURCE_DESCRIPTIONS[spec.source] = spec.description
+    SOURCE_PARSERS[spec.source] = spec.parser
+    _refresh_live_sources()
+
+
+def get_source_spec(source: LiveSource) -> SourceSpec:
+    try:
+        return SourceSpec(
+            source=source,
+            url=SOURCE_URLS[source],
+            parser=SOURCE_PARSERS[source],
+            areas=SOURCE_AREAS[source],
+            description=SOURCE_DESCRIPTIONS.get(source, ""),
+        )
+    except KeyError as exc:
+        known = ", ".join(LIVE_SOURCES)
+        raise KeyError(f"unknown model-area source {source!r}; known sources: {known}") from exc
+
+
+def get_source_specs() -> tuple[SourceSpec, ...]:
+    return tuple(get_source_spec(source) for source in LIVE_SOURCES)
+
+
+def _refresh_live_sources() -> None:
+    global LIVE_SOURCES
+    LIVE_SOURCES = tuple(SOURCE_URLS)
+
+
 def fetch_live_model_area_scores(
     sources: Sequence[LiveSource] = LIVE_SOURCES,
     *,
@@ -332,19 +435,13 @@ def fetch_live_model_area_scores(
     all_scores: list[ModelAreaScore] = []
     fetch_results: list[SourceFetchResult] = []
     for source in sources:
-        url = SOURCE_URLS[source]
+        spec = get_source_spec(source)
+        url = spec.url
         raw = _fetch_url(url, timeout_s=timeout_s)
         snapshot_hash = hashlib.sha256(raw).hexdigest()
         retrieved_at = datetime.now(UTC).isoformat(timespec="seconds")
         text = raw.decode("utf-8", errors="replace")
-        scores = _parse_source(
-            source,
-            text,
-            url=url,
-            snapshot_hash=snapshot_hash,
-            retrieved_at=retrieved_at,
-            limit=limit_per_source,
-        )
+        scores = spec.parser(text, url, snapshot_hash, retrieved_at, limit_per_source)
         all_scores.extend(scores)
         fetch_results.append(
             SourceFetchResult(
@@ -552,81 +649,6 @@ def _fetch_url(url: str, *, timeout_s: float) -> bytes:
             return response.read()
     except (HTTPError, URLError, TimeoutError) as exc:
         raise FetchError(f"failed to fetch {url}: {exc}") from exc
-
-
-def _parse_source(
-    source: LiveSource,
-    text: str,
-    *,
-    url: str,
-    snapshot_hash: str,
-    retrieved_at: str,
-    limit: int | None,
-) -> list[ModelAreaScore]:
-    match source:
-        case "aider":
-            return _parse_aider(text, url, snapshot_hash, retrieved_at, limit)
-        case "swe_bench":
-            return _parse_swe_bench(text, url, snapshot_hash, retrieved_at, limit)
-        case "terminal_bench":
-            return _parse_terminal_bench(text, url, snapshot_hash, retrieved_at, limit)
-        case "livecodebench_generation":
-            return _parse_livecodebench(
-                text,
-                url,
-                snapshot_hash,
-                retrieved_at,
-                limit,
-                benchmark_version="generation-live",
-                area="competitive_programming",
-                default_subarea="pass_at_1",
-                metric_key="pass@1",
-            )
-        case "livecodebench_execution":
-            return _parse_livecodebench(
-                text,
-                url,
-                snapshot_hash,
-                retrieved_at,
-                limit,
-                benchmark_version="execution-live",
-                area="code_execution",
-                default_subarea="pass_at_1_cot",
-                metric_key="Pass@1-COT",
-                fallback_metric_key="Pass@1",
-            )
-        case "livecodebench_repair":
-            return _parse_livecodebench(
-                text,
-                url,
-                snapshot_hash,
-                retrieved_at,
-                limit,
-                benchmark_version="repair-live",
-                area="code_repair",
-                default_subarea="pass_at_1",
-                metric_key="pass@1",
-            )
-        case "livecodebench_testgen":
-            return _parse_livecodebench(
-                text,
-                url,
-                snapshot_hash,
-                retrieved_at,
-                limit,
-                benchmark_version="testgen-live",
-                area="test_generation",
-                default_subarea="pass_at_1",
-                metric_key="pass@1",
-            )
-        case "benchlm":
-            return _parse_benchlm(text, url, snapshot_hash, retrieved_at, limit)
-        case "open_llm_leaderboard":
-            return _parse_open_llm_leaderboard(text, url, snapshot_hash, retrieved_at, limit)
-        case "uibenchkit_dcgen":
-            return _parse_uibenchkit(text, url, snapshot_hash, retrieved_at, limit)
-        case "uibenchkit_design2code":
-            return _parse_uibenchkit(text, url, snapshot_hash, retrieved_at, limit)
 
 
 def _parse_aider(
@@ -1448,3 +1470,113 @@ def _format_cell(cell: AreaMatrixCell | None) -> str:
     if cell is None or cell.normalized_score is None:
         return "-"
     return f"{cell.normalized_score:.3f} ({cell.confidence:.2f})"
+
+
+def _register_builtin_sources() -> None:
+    parsers: dict[LiveSource, SourceParser] = {
+        "aider": _parse_aider,
+        "swe_bench": _parse_swe_bench,
+        "terminal_bench": _parse_terminal_bench,
+        "livecodebench_generation": _parse_livecodebench_generation,
+        "livecodebench_execution": _parse_livecodebench_execution,
+        "livecodebench_repair": _parse_livecodebench_repair,
+        "livecodebench_testgen": _parse_livecodebench_testgen,
+        "benchlm": _parse_benchlm,
+        "open_llm_leaderboard": _parse_open_llm_leaderboard,
+        "uibenchkit_dcgen": _parse_uibenchkit,
+        "uibenchkit_design2code": _parse_uibenchkit,
+    }
+    for source, parser in parsers.items():
+        register_source(
+            SourceSpec(
+                source=source,
+                url=SOURCE_URLS[source],
+                parser=parser,
+                areas=SOURCE_AREAS[source],
+                description=SOURCE_DESCRIPTIONS[source],
+            )
+        )
+
+
+def _parse_livecodebench_generation(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    return _parse_livecodebench(
+        text,
+        source_url,
+        snapshot_hash,
+        retrieved_at,
+        limit,
+        benchmark_version="generation-live",
+        area="competitive_programming",
+        default_subarea="pass_at_1",
+        metric_key="pass@1",
+    )
+
+
+def _parse_livecodebench_execution(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    return _parse_livecodebench(
+        text,
+        source_url,
+        snapshot_hash,
+        retrieved_at,
+        limit,
+        benchmark_version="execution-live",
+        area="code_execution",
+        default_subarea="pass_at_1_cot",
+        metric_key="Pass@1-COT",
+        fallback_metric_key="Pass@1",
+    )
+
+
+def _parse_livecodebench_repair(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    return _parse_livecodebench(
+        text,
+        source_url,
+        snapshot_hash,
+        retrieved_at,
+        limit,
+        benchmark_version="repair-live",
+        area="code_repair",
+        default_subarea="pass_at_1",
+        metric_key="pass@1",
+    )
+
+
+def _parse_livecodebench_testgen(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    return _parse_livecodebench(
+        text,
+        source_url,
+        snapshot_hash,
+        retrieved_at,
+        limit,
+        benchmark_version="testgen-live",
+        area="test_generation",
+        default_subarea="pass_at_1",
+        metric_key="pass@1",
+    )
+
+
+_register_builtin_sources()
