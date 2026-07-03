@@ -27,6 +27,10 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
         "performances_execution": _LCB_EXECUTION_JSON,
         "performances_repair": _LCB_REPAIR_JSON,
         "performances_testgen": _LCB_TESTGEN_JSON,
+        "benchlm.ai": _BENCHLM_JSON,
+        "open-llm-leaderboard": _OPEN_LLM_JSON,
+        "comparison_dcgen": _UIBENCH_DCGEM_CSV,
+        "comparison_design2code": _UIBENCH_DESIGN2CODE_CSV,
     }
 
     def fake_fetch(url: str, *, timeout_s: float) -> bytes:
@@ -41,7 +45,7 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     fetched = fetch_live_model_area_scores()
     matrix = build_model_area_matrix(fetched.scores)
 
-    assert len(fetched.sources) == 7
+    assert len(fetched.sources) == 11
     assert {source.record_count for source in fetched.sources}
     assert "coding_edit" in matrix.areas
     assert "swe_repair" in matrix.areas
@@ -50,6 +54,13 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     assert "code_execution" in matrix.areas
     assert "code_repair" in matrix.areas
     assert "test_generation" in matrix.areas
+    assert "ui_to_code" in matrix.areas
+    assert "ui_layout_structure" in matrix.areas
+    assert "reasoning" in matrix.areas
+    assert "math" in matrix.areas
+    assert "instruction_following" in matrix.areas
+    assert "hard_science_reasoning" in matrix.areas
+    assert "agentic" in matrix.areas
     assert matrix.rows["gpt-5-high"].cells["coding_edit"].raw_score == pytest.approx(0.88)
     assert matrix.rows["claude-opus"].cells["swe_repair"].raw_score == pytest.approx(0.8)
     assert matrix.rows["gpt-5-5"].cells["terminal_agentic"].raw_score == pytest.approx(0.83)
@@ -62,6 +73,14 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     assert matrix.rows["claude-2"].cells["code_execution"].raw_score == pytest.approx(0.7)
     assert matrix.rows["qwen2-ins-72b"].cells["code_repair"].raw_score == pytest.approx(0.8)
     assert matrix.rows["dscoder-33b-ins"].cells["test_generation"].raw_score == pytest.approx(0.3)
+    assert matrix.rows["claude-mythos-5"].cells["agentic"].raw_score == pytest.approx(1.0)
+    assert matrix.rows["qwen3-7-max"].cells["math"].raw_score == pytest.approx(0.902)
+    assert matrix.rows["open-model"].cells[
+        "hard_science_reasoning"
+    ].raw_score == pytest.approx(0.25)
+    assert matrix.rows["gemini-3-pro-preview"].cells["ui_to_code"].raw_score == pytest.approx(
+        (0.86 + 0.80 + 0.92 + 0.84 + 0.81 + 0.91) / 6
+    )
 
 
 def test_benchmark_local_normalization_does_not_mix_areas() -> None:
@@ -292,4 +311,70 @@ _LCB_TESTGEN_JSON = json.dumps(
             }
         ]
     }
+)
+
+_BENCHLM_JSON = json.dumps(
+    {
+        "sourceLastUpdated": "July 2, 2026",
+        "items": [
+            {
+                "model": "Claude Mythos 5",
+                "creator": "Anthropic",
+                "categoryScores": {
+                    "agentic": 100,
+                    "coding": 100,
+                    "reasoning": 95,
+                    "multimodalGrounded": 98.9,
+                    "knowledge": 99.3,
+                    "multilingual": 100,
+                    "instructionFollowing": 91.4,
+                    "math": 90,
+                },
+            },
+            {
+                "model": "Qwen3.7 Max",
+                "creator": "Alibaba",
+                "categoryScores": {
+                    "agentic": 85,
+                    "coding": 91.1,
+                    "reasoning": 94.8,
+                    "knowledge": 84.8,
+                    "instructionFollowing": 88,
+                    "math": 90.2,
+                },
+            },
+        ],
+    }
+)
+
+_OPEN_LLM_JSON = json.dumps(
+    [
+        {
+            "model": {"name": "open/model"},
+            "evaluations": {
+                "ifeval": {"value": 0.7, "normalized_score": 70},
+                "bbh": {"value": 0.6, "normalized_score": 60},
+                "math": {"value": 0.2, "normalized_score": 20},
+                "gpqa": {"value": 0.25, "normalized_score": 25},
+                "musr": {"value": 0.4, "normalized_score": 40},
+                "mmlu_pro": {"value": 0.5, "normalized_score": 50},
+            },
+        }
+    ]
+)
+
+_UIBENCH_DCGEM_CSV = "\n".join(
+    [
+        "dataset,method,model,model_date,clip_avg,fg_block_match_avg,fg_text_avg,"
+        "fg_position_avg,fg_color_avg,fg_clip_avg",
+        "dcgen,direct,gemini-3-pro-preview,2026-01-10,0.86,0.80,0.92,0.84,0.81,0.91",
+    ]
+)
+
+_UIBENCH_DESIGN2CODE_CSV = "\n".join(
+    [
+        "dataset,method,model,model_date,clip_avg,fg_block_match_avg,fg_text_avg,"
+        "fg_position_avg,fg_color_avg,fg_clip_avg",
+        "design2code,uicopilot,gpt-5,2026-03-08,0.85,0.70,0.75,0.69,0.67,0.86",
+    ]
 )

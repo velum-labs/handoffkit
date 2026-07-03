@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import html
+import io
 import json
 import math
 import re
@@ -40,6 +42,10 @@ LiveSource = Literal[
     "livecodebench_execution",
     "livecodebench_repair",
     "livecodebench_testgen",
+    "benchlm",
+    "open_llm_leaderboard",
+    "uibenchkit_dcgen",
+    "uibenchkit_design2code",
 ]
 
 LIVE_SOURCES: tuple[LiveSource, ...] = (
@@ -50,6 +56,10 @@ LIVE_SOURCES: tuple[LiveSource, ...] = (
     "livecodebench_execution",
     "livecodebench_repair",
     "livecodebench_testgen",
+    "benchlm",
+    "open_llm_leaderboard",
+    "uibenchkit_dcgen",
+    "uibenchkit_design2code",
 )
 SOURCE_URLS: dict[LiveSource, str] = {
     "aider": "https://aider.chat/docs/leaderboards/",
@@ -73,6 +83,19 @@ SOURCE_URLS: dict[LiveSource, str] = {
     "livecodebench_testgen": (
         "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/"
         "main/src/mocks/performances_testgen.json"
+    ),
+    "benchlm": "https://benchlm.ai/data/leaderboard.json",
+    "open_llm_leaderboard": (
+        "https://open-llm-leaderboard-open-llm-leaderboard.hf.space/api/"
+        "leaderboard/formatted"
+    ),
+    "uibenchkit_dcgen": (
+        "https://raw.githubusercontent.com/chinh02/uibenchkit-experiments/main/"
+        "leaderboard/comparison_dcgen.csv"
+    ),
+    "uibenchkit_design2code": (
+        "https://raw.githubusercontent.com/chinh02/uibenchkit-experiments/main/"
+        "leaderboard/comparison_design2code.csv"
     ),
 }
 USER_AGENT = "model-area-index/0.1 (+https://github.com/velum-labs/handoffkit)"
@@ -135,6 +158,28 @@ SWE_TASK_COUNTS: dict[str, int] = {
     "Verified": 500,
     "Lite": 300,
     "Multimodal": 517,
+}
+BENCHLM_CATEGORY_AREAS: dict[str, str] = {
+    "agentic": "agentic",
+    "coding": "coding_general",
+    "reasoning": "reasoning",
+    "multimodalGrounded": "multimodal_grounded",
+    "knowledge": "knowledge",
+    "multilingual": "multilingual",
+    "instructionFollowing": "instruction_following",
+    "math": "math",
+}
+OPEN_LLM_EVAL_AREAS: dict[str, str] = {
+    "ifeval": "instruction_following",
+    "bbh": "reasoning",
+    "math": "math",
+    "gpqa": "hard_science_reasoning",
+    "musr": "multi_step_reasoning",
+    "mmlu_pro": "knowledge",
+}
+UIBENCHKIT_TASK_COUNTS: dict[str, int] = {
+    "dcgen": 348,
+    "design2code": 484,
 }
 
 
@@ -574,6 +619,14 @@ def _parse_source(
                 default_subarea="pass_at_1",
                 metric_key="pass@1",
             )
+        case "benchlm":
+            return _parse_benchlm(text, url, snapshot_hash, retrieved_at, limit)
+        case "open_llm_leaderboard":
+            return _parse_open_llm_leaderboard(text, url, snapshot_hash, retrieved_at, limit)
+        case "uibenchkit_dcgen":
+            return _parse_uibenchkit(text, url, snapshot_hash, retrieved_at, limit)
+        case "uibenchkit_design2code":
+            return _parse_uibenchkit(text, url, snapshot_hash, retrieved_at, limit)
 
 
 def _parse_aider(
@@ -864,6 +917,238 @@ def _parse_livecodebench(
     return rows
 
 
+def _parse_benchlm(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    parsed = json.loads(text)
+    rows: list[ModelAreaScore] = []
+    categories = parsed.get("categories")
+    if isinstance(categories, Mapping):
+        for category, area in BENCHLM_CATEGORY_AREAS.items():
+            entries = categories.get(category, [])
+            if not isinstance(entries, list):
+                continue
+            for item in entries[:limit]:
+                if not isinstance(item, Mapping):
+                    continue
+                score = _as_float(item.get("score"))
+                if score is None:
+                    continue
+                rows.append(
+                    _benchlm_score(
+                        item,
+                        area=area,
+                        category=category,
+                        score=score,
+                        parsed=parsed,
+                        source_url=source_url,
+                        snapshot_hash=snapshot_hash,
+                        retrieved_at=retrieved_at,
+                    )
+                )
+    else:
+        items = parsed.get("items", [])
+        if not isinstance(items, list):
+            raise FetchError("BenchLM leaderboard JSON lacked items or categories")
+        for item in items[:limit]:
+            if not isinstance(item, Mapping):
+                continue
+            category_scores = item.get("categoryScores")
+            if not isinstance(category_scores, Mapping):
+                continue
+            for category, area in BENCHLM_CATEGORY_AREAS.items():
+                score = _as_float(category_scores.get(category))
+                if score is None:
+                    continue
+                rows.append(
+                    _benchlm_score(
+                        item,
+                        area=area,
+                        category=category,
+                        score=score,
+                        parsed=parsed,
+                        source_url=source_url,
+                        snapshot_hash=snapshot_hash,
+                        retrieved_at=retrieved_at,
+                    )
+                )
+    if not rows:
+        raise FetchError("BenchLM leaderboard parsed zero rows")
+    return rows
+
+
+def _benchlm_score(
+    item: Mapping[str, object],
+    *,
+    area: str,
+    category: str,
+    score: float,
+    parsed: Mapping[str, object],
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+) -> ModelAreaScore:
+    model = _as_str(item.get("model"))
+    if model is None:
+        raise FetchError("BenchLM row lacked model")
+    normalized = score / 100.0 if score > 1.0 else score
+    confidence = _as_float(item.get("scoreConfidence"))
+    return ModelAreaScore(
+        model_key=_model_key(model),
+        provider=_provider_for_name(_as_str(item.get("creator")) or model),
+        model_family=_family_for_name(model),
+        model_version_or_alias=model,
+        benchmark="benchlm",
+        benchmark_version=str(parsed.get("sourceLastUpdated") or "live"),
+        area=area,
+        subarea=category,
+        score_raw=normalized,
+        score_normalized=normalized,
+        n_tasks=_positive_int_or_none(item.get("trustedBenchmarkCount")),
+        date_observed=retrieved_at,
+        harness="BenchLM category leaderboard",
+        prompting_mode="mixed_public_benchmarks",
+        source_url=source_url,
+        source_snapshot_hash=snapshot_hash,
+        data_level="aggregate",
+        scoring="objective",
+        freshness_weight=min(1.0, 0.35 + (confidence or 1.0) * 0.2),
+        saturation_weight=_saturation_weight(normalized),
+        same_harness_comparable=False,
+    )
+
+
+def _parse_open_llm_leaderboard(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    parsed = json.loads(text)
+    if not isinstance(parsed, list):
+        raise FetchError("Open LLM Leaderboard formatted API did not return a list")
+    rows: list[ModelAreaScore] = []
+    for entry in parsed[:limit]:
+        if not isinstance(entry, Mapping):
+            continue
+        model_block = entry.get("model")
+        evaluations = entry.get("evaluations")
+        if not isinstance(model_block, Mapping) or not isinstance(evaluations, Mapping):
+            continue
+        model = _as_str(model_block.get("name"))
+        if model is None:
+            continue
+        for eval_key, area in OPEN_LLM_EVAL_AREAS.items():
+            eval_block = evaluations.get(eval_key)
+            if not isinstance(eval_block, Mapping):
+                continue
+            score = _as_float(eval_block.get("value"))
+            normalized_score = _as_float(eval_block.get("normalized_score"))
+            if score is None:
+                continue
+            rows.append(
+                ModelAreaScore(
+                    model_key=_model_key(model),
+                    provider="open-weight",
+                    model_family=_family_for_name(model),
+                    model_version_or_alias=model,
+                    benchmark="open-llm-leaderboard",
+                    benchmark_version="formatted-live",
+                    area=area,
+                    subarea=eval_key,
+                    score_raw=score,
+                    score_normalized=(
+                        normalized_score / 100.0 if normalized_score is not None else None
+                    ),
+                    date_observed=retrieved_at,
+                    harness="Open LLM Leaderboard formatted API",
+                    prompting_mode="leaderboard_v2",
+                    source_url=source_url,
+                    source_snapshot_hash=snapshot_hash,
+                    data_level="aggregate",
+                    scoring="objective",
+                    saturation_weight=_saturation_weight(score),
+                    same_harness_comparable=True,
+                )
+            )
+    if not rows:
+        raise FetchError("Open LLM Leaderboard parsed zero rows")
+    return rows
+
+
+def _parse_uibenchkit(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    csv_rows = list(csv.DictReader(io.StringIO(text)))
+    rows: list[ModelAreaScore] = []
+    for entry in csv_rows[:limit]:
+        model = entry.get("model")
+        dataset = entry.get("dataset") or "ui"
+        if not model:
+            continue
+        metric_values = {
+            "ui_to_code": _mean_present(
+                [
+                    _as_float(entry.get("clip_avg")),
+                    _as_float(entry.get("fg_block_match_avg")),
+                    _as_float(entry.get("fg_text_avg")),
+                    _as_float(entry.get("fg_position_avg")),
+                    _as_float(entry.get("fg_color_avg")),
+                    _as_float(entry.get("fg_clip_avg")),
+                ]
+            ),
+            "ui_visual_fidelity": _as_float(entry.get("clip_avg")),
+            "ui_layout_structure": _mean_present(
+                [
+                    _as_float(entry.get("fg_block_match_avg")),
+                    _as_float(entry.get("fg_position_avg")),
+                ]
+            ),
+            "ui_text_fidelity": _as_float(entry.get("fg_text_avg")),
+            "ui_color_fidelity": _as_float(entry.get("fg_color_avg")),
+        }
+        for area, score in metric_values.items():
+            if score is None:
+                continue
+            rows.append(
+                ModelAreaScore(
+                    model_key=_model_key(model),
+                    provider=_provider_for_name(model),
+                    model_family=_family_for_name(model),
+                    model_version_or_alias=model,
+                    benchmark="uibenchkit",
+                    benchmark_version=str(dataset),
+                    area=area,
+                    subarea=entry.get("method") or str(dataset),
+                    score_raw=score,
+                    score_normalized=score,
+                    n_tasks=UIBENCHKIT_TASK_COUNTS.get(str(dataset)),
+                    cost_usd=None,
+                    date_observed=retrieved_at,
+                    harness=f"UIBenchKit {dataset} leaderboard",
+                    prompting_mode=entry.get("method"),
+                    source_url=source_url,
+                    source_snapshot_hash=snapshot_hash,
+                    data_level="aggregate",
+                    scoring="objective",
+                    saturation_weight=_saturation_weight(score),
+                    same_harness_comparable=True,
+                )
+            )
+    if not rows:
+        raise FetchError("UIBenchKit leaderboard parsed zero rows")
+    return rows
+
+
 def _load_records(path: str | Path) -> list[Mapping[str, Any]]:
     input_path = Path(path)
     text = input_path.read_text(encoding="utf-8").strip()
@@ -1124,6 +1409,11 @@ def _as_int(value: object) -> int | None:
     return int(number) if number is not None else None
 
 
+def _positive_int_or_none(value: object) -> int | None:
+    number = _as_int(value)
+    return number if number is not None and number >= 1 else None
+
+
 def _as_str(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
@@ -1147,6 +1437,11 @@ def _optional_weighted_average(values: Iterable[tuple[float | None, float]]) -> 
 
 def _average(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _mean_present(values: Sequence[float | None]) -> float | None:
+    present = [value for value in values if value is not None]
+    return _average(present) if present else None
 
 
 def _format_cell(cell: AreaMatrixCell | None) -> str:
