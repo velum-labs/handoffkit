@@ -23,6 +23,8 @@ from model_area_index.core import (
     PanelRecommendationMember,
     ScoreDirection,
     ScoringMode,
+    SourceAvailability,
+    SourceFetchResult,
     SourceSpec,
     TaskOutcome,
     TaskOutcomePanelMetrics,
@@ -31,6 +33,7 @@ from model_area_index.core import (
     build_data_quality_report,
     build_model_area_matrix,
     build_task_outcome_panel_metrics,
+    build_task_outcome_reports,
     fetch_live_model_area_scores,
     format_model_area_matrix_markdown,
     get_source_spec,
@@ -40,6 +43,7 @@ from model_area_index.core import (
     recommend_panel,
     register_source,
     write_model_area_scores,
+    write_task_outcomes,
 )
 
 __all__ = [
@@ -65,6 +69,8 @@ __all__ = [
     "PanelRecommendationMember",
     "ScoreDirection",
     "ScoringMode",
+    "SourceAvailability",
+    "SourceFetchResult",
     "SourceSpec",
     "TaskOutcome",
     "TaskOutcomePanelMetrics",
@@ -73,6 +79,7 @@ __all__ = [
     "build_data_quality_report",
     "build_model_area_matrix",
     "build_task_outcome_panel_metrics",
+    "build_task_outcome_reports",
     "fetch_live_model_area_scores",
     "format_model_area_matrix_markdown",
     "get_source_spec",
@@ -82,4 +89,5 @@ __all__ = [
     "recommend_panel",
     "register_source",
     "write_model_area_scores",
+    "write_task_outcomes",
 ]

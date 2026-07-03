@@ -72,6 +72,11 @@ register_source(
 
 Then call `fetch_live_model_area_scores(sources=("my_source",))`.
 
+Live fetches are tolerant by default: one source failure is captured in
+`source_metadata` and the remaining sources still produce a matrix. Use
+`strict=True` in Python or `--strict` in the CLI when CI should fail on any
+source failure.
+
 ## Evidence boundaries
 
 Aggregate rows are useful for shortlisting and routing priors. They are not
@@ -92,3 +97,15 @@ checks concrete failure modes:
 
 The CLI includes `data_quality_report` in JSON output and supports
 `--fail-on-data-quality-errors` for CI gates.
+
+Full live-pulled snapshots can be large. Keep large `latest` outputs as CI,
+release, or local artifacts; commit only small reviewed fixtures such as
+`fixtures/model_area_scores.sample.jsonl`.
+
+## Task-outcome evidence
+
+Do not put per-task evidence into `ModelAreaScore` unless it is still only an
+aggregate/subtask score for the matrix. Real same-task evidence belongs in
+`TaskOutcome` rows. The CLI accepts `--task-outcome-snapshot <jsonl>` and emits
+separate `task_outcome_metrics` with oracle score, oracle headroom, unique-win
+rates, and pairwise failure correlations.

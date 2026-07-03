@@ -27,6 +27,7 @@ DecorrelationEvidenceLevel = Literal[
     "none",
 ]
 ValidationSeverity = Literal["error", "warning"]
+SourceAvailability = Literal["ran", "unavailable", "failed"]
 ScoreDirection = Literal["higher_is_better", "lower_is_better"]
 ScoringMode = Literal["deterministic_tests", "objective", "human_preference", "llm_judge"]
 PanelProfile = Literal[
@@ -155,8 +156,9 @@ PROFILE_AREA_WEIGHTS: dict[PanelProfile, dict[str, float]] = {
         "reasoning": 0.3,
         "math": 0.2,
         "instruction_following": 0.2,
-        "data_analysis": 0.2,
-        "long_context": 0.1,
+        "knowledge": 0.15,
+        "hard_science_reasoning": 0.1,
+        "multi_step_reasoning": 0.05,
     },
     "low-cost-open-weight": {
         "coding_edit": 0.25,
@@ -167,11 +169,11 @@ PROFILE_AREA_WEIGHTS: dict[PanelProfile, dict[str, float]] = {
         "terminal_agentic": 0.1,
     },
     "local-mlx": {
-        "coding_edit": 0.25,
+        "coding_general": 0.25,
         "reasoning": 0.25,
         "math": 0.2,
         "instruction_following": 0.2,
-        "long_context": 0.1,
+        "knowledge": 0.1,
     },
     "mixed-frontier-open": {
         "coding_edit": 0.2,
@@ -340,9 +342,11 @@ class PanelRecommendation(BaseModel):
 class SourceFetchResult(BaseModel):
     source: LiveSource
     url: str
+    availability: SourceAvailability = "ran"
     snapshot_hash: str
     retrieved_at: str
     record_count: int
+    error_reason: str | None = None
 
 
 class LiveFetchResult(BaseModel):
@@ -452,22 +456,55 @@ def fetch_live_model_area_scores(
     *,
     timeout_s: float = 30.0,
     limit_per_source: int | None = None,
+    strict: bool = False,
 ) -> LiveFetchResult:
     all_scores: list[ModelAreaScore] = []
     fetch_results: list[SourceFetchResult] = []
     for source in sources:
-        spec = get_source_spec(source)
-        url = spec.url
-        raw = _fetch_url(url, timeout_s=timeout_s)
-        snapshot_hash = hashlib.sha256(raw).hexdigest()
         retrieved_at = datetime.now(UTC).isoformat(timespec="seconds")
-        text = raw.decode("utf-8", errors="replace")
-        scores = spec.parser(text, url, snapshot_hash, retrieved_at, limit_per_source)
+        try:
+            spec = get_source_spec(source)
+            url = spec.url
+            raw = _fetch_url(url, timeout_s=timeout_s)
+            snapshot_hash = hashlib.sha256(raw).hexdigest()
+            text = raw.decode("utf-8", errors="replace")
+            scores = spec.parser(text, url, snapshot_hash, retrieved_at, limit_per_source)
+        except FetchError as exc:
+            if strict:
+                raise
+            fetch_results.append(
+                SourceFetchResult(
+                    source=source,
+                    url=SOURCE_URLS.get(source, ""),
+                    availability="failed",
+                    snapshot_hash="",
+                    retrieved_at=retrieved_at,
+                    record_count=0,
+                    error_reason=str(exc),
+                )
+            )
+            continue
+        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            if strict:
+                raise FetchError(f"source {source!r} failed: {exc}") from exc
+            fetch_results.append(
+                SourceFetchResult(
+                    source=source,
+                    url=SOURCE_URLS.get(source, ""),
+                    availability="failed",
+                    snapshot_hash="",
+                    retrieved_at=retrieved_at,
+                    record_count=0,
+                    error_reason=str(exc),
+                )
+            )
+            continue
         all_scores.extend(scores)
         fetch_results.append(
             SourceFetchResult(
                 source=source,
                 url=url,
+                availability="ran",
                 snapshot_hash=snapshot_hash,
                 retrieved_at=retrieved_at,
                 record_count=len(scores),
@@ -482,6 +519,14 @@ def load_model_area_scores(path: str | Path) -> list[ModelAreaScore]:
 
 def load_task_outcomes(path: str | Path) -> list[TaskOutcome]:
     return [TaskOutcome.model_validate(row) for row in _load_records(path)]
+
+
+def write_task_outcomes(path: str | Path, outcomes: Iterable[TaskOutcome]) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        for outcome in outcomes:
+            handle.write(json.dumps(outcome.model_dump(mode="json"), sort_keys=True) + "\n")
 
 
 def write_model_area_scores(path: str | Path, scores: Iterable[ModelAreaScore]) -> None:
@@ -591,6 +636,20 @@ def build_task_outcome_panel_metrics(
         },
         decorrelation_evidence_level="task_vector" if denominator >= 2 else "none",
     )
+
+
+def build_task_outcome_reports(
+    outcomes: Sequence[TaskOutcome],
+    *,
+    model_keys: Sequence[str] | None = None,
+) -> list[TaskOutcomePanelMetrics]:
+    grouped: dict[tuple[str, str], list[TaskOutcome]] = {}
+    for outcome in outcomes:
+        grouped.setdefault((outcome.benchmark, outcome.benchmark_version), []).append(outcome)
+    return [
+        build_task_outcome_panel_metrics(group_outcomes, model_keys=model_keys)
+        for _, group_outcomes in sorted(grouped.items())
+    ]
 
 
 def build_data_quality_report(
@@ -1049,7 +1108,7 @@ def _parse_livecodebench(
                 prompting_mode="single_attempt",
                 source_url=source_url,
                 source_snapshot_hash=snapshot_hash,
-                data_level="task_outcome",
+                data_level="subtask",
                 scoring="deterministic_tests",
                 saturation_weight=_saturation_weight(_average(scores)),
                 same_harness_comparable=True,
@@ -1076,7 +1135,7 @@ def _parse_livecodebench(
                     prompting_mode="single_attempt",
                     source_url=source_url,
                     source_snapshot_hash=snapshot_hash,
-                    data_level="task_outcome",
+                    data_level="subtask",
                     scoring="deterministic_tests",
                     saturation_weight=_saturation_weight(_average(diff_values)),
                     same_harness_comparable=True,

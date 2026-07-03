@@ -18,6 +18,7 @@ from model_area_index import (
     recommend_panel,
     register_source,
     write_model_area_scores,
+    write_task_outcomes,
 )
 from model_area_index.cli import main as model_area_index_main
 
@@ -76,7 +77,7 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     assert matrix.rows["gpt-5-5"].cells["terminal_agentic"].raw_score == pytest.approx(0.83)
     deepseek_cell = matrix.rows["deepseek-v3"].cells["competitive_programming"]
     gpt_cell = matrix.rows["gpt-5"].cells["competitive_programming"]
-    assert deepseek_cell.decorrelation_evidence_level == "task_vector"
+    assert deepseek_cell.decorrelation_evidence_level == "aggregate_proxy"
     assert deepseek_cell.raw_score is not None
     assert gpt_cell.raw_score is not None
     assert deepseek_cell.raw_score > gpt_cell.raw_score
@@ -193,6 +194,59 @@ def test_cli_loads_snapshot_and_outputs_recommendation(
     payload = json.loads(capsys.readouterr().out)
     assert payload["source_metadata"]["loaded_snapshot"] == str(snapshot)
     assert payload["recommendation"]["target_profile"] == "coding-agent"
+
+
+def test_cli_keeps_task_outcome_metrics_separate(
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    snapshot = tmp_path / "snapshot.jsonl"
+    task_outcomes = tmp_path / "task-outcomes.jsonl"
+    write_model_area_scores(snapshot, [_score("gpt", "openai", "aider", "coding_edit", 0.9)])
+    write_task_outcomes(
+        task_outcomes,
+        [
+            _outcome("t1", "gpt", 1.0),
+            _outcome("t1", "opus", 0.0),
+            _outcome("t2", "gpt", 0.0),
+            _outcome("t2", "opus", 1.0),
+        ],
+    )
+
+    exit_code = model_area_index_main(
+        [
+            "--snapshot",
+            str(snapshot),
+            "--task-outcome-snapshot",
+            str(task_outcomes),
+            "--format",
+            "json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "task_outcome_metrics" in payload
+    assert payload["task_outcome_metrics"][0]["decorrelation_evidence_level"] == "task_vector"
+    assert payload["rows"]["gpt"]["cells"]["coding_edit"]["decorrelation_evidence_level"] == (
+        "aggregate_proxy"
+    )
+
+
+def test_live_fetch_records_source_failure_without_strict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_fetch(url: str, *, timeout_s: float) -> bytes:
+        del url, timeout_s
+        raise model_area_core.FetchError("boom")
+
+    monkeypatch.setattr("model_area_index.core._fetch_url", fail_fetch)
+
+    fetched = fetch_live_model_area_scores(sources=("aider",))
+
+    assert fetched.scores == []
+    assert fetched.sources[0].availability == "failed"
+    assert fetched.sources[0].error_reason == "boom"
 
 
 def test_source_registry_is_discoverable_and_extensible(
