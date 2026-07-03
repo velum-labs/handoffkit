@@ -37,6 +37,7 @@
     "@fusionkit/adapter-ai-sdk": "workspace:*",
     "@fusionkit/ensemble": "workspace:*",
     "@fusionkit/handoff": "workspace:*",
+    "@fusionkit/harness-core": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/plane": "workspace:*",
     "@fusionkit/protocol": "workspace:*",

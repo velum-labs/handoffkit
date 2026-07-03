@@ -41,7 +41,13 @@ export type {
 export { createToolRegistry } from "./registry.js";
 export type { ToolRegistry } from "./registry.js";
 export { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL, LOCAL_MODEL_LABEL } from "./constants.js";
-export { envFlagEnabled, legacyEnvName, readEnv } from "./env-compat.js";
+export {
+  envFlagEnabled,
+  HARNESS_DRIVERS_FLAG,
+  harnessDriversEnabled,
+  legacyEnvName,
+  readEnv
+} from "./env-compat.js";
 export {
   buildChildEnv,
   DEFAULT_BRIDGE_SCRUB_PREFIXES,

@@ -10,6 +10,7 @@
     { "path": "../adapter-ai-sdk" },
     { "path": "../ensemble" },
     { "path": "../handoff" },
+    { "path": "../harness-core" },
     { "path": "../model-gateway" },
     { "path": "../plane" },
     { "path": "../protocol" },

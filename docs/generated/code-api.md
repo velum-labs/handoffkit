@@ -106,7 +106,7 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { createMockHarness, MOCK_DASHBOARD_CAPABILITIES, MOCK_DASHBOARD_IDENTITY } from "./mock.js";`
 - `export type { MockCandidateFixture, MockHarnessOptions } from "./mock.js";`
 - `export { createDriverHarness } from "./driver-adapter.js";`
-- `export type { DriverHarnessOptions, PanelDriver } from "./driver-adapter.js";`
+- `export type { DriverHarnessOptions, DriverModelRoute, PanelDriver } from "./driver-adapter.js";`
 - `export { traceCandidate } from "./candidate-trace.js";`
 - `export type { CandidateOutcome, CandidateTraceContext, CandidateTraceInput, CandidateTracer } from "./candidate-trace.js";`
 - `export { createToolExecutor, registerDemoTools, sideEffectsForTool } from "./tool-executor.js";`
@@ -156,6 +156,34 @@ by that contract, and the result is an offline-verifiable receipt.
 - `export { reviewStrategies, scorecardFor } from "./review.js";`
 - `export type { ReviewedRun, ReviewResult, ReviewStrategy, Scorecard } from "./review.js";`
 - `export type { ToolCallObservation, ToolLike } from "./tools.js";`
+
+### `packages/harness-core/src/index.ts`
+
+@fusionkit/harness-core is the single coding-agent harness contract:
+driver -> instance -> session interfaces, the canonical harness event
+union (with raw provider envelopes), one tagged error taxonomy with
+derived retryability, deferred-based approvals with explicit policies,
+status probes with an identity-checked disk cache, and an explicit driver
+registry. Drivers (tool-codex, tool-claude, tool-cursor, tool-opencode)
+implement this contract; the panel fanout and launchers consume it.
+
+- `export { HARNESS_KINDS, isHarnessKind, toModelFusionHarnessKind } from "./kinds.js";`
+- `export type { HarnessKind } from "./kinds.js";`
+- `export { HARNESS_ERROR_CODES, HarnessError, asHarnessError, isRetryable, toModelFusionErrorKind } from "./errors.js";`
+- `export type { HarnessErrorCategory, HarnessErrorCode } from "./errors.js";`
+- `export type { HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./events.js";`
+- `export { PANEL_APPROVAL_POLICY, PendingRequests, createDeferred, decideApproval } from "./approvals.js";`
+- `export type { ApprovalDecision, ApprovalPolicy, Deferred, PendingRequest } from "./approvals.js";`
+- `export { DEFAULT_STATUS_CACHE_DIR, readCachedStatus, statusSkipReason, writeCachedStatus } from "./status.js";`
+- `export type { HarnessAuthStatus, HarnessModelDescriptor, HarnessStatus } from "./status.js";`
+- `export type { AnyHarnessDriver, DriverContext, HarnessDriver, HarnessInstance, ResumeCursor, SessionHandle, SessionTurnInput, StartSessionOptions } from "./contract.js";`
+- `export { DriverRegistry } from "./registry.js";`
+- `export { AsyncChannel } from "./channel.js";`
+- `export { EventLog } from "./logging.js";`
+- `export type { EventLogOptions } from "./logging.js";`
+- `export { DEFAULT_TMP_MANIFEST, createTrackedTmpDir, releaseTrackedTmpDir, sweepTrackedTmpDirs } from "./tmp-sweep.js";`
+- `export { buildChildEnv, freePort, runCliCapture, spawnLogged, terminate, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./process.js";`
+- `export type { BuildChildEnvInput, CliCaptureOptions, CliCaptureResult, LoggedChild, LoggedSpawnOptions } from "./process.js";`
 
 ### `packages/kernel/src/index.ts`
 
@@ -306,6 +334,91 @@ interfaces instead of recreating local string lists or proof logic.
 - `export type { ActorRef, AgentKind, AgentSpec, ArtifactKind, AttestationTier, BudgetSpec, ChainedEvent, Checkpoint, CheckpointTier, ConsentRule, ContinuationRef, DataClassRule, DisclosureMode, DisclosureRecord, FailureClass, HandoffEnvelope, HandoffSource, HandoffTargetRef, KeyRef, ManifestFile, ModelUsageRecord, NetworkAccessRecord, NetworkPolicy, Policy, Receipt, ReceiptBundle, RetentionPolicy, RunContract, RunEvent, RunnerIdentity, RunnerSelector, RunStatus, SecretClaim, SecretReleaseRecord, SecretScopeRule, SemanticState, SessionIsolation, Signature, TaskSpec, ToolCallRecord, ToolJournal, WorkspaceManifest } from "./types.js";`
 - `export type { ClaimResult, DisclosureReport, PolicyDecision, RunnerSummary, RunRequest, RunRequestInput, RunSummary, RunView } from "./api.js";`
 
+### `packages/registry/src/index.ts`
+
+Typed accessors over the generated registry data (spec/registry/*.json).
+
+This package is the Node-side single source of truth for provider metadata
+(base URLs, API key env vars, key probes, discovery), subscription auth
+metadata (Claude Code / Codex logins), the fusion model identity, the
+cloud/local model catalogs, model-family capability quirks, and default
+pricing. The Python workspace consumes the same data through
+`fusionkit_core._generated.registry_data` — both are generated from the same
+JSON by `scripts/generate-registry.mjs`, so the two stacks cannot drift.
+
+Zero runtime dependencies (node builtins only) so any package can depend on
+it without cycles.
+
+- `export type ProviderAuthStyle ...`
+- `export type ProviderKeyProbe ...`
+- `export type ProviderDiscovery ...`
+- `export type ProviderInfo ...`
+- `export const PROVIDERS: Readonly<Record<string, ProviderInfo>> ...`
+  All registered providers, keyed by canonical provider id.
+- `export function providerDefaultBaseUrl(provider: string): string | undefined ...`
+  Default base URL for a provider, or undefined for local providers (mlx).
+- `export function defaultKeyEnv(provider: string): string | undefined ...`
+  Default env var holding the API key for a provider, or undefined.
+- `export function providerKeyProbe(provider: string): ProviderKeyProbe | undefined ...`
+  Cheap key-validation probe metadata for a provider, or undefined.
+- `export function providerDiscovery(provider: string): ProviderDiscovery | undefined ...`
+  Live model-discovery capability for a provider, or undefined.
+- `export type SubscriptionMode ...`
+- `export type SubscriptionInfo ...`
+- `export const SUBSCRIPTIONS: Readonly<Record<SubscriptionMode, SubscriptionInfo>> ...`
+- `export function subscriptionInfo(mode: SubscriptionMode): SubscriptionInfo ...`
+  Subscription metadata for an auth mode.
+- `export function providerForAuthMode(mode: SubscriptionMode): string ...`
+  The provider a subscription auth mode speaks (claude-code -> anthropic, codex -> codex).
+- `export const FUSION_PANEL_MODEL: string ...`
+  The model label the fused panel is fronted under (gateway + tool pickers).
+- `export const CURSOR_BRIDGE_MODEL_NAME: string ...`
+  The model name the Cursor bridge exposes to cursor-agent.
+- `export const LOCAL_MODEL_LABEL: string ...`
+  Provider/model label a tool advertises for the gateway-backed local model.
+- `export const FUSION_MODEL_ALIASES: readonly string[] ...`
+  Reserved fusion aliases the Python server's chat front door understands.
+- `export const FUSION_DEFAULT_ALIAS: string ...`
+  The Python server's default (router) fusion alias.
+- `export const FUSION_PANEL_ALIAS: string ...`
+  The panel-mode fusion alias external benchmark runners target.
+- `export const FUSION_GATEWAY_DEFAULT_BASE_URL: string ...`
+  Default local FusionKit gateway base URL used by benchmark runners.
+- `export const FUSION_GATEWAY_API_KEY_ENV: string ...`
+  Env var external runners can read for a FusionKit gateway API key placeholder.
+- `export type CatalogPanelMember ...`
+- `export type BenchmarkPanelPreset ...`
+- `export const DEFAULT_CLOUD_PANEL_MEMBERS: readonly CatalogPanelMember[] ...`
+  The default cloud panel trio (OpenAI + Anthropic + Google).
+- `export const BENCHMARK_PANEL_PRESETS: Readonly<Record<string, BenchmarkPanelPreset>> ...`
+  Named benchmark/live-smoke panel presets shared by CLI scripts and Python evals.
+- `export const DEFAULT_REASONING_MODEL: string ...`
+  The default narration-writer model for a bare `--reasoning-model` flag.
+- `export function catalogDefaultModel(choice: string): string | undefined ...`
+  The default model for an auth choice, or undefined for unknown choices.
+- `export function curatedModels(choice: string): readonly string[] ...`
+  Curated fallback model list for an auth choice (may be empty).
+- `export function smokeModelForTool(tool: string): string | undefined ...`
+  Default smoke-test model for a tool id, or undefined.
+- `export function samplingOverridesForModel(model: string): Readonly<Record<string, number>> ...`
+  Per-model sampling overrides (first matching family wins), e.g. qwen-family models want temperature 0.55 / top_p 1.0. Empty when no family matches.
+- `export function chatTemplateKwargsForModel(`
+  Chat-template kwargs the local MLX gateway should default for a model family (e.g. Qwen `enable_thinking`), or undefined when no family matches.
+- `export type RegistryModelPricing ...`
+- `export const DEFAULT_MODEL_PRICING: Readonly<Record<string, RegistryModelPricing>> ...`
+  Default per-model list prices (USD / 1M tokens), manual overrides merged over the generated table. Matched by longest prefix by consumers.
+- `export type LocalModelRole ...`
+- `export type LocalCatalogModel ...`
+- `export const LOCAL_CATALOG_ENTRIES: readonly LocalCatalogModel[] ...`
+  The curated local MLX catalog, ordered small -> large.
+- `export type PreferredLocalModel ...`
+- `export const PREFERRED_LOCAL_MODELS: readonly PreferredLocalModel[] ...`
+  Repos `defaultTrioFor` prefers first, in order, with their panel member ids.
+- `export const GATEWAY_DEFAULT_MLX_MODEL: string ...`
+  The standalone model-gateway MLX fallback model.
+- `export const LOCAL_PROBE_MODEL: string ...`
+  Throwaway model id used to construct model-agnostic MLX envs.
+
 ### `packages/runner/src/index.ts`
 
 @fusionkit/runner is the outbound-only governed runner entry point.
@@ -321,6 +434,41 @@ share. Everything else is runner-internal.
 - `export type { SessionBackend, SessionBackendResult, SessionExecution } from "./backend.js";`
 - `export { executionHash, executionSpecFor, prepareExecution, requireShellExecution, resolveSessionEnv } from "./execution.js";`
 - `export type { BackendExecutionKind } from "./execution.js";`
+
+### `packages/runtime-utils/src/index.ts`
+
+No module JSDoc was found.
+
+- `export const RUNTIME_TIMEOUT_MS ...`
+- `export const MANAGED_SERVER_DEFAULTS ...`
+- `export const CANDIDATE_ISOLATION_DEFAULTS ...`
+- `export function sleep(ms: number): Promise<void> ...`
+- `export function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal ...`
+- `export function formatDurationMs(ms: number): string ...`
+- `export function commandOnPath(`
+  True when `command` resolves to an executable: an existing path when it contains a separator, else a match on any `PATH` entry (with Windows `PATHEXT` extensions appended). One implementation shared by every harness and launcher instead of three subtly-different copies.
+- `export function captureWorktreeDiff(cwd: string): string | undefined ...`
+  The `git diff` of a working tree, or undefined when clean or not a repo.
+- `export function definedEnv(env: EnvInput): Record<string, string> ...`
+- `export function normalizeApiBaseUrl(baseUrl: string): string ...`
+- `export type BuildChildEnvInput ...`
+- `export function buildChildEnv(input: BuildChildEnvInput ...`
+  Build a child environment from an explicit allowlist instead of spreading the entire parent environment: a harness CLI driven headlessly must not inherit every credential the parent process happens to hold. The baseline covers system plumbing (PATH/HOME/locale/TLS/proxy); everything else must be named by the caller.
+- `export const DEFAULT_BRIDGE_SCRUB_PREFIXES ...`
+- `export function scrubBridgeEnv(`
+- `export type CliCaptureOptions ...`
+- `export type CliCaptureResult ...`
+- `export function runCliCapture(`
+  Run a CLI to completion, capturing stdout/stderr, with the lifecycle rigor every harness child needs: the child is spawned in its own process group and timeout/abort kill the whole group with SIGTERM -> SIGKILL escalation, so a CLI that spawns its own subprocesses (codex/claude/cursor all do) cannot leave orphans behind. Rejects only on spawn failure (e.g. ENOENT); every other outcome resolves. Exit codes mirror coreutils conventions: 124 for timeout, 130 for abort.
+- `export function spawnTool(`
+- `export type LoggedSpawnOptions ...`
+- `export type LoggedChild ...`
+- `export function spawnLogged(`
+- `export function distillLog(raw: string, options: ...`
+- `export function waitForOutput(`
+- `export function terminate(child: ChildProcess, graceMs ...`
+- `export function escapeMarkdownCell(value: string): string ...`
+- `export function markdownTable(headers: readonly string[], rows: readonly (readonly string[])[]): string[] ...`
 
 ### `packages/sdk/src/index.ts`
 
@@ -484,7 +632,7 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
 - `export { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL, LOCAL_MODEL_LABEL } from "./constants.js";`
-- `export { envFlagEnabled, legacyEnvName, readEnv } from "./env-compat.js";`
+- `export { envFlagEnabled, HARNESS_DRIVERS_FLAG, harnessDriversEnabled, legacyEnvName, readEnv } from "./env-compat.js";`
 - `export { buildChildEnv, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
 - `export type { BuildChildEnvInput } from "./env.js";`
 - `export { buildSkippedCandidate } from "./candidate.js";`

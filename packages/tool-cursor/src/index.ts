@@ -1,10 +1,13 @@
 /**
  * Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cursorkit bridge, and the Cursor ensemble harness adapter.
  */
-import { FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
 import type { ToolIntegration } from "@fusionkit/tools";
+import { createDriverHarness } from "@fusionkit/ensemble";
+import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";
 
 import { createCursorHarness, cursorHarnessUnavailableReason } from "./harness.js";
+import { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";
 import { launchCursor } from "./launch.js";
 
 const LIVE_SMOKE_PROMPT =
@@ -29,7 +32,7 @@ export const cursorTool: ToolIntegration = {
   panelHarnessKind: "cursor-acp",
   launch: launchCursor,
   createHarness: (kind, options) =>
-    createCursorHarness({
+    harnessDriversEnabled() ? cursorDriverHarness(options) : createCursorHarness({
       id: kind,
       fusionBackendUrl: options.fusionBackendUrl,
       ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
@@ -83,6 +86,26 @@ export const cursorTool: ToolIntegration = {
     }
   }
 };
+
+/**
+ * The panel harness backed by the official ACP driver (real `cursor-agent acp`
+ * sessions, typed events, `session/load` resume), used when the harness-driver
+ * cutover flag is set. Each panel model routes to its own endpoint via the
+ * driver bridge; cursor points its `--endpoint` there.
+ */
+function cursorDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter {
+  return createDriverHarness({
+    driver: createCursorDriver(),
+    fusionBackendUrl: options.fusionBackendUrl,
+    ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
+    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.turn !== undefined ? { turn: options.turn } : {}),
+    ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),
+    configForModel: (route) =>
+      cursorDriverConfigSchema.parse({ endpoint: route.endpointUrl, model: route.model })
+  });
+}
 
 export {
   createCursorHarness,

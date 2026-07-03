@@ -20,6 +20,7 @@ import type {
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
+import type { ResumeCursor } from "@fusionkit/harness-core";
 import {
   emitTrace,
   newSpanId,
@@ -51,7 +52,7 @@ import type {
   SessionStore,
   WireTrajectory
 } from "@fusionkit/model-gateway";
-import { FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
 import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
 import { toolRegistry } from "./tools.js";
 
@@ -368,6 +369,22 @@ export async function startFusionStepGateway(input: {
   const stepUrl = `${base}/v1/fusion/trajectories:fuse`;
   const defaultModel = input.defaultModel ?? FUSION_PANEL_MODEL;
 
+  // Native multi-turn: one resume-cursor map per conversation (keyed by
+  // session), each holding a cursor per panel model. When the harness-driver
+  // cutover flag is on, a follow-up turn resumes each member's native session
+  // from these instead of re-prompting a fresh process. Legacy harnesses
+  // ignore the map, so it is a no-op with the flag off.
+  const driversEnabled = harnessDriversEnabled();
+  const resumeCursorsBySession = new Map<string, Map<string, ResumeCursor>>();
+  const resumeCursorsFor = (sessionKey: string): Map<string, ResumeCursor> => {
+    let map = resumeCursorsBySession.get(sessionKey);
+    if (map === undefined) {
+      map = new Map<string, ResumeCursor>();
+      resumeCursorsBySession.set(sessionKey, map);
+    }
+    return map;
+  };
+
   const runPanels: PanelRunner = async ({
     task,
     messages,
@@ -437,7 +454,8 @@ export async function startFusionStepGateway(input: {
         stragglerGraceMs: config.stragglerGraceMs ?? DEFAULT_STRAGGLER_GRACE_MS,
         ...(config.panelIdentity !== undefined ? { panelIdentity: config.panelIdentity } : {}),
         ...(config.panelTrust !== undefined ? { panelTrust: config.panelTrust } : {}),
-        ...(harnessSystem !== undefined ? { harnessSystem } : {})
+        ...(harnessSystem !== undefined ? { harnessSystem } : {}),
+        ...(driversEnabled ? { resumeCursors: resumeCursorsFor(sessionKey) } : {})
       });
       const trajectories = normalizeWireTrajectories(wire);
       if (gatewayChatter) {

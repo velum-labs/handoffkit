@@ -379,6 +379,9 @@ importers:
       '@fusionkit/handoff':
         specifier: workspace:*
         version: link:../handoff
+      '@fusionkit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@fusionkit/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway

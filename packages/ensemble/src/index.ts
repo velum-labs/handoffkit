@@ -265,7 +265,7 @@ export {
 } from "./mock.js";
 export type { MockCandidateFixture, MockHarnessOptions } from "./mock.js";
 export { createDriverHarness } from "./driver-adapter.js";
-export type { DriverHarnessOptions, PanelDriver } from "./driver-adapter.js";
+export type { DriverHarnessOptions, DriverModelRoute, PanelDriver } from "./driver-adapter.js";
 export { traceCandidate } from "./candidate-trace.js";
 export type {
   CandidateOutcome,

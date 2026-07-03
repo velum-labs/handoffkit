@@ -2,10 +2,13 @@
  * Codex tool integration entry point. It exposes the Codex launcher and ensemble harness adapter used by the FusionKit CLI.
  */
 import { smokeModelForTool } from "@fusionkit/registry";
-import { FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
 import type { ToolIntegration } from "@fusionkit/tools";
+import { createDriverHarness } from "@fusionkit/ensemble";
+import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";
 
 import { codexHarness, codexHarnessCredentialSkipReason, createCodexHarness } from "./harness.js";
+import { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 
 import { codexLaunchConfigToml, launchCodex } from "./launch.js";
 
@@ -36,7 +39,7 @@ export const codexTool: ToolIntegration = {
   panelHarnessKind: "codex",
   launch: launchCodex,
   createHarness: (_kind, options) =>
-    createCodexHarness({
+    harnessDriversEnabled() ? codexDriverHarness(options) : createCodexHarness({
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
       ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
@@ -99,6 +102,36 @@ export const codexTool: ToolIntegration = {
     }
   }
 };
+
+/**
+ * The panel harness backed by the codex-sdk driver (native `codex app-server`
+ * threads, typed events, resume cursors), used when the harness-driver cutover
+ * flag is set. Each panel model routes to its own endpoint via the driver
+ * bridge; codex requests the endpoint id as its model there.
+ */
+function codexDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter {
+  return createDriverHarness({
+    driver: createCodexDriver(),
+    fusionBackendUrl: options.fusionBackendUrl,
+    ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
+    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.turn !== undefined ? { turn: options.turn } : {}),
+    ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),
+    configForModel: (route) =>
+      codexDriverConfigSchema.parse({
+        model: route.model,
+        // Panel candidates run unattended in disposable worktrees: default to
+        // maximum autonomy unless the caller asked for guarded trust.
+        sandboxMode: options.panelTrust === "guarded" ? "workspace-write" : "danger-full-access",
+        approvalPolicy: "never",
+        provider: {
+          baseUrl: route.endpointUrl,
+          ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {})
+        }
+      })
+  });
+}
 
 export {
   codexConfigToml,

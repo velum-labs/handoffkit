@@ -5,6 +5,7 @@ import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { newSpanId, TRACE_ID_HEADER, TRACE_SPAN_HEADER } from "@fusionkit/protocol";
 import { runCliCapture } from "@fusionkit/runtime-utils";
+import type { ResumeCursor } from "@fusionkit/harness-core";
 import { gitText } from "@fusionkit/workspace";
 
 import { createAgentHarness } from "./agent.js";
@@ -77,6 +78,12 @@ export type ToolHarnessResolveOptions = {
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
   panelTrust?: PanelTrust;
+  /**
+   * Native-session resume cursors keyed by ensemble model id, owned by the
+   * caller across turns of one conversation. Driver-backed harnesses resume
+   * each member's native session from these; legacy harnesses ignore them.
+   */
+  resumeCursors?: Map<string, ResumeCursor>;
 };
 
 /**
@@ -125,7 +132,8 @@ function resolveToolAdapter(
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
-    ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {})
+    ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
+    ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {})
   });
 }
 
@@ -202,6 +210,12 @@ export type UnifiedHarnessE2EOptions = {
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
   panelTrust?: PanelTrust;
+  /**
+   * Native-session resume cursors keyed by ensemble model id, owned by the
+   * caller across turns of one conversation. Only the harness-core driver
+   * harnesses honor it; legacy harnesses ignore it.
+   */
+  resumeCursors?: Map<string, ResumeCursor>;
 };
 
 function normalizeFusionBackendUrl(value: string): string {
@@ -567,6 +581,8 @@ export type FusionPanelOptions = {
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
   panelTrust?: PanelTrust;
+  /** Native-session resume cursors keyed by model id (see UnifiedHarnessE2EOptions). */
+  resumeCursors?: Map<string, ResumeCursor>;
 };
 
 /**
@@ -600,7 +616,8 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
-    ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {})
+    ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
+    ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {})
   };
   const descriptor = descriptorFor(harness, e2eOptions);
   descriptor.judge = {

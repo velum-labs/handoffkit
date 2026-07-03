@@ -15,7 +15,6 @@ import type {
   HarnessDriver,
   HarnessErrorCode,
   HarnessEvent,
-  HarnessInstance,
   ResumeCursor
 } from "@fusionkit/harness-core";
 
@@ -25,8 +24,17 @@ import type {
   HarnessAdapter,
   HarnessCandidateOutput,
   HarnessCapabilities,
-  HarnessRunInput
+  HarnessRunInput,
+  HarnessTrajectory,
+  TrajectoryStep
 } from "./harness.js";
+
+const MAX_STEP_TEXT = 4000;
+const MAX_TOOL_INPUT = 600;
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
 
 /**
  * Bridge a harness-core {@link HarnessDriver} into the ensemble panel's
@@ -36,61 +44,158 @@ import type {
  * panel to consume the driver architecture; each turn advances the driver's
  * own session so multi-turn front-door runs reuse native resume.
  */
+/** How a panel candidate's model routes: its own endpoint, or the shared one. */
+export type DriverModelRoute = {
+  /** The ensemble model id (routing key). */
+  modelId: string;
+  /** The model id the CLI should request (the endpoint id when per-model routed). */
+  model: string;
+  /** OpenAI-compatible endpoint the CLI's model calls go to. */
+  endpointUrl: string;
+};
+
 export type DriverHarnessOptions<Config> = {
   driver: HarnessDriver<Config>;
-  /** Base config; per-candidate model is overlaid from the ensemble model. */
-  config: Config;
+  /**
+   * Build the per-candidate driver config. The panel routes each model to its
+   * own endpoint (or the shared fusion backend), so config is resolved per
+   * candidate rather than shared: one native session per model, each pointed
+   * at that model's route.
+   */
+  configForModel: (route: DriverModelRoute) => Config;
+  /** Per-model endpoints keyed by ensemble model id (panel routing). */
+  modelEndpoints?: Record<string, string>;
+  /** The shared fusion backend URL for models without a dedicated endpoint. */
+  fusionBackendUrl: string;
   /** Env/status-cache context for probes and child allowlists. */
   context?: DriverContext;
   /** Panel default is autoApprove:all (headless, disposable worktrees). */
   approvalPolicy?: ApprovalPolicy;
-  /** Resume cursors keyed by candidate id, for multi-turn continuation. */
+  /**
+   * Resume cursors keyed by ensemble model id, for multi-turn continuation.
+   * The caller (the gateway) owns one map per conversation so a follow-up turn
+   * resumes each panel member's native session instead of re-prompting a fresh
+   * process. Keyed by model id (stable across turns), not the per-turn
+   * candidate id.
+   */
   resumeCursors?: Map<string, ResumeCursor>;
   traceId?: string;
   parentSpanId?: string;
   turn?: number;
 };
 
-type PreparedDriverHarness = {
-  instance: HarnessInstance;
-};
-
 type FoldedTurn = {
   status: HarnessCandidateOutput["status"];
   finalOutput: string;
   toolCount: number;
+  /** Reconstructed agent trajectory steps — the fusion panel's actual product. */
+  steps: TrajectoryStep[];
+  endReason: HarnessTrajectory["endReason"];
   error?: { message: string; code: string };
 };
 
+/** Map a canonical turn end reason onto the harness end-reason vocabulary. */
+function endReasonKindFor(
+  reason: "completed" | "interrupted" | "timeout" | "aborted" | "error"
+): NonNullable<HarnessTrajectory["endReason"]>["kind"] {
+  switch (reason) {
+    case "completed":
+      return "completed";
+    case "timeout":
+      return "timeout";
+    case "interrupted":
+    case "aborted":
+      return "aborted";
+    case "error":
+      return "exit_error";
+    default: {
+      const exhausted: never = reason;
+      throw new Error(`unsupported turn end reason: ${String(exhausted)}`);
+    }
+  }
+}
+
+/**
+ * Fold the canonical event stream into a candidate result *and* a step-level
+ * trajectory. The trajectory (not the transcript) is what the judge/fuse step
+ * consumes, so reasoning, tool calls, tool results/observations, and the final
+ * assistant output are each emitted as a `TrajectoryStep`.
+ */
 function foldEvents(events: readonly HarnessEvent[]): FoldedTurn {
   const assistant: string[] = [];
+  const steps: TrajectoryStep[] = [];
   let toolCount = 0;
   let status: HarnessCandidateOutput["status"] = "failed";
+  let endReason: HarnessTrajectory["endReason"];
   let error: FoldedTurn["error"] | undefined;
+  const push = (step: Omit<TrajectoryStep, "index">): void => {
+    steps.push({ index: steps.length, ...step });
+  };
   for (const event of events) {
     switch (event.type) {
       case "content.delta":
-        if (event.stream === "assistant_text") assistant.push(event.text);
+        if (event.stream === "assistant_text") {
+          assistant.push(event.text);
+        } else if (event.stream === "reasoning_text" && event.text.length > 0) {
+          push({ type: "reasoning", text: truncate(event.text, MAX_STEP_TEXT) });
+        }
         break;
       case "tool.call":
+        toolCount += 1;
+        push({
+          type: "tool_call",
+          tool_name: event.name,
+          ...(event.requestId !== undefined ? { tool_call_id: event.requestId } : {}),
+          ...(event.input !== undefined
+            ? { tool_input: truncate(JSON.stringify(event.input), MAX_TOOL_INPUT) }
+            : {})
+        });
+        break;
+      case "tool.result":
+        push({
+          type: "observation",
+          tool_name: event.name,
+          ...(event.requestId !== undefined ? { tool_call_id: event.requestId } : {}),
+          ...(event.output !== undefined
+            ? { text: truncate(JSON.stringify(event.output), MAX_STEP_TEXT) }
+            : {}),
+          is_error: event.isError
+        });
+        break;
       case "item.completed":
-        if (event.type === "tool.call" || event.itemType !== "assistant_message") toolCount += 1;
+        // Drivers whose protocol reports tool activity as items (codex,
+        // cursor, opencode) rather than tool.call/result events surface it as
+        // an observation step here.
+        if (event.itemType !== "assistant_message" && event.itemType !== "reasoning") {
+          toolCount += 1;
+          push({
+            type: "observation",
+            ...(event.detail !== undefined ? { text: truncate(event.detail, MAX_STEP_TEXT) } : {}),
+            is_error: event.status === "failed"
+          });
+        }
         break;
       case "turn.completed":
         status = event.endReason === "completed" ? "succeeded" : "failed";
+        endReason = { kind: endReasonKindFor(event.endReason) };
         break;
       case "turn.failed":
         status = "failed";
+        endReason = { kind: "exit_error", detail: event.message };
         error = { message: event.message, code: event.errorCode };
         break;
       default:
         break;
     }
   }
+  const finalOutput = assistant.join("");
+  if (finalOutput.length > 0) push({ type: "output", text: truncate(finalOutput, MAX_STEP_TEXT) });
   return {
     status,
-    finalOutput: assistant.join(""),
+    finalOutput,
     toolCount,
+    steps,
+    endReason,
     ...(error !== undefined ? { error } : {})
   };
 }
@@ -100,12 +205,19 @@ export function createDriverHarness<Config>(
 ): HarnessAdapter {
   const harnessKind: ModelFusionHarnessKind = toModelFusionHarnessKind(options.driver.kind);
   const approvalPolicy = options.approvalPolicy ?? PANEL_APPROVAL_POLICY;
+  const routeFor = (modelId: string, model: string): DriverModelRoute => {
+    const endpointUrl = options.modelEndpoints?.[modelId];
+    return endpointUrl !== undefined
+      ? { modelId, model: modelId, endpointUrl }
+      : { modelId, model, endpointUrl: options.fusionBackendUrl };
+  };
   return {
     id: options.driver.kind,
     harnessKind,
-    prepare: async (): Promise<PreparedDriverHarness> => ({
-      instance: await options.driver.createInstance(options.config, options.context)
-    }),
+    // Instances are created per candidate in run() (each model routes to its
+    // own endpoint), and native resume carries continuity across turns, so
+    // there is no shared prepared state to build here.
+    prepare: () => ({}),
     capabilities: (): HarnessCapabilities => ({
       workspace_read: "supported",
       workspace_write: "supported",
@@ -118,8 +230,7 @@ export function createDriverHarness<Config>(
       requiredEvidence: ["driver transcript", "turn end reason", "worktree diff or skip reason"]
     }),
     run: async (input: HarnessRunInput): Promise<HarnessCandidateOutput> => {
-      const { descriptor, model, ordinal, worktree, prepared, signal } = input;
-      const state = prepared as PreparedDriverHarness;
+      const { descriptor, model, ordinal, worktree, signal } = input;
       const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
       const cwd = worktree?.path ?? descriptor.workspace ?? process.cwd();
       const tracer = traceCandidate(
@@ -136,40 +247,71 @@ export function createDriverHarness<Config>(
         }
       );
 
-      const resume = options.resumeCursors?.get(candidateId);
-      const session = await state.instance.startSession({
-        cwd,
-        approvalPolicy,
-        ...(model.model !== undefined ? { model: model.model } : {}),
-        ...(resume !== undefined ? { resume } : {})
-      });
+      const route = routeFor(model.id, model.model);
+      const instance = await options.driver.createInstance(
+        options.configForModel(route),
+        options.context
+      );
+      const resume = options.resumeCursors?.get(model.id);
       const events: HarnessEvent[] = [];
       try {
-        for await (const event of session.sendTurn({
-          prompt: descriptor.prompt,
-          ...(signal !== undefined ? { signal } : {})
-        })) {
-          events.push(event);
+        const session = await instance.startSession({
+          cwd,
+          approvalPolicy,
+          model: route.model,
+          ...(resume !== undefined ? { resume } : {})
+        });
+        try {
+          for await (const event of session.sendTurn({
+            prompt: descriptor.prompt,
+            ...(signal !== undefined ? { signal } : {})
+          })) {
+            events.push(event);
+          }
+        } finally {
+          const cursor = session.resumeCursor();
+          if (cursor !== undefined) options.resumeCursors?.set(model.id, cursor);
+          await session.stop().catch(() => undefined);
         }
       } finally {
-        options.resumeCursors?.set(candidateId, session.resumeCursor() ?? options.resumeCursors.get(candidateId) ?? { version: 1, kind: options.driver.kind, data: {} });
-        await session.stop().catch(() => undefined);
+        await instance.dispose().catch(() => undefined);
       }
 
       const folded = foldEvents(events);
       const diff = captureWorktreeDiff(cwd);
       const transcript = folded.finalOutput.length > 0 ? folded.finalOutput : `(${options.driver.kind} produced no text)`;
       const outputHash = artifactHash(transcript);
+      for (const step of folded.steps) tracer.step(step);
       tracer.finished({
         status: folded.status,
-        steps: [],
+        steps: folded.steps,
         finalOutput: folded.finalOutput
       });
+      // The reconstructed trajectory (steps) is the fusion panel's product; a
+      // candidate without one is treated as failed by the fuse step, so it is
+      // always attached when the turn produced any steps.
+      const trajectory: HarnessTrajectory | undefined =
+        folded.steps.length > 0
+          ? {
+              trajectoryId: candidateId,
+              modelId: model.id,
+              model: model.model,
+              candidateId,
+              harnessKind,
+              status: folded.status,
+              steps: folded.steps,
+              finalOutput: folded.finalOutput.length > 0 ? folded.finalOutput : transcript,
+              ...(diff !== undefined ? { diff } : {}),
+              ...(folded.endReason !== undefined ? { endReason: folded.endReason } : {})
+            }
+          : undefined;
       return {
         candidateId,
         model,
         status: folded.status,
+        ...(folded.endReason !== undefined ? { endReason: folded.endReason } : {}),
         ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {}),
+        ...(trajectory !== undefined ? { trajectory } : {}),
         transcript,
         log: transcript,
         ...(diff !== undefined ? { diff } : {}),
@@ -214,11 +356,7 @@ export function createDriverHarness<Config>(
         } satisfies Record<string, JsonValue>
       };
     },
-    collectArtifacts: () => [],
-    cleanup: async ({ prepared }) => {
-      const state = prepared as PreparedDriverHarness | undefined;
-      await state?.instance.dispose().catch(() => undefined);
-    }
+    collectArtifacts: () => []
   };
 }
 
