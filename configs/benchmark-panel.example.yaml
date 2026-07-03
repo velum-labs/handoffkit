@@ -1,8 +1,7 @@
-gi# Decorrelated peer panel for fusion benchmarking.
+# Decorrelated peer panel for fusion benchmarking.
 #
-# Unlike the lopsided product default (one strong model + one much weaker one),
-# this panel pairs comparable-strength frontier models from different families so
-# fusion has real oracle headroom to demonstrate. Boot it with:
+# This benchmark-only panel is separate from the product default and intentionally
+# uses frontier peer models for oracle-headroom experiments. Boot it with:
 #
 #   fusionkit serve -c configs/benchmark-panel.example.yaml
 #
@@ -25,7 +24,7 @@ endpoints:
     tags: [cloud, peer]
   - id: opus
     provider: anthropic
-    model: claude-opus-4.8
+    model: claude-opus-4-8
     base_url: https://api.anthropic.com
     api_key_env: ANTHROPIC_API_KEY
     capabilities:

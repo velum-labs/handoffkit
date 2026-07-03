@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import { KernelBackend } from "@fusionkit/ensemble";
 import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
+import { providerForAuthMode } from "@fusionkit/registry";
 import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
   Gateway,
@@ -29,8 +30,16 @@ import { freePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js
 import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";
 
-import { defaultKeyEnv, fusionkitPyCommand, loadEnvFileInto, providerDefaultBaseUrl } from "./env.js";
-import type { PanelModelSpec, PanelProvider, StackReporter } from "./env.js";
+import {
+  defaultKeyEnv,
+  fusionkitPyCommand,
+  loadEnvFileInto,
+  PANEL_AUTH_MODES,
+  PANEL_PROVIDERS,
+  panelProviderForAuthMode,
+  providerDefaultBaseUrl
+} from "./env.js";
+import type { PanelAuthMode, PanelModelSpec, PanelProvider, StackReporter } from "./env.js";
 import { detectHost } from "./local-catalog.js";
 
 /**
@@ -53,6 +62,7 @@ export type Router = {
   close: () => Promise<void>;
 };
 
+// TODO(@000alen): looks very brittle; replace with classify_provider_error/ProviderCallError-style startup classification.
 /**
  * Heuristic: does the captured output indicate a permanent failure (bad key,
  * inaccessible model) that a retry cannot fix? Used to fail fast with a clear
@@ -111,8 +121,16 @@ function judgeSpecFor(specs: PanelModelSpec[], judgeModel: string | undefined): 
 /** The router endpoint id reserved for a dedicated narration-writer model. */
 export const NARRATOR_ENDPOINT_ID = "narrator";
 
-/** Cloud providers a `provider/model` narrator token can name. */
-const NARRATOR_CLOUD_PROVIDERS = new Set<PanelProvider>(["openai", "anthropic", "google", "openrouter"]);
+/**
+ * Cloud providers a `provider/model` narrator token can name: every provider
+ * with an API key env in the provider registry (openai/anthropic/google/
+ * openrouter — local and openai-compatible endpoints have no ambient key).
+ */
+const NARRATOR_CLOUD_PROVIDERS = new Set<PanelProvider>(
+  (PANEL_PROVIDERS as readonly PanelProvider[]).filter(
+    (provider) => defaultKeyEnv(provider) !== undefined
+  )
+);
 
 /**
  * How a `--reasoning-model` value is served:
@@ -154,15 +172,20 @@ export function resolveNarratorModel(
         }
       };
     }
-    // Subscription prefixes reuse the local CLI login, like panel members do.
-    if (prefix === "claude-code") {
+    // Subscription prefixes reuse the local CLI login, like panel members do;
+    // the auth-mode -> provider mapping comes from the subscription registry.
+    if ((PANEL_AUTH_MODES as readonly string[]).includes(prefix)) {
+      const auth = prefix as PanelAuthMode;
+      const authProvider = panelProviderForAuthMode(auth);
       return {
         kind: "extra-endpoint",
-        spec: { id: NARRATOR_ENDPOINT_ID, model, provider: "anthropic", auth: "claude-code" }
+        spec: {
+          id: NARRATOR_ENDPOINT_ID,
+          model,
+          ...(authProvider !== undefined ? { provider: authProvider } : {}),
+          auth
+        }
       };
-    }
-    if (prefix === "codex") {
-      return { kind: "extra-endpoint", spec: { id: NARRATOR_ENDPOINT_ID, model, auth: "codex" } };
     }
   }
   // A bare HF-style path (e.g. mlx-community/Qwen3-1.7B-4bit): local MLX.
@@ -189,9 +212,10 @@ export function routerConfigYaml(input: {
     lines.push(`    model: ${JSON.stringify(spec.model)}`);
     if (spec.auth !== undefined) {
       // Subscription endpoint: FusionKit reuses the local CLI login read-only.
-      // `claude-code` speaks the anthropic provider; `codex` has its own provider.
+      // The auth-mode -> provider mapping comes from the subscription registry
+      // (claude-code speaks anthropic; codex has its own provider).
       // base_url / api_key are intentionally omitted (fusionkit defaults them).
-      lines.push(`    provider: ${spec.auth === "codex" ? "codex" : "anthropic"}`);
+      lines.push(`    provider: ${providerForAuthMode(spec.auth)}`);
       lines.push("    auth:");
       lines.push(`      mode: ${spec.auth}`);
     } else if (provider === "mlx") {
@@ -728,6 +752,11 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(Object.keys(pricing).length > 0 ? { pricing } : {}),
       ...(Object.keys(localCompute).length > 0 ? { localCompute } : {}),
+      // Explicitly mark the panel's local (MLX) members so the gateway's cost
+      // classification never falls back to model-id string heuristics.
+      localModels: options.models.flatMap((spec) =>
+        (spec.provider ?? "mlx") === "mlx" ? [spec.model, spec.id] : []
+      ),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),

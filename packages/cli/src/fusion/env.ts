@@ -1,13 +1,23 @@
 /**
  * Shared types, panel defaults, and env helpers for the `fusionkit <tool>`
- * launcher. Kept dependency-light (node builtins only) so every other fusion
- * module and the orchestrator can import from here without cycles.
+ * launcher. Kept dependency-light (node builtins + the zero-dep registry) so
+ * every other fusion module and the orchestrator can import from here without
+ * cycles. Panel/provider defaults come from @fusionkit/registry — the generated
+ * single source of truth shared with the Python workspace.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 import type { PanelTrust } from "@fusionkit/ensemble";
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+import {
+  DEFAULT_CLOUD_PANEL_MEMBERS,
+  DEFAULT_REASONING_MODEL as REGISTRY_DEFAULT_REASONING_MODEL,
+  PREFERRED_LOCAL_MODELS,
+  defaultKeyEnv as registryDefaultKeyEnv,
+  providerDefaultBaseUrl as registryProviderDefaultBaseUrl,
+  providerForAuthMode
+} from "@fusionkit/registry";
 
 import type { PromptOverrides } from "../fusion-config.js";
 
@@ -24,6 +34,31 @@ export type PanelProvider = "mlx" | "openai" | "anthropic" | "google" | "openrou
  * `EndpointAuth`.
  */
 export type PanelAuthMode = "claude-code" | "codex";
+
+/** Every provider accepted in `id=PROVIDER:MODEL` panel specs and configs. */
+export const PANEL_PROVIDERS: readonly PanelProvider[] = [
+  "mlx",
+  "openai",
+  "anthropic",
+  "google",
+  "openrouter",
+  "openai-compatible"
+];
+
+/** Subscription auth modes accepted in `id=MODE:MODEL` panel specs and configs. */
+export const PANEL_AUTH_MODES: readonly PanelAuthMode[] = ["claude-code", "codex"];
+
+/**
+ * The provider a subscription auth mode speaks, from the subscription registry:
+ * `claude-code` maps to the anthropic provider; `codex` has its own provider on
+ * the FusionKit side (represented as an auth-only spec with no PanelProvider).
+ */
+export function panelProviderForAuthMode(mode: PanelAuthMode): PanelProvider | undefined {
+  const provider = providerForAuthMode(mode);
+  return (PANEL_PROVIDERS as readonly string[]).includes(provider)
+    ? (provider as PanelProvider)
+    : undefined;
+}
 
 export type PanelPricingSpec = {
   inputPer1mTokens?: number;
@@ -154,28 +189,30 @@ export const FUSIONKIT_PYPI_VERSION = "0.8.0";
  * rather than a single cross-vendor pair. Works cross-platform with
  * `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY` set (a member
  * whose key is missing simply fails its slot; survivors are still fused). The
- * judge defaults to the first entry. `gemini-2.5-pro` is the frontier-tier id in
- * the curated Google catalog and is accepted by the `google` provider path.
+ * judge defaults to the first entry. Sourced from the registry's model catalog
+ * (spec/registry/model-catalog.json), shared with Python onboarding.
  */
-export const DEFAULT_CLOUD_PANEL: readonly PanelModelSpec[] = [
-  { id: "gpt", model: "gpt-5.5", provider: "openai" },
-  { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic" },
-  { id: "gemini", model: "gemini-2.5-pro", provider: "google" }
-];
+export const DEFAULT_CLOUD_PANEL: readonly PanelModelSpec[] = DEFAULT_CLOUD_PANEL_MEMBERS.map(
+  (member) => ({ id: member.id, model: member.model, provider: member.provider as PanelProvider })
+);
 
 /**
  * The default narration-writer model for a bare `--reasoning-model` flag: the
  * smallest local model that passed both narration tasks (gist + comparison) in
- * the head-to-head benchmark. Already part of the curated local catalog.
+ * the head-to-head benchmark. Registry model-catalog metadata; part of the
+ * curated local catalog.
  */
-export const DEFAULT_REASONING_MODEL = "mlx-community/Qwen3-1.7B-4bit";
+export const DEFAULT_REASONING_MODEL = REGISTRY_DEFAULT_REASONING_MODEL;
 
-/** The locally cached MLX trio (Apple Silicon only) used behind `--local`. */
-export const DEFAULT_TRIO: readonly PanelModelSpec[] = [
-  { id: "qwen", model: "mlx-community/Qwen3-1.7B-4bit", provider: "mlx" },
-  { id: "gemma", model: "mlx-community/gemma-3-1b-it-4bit", provider: "mlx" },
-  { id: "llama", model: "mlx-community/Llama-3.2-1B-Instruct-4bit", provider: "mlx" }
-];
+/**
+ * The locally cached MLX trio (Apple Silicon only) used behind `--local`: the
+ * local catalog's preferred repos in preference order.
+ */
+export const DEFAULT_TRIO: readonly PanelModelSpec[] = PREFERRED_LOCAL_MODELS.map((entry) => ({
+  id: entry.id,
+  model: entry.repo,
+  provider: "mlx"
+}));
 
 /**
  * How to invoke the `fusionkit` Python CLI: from PyPI via `uvx` by default
@@ -247,50 +284,27 @@ export function loadEnvFileInto(path: string, env: Record<string, string | undef
 
 /**
  * Default provider base URL when a cloud spec carries no explicit `baseUrl`.
- * Mirrors `PROVIDER_DEFAULT_BASE_URL` in fusionkit's openai_endpoint.py. Used
- * both for the router config (fusionkit's `ModelEndpoint` requires `base_url`)
- * and for the preflight key-validation probes.
+ * Registry provider metadata (spec/registry/providers.json), shared with the
+ * Python `PROVIDER_DEFAULT_BASE_URL`. Used both for the router config
+ * (fusionkit's `ModelEndpoint` requires `base_url`) and for the preflight
+ * key-validation probes. No trailing /v1 on any entry: fusionkit's
+ * OpenAI-compatible client appends it.
  */
 export function providerDefaultBaseUrl(provider: Exclude<PanelProvider, "mlx">): string {
-  switch (provider) {
-    case "openai":
-      return "https://api.openai.com";
-    case "anthropic":
-      return "https://api.anthropic.com";
-    case "google":
-      return "https://generativelanguage.googleapis.com";
-    // No trailing /v1: fusionkit's OpenAI-compatible client appends it, so the
-    // effective URL is https://openrouter.ai/api/v1.
-    case "openrouter":
-      return "https://openrouter.ai/api";
-    case "openai-compatible":
-      return "http://127.0.0.1";
-    default: {
-      const exhaustive: never = provider;
-      throw new Error(`unknown provider ${String(exhaustive)}`);
-    }
+  const baseUrl = registryProviderDefaultBaseUrl(provider);
+  if (baseUrl === undefined) {
+    throw new Error(`unknown provider ${String(provider)}`);
   }
+  return baseUrl;
 }
 
-/** Default env var holding the API key for each cloud provider. */
+/**
+ * Default env var holding the API key for each cloud provider. Registry
+ * provider metadata — the provider secret registry shared by panel-auth,
+ * doctor, model-catalog, and Python onboarding.
+ */
 export function defaultKeyEnv(provider: PanelProvider): string | undefined {
-  switch (provider) {
-    case "openai":
-      return "OPENAI_API_KEY";
-    case "anthropic":
-      return "ANTHROPIC_API_KEY";
-    case "google":
-      return "GEMINI_API_KEY";
-    case "openrouter":
-      return "OPENROUTER_API_KEY";
-    case "openai-compatible":
-    case "mlx":
-      return undefined;
-    default: {
-      const exhaustive: never = provider;
-      throw new Error(`unknown provider ${String(exhaustive)}`);
-    }
-  }
+  return registryDefaultKeyEnv(provider);
 }
 
 /** The git repository root containing `dir`, or undefined if it is not in a repo. */

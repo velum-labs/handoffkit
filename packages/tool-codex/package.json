@@ -27,8 +27,12 @@
   },
   "dependencies": {
     "@fusionkit/ensemble": "workspace:*",
+    "@fusionkit/harness-core": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/tools": "workspace:*"
+    "@fusionkit/registry": "workspace:*",
+    "@fusionkit/tools": "workspace:*",
+    "@openai/codex-sdk": "0.142.5",
+    "zod": "4.4.3"
   }
 }

@@ -17,18 +17,15 @@ from __future__ import annotations
 
 from typing import Literal
 
+from fusionkit_core.registry import (
+    FUSION_GATEWAY_API_KEY_ENV,
+    FUSION_GATEWAY_DEFAULT_BASE_URL,
+    FUSION_MODEL_ALIASES,
+    FUSION_PANEL_ALIAS,
+)
 from pydantic import BaseModel
 
 GatewayDialect = Literal["openai-chat", "anthropic-messages", "openai-responses"]
-
-# Reserved fusion model aliases understood by the server's /v1/chat/completions:
-# anything else that names a configured endpoint is a per-model passthrough.
-FUSION_MODEL_ALIASES: tuple[str, ...] = (
-    "fusionkit/router",
-    "fusionkit/panel",
-    "fusionkit/self",
-    "fusionkit/single",
-)
 
 _DIALECT_PATHS: dict[GatewayDialect, str] = {
     "openai-chat": "/v1/chat/completions",
@@ -40,10 +37,10 @@ _DIALECT_PATHS: dict[GatewayDialect, str] = {
 class GatewayTarget(BaseModel):
     """Connection details for pointing an external runner at the gateway."""
 
-    base_url: str = "http://127.0.0.1:8080"
-    model: str = "fusionkit/panel"
+    base_url: str = FUSION_GATEWAY_DEFAULT_BASE_URL
+    model: str = FUSION_PANEL_ALIAS
     dialect: GatewayDialect = "openai-chat"
-    api_key_env: str = "FUSIONKIT_GATEWAY_API_KEY"
+    api_key_env: str = FUSION_GATEWAY_API_KEY_ENV
 
     @property
     def normalized_base_url(self) -> str:

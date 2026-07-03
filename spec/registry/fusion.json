@@ -1,0 +1,25 @@
+{
+  "$comment": "Fusion model identity: the fused model label the gateway advertises, the Cursor bridge model name, and the Python server's reserved fusion aliases + mode-suffix mapping. Shared by @fusionkit/tools constants, the model gateway, and fusionkit_server/fusionkit_evals. Regenerate bindings with `node scripts/generate-registry.mjs`.",
+  "fusion": {
+    "fusedModelLabel": "fusion-panel",
+    "bridgeModelName": "local-fusion",
+    "localModelLabel": "fusionkit-local",
+    "aliases": [
+      "fusionkit/router",
+      "fusionkit/panel",
+      "fusionkit/self",
+      "fusionkit/single"
+    ],
+    "defaultAlias": "fusionkit/router",
+    "panelAlias": "fusionkit/panel",
+    "gatewayDefaultBaseUrl": "http://127.0.0.1:8080",
+    "gatewayApiKeyEnv": "FUSIONKIT_GATEWAY_API_KEY",
+    "modeBySuffix": {
+      "single": "single",
+      "self": "self",
+      "panel": "panel",
+      "router": "router"
+    },
+    "defaultMode": "router"
+  }
+}

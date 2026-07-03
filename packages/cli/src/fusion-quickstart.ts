@@ -20,7 +20,7 @@ import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import { formatDurationMs, FUSION_PANEL_MODEL } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
 import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
@@ -103,14 +103,8 @@ export function panelMemberSummary(
 
 /** Auth summary for the launched coding tool, not the panel members behind it. */
 export function toolAuthSummary(tool: FusionTool): string | undefined {
-  switch (tool) {
-    case "codex":
-      return "codex auth: ephemeral CODEX_HOME -> FusionKit local provider (Responses; requires_openai_auth=false)";
-    case "serve":
-      return undefined;
-    default:
-      return `${tool} auth: FusionKit gateway provider`;
-  }
+  if (tool === "serve") return undefined;
+  return toolRegistry.get(tool)?.authSummary ?? `${tool} auth: FusionKit gateway provider`;
 }
 
 export function fusionPreambleLines(input: {
@@ -140,13 +134,6 @@ export function fusionPreambleLines(input: {
   return lines;
 }
 
-/** Compact human elapsed time, e.g. `42s` or `4m07s`. */
-function formatElapsed(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, "0")}s`;
-}
-
 /**
  * The end-of-run receipt: what the fusion engine actually did while the coding
   * agent owned the terminal (fused turns, provider spend/estimates, how to resume).
@@ -174,7 +161,7 @@ export function sessionReceiptLines(
     0
   );
   const lines = [
-    `fusion session complete — ${turns} fused turn(s) in ${formatElapsed(input.elapsedMs)}`
+    `fusion session complete — ${turns} fused turn(s) in ${formatDurationMs(input.elapsedMs)}`
   ];
   const providerSpend =
     metered > 0 || providerUsd > 0
@@ -182,7 +169,7 @@ export function sessionReceiptLines(
       : "unknown";
   const localSpend =
     localActiveMs > 0
-      ? `${formatElapsed(localActiveMs)} active${localComputeUsd > 0 ? ` (${formatUsd(localComputeUsd)} est)` : " (estimate unknown)"}`
+      ? `${formatDurationMs(localActiveMs)} active${localComputeUsd > 0 ? ` (${formatUsd(localComputeUsd)} est)` : " (estimate unknown)"}`
       : "none";
   const tokens = totalTokens > 0 ? ` · ${totalTokens.toLocaleString("en-US")} tokens` : "";
   const unknownText = unknown > 0 ? ` (+${unknown} unknown-cost entr${unknown === 1 ? "y" : "ies"})` : "";

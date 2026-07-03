@@ -235,20 +235,31 @@ export function writeMirroredFile(
 }
 
 /**
+ * The env vars carrying Vercel Sandbox credentials, in token/team/project
+ * order. The single definition every sandbox-credential consumer (backend,
+ * harness credential gates) reads from.
+ */
+export const VERCEL_SANDBOX_CREDENTIAL_ENVS = {
+  token: "VERCEL_TOKEN",
+  teamId: "VERCEL_TEAM_ID",
+  projectId: "VERCEL_PROJECT_ID"
+} as const;
+
+/**
  * Resolve Vercel credentials from explicit options or the ambient
  * environment, failing closed (capability error) when no token exists.
  */
 export function vercelCredentialsFromEnv(
   options: { token?: string; teamId?: string; projectId?: string } = {}
 ): { token: string; teamId?: string; projectId?: string } {
-  const token = options.token ?? process.env.VERCEL_TOKEN;
+  const token = options.token ?? process.env[VERCEL_SANDBOX_CREDENTIAL_ENVS.token];
   if (!token) {
     throw new CapabilityMismatchError(
-      "vercel sandbox requires VERCEL_TOKEN (or an explicit token)"
+      `vercel sandbox requires ${VERCEL_SANDBOX_CREDENTIAL_ENVS.token} (or an explicit token)`
     );
   }
-  const teamId = options.teamId ?? process.env.VERCEL_TEAM_ID;
-  const projectId = options.projectId ?? process.env.VERCEL_PROJECT_ID;
+  const teamId = options.teamId ?? process.env[VERCEL_SANDBOX_CREDENTIAL_ENVS.teamId];
+  const projectId = options.projectId ?? process.env[VERCEL_SANDBOX_CREDENTIAL_ENVS.projectId];
   return {
     token,
     ...(teamId !== undefined ? { teamId } : {}),

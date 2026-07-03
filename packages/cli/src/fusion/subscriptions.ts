@@ -10,18 +10,29 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform, userInfo } from "node:os";
 import { join } from "node:path";
 
+import { SUBSCRIPTIONS } from "@fusionkit/registry";
+
 import type { PanelAuthMode } from "./env.js";
 
-const CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials";
+const CLAUDE_KEYCHAIN_SERVICE = SUBSCRIPTIONS["claude-code"].keychainService ?? "";
+
+/** Expand a registry `~/`-prefixed credential path against the current $HOME. */
+function expandHome(path: string): string {
+  return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+}
 
 // Paths are computed lazily (not module constants) so they honor the current
-// `$HOME` — which keeps detection testable with a temp home directory.
-const claudeCredentialsPath = (): string => join(homedir(), ".claude", ".credentials.json");
-const codexAuthPath = (): string => join(homedir(), ".codex", "auth.json");
-const codexConfigPath = (): string => join(homedir(), ".codex", "config.toml");
+// `$HOME` — which keeps detection testable with a temp home directory. The
+// locations come from the subscription registry, shared with
+// fusionkit_core.credentials on the Python side.
+const claudeCredentialsPath = (): string => expandHome(SUBSCRIPTIONS["claude-code"].credentialsPath);
+const codexAuthPath = (): string => expandHome(SUBSCRIPTIONS.codex.credentialsPath);
+const codexConfigPath = (): string => expandHome(SUBSCRIPTIONS.codex.configPath ?? "~/.codex/config.toml");
 
-export const DEFAULT_CLAUDE_SUB_MODEL = "claude-sonnet-4-5";
-export const DEFAULT_CODEX_MODEL = "gpt-5.5";
+/** Default subscription models: registry subscription metadata. */
+export const DEFAULT_CLAUDE_SUB_MODEL = SUBSCRIPTIONS["claude-code"].defaultModel;
+/** detectCodexModel() is the runtime override; this is the registry fallback. */
+export const DEFAULT_CODEX_MODEL = SUBSCRIPTIONS.codex.defaultModel;
 
 export type SubscriptionStatus = {
   mode: PanelAuthMode;

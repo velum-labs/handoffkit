@@ -1,6 +1,7 @@
 /**
  * Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cursorkit bridge, and the Cursor ensemble harness adapter.
  */
+import { FUSION_PANEL_MODEL } from "@fusionkit/tools";
 import type { ToolIntegration } from "@fusionkit/tools";
 
 import { createCursorHarness, cursorHarnessUnavailableReason } from "./harness.js";
@@ -14,6 +15,15 @@ export const cursorTool: ToolIntegration = {
   displayName: "Cursor",
   pickerHint: "needs a logged-in cursor-agent CLI",
   binary: "cursor-agent",
+  packageName: "@fusionkit/tool-cursor",
+  installHint: "install the Cursor CLI: https://cursor.com/cli",
+  authSummary: "cursor auth: logged-in cursor-agent CLI -> bundled Cursorkit backend",
+  setupSnippet: ({ gatewayUrl, note }) =>
+    [
+      "Cursor (via Cursorkit backend):",
+      `  cursor-agent --endpoint ${note ?? gatewayUrl} --model ${FUSION_PANEL_MODEL}`,
+      `  Cursorkit model backend: ${gatewayUrl.replace(/\/+$/, "")}/v1/chat/completions`
+    ].join("\n"),
   modes: ["fusion", "local"],
   harnessKinds: ["cursor-acp", "cursor-desktop"],
   panelHarnessKind: "cursor-acp",
@@ -50,11 +60,15 @@ export const cursorTool: ToolIntegration = {
       replay_support: "degraded"
     },
     notes: ["Credential-gated; requires a logged-in Cursor CLI (Cursorkit is bundled)."],
-    makeMatrixHarness: (env) => createCursorHarness({ env }),
+    makeMatrixHarness: ({ env, timeoutMs }) =>
+      createCursorHarness({
+        env,
+        ...(timeoutMs !== undefined ? { timeoutMs } : {})
+      }),
     credentialSkipReason: (env) => cursorHarnessUnavailableReason(env),
     smoke: {
       taskId: "cursor-skipped",
-      model: { id: "cursor", model: "fusion-panel" },
+      model: { id: "cursor", model: FUSION_PANEL_MODEL },
       sideEffects: "writes_workspace",
       allowedTools: ["read_file", "write_file", "apply_patch", "run_shell"],
       makeHarness: () => createCursorHarness({ env: {} })
@@ -64,7 +78,7 @@ export const cursorTool: ToolIntegration = {
       envName: "FUSIONKIT_CURSOR_SMOKE",
       prompt: LIVE_SMOKE_PROMPT,
       modelEnvName: "FUSIONKIT_CURSOR_SMOKE_MODEL",
-      defaultModel: "fusion-panel",
+      defaultModel: FUSION_PANEL_MODEL,
       makeHarness: (env) => createCursorHarness({ env, skipWhenUnavailable: false })
     }
   }
@@ -83,5 +97,16 @@ export type {
   CursorHarnessOptions,
   CursorRunMode
 } from "./harness.js";
+export { buildCursorAcpProducer } from "./acp.js";
 export { startCursorBridge } from "./bridge.js";
+export {
+  CURSOR_AGENT_TOOL_MAX_ITERATIONS,
+  CURSOR_AGENT_TOOL_POLICY,
+  cursorBridgeEnv,
+  cursorBridgeModelEnv,
+  cursorIdeEnv,
+  cursorIdeModelsJson
+} from "./bridge-config.js";
 export { cursorIdeInstructions, cursorInstructions, launchCursor } from "./launch.js";
+export { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";
+export type { CursorDriverConfig } from "./driver.js";

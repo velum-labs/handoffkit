@@ -30,6 +30,7 @@
     "@ai-sdk/provider": "3.0.10",
     "@fusionkit/handoff": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runtime-utils": "workspace:*",
     "@fusionkit/sdk": "workspace:*",
     "ai": "6.0.200",
     "zod": "4.4.3"

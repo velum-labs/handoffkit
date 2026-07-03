@@ -3,8 +3,6 @@ import { join } from "node:path";
 
 import { createCommandHarness, createMockHarness } from "@fusionkit/ensemble";
 import type { EnsembleRunResult, HarnessAdapter } from "@fusionkit/ensemble";
-import { claudeCodeHarness, claudeCodeHarnessCredentialSkipReason } from "@fusionkit/tool-claude";
-import { codexHarness, codexHarnessCredentialSkipReason } from "@fusionkit/tool-codex";
 
 import type { HarnessSmokeDashboard } from "../dashboard.js";
 import {
@@ -28,6 +26,7 @@ import type {
 import { gitText } from "@fusionkit/workspace";
 
 import { fail } from "../shared/errors.js";
+import { toolRegistry } from "../tools.js";
 
 export type HandoffPayload = {
   category?: string;
@@ -195,6 +194,8 @@ export function selectHandoffHarness(
   repo: string,
   timeoutMs: number
 ): HandoffHarnessSelection {
+  const integration = toolRegistry.get(harnessId);
+  const dashboard = integration?.dashboard ?? toolRegistry.dashboardTools().find((tool) => tool.id === harnessId);
   switch (harnessId) {
     case "mock":
       return { harness: createMockHarness(), harnessKind: "generic" };
@@ -204,22 +205,23 @@ export function selectHandoffHarness(
         harness: createCommandHarness({ command, cwd: repo, timeoutMs }),
         harnessKind: "generic"
       };
-    case "claude-code": {
-      const reason = claudeCodeHarnessCredentialSkipReason();
-      if (reason !== undefined) {
-        return { skipReason: reason, harnessKind: "claude_code", harnessId };
-      }
-      return { harness: claudeCodeHarness({ timeoutMs }), harnessKind: "claude_code" };
-    }
-    case "codex": {
-      const reason = codexHarnessCredentialSkipReason();
-      if (reason !== undefined) {
-        return { skipReason: reason, harnessKind: "codex", harnessId };
-      }
-      return { harness: codexHarness({ cwd: repo, timeoutMs }), harnessKind: "codex" };
-    }
     default:
-      fail('--harness must be "mock", "command", "claude-code", or "codex"');
+      if (dashboard !== undefined) {
+        const reason = dashboard.credentialSkipReason(process.env);
+        if (reason !== undefined) {
+          return { skipReason: reason, harnessKind: dashboard.harnessKind, harnessId };
+        }
+        return {
+          harness: dashboard.makeMatrixHarness({ env: process.env, repo, timeoutMs }),
+          harnessKind: dashboard.harnessKind
+        };
+      }
+      fail(
+        `--harness must be "mock", "command", or one of: ${toolRegistry
+          .dashboardTools()
+          .map((tool) => `"${tool.id}"`)
+          .join(", ")}`
+      );
   }
 }
 

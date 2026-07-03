@@ -240,6 +240,7 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
       : undefined;
   let baseUrlEnd = input.baseUrl.length;
   while (baseUrlEnd > 0 && input.baseUrl[baseUrlEnd - 1] === "/") baseUrlEnd -= 1;
+  // TODO(@000alen): why are OpenAI-compatible provider name, /v1 suffix, and local dummy apiKey hardcoded here? Reuse the shared OpenAI-compatible endpoint helper used by OpenAiBackend/ManagedModelServer.
   const provider = createOpenAICompatible({
     name: "fusion-panel-agent",
     baseURL: `${input.baseUrl.slice(0, baseUrlEnd)}/v1`,

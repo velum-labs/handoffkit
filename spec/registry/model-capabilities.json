@@ -1,0 +1,48 @@
+{
+  "$comment": "Model-family and provider request-shape quirks. samplingFamilies are matched against the lowercased model id in order (first match wins): `requires` substrings must all match, `anyOf` (when present) needs at least one match. providerRequestShapes drive how the Python clients build wire payloads per provider. chatTemplateKwargs are applied by the local MLX gateway per model family. Regenerate bindings with `node scripts/generate-registry.mjs`.",
+  "modelCapabilities": {
+    "samplingFamilies": [
+      {
+        "id": "qwen",
+        "requires": ["qwen"],
+        "overrides": { "temperature": 0.55, "top_p": 1.0 }
+      },
+      {
+        "id": "kimi-k2-thinking",
+        "requires": ["kimi-k2"],
+        "anyOf": ["thinking", "k2.", "k2p", "k2-5"],
+        "overrides": { "temperature": 1.0 }
+      },
+      {
+        "id": "kimi-k2",
+        "requires": ["kimi-k2"],
+        "overrides": { "temperature": 0.6 }
+      }
+    ],
+    "chatTemplateFamilies": [
+      {
+        "id": "qwen-thinking",
+        "requires": ["qwen"],
+        "chatTemplateKwargs": { "enable_thinking": true }
+      }
+    ],
+    "reasoningRequestFamilies": [
+      {
+        "id": "openrouter-kimi",
+        "provider": "openrouter",
+        "requires": ["kimi"],
+        "reasoning": { "enabled": true, "exclude": false }
+      }
+    ],
+    "providerRequestShapes": {
+      "openai": {
+        "maxTokensParam": "max_completion_tokens",
+        "omitSampling": true,
+        "streamIncludeUsage": true
+      },
+      "anthropic": {
+        "omitSampling": true
+      }
+    }
+  }
+}

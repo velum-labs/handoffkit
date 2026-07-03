@@ -1,0 +1,85 @@
+{
+  "$comment": "Cloud/subscription model catalog: the default cloud panel trio, per-auth-choice default models, curated per-auth-choice model lists (fallbacks when live discovery is unavailable), and the default narration model. Local MLX models live in local-catalog.json. Regenerate bindings with `node scripts/generate-registry.mjs`.",
+  "modelCatalog": {
+    "defaultCloudPanel": [
+      { "id": "gpt", "model": "gpt-5.5", "provider": "openai" },
+      { "id": "sonnet", "model": "claude-sonnet-4-6", "provider": "anthropic" },
+      { "id": "gemini", "model": "gemini-2.5-pro", "provider": "google" }
+    ],
+    "defaultReasoningModel": "mlx-community/Qwen3-1.7B-4bit",
+    "defaultModelByAuthChoice": {
+      "claude-code": "claude-sonnet-4-5",
+      "anthropic": "claude-sonnet-4-5",
+      "codex": "gpt-5.5",
+      "openai": "gpt-5.5",
+      "google": "gemini-2.5-flash",
+      "openrouter": "anthropic/claude-sonnet-4.5",
+      "local": "mlx-community/Qwen3-1.7B-4bit"
+    },
+    "curated": {
+      "claude-code": [
+        "claude-sonnet-4-5",
+        "claude-opus-4-8",
+        "claude-haiku-4-5",
+        "claude-sonnet-4-6"
+      ],
+      "anthropic": [
+        "claude-sonnet-4-5",
+        "claude-opus-4-8",
+        "claude-haiku-4-5",
+        "claude-sonnet-4-6",
+        "claude-3-7-sonnet-latest"
+      ],
+      "codex": ["gpt-5.5", "gpt-5.5-codex", "gpt-5.3-codex", "gpt-5.1-codex"],
+      "openai": ["gpt-5.5", "gpt-5.1", "gpt-5", "o4-mini", "gpt-4.1", "gpt-4.1-mini"],
+      "google": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+      "openrouter": [
+        "anthropic/claude-sonnet-4.5",
+        "openai/gpt-5.5",
+        "google/gemini-2.5-pro",
+        "moonshotai/kimi-k2",
+        "deepseek/deepseek-chat",
+        "qwen/qwen3-coder",
+        "x-ai/grok-4",
+        "meta-llama/llama-3.3-70b-instruct"
+      ]
+    },
+    "smokeModels": {
+      "codex": "gpt-5.5-codex",
+      "claude": "claude-sonnet-4-6"
+    },
+    "benchmarkPanels": {
+      "decorrelated-peers": {
+        "panelId": "decorrelated-peers",
+        "members": [
+          { "id": "gpt", "model": "gpt-5.5", "provider": "openai" },
+          { "id": "opus", "model": "claude-opus-4.8", "provider": "anthropic" },
+          { "id": "gemini", "model": "gemini-3-pro", "provider": "google" }
+        ],
+        "judgeId": "gpt",
+        "synthesizerId": "gpt",
+        "note": "Recommended benchmark panel: decorrelated frontier peers with comparable strength and different model families."
+      },
+      "lopsided-default": {
+        "panelId": "lopsided-default",
+        "members": [
+          { "id": "gpt", "model": "gpt-5.5", "provider": "openai" },
+          { "id": "sonnet", "model": "claude-sonnet-4-6", "provider": "anthropic" }
+        ],
+        "judgeId": "gpt",
+        "synthesizerId": "gpt",
+        "note": "Shipping contrast panel retained for regression comparisons; lopsided by design."
+      },
+      "gpt-opus-smoke": {
+        "panelId": "gpt-opus-smoke",
+        "members": [
+          { "id": "gpt", "model": "gpt-5.5", "provider": "openai" },
+          { "id": "opus", "model": "claude-opus-4-8", "provider": "anthropic" }
+        ],
+        "judgeId": "gpt",
+        "synthesizerId": "gpt",
+        "note": "Two-model GPT + Opus smoke panel used by live E2E scripts."
+      }
+    }
+  }
+}

@@ -2,6 +2,9 @@
   "files": [],
   "references": [
     {
+      "path": "packages/registry"
+    },
+    {
       "path": "packages/kernel"
     },
     {
@@ -42,6 +45,12 @@
     },
     {
       "path": "packages/ensemble"
+    },
+    {
+      "path": "packages/runtime-utils"
+    },
+    {
+      "path": "packages/harness-core"
     },
     {
       "path": "packages/tools"

@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 import type { LocalModelInfo } from "@fusionkit/adapter-ai-sdk";
+import { defaultKeyEnv as registryDefaultKeyEnv, providerDiscovery } from "@fusionkit/registry";
 
 import { DEFAULT_CLOUD_PANEL, defaultKeyEnv, fusionkitPyCommand } from "./fusion-quickstart.js";
 import type { FusionTool, PanelModelSpec } from "./fusion-quickstart.js";
@@ -85,12 +86,10 @@ export function defaultMemberId(choice: AuthChoice, taken: Set<string>): string 
   }
 }
 
-/** Env var that unlocks live discovery for an API-key auth choice (for hinting). */
-const LIVE_KEY_ENV: Partial<Record<AuthChoice, string>> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  google: "GEMINI_API_KEY"
-};
+/** Env var that unlocks live discovery for an auth choice (for hinting). */
+function liveKeyEnvFor(choice: AuthChoice): string | undefined {
+  return providerDiscovery(choice) !== undefined ? registryDefaultKeyEnv(choice) : undefined;
+}
 
 /**
  * Offer a model picker for an auth choice: a live list from the provider when a
@@ -107,7 +106,7 @@ async function pickModel(
     result = await listModelsForAuth(choice, { env: process.env });
     cache.set(choice, result);
   }
-  const keyEnv = LIVE_KEY_ENV[choice];
+  const keyEnv = liveKeyEnvFor(choice);
   const sourceNote =
     result.source === "live"
       ? `${choice} live`

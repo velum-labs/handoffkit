@@ -18,6 +18,8 @@ import {
 } from "@fusionkit/model-gateway";
 import type { FusionGateway } from "@fusionkit/model-gateway";
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
+import { cursorBridgeEnv } from "@fusionkit/tool-cursor";
+import { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL } from "@fusionkit/tools";
 
 import { buildAcpRunner, startConfiguredGateway } from "../gateway.js";
 import type { GatewayRunnerConfig } from "../gateway.js";
@@ -643,25 +645,11 @@ test(
     });
     const bridgePort = 9700 + Math.floor(Math.random() * 250);
     let bridgeOut = "";
-    const scrubbed: Record<string, string | undefined> = {};
-    for (const key of Object.keys(process.env)) {
-      if (key.startsWith("BRIDGE_") || key.startsWith("MODEL_") || key.startsWith("E2E_") || key.startsWith("CURSOR_UPSTREAM")) {
-        scrubbed[key] = undefined;
-      }
-    }
-    const bridgeEnv: Record<string, string> = {};
-    for (const [key, value] of Object.entries({ ...process.env, ...scrubbed })) {
-      if (value !== undefined) bridgeEnv[key] = value;
-    }
-    Object.assign(bridgeEnv, {
-      BRIDGE_PORT: String(bridgePort),
-      BRIDGE_ROUTE_INVENTORY: "true",
-      CURSOR_UPSTREAM_BASE_URL: "https://api2.cursor.sh",
-      MODEL_BASE_URL: `${liveGateway.url()}/v1`,
-      MODEL_API_KEY: "local",
-      MODEL_NAME: "local-fusion",
-      MODEL_PROVIDER_MODEL: "fusion-panel",
-      MODEL_CONTEXT_TOKEN_LIMIT: "128000"
+    const bridgeEnv = cursorBridgeEnv({
+      port: bridgePort,
+      gatewayUrl: liveGateway.url(),
+      modelName: CURSOR_BRIDGE_MODEL_NAME,
+      providerModel: FUSION_PANEL_MODEL
     });
     const bridge = spawn(process.execPath, [serveCli, "serve"], {
       env: bridgeEnv,

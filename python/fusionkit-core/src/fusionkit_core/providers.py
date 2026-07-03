@@ -5,6 +5,7 @@ from typing import Any
 
 from fusionkit_core.config import ModelEndpoint
 from fusionkit_core.contracts import ContractUsage, ModelEndpointV1, contract_metadata
+from fusionkit_core.registry import PROVIDER_API_COMPATIBILITY
 from fusionkit_core.types import ProviderCost, Usage
 
 
@@ -137,13 +138,7 @@ def _api_compatibility(endpoint: ModelEndpoint) -> str:
     # openai-responses, mlx-lm-server and custom. Native Anthropic/Google
     # providers therefore map to "custom" until the versioned contract grows
     # dedicated wire-format values.
-    if endpoint.provider == "mlx-lm":
-        return "mlx-lm-server"
-    if endpoint.provider in ("openai", "openrouter", "openai-compatible"):
-        return "openai-chat-completions"
-    if endpoint.provider == "codex":
-        return "openai-responses"
-    return "custom"
+    return PROVIDER_API_COMPATIBILITY.get(endpoint.provider, "custom")
 
 
 def _capability(value: bool | None) -> str:

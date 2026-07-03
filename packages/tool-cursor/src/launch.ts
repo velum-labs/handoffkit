@@ -2,38 +2,11 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
-import { normalizeApiBaseUrl, scrubBridgeEnv, spawnLogged, spawnTool, terminate, waitForOutput } from "@fusionkit/tools";
+import { spawnLogged, spawnTool, terminate, waitForOutput } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
+import { cursorIdeEnv } from "./bridge-config.js";
 import { startCursorBridge } from "./bridge.js";
-
-/** Local model entry the cursorkit desktop bridge advertises in Cursor's picker. */
-type IdeModelEntry = {
-  id: string;
-  displayName: string;
-  providerModel: string;
-  baseUrl: string;
-  apiKey: string;
-  contextTokenLimit: number;
-};
-
-/** Build the `BRIDGE_MODELS_JSON` the desktop bridge seeds into Cursor's model picker. */
-function ideModelsJson(ctx: ToolLaunchContext): string {
-  const baseUrl = normalizeApiBaseUrl(ctx.gatewayUrl);
-  const apiKey = ctx.authToken ?? "local";
-  const entry = (model: string): IdeModelEntry => ({
-    id: model,
-    displayName: model,
-    providerModel: model,
-    baseUrl,
-    apiKey,
-    contextTokenLimit: 128000
-  });
-  // The fused model is the default; each native panel member is offered too so
-  // the picker shows fused + passthrough (the gateway routes each by id).
-  const natives = (ctx.nativeModels ?? []).filter((model) => model !== ctx.modelLabel);
-  return JSON.stringify([entry(ctx.modelLabel), ...natives.map(entry)]);
-}
 
 /** Human-facing setup for the turnkey Cursor IDE (desktop proxy) flow. */
 export function cursorIdeInstructions(model: string): string {
@@ -135,21 +108,14 @@ async function launchCursorIde(ctx: ToolLaunchContext): Promise<number> {
   const stateDir = ctx.logsDir !== undefined ? join(ctx.logsDir, "cursor-ide") : join(repo, ".cursor-rpc-ide");
   mkdirSync(stateDir, { recursive: true });
 
-  const env: Record<string, string> = {
-    ...scrubBridgeEnv(process.env, ["BRIDGE_", "MODEL_", "E2E_", "CURSOR_UPSTREAM", "CK_"]),
-    CK_WORKSPACE_PATH: repo,
-    BRIDGE_MODELS_JSON: ideModelsJson(ctx),
-    MODEL_BASE_URL: normalizeApiBaseUrl(ctx.gatewayUrl),
-    MODEL_API_KEY: ctx.authToken ?? "local",
-    MODEL_NAME: ctx.modelLabel,
-    MODEL_PROVIDER_MODEL: ctx.modelLabel,
-    MODEL_CONTEXT_TOKEN_LIMIT: "128000",
-    // Trust the gateway's portless CA so the desktop bridge can reach it over
-    // HTTPS. ck forwards its own process env to the bridge it spawns.
-    ...(ctx.caCertPath !== undefined
-      ? { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS ?? ctx.caCertPath }
-      : {})
-  };
+  const env = cursorIdeEnv({
+    repo,
+    gatewayUrl: ctx.gatewayUrl,
+    modelLabel: ctx.modelLabel,
+    ...(ctx.nativeModels !== undefined ? { nativeModels: ctx.nativeModels } : {}),
+    ...(ctx.authToken !== undefined ? { apiKey: ctx.authToken } : {}),
+    ...(ctx.caCertPath !== undefined ? { caCertPath: ctx.caCertPath } : {})
+  });
 
   const proc = spawnLogged(process.execPath, [serveCli, "ck"], {
     cwd: stateDir,

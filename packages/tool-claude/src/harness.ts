@@ -1,15 +1,25 @@
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
-
 import { artifactHash } from "@fusionkit/protocol";
-import type { NetworkPolicy, RunContract, RunEvent } from "@fusionkit/protocol";
+import type { NetworkPolicy, RunEvent } from "@fusionkit/protocol";
 import { claudeModelAlias, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
-import { CapabilityMismatchError, prepareExecution } from "@fusionkit/runner";
-import type { SessionBackend } from "@fusionkit/runner";
-import { aiSdkHarnessBackend } from "@fusionkit/session-harness";
-import type { ClaudeCodeBindingOptions } from "@fusionkit/session-harness";
-import { normalizeApiBaseUrl } from "@fusionkit/tools";
+import { CapabilityMismatchError } from "@fusionkit/runner";
+import type { SessionBackendResult } from "@fusionkit/runner";
+import {
+  claudeCodeBinding,
+  runHarnessSession,
+  VERCEL_SANDBOX_CREDENTIAL_ENVS
+} from "@fusionkit/session-harness";
+import type { ClaudeCodeBindingOptions, HarnessSessionRun } from "@fusionkit/session-harness";
+import { PROVIDERS } from "@fusionkit/registry";
+
+import { claudeEnv } from "./launch.js";
+import {
+  buildChildEnv,
+  captureWorktreeDiff,
+  commandOnPath,
+  normalizeApiBaseUrl,
+  runCliCapture
+} from "@fusionkit/tools";
+import type { CliCaptureResult } from "@fusionkit/tools";
 
 import { hardeningToJson, KernelBackend, traceCandidate } from "@fusionkit/ensemble";
 import { createClaudeStreamStepEmitter, parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
@@ -21,26 +31,45 @@ import type {
   HarnessRunInput
 } from "@fusionkit/ensemble";
 
-const ZERO_HASH = "0".repeat(64);
-const ZERO_GIT_SHA = "0".repeat(40);
-const DEFAULT_POOL = "ensemble";
 const DEFAULT_RUNTIME = "node24";
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_LOG_MAX_BYTES = 256 * 1024;
+/** The registry host for a provider's default base URL (e.g. api.anthropic.com). */
+function providerHost(provider: string): string[] {
+  const baseUrl = PROVIDERS[provider]?.baseUrl;
+  if (baseUrl === undefined) return [];
+  try {
+    return [new URL(baseUrl).hostname];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Deny-by-default sandbox egress: npm (bridge bootstrap) plus the provider and
+ * AI Gateway hosts from the provider registry's base URLs.
+ */
 const DEFAULT_CLAUDE_NETWORK: NetworkPolicy = {
   defaultDeny: true,
-  allowHosts: ["registry.npmjs.org", "api.anthropic.com", "ai-gateway.vercel.sh"]
+  allowHosts: ["registry.npmjs.org", ...providerHost("anthropic"), ...providerHost("ai-gateway")]
 };
 
-const AUTH_ENV_NAMES = [
-  "AI_GATEWAY_API_KEY",
-  "AI_GATEWAY_BASE_URL",
-  "ANTHROPIC_API_KEY",
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_BASE_URL"
-] as const;
+/** The env vars (key/token/base URL) a provider registry entry names. */
+function providerEnvVars(provider: string): string[] {
+  const info = PROVIDERS[provider];
+  if (info === undefined) return [];
+  return [info.keyEnv, info.authTokenEnv, info.baseUrlEnv].filter(
+    (name): name is string => name !== undefined
+  );
+}
 
-type AuthEnvName = (typeof AUTH_ENV_NAMES)[number];
+/**
+ * Claude auth env vars, from the same provider secret registry the
+ * session-harness auth path pins (AI Gateway + Anthropic).
+ */
+const AUTH_ENV_NAMES = [...providerEnvVars("ai-gateway"), ...providerEnvVars("anthropic")];
+
+type AuthEnvName = string;
 export type ClaudeCodeHarnessEnv = Record<string, string | undefined>;
 
 export type ClaudeCodeHarnessOptions = ClaudeCodeBindingOptions & {
@@ -66,11 +95,13 @@ export type ClaudeCodeHarnessOptions = ClaudeCodeBindingOptions & {
   modelEndpoints?: Record<string, string>;
   /** Defaults to `process.env`; tests can pass `{}` for deterministic skips. */
   env?: ClaudeCodeHarnessEnv;
-  /** Already-released secret values forwarded through the session backend seam. */
+  /** Already-released secret values delivered into the session env. */
   secrets?: { name: string; value: string }[];
-  /** Test/extension seam. Defaults to `aiSdkHarnessBackend(...)`. */
-  backend?: SessionBackend;
-  pool?: string;
+  /**
+   * Test/extension seam: executes one harness session run. Defaults to
+   * `runHarnessSession` over `claudeCodeBinding(options)`.
+   */
+  runSession?: (run: HarnessSessionRun) => Promise<SessionBackendResult>;
   network?: NetworkPolicy;
   timeoutMs?: number;
   logMaxBytes?: number;
@@ -87,7 +118,6 @@ type CredentialGate =
 
 type PreparedClaudeCodeHarness = {
   gate: CredentialGate;
-  backend?: SessionBackend;
 };
 
 function candidateId(input: HarnessRunInput): string {
@@ -118,12 +148,12 @@ function credentialGate(
     envValue(env, "ANTHROPIC_API_KEY") ??
     envValue(env, "ANTHROPIC_AUTH_TOKEN");
   const hasSandboxCredential =
-    options.backend !== undefined ||
+    options.runSession !== undefined ||
     options.createSandboxProvider !== undefined ||
     options.token !== undefined ||
-    envValue(env, "VERCEL_TOKEN") !== undefined;
+    envValue(env, VERCEL_SANDBOX_CREDENTIAL_ENVS.token) !== undefined;
 
-  if (!hasSandboxCredential) missing.push("VERCEL_TOKEN");
+  if (!hasSandboxCredential) missing.push(VERCEL_SANDBOX_CREDENTIAL_ENVS.token);
   if (!hasProviderCredential) {
     missing.push("ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|AI_GATEWAY_API_KEY");
   }
@@ -149,112 +179,70 @@ export function claudeCodeHarnessCredentialSkipReason(
   return gate.available ? undefined : gate.reason;
 }
 
-function backendFor(options: ClaudeCodeHarnessOptions, env: ClaudeCodeHarnessEnv): SessionBackend {
-  return (
-    options.backend ??
-    aiSdkHarnessBackend({
-      ...(options.runtime !== undefined ? { runtime: options.runtime } : {}),
-      ...(options.bridgePort !== undefined ? { bridgePort: options.bridgePort } : {}),
-      token: options.token ?? envValue(env, "VERCEL_TOKEN"),
-      teamId: options.teamId ?? envValue(env, "VERCEL_TEAM_ID"),
-      projectId: options.projectId ?? envValue(env, "VERCEL_PROJECT_ID"),
-      ...(options.model !== undefined ? { model: options.model } : {}),
-      ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
-      ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
-      ...(options.startupTimeoutMs !== undefined
-        ? { startupTimeoutMs: options.startupTimeoutMs }
-        : {}),
-      ...(options.createHarness !== undefined ? { createHarness: options.createHarness } : {}),
-      ...(options.createSandboxProvider !== undefined
-        ? { createSandboxProvider: options.createSandboxProvider }
-        : {})
-    })
-  );
-}
-
-function contractFor(input: {
-  descriptor: EnsembleDescriptor;
-  candidateId: string;
-  options: ClaudeCodeHarnessOptions;
-  gate: Extract<CredentialGate, { available: true }>;
-  repoBaseSha?: string;
-}): RunContract {
-  const timeoutMs =
-    input.options.timeoutMs ?? input.descriptor.policy.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+/** The binding options this harness forwards to `claudeCodeBinding`. */
+function bindingOptionsFor(
+  options: ClaudeCodeHarnessOptions,
+  env: ClaudeCodeHarnessEnv
+): ClaudeCodeBindingOptions {
   return {
-    version: "warrant.contract.v1",
-    runId: `ensemble_${input.candidateId}`,
-    issuedAt: new Date().toISOString(),
-    issuer: { keyId: "ensemble-claude-code", role: "plane" },
-    requestedBy: { kind: "service", id: "handoffkit-ensemble" },
-    agent: { kind: "claude-code" },
-    task: { prompt: input.descriptor.prompt },
-    runner: {
-      pool:
-        input.options.pool ??
-        input.descriptor.runtime.environmentId ??
-        input.descriptor.runtime.id ??
-        DEFAULT_POOL
-    },
-    workspace: {
-      version: "warrant.manifest.v1",
-      baseRef: (input.repoBaseSha ?? input.descriptor.baseGitSha) || ZERO_GIT_SHA,
-      bundleHash: ZERO_HASH,
-      untrackedFiles: [],
-      deniedPatterns: [],
-      deniedPaths: []
-    },
-    policyHash: ZERO_HASH,
-    secrets: input.options.secrets?.map((secret) => ({ name: secret.name, scope: "ensemble" })) ?? [],
-    network:
-      input.options.network ??
-      (input.descriptor.runtime.isolation?.networkPolicy
-        ? {
-            defaultDeny: input.descriptor.runtime.isolation.networkPolicy.defaultDeny,
-            allowHosts: [...input.descriptor.runtime.isolation.networkPolicy.allowHosts]
-          }
-        : DEFAULT_CLAUDE_NETWORK),
-    budget: {
-      ...(input.descriptor.policy.budgetUsd !== undefined
-        ? { maxSpendUsd: input.descriptor.policy.budgetUsd }
-        : {}),
-      maxDurationMin: Math.ceil(timeoutMs / 60_000)
-    },
-    disclosure: "minimal-context",
-    isolation: "vercel-sandbox",
-    execution: {
-      kind: "agent",
-      agent: { kind: "claude-code" },
-      prompt: input.descriptor.prompt,
-      timeoutMs,
-      env: { vars: input.gate.authEnv, egressProxy: false },
-      log: {
-        stdout: "capture",
-        stderr: "merge",
-        maxBytes: input.options.logMaxBytes ?? DEFAULT_LOG_MAX_BYTES
-      }
-    },
-    expiresAt: new Date(Date.now() + timeoutMs).toISOString(),
-    signatures: []
+    ...(options.runtime !== undefined ? { runtime: options.runtime } : {}),
+    ...(options.bridgePort !== undefined ? { bridgePort: options.bridgePort } : {}),
+    token: options.token ?? envValue(env, VERCEL_SANDBOX_CREDENTIAL_ENVS.token),
+    teamId: options.teamId ?? envValue(env, VERCEL_SANDBOX_CREDENTIAL_ENVS.teamId),
+    projectId: options.projectId ?? envValue(env, VERCEL_SANDBOX_CREDENTIAL_ENVS.projectId),
+    ...(options.model !== undefined ? { model: options.model } : {}),
+    ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
+    ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
+    ...(options.startupTimeoutMs !== undefined
+      ? { startupTimeoutMs: options.startupTimeoutMs }
+      : {}),
+    ...(options.createHarness !== undefined ? { createHarness: options.createHarness } : {}),
+    ...(options.createSandboxProvider !== undefined
+      ? { createSandboxProvider: options.createSandboxProvider }
+      : {})
   };
 }
 
+/** The egress policy for this run: explicit option, descriptor isolation, or the deny-by-default set. */
+function networkPolicyFor(
+  descriptor: EnsembleDescriptor,
+  options: ClaudeCodeHarnessOptions
+): NetworkPolicy {
+  if (options.network !== undefined) return options.network;
+  const fromDescriptor = descriptor.runtime.isolation?.networkPolicy;
+  if (fromDescriptor !== undefined) {
+    return {
+      defaultDeny: fromDescriptor.defaultDeny,
+      allowHosts: [...fromDescriptor.allowHosts]
+    };
+  }
+  return DEFAULT_CLAUDE_NETWORK;
+}
+
+/**
+ * Hardening metadata built only from facts this harness can stand behind:
+ * `executed` distinguishes a run that actually went through the sandbox
+ * binding from one that never started, and network enforcement is claimed
+ * only when the default Vercel sandbox factory applied the policy at VM
+ * creation (an injected sandbox or run seam owns its own enforcement story).
+ */
 function hardeningFor(input: {
   descriptor: EnsembleDescriptor;
   options: ClaudeCodeHarnessOptions;
   repoDir: string;
   authEnvNames: readonly string[];
-  finished: boolean;
+  executed: boolean;
 }): CandidateHardeningMetadata {
-  const networkPolicy =
-    input.options.network ??
-    input.descriptor.runtime.isolation?.networkPolicy ??
-    DEFAULT_CLAUDE_NETWORK;
+  const networkPolicy = networkPolicyFor(input.descriptor, input.options);
   const mountPolicy = input.descriptor.runtime.isolation?.mountPolicy;
   const secretPolicy = input.descriptor.runtime.isolation?.secretPolicy;
+  const enforcedByDefaultSandbox =
+    input.executed &&
+    input.options.runSession === undefined &&
+    input.options.createSandboxProvider === undefined;
   return {
     requested_isolation: "microvm",
-    actual_isolation: input.finished ? "vercel-sandbox" : "process",
+    actual_isolation: input.executed ? "vercel-sandbox" : "process",
     runtime: {
       provider: "vercel-sandbox",
       runtime:
@@ -273,9 +261,9 @@ function hardeningFor(input: {
     network_policy: {
       default_deny: networkPolicy.defaultDeny,
       allow_hosts: [...networkPolicy.allowHosts],
-      enforced: input.finished
+      enforced: enforcedByDefaultSandbox
     },
-    cleanup: input.finished
+    cleanup: input.executed
       ? { attempted: true, succeeded: true, status: "succeeded" }
       : { attempted: false, succeeded: true, status: "not_required" },
     secret_absence: {
@@ -327,7 +315,7 @@ function skippedOutput(input: {
           options: input.options,
           repoDir,
           authEnvNames: [],
-          finished: false
+          executed: false
         })
       )
     }
@@ -370,7 +358,7 @@ function failureOutput(input: {
           options: input.options,
           repoDir,
           authEnvNames: input.authEnvNames,
-          finished: false
+          executed: false
         })
       )
     }
@@ -420,26 +408,6 @@ function startCandidateRouterGateway(input: {
   });
 }
 
-/** True when `command` resolves on PATH (or is an existing absolute path). */
-function commandOnPath(command: string, env: ClaudeCodeHarnessEnv): boolean {
-  if (command.includes("/")) return existsSync(command);
-  const pathValue = env.PATH ?? process.env.PATH ?? "";
-  return pathValue
-    .split(delimiter)
-    .filter((entry) => entry.length > 0)
-    .some((dir) => existsSync(join(dir, command)));
-}
-
-function captureWorktreeDiff(cwd: string): string | undefined {
-  try {
-    const result = spawnSync("git", ["-C", cwd, "diff"], { encoding: "utf8" });
-    const stdout = result.stdout ?? "";
-    return result.status === 0 && stdout.length > 0 ? stdout : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 type ClaudePrintResult = {
   status: "succeeded" | "failed";
   /** Raw stdout (the stream-json event stream we reconstruct the trajectory from). */
@@ -458,7 +426,7 @@ type ClaudePrintResult = {
  * (`gateway`) that speaks the Anthropic Messages dialect and routes to the
  * member's fusion router endpoint (see `runViaRouterGateway`).
  */
-function driveClaudePrint(input: {
+async function driveClaudePrint(input: {
   command: string;
   cwd: string;
   prompt: string;
@@ -471,6 +439,9 @@ function driveClaudePrint(input: {
   /** Aborts the claude child process (panel cancellation / straggler policy). */
   signal?: AbortSignal;
 }): Promise<ClaudePrintResult> {
+  // The prompt travels via stdin (`claude -p` reads it there when no
+  // positional prompt is given): argv would cap the prompt size and expose it
+  // in `ps`.
   const args = [
     "-p",
     "--output-format",
@@ -479,16 +450,14 @@ function driveClaudePrint(input: {
     "--permission-mode",
     "bypassPermissions",
     "--model",
-    input.model,
-    input.prompt
+    input.model
   ];
   const childEnv: Record<string, string> = { ...input.env };
   if (input.gateway !== undefined) {
-    // Route this candidate through its translation gateway. Ambient Anthropic
-    // credentials must not win over the gateway token, so strip the API key.
-    childEnv.ANTHROPIC_BASE_URL = input.gateway.baseUrl;
-    childEnv.ANTHROPIC_AUTH_TOKEN = input.gateway.authToken;
-    childEnv.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
+    // Route this candidate through its translation gateway (the same env shim
+    // the launcher uses). Ambient Anthropic credentials must not win over the
+    // gateway token, so strip the API key.
+    Object.assign(childEnv, claudeEnv(input.gateway.baseUrl, input.gateway.authToken));
     delete childEnv.ANTHROPIC_API_KEY;
   } else {
     // Run against the native Anthropic backend: ambient ANTHROPIC_API_KEY
@@ -496,85 +465,48 @@ function driveClaudePrint(input: {
     // gateway base URL.
     delete childEnv.ANTHROPIC_BASE_URL;
   }
-  return new Promise<ClaudePrintResult>((resolve) => {
-    const child = spawn(input.command, args, {
+  let result: CliCaptureResult;
+  try {
+    result = await runCliCapture(input.command, args, {
       cwd: input.cwd,
       env: childEnv,
-      stdio: ["ignore", "pipe", "pipe"]
+      timeoutMs: input.timeoutMs,
+      stdin: input.prompt,
+      ...(input.signal !== undefined ? { signal: input.signal } : {}),
+      ...(input.onStdoutLine !== undefined ? { onStdoutLine: input.onStdoutLine } : {})
     });
-    let stdout = "";
-    let stderr = "";
-    let pendingStdout = "";
-    let timedOut = false;
-    const flushStdoutLines = (final = false): void => {
-      let newline = pendingStdout.indexOf("\n");
-      while (newline >= 0) {
-        const line = pendingStdout.slice(0, newline);
-        pendingStdout = pendingStdout.slice(newline + 1);
-        input.onStdoutLine?.(line);
-        newline = pendingStdout.indexOf("\n");
-      }
-      if (final && pendingStdout.length > 0) {
-        input.onStdoutLine?.(pendingStdout);
-        pendingStdout = "";
-      }
+  } catch (error) {
+    return {
+      status: "failed",
+      stdout: "",
+      transcript: "",
+      reason: error instanceof Error ? error.message : String(error)
     };
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-    }, input.timeoutMs);
-    let abortedReason: string | undefined;
-    const onAbort = (): void => {
-      const reason: unknown = input.signal?.reason;
-      abortedReason = reason instanceof Error ? reason.message : reason !== undefined && reason !== null ? String(reason) : "aborted";
-      child.kill("SIGTERM");
+  }
+  const transcript = [result.stdout, result.stderr].filter(Boolean).join("\n");
+  if (result.timedOut) {
+    return { status: "failed", stdout: result.stdout, transcript, reason: "claude CLI timed out" };
+  }
+  if (result.aborted) {
+    return {
+      status: "failed",
+      stdout: result.stdout,
+      transcript,
+      reason: result.abortReason ?? "aborted"
     };
-    if (input.signal?.aborted) onAbort();
-    else input.signal?.addEventListener("abort", onAbort, { once: true });
-    child.stdout.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8");
-      stdout += text;
-      pendingStdout += text;
-      flushStdoutLines();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      flushStdoutLines(true);
-      resolve({
-        status: "failed",
-        stdout,
-        transcript: stdout,
-        reason: error instanceof Error ? error.message : String(error)
-      });
-    });
-    child.on("exit", (code) => {
-      clearTimeout(timer);
-      input.signal?.removeEventListener("abort", onAbort);
-      flushStdoutLines(true);
-      const transcript = [stdout, stderr].filter(Boolean).join("\n");
-      if (timedOut) {
-        resolve({ status: "failed", stdout, transcript, reason: "claude CLI timed out" });
-        return;
-      }
-      if (abortedReason !== undefined) {
-        resolve({ status: "failed", stdout, transcript, reason: abortedReason });
-        return;
-      }
-      const failureReason = stderr.trim().slice(0, 500) || transcript.trim().slice(-500);
-      resolve({
-        status: code === 0 ? "succeeded" : "failed",
-        stdout,
-        transcript,
-        exitCode: code ?? 0,
-        ...(code === 0
-          ? {}
-          : { reason: failureReason.length > 0 ? failureReason : `claude CLI exited with code ${code ?? "null"}` })
-      });
-    });
-  });
+  }
+  if (result.exitCode === 0) {
+    return { status: "succeeded", stdout: result.stdout, transcript, exitCode: result.exitCode };
+  }
+  const failureReason = result.stderr.trim().slice(0, 500) || transcript.trim().slice(-500);
+  return {
+    status: "failed",
+    stdout: result.stdout,
+    transcript,
+    exitCode: result.exitCode,
+    reason:
+      failureReason.length > 0 ? failureReason : `claude CLI exited with code ${result.exitCode}`
+  };
 }
 
 /**
@@ -667,7 +599,10 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
           prompt: descriptor.prompt,
           model: cliModel,
           timeoutMs: options.timeoutMs ?? descriptor.policy.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-          env: definedLocalEnv(env),
+          // Allowlisted child env: baseline system vars plus the Anthropic /
+          // AI Gateway credential names and the CLI's own CLAUDE_* config —
+          // never the parent's full environment.
+          env: buildChildEnv({ base: env, allow: [...AUTH_ENV_NAMES, /^CLAUDE_/] }),
           ...(routerGateway !== undefined
             ? { gateway: { baseUrl: routerGateway.url(), authToken: options.apiKey ?? "local" } }
             : {}),
@@ -761,14 +696,6 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
   };
 }
 
-function definedLocalEnv(env: ClaudeCodeHarnessEnv): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (typeof value === "string") out[key] = value;
-  }
-  return out;
-}
-
 export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}): HarnessAdapter {
   if (options.execution === "local") {
     return createLocalClaudeCodeHarness(options);
@@ -781,11 +708,10 @@ export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}):
     harnessKind: "claude_code",
     prepare: (): PreparedClaudeCodeHarness => {
       const gate = credentialGate(env, options);
-      if (!gate.available) {
-        if (skipWhenUnavailable) return { gate };
+      if (!gate.available && !skipWhenUnavailable) {
         throw new CapabilityMismatchError(gate.reason);
       }
-      return { gate, backend: backendFor(options, env) };
+      return { gate };
     },
     capabilities: () => {
       const gate = credentialGate(env, options);
@@ -816,23 +742,26 @@ export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}):
       const id = candidateId(runInput);
       const repoDir =
         runInput.worktree?.path ?? runInput.descriptor.workspace ?? runInput.descriptor.sourceRepo;
-      const backend = state.backend ?? backendFor(options, env);
-      const contract = contractFor({
-        descriptor: runInput.descriptor,
-        candidateId: id,
-        options,
-        gate: state.gate,
-        ...(runInput.worktree ? { repoBaseSha: runInput.worktree.baseGitSha } : {})
-      });
       const events: RunEvent[] = [];
       const authEnvNames = Object.keys(state.gate.authEnv);
+      // The session env is exactly the gated auth vars plus explicitly
+      // released secrets — an honest statement of what the run needs, not a
+      // fabricated governance contract.
+      const sessionEnv: Record<string, string> = { ...state.gate.authEnv };
+      for (const secret of options.secrets ?? []) sessionEnv[secret.name] = secret.value;
+      const runSession = options.runSession ?? runHarnessSession;
+      const timeoutMs =
+        options.timeoutMs ?? runInput.descriptor.policy.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
       try {
-        const result = await backend.execute({
-          contract,
+        const result = await runSession({
+          binding: claudeCodeBinding(bindingOptionsFor(options, env)),
+          prompt: runInput.descriptor.prompt,
+          env: sessionEnv,
+          timeoutMs,
+          logMaxBytes: options.logMaxBytes ?? DEFAULT_LOG_MAX_BYTES,
+          network: networkPolicyFor(runInput.descriptor, options),
           repoDir,
-          secrets: options.secrets ?? [],
-          execution: prepareExecution({ contract }),
           emit: (event: RunEvent) => {
             events.push(event);
           }
@@ -871,7 +800,7 @@ export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}):
             : {}),
           metadata: {
             adapter: "claude-code",
-            backend_isolation: backend.isolation,
+            backend_isolation: "vercel-sandbox",
             credential_gate: "available",
             event_count: events.length,
             auth_env_names: authEnvNames,
@@ -881,7 +810,7 @@ export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}):
                 options,
                 repoDir,
                 authEnvNames,
-                finished: true
+                executed: true
               })
             )
           }

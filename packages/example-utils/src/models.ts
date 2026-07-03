@@ -25,8 +25,11 @@
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
+import { providerDefaultBaseUrl } from "@fusionkit/registry";
 
-const DEFAULT_CLOUD_BASE_URL = "https://api.openai.com/v1";
+// The OpenAI base URL from the provider registry; the AI SDK's
+// OpenAI-compatible provider wants the /v1 prefix on the base URL.
+const DEFAULT_CLOUD_BASE_URL = `${providerDefaultBaseUrl("openai") ?? "https://api.openai.com"}/v1`;
 
 export type LiveModels = {
   source: "live";

@@ -43,6 +43,7 @@ from fusionkit_core.clients import build_clients
 from fusionkit_core.config import load_config
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.providers import estimate_cost
+from fusionkit_core.registry import FUSION_PANEL_ALIAS
 from fusionkit_core.types import ChatMessage
 from fusionkit_evals.bench_runtime import classify_exception, retry_async
 from fusionkit_evals.bench_verify import verify_solution
@@ -307,7 +308,7 @@ async def main() -> None:
         "mount_mode": "fusion_behind_agent",
         "harness": "livecodebench-code_generation_lite",
         "harness_version": os.environ.get("LCB_VERSION", "release_v6"),
-        "model": request.get("gateway_model", "fusionkit/panel"),
+        "model": request.get("gateway_model", FUSION_PANEL_ALIAS),
         "resolved_tasks": len(scored),
         "total_tasks": len(rows),
         "passed_tasks": sum(1 for r in scored if r["passed"]),

@@ -4,8 +4,36 @@ import type {
   HarnessAdapter,
   HarnessArtifact,
   HarnessCandidateOutput,
+  HarnessCapabilities,
   HarnessToolRecord
 } from "./harness.js";
+
+/**
+ * Dashboard capability profile for the mock harness, owned here next to the
+ * implementation so the dashboard never re-declares (or contradicts) it. The
+ * mock harness replays synthetic fixtures:
+ * - `route_model_observation` is degraded because the fixture *labels* a model
+ *   id but no request ever reaches a live route, so the observation is
+ *   asserted, not captured from real traffic.
+ */
+export const MOCK_DASHBOARD_CAPABILITIES: HarnessCapabilities = {
+  model_override: "supported",
+  transcript_capture: "supported",
+  diff_capture: "supported",
+  tool_loop_capture: "supported",
+  patch_apply_visibility: "supported",
+  route_model_observation: "degraded",
+  verification_hint: "supported",
+  replay_support: "supported"
+};
+
+/** Dashboard identity for the generic fixture harness (id/name/notes). */
+export const MOCK_DASHBOARD_IDENTITY = {
+  id: "mock",
+  harnessKind: "generic",
+  displayName: "Mock",
+  notes: ["Pure synthetic fixture harness for CI."]
+} as const;
 
 export type MockCandidateFixture = {
   transcript?: string;

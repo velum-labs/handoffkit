@@ -40,6 +40,7 @@
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/plane": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/registry": "workspace:*",
     "@fusionkit/runner": "workspace:*",
     "@fusionkit/sdk": "workspace:*",
     "@fusionkit/tool-claude": "workspace:*",

@@ -19,8 +19,9 @@ import {
   mlxServer,
   type ManagedServerEvent
 } from "@fusionkit/adapter-ai-sdk";
+import { GATEWAY_DEFAULT_MLX_MODEL } from "@fusionkit/registry";
 
-const DEFAULT_MODEL = "prism-ml/Ternary-Bonsai-4B-mlx-2bit";
+const DEFAULT_MODEL = GATEWAY_DEFAULT_MLX_MODEL;
 const DEFAULT_REQUESTS = 64;
 const DEFAULT_CONCURRENCY = 8;
 const DEFAULT_WARMUP = 2;

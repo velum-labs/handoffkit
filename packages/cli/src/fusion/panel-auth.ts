@@ -6,9 +6,11 @@
  * authenticates - a Claude Code / Codex subscription, an API key, or a local
  * model - and any of these can be mixed in one panel.
  */
+import { catalogDefaultModel, defaultKeyEnv } from "@fusionkit/registry";
+
 import { detectHost } from "./local-catalog.js";
 import type { HostInfo } from "./local-catalog.js";
-import { DEFAULT_CLAUDE_SUB_MODEL, detectCodexModel, detectSubscription } from "./subscriptions.js";
+import { detectCodexModel, detectSubscription } from "./subscriptions.js";
 import type { PanelModelSpec } from "./env.js";
 
 export type AuthChoice =
@@ -22,17 +24,28 @@ export type AuthChoice =
 
 type ApiKeyProvider = "openai" | "anthropic" | "google" | "openrouter";
 
-const API_KEY_ENV: Record<ApiKeyProvider, string> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  google: "GEMINI_API_KEY",
-  openrouter: "OPENROUTER_API_KEY"
-};
+function apiKeyEnvFor(provider: ApiKeyProvider): string {
+  const keyEnv = defaultKeyEnv(provider);
+  if (keyEnv === undefined) {
+    throw new Error(`provider ${provider} has no API key env in the registry`);
+  }
+  return keyEnv;
+}
 
-/** The default OpenRouter model offered by the wizard (vendor/model id). */
-export const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.5";
+function registryDefault(choice: AuthChoice): string {
+  const model = catalogDefaultModel(choice);
+  if (model === undefined) {
+    throw new Error(`auth choice ${choice} has no default model in the registry`);
+  }
+  return model;
+}
 
-const DEFAULT_LOCAL_MODEL = "mlx-community/Qwen3-1.7B-4bit";
+/**
+ * The default OpenRouter model offered by the wizard (vendor/model id).
+ * Registry model-catalog metadata — the curated fallback when live discovery
+ * is unavailable (see listModelsForAuth).
+ */
+export const DEFAULT_OPENROUTER_MODEL = registryDefault("openrouter");
 
 /** Translate a per-model auth choice into a panel spec (model is chosen separately). */
 export function specForAuthChoice(choice: AuthChoice, id: string, model: string): PanelModelSpec {
@@ -45,7 +58,7 @@ export function specForAuthChoice(choice: AuthChoice, id: string, model: string)
     case "anthropic":
     case "google":
     case "openrouter":
-      return { id, model, provider: choice, keyEnv: API_KEY_ENV[choice] };
+      return { id, model, provider: choice, keyEnv: apiKeyEnvFor(choice) };
     case "local":
       return { id, model, provider: "mlx" };
     default: {
@@ -55,27 +68,14 @@ export function specForAuthChoice(choice: AuthChoice, id: string, model: string)
   }
 }
 
-/** A sensible default model for a given auth choice (the subscription grants the model set). */
+/**
+ * A sensible default model for a given auth choice (the subscription grants the
+ * model set). Registry model-catalog metadata; the codex choice honors the
+ * locally pinned Codex CLI model as a runtime override.
+ */
 export function defaultModelForAuthChoice(choice: AuthChoice): string {
-  switch (choice) {
-    case "claude-code":
-    case "anthropic":
-      return DEFAULT_CLAUDE_SUB_MODEL;
-    case "codex":
-      return detectCodexModel();
-    case "openai":
-      return "gpt-5.5";
-    case "google":
-      return "gemini-2.5-flash";
-    case "openrouter":
-      return DEFAULT_OPENROUTER_MODEL;
-    case "local":
-      return DEFAULT_LOCAL_MODEL;
-    default: {
-      const exhaustive: never = choice;
-      throw new Error(`unknown auth choice: ${String(exhaustive)}`);
-    }
-  }
+  if (choice === "codex") return detectCodexModel();
+  return registryDefault(choice);
 }
 
 export type AuthOption = { value: AuthChoice; label: string; hint: string };
@@ -109,7 +109,7 @@ export function buildAuthOptions(
   }
 
   for (const provider of ["openai", "anthropic", "google", "openrouter"] as const) {
-    const keyEnv = API_KEY_ENV[provider];
+    const keyEnv = apiKeyEnvFor(provider);
     const isSet = (env[keyEnv] ?? "").length > 0;
     const reach = provider === "openrouter" ? " — any vendor's models with one key" : "";
     options.push({

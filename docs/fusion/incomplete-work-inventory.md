@@ -10,7 +10,7 @@ alongside:
 - `docs/fusion/FUSION_VALUE_RUBRIC.md` — production gates and measurement criteria
 - `docs/scope.md` — product vs governance package boundaries
 
-**Last reviewed:** 2026-07-01. Some source documents (especially
+**Last reviewed:** 2026-07-02. Some source documents (especially
 `PRODUCTION_READINESS_AUDIT.md` and `ENSEMBLE_PRODUCT_PLAN.md`, dated 2026-06) are
 partially stale where kernel migration, durable sessions, pre-stream failover, and
 kernel-native streaming have landed since they were written.
@@ -65,7 +65,7 @@ kernel streaming, `openai-compatible` panel provider).
 | --- | --- |
 | **Tool calling through fusion (gateway path)** | Python server supports tools on `/v1/fusion/...`; in-process **executor mode** returns `executor_not_implemented` (`run.py`); full harness ↔ ensemble tool loop on the default `fusionkit codex` path is not proven end-to-end |
 | **Mid-stream rate-limit cutover** | Pre-stream failover exists (`frontdoor.vendor-proxy`); mid-stream splice / resume per dialect still hard |
-| **Cursor upstream failover** | Deferred in `packages/cli/src/cursor-acp.ts` — Cursor `api2.cursor.sh` errors collapse to `http_error`; bridge ends with "local model failed" |
+| **Cursor upstream failover** | Deferred in `packages/tool-cursor/src/acp.ts` / bridge paths — Cursor `api2.cursor.sh` errors collapse to `http_error`; bridge ends with "local model failed" |
 | **vLLM / TGI local backend** | Explicitly deferred (`packages/cli/src/fusion/platform.ts`); MLX Apple Silicon only for local panels |
 | **Config unification** | Node `.fusionkit/fusion.json` vs Python YAML — bridge exists, single source of truth not finished |
 | **Python `doctor` / `init` parity** | No Python `doctor`; shallow Python `init` |
@@ -148,12 +148,12 @@ default `fusionkit codex` path:
 
 | Item | Location | Status |
 | --- | --- | --- |
-| Codex `shell_command: "degraded"` | `packages/tool-codex/src/harness.ts` | `TODO(@000alen): why degraded?` — reason undocumented |
+| Codex `shell_command: "degraded"` | `packages/tool-codex/src/harness.ts` | `TODO(@000alen): why degraded? Codex adapter capability metadata should be the source of truth, with ToolDashboardMetadata documenting the shell_command limitation.` |
 | `panelIdentity` / `harnessPromptPassthrough` CLI flags | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` §12 | Wired internally; **not exposed** on `fusionkit codex` CLI or `.fusionkit` config |
 | Phase 3 optional: custom-instruction delta extraction | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` | Not done |
 | Harness prompt open questions Q1–Q4 | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` | Unresolved |
 | **pi agent** | `packages/runner` | Non-spawnable placeholder argv (harness-only hashing) |
-| **Cursor ACP live probe** | `packages/cli/src/cursor-acp.ts` | Opt-in via `FUSIONKIT_GATEWAY_LIVE_CURSOR=1`; otherwise `blocked` |
+| **Cursor ACP live probe** | `packages/tool-cursor/src/acp.ts` | Opt-in via `FUSIONKIT_GATEWAY_LIVE_CURSOR=1`; otherwise `blocked` |
 | **Cursorkit tool loop** | `PRODUCTION_READINESS_AUDIT.md` | 9 / 31 agent tools wired; full OpenAI `tool_calls` → Cursor message loop incomplete |
 | **opencode** | `packages/tool-opencode` | Local model only; no fusion panel |
 
@@ -250,11 +250,17 @@ From `PRODUCTION_READINESS_AUDIT.md` (verify which items remain open):
 
 | Marker | File | Meaning |
 | --- | --- | --- |
-| `TODO(@000alen): why degraded?` | `packages/tool-codex/src/harness.ts` | `shell_command` capability marked degraded without explanation |
-| `WS5 cursorkit failover seam (DEFERRED)` | `packages/cli/src/cursor-acp.ts` | Cursor upstream rate-limit handoff |
+| `TODO(@000alen): why degraded? Codex adapter capability metadata should be the source of truth, with ToolDashboardMetadata documenting the shell_command limitation.` | `packages/tool-codex/src/harness.ts` | `shell_command` capability should be owned by adapter metadata and surfaced in dashboard capability metadata |
+| `TODO(@000alen): looks very brittle; replace with classify_provider_error/ProviderCallError-style startup classification.` | `packages/cli/src/fusion/stack.ts` | Local stack startup errors need structured provider/startup classification |
+| `TODO(@000alen): why are OpenAI-compatible provider name, /v1 suffix, and local dummy apiKey hardcoded here?` | `packages/adapter-ai-sdk/src/{worktree-agent.ts,managed-server.ts}` | Shared OpenAI-compatible endpoint helper still needed |
+| `TODO(@000alen): why are MLX weight markers/download allow_patterns mirrored here?` | `packages/adapter-ai-sdk/src/mlx-helper-source.ts` | MLX helper/provisioner metadata should own download/scan patterns |
+| `TODO(@000alen): why is the Codex model catalog cache path hardcoded here?` | `packages/tool-codex/src/launch.ts` | Codex CLI state paths should come from subscription metadata |
+| `TODO(@000alen): why does Codex launch config duplicate harness provider config generation?` | `packages/tool-codex/src/launch.ts` | Codex launch/harness provider config generation should be shared |
+| `TODO(@000alen): determine whether this legacy Warrant receipt/trace renderer is still reachable...` | `packages/cli/src/render.ts` | Legacy renderer reachability / export decision |
+| `WS5 cursorkit failover seam (DEFERRED)` | `packages/tool-cursor/src/acp.ts` / bridge paths | Cursor upstream rate-limit handoff |
 | `executor_not_implemented` | `python/fusionkit-core/src/fusionkit_core/run.py` | In-process tool executor |
 | `raise NotImplementedError` | `fusion_bench.py`, `public_bench.py` protocols | Base executor protocols |
-| `TODO(hardcoded\|brittle\|lib)` | `scripts/check-repo.mjs` | CI guard flags known brittle spots |
+| `TODO(hardcoded\|brittle\|lib)` | `scripts/check-repo.mjs` | Legacy CI guard rejects old marker format; current provider/tool abstraction debt is tracked with `TODO(@000alen)` comments |
 
 ---
 

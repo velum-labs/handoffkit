@@ -27,7 +27,11 @@
   },
   "dependencies": {
     "@fusionkit/ensemble": "workspace:*",
+    "@fusionkit/harness-core": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/tools": "workspace:*"
+    "@fusionkit/registry": "workspace:*",
+    "@fusionkit/tools": "workspace:*",
+    "@zed-industries/agent-client-protocol": "0.4.5",
+    "zod": "4.4.3"
   }
 }

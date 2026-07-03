@@ -4,7 +4,7 @@
  * Provisions a Warrant-owned mlx-lm server and runs a single generateText call.
  * Apple Silicon only.
  *
- *   WARRANT_MLX_MODEL            HF repo id (default: prism-ml/Ternary-Bonsai-4B-mlx-2bit)
+ *   WARRANT_MLX_MODEL            HF repo id (default: registry gatewayDefaultModel)
  *   WARRANT_MLX_DIR              owned MLX directory override (default: ~/.warrant/mlx)
  *   WARRANT_MLX_IDLE_SHUTDOWN_MS idle shutdown (default: 0 — stay up through the run)
  *   WARRANT_MLX_PROMPT           prompt override
@@ -16,8 +16,9 @@ import {
   mlxServer,
   type ManagedServerEvent
 } from "@fusionkit/adapter-ai-sdk";
+import { GATEWAY_DEFAULT_MLX_MODEL } from "@fusionkit/registry";
 
-const DEFAULT_MODEL = "prism-ml/Ternary-Bonsai-4B-mlx-2bit";
+const DEFAULT_MODEL = GATEWAY_DEFAULT_MLX_MODEL;
 const DEFAULT_PROMPT =
   "In one short sentence, explain what MLX is useful for on Apple Silicon.";
 

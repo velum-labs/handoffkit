@@ -8,13 +8,19 @@
  * cover Claude Code in a Vercel Sandbox microVM and Pi on a local just-bash
  * sandbox for a cheap local swarm worker.
  */
-export { AiSdkHarnessBackend, harnessBackend, isAgentRunFor } from "./backend.js";
+export {
+  AiSdkHarnessBackend,
+  harnessBackend,
+  isAgentRunFor,
+  runHarnessSession
+} from "./backend.js";
 export type {
   CreateHarnessInput,
   CreateSandboxProviderInput,
   HarnessAdapter,
   HarnessBinding,
-  HarnessSandboxProvider
+  HarnessSandboxProvider,
+  HarnessSessionRun
 } from "./backend.js";
 export {
   aiSdkHarnessBackend,
@@ -28,5 +34,6 @@ export type {
 export { isPiAgentRun, piBinding, piHarnessBackend } from "./pi.js";
 export type { PiBindingOptions, PiHarnessBackendOptions } from "./pi.js";
 export { claudeCodeAuthFromEnv, piAuthFromEnv } from "./auth.js";
+export { VERCEL_SANDBOX_CREDENTIAL_ENVS } from "@fusionkit/session-vercel-sandbox";
 export { TranscriptRecorder } from "./transcript.js";
 export type { TranscriptLine } from "./transcript.js";

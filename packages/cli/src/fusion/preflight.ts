@@ -3,6 +3,8 @@
  * the tool, panel, and options. The actual prerequisite check lives in
  * `../shared/preflight.ts`; this computes what to check.
  */
+import { providerKeyProbe } from "@fusionkit/registry";
+
 import { toolRegistry } from "../tools.js";
 
 import { defaultKeyEnv, providerDefaultBaseUrl } from "./env.js";
@@ -114,49 +116,41 @@ export async function localPanelMemoryWarning(
 type KeyProbe = { url: string; headers: Record<string, string>; invalidStatuses: number[] };
 
 /**
- * Build the cheap "is this key accepted at all" probe for a cloud member: an
- * unauthenticated-data-free models-list call. Returns undefined for providers
- * we cannot probe generically (mlx, openai-compatible, subscription auth).
+ * Build the cheap "is this key accepted at all" probe for a cloud member from
+ * the provider registry's keyProbe metadata (e.g. OpenRouter's /v1/models is
+ * public, so its probe targets the key-info endpoint; Google rejects a
+ * malformed key with 400 API_KEY_INVALID). Returns undefined for providers
+ * without probe metadata (mlx, openai-compatible, subscription auth).
  */
 function keyProbeFor(spec: PanelModelSpec, key: string): KeyProbe | undefined {
   const provider = spec.provider;
-  if (spec.auth !== undefined || provider === undefined) return undefined;
-  switch (provider) {
-    case "openai":
-      return {
-        url: `${spec.baseUrl ?? providerDefaultBaseUrl(provider)}/v1/models`,
-        headers: { authorization: `Bearer ${key}` },
-        invalidStatuses: [401, 403]
-      };
-    case "openrouter":
-      // OpenRouter's /v1/models is public (200 regardless of auth), so probe
-      // the key-info endpoint, which rejects a bad key with 401.
-      return {
-        url: `${spec.baseUrl ?? providerDefaultBaseUrl(provider)}/v1/key`,
-        headers: { authorization: `Bearer ${key}` },
-        invalidStatuses: [401, 403]
-      };
-    case "anthropic":
-      return {
-        url: `${spec.baseUrl ?? providerDefaultBaseUrl(provider)}/v1/models`,
-        headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
-        invalidStatuses: [401, 403]
-      };
-    case "google":
-      return {
-        url: `${spec.baseUrl ?? providerDefaultBaseUrl(provider)}/v1beta/models`,
-        headers: { "x-goog-api-key": key },
-        // Google rejects a malformed key with 400 (API_KEY_INVALID).
-        invalidStatuses: [400, 401, 403]
-      };
-    case "mlx":
-    case "openai-compatible":
-      return undefined;
+  if (spec.auth !== undefined || provider === undefined || provider === "mlx") return undefined;
+  const probe = providerKeyProbe(provider);
+  if (probe === undefined) return undefined;
+  const headers: Record<string, string> = { ...probe.extraHeaders };
+  switch (probe.auth) {
+    case "bearer":
+      headers.authorization = `Bearer ${key}`;
+      break;
+    case "x-api-key":
+      headers["x-api-key"] = key;
+      break;
+    case "x-goog-api-key":
+      headers["x-goog-api-key"] = key;
+      break;
+    case "query-key":
+      break;
     default: {
-      const exhaustive: never = provider;
-      throw new Error(`unknown provider ${String(exhaustive)}`);
+      const exhaustive: never = probe.auth;
+      throw new Error(`unknown probe auth style ${String(exhaustive)}`);
     }
   }
+  const base = spec.baseUrl ?? providerDefaultBaseUrl(provider);
+  const url =
+    probe.auth === "query-key"
+      ? `${base}${probe.path}?key=${encodeURIComponent(key)}`
+      : `${base}${probe.path}`;
+  return { url, headers, invalidStatuses: [...probe.invalidStatuses] };
 }
 
 /**

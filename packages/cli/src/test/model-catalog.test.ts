@@ -50,9 +50,7 @@ test("parsers tolerate malformed payloads", () => {
 
 // --- listModelsForAuth -----------------------------------------------------
 
-test("subscriptions, local, and openrouter always use the curated list", async () => {
-  // OpenRouter is curated on purpose: its live /models list has hundreds of
-  // entries, far too many for the terminal picker.
+test("subscriptions, local, and default-curated providers use the curated list", async () => {
   for (const choice of ["claude-code", "codex", "local", "openrouter"] as const) {
     const result = await listModelsForAuth(choice, {
       env: { OPENROUTER_API_KEY: "sk-or-test" },
@@ -61,6 +59,19 @@ test("subscriptions, local, and openrouter always use the curated list", async (
     assert.equal(result.source, "curated");
     assert.ok(result.models.length > 0);
   }
+});
+
+test("openrouter can opt into live discovery from provider metadata", async () => {
+  const result = await listModelsForAuth("openrouter", {
+    env: { OPENROUTER_API_KEY: "sk-or-test" },
+    liveDiscovery: true,
+    fetchImpl: async () =>
+      jsonResponse({
+        data: [{ id: "anthropic/claude-sonnet-4.5" }, { id: "openai/gpt-5.5" }]
+      })
+  });
+  assert.equal(result.source, "live");
+  assert.deepEqual(result.models, ["anthropic/claude-sonnet-4.5", "openai/gpt-5.5"]);
 });
 
 test("api-key provider without a key falls back to curated (no fetch)", async () => {

@@ -1,5 +1,6 @@
 import { mlxServer } from "@fusionkit/adapter-ai-sdk";
 import type { ManagedServerEvent } from "@fusionkit/adapter-ai-sdk";
+import { chatTemplateKwargsForModel } from "@fusionkit/registry";
 
 import { OpenAiBackend } from "./backend.js";
 import type { Backend } from "./backend.js";
@@ -31,17 +32,25 @@ export type MlxBackendOptions = {
 };
 
 /**
- * Default hybrid-thinking ON for chat requests to the local server. Qwen3-class
+ * Per-model chat-template defaults from the capability registry: Qwen3-class
  * templates honor `enable_thinking` and reason before answering (measurably
- * better agentic behavior); templates that don't know the kwarg ignore it. A
- * caller that sets `chat_template_kwargs` itself always wins — the narration
- * writer explicitly sends `enable_thinking: false` and must stay off.
+ * better agentic behavior); model families without a registry entry keep their
+ * template defaults. A caller that sets `chat_template_kwargs` itself always
+ * wins — the narration writer explicitly sends `enable_thinking: false` and
+ * must stay off. The request's own `model` field (when present) selects the
+ * family; otherwise the server's configured model does.
  */
-export function withThinkingDefault(body: unknown): unknown {
+export function withThinkingDefault(body: unknown, serverModel?: string): unknown {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return body;
   const record = body as Record<string, unknown>;
   if (record.chat_template_kwargs !== undefined) return body;
-  return { ...record, chat_template_kwargs: { enable_thinking: true } };
+  const model = typeof record.model === "string" && record.model.length > 0
+    ? record.model
+    : serverModel;
+  if (model === undefined) return body;
+  const kwargs = chatTemplateKwargsForModel(model);
+  if (kwargs === undefined) return body;
+  return { ...record, chat_template_kwargs: { ...kwargs } };
 }
 
 export class MlxBackend implements Backend {
@@ -112,7 +121,7 @@ export class MlxBackend implements Backend {
   }
 
   async chat(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return (await this.#ready()).chat(withThinkingDefault(body), signal);
+    return (await this.#ready()).chat(withThinkingDefault(body, this.#model), signal);
   }
 
   async models(signal?: AbortSignal): Promise<Response> {

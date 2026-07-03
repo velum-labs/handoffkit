@@ -1,8 +1,30 @@
 import { artifactHash } from "@fusionkit/protocol";
 
-import type { HarnessAdapter, HarnessCandidateOutput } from "./harness.js";
+import type { HarnessAdapter, HarnessCandidateOutput, HarnessCapabilities } from "./harness.js";
 import type { EnsembleModel } from "./harness.js";
 import { runCandidateCommandWithIsolation } from "./isolation.js";
+
+/**
+ * Dashboard capability profile for the command harness, owned here next to the
+ * implementation so the dashboard never re-declares (or contradicts) it. The
+ * command harness runs one model-agnostic shell command per candidate:
+ * - `diff_capture` is unsupported because the command's stdout is the product;
+ *   no git worktree diff is produced or collected.
+ * - `patch_apply_visibility` is unsupported because the harness never applies
+ *   patches — there is no apply step to observe.
+ * - `route_model_observation` is unsupported because the command does not call
+ *   a model at all, so no served-model identity can be captured.
+ */
+export const COMMAND_DASHBOARD_CAPABILITIES: HarnessCapabilities = {
+  model_override: "supported",
+  transcript_capture: "supported",
+  diff_capture: "unsupported",
+  tool_loop_capture: "supported",
+  patch_apply_visibility: "unsupported",
+  route_model_observation: "unsupported",
+  verification_hint: "supported",
+  replay_support: "supported"
+};
 
 export type CommandHarnessEnvInput = {
   model: EnsembleModel;

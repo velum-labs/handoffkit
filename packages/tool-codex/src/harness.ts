@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -8,11 +7,14 @@ import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
 import { createTrajectoryCapture, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type { CapturedTrajectory } from "@fusionkit/model-gateway";
 import { KernelBackend, panelMemberPreamble, traceCandidate } from "@fusionkit/ensemble";
+import { PROVIDERS, SUBSCRIPTIONS } from "@fusionkit/registry";
 import {
+  buildChildEnv,
   buildSkippedCandidate,
   definedEnv,
   normalizeApiBaseUrl,
-  readEnv
+  readEnv,
+  runCliCapture
 } from "@fusionkit/tools";
 
 import type {
@@ -26,9 +28,12 @@ import type {
 const DEFAULT_CODEX_COMMAND = "codex";
 const DEFAULT_PROVIDER_ID = "fusionkit-codex";
 const DEFAULT_PROVIDER_NAME = "FusionKit Codex";
-const DEFAULT_CREDENTIAL_ENV_NAMES = ["CODEX_API_KEY", "OPENAI_API_KEY"] as const;
+/** Codex credential env names, from the provider secret registry. */
+const DEFAULT_CREDENTIAL_ENV_NAMES: readonly string[] =
+  PROVIDERS.codex?.credentialEnvNames ?? [];
 const INLINE_PROVIDER_API_KEY_ENV = "FUSIONKIT_CODEX_PROVIDER_API_KEY";
-const CODEX_AUTH_FILE = "auth.json";
+/** The Codex CLI auth store file name, from the subscription registry. */
+const CODEX_AUTH_FILE = SUBSCRIPTIONS.codex.authFileName ?? "auth.json";
 
 export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 export type CodexApprovalPolicy = "untrusted" | "on-failure" | "on-request" | "never";
@@ -69,6 +74,8 @@ export type CodexExecInput = {
   cwd: string;
   env: Record<string, string>;
   timeoutMs?: number;
+  /** Written to the child's stdin (the prompt; `codex exec -` reads it there). */
+  stdin?: string;
   /**
    * Aborts the codex child process (panel cancellation / straggler policy).
    * The abort reason's message is surfaced as the result's `abortReason`.
@@ -185,16 +192,23 @@ function codexAuthFile(env: Record<string, string>): string | undefined {
   return existsSync(path) ? path : undefined;
 }
 
+/** The subscription registry's ordered env override chains for the Codex harness. */
+const CODEX_OVERRIDE_ENV = SUBSCRIPTIONS.codex.overrideEnv ?? {};
+
+function firstEnvValue(env: Record<string, string>, names: readonly string[]): string | undefined {
+  for (const name of names) {
+    const value = readEnv(env, name) ?? env[name];
+    if (value !== undefined && value.length > 0) return value;
+  }
+  return undefined;
+}
+
 function providerFromEnv(env: Record<string, string>): CodexProvider {
-  const responsesBaseUrl =
-    readEnv(env, "FUSIONKIT_CODEX_RESPONSES_BASE_URL") ?? env.CODEX_RESPONSES_BASE_URL;
-  if (responsesBaseUrl !== undefined && responsesBaseUrl.length > 0) {
-    const apiKeyEnvName = firstPresentEnv(env, [
-      "FUSIONKIT_CODEX_API_KEY",
-      "WARRANT_CODEX_API_KEY",
-      "CODEX_API_KEY",
-      "OPENAI_API_KEY"
-    ]);
+  // The provider override env chains (canonical + legacy aliases) come from the
+  // subscription registry, shared with onboarding docs and the Python side.
+  const responsesBaseUrl = firstEnvValue(env, CODEX_OVERRIDE_ENV.responsesBaseUrl ?? []);
+  if (responsesBaseUrl !== undefined) {
+    const apiKeyEnvName = firstPresentEnv(env, CODEX_OVERRIDE_ENV.responsesApiKey ?? []);
     return {
       kind: "responses",
       baseUrl: responsesBaseUrl,
@@ -203,13 +217,9 @@ function providerFromEnv(env: Record<string, string>): CodexProvider {
     };
   }
 
-  const openAiBaseUrl = readEnv(env, "FUSIONKIT_CODEX_OPENAI_BASE_URL") ?? env.OPENAI_BASE_URL;
-  if (openAiBaseUrl !== undefined && openAiBaseUrl.length > 0) {
-    const apiKeyEnvName = firstPresentEnv(env, [
-      "FUSIONKIT_CODEX_OPENAI_API_KEY",
-      "WARRANT_CODEX_OPENAI_API_KEY",
-      "OPENAI_API_KEY"
-    ]);
+  const openAiBaseUrl = firstEnvValue(env, CODEX_OVERRIDE_ENV.openaiCompatibleBaseUrl ?? []);
+  if (openAiBaseUrl !== undefined) {
+    const apiKeyEnvName = firstPresentEnv(env, CODEX_OVERRIDE_ENV.openaiCompatibleApiKey ?? []);
     return {
       kind: "openai-compatible",
       baseUrl: openAiBaseUrl,
@@ -314,8 +324,12 @@ export function codexConfigToml(input: CodexConfigTomlInput): string {
   return lines.join("\n");
 }
 
-function codexArgs(prompt: string): string[] {
-  return ["exec", "--json", "--skip-git-repo-check", prompt];
+/**
+ * `-` makes `codex exec` read the prompt from stdin instead of argv, so large
+ * prompts cannot hit the OS argv limit and the prompt is not visible in `ps`.
+ */
+function codexArgs(): string[] {
+  return ["exec", "--json", "--skip-git-repo-check", "-"];
 }
 
 function writeCodexHome(input: {
@@ -360,7 +374,10 @@ function writeCodexHome(input: {
   ) {
     const authFile = codexAuthFile(input.env);
     if (authFile !== undefined) {
-      copyFileSync(authFile, join(codexHome, CODEX_AUTH_FILE));
+      // Symlink (never copy) the CLI auth store into the ephemeral home:
+      // removing the temp dir removes only the link, so live credentials are
+      // never left behind in /tmp, and token refreshes land in the real store.
+      symlinkSync(authFile, join(codexHome, CODEX_AUTH_FILE));
     }
   }
   return codexHome;
@@ -420,67 +437,21 @@ export function codexEndReason(result: CodexExecResult): HarnessEndReason {
   };
 }
 
-function abortReasonText(signal: AbortSignal): string {
-  const reason: unknown = signal.reason;
-  if (reason instanceof Error) return reason.message;
-  if (reason !== undefined && reason !== null) return String(reason);
-  return "aborted";
-}
-
 export async function defaultCodexRunner(input: CodexExecInput): Promise<CodexExecResult> {
-  if (input.signal?.aborted) {
-    return {
-      stdout: "",
-      stderr: "",
-      exitCode: 130,
-      aborted: true,
-      abortReason: abortReasonText(input.signal)
-    };
-  }
-  return await new Promise<CodexExecResult>((resolve, reject) => {
-    const child = spawn(input.command, input.args, {
-      cwd: input.cwd,
-      env: input.env,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let timedOut = false;
-    let aborted = false;
-    let abortReason: string | undefined;
-    let timer: NodeJS.Timeout | undefined;
-    if (input.timeoutMs !== undefined) {
-      timer = setTimeout(() => {
-        timedOut = true;
-        child.kill("SIGTERM");
-      }, input.timeoutMs);
-    }
-    const signal = input.signal;
-    const onAbort = (): void => {
-      aborted = true;
-      abortReason = signal !== undefined ? abortReasonText(signal) : "aborted";
-      child.kill("SIGTERM");
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("error", (error) => {
-      signal?.removeEventListener("abort", onAbort);
-      reject(error);
-    });
-    child.on("exit", (code) => {
-      if (timer !== undefined) clearTimeout(timer);
-      signal?.removeEventListener("abort", onAbort);
-      resolve({
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-        // 124 mirrors coreutils `timeout`; 130 mirrors SIGINT-style interruption.
-        exitCode: timedOut ? 124 : aborted ? 130 : code ?? 0,
-        ...(timedOut ? { timedOut } : {}),
-        ...(aborted ? { aborted, abortReason } : {})
-      });
-    });
+  const result = await runCliCapture(input.command, input.args, {
+    cwd: input.cwd,
+    env: input.env,
+    ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+    ...(input.signal !== undefined ? { signal: input.signal } : {}),
+    ...(input.stdin !== undefined ? { stdin: input.stdin } : {})
   });
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    ...(result.timedOut ? { timedOut: true } : {}),
+    ...(result.aborted ? { aborted: true, ...(result.abortReason !== undefined ? { abortReason: result.abortReason } : {}) } : {})
+  };
 }
 
 async function runProvider(input: {
@@ -655,7 +626,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
     capabilities: () => ({
       workspace_read: "supported",
       apply_patch: "supported",
-      // TODO(@000alen): why degraded?
+      // TODO(@000alen): why degraded? Codex adapter capability metadata should be the source of truth, with ToolDashboardMetadata documenting the shell_command limitation.
       shell_command: "degraded",
       artifact_capture: "supported",
       model_gateway_responses: "supported",
@@ -709,7 +680,25 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         }
       });
       try {
-        const env = { ...state.env };
+        // The child gets an allowlisted environment, never the parent's full
+        // env: baseline system vars plus exactly the credential names this
+        // provider mode can legitimately consume.
+        const providerApiKeyEnvNames =
+          provider.provider.kind === "ambient"
+            ? provider.provider.credentialEnvNames ?? []
+            : provider.provider.apiKeyEnvName !== undefined
+              ? [provider.provider.apiKeyEnvName]
+              : [];
+        const env = buildChildEnv({
+          base: state.env,
+          allow: [
+            ...DEFAULT_CREDENTIAL_ENV_NAMES,
+            ...Object.values(CODEX_OVERRIDE_ENV).flat(),
+            ...providerApiKeyEnvNames,
+            INLINE_PROVIDER_API_KEY_ENV,
+            "CODEX_HOME"
+          ]
+        });
         if (provider.provider.kind === "responses" && provider.provider.apiKey !== undefined) {
           env[INLINE_PROVIDER_API_KEY_ENV] = provider.provider.apiKey;
         }
@@ -728,7 +717,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
           options.panelIdentity === true
             ? `${panelMemberPreamble(model.id, ordinal, descriptor.models.length)}\n\n${descriptor.prompt}`
             : descriptor.prompt;
-        const args = codexArgs(prompt);
+        const args = codexArgs();
         const cwd = worktree?.path ?? options.cwd ?? descriptor.workspace ?? process.cwd();
         const timeoutMs = options.timeoutMs ?? descriptor.policy.timeoutMs;
         let result: CodexExecResult;
@@ -739,6 +728,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
             cwd,
             env,
             timeoutMs,
+            stdin: prompt,
             ...(signal !== undefined ? { signal } : {})
           });
         } catch (error) {

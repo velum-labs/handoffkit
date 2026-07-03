@@ -9,9 +9,13 @@
  */
 import { mlxServer } from "@fusionkit/adapter-ai-sdk";
 import type { MlxEnv } from "@fusionkit/adapter-ai-sdk";
+import { LOCAL_PROBE_MODEL } from "@fusionkit/registry";
 
-/** A throwaway model id used only to construct the env (model-agnostic ops). */
-const PROBE_MODEL = "mlx-community/Qwen3-1.7B-4bit";
+/**
+ * A throwaway model id used only to construct the env (model-agnostic ops),
+ * from the local catalog registry metadata.
+ */
+const PROBE_MODEL = LOCAL_PROBE_MODEL;
 
 /** Build the owned MlxEnv (structured fork, optional `FUSIONKIT_MLX_DIR`). */
 export function ownedMlxEnv(): MlxEnv {

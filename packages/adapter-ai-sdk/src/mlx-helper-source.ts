@@ -38,6 +38,7 @@ def cmd_scan():
         emit({"type": "error", "message": str(exc)})
         return 1
 
+    # TODO(@000alen): why are MLX weight markers/download allow_patterns mirrored here? Expose them from the pinned mlx-lm helper/provisioner metadata so scan/download and server loading cannot drift.
     # A usable MLX repo has weights plus a config. Accept both multi-shard
     # (model.safetensors.index.json) and single-file (model.safetensors)
     # layouts; mlx-lm's own server check misses the single-file case.
@@ -69,6 +70,7 @@ def cmd_scan():
     return 0
 
 
+# TODO(@000alen): why are MLX weight markers/download allow_patterns mirrored here? Expose them from the pinned mlx-lm helper/provisioner metadata so scan/download and server loading cannot drift.
 # Mirror mlx-lm's allow_patterns so we fetch exactly the weights/config/
 # tokenizer files the server needs and skip PyTorch/GGUF duplicates.
 ALLOW_PATTERNS = [

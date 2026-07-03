@@ -1,0 +1,52 @@
+{
+  "$comment": "Approximate list prices (USD / 1M tokens) for the default panel and common judges, matched by longest prefix so dated model ids still resolve. Refresh from the public LiteLLM price database with `node scripts/generate-pricing.mjs` (entries in manualOverrides always win and survive refreshes). Regenerate bindings with `node scripts/generate-registry.mjs`.",
+  "pricing": {
+    "models": {
+      "claude-haiku": {
+        "inputPer1mTokens": 1,
+        "outputPer1mTokens": 5
+      },
+      "claude-opus": {
+        "inputPer1mTokens": 15,
+        "outputPer1mTokens": 75
+      },
+      "claude-sonnet": {
+        "inputPer1mTokens": 3,
+        "outputPer1mTokens": 15
+      },
+      "claude-sonnet-4-6": {
+        "inputPer1mTokens": 3,
+        "outputPer1mTokens": 15
+      },
+      "gemini-2.5-flash": {
+        "inputPer1mTokens": 0.3,
+        "outputPer1mTokens": 2.5
+      },
+      "gemini-2.5-pro": {
+        "inputPer1mTokens": 1.25,
+        "outputPer1mTokens": 10
+      },
+      "gpt-4.1": {
+        "inputPer1mTokens": 2,
+        "outputPer1mTokens": 8
+      },
+      "gpt-4o": {
+        "inputPer1mTokens": 2.5,
+        "outputPer1mTokens": 10
+      },
+      "gpt-5": {
+        "inputPer1mTokens": 1.25,
+        "outputPer1mTokens": 10
+      },
+      "gpt-5.5": {
+        "inputPer1mTokens": 1.25,
+        "outputPer1mTokens": 10
+      },
+      "o3": {
+        "inputPer1mTokens": 2,
+        "outputPer1mTokens": 8
+      }
+    },
+    "manualOverrides": {}
+  }
+}

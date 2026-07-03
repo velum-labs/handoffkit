@@ -1,20 +1,27 @@
-/**
- * Real Cursor ACP front-door producer. Spawns the bundled Cursorkit bridge (its
- * local-model backend pointed at the running Fusion Harness Gateway) and drives
- * the real cursor-agent CLI in ACP mode, asserting the fusion-synthesized
- * sentinel reaches Cursor via session/update. Returns undefined when the
- * cursor-agent CLI is unavailable, so the acceptance suite records the explicit
- * `blocked` / `cursorkit_backend_not_running` outcome instead of a silent pass.
- */
-
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline";
 
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
-import { readEnv } from "@fusionkit/tools";
-import type { FrontDoorOutcome, FrontDoorOutcomeProducer } from "@fusionkit/model-gateway";
+import {
+  CURSOR_BRIDGE_MODEL_NAME,
+  FUSION_PANEL_MODEL,
+  commandOnPath,
+  freePort,
+  readEnv,
+  terminate
+} from "@fusionkit/tools";
+
+import { cursorBridgeEnv } from "./bridge-config.js";
+
+type CursorFrontDoorOutcome = {
+  id: string;
+  status: "passed" | "failed";
+  reason?: string;
+  request_path?: string;
+  evidence: string[];
+};
+
+type CursorFrontDoorOutcomeProducer = () => Promise<CursorFrontDoorOutcome>;
 
 export type CursorAcpProducerInput = {
   gatewayUrl: string;
@@ -25,23 +32,9 @@ export type CursorAcpProducerInput = {
   timeoutMs?: number;
 };
 
-function commandOnPath(command: string): boolean {
-  if (command.includes("/")) return existsSync(command);
-  const pathValue = process.env.PATH ?? "";
-  return pathValue
-    .split(delimiter)
-    .filter((entry) => entry.length > 0)
-    .some((dir) => existsSync(join(dir, command)));
-}
-
-function normalizeModelBaseUrl(gatewayUrl: string): string {
-  const trimmed = gatewayUrl.replace(/\/+$/, "");
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
-}
-
 export function buildCursorAcpProducer(
   input: CursorAcpProducerInput
-): FrontDoorOutcomeProducer | undefined {
+): CursorFrontDoorOutcomeProducer | undefined {
   const command = input.command ?? "cursor-agent";
   // The live Cursor ACP probe drives the real cursor-agent CLI through the
   // bundled Cursorkit bridge, so it stays opt-in: without the live flag the
@@ -58,47 +51,23 @@ export function buildCursorAcpProducer(
 
 async function runCursorAcpOutcome(
   input: Required<Pick<CursorAcpProducerInput, "command">> & CursorAcpProducerInput
-): Promise<FrontDoorOutcome> {
-  const modelName = input.modelName ?? "local-fusion";
-  const bridgePort = 9700 + Math.floor(Math.random() * 250);
-  const bridgeEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-    if (key.startsWith("BRIDGE_") || key.startsWith("MODEL_") || key.startsWith("CURSOR_UPSTREAM")) {
-      continue;
-    }
-    bridgeEnv[key] = value;
-  }
-  Object.assign(bridgeEnv, {
-    BRIDGE_PORT: String(bridgePort),
-    BRIDGE_ROUTE_INVENTORY: "true",
-    // WS5 cursorkit failover seam (DEFERRED — owned by WS6, cursorkit/tool-cursor).
-    // For Codex/Claude, vendor rate-limit/credit handoff already works: those
-    // harnesses send native passthrough requests to the gateway's
-    // /v1/chat/completions, where the `frontdoor.vendor-proxy` operator detects
-    // the classified `error_category` and the scheduler reroutes the turn to the
-    // ensemble. Because
-    // MODEL_BASE_URL below also points the cursorkit bridge at that same gateway
-    // endpoint, Cursor inherits the SAME pre-stream failover for its *model*
-    // backend for free.
-    // What's still deferred here is the Cursor-*upstream* (CURSOR_UPSTREAM_BASE_URL,
-    // api2.cursor.sh) path: cursorkit's provider (openai.ts) currently collapses
-    // upstream failures to `http_error` and the bridge ends the stream with
-    // "local model failed". When WS6 lands, classify that upstream error in
-    // cursorkit and, on a rate-limit/quota category, hand the turn off to the
-    // gateway's fused model (MODEL_PROVIDER_MODEL = "fusion-panel") here.
-    CURSOR_UPSTREAM_BASE_URL: "https://api2.cursor.sh",
-    MODEL_BASE_URL: normalizeModelBaseUrl(input.gatewayUrl),
-    MODEL_API_KEY: "local",
-    MODEL_NAME: modelName,
-    MODEL_PROVIDER_MODEL: "fusion-panel",
-    MODEL_CONTEXT_TOKEN_LIMIT: "128000"
+): Promise<CursorFrontDoorOutcome> {
+  const modelName = input.modelName ?? CURSOR_BRIDGE_MODEL_NAME;
+  // Reserve a real free loopback port so parallel probes cannot collide.
+  const bridgePort = await freePort();
+  const bridgeEnv = cursorBridgeEnv({
+    port: bridgePort,
+    gatewayUrl: input.gatewayUrl,
+    modelName,
+    providerModel: FUSION_PANEL_MODEL
   });
 
   const { serveCli } = resolveCursorkitCli();
   let bridgeOut = "";
+  // detached: the bridge may spawn children; teardown kills the whole group.
   const bridge = spawn(process.execPath, [serveCli, "serve"], {
     env: bridgeEnv,
+    detached: true,
     stdio: ["ignore", "pipe", "pipe"]
   });
   bridge.stdout.on("data", (chunk: Buffer) => {
@@ -154,7 +123,8 @@ async function runCursorAcpOutcome(
       evidence
     };
   } finally {
-    bridge.kill("SIGTERM");
+    // Process-group SIGTERM with SIGKILL escalation, not a bare child kill.
+    terminate(bridge);
   }
 }
 
@@ -177,7 +147,7 @@ async function driveCursorAgentSentinel(input: {
       "ask",
       "acp"
     ],
-    { cwd: input.cwd, stdio: ["pipe", "pipe", "pipe"] }
+    { cwd: input.cwd, detached: true, stdio: ["pipe", "pipe", "pipe"] }
   );
   let acpText = "";
   let nextId = 1;
@@ -263,6 +233,6 @@ async function driveCursorAgentSentinel(input: {
     return acpText;
   } finally {
     rl.close();
-    acp.kill("SIGTERM");
+    terminate(acp);
   }
 }

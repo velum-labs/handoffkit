@@ -28,10 +28,11 @@ from pathlib import Path
 from typing import Any, assert_never
 
 from fusionkit_core.config import ModelEndpoint, SubscriptionAuthMode
-
-CLAUDE_CODE_KEYCHAIN_SERVICE = "Claude Code-credentials"
-DEFAULT_CLAUDE_CREDENTIALS_PATH = "~/.claude/.credentials.json"
-DEFAULT_CODEX_CREDENTIALS_PATH = "~/.codex/auth.json"
+from fusionkit_core.registry import (
+    CLAUDE_CODE_KEYCHAIN_SERVICE,
+    DEFAULT_CLAUDE_CREDENTIALS_PATH,
+    DEFAULT_CODEX_CREDENTIALS_PATH,
+)
 
 # Re-read the underlying store at most this often, and always re-read once the
 # cached token is within this skew of its expiry, so CLI refreshes are picked up

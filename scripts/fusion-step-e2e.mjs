@@ -16,8 +16,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { startFusionStack } from "../packages/cli/dist/fusion-quickstart.js";
+import { BENCHMARK_PANEL_PRESETS } from "../packages/registry/dist/index.js";
 
 const FK_DIR = process.env.WARRANT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
+const E2E_PANEL = BENCHMARK_PANEL_PRESETS["gpt-opus-smoke"];
+if (E2E_PANEL === undefined) throw new Error("missing gpt-opus-smoke benchmark panel preset");
+const E2E_JUDGE_MODEL = E2E_PANEL.members.find((member) => member.id === E2E_PANEL.judgeId)?.model;
+if (E2E_JUDGE_MODEL === undefined) throw new Error("gpt-opus-smoke judgeId must reference a member");
 
 function log(line) {
   process.stderr.write(`${line}\n`);
@@ -191,18 +196,14 @@ async function main() {
 
   log(`repo: ${repo}`);
   log(`trace dir: ${traceDir}`);
-  log("starting fusion stack (gpt + opus panel, judge gpt-5.5)...");
-
+  log(`starting fusion stack (${E2E_PANEL.panelId}, judge ${E2E_JUDGE_MODEL})...`);
   const stack = await startFusionStack({
     repo,
     outputRoot: join(root, "runs"),
-    models: [
-      { id: "gpt", model: "gpt-5.5", provider: "openai" },
-      { id: "opus", model: "claude-opus-4-8", provider: "anthropic" }
-    ],
+    models: E2E_PANEL.members,
     fusionkitDir: FK_DIR,
     harness: "agent",
-    judgeModel: "gpt-5.5",
+    judgeModel: E2E_JUDGE_MODEL,
     timeoutMs: 240_000,
     log
   });

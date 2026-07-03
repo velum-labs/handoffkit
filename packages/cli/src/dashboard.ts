@@ -15,14 +15,21 @@ import type {
 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
 
-import { createCommandHarness, createMockHarness, runEnsemble } from "@fusionkit/ensemble";
+import {
+  COMMAND_DASHBOARD_CAPABILITIES,
+  createCommandHarness,
+  createMockHarness,
+  MOCK_DASHBOARD_CAPABILITIES,
+  MOCK_DASHBOARD_IDENTITY,
+  runEnsemble
+} from "@fusionkit/ensemble";
 import type {
   EnsembleDescriptor,
   EnsembleModel,
   HarnessAdapter,
   HarnessCapabilities
 } from "@fusionkit/ensemble";
-import { envFlagEnabled, readEnv } from "@fusionkit/tools";
+import { envFlagEnabled, markdownTable, readEnv } from "@fusionkit/tools";
 import type { ToolDashboardMetadata } from "@fusionkit/tools";
 
 import { toolRegistry } from "./tools.js";
@@ -38,27 +45,9 @@ const DEFAULT_COMMAND_FAILURE = "exit 7";
 const DEFAULT_OUTPUT_DIR = ".warrant/ensemble-dashboard";
 const ALL_LIVE_SMOKE_ENV = "FUSIONKIT_ENSEMBLE_LIVE_SMOKE";
 
-/** Dashboard capability overlays for the generic (non-tool) harnesses. */
-const COMMAND_CAPABILITIES: HarnessCapabilities = {
-  model_override: "supported",
-  transcript_capture: "supported",
-  diff_capture: "unsupported",
-  tool_loop_capture: "supported",
-  patch_apply_visibility: "unsupported",
-  route_model_observation: "unsupported",
-  verification_hint: "supported",
-  replay_support: "supported"
-};
-const MOCK_CAPABILITIES: HarnessCapabilities = {
-  model_override: "supported",
-  transcript_capture: "supported",
-  diff_capture: "supported",
-  tool_loop_capture: "supported",
-  patch_apply_visibility: "supported",
-  route_model_observation: "degraded",
-  verification_hint: "supported",
-  replay_support: "supported"
-};
+// The generic (non-tool) harness capability profiles are owned by their
+// implementations in @fusionkit/ensemble (command.ts / mock.ts), where each
+// unsupported/degraded status is documented next to the code that causes it.
 
 /** Dashboard target id (a tool id like "claude-code", or "command"/"mock"). */
 export type HarnessCapabilityTarget = string;
@@ -160,10 +149,6 @@ function safeFileName(value: string): string {
   return value.replace(/[^A-Za-z0-9_.:-]/g, "_");
 }
 
-function escapeMarkdownCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
-}
-
 function liveSmokeEnvEnabled(
   env: Record<string, string | undefined>,
   tool: ToolDashboardMetadata
@@ -239,7 +224,7 @@ export function createHarnessCapabilityMatrix(
       displayName: tool.displayName,
       availability: tool.availability,
       capabilities: mergeCapabilities(
-        adapterCapabilities(tool.makeMatrixHarness(env)),
+        adapterCapabilities(tool.makeMatrixHarness({ env })),
         tool.capabilities
       ),
       notes: tool.notes
@@ -259,17 +244,20 @@ export function createHarnessCapabilityMatrix(
             cwd: options.repo
           })
         ),
-        COMMAND_CAPABILITIES
+        COMMAND_DASHBOARD_CAPABILITIES
       ),
       notes: ["Runs local shell commands through the command harness."]
     }),
     matrixRow({
-      harnessId: "mock",
-      harnessKind: "generic",
-      displayName: "Mock",
+      harnessId: MOCK_DASHBOARD_IDENTITY.id,
+      harnessKind: MOCK_DASHBOARD_IDENTITY.harnessKind,
+      displayName: MOCK_DASHBOARD_IDENTITY.displayName,
       availability: "available",
-      capabilities: mergeCapabilities(adapterCapabilities(createMockHarness()), MOCK_CAPABILITIES),
-      notes: ["Pure synthetic fixture harness for CI."]
+      capabilities: mergeCapabilities(
+        adapterCapabilities(createMockHarness()),
+        MOCK_DASHBOARD_CAPABILITIES
+      ),
+      notes: [...MOCK_DASHBOARD_IDENTITY.notes]
     })
   ];
 
@@ -463,7 +451,7 @@ function genericSmokeRuns(options: Required<Pick<
       model: { id: "mock", model: "synthetic-mock" },
       sideEffects: "read_only",
       allowedTools: ["read_file"],
-      capabilities: MOCK_CAPABILITIES
+      capabilities: MOCK_DASHBOARD_CAPABILITIES
     },
     {
       taskId: "command-success",
@@ -475,7 +463,7 @@ function genericSmokeRuns(options: Required<Pick<
       model: { id: "command", model: "local-shell" },
       sideEffects: "tool_execution",
       allowedTools: ["shell_command"],
-      capabilities: COMMAND_CAPABILITIES
+      capabilities: COMMAND_DASHBOARD_CAPABILITIES
     },
     {
       taskId: "command-failure",
@@ -487,7 +475,7 @@ function genericSmokeRuns(options: Required<Pick<
       model: { id: "command", model: "local-shell" },
       sideEffects: "tool_execution",
       allowedTools: ["shell_command"],
-      capabilities: COMMAND_CAPABILITIES
+      capabilities: COMMAND_DASHBOARD_CAPABILITIES
     }
   ];
 }
@@ -550,23 +538,14 @@ function renderCapabilityMatrix(matrix: HarnessCapabilityMatrix): string[] {
     ...matrix.capabilities,
     "Notes"
   ];
-  const lines = [
-    "## Capability Matrix",
-    "",
-    `| ${header.map(escapeMarkdownCell).join(" | ")} |`,
-    `| ${header.map(() => "---").join(" | ")} |`
-  ];
-  for (const row of matrix.rows) {
-    const cells = [
+  const rows = matrix.rows.map((row) => [
       row.displayName,
       row.harnessKind,
       row.availability,
       ...matrix.capabilities.map((capability) => capabilityCell(row.capabilities, capability)),
       row.notes.join(" ")
-    ];
-    lines.push(`| ${cells.map(escapeMarkdownCell).join(" | ")} |`);
-  }
-  return lines;
+    ]);
+  return ["## Capability Matrix", "", ...markdownTable(header, rows)];
 }
 
 function relativePath(path: string, from: string): string {
@@ -648,24 +627,29 @@ function createAdapterReadiness(input: {
 }
 
 function renderAdapterReadiness(readiness: readonly HarnessAdapterReadiness[]): string[] {
-  const lines = [
+  const rows = readiness.map((row) => [
+    row.displayName,
+    row.contractReadiness,
+    row.credentialState,
+    row.liveSmoke,
+    row.evidence.length > 0 ? row.evidence.join("; ") : "-",
+    row.artifactRefs.length > 0 ? row.artifactRefs.join("; ") : "-"
+  ]);
+  return [
     "## Adapter Readiness",
     "",
-    "| Adapter | Contract/Mock Readiness | Credentials | Live Smoke | Last Evidence | Safe Artifact Refs |",
-    "| --- | --- | --- | --- | --- | --- |"
+    ...markdownTable(
+      [
+        "Adapter",
+        "Contract/Mock Readiness",
+        "Credentials",
+        "Live Smoke",
+        "Last Evidence",
+        "Safe Artifact Refs"
+      ],
+      rows
+    )
   ];
-  for (const row of readiness) {
-    const cells = [
-      row.displayName,
-      row.contractReadiness,
-      row.credentialState,
-      row.liveSmoke,
-      row.evidence.length > 0 ? row.evidence.join("; ") : "-",
-      row.artifactRefs.length > 0 ? row.artifactRefs.join("; ") : "-"
-    ];
-    lines.push(`| ${cells.map(escapeMarkdownCell).join(" | ")} |`);
-  }
-  return lines;
 }
 
 function renderSmokeRecords(
@@ -673,26 +657,33 @@ function renderSmokeRecords(
   outputRoot: string,
   displayNameFor: (harnessId: HarnessCapabilityTarget) => string
 ): string[] {
-  const lines = [
+  const rows = records.map((record) => [
+    record.taskId,
+    displayNameFor(record.harnessId),
+    record.purpose,
+    record.outcome,
+    record.result.status,
+    record.result.harness_kind,
+    relativePath(record.resultPath, outputRoot),
+    record.result.output_summary ?? ""
+  ]);
+  return [
     "## Smoke Records",
     "",
-    "| Task | Harness | Purpose | Expected | Result Status | Harness Kind | Result Record | Summary |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- |"
+    ...markdownTable(
+      [
+        "Task",
+        "Harness",
+        "Purpose",
+        "Expected",
+        "Result Status",
+        "Harness Kind",
+        "Result Record",
+        "Summary"
+      ],
+      rows
+    )
   ];
-  for (const record of records) {
-    const cells = [
-      record.taskId,
-      displayNameFor(record.harnessId),
-      record.purpose,
-      record.outcome,
-      record.result.status,
-      record.result.harness_kind,
-      relativePath(record.resultPath, outputRoot),
-      record.result.output_summary ?? ""
-    ];
-    lines.push(`| ${cells.map(escapeMarkdownCell).join(" | ")} |`);
-  }
-  return lines;
 }
 
 function renderDashboard(input: {

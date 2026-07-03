@@ -1,133 +1,28 @@
 /**
- * A hand-maintained, hardware-aware catalog of local MLX models for the
- * `fusionkit init` picker and `fusionkit models` command.
+ * The hardware-aware catalog of local MLX models for the `fusionkit init`
+ * picker and `fusionkit models` command.
  *
- * Local models run on Apple Silicon via the owned MLX env. There is no reliable
- * "recommended models" API upstream, so this is a curated shortlist of
- * mlx-community 4-bit builds that run well on a Mac. Sizes are the on-disk
- * download footprint (approximate, from the published repos); `minRamGB` is a
- * conservative floor for loading the weights with headroom for the KV cache and
- * the OS — not just the file size.
+ * Local models run on Apple Silicon via the owned MLX env. The catalog data
+ * lives in the registry (spec/registry/local-catalog.json), refreshed from the
+ * HuggingFace hub by `scripts/generate-local-catalog.mjs`: sizes are the
+ * on-disk download footprint; `minRamGB` is a conservative floor for loading
+ * the weights with headroom for the KV cache and the OS — not just the file
+ * size.
  */
 import { totalmem } from "node:os";
 
-export type ModelRole = "general" | "coder";
+import { LOCAL_CATALOG_ENTRIES, PREFERRED_LOCAL_MODELS } from "@fusionkit/registry";
+import type { LocalCatalogModel, LocalModelRole } from "@fusionkit/registry";
 
-export type LocalCatalogEntry = {
-  /** Hugging Face repo id loaded by the MLX server. */
-  repo: string;
-  /** Short human label for the picker. */
-  label: string;
-  /** Parameter count, human form (e.g. "1.7B"). */
-  params: string;
-  /** Quantization (e.g. "4bit"). */
-  quant: string;
-  /** Approximate on-disk download size in GB. */
-  sizeGB: number;
-  /** Conservative unified-memory floor in GB to run it comfortably. */
-  minRamGB: number;
-  /** One-line description. */
-  blurb: string;
-  /** What it's best at. */
-  role: ModelRole;
-};
+export type ModelRole = LocalModelRole;
+
+export type LocalCatalogEntry = LocalCatalogModel;
 
 /**
- * The curated catalog, ordered small -> large. The first three doubled as the
- * historical `DEFAULT_TRIO` and run on virtually any Apple Silicon Mac.
+ * The curated catalog, ordered small -> large. The preferred entries double as
+ * the default local trio and run on virtually any Apple Silicon Mac.
  */
-export const LOCAL_CATALOG: readonly LocalCatalogEntry[] = [
-  {
-    repo: "mlx-community/Llama-3.2-1B-Instruct-4bit",
-    label: "Llama 3.2 1B Instruct",
-    params: "1B",
-    quant: "4bit",
-    sizeGB: 0.7,
-    minRamGB: 4,
-    blurb: "tiny and fast; great for low-memory machines and quick panels",
-    role: "general"
-  },
-  {
-    repo: "mlx-community/gemma-3-1b-it-4bit",
-    label: "Gemma 3 1B Instruct",
-    params: "1B",
-    quant: "4bit",
-    sizeGB: 0.8,
-    minRamGB: 4,
-    blurb: "small Google model; a strong, diverse panel voice",
-    role: "general"
-  },
-  {
-    repo: "mlx-community/Qwen3-1.7B-4bit",
-    label: "Qwen3 1.7B",
-    params: "1.7B",
-    quant: "4bit",
-    sizeGB: 1.0,
-    minRamGB: 6,
-    blurb: "capable small all-rounder; a good default panel member",
-    role: "general"
-  },
-  {
-    repo: "mlx-community/Llama-3.2-3B-Instruct-4bit",
-    label: "Llama 3.2 3B Instruct",
-    params: "3B",
-    quant: "4bit",
-    sizeGB: 1.8,
-    minRamGB: 8,
-    blurb: "noticeably stronger than 1B while still light",
-    role: "general"
-  },
-  {
-    repo: "mlx-community/Qwen3-4B-4bit",
-    label: "Qwen3 4B",
-    params: "4B",
-    quant: "4bit",
-    sizeGB: 2.3,
-    minRamGB: 10,
-    blurb: "well-rounded mid-size model; good quality-to-size ratio",
-    role: "general"
-  },
-  {
-    repo: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
-    label: "Qwen2.5 Coder 7B",
-    params: "7B",
-    quant: "4bit",
-    sizeGB: 4.2,
-    minRamGB: 16,
-    blurb: "code-specialized; a strong local coding panelist",
-    role: "coder"
-  },
-  {
-    repo: "mlx-community/Qwen3-8B-4bit",
-    label: "Qwen3 8B",
-    params: "8B",
-    quant: "4bit",
-    sizeGB: 4.5,
-    minRamGB: 16,
-    blurb: "high-quality general model for 16GB+ machines",
-    role: "general"
-  },
-  {
-    repo: "mlx-community/Qwen3-14B-4bit",
-    label: "Qwen3 14B",
-    params: "14B",
-    quant: "4bit",
-    sizeGB: 8.0,
-    minRamGB: 24,
-    blurb: "frontier-ish local quality; needs a roomy machine",
-    role: "general"
-  },
-  {
-    repo: "mlx-community/Qwen2.5-Coder-32B-Instruct-4bit",
-    label: "Qwen2.5 Coder 32B",
-    params: "32B",
-    quant: "4bit",
-    sizeGB: 18.0,
-    minRamGB: 36,
-    blurb: "the strongest local coder here; for 36GB+ Macs",
-    role: "coder"
-  }
-];
+export const LOCAL_CATALOG: readonly LocalCatalogEntry[] = LOCAL_CATALOG_ENTRIES;
 
 /** The host's relevant capabilities for local model fit. */
 export type HostInfo = {
@@ -206,11 +101,8 @@ export function recommendFor(host: HostInfo): CatalogRecommendation[] {
 export function defaultTrioFor(host: HostInfo): LocalCatalogEntry[] {
   const budget = usableRamGB(host);
   const byRepo = new Map(LOCAL_CATALOG.map((entry) => [entry.repo, entry]));
-  const preferredRepos = [
-    "mlx-community/Qwen3-1.7B-4bit",
-    "mlx-community/gemma-3-1b-it-4bit",
-    "mlx-community/Llama-3.2-1B-Instruct-4bit"
-  ];
+  // Preferred defaults are catalog metadata (spec/registry/local-catalog.json).
+  const preferredRepos = PREFERRED_LOCAL_MODELS.map((entry) => entry.repo);
 
   const chosen: LocalCatalogEntry[] = [];
   let used = 0;

@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { createWriteStream, mkdirSync } from "node:fs";
-import { createServer } from "node:net";
 import { dirname } from "node:path";
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -12,6 +11,7 @@ import type {
   LanguageModelV3StreamPart,
   LanguageModelV3StreamResult
 } from "@ai-sdk/provider";
+import { freePort, MANAGED_SERVER_DEFAULTS, sleep } from "@fusionkit/runtime-utils";
 
 import { MLX_LM_STRUCTURED_PIN, MlxEnv } from "./mlx-env.js";
 import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
@@ -32,12 +32,12 @@ import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
  */
 
 /** Defaults; every one is overridable per server. */
-const DEFAULT_STARTUP_TIMEOUT_MS = 120_000;
-const DEFAULT_IDLE_SHUTDOWN_MS = 5 * 60 * 1000;
-const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
-const HEALTH_POLL_MS = 250;
+const DEFAULT_STARTUP_TIMEOUT_MS = MANAGED_SERVER_DEFAULTS.startupTimeoutMs;
+const DEFAULT_IDLE_SHUTDOWN_MS = MANAGED_SERVER_DEFAULTS.idleShutdownMs;
+const DEFAULT_SHUTDOWN_GRACE_MS = MANAGED_SERVER_DEFAULTS.shutdownGraceMs;
+const HEALTH_POLL_MS = MANAGED_SERVER_DEFAULTS.healthPollMs;
 /** Last bytes of server output kept for diagnostics. */
-const OUTPUT_TAIL_BYTES = 64 * 1024;
+const OUTPUT_TAIL_BYTES = MANAGED_SERVER_DEFAULTS.outputTailBytes;
 
 export type ManagedServerEvent =
   | { type: "starting"; port: number }
@@ -79,6 +79,7 @@ function defaultCreateModel(
   modelId: string,
   supportsStructuredOutputs: boolean
 ): LanguageModelV3 {
+  // TODO(@000alen): why are OpenAI-compatible provider name, /v1 suffix, and local dummy apiKey hardcoded here? Reuse the shared OpenAI-compatible endpoint helper used by OpenAiBackend/ManagedModelServer callers.
   return createOpenAICompatible({
     name: "warrant-managed-server",
     // The provider appends route paths (e.g. /chat/completions) directly,
@@ -88,21 +89,6 @@ function defaultCreateModel(
     supportsStructuredOutputs
   })(modelId);
 }
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const address = probe.address();
-      const port = typeof address === "object" && address ? address.port : 0;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
 
 export class ManagedModelServer implements LanguageModelV3 {
   readonly specificationVersion = "v3" as const;

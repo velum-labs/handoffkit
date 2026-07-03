@@ -13,6 +13,7 @@
     { "path": "../model-gateway" },
     { "path": "../plane" },
     { "path": "../protocol" },
+    { "path": "../registry" },
     { "path": "../runner" },
     { "path": "../sdk" },
     { "path": "../testkit" },

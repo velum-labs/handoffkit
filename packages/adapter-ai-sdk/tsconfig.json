@@ -8,6 +8,7 @@
   "references": [
     { "path": "../handoff" },
     { "path": "../protocol" },
+    { "path": "../runtime-utils" },
     { "path": "../sdk" },
     { "path": "../testkit" }
   ]

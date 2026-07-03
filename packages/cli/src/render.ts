@@ -1,3 +1,5 @@
+// TODO(@000alen): determine whether this legacy Warrant receipt/trace renderer is still reachable from the shipped FusionKit CLI; if kept, move active renderers behind a shared report/markdown renderer, otherwise stop exporting ./render.
+
 import type {
   DisclosureReport,
   ReceiptBundle,

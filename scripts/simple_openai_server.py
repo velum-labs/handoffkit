@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import argparse
 
+from fusionkit_core.registry import API_KEY_ENVS
 from fusionkit_server.openai_endpoint import build_endpoint, serve_single_endpoint
+
+DEFAULT_PROVIDER = next(iter(API_KEY_ENVS))
 
 
 def main() -> None:
@@ -18,7 +21,7 @@ def main() -> None:
     parser.add_argument("--model", required=True, help="provider model name (e.g. gpt-5.5)")
     parser.add_argument(
         "--provider",
-        default="openai",
+        default=DEFAULT_PROVIDER,
         choices=["openai", "anthropic", "google", "openai-compatible", "mlx-lm", "custom"],
     )
     parser.add_argument("--base-url", default=None, help="override the provider base URL")

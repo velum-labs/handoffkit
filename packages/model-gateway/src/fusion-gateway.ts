@@ -15,6 +15,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { newTraceId, TRACE_ID_HEADER } from "@fusionkit/protocol";
+import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 
 import { chatToAnthropicMessage, openAiSseToAnthropic } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
@@ -67,7 +68,7 @@ export const FUSION_STATUS_HEADER = "x-fusion-status";
 export const FUSION_EVIDENCE_HEADER = "x-fusion-evidence";
 export const FUSION_REPORT_HEADER = "x-fusion-report";
 
-const DEFAULT_MODEL = "fusion-panel";
+const DEFAULT_MODEL = FUSION_PANEL_MODEL;
 
 // ---- prompt extraction ----
 

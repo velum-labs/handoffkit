@@ -45,6 +45,7 @@ done
 GIT_SHA=$(git rev-parse HEAD)
 echo "fusionkit_sha=$GIT_SHA"
 
+# TODO(@000alen): why is this hardcoded? Generate this demo panel from DEFAULT_TRIO/local catalog metadata instead of duplicating MLX model ids in YAML and server startup.
 cat > "$ART/models.local.yaml" <<YAML
 endpoints:
   - id: qwen-judge

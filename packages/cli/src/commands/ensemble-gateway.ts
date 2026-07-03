@@ -19,6 +19,7 @@ import {
   parseTimeoutMs,
   unifiedHarnessKinds
 } from "../shared/options.js";
+import { toolRegistry } from "../tools.js";
 
 type GatewayOpts = {
   fusionBackend?: string;
@@ -104,7 +105,11 @@ export function buildGatewayCommand(): Command {
     .description("install registry-backed ACP adapters")
     .option("--install-dir <dir>", "adapter metadata dir", ".warrant/acp-registry")
     .action(async (ids: string[], opts: { installDir: string }) => {
-      const agentIds = ids.length > 0 ? ids : ["codex-cli", "claude-agent"];
+      const defaultAgentIds = toolRegistry
+        .list()
+        .map((tool) => tool.acpAdapterId)
+        .filter((id): id is string => id !== undefined);
+      const agentIds = ids.length > 0 ? ids : defaultAgentIds;
       const installed = await installRegistryAdapters({
         agentIds,
         installDir: resolve(opts.installDir)

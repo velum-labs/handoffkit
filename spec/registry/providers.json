@@ -1,0 +1,100 @@
+{
+  "$comment": "Provider metadata: single source of truth for provider base URLs, API key env vars, wire compatibility, key-validation probes, and live model-discovery capabilities. Consumed via generated bindings (packages/registry + fusionkit_core._generated.registry_data); regenerate with `node scripts/generate-registry.mjs`.",
+  "providers": {
+    "openai": {
+      "baseUrl": "https://api.openai.com",
+      "keyEnv": "OPENAI_API_KEY",
+      "baseUrlEnv": "OPENAI_BASE_URL",
+      "apiCompatibility": "openai-chat-completions",
+      "keyProbe": {
+        "path": "/v1/models",
+        "auth": "bearer",
+        "invalidStatuses": [401, 403]
+      },
+      "discovery": {
+        "path": "/v1/models",
+        "auth": "bearer",
+        "responseShape": "openai"
+      }
+    },
+    "anthropic": {
+      "baseUrl": "https://api.anthropic.com",
+      "keyEnv": "ANTHROPIC_API_KEY",
+      "authTokenEnv": "ANTHROPIC_AUTH_TOKEN",
+      "baseUrlEnv": "ANTHROPIC_BASE_URL",
+      "apiCompatibility": "custom",
+      "keyProbe": {
+        "path": "/v1/models",
+        "auth": "x-api-key",
+        "extraHeaders": { "anthropic-version": "2023-06-01" },
+        "invalidStatuses": [401, 403]
+      },
+      "discovery": {
+        "path": "/v1/models",
+        "auth": "x-api-key",
+        "extraHeaders": { "anthropic-version": "2023-06-01" },
+        "responseShape": "anthropic"
+      }
+    },
+    "google": {
+      "baseUrl": "https://generativelanguage.googleapis.com",
+      "keyEnv": "GEMINI_API_KEY",
+      "apiCompatibility": "custom",
+      "keyProbe": {
+        "path": "/v1beta/models",
+        "auth": "x-goog-api-key",
+        "invalidStatuses": [400, 401, 403]
+      },
+      "discovery": {
+        "path": "/v1beta/models",
+        "auth": "query-key",
+        "responseShape": "google"
+      }
+    },
+    "openrouter": {
+      "baseUrl": "https://openrouter.ai/api",
+      "keyEnv": "OPENROUTER_API_KEY",
+      "apiCompatibility": "openai-chat-completions",
+      "attributionHeaders": {
+        "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
+        "X-Title": "FusionKit"
+      },
+      "keyProbe": {
+        "path": "/v1/key",
+        "auth": "bearer",
+        "invalidStatuses": [401, 403]
+      },
+      "discovery": {
+        "path": "/v1/models",
+        "auth": "bearer",
+        "extraHeaders": {
+          "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
+          "X-Title": "FusionKit"
+        },
+        "responseShape": "openai",
+        "pickerDefaultSource": "curated"
+      }
+    },
+    "codex": {
+      "baseUrl": "https://chatgpt.com/backend-api/codex",
+      "apiCompatibility": "openai-responses",
+      "credentialEnvNames": ["CODEX_API_KEY", "OPENAI_API_KEY"]
+    },
+    "ai-gateway": {
+      "baseUrl": "https://ai-gateway.vercel.sh",
+      "keyEnv": "AI_GATEWAY_API_KEY",
+      "baseUrlEnv": "AI_GATEWAY_BASE_URL"
+    },
+    "openai-compatible": {
+      "baseUrl": "http://127.0.0.1",
+      "apiCompatibility": "openai-chat-completions"
+    },
+    "mlx-lm": {
+      "apiCompatibility": "mlx-lm-server"
+    },
+    "mlx": {},
+    "custom": {
+      "apiCompatibility": "custom"
+    }
+  }
+}

@@ -1,0 +1,117 @@
+/**
+ * Generate the cross-language registry bindings from spec/registry/*.json.
+ *
+ * The JSON files under spec/registry/ are the single source of truth for
+ * provider metadata (base URLs, key env vars, probes, discovery), subscription
+ * auth metadata (Claude Code / Codex), the fusion model identity, the
+ * cloud/local model catalogs, model-family capability quirks, and default
+ * pricing. This script embeds that data into:
+ *
+ *   - packages/registry/src/generated/data.ts   (the @fusionkit/registry package)
+ *   - python/fusionkit-core/src/fusionkit_core/_generated/registry_data.py
+ *
+ * Run `node scripts/generate-registry.mjs` after editing any spec/registry
+ * file; `--check` verifies the generated files are current (used by pnpm check).
+ */
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
+
+const SPEC_FILES = [
+  ["providers", "spec/registry/providers.json"],
+  ["subscriptions", "spec/registry/subscriptions.json"],
+  ["fusion", "spec/registry/fusion.json"],
+  ["modelCatalog", "spec/registry/model-catalog.json"],
+  ["modelCapabilities", "spec/registry/model-capabilities.json"],
+  ["pricing", "spec/registry/pricing.json"],
+  ["localCatalog", "spec/registry/local-catalog.json"]
+];
+
+const TS_TARGET = "packages/registry/src/generated/data.ts";
+const PY_TARGET = "python/fusionkit-core/src/fusionkit_core/_generated/registry_data.py";
+
+const checkMode = process.argv.includes("--check");
+
+function loadRegistry() {
+  const registry = {};
+  for (const [key, path] of SPEC_FILES) {
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    const section = parsed[key];
+    if (section === undefined) {
+      throw new Error(`${path} must carry its data under the "${key}" key`);
+    }
+    registry[key] = section;
+  }
+  return registry;
+}
+
+const HEADER_NOTE =
+  "GENERATED FILE - DO NOT EDIT. Source of truth: spec/registry/*.json. " +
+  "Regenerate with `node scripts/generate-registry.mjs`.";
+
+function renderTs(registry) {
+  const body = JSON.stringify(registry, null, 2);
+  return `// ${HEADER_NOTE}\n\nexport const REGISTRY = ${body};\n`;
+}
+
+/** Serialize a JSON value as a Python literal (True/False/None instead of JSON). */
+function toPython(value, indent) {
+  const pad = "    ".repeat(indent);
+  const childPad = "    ".repeat(indent + 1);
+  if (value === null) return "None";
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.map((item) => `${childPad}${toPython(item, indent + 1)}`);
+    return `[\n${items.join(",\n")},\n${pad}]`;
+  }
+  const entries = Object.entries(value);
+  if (entries.length === 0) return "{}";
+  const items = entries.map(
+    ([key, item]) => `${childPad}${JSON.stringify(key)}: ${toPython(item, indent + 1)}`
+  );
+  return `{\n${items.join(",\n")},\n${pad}}`;
+}
+
+function renderPy(registry) {
+  return [
+    `# ${HEADER_NOTE}`,
+    "# ruff: noqa: E501",
+    "from __future__ import annotations",
+    "",
+    "from typing import Any, Final",
+    "",
+    `REGISTRY: Final[dict[str, Any]] = ${toPython(registry, 0)}`,
+    ""
+  ].join("\n");
+}
+
+function apply(path, content) {
+  if (checkMode) {
+    if (!existsSync(path)) {
+      console.error(`registry check failed: missing generated file ${path}`);
+      process.exitCode = 1;
+      return;
+    }
+    const current = readFileSync(path, "utf8");
+    if (current !== content) {
+      console.error(
+        `registry check failed: ${path} is stale; run \`node scripts/generate-registry.mjs\``
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+  console.log(`wrote ${path}`);
+}
+
+const registry = loadRegistry();
+apply(TS_TARGET, renderTs(registry));
+apply(PY_TARGET, renderPy(registry));
+
+if (checkMode && process.exitCode === undefined) {
+  console.log("registry check passed");
+}

@@ -5,5 +5,5 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../../packages/adapter-ai-sdk" }]
+  "references": [{ "path": "../../packages/adapter-ai-sdk" }, { "path": "../../packages/registry" }]
 }

@@ -397,7 +397,7 @@ Velum fork of Apple `mlx-lm`. v0.31.3+structured.3. ~50k LOC, 298 tests. MIT (up
 
 **Outstanding for a defensible public number:** judge+synth cost capture; 100+ tasks × 3 seeds; CI subset gate; the spec's "claim-to-harness < 60s" is unbenchmarked.
 
-> Note: `configs/benchmark-panel.example.yaml` default product panel (gpt-5.5 + claude-opus-4-8 + gemini-3-pro) is **lopsided** — oracle headroom near zero. File line 1 has a stray `gi#` typo.
+> Note: `configs/benchmark-panel.example.yaml` is now a benchmark-only decorrelated peer panel (gpt-5.5 + claude-opus-4-8 + gemini-3-pro), separate from the product default. Earlier audit notes about a stray `gi#` typo and lopsided default-panel wording are stale.
 
 ---
 

@@ -21,7 +21,14 @@ import { join } from "node:path";
 
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import type { HarnessAgentAdapter, HarnessAgentSettings } from "@ai-sdk/harness/agent";
-import type { AgentKind, RunContract, SessionIsolation } from "@fusionkit/protocol";
+import type {
+  AgentKind,
+  NetworkPolicy,
+  RunContract,
+  SessionIsolation
+} from "@fusionkit/protocol";
+import { hashCanonical } from "@fusionkit/protocol";
+import type { RunEvent } from "@fusionkit/protocol";
 import {
   CapabilityMismatchError,
   executionHash,
@@ -72,14 +79,14 @@ export type HarnessAdapter = HarnessAgentAdapter<any>;
 export type HarnessSandboxProvider = HarnessAgentSettings["sandbox"];
 
 export type CreateHarnessInput = {
-  /** Resolved session env: contract env policy plus released secrets. */
+  /** Resolved session env: the run's env policy plus released secrets. */
   env: Record<string, string>;
-  contract: RunContract;
 };
 
 export type CreateSandboxProviderInput = {
-  contract: RunContract;
   timeoutMs: number;
+  /** Egress policy applied at the sandbox boundary, when the run declares one. */
+  network?: NetworkPolicy;
 };
 
 /**
@@ -152,64 +159,108 @@ export class AiSdkHarnessBackend implements SessionBackend {
     }
 
     const env = resolveSessionEnv(execution.env, secrets);
-    const extraIgnores = this.binding.extraIgnores ?? [];
-
-    const harness = await this.binding.createHarness({ env, contract });
-    const provider = await this.binding.createSandboxProvider({
-      contract,
-      timeoutMs: execution.timeoutMs
+    return runHarnessSession({
+      binding: this.binding,
+      prompt: spec.prompt,
+      env,
+      timeoutMs: execution.timeoutMs,
+      ...(execution.logMaxBytes !== undefined ? { logMaxBytes: execution.logMaxBytes } : {}),
+      network: contract.network,
+      repoDir,
+      emit,
+      executionHash: executionHash(execution)
     });
+  }
+}
 
-    // One signal covers session creation, sandbox startup, and the turn.
-    const abortSignal = AbortSignal.timeout(execution.timeoutMs);
+/**
+ * One honest harness run: exactly what the execution needs, stated directly.
+ * Callers holding a signed governance `RunContract` go through
+ * {@link AiSdkHarnessBackend}, which extracts these values from it; callers
+ * that have no contract (the fusion panel) pass the values here instead of
+ * fabricating a contract document to satisfy the schema.
+ */
+export type HarnessSessionRun = {
+  binding: HarnessBinding;
+  prompt: string;
+  /** Resolved session env delivered to the harness adapter (fail-closed). */
+  env: Record<string, string>;
+  timeoutMs: number;
+  logMaxBytes?: number;
+  /** Egress policy applied at the sandbox boundary, when the run declares one. */
+  network?: NetworkPolicy;
+  /** Materialized workspace on the host; the session tree is mirrored back onto it. */
+  repoDir: string;
+  emit?: (event: RunEvent) => void;
+  /** Overrides the boundary event's argv hash (contract-backed callers). */
+  executionHash?: string;
+};
 
-    let staged: { session: SandboxFsSession; workDir: string } | undefined;
-    const agent = new HarnessAgent({
-      harness,
-      sandbox: provider,
-      onSandboxSession: async ({ session, sessionWorkDir }) => {
-        staged = { session, workDir: sessionWorkDir };
-        for (const rel of listWorkspaceFiles(repoDir, extraIgnores)) {
-          await session.writeBinaryFile({
-            path: posixJoin(sessionWorkDir, rel),
-            content: readFileSync(join(repoDir, rel))
-          });
-        }
-      }
-    });
+/** Execute one harness turn against a binding, without a governance contract. */
+export async function runHarnessSession(run: HarnessSessionRun): Promise<SessionBackendResult> {
+  const extraIgnores = run.binding.extraIgnores ?? [];
+  const ignoredSegments = new Set([...SANDBOX_IGNORED_DIRS, ...extraIgnores]);
+  const harness = await run.binding.createHarness({ env: run.env });
+  const provider = await run.binding.createSandboxProvider({
+    timeoutMs: run.timeoutMs,
+    ...(run.network !== undefined ? { network: run.network } : {})
+  });
 
-    const transcript = new TranscriptRecorder();
-    const session = await agent.createSession({ abortSignal });
-    try {
-      try {
-        const result = await agent.stream({
-          session,
-          prompt: spec.prompt,
-          abortSignal
+  // One signal covers session creation, sandbox startup, and the turn.
+  const abortSignal = AbortSignal.timeout(run.timeoutMs);
+
+  let staged: { session: SandboxFsSession; workDir: string } | undefined;
+  const agent = new HarnessAgent({
+    harness,
+    sandbox: provider,
+    onSandboxSession: async ({ session, sessionWorkDir }) => {
+      staged = { session, workDir: sessionWorkDir };
+      for (const rel of listWorkspaceFiles(run.repoDir, extraIgnores)) {
+        await session.writeBinaryFile({
+          path: posixJoin(sessionWorkDir, rel),
+          content: readFileSync(join(run.repoDir, rel))
         });
-        for await (const part of result.fullStream) {
-          transcript.ingest(part);
-        }
-      } catch (error) {
-        // A failed turn is still evidence: record it, mirror back whatever
-        // the harness already changed, and report a non-zero exit code.
-        transcript.fail(error);
       }
-
-      if (staged) {
-        await mirrorBack(staged.session, staged.workDir, repoDir, this.ignoredSegments);
-      }
-
-      const exitCode = transcript.exitCode();
-      emit({
-        type: "command.executed",
-        argvHash: executionHash(execution),
-        exitCode
-      });
-      return { exitCode, log: transcript.toBuffer(execution.logMaxBytes) };
-    } finally {
-      await session.destroy().catch(() => undefined);
     }
+  });
+
+  const transcript = new TranscriptRecorder();
+  const session = await agent.createSession({ abortSignal });
+  try {
+    try {
+      const result = await agent.stream({
+        session,
+        prompt: run.prompt,
+        abortSignal
+      });
+      for await (const part of result.fullStream) {
+        transcript.ingest(part);
+      }
+    } catch (error) {
+      // A failed turn is still evidence: record it, mirror back whatever
+      // the harness already changed, and report a non-zero exit code.
+      transcript.fail(error);
+    }
+
+    if (staged) {
+      await mirrorBack(staged.session, staged.workDir, run.repoDir, ignoredSegments);
+    }
+
+    const exitCode = transcript.exitCode();
+    run.emit?.({
+      type: "command.executed",
+      argvHash:
+        run.executionHash ??
+        hashCanonical({
+          kind: "harness",
+          agent: run.binding.agentKind,
+          prompt: run.prompt
+        }),
+      exitCode
+    });
+    return { exitCode, log: transcript.toBuffer(run.logMaxBytes) };
+  } finally {
+    await session.destroy().catch(() => undefined);
   }
 }
 

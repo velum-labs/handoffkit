@@ -14,6 +14,10 @@
   },
   "packages": [
     {
+      "path": "packages/registry",
+      "name": "@fusionkit/registry"
+    },
+    {
       "path": "packages/protocol",
       "name": "@fusionkit/protocol"
     },
@@ -68,6 +72,14 @@
     {
       "path": "packages/ensemble",
       "name": "@fusionkit/ensemble"
+    },
+    {
+      "path": "packages/runtime-utils",
+      "name": "@fusionkit/runtime-utils"
+    },
+    {
+      "path": "packages/harness-core",
+      "name": "@fusionkit/harness-core"
     },
     {
       "path": "packages/tools",

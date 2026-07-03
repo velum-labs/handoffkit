@@ -119,10 +119,12 @@
   },
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
+    "@fusionkit/harness-core": "workspace:*",
     "@fusionkit/kernel": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runner": "workspace:*",
+    "@fusionkit/runtime-utils": "workspace:*",
     "@fusionkit/session-harness": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
     "@velum-labs/cursorkit": "0.1.2"

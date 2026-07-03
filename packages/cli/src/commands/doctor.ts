@@ -19,6 +19,7 @@ import { platformCapabilities } from "../fusion/platform.js";
 import { engineCached, provisionEngineWithProgress } from "../fusion/provision.js";
 import { hasBinary, INSTALL_HINTS } from "../shared/preflight.js";
 import { probeBinaryVersion, readPackageVersion } from "../shared/package-version.js";
+import { toolRegistry } from "../tools.js";
 import { formatBytes } from "../ui/progress.js";
 import { bold, brandBanner, brandHeader, cyan, dim, glyph, gray, green, red, yellow } from "../ui/theme.js";
 
@@ -107,17 +108,15 @@ async function runDoctor(opts: { provision?: boolean } = {}): Promise<number> {
 
   console.log("");
   console.log(bold("coding agents (install the one you use)"));
-  for (const [bin, tool] of [
-    ["codex", "codex"],
-    ["claude", "claude"],
-    ["cursor-agent", "cursor"]
-  ] as const) {
+  for (const tool of toolRegistry.list()) {
+    const bin = tool.binary;
+    if (bin === undefined) continue;
     const ok = hasBinary(bin);
     const version = ok ? probeBinaryVersion(bin) : undefined;
     const detail = version !== null && version !== undefined ? version : undefined;
     console.log(
       `  ${line({
-        label: `${tool} (${bin})`,
+        label: `${tool.id} (${bin})`,
         ok,
         ...(detail !== undefined ? { detail } : {}),
         ...(ok ? {} : { hint: INSTALL_HINTS[bin] ?? `install ${bin}` })
@@ -127,7 +126,17 @@ async function runDoctor(opts: { provision?: boolean } = {}): Promise<number> {
 
   console.log("");
   console.log(bold("provider keys (needed by the cloud panel)"));
-  for (const name of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) {
+  // The default cloud panel's providers, resolved through the provider secret
+  // registry — stays in sync when the default panel composition changes.
+  const panelKeyEnvs = [
+    ...new Set(
+      DEFAULT_CLOUD_PANEL.flatMap((spec) => {
+        const keyEnv = spec.provider !== undefined ? defaultKeyEnv(spec.provider) : undefined;
+        return keyEnv !== undefined ? [keyEnv] : [];
+      })
+    )
+  ];
+  for (const name of panelKeyEnvs) {
     const ok = keyPresent(name);
     console.log(
       `  ${line({ label: name, ok, detail: ok ? "set" : "not set", ...(ok ? {} : { hint: `export ${name}=... (or add it to .env)` })})}`

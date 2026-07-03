@@ -1,0 +1,37 @@
+{
+  "name": "@fusionkit/harness-core",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/harness-core"
+  },
+  "description": "The single coding-agent harness contract for FusionKit: driver/instance/session interfaces, canonical harness events, tagged error taxonomy, deferred-based approvals, status probes with disk cache, and the driver contract test suite.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runtime-utils": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  }
+}

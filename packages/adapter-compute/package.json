@@ -28,6 +28,7 @@
   "dependencies": {
     "@fusionkit/handoff": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runtime-utils": "workspace:*",
     "@fusionkit/sdk": "workspace:*",
     "@fusionkit/workspace": "workspace:*"
   },

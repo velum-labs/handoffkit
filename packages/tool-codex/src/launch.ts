@@ -26,6 +26,7 @@ function modelList(model: string, nativeModels: readonly string[]): string[] {
  */
 export type CodexModelPreset = Record<string, unknown>;
 
+// TODO(@000alen): why is the Codex model catalog cache path hardcoded here? share Codex CLI state paths with subscription credential/config metadata.
 /**
  * Read a real `ModelPreset` from the installed Codex's `~/.codex/models_cache.json`
  * (the catalog it fetched for the current version). Returns `undefined` when the
@@ -74,6 +75,7 @@ export function codexModelCatalogJson(
   return JSON.stringify({ models }, null, 2);
 }
 
+// TODO(@000alen): why does Codex launch config duplicate harness provider config generation? share CodexProvider/Codex TOML metadata across launcher and harness.
 /**
  * Codex config.toml fragment defining the gateway as a Responses provider.
  * Written into an ephemeral CODEX_HOME so the user's own config is untouched.

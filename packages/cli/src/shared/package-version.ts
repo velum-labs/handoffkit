@@ -10,19 +10,6 @@ import { toolRegistry } from "../tools.js";
 
 const require = createRequire(import.meta.url);
 
-const TOOL_PACKAGE_BY_ID: Record<string, string> = {
-  codex: "@fusionkit/tool-codex",
-  claude: "@fusionkit/tool-claude",
-  cursor: "@fusionkit/tool-cursor",
-  opencode: "@fusionkit/tool-opencode"
-};
-
-const AGENT_BINARIES = [
-  ["codex", "codex"],
-  ["claude", "claude"],
-  ["cursor-agent", "cursor"]
-] as const;
-
 /** Read `version` from the nearest ancestor package.json relative to a module URL. */
 export function readPackageVersion(fromModuleUrl: string, relativePkgPath = "../package.json"): string {
   try {
@@ -50,7 +37,7 @@ export function probeBinaryVersion(binary: string): string | null {
 
 /** Resolve the installed @fusionkit/tool-* package version for a registry tool id. */
 export function readToolPackageVersion(toolId: string): string | null {
-  const packageName = TOOL_PACKAGE_BY_ID[toolId];
+  const packageName = toolRegistry.get(toolId)?.packageName;
   if (packageName === undefined) return null;
   try {
     const entry = require.resolve(packageName);
@@ -104,9 +91,11 @@ export async function collectVersionMatrix(): Promise<VersionMatrix> {
     runners[binary] = probeBinaryVersion(binary);
   }
 
+  // Every registry tool with a launchable binary, probed by its own binary name.
   const agents: Record<string, string | null> = {};
-  for (const [binary, label] of AGENT_BINARIES) {
-    agents[label] = probeBinaryVersion(binary);
+  for (const tool of toolRegistry.list()) {
+    if (tool.binary === undefined) continue;
+    agents[tool.id] = probeBinaryVersion(tool.binary);
   }
 
   const tools: Record<string, string | null> = {};

@@ -14,6 +14,7 @@
 import { createClaudeCode } from "@ai-sdk/harness-claude-code";
 import { createVercelSandbox } from "@ai-sdk/sandbox-vercel";
 import type { RunContract } from "@fusionkit/protocol";
+import { CANDIDATE_ISOLATION_DEFAULTS } from "@fusionkit/runtime-utils";
 import type { SessionBackend } from "@fusionkit/runner";
 import {
   toVercelNetwork,
@@ -31,7 +32,7 @@ import type {
   HarnessSandboxProvider
 } from "./backend.js";
 
-const DEFAULT_RUNTIME = "node24";
+const DEFAULT_RUNTIME = CANDIDATE_ISOLATION_DEFAULTS.microvmRuntime;
 const DEFAULT_BRIDGE_PORT = 4000;
 
 // On top of the shared sandbox ignore set, the harness's own session-state
@@ -100,11 +101,13 @@ function defaultClaudeSandbox(options: ClaudeCodeBindingOptions) {
       runtime: options.runtime ?? DEFAULT_RUNTIME,
       timeout: input.timeoutMs,
       ports: [options.bridgePort ?? DEFAULT_BRIDGE_PORT],
-      // Deny-by-default egress from the signed contract, applied at the VM
-      // boundary. The bridge bootstrap and the model API are subject to it:
-      // a contract that wants this path live must allow the registry and
-      // api.anthropic.com (or the gateway host) explicitly.
-      networkPolicy: toVercelNetwork(input.contract.network)
+      // Deny-by-default egress from the run's network policy, applied at the
+      // VM boundary. The bridge bootstrap and the model API are subject to
+      // it: a run that wants this path live must allow the registry and
+      // api.anthropic.com (or the gateway host) explicitly. A run that
+      // declares no policy gets unrestricted egress — like running the CLI
+      // outside a sandbox.
+      networkPolicy: toVercelNetwork(input.network ?? { defaultDeny: false, allowHosts: [] })
     });
   };
 }

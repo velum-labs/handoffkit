@@ -1,7 +1,7 @@
 /**
  * FusionKit ensemble runtime entry point. It exposes harness execution, panel workflows, judge synthesis, runtime-kernel workflows, operators, schedulers, worktrees, isolation helpers, and tool execution.
  */
-export { createCommandHarness } from "./command.js";
+export { COMMAND_DASHBOARD_CAPABILITIES, createCommandHarness } from "./command.js";
 export type { CommandHarnessOptions } from "./command.js";
 export { resolveCursorkitCli } from "./cursorkit-path.js";
 export type { CursorkitCli } from "./cursorkit-path.js";
@@ -258,8 +258,14 @@ export type {
   TraceEventInput,
   TraceEventType
 } from "./runtime.js";
-export { createMockHarness } from "./mock.js";
+export {
+  createMockHarness,
+  MOCK_DASHBOARD_CAPABILITIES,
+  MOCK_DASHBOARD_IDENTITY
+} from "./mock.js";
 export type { MockCandidateFixture, MockHarnessOptions } from "./mock.js";
+export { createDriverHarness } from "./driver-adapter.js";
+export type { DriverHarnessOptions, PanelDriver } from "./driver-adapter.js";
 export { traceCandidate } from "./candidate-trace.js";
 export type {
   CandidateOutcome,

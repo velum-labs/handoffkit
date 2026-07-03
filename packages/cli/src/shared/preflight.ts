@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
 
+import { toolRegistry } from "../tools.js";
+
 /** Thrown when the environment is missing a binary or credential fusion needs. */
 export class PreflightError extends Error {
   constructor(message: string) {
@@ -19,12 +21,25 @@ export function hasBinary(bin: string): boolean {
   }
 }
 
+/** Install hints for tool binaries come from ToolIntegration.installHint. */
+function toolInstallHints(): Record<string, string> {
+  const hints: Record<string, string> = {};
+  for (const tool of toolRegistry.list()) {
+    if (tool.binary !== undefined && tool.installHint !== undefined) {
+      hints[tool.binary] = tool.installHint;
+    }
+  }
+  return hints;
+}
+
+/**
+ * Binary install guidance: the Python runner hints live here; per-tool hints
+ * come from each ToolIntegration's registry metadata.
+ */
 export const INSTALL_HINTS: Record<string, string> = {
   uv: "install uv: https://docs.astral.sh/uv/getting-started/installation/",
   uvx: "install uv (ships uvx): https://docs.astral.sh/uv/getting-started/installation/",
-  codex: "install the Codex CLI: https://github.com/openai/codex",
-  claude: "install Claude Code: https://docs.anthropic.com/en/docs/claude-code/overview",
-  "cursor-agent": "install the Cursor CLI: https://cursor.com/cli"
+  ...toolInstallHints()
 };
 
 /**

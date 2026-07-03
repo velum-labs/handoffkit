@@ -26,12 +26,14 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, Field
 
 from fusionkit_evals.benchmark_panel import BenchmarkPanel, PanelHeadroom, estimate_panel_headroom
+from fusionkit_evals.gateway_target import GatewayTarget
 
 PUBLIC_BENCH_DISCLAIMER = (
     "external public-benchmark comparison; fusion numbers are measured from this run, while "
     "baseline numbers are cited from public leaderboards and may use a different harness version "
     "or date"
 )
+_DEFAULT_GATEWAY_TARGET = GatewayTarget()
 
 PublicBenchmarkSuite = Literal[
     "aider-polyglot",
@@ -87,8 +89,8 @@ PUBLIC_BENCHMARK_INFO: dict[PublicBenchmarkSuite, PublicBenchmarkInfo] = {
         suite="aider-polyglot",
         display_name="Aider polyglot",
         mount_mode="fusion_behind_agent",
-        default_dialect="openai-chat",
-        default_gateway_model="fusionkit/panel",
+        default_dialect=_DEFAULT_GATEWAY_TARGET.dialect,
+        default_gateway_model=_DEFAULT_GATEWAY_TARGET.model,
         task_count=225,
         verifier="aider runs each exercise's unit tests after up to two attempts",
         contamination_note=(
@@ -106,8 +108,8 @@ PUBLIC_BENCHMARK_INFO: dict[PublicBenchmarkSuite, PublicBenchmarkInfo] = {
         suite="swe-bench-pro",
         display_name="SWE-bench Pro",
         mount_mode="fusion_as_agent",
-        default_dialect="openai-chat",
-        default_gateway_model="fusionkit/panel",
+        default_dialect=_DEFAULT_GATEWAY_TARGET.dialect,
+        default_gateway_model=_DEFAULT_GATEWAY_TARGET.model,
         task_count=None,
         verifier="official secure harness applies the predicted patch and runs the repo tests",
         contamination_note=(
@@ -122,8 +124,8 @@ PUBLIC_BENCHMARK_INFO: dict[PublicBenchmarkSuite, PublicBenchmarkInfo] = {
         suite="terminal-bench",
         display_name="Terminal-Bench 2.x",
         mount_mode="fusion_as_agent",
-        default_dialect="openai-chat",
-        default_gateway_model="fusionkit/panel",
+        default_dialect=_DEFAULT_GATEWAY_TARGET.dialect,
+        default_gateway_model=_DEFAULT_GATEWAY_TARGET.model,
         task_count=89,
         verifier="each task runs in a Docker container; tests verify final container state",
         contamination_note=(
@@ -138,8 +140,8 @@ PUBLIC_BENCHMARK_INFO: dict[PublicBenchmarkSuite, PublicBenchmarkInfo] = {
         suite="livecodebench",
         display_name="LiveCodeBench",
         mount_mode="fusion_behind_agent",
-        default_dialect="openai-chat",
-        default_gateway_model="fusionkit/panel",
+        default_dialect=_DEFAULT_GATEWAY_TARGET.dialect,
+        default_gateway_model=_DEFAULT_GATEWAY_TARGET.model,
         task_count=None,
         verifier="hidden test cases for post-cutoff competitive programming problems",
         contamination_note=(

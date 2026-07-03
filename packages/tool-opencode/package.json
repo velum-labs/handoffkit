@@ -26,6 +26,9 @@
     "provenance": true
   },
   "dependencies": {
-    "@fusionkit/tools": "workspace:*"
+    "@fusionkit/harness-core": "workspace:*",
+    "@fusionkit/tools": "workspace:*",
+    "@opencode-ai/sdk": "1.17.13",
+    "zod": "4.4.3"
   }
 }

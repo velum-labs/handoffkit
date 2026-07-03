@@ -33,7 +33,8 @@ for (const token of ["fusionkit", "codex", "claude", "cursor", "serve", "fusion"
 const preflight = runCli(["codex"], {
   PATH: "/usr/bin:/bin",
   OPENAI_API_KEY: "",
-  ANTHROPIC_API_KEY: ""
+  ANTHROPIC_API_KEY: "",
+  GEMINI_API_KEY: ""
 });
 if (preflight.status === 0) fail("`fusionkit codex` unexpectedly succeeded with no prerequisites");
 const preflightOutput = `${preflight.stdout}${preflight.stderr}`;

@@ -203,6 +203,9 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../../packages/adapter-ai-sdk
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../../packages/registry
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -286,7 +289,7 @@ importers:
         version: 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
       '@ai-sdk/harness-claude-code':
         specifier: 1.0.0-canary.2
-        version: 1.0.0-canary.2
+        version: 1.0.0-canary.2(@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3))
       '@ai-sdk/sandbox-vercel':
         specifier: 1.0.0-canary.6
         version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
@@ -326,6 +329,9 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../runtime-utils
       '@fusionkit/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -348,6 +354,9 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../runtime-utils
       '@fusionkit/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -379,6 +388,9 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../registry
       '@fusionkit/runner':
         specifier: workspace:*
         version: link:../runner
@@ -426,6 +438,9 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
+      '@fusionkit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@fusionkit/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -438,6 +453,9 @@ importers:
       '@fusionkit/runner':
         specifier: workspace:*
         version: link:../runner
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../runtime-utils
       '@fusionkit/session-harness':
         specifier: workspace:*
         version: link:../session-harness
@@ -456,6 +474,9 @@ importers:
       '@ai-sdk/provider':
         specifier: 3.0.10
         version: 3.0.10
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../registry
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -472,6 +493,18 @@ importers:
         specifier: workspace:*
         version: link:../workspace
 
+  packages/harness-core:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/kernel: {}
 
   packages/model-gateway:
@@ -485,6 +518,12 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../registry
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../runtime-utils
 
   packages/plane:
     dependencies:
@@ -503,17 +542,24 @@ importers:
 
   packages/protocol: {}
 
+  packages/registry: {}
+
   packages/runner:
     dependencies:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../runtime-utils
       '@fusionkit/sdk':
         specifier: workspace:*
         version: link:../sdk
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
+
+  packages/runtime-utils: {}
 
   packages/sdk:
     dependencies:
@@ -528,7 +574,7 @@ importers:
         version: 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
       '@ai-sdk/harness-claude-code':
         specifier: 1.0.0-canary.2
-        version: 1.0.0-canary.2
+        version: 1.0.0-canary.2(@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3))
       '@ai-sdk/harness-pi':
         specifier: 1.0.0-canary.2
         version: 1.0.0-canary.2(ws@8.21.0)
@@ -541,9 +587,15 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../registry
       '@fusionkit/runner':
         specifier: workspace:*
         version: link:../runner
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../runtime-utils
       '@fusionkit/session-hermetic':
         specifier: workspace:*
         version: link:../session-hermetic
@@ -630,15 +682,24 @@ importers:
 
   packages/tool-claude:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: 0.3.198
+        version: 0.3.198(zod@4.4.3)
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
+      '@fusionkit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@fusionkit/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../registry
       '@fusionkit/runner':
         specifier: workspace:*
         version: link:../runner
@@ -648,6 +709,9 @@ importers:
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@fusionkit/workspace':
         specifier: workspace:*
@@ -658,33 +722,66 @@ importers:
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
+      '@fusionkit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@fusionkit/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../registry
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@openai/codex-sdk':
+        specifier: 0.142.5
+        version: 0.142.5
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/tool-cursor:
     dependencies:
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
+      '@fusionkit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../registry
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@zed-industries/agent-client-protocol':
+        specifier: 0.4.5
+        version: 0.4.5
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/tool-opencode:
     dependencies:
+      '@fusionkit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@opencode-ai/sdk':
+        specifier: 1.17.13
+        version: 1.17.13
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/tools:
     dependencies:
@@ -694,6 +791,12 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../registry
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../runtime-utils
 
   packages/workspace:
     dependencies:
@@ -781,6 +884,58 @@ packages:
     resolution: {integrity: sha512-Kw9Yu83Tbq5gpZvefJr6BKsO51z4GCcZ7QTSWAtpTD44pD+hYfOSu1OH8+VhalmdJShS3q6XENL3UExFgL01nA==}
     engines: {node: '>=22'}
 
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.198':
+    resolution: {integrity: sha512-ZmiAybQKIKcP1qEAE/vfXvfxtKxG9CnJn98QTXC5Zxiwuy7Mllx2ALXh9dfmsf0V87CGEodlZQmMgUJotNIsUw==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.198':
+    resolution: {integrity: sha512-XwH5vgN46WSwg8aC1OagNofnJpV/G1ciEu118GEKer8ZhVkq/dvK/DqShxMkb6r1jV7u5IJ7zPXu9uKliyNJAw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.198':
+    resolution: {integrity: sha512-Q7lKVNjIrUQ2B/AR77OvRf0zeOdEjonFVaR9FYrrwtzGeEqum69WSht5nM7Y7el3wjbNi0/eV0QTUM0DlsTEfw==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.198':
+    resolution: {integrity: sha512-qmz8dxEtDIlKntU5qYe0R4aWTxTue5S7zIQknatLX7aJ6HN/nq1aCNXWn5smTH2FViBkUPPR+sCIsNwSk6AT6Q==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.198':
+    resolution: {integrity: sha512-h1SrWVIMjLInYNPlf+TxXuKTOdoiOfJLBSoQG97315Z2Nh0IpBfqWExlqYTtPCgKE7q2iga31U283QfHpIDlSQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.198':
+    resolution: {integrity: sha512-Zqxyz2AT1UM5WlOOoLJhLssZDgZo8rBK5ku6daveK12zp+UTJGZhGsjFghz1/ASxH08KqOTbUePNTORnPhHAEQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.198':
+    resolution: {integrity: sha512-mjIHf1HFiRuXefewWTaNZFlTZlCaEt/xsRjc1nSTCEEpFolZayVhrDKz+O2QFVcDtPl8x8GeYSL0kiikg1DZjQ==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.198':
+    resolution: {integrity: sha512-y3HLuCCz1kDwUrhd6OnqO+d5BUpTFSzNUsPT9kf3r1vk9HYKF+eMC9eIlcOhiW2kX491kxEvuEOfqgIkGx15cg==}
+    cpu: [x64]
+    os: [win32]
+
+  '@anthropic-ai/claude-agent-sdk@0.3.198':
+    resolution: {integrity: sha512-xt469sSCyclTPtzpLAg0Aschy665GiRMgZKabSmESbGUA5/H56HcILVOiFxclXswkeMUk2fQxfHJUY9UZfiTnA==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@anthropic-ai/sdk': '>=0.93.0'
+      '@modelcontextprotocol/sdk': ^1.29.0
+      zod: ^4.0.0
+
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
 
@@ -827,6 +982,54 @@ packages:
 
   '@nodable/entities@2.1.1':
     resolution: {integrity: sha512-Pig3HxDIoMgjdEH8OCf/dkcTmLFjJRjWuq8jSnklu284/TKOPibSRERmOykiwmyXTtv61mP+44f3GMx0tLAyjg==}
+
+  '@openai/codex-sdk@0.142.5':
+    resolution: {integrity: sha512-MConZ+eoBoZmkc4reezuzOgLtoI1BQBzo/nVYsSjtAIBpwKcgeEm1rfmqfUnTfFaBNHFTxBntcS7ZeQYuDPbWA==}
+    engines: {node: '>=18'}
+
+  '@openai/codex@0.142.5':
+    resolution: {integrity: sha512-WQEpD7l3k68eIAP0aq28EdR18ENBAf8DyprzFhzNwCOQJSv4nHzpwT8Fl30IJacprko2ZCmUBZjM2u941l2yLw==}
+    engines: {node: '>=16'}
+    hasBin: true
+
+  '@openai/codex@0.142.5-darwin-arm64':
+    resolution: {integrity: sha512-l43p8xv+Z/2/b6fCUc7/FmcQZsaPB7RFizLponGwHAnFOWe3i9Vky69p+up3BUam9AetoQQUv7Mo+2KdaFEqhA==}
+    engines: {node: '>=16'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@openai/codex@0.142.5-darwin-x64':
+    resolution: {integrity: sha512-yk6A06/VmW7NFsa48OVPaj//g/zeSpd79wjuqfXZwW8ZKRYQm3+wCd3hWjPl79F3QnXvDvM2j3JMIBL3m3GXXg==}
+    engines: {node: '>=16'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@openai/codex@0.142.5-linux-arm64':
+    resolution: {integrity: sha512-77ka5PSnm5HdxdBT99IwntCasmbqevlS0eiC0AtEb6ZXCLkim2gm0AWm+jNYy0EhbssvNK+KghayWo34HMgXeA==}
+    engines: {node: '>=16'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@openai/codex@0.142.5-linux-x64':
+    resolution: {integrity: sha512-pxY+d3NgNE57Y/MApD3/TZUAygxJN6I9h3ZeDUwe67mxWjUxsuapxMRFTKSznCalYbRAeZp752+AAXmUbmguEg==}
+    engines: {node: '>=16'}
+    cpu: [x64]
+    os: [linux]
+
+  '@openai/codex@0.142.5-win32-arm64':
+    resolution: {integrity: sha512-65BEqGbUZ7r0ayunIHdBjo5crwgbwKX/6puOcO+VCswUw/dXvDsN2IGcbXB52+bS9U5+FxP783cUHfTT6m40DQ==}
+    engines: {node: '>=16'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@openai/codex@0.142.5-win32-x64':
+    resolution: {integrity: sha512-a+wI4PEx9a2fg6V5ueTTDkOkr1XpEvA5RFXIbo/L2hOfzMmGtyRnbG24bCGu5Q2RSgVxSQV0aLkdb3vdYMNH9A==}
+    engines: {node: '>=16'}
+    cpu: [x64]
+    os: [win32]
+
+  '@opencode-ai/sdk@1.17.13':
+    resolution: {integrity: sha512-VItOGjMzRQx3zypwmeFLNhCiIx32kxS7FqzIJvVZLfyNGCifs3rfGC9qzNKWcxQo4SjNvAw++v4gWWU6Inv+JQ==}
 
   '@opentelemetry/api@1.9.1':
     resolution: {integrity: sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==}
@@ -909,6 +1112,10 @@ packages:
   '@workflow/serde@4.1.0-beta.2':
     resolution: {integrity: sha512-8kkeoQKLDaKXefjV5dbhBj2aErfKp1Mc4pb6tj8144cF+Em5SPbyMbyLCHp+BVrFfFVCBluCtMx+jjvaFVZGww==}
 
+  '@zed-industries/agent-client-protocol@0.4.5':
+    resolution: {integrity: sha512-OwHKfu5AiKul/GSJilHg36+kOSV9eOl2eYnjR6tenAQDdraSnt22WFk0SDFTeuAANz1Gxkv+DTf7Hq32rvX7FQ==}
+    deprecated: This package has been renamed to @agentclientprotocol/sdk. Please migrate to continue receiving updates.
+
   ai@6.0.200:
     resolution: {integrity: sha512-kme8AWPy7om8s5Isj/uIE0T3hVf8d5QEIpd2WJ/RiAansglud92fIEurCaz/ZYgjW5abcxuyhv55soQnLIWYEA==}
     engines: {node: '>=18'}
@@ -982,6 +1189,10 @@ packages:
   commander@6.2.1:
     resolution: {integrity: sha512-U7VdrJFnJgo4xjrHpTzu0yrHPGImdsmD95ZlgYSEajAn2JKzDhDTPG9kBTefmObL2w/ngeZnilk+OV9CG3d7UA==}
     engines: {node: '>= 6'}
+
+  cross-spawn@7.0.6:
+    resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
+    engines: {node: '>= 8'}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -1060,6 +1271,9 @@ packages:
     resolution: {integrity: sha512-IBTdIkzZNOpqm7q3dRqJvMaldXjDHWkEDfrwGEQTs5eaQMWV+djAhR+wahyNNMAa+qpbDUhBMVt4ZKNwpPm7xQ==}
     engines: {node: ^20.17.0 || >=22.9.0}
 
+  isexe@2.0.0:
+    resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
+
   jose@6.2.3:
     resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
@@ -1134,6 +1348,10 @@ packages:
   path-expression-matcher@1.5.0:
     resolution: {integrity: sha512-cbrerZV+6rvdQrrD+iGMcZFEiiSrbv9Tfdkvnusy6y0x0GKBXREFg/Y65GhIfm0tnLntThhzCnfKwp1WRjeCyQ==}
     engines: {node: '>=14.0.0'}
+
+  path-key@3.1.1:
+    resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
+    engines: {node: '>=8'}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -1235,6 +1453,14 @@ packages:
     resolution: {integrity: sha512-rUCObTnP32Q08R2uuIrt7r9PlEonuTmtuXYcW6s5kjdlj3xbnwe+21yXptAUYcMAABLkYYTtnmzb3w3EDZfueA==}
     engines: {node: '>=10'}
     hasBin: true
+
+  shebang-command@2.0.0:
+    resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
+    engines: {node: '>=8'}
+
+  shebang-regex@3.0.0:
+    resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
+    engines: {node: '>=8'}
 
   simple-concat@1.0.1:
     resolution: {integrity: sha512-cSFtAPtRhljv69IK0hTVZQ+OfE9nePi/rtJmw5UjHeVyVroEqJXP1sFztKUy1qU+xvz3u/sfYJLa947b7nAN2Q==}
@@ -1340,6 +1566,11 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
+  which@2.0.2:
+    resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
+    engines: {node: '>= 8'}
+    hasBin: true
+
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
@@ -1401,10 +1632,11 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.4.3
 
-  '@ai-sdk/harness-claude-code@1.0.0-canary.2':
+  '@ai-sdk/harness-claude-code@1.0.0-canary.2(@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3))':
     dependencies:
       '@ai-sdk/harness': 1.0.0-canary.6(ws@8.21.0)(zod@3.25.76)
       '@ai-sdk/provider-utils': 5.0.0-canary.47(zod@3.25.76)
+      '@anthropic-ai/claude-agent-sdk': 0.3.198(zod@4.4.3)
       ws: 8.21.0
       zod: 3.25.76
     transitivePeerDependencies:
@@ -1501,6 +1733,43 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.198':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.198':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.198':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.198':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.198':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.198':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.198':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.198':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3)':
+    dependencies:
+      zod: 4.4.3
+    optionalDependencies:
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.198
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.198
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.198
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.198
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.198
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.198
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.198
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.198
+
   '@borewit/text-codec@0.2.2': {}
 
   '@bufbuild/protobuf@2.12.0': {}
@@ -1543,6 +1812,41 @@ snapshots:
   '@noble/hashes@1.4.0': {}
 
   '@nodable/entities@2.1.1': {}
+
+  '@openai/codex-sdk@0.142.5':
+    dependencies:
+      '@openai/codex': 0.142.5
+
+  '@openai/codex@0.142.5':
+    optionalDependencies:
+      '@openai/codex-darwin-arm64': '@openai/codex@0.142.5-darwin-arm64'
+      '@openai/codex-darwin-x64': '@openai/codex@0.142.5-darwin-x64'
+      '@openai/codex-linux-arm64': '@openai/codex@0.142.5-linux-arm64'
+      '@openai/codex-linux-x64': '@openai/codex@0.142.5-linux-x64'
+      '@openai/codex-win32-arm64': '@openai/codex@0.142.5-win32-arm64'
+      '@openai/codex-win32-x64': '@openai/codex@0.142.5-win32-x64'
+
+  '@openai/codex@0.142.5-darwin-arm64':
+    optional: true
+
+  '@openai/codex@0.142.5-darwin-x64':
+    optional: true
+
+  '@openai/codex@0.142.5-linux-arm64':
+    optional: true
+
+  '@openai/codex@0.142.5-linux-x64':
+    optional: true
+
+  '@openai/codex@0.142.5-win32-arm64':
+    optional: true
+
+  '@openai/codex@0.142.5-win32-x64':
+    optional: true
+
+  '@opencode-ai/sdk@1.17.13':
+    dependencies:
+      cross-spawn: 7.0.6
 
   '@opentelemetry/api@1.9.1': {}
 
@@ -1694,6 +1998,10 @@ snapshots:
 
   '@workflow/serde@4.1.0-beta.2': {}
 
+  '@zed-industries/agent-client-protocol@0.4.5':
+    dependencies:
+      zod: 3.25.76
+
   ai@6.0.200(zod@4.4.3):
     dependencies:
       '@ai-sdk/gateway': 3.0.127(zod@4.4.3)
@@ -1764,6 +2072,12 @@ snapshots:
   commander@14.0.3: {}
 
   commander@6.2.1: {}
+
+  cross-spawn@7.0.6:
+    dependencies:
+      path-key: 3.1.1
+      shebang-command: 2.0.0
+      which: 2.0.2
 
   debug@4.4.3:
     dependencies:
@@ -1841,6 +2155,8 @@ snapshots:
     optional: true
 
   ini@6.0.0: {}
+
+  isexe@2.0.0: {}
 
   jose@6.2.3: {}
 
@@ -1922,6 +2238,8 @@ snapshots:
   papaparse@5.5.3: {}
 
   path-expression-matcher@1.5.0: {}
+
+  path-key@3.1.1: {}
 
   picocolors@1.1.1: {}
 
@@ -2047,6 +2365,12 @@ snapshots:
   semver@7.8.4:
     optional: true
 
+  shebang-command@2.0.0:
+    dependencies:
+      shebang-regex: 3.0.0
+
+  shebang-regex@3.0.0: {}
+
   simple-concat@1.0.1:
     optional: true
 
@@ -2167,6 +2491,10 @@ snapshots:
 
   util-deprecate@1.0.2:
     optional: true
+
+  which@2.0.2:
+    dependencies:
+      isexe: 2.0.0
 
   wrappy@1.0.2:
     optional: true

@@ -7,8 +7,10 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../ensemble" },
+    { "path": "../harness-core" },
     { "path": "../model-gateway" },
     { "path": "../protocol" },
+    { "path": "../registry" },
     { "path": "../runner" },
     { "path": "../session-harness" },
     { "path": "../tools" },

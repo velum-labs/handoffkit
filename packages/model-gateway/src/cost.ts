@@ -19,6 +19,7 @@
  * estimates. Provider-reported spend (for example OpenRouter generation
  * metadata) wins; configured/static pricing is treated as an estimate fallback.
  */
+import { DEFAULT_MODEL_PRICING as REGISTRY_MODEL_PRICING } from "@fusionkit/registry";
 
 /** USD price for a model, per 1,000,000 tokens. */
 export type ModelPricing = {
@@ -122,23 +123,14 @@ export type SessionCost = {
 
 /**
  * Built-in approximate list prices (USD / 1M tokens) for the default panel and
- * common judges. Used when the gateway is not given explicit pricing. Matched
- * by longest-prefix so a dated model id (`gpt-5.5-2026-01`) still resolves.
- * These are coarse defaults; thread real pricing through the config to override.
+ * common judges, from the pricing registry (spec/registry/pricing.json,
+ * refreshed by scripts/generate-pricing.mjs). Used when the gateway is not
+ * given explicit pricing. Matched by longest-prefix so a dated model id
+ * (`gpt-5.5-2026-01`) still resolves. These are coarse defaults; thread real
+ * pricing through the config to override.
  */
-export const DEFAULT_MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
-  "gpt-5.5": { inputPer1mTokens: 1.25, outputPer1mTokens: 10 },
-  "gpt-5": { inputPer1mTokens: 1.25, outputPer1mTokens: 10 },
-  "gpt-4.1": { inputPer1mTokens: 2, outputPer1mTokens: 8 },
-  "gpt-4o": { inputPer1mTokens: 2.5, outputPer1mTokens: 10 },
-  "o3": { inputPer1mTokens: 2, outputPer1mTokens: 8 },
-  "claude-sonnet-4-6": { inputPer1mTokens: 3, outputPer1mTokens: 15 },
-  "claude-sonnet": { inputPer1mTokens: 3, outputPer1mTokens: 15 },
-  "claude-opus": { inputPer1mTokens: 15, outputPer1mTokens: 75 },
-  "claude-haiku": { inputPer1mTokens: 1, outputPer1mTokens: 5 },
-  "gemini-2.5-pro": { inputPer1mTokens: 1.25, outputPer1mTokens: 10 },
-  "gemini-2.5-flash": { inputPer1mTokens: 0.3, outputPer1mTokens: 2.5 }
-};
+export const DEFAULT_MODEL_PRICING: Readonly<Record<string, ModelPricing>> =
+  REGISTRY_MODEL_PRICING;
 
 const DEFAULT_CURRENCY = "USD";
 

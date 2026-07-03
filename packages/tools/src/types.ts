@@ -9,6 +9,12 @@ import type { ModelFusionHarnessKind, ModelFusionSideEffects } from "@fusionkit/
 
 type ToolEnv = Record<string, string | undefined>;
 
+export type ToolDashboardHarnessInput = {
+  env: ToolEnv;
+  repo?: string;
+  timeoutMs?: number;
+};
+
 /**
  * How a tool is being launched: behind the real fusion panel (`fusion`) or
  * backed by a single local model (`local`). The same `ToolIntegration.launch`
@@ -119,8 +125,8 @@ export type ToolDashboardMetadata = {
   /** Capability overlay merged onto the adapter's own capabilities. */
   capabilities: HarnessCapabilities;
   notes: string[];
-  /** Build the harness whose capabilities seed the matrix row. */
-  makeMatrixHarness: (env: ToolEnv) => HarnessAdapter;
+  /** Build the harness whose capabilities seed the matrix row and handoff smoke runs. */
+  makeMatrixHarness: (input: ToolDashboardHarnessInput) => HarnessAdapter;
   /** Why the tool would skip for lack of credentials (undefined = ready). */
   credentialSkipReason: (env: ToolEnv) => string | undefined;
   smoke: ToolDashboardSmoke;
@@ -144,6 +150,20 @@ export type ToolIntegration = {
   pickerHint: string;
   /** The PATH binary launched, when the tool spawns one. */
   binary?: string;
+  /** The npm package implementing this integration (for version reporting). */
+  packageName?: string;
+  /** How to install the tool binary (doctor/preflight guidance). */
+  installHint?: string;
+  /** One-line auth summary shown when this tool is launched behind the panel. */
+  authSummary?: string;
+  /**
+   * Front-door setup block for pointing this tool at a running gateway
+   * (rendered by `gatewaySetupSnippets`). `note` carries tool-specific extra
+   * context (e.g. the Cursorkit endpoint placeholder).
+   */
+  setupSnippet?: (input: { gatewayUrl: string; note?: string }) => string;
+  /** Registry-backed ACP adapter id installed by `ensemble gateway acp-registry`. */
+  acpAdapterId?: string;
   /** Launch modes this tool supports. */
   modes: readonly ToolLaunchMode[];
   /** The unified harness kinds this tool's adapter answers for. */

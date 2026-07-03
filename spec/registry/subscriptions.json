@@ -1,0 +1,46 @@
+{
+  "$comment": "Subscription auth metadata (Claude Code / Codex CLI logins): credential store locations, auth-mode -> provider mapping, default models, and provider-required request framing. Shared by Node subscription detection (packages/cli/src/fusion/subscriptions.ts) and the Python clients/credentials modules. Regenerate bindings with `node scripts/generate-registry.mjs`.",
+  "subscriptions": {
+    "claude-code": {
+      "provider": "anthropic",
+      "credentialsPath": "~/.claude/.credentials.json",
+      "keychainService": "Claude Code-credentials",
+      "defaultModel": "claude-sonnet-4-5",
+      "oauthBetaHeader": "oauth-2025-04-20",
+      "spoofSystemPrompt": "You are Claude Code, Anthropic's official CLI for Claude."
+    },
+    "codex": {
+      "provider": "codex",
+      "credentialsPath": "~/.codex/auth.json",
+      "configPath": "~/.codex/config.toml",
+      "modelsCachePath": "~/.codex/models_cache.json",
+      "authFileName": "auth.json",
+      "defaultModel": "gpt-5.5",
+      "defaultInstructions": "You are a helpful assistant.",
+      "defaultHeaders": {
+        "OpenAI-Beta": "responses=v1",
+        "originator": "fusionkit"
+      },
+      "requestDefaults": {
+        "stream": true,
+        "store": false,
+        "omitSampling": true
+      },
+      "overrideEnv": {
+        "responsesBaseUrl": ["FUSIONKIT_CODEX_RESPONSES_BASE_URL", "CODEX_RESPONSES_BASE_URL"],
+        "responsesApiKey": [
+          "FUSIONKIT_CODEX_API_KEY",
+          "WARRANT_CODEX_API_KEY",
+          "CODEX_API_KEY",
+          "OPENAI_API_KEY"
+        ],
+        "openaiCompatibleBaseUrl": ["FUSIONKIT_CODEX_OPENAI_BASE_URL", "OPENAI_BASE_URL"],
+        "openaiCompatibleApiKey": [
+          "FUSIONKIT_CODEX_OPENAI_API_KEY",
+          "WARRANT_CODEX_OPENAI_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      }
+    }
+  }
+}

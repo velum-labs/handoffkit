@@ -1,3 +1,5 @@
+import { GATEWAY_DEFAULT_MLX_MODEL } from "@fusionkit/registry";
+
 import { OpenAiBackend } from "./backend.js";
 import type { Backend } from "./backend.js";
 import { MlxBackend } from "./mlx-backend.js";
@@ -10,8 +12,8 @@ import { MlxBackend } from "./mlx-backend.js";
  * the mlx provisioner cannot run. Legacy `WARRANT_*` names are still honored.
  */
 
-/** Default mlx model, matching the examples/mlx default. */
-export const DEFAULT_MLX_MODEL = "prism-ml/Ternary-Bonsai-4B-mlx-2bit";
+/** Default mlx model, from the local catalog registry (examples share it). */
+export const DEFAULT_MLX_MODEL = GATEWAY_DEFAULT_MLX_MODEL;
 
 export type BackendConfig =
   | { kind: "mlx"; model: string; structured: boolean }

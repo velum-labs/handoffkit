@@ -6,7 +6,7 @@ import traceback
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, assert_never
+from typing import Any, assert_never, cast
 
 from fastapi import FastAPI, Header, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -32,6 +32,11 @@ from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import FuseResult
 from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.producers import PanelExhaustedError, trajectory_from_contract
+from fusionkit_core.registry import (
+    FUSION_DEFAULT_ALIAS,
+    FUSION_MODEL_ALIASES,
+    fusion_mode_for_model,
+)
 from fusionkit_core.run import (
     CreateRunResult,
     FusionRunManager,
@@ -67,7 +72,7 @@ class FusionOptions(BaseModel):
 
 
 class FusionRequest(BaseModel):
-    model: str = "fusionkit/router"
+    model: str = FUSION_DEFAULT_ALIAS
     messages: list[ChatMessage]
     temperature: float | None = None
     top_p: float | None = None
@@ -115,7 +120,7 @@ class FuseTrajectoriesRequest(BaseModel):
     the ``fusion`` extension.
     """
 
-    model: str = "fusionkit/router"
+    model: str = FUSION_DEFAULT_ALIAS
     # Raw OpenAI chat messages (assistant tool_calls are nested under `function`,
     # tool results carry `tool_call_id`, content may be a parts array); normalized
     # to FusionKit ChatMessage in the handler.
@@ -146,7 +151,9 @@ def create_app(
 
     @app.get("/v1/models")
     async def models() -> dict[str, Any]:
-        data: list[dict[str, Any]] = [{"id": "fusionkit/router", "object": "model"}]
+        data: list[dict[str, Any]] = [
+            {"id": alias, "object": "model"} for alias in FUSION_MODEL_ALIASES
+        ]
         data.extend(
             {"id": endpoint.id, "object": "model", "owned_by": endpoint.provider}
             for endpoint in config.endpoints
@@ -758,16 +765,7 @@ def _dump_optional(model: BaseModel | None) -> dict[str, Any] | None:
 def _mode_from_request(request: FusionRequest) -> FusionMode:
     if request.fusion.mode is not None:
         return request.fusion.mode
-    suffix = request.model.rsplit("/", maxsplit=1)[-1]
-    if suffix == "single":
-        return "single"
-    if suffix == "self":
-        return "self"
-    if suffix == "panel":
-        return "panel"
-    if suffix == "router":
-        return "router"
-    return "router"
+    return cast(FusionMode, fusion_mode_for_model(request.model))
 
 
 def _coerce_message_content(content: Any) -> str:

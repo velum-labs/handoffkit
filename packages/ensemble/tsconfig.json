@@ -6,10 +6,12 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
+    { "path": "../harness-core" },
     { "path": "../kernel" },
     { "path": "../model-gateway" },
     { "path": "../protocol" },
     { "path": "../runner" },
+    { "path": "../runtime-utils" },
     { "path": "../session-harness" },
     { "path": "../workspace" }
   ]

@@ -27,6 +27,8 @@
   },
   "dependencies": {
     "@fusionkit/ensemble": "workspace:*",
-    "@fusionkit/protocol": "workspace:*"
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/registry": "workspace:*",
+    "@fusionkit/runtime-utils": "workspace:*"
   }
 }

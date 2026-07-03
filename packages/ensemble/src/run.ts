@@ -5,6 +5,7 @@ import {
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   requestHash
 } from "@fusionkit/protocol";
+import { CANDIDATE_ISOLATION_DEFAULTS } from "@fusionkit/runtime-utils";
 import type {
   HarnessCandidateRecordV1,
   HarnessRunRequestV1,
@@ -43,12 +44,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-const DEFAULT_CONTAINER_IMAGE = "node:22";
-const DEFAULT_CONTAINER_ENGINE = "docker";
-const DEFAULT_CONTAINER_WORKDIR = "/workspace";
-const DEFAULT_MICROVM_PROVIDER = "vercel-sandbox";
-const DEFAULT_MICROVM_RUNTIME = "node24";
-const UNKNOWN_RUNTIME_DIGEST = "unknown";
+const DEFAULT_CONTAINER_IMAGE = CANDIDATE_ISOLATION_DEFAULTS.containerImage;
+const DEFAULT_CONTAINER_ENGINE = CANDIDATE_ISOLATION_DEFAULTS.containerEngine;
+const DEFAULT_CONTAINER_WORKDIR = CANDIDATE_ISOLATION_DEFAULTS.containerWorkdir;
+const DEFAULT_MICROVM_PROVIDER = CANDIDATE_ISOLATION_DEFAULTS.microvmProvider;
+const DEFAULT_MICROVM_RUNTIME = CANDIDATE_ISOLATION_DEFAULTS.microvmRuntime;
+const UNKNOWN_RUNTIME_DIGEST = CANDIDATE_ISOLATION_DEFAULTS.unknownRuntimeDigest;
 
 type ContractMetadataInput<S extends string> = {
   schema: S;
@@ -457,18 +458,37 @@ export async function runEnsembleLegacy(descriptor: EnsembleDescriptor): Promise
         outerSignal.addEventListener("abort", () => abortAll(outerSignal.reason), { once: true });
       }
     }
+    // Panel isolation is structural: a harness that throws mid-run becomes a
+    // failed candidate record instead of a rejected promise that poisons its
+    // siblings. Only an abandoned (straggler) candidate is left to settle via
+    // the grace machinery below.
     const runs = descriptor.models.map((model, ordinal) =>
-      Promise.resolve(
-        descriptor.harness.run({
-          descriptor,
-          request,
-          model,
-          ordinal,
-          prepared,
-          worktree: worktreePlan?.worktrees[ordinal],
-          signal: candidateAborts[ordinal]?.signal as AbortSignal
+      Promise.resolve()
+        .then(() =>
+          descriptor.harness.run({
+            descriptor,
+            request,
+            model,
+            ordinal,
+            prepared,
+            worktree: worktreePlan?.worktrees[ordinal],
+            signal: candidateAborts[ordinal]?.signal as AbortSignal
+          })
+        )
+        .catch((error: unknown): HarnessCandidateOutput => {
+          if (candidateAborts[ordinal]?.signal.aborted === true) throw error;
+          const worktree = worktreePlan?.worktrees[ordinal];
+          const message = errorMessage(error);
+          return {
+            candidateId: `${descriptor.id}_${model.id}_${ordinal}`,
+            model,
+            status: "failed",
+            ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {}),
+            transcript: `harness threw: ${message}`,
+            error: { kind: "internal_error", message, retryable: false },
+            metadata: { adapter: harnessKind, isolation: "structural_failure" }
+          } satisfies HarnessCandidateOutput;
         })
-      )
     );
     const { settled, abandonedOrdinals } = await settleWithStragglerGrace(runs, {
       graceMs: descriptor.policy.stragglerGraceMs,

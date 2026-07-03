@@ -69,6 +69,7 @@ if (sourceListing.status === 0 && schemaBundleHash !== undefined) {
   for (const file of sourceListing.stdout.split("\n").filter((line) => line.length > 0)) {
     if (file === originPath) continue;
     if (file.startsWith("packages/protocol/src/fixtures/model-fusion-contract/")) continue;
+    if (!existsSync(file)) continue;
     const text = readFileSync(file, "utf8");
     if (text.includes(schemaBundleHash)) {
       fail(`${file} copies the model-fusion schema bundle hash; import it from @fusionkit/protocol`);

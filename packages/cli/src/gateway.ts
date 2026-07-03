@@ -51,8 +51,9 @@ import type {
   SessionStore,
   WireTrajectory
 } from "@fusionkit/model-gateway";
-
-import { buildCursorAcpProducer } from "./cursor-acp.js";
+import { FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
+import { toolRegistry } from "./tools.js";
 
 export type GatewayRunnerConfig = {
   fusionBackendUrl: string;
@@ -86,6 +87,8 @@ export type GatewayRunnerConfig = {
   pricing?: Readonly<Record<string, ModelPricing>>;
   /** Per-model local compute pricing overrides. */
   localCompute?: Readonly<Record<string, LocalComputePricing>>;
+  /** Model names / endpoint ids of panel members running on local compute (MLX). */
+  localModels?: readonly string[];
   /** WS4 durable session store; when set the gateway persists/resumes sessions. */
   sessionStore?: SessionStore;
   /** WS4 resume target id bound to the first conversation this gateway serves. */
@@ -312,41 +315,37 @@ export function buildAcpRunner(config: GatewayRunnerConfig): AcpRunner {
 }
 
 export function codexConfigSnippet(gatewayUrl: string): string {
-  const base = gatewayUrl.replace(/\/+$/, "");
-  return [
-    "# ~/.codex/config.toml (or a temporary CODEX_HOME)",
-    `model = "fusion-panel"`,
-    `model_provider = "fusion-gateway"`,
-    "",
-    "[model_providers.fusion-gateway]",
-    `name = "Fusion Harness Gateway"`,
-    `base_url = "${base}/v1"`,
-    `wire_api = "responses"`,
-    `requires_openai_auth = false`
-  ].join("\n");
+  const setup = toolRegistry.get("codex")?.setupSnippet?.({ gatewayUrl });
+  if (setup === undefined) {
+    throw new Error("codex tool integration does not expose a setup snippet");
+  }
+  return setup.split("\n").slice(1).join("\n");
 }
 
 export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string): string {
-  const base = gatewayUrl.replace(/\/+$/, "");
+  const toolSnippets = toolRegistry
+    .list()
+    .flatMap((tool) => {
+      const snippet = tool.setupSnippet?.({
+        gatewayUrl,
+        ...(tool.id === "cursor" ? { note: cursorKitNote } : {})
+      });
+      return snippet === undefined ? [] : [snippet];
+    });
+  const acpAdapterIds = toolRegistry
+    .list()
+    .map((tool) => tool.acpAdapterId)
+    .filter((id): id is string => id !== undefined);
   return [
     "Front-door setup:",
     "",
-    "Codex (OpenAI Responses):",
-    codexConfigSnippet(gatewayUrl),
-    "",
-    "Claude Code (Anthropic Messages); Claude appends /v1/messages, so use the gateway root:",
-    `  ANTHROPIC_BASE_URL=${base}`,
-    `  ANTHROPIC_AUTH_TOKEN=local`,
-    "",
-    "Cursor (via Cursorkit backend):",
-    `  cursor-agent --endpoint ${cursorKitNote} --model fusion-panel`,
-    `  Cursorkit model backend: ${base}/v1/chat/completions`,
+    ...toolSnippets.flatMap((snippet) => [snippet, ""]),
     "",
     "Generic ACP local agent:",
     "  fusionkit ensemble gateway acp --fusion-backend <fusion-backend>",
     "",
     "ACP registry adapters:",
-    "  fusionkit ensemble gateway acp-registry install codex-cli claude-agent"
+    `  fusionkit ensemble gateway acp-registry install ${acpAdapterIds.join(" ")}`
   ].join("\n");
 }
 
@@ -367,7 +366,7 @@ export async function startFusionStepGateway(input: {
   const { config } = input;
   const base = config.fusionBackendUrl.replace(/\/+$/, "");
   const stepUrl = `${base}/v1/fusion/trajectories:fuse`;
-  const defaultModel = input.defaultModel ?? "fusion-panel";
+  const defaultModel = input.defaultModel ?? FUSION_PANEL_MODEL;
 
   const runPanels: PanelRunner = async ({
     task,
@@ -486,6 +485,7 @@ export async function startFusionStepGateway(input: {
     ...(config.budgetUsd !== undefined ? { budgetUsd: config.budgetUsd } : {}),
     ...(config.pricing !== undefined ? { pricing: config.pricing } : {}),
     ...(config.localCompute !== undefined ? { localCompute: config.localCompute } : {}),
+    ...(config.localModels !== undefined ? { localModels: config.localModels } : {}),
     ...(config.reasoningTraces !== undefined ? { reasoningTraces: config.reasoningTraces } : {}),
     ...(config.narrationWriter !== undefined ? { narrationWriter: config.narrationWriter } : {}),
     // WS7 cost attribution: a fused turn's gateway-observed `usage` is the

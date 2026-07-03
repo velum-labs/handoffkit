@@ -40,6 +40,8 @@ import {
   TRACE_ID_HEADER
 } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
+import { withDeadline, withTimeout } from "@fusionkit/runtime-utils";
 
 import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import { joinPath } from "./backend.js";
@@ -250,6 +252,12 @@ export type FusionBackendOptions = {
   /** Optional local-compute rates keyed by model name or endpoint id. */
   localCompute?: Readonly<Record<string, LocalComputePricing>>;
   /**
+   * Model names / endpoint ids of panel members that run on local compute
+   * (e.g. MLX members), threaded explicitly from the panel spec so cost
+   * classification does not rely on model-id string heuristics.
+   */
+  localModels?: readonly string[];
+  /**
    * WS7 model name to attribute a *fused* turn's cost to — the judge/synthesizer
    * model whose `usage` the fused response carries. The gateway only sees this
    * one call's tokens (the panel members are metered inside the Python engine),
@@ -377,48 +385,6 @@ function errorText(error: unknown): string {
 /** A candidate set is usable when at least one trajectory did not fail. */
 function hasUsableCandidates(candidates: WireTrajectory[]): boolean {
   return candidates.some((candidate) => candidate.status !== "failed");
-}
-
-/** Combine an optional client-abort signal with a wall-clock timeout. */
-function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
-}
-
-/** Render a millisecond budget as a human-readable duration ("15m", "2m30s", "45s"). */
-function formatDurationMs(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const totalSeconds = Math.round(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes === 0) return `${seconds}s`;
-  return seconds === 0 ? `${minutes}m` : `${minutes}m${seconds}s`;
-}
-
-/**
- * Reject if `promise` does not settle within `timeoutMs`. `onTimeout` runs when
- * the deadline fires — the panel path uses it to abort the in-flight work so a
- * timed-out turn cancels its candidates instead of leaving them burning tokens.
- */
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  label: string,
-  onTimeout?: (error: Error) => void
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      const error = new Error(`${label} timed out after ${formatDurationMs(timeoutMs)}`);
-      onTimeout?.(error);
-      reject(error);
-    }, timeoutMs);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
 }
 
 function jsonError(status: number, message: string): Response {
@@ -802,6 +768,7 @@ export class FusionBackend implements Backend {
   readonly #budgetUsd: number | undefined;
   readonly #pricing: Readonly<Record<string, ModelPricing>>;
   readonly #localCompute: Readonly<Record<string, LocalComputePricing>>;
+  readonly #localModels: ReadonlySet<string>;
   readonly #costModel: string | undefined;
   readonly #reasoningTraces: boolean;
   readonly #narrationWriter: NarrationWriter | undefined;
@@ -836,6 +803,7 @@ export class FusionBackend implements Backend {
     this.#budgetUsd = options.budgetUsd;
     this.#pricing = options.pricing ?? {};
     this.#localCompute = options.localCompute ?? {};
+    this.#localModels = new Set(options.localModels ?? []);
     this.#costModel = options.costModel;
     this.#reasoningTraces = options.reasoningTraces ?? true;
     this.#narrationWriter = options.narrationWriter;
@@ -867,7 +835,7 @@ export class FusionBackend implements Backend {
 
   /** Discovery list: the fused model first, then each native passthrough model. */
   listModelIds(): readonly string[] {
-    const fusion = this.defaultModel ?? "fusion-panel";
+    const fusion = this.defaultModel ?? FUSION_PANEL_MODEL;
     const ids = [fusion];
     for (const entry of this.#passthrough) {
       if (!ids.includes(entry.modelId)) ids.push(entry.modelId);
@@ -1133,7 +1101,7 @@ export class FusionBackend implements Backend {
     sessionId: string
   ): Response {
     const encoder = new TextEncoder();
-    const fusedModel = this.defaultModel ?? "fusion-panel";
+    const fusedModel = this.defaultModel ?? FUSION_PANEL_MODEL;
     // WS7: meter the vendor stream from the `usage` block riding its SSE tail.
     const meter = (text: string): void => {
       const providerCost = providerCostFromSse(text);
@@ -1300,12 +1268,12 @@ export class FusionBackend implements Backend {
     // WS7: a fused turn's gateway-observed usage is the judge/synthesis call's,
     // priced against the configured judge model (falling back to the advertised
     // fused id, whose cost is reported unknown).
-    return this.#costModel ?? this.defaultModel ?? "fusion-panel";
+    return this.#costModel ?? this.defaultModel ?? FUSION_PANEL_MODEL;
   }
 
   #buildStepBody(req: FrontdoorRequestValue, candidates: readonly WireTrajectory[]): string {
     const stepBody: Record<string, unknown> = {
-      model: req.chat.model ?? this.defaultModel ?? "fusion-panel",
+      model: req.chat.model ?? this.defaultModel ?? FUSION_PANEL_MODEL,
       messages: req.chat.messages ?? [],
       trajectories: candidates,
       stream: req.streaming
@@ -1394,10 +1362,13 @@ export class FusionBackend implements Backend {
     latencyMs?: number;
   }): ReturnType<typeof localComputeFromLatency> {
     const pricing = this.#localCompute[input.model] ?? this.#localCompute[input.endpointId];
+    // Local classification is explicit: panel members threaded via
+    // `localModels` (the CLI marks its mlx members), or true local provider
+    // metadata from the engine (`mlx-lm`). No model-id string heuristics.
     const looksLocal =
-      input.model.startsWith("mlx-community/") ||
-      input.provider === "mlx-lm" ||
-      (input.provider === "openai-compatible" && input.model.includes("/"));
+      this.#localModels.has(input.model) ||
+      this.#localModels.has(input.endpointId) ||
+      input.provider === "mlx-lm";
     if (pricing === undefined && !looksLocal) return undefined;
     return localComputeFromLatency({
       latencyMs: input.latencyMs,

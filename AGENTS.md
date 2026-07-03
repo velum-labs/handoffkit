@@ -72,7 +72,6 @@ panel fanout + synthesis (per-endpoint ids also work for passthrough). Notes:
 - A real provider key is required. Only `OPENAI_API_KEY` is typically set here;
   `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` are not.
 - `gpt-5.5` is a real model on the provided OpenAI account.
-- The committed `.fusionkit/fusion.json` panel includes a **local MLX** model,
-  which is **Apple-Silicon only** and will not run on this Linux host. For a
-  cloud-only run, use a config whose `endpoints`/`panel_models` are all cloud
-  providers (see `configs/models.example.yaml` for the schema).
+- The committed `.fusionkit/fusion.json` panel currently uses OpenRouter
+  (`moonshotai/kimi-k2-thinking`, `qwen/qwen3-coder`) and requires
+  `OPENROUTER_API_KEY`.

@@ -843,7 +843,7 @@ test("ensemble gateway codex-config prints a Responses provider snippet", () => 
     "http://127.0.0.1:8787"
   ]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /model_provider = "fusion-gateway"/);
+  assert.match(result.stdout, /model_provider = "fusionkit-local"/);
   assert.match(result.stdout, /wire_api = "responses"/);
   assert.match(result.stdout, /base_url = "http:\/\/127\.0\.0\.1:8787\/v1"/);
 });

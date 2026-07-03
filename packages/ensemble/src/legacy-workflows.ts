@@ -27,12 +27,27 @@ export class LegacyRunEnsembleOperator implements Operator {
     sideEffects: "write_workspace"
   };
 
+  // The abort signal is a live runtime handle, not serializable wire data —
+  // and artifacts are deep-frozen. Freezing a caller's AbortSignal breaks its
+  // AbortController ("Cannot assign to read only property Symbol(kAborted)"),
+  // silently disabling run cancellation. So the signal stays out of the
+  // descriptor artifact and rejoins here, at run time — the same discipline
+  // as the fuse-step request artifact (see kernel-gateway.ts).
+  readonly #signal: AbortSignal | undefined;
+
+  constructor(options: { signal?: AbortSignal } = {}) {
+    this.#signal = options.signal;
+  }
+
   async run(inputs: readonly Artifact[], ctx: OperatorRunContext): Promise<readonly Artifact[]> {
     const descriptor = inputs.find((artifact) => artifact.type === LegacyArtifactTypes.EnsembleDescriptor)?.value as
       | EnsembleDescriptor
       | undefined;
     if (descriptor === undefined) throw new Error("legacy ensemble workflow requires an EnsembleDescriptor artifact");
-    const result = await runEnsembleLegacy(descriptor);
+    const result = await runEnsembleLegacy({
+      ...descriptor,
+      ...(this.#signal !== undefined ? { signal: this.#signal } : {})
+    });
     return [
       ctx.createArtifact<EnsembleRunResult>({
         id: `${ctx.nodeId}.result`,
@@ -105,10 +120,13 @@ export type EnsembleRunWorkflowInput = {
 
 export function ensembleRunWorkflow(input: EnsembleRunWorkflowInput): KernelWorkflow {
   const task = createTaskArtifact({ ...(input.task ?? { id: "ensemble-run", prompt: input.descriptor.prompt }) });
+  // Keep the live abort signal out of the deep-frozen artifact; it rejoins
+  // the descriptor inside the operator at run time.
+  const { signal, ...wireDescriptor } = input.descriptor;
   const descriptorArtifact = {
     id: "ensemble-descriptor",
     type: LegacyArtifactTypes.EnsembleDescriptor,
-    value: input.descriptor,
+    value: wireDescriptor,
     visibility: "developer" as const,
     leakage: "none" as const,
     provenance: {
@@ -119,7 +137,7 @@ export function ensembleRunWorkflow(input: EnsembleRunWorkflowInput): KernelWork
   return graph("legacy-ensemble-run")
     .task(task)
     .artifact(descriptorArtifact)
-    .node("run-ensemble", new LegacyRunEnsembleOperator(), {
+    .node("run-ensemble", new LegacyRunEnsembleOperator(signal !== undefined ? { signal } : {}), {
       inputs: [refs.artifact(descriptorArtifact.id)]
     })
     .scheduler(new StaticDAGScheduler())

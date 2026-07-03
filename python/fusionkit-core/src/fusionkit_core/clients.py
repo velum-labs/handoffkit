@@ -17,6 +17,17 @@ from openai import AsyncOpenAI
 from fusionkit_core.config import FusionConfig, ModelEndpoint, ProviderKind, SamplingConfig
 from fusionkit_core.credentials import resolve_credential
 from fusionkit_core.providers import resolve_api_key
+from fusionkit_core.registry import (
+    ANTHROPIC_DEFAULT_BASE_URL,
+    ANTHROPIC_OAUTH_BETA,
+    CLAUDE_CODE_SPOOF_SYSTEM,
+    CODEX_BASE_URL,
+    CODEX_DEFAULT_HEADERS,
+    CODEX_DEFAULT_INSTRUCTIONS,
+    OPENROUTER_ATTRIBUTION_HEADERS,
+    provider_request_shape,
+    reasoning_request_for,
+)
 from fusionkit_core.types import (
     ChatMessage,
     ModelResponse,
@@ -291,28 +302,6 @@ async def _call_with_retries(
             )
         await asyncio.sleep(delay)
 
-# Default base URLs for subscription providers when the endpoint omits one.
-ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
-CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
-
-# OpenRouter app attribution (optional but recommended by OpenRouter): lets the
-# traffic show up as FusionKit on openrouter.ai rankings/analytics.
-OPENROUTER_ATTRIBUTION_HEADERS = {
-    "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
-    "X-Title": "FusionKit",
-}
-
-# The codex Responses backend rejects requests without `instructions`; this is
-# used when the conversation carries no system message.
-CODEX_DEFAULT_INSTRUCTIONS = "You are a helpful assistant."
-
-# Anthropic OAuth (subscription) tokens are only accepted when the request looks
-# like Claude Code: the first system message must identify as the official CLI,
-# and the beta header must be present.
-CLAUDE_CODE_SPOOF_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
-ANTHROPIC_OAUTH_BETA = "oauth-2025-04-20"
-
-
 @runtime_checkable
 class ChatClient(Protocol):
     model_id: str
@@ -432,31 +421,25 @@ class OpenAICompatibleClient:
             "model": self.endpoint.model,
             "messages": _openai_messages(messages),
         }
-        if self.endpoint.provider == "openai":
-            # Modern OpenAI chat models (gpt-5.x, o-series) require
-            # ``max_completion_tokens`` instead of ``max_tokens`` and only accept
-            # the default temperature/top_p, so the sampling knobs are omitted to
-            # stay compatible across the whole OpenAI line. Callers that target an
-            # OpenAI-compatible server (vLLM, MLX, …) keep the classic params.
-            payload["max_completion_tokens"] = sampling.max_tokens
-        else:
+        request_shape = provider_request_shape(self.endpoint.provider)
+        max_tokens_param = str(request_shape.get("maxTokensParam", "max_tokens"))
+        payload[max_tokens_param] = sampling.max_tokens
+        if not request_shape.get("omitSampling", False):
             payload["temperature"] = sampling.temperature
             payload["top_p"] = sampling.top_p
-            payload["max_tokens"] = sampling.max_tokens
             if sampling.seed is not None:
                 payload["seed"] = sampling.seed
         if tools:
             payload["tools"] = _openai_tools(tools)
         if tool_choice is not None:
             payload["tool_choice"] = _openai_tool_choice(tool_choice)
-        # TODO(@000alen): why is this hardcoded for kimi? There must be a better more generic way
-        # to enable reasoning for all models.
-        if _openrouter_kimi_reasoning_enabled(self.endpoint):
+        reasoning_request = reasoning_request_for(self.endpoint.provider, self.endpoint.model)
+        if reasoning_request is not None:
             # OpenRouter exposes reasoning for Kimi via its unified `reasoning`
             # request object. Keep this narrowly scoped so non-reasoning
             # OpenRouter models preserve their current request shape, and let
             # explicit caller overrides win below.
-            payload["reasoning"] = {"enabled": True, "exclude": False}
+            payload["reasoning"] = reasoning_request
         if extra:
             payload.update(extra)
         # `reasoning` is an OpenRouter extension, not an OpenAI parameter: the
@@ -631,11 +614,9 @@ class AnthropicModelClient:
         extra: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
         system_text, conversation = _anthropic_messages(messages)
-        # Sampling knobs are omitted by default: newer Anthropic models (e.g.
-        # claude-opus-4-8) reject `temperature` outright ("deprecated for this
-        # model"), and several reject setting both temperature and top_p. The
-        # model default is used; callers that need explicit sampling can pass
-        # `temperature`/`top_p` via ``extra``.
+        # Registry providerRequestShapes marks Anthropic sampling as omitted:
+        # newer Anthropic models reject explicit temperature/top_p, while callers
+        # that need them can still pass provider-specific values via ``extra``.
         kwargs: dict[str, Any] = {
             "model": self.endpoint.model,
             "messages": conversation,
@@ -791,7 +772,7 @@ class CodexResponsesClient:
         self._client = AsyncOpenAI(
             base_url=endpoint.base_url or CODEX_BASE_URL,
             api_key="placeholder-oauth-token",
-            default_headers={"OpenAI-Beta": "responses=v1", "originator": "fusionkit"},
+            default_headers=CODEX_DEFAULT_HEADERS,
             timeout=endpoint.timeout_s,
         )
 
@@ -976,7 +957,10 @@ class GoogleModelClient:
         self.endpoint = endpoint
         self.model_id = endpoint.id
         self.max_context = endpoint.max_context
-        self._client = genai.Client(api_key=resolve_api_key(endpoint))
+        client_kwargs: dict[str, Any] = {"api_key": resolve_api_key(endpoint)}
+        if endpoint.base_url:
+            client_kwargs["http_options"] = {"base_url": endpoint.base_url}
+        self._client = genai.Client(**client_kwargs)
 
     def _request(
         self,
@@ -1311,10 +1295,6 @@ def _openai_tool_choice(tool_choice: ToolChoice) -> Any:
         return tool_choice
     return {"type": "function", "function": {"name": tool_choice["name"]}}
 
-
-def _openrouter_kimi_reasoning_enabled(endpoint: ModelEndpoint) -> bool:
-    """True when this OpenRouter endpoint should ask Kimi to generate reasoning."""
-    return endpoint.provider == "openrouter" and "kimi" in endpoint.model.lower()
 
 
 def _reasoning_details_text(details: Any) -> str | None:

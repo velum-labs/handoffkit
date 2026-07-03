@@ -1,7 +1,3 @@
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
-
 import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue } from "@fusionkit/protocol";
 
@@ -19,15 +15,24 @@ import { createCursorStreamStepEmitter, parseCursorStreamJson } from "./stream-t
 import {
   CURSOR_BRIDGE_MODEL_NAME,
   FUSION_PANEL_MODEL,
+  buildChildEnv,
   buildSkippedCandidate,
+  captureWorktreeDiff,
+  commandOnPath,
   definedEnv,
   freePort,
-  normalizeApiBaseUrl,
-  scrubBridgeEnv,
+  runCliCapture,
   spawnLogged,
   terminate,
   waitForOutput
 } from "@fusionkit/tools";
+import type { CliCaptureResult } from "@fusionkit/tools";
+
+import {
+  CURSOR_AGENT_TOOL_MAX_ITERATIONS,
+  CURSOR_AGENT_TOOL_POLICY,
+  cursorBridgeEnv
+} from "./bridge-config.js";
 
 const DEFAULT_CURSOR_COMMAND = "cursor-agent";
 const DEFAULT_BRIDGE_MODEL_NAME = CURSOR_BRIDGE_MODEL_NAME;
@@ -49,6 +54,11 @@ export type CursorExecInput = {
   timeoutMs?: number;
   env: Record<string, string>;
   onStdoutLine?: (line: string) => void;
+  /**
+   * Aborts the bridge and cursor-agent child processes (panel cancellation /
+   * straggler policy). The abort reason's message is surfaced as `reason`.
+   */
+  signal?: AbortSignal;
 };
 
 export type CursorExecResult = {
@@ -97,20 +107,6 @@ type PreparedCursorHarness = {
   env: Record<string, string>;
   availability: CursorAvailability;
 };
-
-function commandOnPath(
-  command: string,
-  env: Record<string, string>
-): boolean {
-  if (command.includes("/")) {
-    return existsSync(command);
-  }
-  const pathValue = env.PATH ?? process.env.PATH ?? "";
-  return pathValue
-    .split(delimiter)
-    .filter((entry) => entry.length > 0)
-    .some((dir) => existsSync(join(dir, command)));
-}
 
 function resolveAvailability(
   options: CursorHarnessOptions,
@@ -185,18 +181,17 @@ export async function defaultCursorRunner(
   // Reserve a real free loopback port instead of a random guess so parallel
   // candidates cannot collide on the same bridge port.
   const bridgePort = await freePort();
-  const bridgeEnv: Record<string, string> = scrubBridgeEnv(input.env);
+  const bridgeEnv = cursorBridgeEnv({
+    baseEnv: input.env,
+    port: bridgePort,
+    gatewayUrl: input.fusionBackendUrl,
+    ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+    modelName: input.modelName,
+    providerModel: input.providerModel
+  });
   Object.assign(bridgeEnv, {
-    BRIDGE_PORT: String(bridgePort),
-    BRIDGE_ROUTE_INVENTORY: "true",
-    BRIDGE_AGENT_TOOL_POLICY: "all",
-    BRIDGE_AGENT_TOOL_MAX_ITERATIONS: "24",
-    CURSOR_UPSTREAM_BASE_URL: "https://api2.cursor.sh",
-    MODEL_BASE_URL: normalizeApiBaseUrl(input.fusionBackendUrl),
-    MODEL_API_KEY: input.apiKey ?? "local",
-    MODEL_NAME: input.modelName,
-    MODEL_PROVIDER_MODEL: input.providerModel,
-    MODEL_CONTEXT_TOKEN_LIMIT: "128000"
+    BRIDGE_AGENT_TOOL_POLICY: CURSOR_AGENT_TOOL_POLICY,
+    BRIDGE_AGENT_TOOL_MAX_ITERATIONS: String(CURSOR_AGENT_TOOL_MAX_ITERATIONS)
   });
 
   const { serveCli } = resolveCursorkitCli();
@@ -206,7 +201,19 @@ export async function defaultCursorRunner(
   });
 
   const timeoutMs = input.timeoutMs ?? 180_000;
+  // Abort must also tear down the bridge, not just cursor-agent: a candidate
+  // dropped by the straggler policy may still be waiting on bridge startup.
+  const onAbort = (): void => terminate(bridge.child);
+  input.signal?.addEventListener("abort", onAbort, { once: true });
   try {
+    if (input.signal?.aborted === true) {
+      return {
+        status: "failed",
+        transcript: "",
+        toolEvents: 0,
+        reason: abortReasonText(input.signal)
+      };
+    }
     try {
       await waitForOutput(bridge, /bridge listening/, {
         timeoutMs: BRIDGE_START_TIMEOUT_MS,
@@ -229,7 +236,9 @@ export async function defaultCursorRunner(
       cwd: input.cwd,
       prompt: input.prompt,
       timeoutMs,
-      onStdoutLine: input.onStdoutLine
+      env: input.env,
+      ...(input.signal !== undefined ? { signal: input.signal } : {}),
+      ...(input.onStdoutLine !== undefined ? { onStdoutLine: input.onStdoutLine } : {})
     });
 
     const diff = captureWorktreeDiff(input.cwd);
@@ -242,11 +251,19 @@ export async function defaultCursorRunner(
       ...(printResult.reason !== undefined ? { reason: printResult.reason } : {})
     };
   } finally {
+    input.signal?.removeEventListener("abort", onAbort);
     // Tear down the whole bridge process group (serve may spawn children),
     // escalating to SIGKILL if it ignores the grace period.
     terminate(bridge.child);
     bridge.closeLog();
   }
+}
+
+function abortReasonText(signal: AbortSignal): string {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) return reason.message;
+  if (reason !== undefined && reason !== null) return String(reason);
+  return "aborted";
 }
 
 type PrintResult = {
@@ -277,8 +294,12 @@ async function driveCursorAgentPrint(input: {
   cwd: string;
   prompt: string;
   timeoutMs: number;
+  env: Record<string, string>;
   onStdoutLine?: (line: string) => void;
+  signal?: AbortSignal;
 }): Promise<PrintResult> {
+  // The prompt travels via stdin (`cursor-agent -p` reads piped input): argv
+  // would cap the prompt size and expose it in `ps`.
   const args = [
     "-p",
     "--force",
@@ -293,93 +314,58 @@ async function driveCursorAgentPrint(input: {
   if (input.mode === "ask") {
     args.push("--mode", "ask");
   }
-  args.push(input.prompt);
 
-  return await new Promise<PrintResult>((resolve) => {
-    const child = spawn(input.command, args, {
-      cwd: input.cwd,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    let stdout = "";
-    let stderr = "";
-    let pendingStdout = "";
-    let timedOut = false;
-    const flushStdoutLines = (final = false): void => {
-      let newline = pendingStdout.indexOf("\n");
-      while (newline >= 0) {
-        const line = pendingStdout.slice(0, newline);
-        pendingStdout = pendingStdout.slice(newline + 1);
-        input.onStdoutLine?.(line);
-        newline = pendingStdout.indexOf("\n");
-      }
-      if (final && pendingStdout.length > 0) {
-        input.onStdoutLine?.(pendingStdout);
-        pendingStdout = "";
-      }
-    };
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-    }, input.timeoutMs);
-    child.stdout.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8");
-      stdout += text;
-      pendingStdout += text;
-      flushStdoutLines();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      flushStdoutLines(true);
-      resolve({
-        status: "failed",
-        transcript: stdout,
-        reason: error instanceof Error ? error.message : String(error)
-      });
-    });
-    child.on("exit", (code) => {
-      clearTimeout(timer);
-      flushStdoutLines(true);
-      if (timedOut) {
-        resolve({
-          status: "failed",
-          transcript: stdout,
-          reason: "cursor-agent timed out"
-        });
-        return;
-      }
-      // Prefer the structured terminal `result` event over the exit code: the
-      // bridge can exit non-zero even after a clean, completed answer.
-      const parsed = parseCursorStreamJson(stdout);
-      const status: PrintResult["status"] = parsed.sawResult
-        ? parsed.isError
-          ? "failed"
-          : "succeeded"
-        : code === 0
-          ? "succeeded"
-          : "failed";
-      resolve({
-        status,
-        transcript: stdout,
-        exitCode: code ?? 0,
-        ...(status === "failed"
-          ? { reason: parsed.isError ? parsed.finalOutput || "cursor-agent reported an error" : stderr.slice(0, 500) }
-          : {})
-      });
-    });
-  });
-}
-
-function captureWorktreeDiff(cwd: string): string | undefined {
+  let result: CliCaptureResult;
   try {
-    const result = spawnSync("git", ["-C", cwd, "diff"], { encoding: "utf8" });
-    const stdout = result.stdout ?? "";
-    return result.status === 0 && stdout.length > 0 ? stdout : undefined;
-  } catch {
-    return undefined;
+    result = await runCliCapture(input.command, args, {
+      cwd: input.cwd,
+      // Allowlisted child env: baseline system vars plus cursor-agent's own
+      // CURSOR_* config/login state — never the parent's full environment.
+      env: buildChildEnv({ base: input.env, allow: [/^CURSOR_/] }),
+      timeoutMs: input.timeoutMs,
+      stdin: input.prompt,
+      ...(input.signal !== undefined ? { signal: input.signal } : {}),
+      ...(input.onStdoutLine !== undefined ? { onStdoutLine: input.onStdoutLine } : {})
+    });
+  } catch (error) {
+    return {
+      status: "failed",
+      transcript: "",
+      reason: error instanceof Error ? error.message : String(error)
+    };
   }
+  if (result.timedOut) {
+    return { status: "failed", transcript: result.stdout, reason: "cursor-agent timed out" };
+  }
+  if (result.aborted) {
+    return {
+      status: "failed",
+      transcript: result.stdout,
+      reason: result.abortReason ?? "aborted"
+    };
+  }
+  // Prefer the structured terminal `result` event over the exit code: the
+  // bridge can exit non-zero even after a clean, completed answer.
+  const parsed = parseCursorStreamJson(result.stdout);
+  const status: PrintResult["status"] = parsed.sawResult
+    ? parsed.isError
+      ? "failed"
+      : "succeeded"
+    : result.exitCode === 0
+      ? "succeeded"
+      : "failed";
+  return {
+    status,
+    transcript: result.stdout,
+    exitCode: result.exitCode,
+    ...(status === "failed"
+      ? {
+          reason: parsed.isError
+            ? parsed.finalOutput || "cursor-agent reported an error"
+            : result.stderr.slice(0, 500)
+        }
+      : {})
+  };
 }
 
 export function createCursorHarness(
@@ -417,7 +403,7 @@ export function createCursorHarness(
         "worktree diff or skip reason"
       ]
     }),
-    run: async ({ descriptor, model, ordinal, prepared, worktree }) => {
+    run: async ({ descriptor, model, ordinal, prepared, worktree, signal }) => {
       const state = prepared as PreparedCursorHarness;
       if (!state.availability.available) {
         if (!skipWhenUnavailable) {
@@ -486,7 +472,8 @@ export function createCursorHarness(
               ? { timeoutMs: descriptor.policy.timeoutMs }
               : {}),
           env: state.env,
-          onStdoutLine: emitStep
+          onStdoutLine: emitStep,
+          ...(signal !== undefined ? { signal } : {})
         });
       } catch (error) {
         tracer.finished({ status: "failed", steps: [], finishReason: "error" });

@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { newSpanId, TRACE_ID_HEADER, TRACE_SPAN_HEADER } from "@fusionkit/protocol";
+import { runCliCapture } from "@fusionkit/runtime-utils";
 import { gitText } from "@fusionkit/workspace";
 
 import { createAgentHarness } from "./agent.js";
@@ -783,30 +783,20 @@ async function defaultCursorRunner(input: CursorHarnessRunnerInput): Promise<Cur
     String(input.timeoutMs ?? 60_000)
   ];
   mkdirSync(input.outDir, { recursive: true });
-  return await new Promise((resolveResult) => {
-    const child = spawn(process.execPath, args, {
-      cwd: input.outDir,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
-    });
-    child.on("exit", (code) => {
-      const logPath = join(input.outDir, `${input.kind}-${input.model.id}.log`);
-      writeFileSync(logPath, [stdout, stderr].filter(Boolean).join("\n"));
-      resolveResult({
-        status: code === 0 ? "succeeded" : "failed",
-        message: code === 0 ? `${input.kind} completed` : `${input.kind} failed`,
-        artifacts: { log: logPath },
-        details: { exitCode: code ?? 1 }
-      });
-    });
+  const result = await runCliCapture(process.execPath, args, {
+    cwd: input.outDir,
+    // The probe CLI enforces its own per-step timeout; this outer deadline is
+    // the group-kill backstop so a hung probe cannot leak processes.
+    timeoutMs: (input.timeoutMs ?? 60_000) + 30_000
   });
+  const logPath = join(input.outDir, `${input.kind}-${input.model.id}.log`);
+  writeFileSync(logPath, [result.stdout, result.stderr].filter(Boolean).join("\n"));
+  return {
+    status: result.exitCode === 0 ? "succeeded" : "failed",
+    message: result.exitCode === 0 ? `${input.kind} completed` : `${input.kind} failed`,
+    artifacts: { log: logPath },
+    details: { exitCode: result.exitCode }
+  };
 }
 
 async function runCursorHarness(

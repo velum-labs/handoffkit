@@ -24,10 +24,10 @@ fusion to help.
 
 ## Panel composition matters
 
-The shipping default (`gpt-5.5 + claude-sonnet-4-6`) is lopsided: one member is
-far stronger, so the oracle ceiling barely exceeds the best single model. Benchmark
-fusion with a decorrelated peer panel instead (`decorrelated-peers`:
-gpt-5.5 + claude-opus-4.8 + gemini-3-pro). See
+Historical two-member product defaults were lopsided: one member was far stronger,
+so the oracle ceiling barely exceeded the best single model. Benchmark fusion with
+a decorrelated peer panel instead (`decorrelated-peers`:
+gpt-5.5 + claude-opus-4-8 + gemini-3-pro). See
 `configs/benchmark-panel.example.yaml`.
 
 ## Suites

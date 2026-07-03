@@ -105,6 +105,40 @@ test("cursor adapter produces a real candidate with a diff via the injected runn
   }
 });
 
+test("cursor adapter threads the run's abort signal into the runner", async () => {
+  const { outputRoot, cleanup } = tempOutputRoot();
+  const controller = new AbortController();
+  let signalDelivered = false;
+  const runner: CursorExecRunner = async (input) => {
+    assert.ok(input.signal, "the runner must receive the per-candidate abort signal");
+    setTimeout(() => controller.abort(new Error("straggler_abandoned")), 20);
+    // The descriptor-level abort must propagate to the runner's signal; a 2s
+    // backstop keeps a regression from hanging the suite.
+    const fired = await Promise.race([
+      new Promise<boolean>((resolve) =>
+        input.signal?.addEventListener("abort", () => resolve(true), { once: true })
+      ),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000))
+    ]);
+    assert.equal(fired, true, "descriptor abort must reach the runner signal");
+    return { status: "failed", transcript: "", toolEvents: 0, reason: "aborted" };
+  };
+
+  try {
+    const result = await ensemble.run(
+      descriptor(outputRoot, {
+        harness: cursorHarness({ fusionBackendUrl: "http://127.0.0.1:9999", runner }),
+        signal: controller.signal
+      })
+    );
+    signalDelivered = true;
+    assert.equal(result.candidates[0]?.status, "failed");
+  } finally {
+    cleanup();
+  }
+  assert.equal(signalDelivered, true);
+});
+
 test("defaultCursorRunner spawns the bridge, drives the agent, and tears it down", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "cursor-runner-"));
   // Stub `cursorkit serve`: announce readiness, then idle until terminated.

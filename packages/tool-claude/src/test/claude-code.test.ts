@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { assertHarnessRunResultV1, requestHash } from "@fusionkit/protocol";
-import type { SessionBackend } from "@fusionkit/runner";
+import type { SessionBackendResult } from "@fusionkit/runner";
+import type { HarnessSessionRun } from "@fusionkit/session-harness";
 import { gitText } from "@fusionkit/workspace";
 
 import { createMockHarness, runEnsemble } from "@fusionkit/ensemble";
@@ -85,31 +86,28 @@ test("claude-code adapter can replace mock and skip clearly without credentials"
   );
 });
 
-test("claude-code adapter delegates through a session backend from a generic descriptor", async () => {
+test("claude-code adapter delegates through the harness session runner from a generic descriptor", async () => {
   const repo = makeRepo();
   const seen: {
     agentKind?: string;
+    prompt?: string;
     env?: Record<string, string>;
     repoDir?: string;
+    networkDefaultDeny?: boolean;
   } = {};
-  const backend: SessionBackend = {
-    isolation: "vercel-sandbox",
-    supports: () => true,
-    execute: async (input) => {
-      seen.agentKind = input.contract.agent.kind;
-      seen.env = input.execution.env;
-      seen.repoDir = input.repoDir;
-      assert.equal(input.contract.isolation, "vercel-sandbox");
-      assert.equal(input.contract.execution?.kind, "agent");
-      assert.equal(input.secrets.length, 0);
-      writeFileSync(join(input.repoDir, "CLAUDE_RESULT.md"), "fake claude result\n");
-      input.emit({
-        type: "command.executed",
-        argvHash: requestHash({ adapter: "claude-code" }),
-        exitCode: 0
-      });
-      return { exitCode: 0, log: Buffer.from("fake claude transcript") };
-    }
+  const runSession = async (run: HarnessSessionRun): Promise<SessionBackendResult> => {
+    seen.agentKind = run.binding.agentKind;
+    seen.prompt = run.prompt;
+    seen.env = run.env;
+    seen.repoDir = run.repoDir;
+    seen.networkDefaultDeny = run.network?.defaultDeny;
+    writeFileSync(join(run.repoDir, "CLAUDE_RESULT.md"), "fake claude result\n");
+    run.emit?.({
+      type: "command.executed",
+      argvHash: requestHash({ adapter: "claude-code" }),
+      exitCode: 0
+    });
+    return { exitCode: 0, log: Buffer.from("fake claude transcript") };
   };
 
   try {
@@ -121,7 +119,7 @@ test("claude-code adapter delegates through a session backend from a generic des
             ANTHROPIC_API_KEY: "sk-ant-test",
             VERCEL_TOKEN: "vercel-test"
           },
-          backend
+          runSession
         }),
         workspace: repo.repo,
         baseGitSha: repo.head,
@@ -133,8 +131,10 @@ test("claude-code adapter delegates through a session backend from a generic des
     assert.equal(result.harnessRunResult.status, "succeeded");
     assert.equal(result.candidates[0]?.status, "succeeded");
     assert.equal(seen.agentKind, "claude-code");
+    assert.equal(seen.prompt, BASE_DESCRIPTOR.prompt);
     assert.equal(seen.env?.ANTHROPIC_API_KEY, "sk-ant-test");
     assert.equal(Object.hasOwn(seen.env ?? {}, "VERCEL_TOKEN"), false);
+    assert.equal(seen.networkDefaultDeny, true);
     assert.notEqual(seen.repoDir, repo.repo);
     assert.ok(result.artifacts.some((artifact) => artifact.kind === "patch"));
     assert.match(result.candidates[0]?.metadata?.adapter as string, /claude-code/);

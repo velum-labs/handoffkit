@@ -8,6 +8,7 @@ import { toolRegistry } from "../tools.js";
 
 import type { FusionTool, PanelAuthMode, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
 import { FUSION_TOOLS } from "../fusion-quickstart.js";
+import { PANEL_AUTH_MODES, PANEL_PROVIDERS, panelProviderForAuthMode } from "../fusion/env.js";
 
 import { fail } from "./errors.js";
 
@@ -93,17 +94,7 @@ export function isolationFlag(value: string | undefined): SessionIsolation | und
   return value as SessionIsolation;
 }
 
-export const PANEL_PROVIDERS: readonly PanelProvider[] = [
-  "mlx",
-  "openai",
-  "anthropic",
-  "google",
-  "openrouter",
-  "openai-compatible"
-];
-
-/** Subscription auth modes accepted in `id=MODE:MODEL` panel specs and configs. */
-export const PANEL_AUTH_MODES: readonly PanelAuthMode[] = ["claude-code", "codex"];
+export { PANEL_AUTH_MODES, PANEL_PROVIDERS };
 
 /** WS5 rate-limit / credit handoff policies (`--on-rate-limit`). */
 export const ON_RATE_LIMIT_POLICIES: readonly OnRateLimitPolicy[] = ["fusion", "passthrough", "fail"];
@@ -148,11 +139,11 @@ export function parsePanelModelSpec(spec: string, keyEnvs: Record<string, string
     const model = value.slice(colon + 1);
     if ((PANEL_AUTH_MODES as readonly string[]).includes(maybe)) {
       const auth = maybe as PanelAuthMode;
+      // The auth-mode -> provider mapping comes from the subscription registry:
       // claude-code maps to the anthropic provider; codex has its own provider
-      // (derived in routerConfigYaml from `auth`).
-      return auth === "claude-code"
-        ? { id, model, provider: "anthropic", auth }
-        : { id, model, auth };
+      // on the FusionKit side (derived in routerConfigYaml from `auth`).
+      const provider = panelProviderForAuthMode(auth);
+      return provider !== undefined ? { id, model, provider, auth } : { id, model, auth };
     }
     if ((PANEL_PROVIDERS as readonly string[]).includes(maybe)) {
       return {

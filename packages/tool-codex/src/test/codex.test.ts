@@ -298,9 +298,11 @@ test("codex adapter accepts local CLI auth without exported API keys", async () 
 test("generic ensemble descriptor swaps mock harness for Codex harness", async () => {
   const { outputRoot, cleanup } = tempOutputRoot();
   let seenArgs: string[] | undefined;
+  let seenStdin: string | undefined;
   let seenConfig = "";
   const runner: CodexExecRunner = (input) => {
     seenArgs = input.args;
+    seenStdin = input.stdin;
     const codexHome = input.env.CODEX_HOME;
     assert.ok(codexHome);
     seenConfig = readFileSync(join(codexHome, "config.toml"), "utf8");
@@ -319,7 +321,9 @@ test("generic ensemble descriptor swaps mock harness for Codex harness", async (
     assert.equal(mock.harnessRunResult.status, "succeeded");
     assert.equal(codex.harnessRunResult.status, "succeeded");
     assert.deepEqual(seenArgs?.slice(0, 3), ["exec", "--json", "--skip-git-repo-check"]);
-    assert.equal(seenArgs?.at(-1), base.prompt);
+    // The prompt travels via stdin (`codex exec -`), never argv.
+    assert.equal(seenArgs?.at(-1), "-");
+    assert.equal(seenStdin, base.prompt);
     assert.ok(seenConfig.includes('model = "gpt-5.1-codex-max"'));
     assert.equal(codex.candidates[0]?.metadata?.provider_kind, "ambient");
   } finally {

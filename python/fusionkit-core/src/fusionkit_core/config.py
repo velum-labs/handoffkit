@@ -6,6 +6,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+from fusionkit_core.registry import sampling_overrides_for_model
+
 FusionMode = Literal["single", "self", "panel", "router"]
 ProviderKind = Literal[
     "openai", "anthropic", "google", "openrouter", "openai-compatible", "mlx-lm", "custom", "codex"
@@ -82,14 +84,7 @@ def model_sampling_defaults(model: str) -> dict[str, float]:
     the generic :class:`SamplingConfig` defaults; callers apply them when
     neither the request nor the operator config pinned a value.
     """
-    lowered = model.lower()
-    if "qwen" in lowered:
-        return {"temperature": 0.55, "top_p": 1.0}
-    if "kimi-k2" in lowered:
-        if any(tag in lowered for tag in ("thinking", "k2.", "k2p", "k2-5")):
-            return {"temperature": 1.0}
-        return {"temperature": 0.6}
-    return {}
+    return sampling_overrides_for_model(model)
 
 
 class PromptOverrides(BaseModel):

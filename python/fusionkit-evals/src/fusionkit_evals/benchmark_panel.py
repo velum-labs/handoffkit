@@ -19,12 +19,18 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from typing import Any, cast
 
 from fusionkit_core.config import (
     FusionConfig,
     ModelEndpoint,
     ProviderKind,
     SamplingConfig,
+)
+from fusionkit_core.registry import (
+    BENCHMARK_PANEL_PRESETS,
+    PROVIDER_DEFAULT_BASE_URL,
+    PROVIDER_KEY_ENV,
 )
 from pydantic import BaseModel, Field, model_validator
 
@@ -34,18 +40,20 @@ from pydantic import BaseModel, Field, model_validator
 LOPSIDED_SCORE_GAP = 0.2
 
 DEFAULT_PROVIDER_BASE_URLS: dict[ProviderKind, str] = {
-    "openai": "https://api.openai.com",
-    "anthropic": "https://api.anthropic.com",
-    "google": "https://generativelanguage.googleapis.com",
-    "openrouter": "https://openrouter.ai/api",
+    cast(ProviderKind, provider): PROVIDER_DEFAULT_BASE_URL[provider]
+    for provider in ("openai", "anthropic", "google", "openrouter", "codex")
 }
 
 DEFAULT_PROVIDER_KEY_ENVS: dict[ProviderKind, str] = {
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "google": "GEMINI_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
+    cast(ProviderKind, provider): key_env
+    for provider, key_env in PROVIDER_KEY_ENV.items()
+    if provider in DEFAULT_PROVIDER_BASE_URLS
 }
+
+DEFAULT_BENCHMARK_PROVIDER: ProviderKind = cast(
+    ProviderKind,
+    next(iter(BENCHMARK_PANEL_PRESETS.values()))["members"][0]["provider"],
+)
 
 
 class BenchmarkPanelMember(BaseModel):
@@ -53,7 +61,7 @@ class BenchmarkPanelMember(BaseModel):
 
     id: str
     model: str
-    provider: ProviderKind = "openai"
+    provider: ProviderKind = DEFAULT_BENCHMARK_PROVIDER
     base_url: str | None = None
     api_key_env: str | None = None
 
@@ -217,30 +225,25 @@ def estimate_panel_headroom(
     )
 
 
-# The recommended benchmark panel: decorrelated frontier peers (comparable
-# strength, different model families) so fusion has real oracle headroom.
-DECORRELATED_PEER_PANEL = BenchmarkPanel(
-    panel_id="decorrelated-peers",
-    members=[
-        BenchmarkPanelMember(id="gpt", model="gpt-5.5", provider="openai"),
-        BenchmarkPanelMember(id="opus", model="claude-opus-4.8", provider="anthropic"),
-        BenchmarkPanelMember(id="gemini", model="gemini-3-pro", provider="google"),
-    ],
-    judge_id="gpt",
-    note="decorrelated frontier peers chosen for diversity, not for matching the product default",
-)
+def _panel_from_registry(preset: Mapping[str, Any]) -> BenchmarkPanel:
+    return BenchmarkPanel(
+        panel_id=str(preset["panelId"]),
+        members=[
+            BenchmarkPanelMember(
+                id=str(member["id"]),
+                model=str(member["model"]),
+                provider=cast(ProviderKind, member["provider"]),
+            )
+            for member in cast(list[Mapping[str, Any]], preset["members"])
+        ],
+        judge_id=str(preset["judgeId"]),
+        synthesizer_id=str(preset.get("synthesizerId") or preset["judgeId"]),
+        note=str(preset.get("note") or ""),
+    )
 
-# The shipping product default, kept only as a contrast: it is lopsided, so it is
-# the wrong panel to benchmark fusion with.
-LOPSIDED_DEFAULT_PANEL = BenchmarkPanel(
-    panel_id="lopsided-default",
-    members=[
-        BenchmarkPanelMember(id="gpt", model="gpt-5.5", provider="openai"),
-        BenchmarkPanelMember(id="sonnet", model="claude-sonnet-4-6", provider="anthropic"),
-    ],
-    judge_id="gpt",
-    note="product default; lopsided (one member much stronger), low fusion headroom",
-)
+
+DECORRELATED_PEER_PANEL = _panel_from_registry(BENCHMARK_PANEL_PRESETS["decorrelated-peers"])
+LOPSIDED_DEFAULT_PANEL = _panel_from_registry(BENCHMARK_PANEL_PRESETS["lopsided-default"])
 
 BENCHMARK_PANELS: dict[str, BenchmarkPanel] = {
     DECORRELATED_PEER_PANEL.panel_id: DECORRELATED_PEER_PANEL,

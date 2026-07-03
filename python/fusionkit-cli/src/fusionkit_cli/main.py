@@ -32,6 +32,12 @@ from fusionkit_core.config import (
 # stdlib-only module; kept at module scope both for cheapness and because tests
 # monkeypatch `fusionkit_cli.main.subscription_status`.
 from fusionkit_core.credentials import subscription_status
+from fusionkit_core.registry import (
+    BENCHMARK_PANEL_PRESETS,
+    FUSION_GATEWAY_DEFAULT_BASE_URL,
+    PROVIDER_DEFAULT_BASE_URL,
+    provider_for_auth_mode,
+)
 
 from fusionkit_cli.onboarding import (
     API_KEY_ENVS,
@@ -55,6 +61,8 @@ if TYPE_CHECKING:
     from fusionkit_evals.public_bench import PublicBenchmarkSuite
 
 app = typer.Typer(help="Local model fusion toolkit.", invoke_without_command=True)
+DEFAULT_SERVE_PROVIDER = next(iter(API_KEY_ENVS))
+DEFAULT_PUBLIC_BENCH_PANEL = next(iter(BENCHMARK_PANEL_PRESETS))
 
 
 def _fusionkit_distribution_version() -> str:
@@ -223,10 +231,10 @@ def init(
             endpoints.append(api_key_endpoint(provider))
 
     if not endpoints:
+        api_key_hint = " / ".join(API_KEY_ENVS.values())
         typer.secho(
             "Nothing selected. Log in with `claude` / `codex login`, or set "
-            "OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY, "
-            "then re-run `fusionkit init`.",
+            f"{api_key_hint}, then re-run `fusionkit init`.",
             fg=typer.colors.YELLOW,
             err=True,
         )
@@ -303,15 +311,14 @@ def _switch_endpoint(
     endpoint: ModelEndpoint, mode: SubscriptionAuthMode, api_key_env: str | None
 ) -> ModelEndpoint:
     """Return a copy of an endpoint with its auth mode changed (keeping provider coherent)."""
-    from fusionkit_server.openai_endpoint import PROVIDER_DEFAULT_BASE_URL
-
     provider: ProviderKind = endpoint.provider
     base_url = endpoint.base_url
     resolved_key_env = endpoint.api_key_env
-    if mode == "claude-code":
-        provider = "anthropic"
-    elif mode == "codex":
-        provider = "codex"
+    if mode in ("claude-code", "codex"):
+        provider = cast(ProviderKind, provider_for_auth_mode(mode))
+        if endpoint.provider != provider:
+            base_url = ""
+        resolved_key_env = None
     else:  # api_key
         if provider == "codex":
             # The codex provider only speaks the subscription Responses API; an
@@ -400,7 +407,7 @@ def serve_endpoint(
     id: Annotated[str, typer.Option("--id", help="endpoint id exposed via /v1/models")],
     model: Annotated[str, typer.Option("--model", help="provider model name (e.g. gpt-5.5)")],
     port: Annotated[int, typer.Option("--port")],
-    provider: Annotated[str, typer.Option("--provider")] = "openai",
+    provider: Annotated[str, typer.Option("--provider")] = DEFAULT_SERVE_PROVIDER,
     base_url: Annotated[
         str | None, typer.Option("--base-url", help="override the provider base URL")
     ] = None,
@@ -620,10 +627,10 @@ def public_bench(
     panel: Annotated[
         str,
         typer.Option("--panel", help="benchmark panel id (e.g. decorrelated-peers)"),
-    ] = "decorrelated-peers",
+    ] = DEFAULT_PUBLIC_BENCH_PANEL,
     gateway_base_url: Annotated[
         str, typer.Option("--gateway-base-url")
-    ] = "http://127.0.0.1:8080",
+    ] = FUSION_GATEWAY_DEFAULT_BASE_URL,
     gateway_model: Annotated[
         str | None,
         typer.Option("--gateway-model", help="gateway model alias (defaults per suite)"),

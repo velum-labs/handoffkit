@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import { promisify } from "node:util";
 
 import { hashCanonicalSha256 } from "@fusionkit/protocol";
+import { CANDIDATE_ISOLATION_DEFAULTS } from "@fusionkit/runtime-utils";
 
 import type {
   CandidateActualIsolationKind,
@@ -20,12 +21,13 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_CONTAINER_IMAGE = "node:22";
-const DEFAULT_CONTAINER_ENGINE = "docker";
-const DEFAULT_CONTAINER_WORKDIR = "/workspace";
-const DEFAULT_MICROVM_PROVIDER: CandidateMicrovmProvider = "vercel-sandbox";
-const DEFAULT_MICROVM_RUNTIME = "node24";
-const UNKNOWN_RUNTIME_DIGEST = "unknown";
+const DEFAULT_CONTAINER_IMAGE = CANDIDATE_ISOLATION_DEFAULTS.containerImage;
+const DEFAULT_CONTAINER_ENGINE = CANDIDATE_ISOLATION_DEFAULTS.containerEngine;
+const DEFAULT_CONTAINER_WORKDIR = CANDIDATE_ISOLATION_DEFAULTS.containerWorkdir;
+const DEFAULT_MICROVM_PROVIDER: CandidateMicrovmProvider =
+  CANDIDATE_ISOLATION_DEFAULTS.microvmProvider;
+const DEFAULT_MICROVM_RUNTIME = CANDIDATE_ISOLATION_DEFAULTS.microvmRuntime;
+const UNKNOWN_RUNTIME_DIGEST = CANDIDATE_ISOLATION_DEFAULTS.unknownRuntimeDigest;
 const DEFAULT_IGNORED_DIRS = [".git", "node_modules", ".warrant"];
 const DEFAULT_MAX_SCAN_BYTES = 256 * 1024;
 

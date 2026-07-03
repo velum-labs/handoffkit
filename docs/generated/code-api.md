@@ -62,7 +62,7 @@ No exports found.
 
 FusionKit ensemble runtime entry point. It exposes harness execution, panel workflows, judge synthesis, runtime-kernel workflows, operators, schedulers, worktrees, isolation helpers, and tool execution.
 
-- `export { createCommandHarness } from "./command.js";`
+- `export { COMMAND_DASHBOARD_CAPABILITIES, createCommandHarness } from "./command.js";`
 - `export type { CommandHarnessOptions } from "./command.js";`
 - `export { resolveCursorkitCli } from "./cursorkit-path.js";`
 - `export type { CursorkitCli } from "./cursorkit-path.js";`
@@ -103,8 +103,10 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { AdaptiveRouterScheduler, AgenticDelegationScheduler, BestOfNScheduler, ExecutionSelectRepairScheduler, FixedLayerMoAScheduler, LearnedWorkflowScheduler, OfflineArchitectureSearchScheduler, RankFuseScheduler, TreeSearchScheduler } from "./schedulers.js";`
 - `export type { LearnedWorkflowPolicy } from "./schedulers.js";`
 - `export type { Artifact, ArtifactInputRef, ArtifactLeakage, ArtifactVisibility, BudgetLedger, BudgetPolicy, BudgetUsage, CostEstimate, CreateArtifactInput, Observation, Operator, OperatorGraph, OperatorGraphNode, OperatorRunContext, OperatorSideEffects, OperatorSpec, OutcomeRecord, Provenance, RecordObservationInput, RecordSignalInput, RetryPolicy, KernelSessionState, KernelStateStore, KernelTurnState, RuntimeEvent, RuntimeExecutionResult, RuntimeReplayRecord, RuntimeState, RuntimeStatus, Scheduler, SchedulerExecutionContext, SchedulerRunResult, Signal, SignalCalibration, SignalDimension, StreamingOperator, TaskSpec, TraceEvent, TraceEventInput, TraceEventType } from "./runtime.js";`
-- `export { createMockHarness } from "./mock.js";`
+- `export { createMockHarness, MOCK_DASHBOARD_CAPABILITIES, MOCK_DASHBOARD_IDENTITY } from "./mock.js";`
 - `export type { MockCandidateFixture, MockHarnessOptions } from "./mock.js";`
+- `export { createDriverHarness } from "./driver-adapter.js";`
+- `export type { DriverHarnessOptions, PanelDriver } from "./driver-adapter.js";`
 - `export { traceCandidate } from "./candidate-trace.js";`
 - `export type { CandidateOutcome, CandidateTraceContext, CandidateTraceInput, CandidateTracer } from "./candidate-trace.js";`
 - `export { createToolExecutor, registerDemoTools, sideEffectsForTool } from "./tool-executor.js";`
@@ -198,7 +200,7 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export { defaultSessionsDir, FileSystemSessionStore, InMemorySessionStore } from "./session-store.js";`
 - `export type { PersistedSession, SessionMeta, SessionStore, SessionSummary, SessionTurnRecord } from "./session-store.js";`
 - `export { addTurnCost, DEFAULT_MODEL_PRICING, emptySessionCost, estimateCost, formatUsd, lookupPricing, meterTurn, parseUsage, parseUsageFromSse, turnCostLine } from "./cost.js";`
-- `export type { CostLedgerEntry, CostStage, LocalComputePricing, LocalComputeUsage, ModelPricing, SessionCost, TokenUsage, TurnCost } from "./cost.js";`
+- `export type { CostLedgerEntry, CostStage, LocalComputePricing, LocalComputeUsage, ModelPricing, ProviderCostMetadata, SessionCost, TokenUsage, TurnCost } from "./cost.js";`
 - `export { MlxBackend } from "./mlx-backend.js";`
 - `export type { MlxBackendOptions } from "./mlx-backend.js";`
 - `export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";`
@@ -341,13 +343,14 @@ through the broker. The generic backend is binding-driven. Shipped bindings
 cover Claude Code in a Vercel Sandbox microVM and Pi on a local just-bash
 sandbox for a cheap local swarm worker.
 
-- `export { AiSdkHarnessBackend, harnessBackend, isAgentRunFor } from "./backend.js";`
-- `export type { CreateHarnessInput, CreateSandboxProviderInput, HarnessAdapter, HarnessBinding, HarnessSandboxProvider } from "./backend.js";`
+- `export { AiSdkHarnessBackend, harnessBackend, isAgentRunFor, runHarnessSession } from "./backend.js";`
+- `export type { CreateHarnessInput, CreateSandboxProviderInput, HarnessAdapter, HarnessBinding, HarnessSandboxProvider, HarnessSessionRun } from "./backend.js";`
 - `export { aiSdkHarnessBackend, claudeCodeBinding, isClaudeCodeAgentRun } from "./claude-code.js";`
 - `export type { AiSdkHarnessBackendOptions, ClaudeCodeBindingOptions } from "./claude-code.js";`
 - `export { isPiAgentRun, piBinding, piHarnessBackend } from "./pi.js";`
 - `export type { PiBindingOptions, PiHarnessBackendOptions } from "./pi.js";`
 - `export { claudeCodeAuthFromEnv, piAuthFromEnv } from "./auth.js";`
+- `export { VERCEL_SANDBOX_CREDENTIAL_ENVS } from "@fusionkit/session-vercel-sandbox";`
 - `export { TranscriptRecorder } from "./transcript.js";`
 - `export type { TranscriptLine } from "./transcript.js";`
 
@@ -396,6 +399,8 @@ mirror-back writes, credential resolution, and network policy mapping.
   List a workspace's files as relative paths, skipping the shared ignored directories plus any backend-specific extras. The one walker used to stage workspaces into sandboxes.
 - `export function writeMirroredFile(`
   Write one mirrored-back sandbox file into the local checkout, with the path validated against escape before anything touches the filesystem. Shared by every sandbox-shaped backend so mirror-back path safety lives in exactly one place.
+- `export const VERCEL_SANDBOX_CREDENTIAL_ENVS ...`
+  The env vars carrying Vercel Sandbox credentials, in token/team/project order. The single definition every sandbox-credential consumer (backend, harness credential gates) reads from.
 - `export function vercelCredentialsFromEnv(`
   Resolve Vercel credentials from explicit options or the ambient environment, failing closed (capability error) when no token exists.
 - `export function toVercelNetwork(`
@@ -431,6 +436,8 @@ Claude Code tool integration entry point. It exposes launcher environment helper
 - `export { claudeCodeHarness, claudeCodeHarnessCredentialSkipReason, createClaudeCodeHarness } from "./harness.js";`
 - `export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./harness.js";`
 - `export { claudeEnv, launchClaude } from "./launch.js";`
+- `export { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";`
+- `export type { ClaudeDriverConfig } from "./driver.js";`
 
 ### `packages/tool-codex/src/index.ts`
 
@@ -440,6 +447,8 @@ Codex tool integration entry point. It exposes the Codex launcher and ensemble h
 - `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, createCodexHarness, defaultCodexRunner } from "./harness.js";`
 - `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
 - `export { codexLaunchConfigToml, codexModelCatalogJson, launchCodex, readCodexCatalogTemplate } from "./launch.js";`
+- `export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";`
+- `export type { CodexDriverConfig } from "./driver.js";`
 
 ### `packages/tool-cursor/src/index.ts`
 
@@ -448,8 +457,12 @@ Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cur
 - `export const cursorTool: ToolIntegration ...`
 - `export { createCursorHarness, cursorHarness, cursorHarnessUnavailableReason, defaultCursorRunner } from "./harness.js";`
 - `export type { CursorExecInput, CursorExecResult, CursorExecRunner, CursorHarnessOptions, CursorRunMode } from "./harness.js";`
+- `export { buildCursorAcpProducer } from "./acp.js";`
 - `export { startCursorBridge } from "./bridge.js";`
+- `export { CURSOR_AGENT_TOOL_MAX_ITERATIONS, CURSOR_AGENT_TOOL_POLICY, cursorBridgeEnv, cursorBridgeModelEnv, cursorIdeEnv, cursorIdeModelsJson } from "./bridge-config.js";`
 - `export { cursorIdeInstructions, cursorInstructions, launchCursor } from "./launch.js";`
+- `export { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";`
+- `export type { CursorDriverConfig } from "./driver.js";`
 
 ### `packages/tool-opencode/src/index.ts`
 
@@ -457,19 +470,23 @@ opencode tool integration entry point. It exposes launcher configuration helpers
 
 - `export const opencodeTool: ToolIntegration ...`
 - `export { launchOpencode, opencodeConfig, opencodeModelArg } from "./launch.js";`
+- `export { createOpencodeDriver, opencodeDriverConfigSchema } from "./driver.js";`
+- `export type { OpencodeBackend, OpencodeBackendFactory, OpencodeDriverConfig, OpencodeDriverOptions, OpencodeTurnPart, OpencodeTurnResult } from "./driver.js";`
 
 ### `packages/tools/src/index.ts`
 
 Tool integration entry point. It exposes the launcher and harness integration contract, registry helpers, process helpers, constants, environment compatibility helpers, and skipped-candidate utilities.
 
-- `export { distillLog, freePort, sleep, spawnLogged, spawnTool, terminate, waitForHttp, waitForOutput } from "./proc.js";`
-- `export type { LoggedChild, LoggedSpawnOptions } from "./proc.js";`
+- `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, runCliCapture, sleep, spawnLogged, spawnTool, terminate, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
+- `export type { CliCaptureOptions, CliCaptureResult, LoggedChild, LoggedSpawnOptions } from "./proc.js";`
+- `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";`
 - `export type { ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
 - `export { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL, LOCAL_MODEL_LABEL } from "./constants.js";`
 - `export { envFlagEnabled, legacyEnvName, readEnv } from "./env-compat.js";`
-- `export { DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
+- `export { buildChildEnv, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
+- `export type { BuildChildEnvInput } from "./env.js";`
 - `export { buildSkippedCandidate } from "./candidate.js";`
 
 ### `packages/workspace/src/index.ts`

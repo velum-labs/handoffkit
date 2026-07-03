@@ -1,5 +1,6 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
 import { artifactHash, emitTrace, newSpanId } from "@fusionkit/protocol";
+import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
 
 import {
   panelMemberPreamble,
@@ -17,7 +18,7 @@ import {
  */
 
 /** Wall-clock budget for a single panel model's agent run (model + tools). */
-const DEFAULT_MODEL_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_MODEL_TIMEOUT_MS = RUNTIME_TIMEOUT_MS.panelModel;
 
 export type AgentHarnessOptions = {
   id?: string;

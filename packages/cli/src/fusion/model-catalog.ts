@@ -7,6 +7,13 @@
  * catalog. Any failure (missing key, network/timeout, empty list) falls back to
  * the curated list, so onboarding always has something to pick.
  */
+import {
+  curatedModels,
+  defaultKeyEnv,
+  providerDefaultBaseUrl,
+  providerDiscovery
+} from "@fusionkit/registry";
+
 import { LOCAL_CATALOG_REPOS } from "./local-catalog.js";
 import { defaultModelForAuthChoice } from "./panel-auth.js";
 import type { AuthChoice } from "./panel-auth.js";
@@ -14,44 +21,21 @@ import type { AuthChoice } from "./panel-auth.js";
 export type ModelSource = "live" | "curated";
 export type ModelListResult = { models: string[]; source: ModelSource };
 
-type ApiKeyProvider = "openai" | "anthropic" | "google";
-
-const API_KEY_ENV: Record<ApiKeyProvider, string> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  google: "GEMINI_API_KEY"
-};
-
 const DEFAULT_TIMEOUT_MS = 6000;
 
-/** Curated, comprehensive-enough fallbacks per auth choice (best-effort, may drift). */
+/**
+ * Curated, comprehensive-enough fallbacks per auth choice, from the registry's
+ * model catalog (shared with Python onboarding). Local models come from the
+ * hardware-aware local catalog; the interactive picker enriches these with
+ * download status + RAM fit.
+ */
 const CURATED: Record<AuthChoice, string[]> = {
-  "claude-code": ["claude-sonnet-4-5", "claude-opus-4-8", "claude-haiku-4-5", "claude-sonnet-4-6"],
-  anthropic: [
-    "claude-sonnet-4-5",
-    "claude-opus-4-8",
-    "claude-haiku-4-5",
-    "claude-sonnet-4-6",
-    "claude-3-7-sonnet-latest"
-  ],
-  codex: ["gpt-5.5", "gpt-5.5-codex", "gpt-5.3-codex", "gpt-5.1-codex"],
-  openai: ["gpt-5.5", "gpt-5.1", "gpt-5", "o4-mini", "gpt-4.1", "gpt-4.1-mini"],
-  google: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-  // OpenRouter's live /models list has hundreds of entries — far too many for a
-  // terminal picker — so it stays curated (a cross-vendor sample); any
-  // `vendor/model` id works via the "other" escape hatch.
-  openrouter: [
-    "anthropic/claude-sonnet-4.5",
-    "openai/gpt-5.5",
-    "google/gemini-2.5-pro",
-    "moonshotai/kimi-k2",
-    "deepseek/deepseek-chat",
-    "qwen/qwen3-coder",
-    "x-ai/grok-4",
-    "meta-llama/llama-3.3-70b-instruct"
-  ],
-  // Local models come from the hardware-aware curated catalog; the interactive
-  // picker enriches these with download status + RAM fit (see fusion-init).
+  "claude-code": [...curatedModels("claude-code")],
+  anthropic: [...curatedModels("anthropic")],
+  codex: [...curatedModels("codex")],
+  openai: [...curatedModels("openai")],
+  google: [...curatedModels("google")],
+  openrouter: [...curatedModels("openrouter")],
   local: [...LOCAL_CATALOG_REPOS]
 };
 
@@ -112,8 +96,23 @@ export function parseGoogleModels(json: unknown): string[] {
     });
 }
 
+/** Parse a live discovery payload according to the provider's response shape. */
+function parseDiscoveryResponse(shape: string, json: unknown): string[] {
+  switch (shape) {
+    case "openai":
+      return parseOpenAiModels(json);
+    case "anthropic":
+      return parseAnthropicModels(json);
+    case "google":
+      return parseGoogleModels(json);
+    default:
+      return [];
+  }
+}
+
 async function fetchProviderModels(
-  provider: ApiKeyProvider,
+  provider: string,
+  discovery: NonNullable<ReturnType<typeof providerDiscovery>>,
   key: string,
   fetchImpl: typeof fetch,
   timeoutMs: number
@@ -121,51 +120,41 @@ async function fetchProviderModels(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    let url: string;
-    let headers: Record<string, string>;
-    switch (provider) {
-      case "openai":
-        url = "https://api.openai.com/v1/models";
-        headers = { authorization: `Bearer ${key}` };
+    const baseUrl = providerDefaultBaseUrl(provider);
+    if (baseUrl === undefined) return [];
+    let url = `${baseUrl}${discovery.path}`;
+    const headers: Record<string, string> = { ...discovery.extraHeaders };
+    switch (discovery.auth) {
+      case "bearer":
+        headers.authorization = `Bearer ${key}`;
         break;
-      case "anthropic":
-        url = "https://api.anthropic.com/v1/models";
-        headers = { "x-api-key": key, "anthropic-version": "2023-06-01" };
+      case "x-api-key":
+        headers["x-api-key"] = key;
         break;
-      case "google":
-        url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`;
-        headers = {};
+      case "x-goog-api-key":
+        headers["x-goog-api-key"] = key;
+        break;
+      case "query-key":
+        url = `${url}?key=${encodeURIComponent(key)}`;
         break;
       default: {
-        const exhaustive: never = provider;
-        throw new Error(`unknown provider ${String(exhaustive)}`);
+        const exhaustive: never = discovery.auth;
+        throw new Error(`unknown discovery auth style ${String(exhaustive)}`);
       }
     }
     const response = await fetchImpl(url, { headers, signal: controller.signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const json: unknown = await response.json();
-    switch (provider) {
-      case "openai":
-        return parseOpenAiModels(json);
-      case "anthropic":
-        return parseAnthropicModels(json);
-      case "google":
-        return parseGoogleModels(json);
-      default: {
-        const exhaustive: never = provider;
-        throw new Error(`unknown provider ${String(exhaustive)}`);
-      }
-    }
+    return parseDiscoveryResponse(discovery.responseShape, json);
   } finally {
     clearTimeout(timer);
   }
 }
 
-const API_KEY_CHOICES = new Set<AuthChoice>(["openai", "anthropic", "google"]);
-
 /**
- * List the models to offer for an auth choice: live from the provider when an
- * API key is present, curated otherwise (and on any failure).
+ * List the models to offer for an auth choice: live from the provider when it
+ * has a discovery capability in the provider registry and an API key is present
+ * in the environment; curated otherwise (and on any failure).
  */
 export async function listModelsForAuth(
   choice: AuthChoice,
@@ -173,19 +162,31 @@ export async function listModelsForAuth(
     env?: Record<string, string | undefined>;
     fetchImpl?: typeof fetch;
     timeoutMs?: number;
+    /** Force live discovery even when the provider registry defaults the picker to curated. */
+    liveDiscovery?: boolean;
   } = {}
 ): Promise<ModelListResult> {
   const curated = { models: CURATED[choice], source: "curated" as const };
-  if (!API_KEY_CHOICES.has(choice)) return curated;
+  const discovery = providerDiscovery(choice);
+  const keyEnv = defaultKeyEnv(choice);
+  if (discovery === undefined || keyEnv === undefined) return curated;
+  if (discovery.pickerDefaultSource === "curated" && opts.liveDiscovery !== true) {
+    return curated;
+  }
 
-  const provider = choice as ApiKeyProvider;
   const env = opts.env ?? process.env;
-  const key = env[API_KEY_ENV[provider]];
+  const key = env[keyEnv];
   if (key === undefined || key.length === 0) return curated;
 
   const fetchImpl = opts.fetchImpl ?? fetch;
   try {
-    const ids = await fetchProviderModels(provider, key, fetchImpl, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const ids = await fetchProviderModels(
+      choice,
+      discovery,
+      key,
+      fetchImpl,
+      opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    );
     const models = finalize(ids, choice);
     return models.length > 0 ? { models, source: "live" } : curated;
   } catch {

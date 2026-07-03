@@ -33,6 +33,7 @@ from fusionkit_core.config import (
     model_sampling_defaults,
 )
 from fusionkit_core.judge import accumulate_tool_call, warn_malformed_tool_calls
+from fusionkit_core.registry import PROVIDER_DEFAULT_BASE_URL
 from fusionkit_core.trace import (
     TRACE_ID_HEADER,
     TRACE_SPAN_HEADER,
@@ -41,16 +42,6 @@ from fusionkit_core.trace import (
 )
 from fusionkit_core.trace import emit as trace_emit
 from fusionkit_core.types import ChatMessage, ToolCall
-
-# Provider base URLs when the operator does not pass an explicit base URL. The
-# OpenAI client appends `/v1`; the Anthropic SDK takes the root.
-PROVIDER_DEFAULT_BASE_URL = {
-    "openai": "https://api.openai.com",
-    "anthropic": "https://api.anthropic.com",
-    "google": "https://generativelanguage.googleapis.com",
-    "openrouter": "https://openrouter.ai/api",
-    "codex": "https://chatgpt.com/backend-api/codex",
-}
 
 
 def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
@@ -424,7 +415,11 @@ def build_endpoint(
     auth_mode: str = "api_key",
     credentials_path: str | None = None,
 ) -> ModelEndpoint:
-    resolved_base_url = base_url or PROVIDER_DEFAULT_BASE_URL.get(provider, "http://127.0.0.1")
+    resolved_base_url = base_url or PROVIDER_DEFAULT_BASE_URL.get(provider)
+    if resolved_base_url is None:
+        raise ValueError(
+            f"provider {provider!r} needs --base-url because it has no registry default"
+        )
     # `provider` / `auth_mode` arrive as free strings from the CLI; ModelEndpoint
     # validates them against their Literal types at construction time (pydantic
     # raises on misuse).
