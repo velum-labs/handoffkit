@@ -94,14 +94,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     data_quality_report = build_data_quality_report(scores)
     if args.fail_on_data_quality_errors and data_quality_report.error_count:
         raise SystemExit(2)
-    task_outcome_metrics = []
+    task_outcome_metric_models = []
     for task_outcome_snapshot in args.task_outcome_snapshot or []:
-        task_outcome_metrics.extend(
-            metric.model_dump(mode="json")
-            for metric in build_task_outcome_reports(load_task_outcomes(task_outcome_snapshot))
+        task_outcome_metric_models.extend(
+            build_task_outcome_reports(load_task_outcomes(task_outcome_snapshot))
         )
     recommendation = (
-        recommend_panel(matrix, target_profile=cast(PanelProfile, args.target_profile))
+        recommend_panel(
+            matrix,
+            target_profile=cast(PanelProfile, args.target_profile),
+            task_outcome_metrics=task_outcome_metric_models,
+        )
         if args.target_profile is not None
         else None
     )
@@ -109,8 +112,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         payload: dict[str, object] = matrix.model_dump(mode="json")
         payload["source_metadata"] = source_metadata
         payload["data_quality_report"] = data_quality_report.model_dump(mode="json")
-        if task_outcome_metrics:
-            payload["task_outcome_metrics"] = task_outcome_metrics
+        if task_outcome_metric_models:
+            payload["task_outcome_metrics"] = [
+                metric.model_dump(mode="json") for metric in task_outcome_metric_models
+            ]
         if recommendation is not None:
             payload["recommendation"] = recommendation.model_dump(mode="json")
         rendered = json.dumps(payload, indent=2)

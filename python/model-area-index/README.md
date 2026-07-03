@@ -109,3 +109,8 @@ aggregate/subtask score for the matrix. Real same-task evidence belongs in
 `TaskOutcome` rows. The CLI accepts `--task-outcome-snapshot <jsonl>` and emits
 separate `task_outcome_metrics` with oracle score, oracle headroom, unique-win
 rates, and pairwise failure correlations.
+
+Panel recommendations use those `TaskOutcomePanelMetrics` when supplied. Without
+task outcomes, the recommender applies only an aggregate capability-vector
+similarity penalty, which is a weak diversity proxy and is reported as such in
+the recommendation reason.

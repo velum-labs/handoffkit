@@ -155,6 +155,61 @@ def test_recommender_prefers_provider_diversity_for_coding_agent_profile() -> No
     assert recommendation.objective_score > 0
 
 
+def test_recommender_penalizes_capability_vector_similarity() -> None:
+    scores = [
+        _score("alpha", "openai", "bench", "coding_edit", 0.9),
+        _score("alpha", "openai", "bench", "swe_repair", 0.9),
+        _score("beta", "anthropic", "bench", "coding_edit", 0.85),
+        _score("beta", "anthropic", "bench", "swe_repair", 0.85),
+        _score("gamma", "google", "bench", "terminal_agentic", 0.7),
+        _score("gamma", "google", "bench", "competitive_programming", 0.7),
+    ]
+    matrix = build_model_area_matrix(scores)
+
+    recommendation = recommend_panel(
+        matrix,
+        target_profile="coding-agent",
+        max_members=2,
+        require_provider_diversity=False,
+        similarity_penalty=0.4,
+    )
+
+    assert [member.model_key for member in recommendation.members] == ["alpha", "gamma"]
+    assert recommendation.members[1].diversity_score > 0.9
+    assert "aggregate proxy diversity" in recommendation.members[1].reason
+
+
+def test_recommender_uses_task_outcome_metrics_when_available() -> None:
+    scores = [
+        _score("alpha", "openai", "bench", "coding_edit", 0.9),
+        _score("alpha", "openai", "bench", "swe_repair", 0.9),
+        _score("gamma", "google", "bench", "terminal_agentic", 0.65),
+        _score("gamma", "google", "bench", "competitive_programming", 0.65),
+    ]
+    outcomes = [
+        _outcome("t1", "alpha", 1.0),
+        _outcome("t1", "gamma", 0.0),
+        _outcome("t2", "alpha", 0.0),
+        _outcome("t2", "gamma", 1.0),
+        _outcome("t3", "alpha", 0.0),
+        _outcome("t3", "gamma", 1.0),
+    ]
+    matrix = build_model_area_matrix(scores)
+    task_metrics = [build_task_outcome_panel_metrics(outcomes)]
+
+    recommendation = recommend_panel(
+        matrix,
+        target_profile="coding-agent",
+        max_members=2,
+        require_provider_diversity=False,
+        task_outcome_metrics=task_metrics,
+    )
+
+    gamma = next(member for member in recommendation.members if member.model_key == "gamma")
+    assert gamma.task_evidence_score > 0
+    assert "task-outcome evidence" in gamma.reason
+
+
 def test_markdown_formatter_labels_aggregate_warning() -> None:
     matrix = build_model_area_matrix(
         [_score("gpt", "openai", "aider", "coding_edit", 0.88)],

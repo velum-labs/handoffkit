@@ -329,7 +329,11 @@ class PanelRecommendationMember(BaseModel):
     model_key: str
     provider: str
     score: float
+    capability_score: float = 0.0
+    diversity_score: float = 0.0
+    task_evidence_score: float = 0.0
     missing_areas: list[str] = Field(default_factory=list)
+    reason: str = ""
 
 
 class PanelRecommendation(BaseModel):
@@ -786,36 +790,94 @@ def recommend_panel(
     max_members: int = 3,
     max_cost_usd: float | None = None,
     require_provider_diversity: bool = True,
+    task_outcome_metrics: Sequence[TaskOutcomePanelMetrics] = (),
+    similarity_penalty: float = 0.25,
 ) -> PanelRecommendation:
     if max_members < 1:
         raise ValueError("max_members must be at least 1")
     area_weights = PROFILE_AREA_WEIGHTS[target_profile]
-    candidates = [
-        _score_recommendation_candidate(row, area_weights, max_cost_usd)
-        for row in matrix.rows.values()
-    ]
-    eligible = [candidate for candidate in candidates if candidate is not None]
-    eligible.sort(key=lambda candidate: candidate.score, reverse=True)
+    candidate_scores: dict[str, PanelRecommendationMember] = {}
+    for row in matrix.rows.values():
+        candidate = _score_recommendation_candidate(row, area_weights, max_cost_usd)
+        if candidate is not None:
+            candidate_scores[row.model_key] = candidate
+    eligible = list(candidate_scores.values())
     selected: list[PanelRecommendationMember] = []
     seen_providers: set[str] = set()
-    if require_provider_diversity:
-        for candidate in eligible:
-            if candidate.provider in seen_providers:
-                continue
-            selected.append(candidate)
-            seen_providers.add(candidate.provider)
-            if len(selected) == max_members:
-                break
-    for candidate in eligible:
-        if len(selected) == max_members:
-            break
-        if candidate not in selected:
-            selected.append(candidate)
     warnings = []
+    task_scores = _task_metric_member_scores(task_outcome_metrics)
+    while len(selected) < max_members and eligible:
+        best_index: int | None = None
+        best_member: PanelRecommendationMember | None = None
+        for index, candidate in enumerate(eligible):
+            if require_provider_diversity and candidate.provider in seen_providers:
+                continue
+            diversity_score = _candidate_diversity_score(
+                matrix,
+                candidate.model_key,
+                [member.model_key for member in selected],
+            )
+            task_evidence_score = task_scores.get(candidate.model_key, 0.0)
+            score = (
+                candidate.capability_score
+                + similarity_penalty * diversity_score
+                + 0.35 * task_evidence_score
+            )
+            member = candidate.model_copy(
+                update={
+                    "score": score,
+                    "diversity_score": diversity_score,
+                    "task_evidence_score": task_evidence_score,
+                    "reason": _recommendation_reason(diversity_score, task_evidence_score),
+                }
+            )
+            if best_member is None or member.score > best_member.score:
+                best_index = index
+                best_member = member
+        if best_member is None:
+            break
+        selected.append(best_member)
+        seen_providers.add(best_member.provider)
+        del eligible[best_index if best_index is not None else 0]
+    if len(selected) < max_members and require_provider_diversity:
+        warnings.append("provider-diversity constraint limited panel size")
+        while len(selected) < max_members and eligible:
+            # Relax provider diversity only after recording the constraint warning.
+            best_index = max(
+                range(len(eligible)),
+                key=lambda index: _candidate_diversity_score(
+                    matrix,
+                    eligible[index].model_key,
+                    [member.model_key for member in selected],
+                ) + eligible[index].capability_score,
+            )
+            candidate = eligible.pop(best_index)
+            diversity_score = _candidate_diversity_score(
+                matrix,
+                candidate.model_key,
+                [member.model_key for member in selected],
+            )
+            task_evidence_score = task_scores.get(candidate.model_key, 0.0)
+            selected.append(
+                candidate.model_copy(
+                    update={
+                        "score": (
+                            candidate.capability_score
+                            + similarity_penalty * diversity_score
+                            + 0.35 * task_evidence_score
+                        ),
+                        "diversity_score": diversity_score,
+                        "task_evidence_score": task_evidence_score,
+                        "reason": _recommendation_reason(diversity_score, task_evidence_score),
+                    }
+                )
+            )
     if len(selected) < max_members:
         warnings.append("fewer eligible models than requested after constraints")
     if any(member.missing_areas for member in selected):
         warnings.append("one or more selected models lack evidence for profile areas")
+    if not task_outcome_metrics:
+        warnings.append("no task-outcome metrics supplied; diversity uses capability-vector proxy")
     return PanelRecommendation(
         target_profile=target_profile,
         members=selected,
@@ -1568,8 +1630,85 @@ def _score_recommendation_candidate(
         model_key=row.model_key,
         provider=row.provider,
         score=max(0.0, score),
+        capability_score=max(0.0, score),
         missing_areas=missing_areas,
     )
+
+
+def _candidate_diversity_score(
+    matrix: ModelAreaMatrix,
+    model_key: str,
+    selected_model_keys: Sequence[str],
+) -> float:
+    if not selected_model_keys:
+        return 1.0
+    candidate_vector = _model_vector(matrix, model_key)
+    similarities = [
+        _cosine_similarity(candidate_vector, _model_vector(matrix, selected_key))
+        for selected_key in selected_model_keys
+    ]
+    return max(0.0, 1.0 - max(similarities))
+
+
+def _model_vector(matrix: ModelAreaMatrix, model_key: str) -> list[float]:
+    row = matrix.rows.get(model_key)
+    if row is None:
+        return [0.0 for _ in matrix.areas]
+    values: list[float] = []
+    for area in matrix.areas:
+        cell = row.cells.get(area)
+        values.append(
+            cell.normalized_score
+            if cell is not None and cell.normalized_score is not None
+            else 0.0
+        )
+    return values
+
+
+def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
+    numerator = sum(
+        left_value * right_value
+        for left_value, right_value in zip(left, right, strict=True)
+    )
+    left_norm = math.sqrt(sum(value * value for value in left))
+    right_norm = math.sqrt(sum(value * value for value in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return numerator / (left_norm * right_norm)
+
+
+def _task_metric_member_scores(
+    metrics: Sequence[TaskOutcomePanelMetrics],
+) -> dict[str, float]:
+    scores: dict[str, float] = {}
+    for metric in metrics:
+        if metric.decorrelation_evidence_level != "task_vector":
+            continue
+        headroom = max(0.0, metric.oracle_headroom or 0.0)
+        mean_corr = _mean_failure_correlation(metric.failure_correlations)
+        decorrelation = 1.0 - mean_corr if mean_corr is not None else 0.5
+        for model_key in metric.model_keys:
+            unique_win = metric.unique_win_rates.get(model_key, 0.0)
+            scores[model_key] = max(
+                scores.get(model_key, 0.0),
+                min(1.0, 0.45 * decorrelation + 0.35 * unique_win + 0.2 * headroom),
+            )
+    return scores
+
+
+def _mean_failure_correlation(rows: Sequence[FailureCorrelation]) -> float | None:
+    values = [row.correlation for row in rows if row.correlation is not None]
+    if not values:
+        return None
+    return _average(values)
+
+
+def _recommendation_reason(diversity_score: float, task_evidence_score: float) -> str:
+    if task_evidence_score > 0:
+        return "task-outcome evidence plus capability/diversity score"
+    if diversity_score < 0.25:
+        return "capability score with low proxy diversity"
+    return "capability score with aggregate proxy diversity"
 
 
 def _strip_html(value: str) -> str:
