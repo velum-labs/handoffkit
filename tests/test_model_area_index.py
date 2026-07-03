@@ -8,29 +8,51 @@ from model_area_index import (
     TaskOutcome,
     build_model_area_matrix,
     build_task_outcome_panel_metrics,
+    fetch_live_model_area_scores,
     format_model_area_matrix_markdown,
-    load_default_model_area_scores,
     recommend_panel,
+    write_model_area_scores,
 )
 from model_area_index.cli import main as model_area_index_main
 
 
-def test_default_seed_snapshot_builds_model_area_matrix() -> None:
-    scores = load_default_model_area_scores()
-    matrix = build_model_area_matrix(scores)
+def test_fetch_live_model_area_scores_parses_representative_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads = {
+        "aider.chat": _AIDER_HTML,
+        "swe-bench": _SWE_JSON,
+        "tbench.ai": _TERMINAL_HTML,
+        "LiveCodeBench": _LCB_JSON,
+    }
 
-    assert matrix.generated_from_records >= 10
+    def fake_fetch(url: str, *, timeout_s: float) -> bytes:
+        del timeout_s
+        for token, payload in payloads.items():
+            if token in url:
+                return payload.encode()
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr("model_area_index.core._fetch_url", fake_fetch)
+
+    fetched = fetch_live_model_area_scores()
+    matrix = build_model_area_matrix(fetched.scores)
+
+    assert len(fetched.sources) == 4
+    assert {source.record_count for source in fetched.sources}
     assert "coding_edit" in matrix.areas
-    assert "gpt-5.5" in matrix.rows
-    assert "deepseek-v3.2" in matrix.rows
-
-    gpt = matrix.rows["gpt-5.5"].cells["coding_edit"]
-    deepseek = matrix.rows["deepseek-v3.2"].cells["coding_edit"]
-    assert gpt.normalized_score is not None
-    assert deepseek.normalized_score is not None
-    assert gpt.normalized_score > deepseek.normalized_score
-    assert gpt.decorrelation_evidence_level == "aggregate_proxy"
-    assert "aggregate proxy" in gpt.warnings[0]
+    assert "swe_repair" in matrix.areas
+    assert "terminal_agentic" in matrix.areas
+    assert "competitive_programming" in matrix.areas
+    assert matrix.rows["gpt-5-high"].cells["coding_edit"].raw_score == pytest.approx(0.88)
+    assert matrix.rows["claude-opus"].cells["swe_repair"].raw_score == pytest.approx(0.8)
+    assert matrix.rows["gpt-5-5"].cells["terminal_agentic"].raw_score == pytest.approx(0.83)
+    deepseek_cell = matrix.rows["deepseek-v3"].cells["competitive_programming"]
+    gpt_cell = matrix.rows["gpt-5"].cells["competitive_programming"]
+    assert deepseek_cell.decorrelation_evidence_level == "task_vector"
+    assert deepseek_cell.raw_score is not None
+    assert gpt_cell.raw_score is not None
+    assert deepseek_cell.raw_score > gpt_cell.raw_score
 
 
 def test_benchmark_local_normalization_does_not_mix_areas() -> None:
@@ -79,41 +101,60 @@ def test_task_outcome_metrics_compute_oracle_and_failure_correlation() -> None:
 
 
 def test_recommender_prefers_provider_diversity_for_coding_agent_profile() -> None:
-    matrix = build_model_area_matrix(load_default_model_area_scores())
+    scores = [
+        _score("gpt", "openai", "aider", "coding_edit", 0.9),
+        _score("opus", "anthropic", "swe", "swe_repair", 0.8),
+        _score("gemini", "google", "terminal", "terminal_agentic", 0.7),
+        _score("deepseek", "deepseek", "lcb", "competitive_programming", 0.95),
+    ]
+    matrix = build_model_area_matrix(scores)
+
     recommendation = recommend_panel(matrix, target_profile="coding-agent", max_members=3)
 
     assert len(recommendation.members) == 3
-    providers = {member.provider for member in recommendation.members}
-    assert len(providers) == 3
+    assert len({member.provider for member in recommendation.members}) == 3
     assert recommendation.objective_score > 0
 
 
 def test_markdown_formatter_labels_aggregate_warning() -> None:
-    matrix = build_model_area_matrix(load_default_model_area_scores(), areas=["coding_edit"])
+    matrix = build_model_area_matrix(
+        [_score("gpt", "openai", "aider", "coding_edit", 0.88)],
+        areas=["coding_edit"],
+    )
     markdown = format_model_area_matrix_markdown(matrix)
 
     assert "Model Area Matrix" in markdown
     assert "routing priors" in markdown
-    assert "gpt-5.5" in markdown
+    assert "gpt" in markdown
 
 
-def test_model_area_matrix_cli_outputs_default_json(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = model_area_index_main(["--format", "json"])
+def test_cli_loads_snapshot_and_outputs_recommendation(
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    snapshot = tmp_path / "snapshot.jsonl"
+    scores = [
+        _score("gpt", "openai", "aider", "coding_edit", 0.9),
+        _score("opus", "anthropic", "swe", "swe_repair", 0.8),
+        _score("gemini", "google", "terminal", "terminal_agentic", 0.7),
+    ]
+    write_model_area_scores(snapshot, scores)
+
+    exit_code = model_area_index_main(
+        [
+            "--snapshot",
+            str(snapshot),
+            "--format",
+            "json",
+            "--target-profile",
+            "coding-agent",
+        ]
+    )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["generated_from_records"] >= 10
-    assert "coding_edit" in payload["areas"]
-    assert "gpt-5.5" in payload["rows"]
-
-
-def test_model_area_matrix_cli_outputs_recommendation(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = model_area_index_main(["--format", "json", "--target-profile", "coding-agent"])
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
+    assert payload["source_metadata"]["loaded_snapshot"] == str(snapshot)
     assert payload["recommendation"]["target_profile"] == "coding-agent"
-    assert len(payload["recommendation"]["members"]) == 3
 
 
 def _score(
@@ -142,6 +183,7 @@ def _score(
         same_harness_comparable=True,
     )
 
+
 def _outcome(task_id: str, model_key: str, score: float) -> TaskOutcome:
     return TaskOutcome(
         benchmark="sample",
@@ -154,3 +196,51 @@ def _outcome(task_id: str, model_key: str, score: float) -> TaskOutcome:
         harness="official",
         date_observed="2026-07-03",
     )
+
+
+_AIDER_HTML = """
+<tr class="details-row"><td><ul>
+<li><strong>Test cases :</strong>225</li>
+<li><strong>Model :</strong>gpt-5 (high)</li>
+<li><strong>Pass rate 2 :</strong>88.0</li>
+<li><strong>Total cost :</strong>29.08</li>
+<li><strong>Command :</strong>aider --model openai/gpt-5</li>
+<li><strong>Date :</strong>2026-07-03</li>
+</ul></td></tr>
+"""
+
+_SWE_JSON = json.dumps(
+    {
+        "leaderboards": [
+            {
+                "name": "Verified",
+                "results": [
+                    {
+                        "name": "Claude Opus",
+                        "resolved": 80.0,
+                        "date": "2026-07-03",
+                        "cost": 12.0,
+                        "os_system": True,
+                    }
+                ],
+            }
+        ]
+    }
+)
+
+_TERMINAL_HTML = (
+    r'\"rows\":[{\"agent\":\"Codex CLI\",\"model\":[\"GPT-5.5\"],'
+    r'\"accuracy\":0.83,\"stderr\":0.01,\"date\":\"2026-07-03\",'
+    r'\"modelNames\":[\"gpt-5.5\"],\"modelProviders\":[\"openai\"]}]'
+)
+
+_LCB_JSON = json.dumps(
+    {
+        "performances": [
+            {"question_id": "a", "model": "DeepSeek-V3", "difficulty": "easy", "pass@1": 100},
+            {"question_id": "b", "model": "DeepSeek-V3", "difficulty": "hard", "pass@1": 50},
+            {"question_id": "a", "model": "GPT-5", "difficulty": "easy", "pass@1": 50},
+            {"question_id": "b", "model": "GPT-5", "difficulty": "hard", "pass@1": 50},
+        ]
+    }
+)

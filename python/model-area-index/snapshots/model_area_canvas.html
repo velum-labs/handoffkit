@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Model Area Index Canvas</title>
+<style>
+  body { margin: 0; background: #0b1020; color: #e5ecff; font-family: Inter, system-ui, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 28px; }
+  h1 { margin: 0 0 6px; font-size: 28px; }
+  p { color: #a9b6d8; margin: 6px 0 18px; }
+  canvas { width: 100%; height: auto; border: 1px solid #26314f; border-radius: 18px; background: #111831; }
+  code { color: #a5f3fc; }
+</style>
+</head>
+<body>
+<main>
+<h1>Model Area Index</h1>
+<p>Radar charts use normalized area scores from live public pulls. The matrix is capability-vector similarity, not task-error correlation.</p>
+<p><code>542</code> pulled rows across 4 live sources.</p>
+<canvas id="canvas" width="1600" height="1500"></canvas>
+</main>
+<script>
+const data = {"areas": ["coding_edit", "competitive_programming", "swe_repair", "terminal_agentic"], "models": [{"model": "o4-mini-high", "provider": "openai", "coverage": 2, "mean": 0.7483778446492382, "vector": [0.5, 0.9967556892984765, 0.0, 0.0]}, {"model": "o3-high", "provider": "openai", "coverage": 2, "mean": 0.7277118391073891, "vector": [0.5, 0.9554236782147781, 0.0, 0.0]}, {"model": "deepseek-r1-0528", "provider": "deepseek", "coverage": 2, "mean": 0.7210329498151953, "vector": [0.5, 0.9420658996303907, 0.0, 0.0]}, {"model": "claude-3-5-sonnet-20241022", "provider": "anthropic", "coverage": 2, "mean": 0.447324218384411, "vector": [0.5, 0.394648436768822, 0.0, 0.0]}, {"model": "gpt-4o-2024-08-06", "provider": "openai", "coverage": 2, "mean": 0.37842882924723564, "vector": [0.5, 0.25685765849447123, 0.0, 0.0]}, {"model": "gpt-4o-mini-2024-07-18", "provider": "openai", "coverage": 2, "mean": 0.35925573805795247, "vector": [0.5, 0.21851147611590496, 0.0, 0.0]}, {"model": "gpt-4o-2024-11-20", "provider": "openai", "coverage": 2, "mean": 0.34306784660766965, "vector": [0.5, 0.0, 0.18613569321533924, 0.0]}, {"model": "qwen2-5-coder-32b-instruct", "provider": "alibaba", "coverage": 2, "mean": 0.25, "vector": [0.5, 0.0, 0.0, 0.0]}, {"model": "claude-opus-4-20250514-32k-thinking", "provider": "anthropic", "coverage": 1, "mean": 1.0, "vector": [1.0, 0.0, 0.0, 0.0]}, {"model": "claude-4-5-opus-high-reasoning", "provider": "anthropic", "coverage": 1, "mean": 1.0, "vector": [0.0, 0.0, 1.0, 0.0]}, {"model": "claude-fable-5", "provider": "anthropic", "coverage": 1, "mean": 1.0, "vector": [0.0, 0.0, 0.0, 1.0]}], "similarity": [[1.0, 0.9998523124635746, 0.9997356498252595, 0.9057428615682895, 0.8072679876305905, 0.7687975327836607, 0.4202041794099121, 0.4483769562905413, 0.4483769562905413, 0.0, 0.0], [0.9998523124635746, 0.9999999999999998, 0.9999831376772285, 0.912892930682251, 0.817291592920866, 0.7796742057367129, 0.43453839011361767, 0.4636722105528391, 0.4636722105528391, 0.0, 0.0], [0.9997356498252595, 0.9999831376772285, 1.0000000000000002, 0.915248058685507, 0.8206241004451408, 0.7832974849282722, 0.439353049540314, 0.4688096709711272, 0.4688096709711272, 0.0, 0.0], [0.9057428615682895, 0.912892930682251, 0.915248058685507, 0.9999999999999999, 0.9813139553182711, 0.9673673738724965, 0.7356296420578712, 0.784950259957429, 0.784950259957429, 0.0, 0.0], [0.8072679876305905, 0.817291592920866, 0.8206241004451408, 0.9813139553182711, 1.0, 0.9980444115791139, 0.8336046670488577, 0.8894940642566588, 0.8894940642566588, 0.0, 0.0], [0.7687975327836607, 0.7796742057367129, 0.7832974849282722, 0.9673673738724965, 0.9980444115791139, 1.0, 0.8587429740997032, 0.9163177803310287, 0.9163177803310287, 0.0, 0.0], [0.4202041794099121, 0.43453839011361767, 0.439353049540314, 0.7356296420578712, 0.8336046670488577, 0.8587429740997032, 0.9999999999999998, 0.9371672061077696, 0.9371672061077696, 0.3488805351351048, 0.0], [0.4483769562905413, 0.4636722105528391, 0.4688096709711272, 0.784950259957429, 0.8894940642566588, 0.9163177803310287, 0.9371672061077696, 1.0, 1.0, 0.0, 0.0], [0.4483769562905413, 0.4636722105528391, 0.4688096709711272, 0.784950259957429, 0.8894940642566588, 0.9163177803310287, 0.9371672061077696, 1.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3488805351351048, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]], "sourceMetadata": [{"source": "aider", "url": "https://aider.chat/docs/leaderboards/", "snapshot_hash": "cea6cab3ac65e4d41cce072fcac5540497d757b3a6f72d997b7c3607b44c470e", "retrieved_at": "2026-07-03T04:22:52+00:00", "record_count": 69}, {"source": "swe_bench", "url": "https://raw.githubusercontent.com/swe-bench/swe-bench.github.io/master/data/leaderboards.json", "snapshot_hash": "c3bf3a74d7d67ba7e2777e197f96894601917e8e186a078133897ed3e81566e5", "retrieved_at": "2026-07-03T04:22:52+00:00", "record_count": 372}, {"source": "terminal_bench", "url": "https://www.tbench.ai/leaderboard/terminal-bench/2.1", "snapshot_hash": "9851e83fc03b57bb7113ee4cec7bd093ac62d65cde2587e2e47234eb034994e9", "retrieved_at": "2026-07-03T04:22:53+00:00", "record_count": 13}, {"source": "livecodebench", "url": "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/main/src/mocks/performances_generation.json", "snapshot_hash": "e75b9074733b3e265451762650fe71537ad5470cb581c432a1b85e020b822b3c", "retrieved_at": "2026-07-03T04:22:53+00:00", "record_count": 88}], "generatedFromRecords": 542};
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const colors = ['#60a5fa','#f472b6','#34d399','#fbbf24','#a78bfa','#fb7185','#22d3ee','#c084fc','#4ade80','#f97316','#93c5fd','#f0abfc'];
+function text(s,x,y,size=22,color='#e5ecff',align='left'){ctx.fillStyle=color;ctx.font=`${size}px Inter, system-ui, sans-serif`;ctx.textAlign=align;ctx.fillText(s,x,y);}
+function line(x1,y1,x2,y2,color='#33415f',w=1){ctx.strokeStyle=color;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+function polygon(points, fill, stroke, width=2){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke();}
+ctx.clearRect(0,0,W,H);
+text('Radial capability charts', 48, 54, 30);
+text('Each spoke is an area; missing public evidence is zero-filled for visualization.', 48, 86, 18, '#a9b6d8');
+const areas = data.areas;
+const cols = 4, cellW = 360, cellH = 280, startX = 60, startY = 130;
+data.models.forEach((model, idx) => {
+  const col = idx % cols, row = Math.floor(idx / cols);
+  const cx = startX + col * cellW + 145, cy = startY + row * cellH + 125, r = 82;
+  const color = colors[idx % colors.length];
+  for (let ring=1; ring<=4; ring++) {
+    ctx.beginPath(); ctx.arc(cx, cy, r*ring/4, 0, Math.PI*2); ctx.strokeStyle = '#26314f'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  const axis = areas.map((area, i) => { const a = -Math.PI/2 + i * Math.PI*2/areas.length; return [cx + Math.cos(a)*r, cy + Math.sin(a)*r, a, area]; });
+  axis.forEach(([x,y,a,area]) => { line(cx,cy,x,y,'#33415f'); text(area.replaceAll('_',' '), cx + Math.cos(a)*(r+34), cy + Math.sin(a)*(r+34), 12, '#a9b6d8', 'center'); });
+  const points = model.vector.map((v, i) => { const a = -Math.PI/2 + i * Math.PI*2/areas.length; return [cx + Math.cos(a)*r*v, cy + Math.sin(a)*r*v]; });
+  polygon(points, color+'44', color, 3);
+  text(model.model, startX + col * cellW, cy + 130, 17, '#e5ecff');
+  text(`${model.provider} · coverage ${model.coverage}/${areas.length} · mean ${model.mean.toFixed(2)}`, startX + col * cellW, cy + 154, 13, '#a9b6d8');
+});
+const matrixTop = 1030;
+text('Model capability similarity matrix', 48, matrixTop, 30);
+text('Cosine similarity over normalized area vectors; this is not same-task failure correlation.', 48, matrixTop+32, 18, '#a9b6d8');
+const labels = data.models.map(m => m.model);
+const n = labels.length, size = Math.min(62, Math.floor(960 / n));
+const mx = 365, my = matrixTop + 90;
+labels.forEach((label, i) => { text(label.slice(0,28), mx - 16, my + i*size + size*0.62, 12, '#a9b6d8', 'right'); text(label.slice(0,16), mx + i*size + size/2, my - 12, 11, '#a9b6d8', 'center'); });
+for (let i=0; i<n; i++) {
+  for (let j=0; j<n; j++) {
+    const v = data.similarity[i][j];
+    const hue = 220 - 220*v;
+    ctx.fillStyle = `hsl(${hue}, 80%, ${18 + 45*v}%)`;
+    ctx.fillRect(mx + j*size, my + i*size, size-2, size-2);
+    if (size > 44) text(v.toFixed(2), mx + j*size + size/2, my + i*size + size*0.6, 12, v > 0.6 ? '#08111f' : '#e5ecff', 'center');
+  }
+}
+text('Live sources:', 48, H - 96, 18, '#e5ecff');
+data.sourceMetadata.forEach((s, i) => text(`${s.source}: ${s.record_count} rows · sha256 ${s.snapshot_hash.slice(0,12)}`, 48, H - 68 + i*20, 14, '#a9b6d8'));
+</script>
+</body>
+</html>

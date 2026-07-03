@@ -8,22 +8,45 @@ from pathlib import Path
 from typing import cast
 
 from model_area_index.core import (
+    LIVE_SOURCES,
     PROFILE_AREA_WEIGHTS,
     PanelProfile,
     build_model_area_matrix,
+    fetch_live_model_area_scores,
     format_model_area_matrix_markdown,
-    load_default_model_area_scores,
     load_model_area_scores,
     recommend_panel,
+    write_model_area_scores,
 )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="model-area-index",
-        description="Build a no-run model-by-area capability matrix from public snapshots.",
+        description="Fetch public benchmark data and build a no-run model-by-area matrix.",
     )
-    parser.add_argument("--snapshot", type=Path, help="JSON/JSONL public model-area snapshot")
+    parser.add_argument(
+        "--snapshot",
+        type=Path,
+        help="load an already-fetched JSON/JSONL snapshot instead of fetching live",
+    )
+    parser.add_argument(
+        "--write-snapshot",
+        type=Path,
+        help="write fetched/loaded model-area rows as JSONL",
+    )
+    parser.add_argument(
+        "--source",
+        action="append",
+        choices=LIVE_SOURCES,
+        help="live source to fetch; repeatable; defaults to all sources",
+    )
+    parser.add_argument(
+        "--limit-per-source",
+        type=int,
+        help="cap parsed rows per source for quick inspection",
+    )
+    parser.add_argument("--timeout-s", type=float, default=30.0)
     parser.add_argument("--output", "-o", type=Path, help="write rendered matrix to this path")
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     parser.add_argument(
@@ -33,11 +56,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    scores = (
-        load_model_area_scores(args.snapshot)
-        if args.snapshot is not None
-        else load_default_model_area_scores()
-    )
+    sources = tuple(args.source) if args.source is not None else LIVE_SOURCES
+    if args.snapshot is not None:
+        scores = load_model_area_scores(args.snapshot)
+        source_metadata: object = {"loaded_snapshot": str(args.snapshot)}
+    else:
+        fetched = fetch_live_model_area_scores(
+            sources=sources,
+            timeout_s=args.timeout_s,
+            limit_per_source=args.limit_per_source,
+        )
+        scores = fetched.scores
+        source_metadata = [source.model_dump(mode="json") for source in fetched.sources]
+    if args.write_snapshot is not None:
+        write_model_area_scores(args.write_snapshot, scores)
     matrix = build_model_area_matrix(scores)
     recommendation = (
         recommend_panel(matrix, target_profile=cast(PanelProfile, args.target_profile))
@@ -46,6 +78,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if args.format == "json":
         payload: dict[str, object] = matrix.model_dump(mode="json")
+        payload["source_metadata"] = source_metadata
         if recommendation is not None:
             payload["recommendation"] = recommendation.model_dump(mode="json")
         rendered = json.dumps(payload, indent=2)

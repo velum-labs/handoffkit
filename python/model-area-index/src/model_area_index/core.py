@@ -1,17 +1,18 @@
-"""No-run public model capability index.
-
-The index is not a benchmark runner. It ingests versioned public benchmark
-snapshots, builds model-by-area score matrices, and only computes error
-decorrelation from per-task outcomes on the same task ids.
-"""
+"""No-run public model capability index built from live benchmark data."""
 
 from __future__ import annotations
 
+import hashlib
+import html
 import json
 import math
+import re
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -31,6 +32,27 @@ PanelProfile = Literal[
     "local-mlx",
     "mixed-frontier-open",
 ]
+LiveSource = Literal["aider", "swe_bench", "terminal_bench", "livecodebench"]
+
+LIVE_SOURCES: tuple[LiveSource, ...] = (
+    "aider",
+    "swe_bench",
+    "terminal_bench",
+    "livecodebench",
+)
+SOURCE_URLS: dict[LiveSource, str] = {
+    "aider": "https://aider.chat/docs/leaderboards/",
+    "swe_bench": (
+        "https://raw.githubusercontent.com/swe-bench/swe-bench.github.io/"
+        "master/data/leaderboards.json"
+    ),
+    "terminal_bench": "https://www.tbench.ai/leaderboard/terminal-bench/2.1",
+    "livecodebench": (
+        "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/"
+        "main/src/mocks/performances_generation.json"
+    ),
+}
+USER_AGENT = "model-area-index/0.1 (+https://github.com/velum-labs/handoffkit)"
 
 DATA_LEVEL_WEIGHTS: dict[CapabilityDataLevel, float] = {
     "task_outcome": 1.0,
@@ -83,10 +105,14 @@ PROFILE_AREA_WEIGHTS: dict[PanelProfile, dict[str, float]] = {
         "math": 0.15,
     },
 }
-
-DEFAULT_MODEL_AREA_SNAPSHOT = (
-    Path(__file__).resolve().parent / "data" / "public_model_area_scores.seed.jsonl"
-)
+SWE_TASK_COUNTS: dict[str, int] = {
+    "bash-only": 500,
+    "Multilingual": 300,
+    "Test": 2294,
+    "Verified": 500,
+    "Lite": 300,
+    "Multimodal": 517,
+}
 
 
 class ModelAreaScore(BaseModel):
@@ -212,8 +238,56 @@ class PanelRecommendation(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-def default_model_area_snapshot_path() -> Path:
-    return DEFAULT_MODEL_AREA_SNAPSHOT
+class SourceFetchResult(BaseModel):
+    source: LiveSource
+    url: str
+    snapshot_hash: str
+    retrieved_at: str
+    record_count: int
+
+
+class LiveFetchResult(BaseModel):
+    scores: list[ModelAreaScore]
+    sources: list[SourceFetchResult]
+
+
+class FetchError(RuntimeError):
+    """A live public benchmark source could not be fetched or parsed."""
+
+
+def fetch_live_model_area_scores(
+    sources: Sequence[LiveSource] = LIVE_SOURCES,
+    *,
+    timeout_s: float = 30.0,
+    limit_per_source: int | None = None,
+) -> LiveFetchResult:
+    all_scores: list[ModelAreaScore] = []
+    fetch_results: list[SourceFetchResult] = []
+    for source in sources:
+        url = SOURCE_URLS[source]
+        raw = _fetch_url(url, timeout_s=timeout_s)
+        snapshot_hash = hashlib.sha256(raw).hexdigest()
+        retrieved_at = datetime.now(UTC).isoformat(timespec="seconds")
+        text = raw.decode("utf-8", errors="replace")
+        scores = _parse_source(
+            source,
+            text,
+            url=url,
+            snapshot_hash=snapshot_hash,
+            retrieved_at=retrieved_at,
+            limit=limit_per_source,
+        )
+        all_scores.extend(scores)
+        fetch_results.append(
+            SourceFetchResult(
+                source=source,
+                url=url,
+                snapshot_hash=snapshot_hash,
+                retrieved_at=retrieved_at,
+                record_count=len(scores),
+            )
+        )
+    return LiveFetchResult(scores=all_scores, sources=fetch_results)
 
 
 def load_model_area_scores(path: str | Path) -> list[ModelAreaScore]:
@@ -224,8 +298,12 @@ def load_task_outcomes(path: str | Path) -> list[TaskOutcome]:
     return [TaskOutcome.model_validate(row) for row in _load_records(path)]
 
 
-def load_default_model_area_scores() -> list[ModelAreaScore]:
-    return load_model_area_scores(DEFAULT_MODEL_AREA_SNAPSHOT)
+def write_model_area_scores(path: str | Path, scores: Iterable[ModelAreaScore]) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        for score in scores:
+            handle.write(json.dumps(score.model_dump(mode="json"), sort_keys=True) + "\n")
 
 
 def build_model_area_matrix(
@@ -397,6 +475,315 @@ def format_model_area_matrix_markdown(matrix: ModelAreaMatrix) -> str:
         lines.append(f"| {model_key} | {row.provider} | " + " | ".join(cells) + " |")
     lines.append("")
     return "\n".join(lines)
+
+
+def _fetch_url(url: str, *, timeout_s: float) -> bytes:
+    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+    try:
+        with urlopen(request, timeout=timeout_s) as response:
+            return response.read()
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise FetchError(f"failed to fetch {url}: {exc}") from exc
+
+
+def _parse_source(
+    source: LiveSource,
+    text: str,
+    *,
+    url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    match source:
+        case "aider":
+            return _parse_aider(text, url, snapshot_hash, retrieved_at, limit)
+        case "swe_bench":
+            return _parse_swe_bench(text, url, snapshot_hash, retrieved_at, limit)
+        case "terminal_bench":
+            return _parse_terminal_bench(text, url, snapshot_hash, retrieved_at, limit)
+        case "livecodebench":
+            return _parse_livecodebench(text, url, snapshot_hash, retrieved_at, limit)
+
+
+def _parse_aider(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    rows: list[ModelAreaScore] = []
+    for block in re.findall(r'<tr class="details-row".*?</tr>', text, re.S):
+        fields = _parse_aider_fields(block)
+        model = fields.get("Model")
+        pass_rate = _as_float(fields.get("Pass rate 2"))
+        if model is None or pass_rate is None:
+            continue
+        n_tasks = _as_int(fields.get("Test cases")) or _as_int(fields.get("Total tests"))
+        rows.append(
+            ModelAreaScore(
+                model_key=_model_key(model),
+                provider=_provider_for_name(model),
+                model_family=_family_for_name(model),
+                model_version_or_alias=model,
+                benchmark="aider-polyglot",
+                benchmark_version=fields.get("Date") or "live",
+                area="coding_edit",
+                subarea="polyglot_exercism",
+                score_raw=pass_rate / 100.0,
+                n_tasks=n_tasks,
+                cost_usd=_as_float(fields.get("Total cost")),
+                date_observed=retrieved_at,
+                harness="aider benchmark",
+                prompting_mode=fields.get("Command"),
+                source_url=source_url,
+                source_snapshot_hash=snapshot_hash,
+                data_level="aggregate",
+                scoring="deterministic_tests",
+                saturation_weight=_saturation_weight(pass_rate / 100.0),
+                same_harness_comparable=True,
+            )
+        )
+        if limit is not None and len(rows) >= limit:
+            break
+    if not rows:
+        raise FetchError("Aider leaderboard parsed zero rows")
+    return rows
+
+
+def _parse_aider_fields(block: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for key, value in re.findall(r"<li><strong>\s*(.*?)\s*:</strong>\s*(.*?)\s*</li>", block, re.S):
+        clean_key = _strip_html(key)
+        clean_value = _strip_html(value)
+        if clean_key:
+            fields[clean_key] = clean_value
+    return fields
+
+
+def _parse_swe_bench(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    parsed = json.loads(text)
+    rows: list[ModelAreaScore] = []
+    for leaderboard in parsed.get("leaderboards", []):
+        if not isinstance(leaderboard, Mapping):
+            continue
+        suite = str(leaderboard.get("name", "unknown"))
+        results = leaderboard.get("results", [])
+        if not isinstance(results, list):
+            continue
+        for result in results[:limit]:
+            if not isinstance(result, Mapping):
+                continue
+            name = _as_str(result.get("name"))
+            resolved = _as_float(result.get("resolved"))
+            if name is None or resolved is None:
+                continue
+            details = result.get("per_instance_details")
+            n_tasks = len(details) if isinstance(details, Mapping) else SWE_TASK_COUNTS.get(suite)
+            rows.append(
+                ModelAreaScore(
+                    model_key=_model_key(name),
+                    provider=_provider_for_name(name),
+                    model_family=_family_for_name(name),
+                    model_version_or_alias=name,
+                    benchmark="swe-bench",
+                    benchmark_version=suite,
+                    area="swe_repair",
+                    subarea=suite,
+                    score_raw=resolved / 100.0,
+                    n_tasks=n_tasks,
+                    cost_usd=_as_float(result.get("cost")),
+                    date_observed=retrieved_at,
+                    harness=f"SWE-bench {suite} leaderboard",
+                    prompting_mode="agent_system" if result.get("os_system") is not None else None,
+                    source_url=source_url,
+                    source_snapshot_hash=snapshot_hash,
+                    data_level="aggregate",
+                    scoring="deterministic_tests",
+                    saturation_weight=_saturation_weight(resolved / 100.0),
+                    same_harness_comparable=False,
+                )
+            )
+    if not rows:
+        raise FetchError("SWE-bench leaderboard parsed zero rows")
+    return rows
+
+
+def _parse_terminal_bench(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    rows_json = _extract_terminal_rows_json(text)
+    rows: list[ModelAreaScore] = []
+    for entry in rows_json[:limit]:
+        if not isinstance(entry, Mapping):
+            continue
+        accuracy = _as_float(entry.get("accuracy"))
+        model_names = entry.get("modelNames")
+        display_names = entry.get("model")
+        if accuracy is None or not isinstance(model_names, list) or not model_names:
+            continue
+        model_name = "+".join(str(model) for model in model_names)
+        display_name = (
+            " + ".join(str(model) for model in display_names)
+            if isinstance(display_names, list) and display_names
+            else model_name
+        )
+        provider_values = entry.get("modelProviders")
+        provider = (
+            str(provider_values[0])
+            if isinstance(provider_values, list) and provider_values
+            else _provider_for_name(model_name)
+        )
+        agent = _as_str(entry.get("agent"))
+        rows.append(
+            ModelAreaScore(
+                model_key=_model_key(model_name),
+                provider=provider.lower(),
+                model_family=_family_for_name(model_name),
+                model_version_or_alias=display_name,
+                benchmark="terminal-bench",
+                benchmark_version="2.1",
+                area="terminal_agentic",
+                subarea="verified_terminal_tasks",
+                score_raw=accuracy,
+                stderr_or_ci=_as_float(entry.get("stderr")),
+                date_observed=retrieved_at,
+                harness="Terminal-Bench 2.1 leaderboard",
+                prompting_mode=f"agent={agent}" if agent else "agent_plus_model",
+                source_url=source_url,
+                source_snapshot_hash=snapshot_hash,
+                data_level="aggregate",
+                scoring="deterministic_tests",
+                saturation_weight=_saturation_weight(accuracy),
+                same_harness_comparable=False,
+            )
+        )
+    if not rows:
+        raise FetchError("Terminal-Bench leaderboard parsed zero rows")
+    return rows
+
+
+def _extract_terminal_rows_json(text: str) -> list[Any]:
+    marker = r'\"rows\":'
+    start = text.find(marker)
+    if start == -1:
+        raise FetchError("Terminal-Bench page did not contain embedded rows")
+    start += len(marker)
+    array_start = text.find("[", start)
+    if array_start == -1:
+        raise FetchError("Terminal-Bench rows marker was not followed by an array")
+    depth = 0
+    array_end: int | None = None
+    for index in range(array_start, len(text)):
+        char = text[index]
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                array_end = index + 1
+                break
+    if array_end is None:
+        raise FetchError("Terminal-Bench embedded rows array was unterminated")
+    raw_array = text[array_start:array_end].replace(r"\"", '"').replace(r"\/", "/")
+    parsed = json.loads(raw_array)
+    if not isinstance(parsed, list):
+        raise FetchError("Terminal-Bench embedded rows were not a JSON list")
+    return parsed
+
+
+def _parse_livecodebench(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    parsed = json.loads(text)
+    performances = parsed.get("performances")
+    if not isinstance(performances, list):
+        raise FetchError("LiveCodeBench performances_generation JSON lacked performances")
+    by_model: dict[str, list[float]] = {}
+    difficulty_scores: dict[tuple[str, str], list[float]] = {}
+    for row in performances:
+        if not isinstance(row, Mapping):
+            continue
+        model = _as_str(row.get("model"))
+        score = _as_float(row.get("pass@1"))
+        if model is None or score is None:
+            continue
+        normalized = score / 100.0 if score > 1.0 else score
+        by_model.setdefault(model, []).append(normalized)
+        difficulty = _as_str(row.get("difficulty"))
+        if difficulty is not None:
+            difficulty_scores.setdefault((model, difficulty), []).append(normalized)
+    ranked = sorted(by_model.items(), key=lambda item: _average(item[1]), reverse=True)
+    rows: list[ModelAreaScore] = []
+    for model, scores in ranked[:limit]:
+        rows.append(
+            ModelAreaScore(
+                model_key=_model_key(model),
+                provider=_provider_for_name(model),
+                model_family=_family_for_name(model),
+                model_version_or_alias=model,
+                benchmark="livecodebench",
+                benchmark_version="generation-live",
+                area="competitive_programming",
+                subarea="pass_at_1",
+                score_raw=_average(scores),
+                n_tasks=len(scores),
+                date_observed=retrieved_at,
+                harness="LiveCodeBench generation raw performances",
+                prompting_mode="single_attempt",
+                source_url=source_url,
+                source_snapshot_hash=snapshot_hash,
+                data_level="task_outcome",
+                scoring="deterministic_tests",
+                saturation_weight=_saturation_weight(_average(scores)),
+                same_harness_comparable=True,
+            )
+        )
+        for difficulty in ("easy", "medium", "hard"):
+            diff_values = difficulty_scores.get((model, difficulty), [])
+            if not diff_values:
+                continue
+            rows.append(
+                ModelAreaScore(
+                    model_key=_model_key(model),
+                    provider=_provider_for_name(model),
+                    model_family=_family_for_name(model),
+                    model_version_or_alias=model,
+                    benchmark="livecodebench",
+                    benchmark_version="generation-live",
+                    area="competitive_programming",
+                    subarea=f"{difficulty}_pass_at_1",
+                    score_raw=_average(diff_values),
+                    n_tasks=len(diff_values),
+                    date_observed=retrieved_at,
+                    harness="LiveCodeBench generation raw performances",
+                    prompting_mode="single_attempt",
+                    source_url=source_url,
+                    source_snapshot_hash=snapshot_hash,
+                    data_level="task_outcome",
+                    scoring="deterministic_tests",
+                    saturation_weight=_saturation_weight(_average(diff_values)),
+                    same_harness_comparable=True,
+                )
+            )
+    if not rows:
+        raise FetchError("LiveCodeBench raw performances parsed zero rows")
+    return rows
 
 
 def _load_records(path: str | Path) -> list[Mapping[str, Any]]:
@@ -580,6 +967,87 @@ def _score_recommendation_candidate(
         score=max(0.0, score),
         missing_areas=missing_areas,
     )
+
+
+def _strip_html(value: str) -> str:
+    return html.unescape(re.sub(r"<.*?>", "", value)).strip()
+
+
+def _model_key(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "unknown-model"
+
+
+def _provider_for_name(value: str) -> str:
+    lower = value.lower()
+    if any(token in lower for token in ("claude", "anthropic")):
+        return "anthropic"
+    if any(token in lower for token in ("gemini", "google")):
+        return "google"
+    if any(token in lower for token in ("deepseek", "r1")):
+        return "deepseek"
+    if any(token in lower for token in ("qwen", "dashscope", "alibaba")):
+        return "alibaba"
+    if any(token in lower for token in ("grok", "x-ai", "xai")):
+        return "xai"
+    if any(token in lower for token in ("llama", "mistral", "mixtral", "glm", "minimax")):
+        return "open-weight"
+    if any(token in lower for token in ("gpt", "openai", "o1", "o3", "o4", "codex")):
+        return "openai"
+    return "unknown"
+
+
+def _family_for_name(value: str) -> str:
+    lower = value.lower()
+    if "claude" in lower:
+        return "claude"
+    if "gemini" in lower:
+        return "gemini"
+    if "deepseek" in lower:
+        return "deepseek"
+    if "codex" in lower:
+        return "codex"
+    if "gpt" in lower:
+        return "gpt"
+    if re.search(r"\bo[134]\b|o[134]-", lower):
+        return "o-series"
+    if "llama" in lower:
+        return "llama"
+    if "qwen" in lower:
+        return "qwen"
+    if "glm" in lower:
+        return "glm"
+    return _model_key(value).split("-")[0]
+
+
+def _saturation_weight(score: float) -> float:
+    if score > 0.9:
+        return 0.45
+    if score > 0.8:
+        return 0.7
+    return 1.0
+
+
+def _as_float(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip().rstrip("%"))
+        except ValueError:
+            return None
+    return None
+
+
+def _as_int(value: object) -> int | None:
+    number = _as_float(value)
+    return int(number) if number is not None else None
+
+
+def _as_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _weighted_average(values: Sequence[float], weights: Sequence[float]) -> float:
