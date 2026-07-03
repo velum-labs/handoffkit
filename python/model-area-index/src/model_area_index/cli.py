@@ -12,6 +12,7 @@ from model_area_index.core import (
     PROFILE_AREA_WEIGHTS,
     PanelProfile,
     build_model_area_matrix,
+    build_reliability_report,
     fetch_live_model_area_scores,
     format_model_area_matrix_markdown,
     load_model_area_scores,
@@ -71,6 +72,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.write_snapshot is not None:
         write_model_area_scores(args.write_snapshot, scores)
     matrix = build_model_area_matrix(scores)
+    reliability_report = build_reliability_report(matrix)
     recommendation = (
         recommend_panel(matrix, target_profile=cast(PanelProfile, args.target_profile))
         if args.target_profile is not None
@@ -79,6 +81,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.format == "json":
         payload: dict[str, object] = matrix.model_dump(mode="json")
         payload["source_metadata"] = source_metadata
+        payload["reliability_report"] = reliability_report.model_dump(mode="json")
         if recommendation is not None:
             payload["recommendation"] = recommendation.model_dump(mode="json")
         rendered = json.dumps(payload, indent=2)
