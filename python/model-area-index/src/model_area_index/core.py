@@ -20,7 +20,14 @@ from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, Field, model_validator
 
-CapabilityDataLevel = Literal["aggregate", "subtask", "task_outcome", "model_answer"]
+CapabilityDataLevel = Literal[
+    "aggregate_score",
+    "subtask_score",
+    "task_metadata_only",
+    "model_answer",
+    "task_outcome",
+    "same_run_task_outcome",
+]
 DecorrelationEvidenceLevel = Literal[
     "task_vector",
     "model_answer_replayable",
@@ -160,10 +167,12 @@ SOURCE_AREAS: dict[LiveSource, tuple[str, ...]] = {
 USER_AGENT = "model-area-index/0.1 (+https://github.com/velum-labs/handoffkit)"
 
 DATA_LEVEL_WEIGHTS: dict[CapabilityDataLevel, float] = {
-    "task_outcome": 1.0,
+    "same_run_task_outcome": 1.0,
+    "task_outcome": 0.95,
     "model_answer": 0.9,
-    "subtask": 0.65,
-    "aggregate": 0.45,
+    "subtask_score": 0.65,
+    "aggregate_score": 0.45,
+    "task_metadata_only": 0.0,
 }
 SCORING_WEIGHTS: dict[ScoringMode, float] = {
     "deterministic_tests": 1.0,
@@ -289,7 +298,7 @@ class ModelAreaScore(BaseModel):
     prompting_mode: str | None = None
     source_url: str
     source_snapshot_hash: str
-    data_level: CapabilityDataLevel = "aggregate"
+    data_level: CapabilityDataLevel = "aggregate_score"
     scoring: ScoringMode = "objective"
     contamination_weight: float = Field(default=1.0, ge=0.0, le=1.0)
     saturation_weight: float = Field(default=1.0, ge=0.0, le=1.0)
@@ -323,20 +332,130 @@ class ModelAreaScore(BaseModel):
         return self
 
 
+class BenchmarkTask(BaseModel):
+    """One benchmark item and the metadata needed for slice-level analysis."""
+
+    benchmark: str
+    benchmark_version: str
+    task_id: str
+    task_fingerprint: str | None = None
+    split: str | None = None
+    area: str
+    subarea: str | None = None
+    domain: str | None = None
+    source_date: str | None = None
+    contamination_window: str | None = None
+    difficulty: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    input_modality: str | None = None
+    output_modality: str | None = None
+    output_type: str | None = None
+    language: str | None = None
+    repo: str | None = None
+    repo_language: str | None = None
+    package_ecosystem: str | None = None
+    context_length_tokens: int | None = Field(default=None, ge=1)
+    tool_required: bool = False
+    web_required: bool = False
+    gui_required: bool = False
+    terminal_required: bool = False
+    stateful: bool = False
+    multi_turn: bool = False
+    evaluator_kind: str | None = None
+    evaluator_id: str | None = None
+    harness: str
+    attempt_budget: int | None = Field(default=None, ge=1)
+    timeout_s: float | None = Field(default=None, gt=0.0)
+    public_or_hidden_tests: str | None = None
+    license: str | None = None
+    source_url: str
+    source_snapshot_hash: str
+
+    @model_validator(mode="after")
+    def _fill_fingerprint(self) -> BenchmarkTask:
+        self.task_fingerprint = self.task_fingerprint or _task_fingerprint(
+            self.benchmark,
+            self.benchmark_version,
+            self.task_id,
+            self.harness,
+            self.evaluator_id,
+        )
+        return self
+
+
+class ModelAnswerArtifact(BaseModel):
+    """Pointer to a raw public model output, patch, trajectory, or log artifact."""
+
+    benchmark: str
+    benchmark_version: str
+    task_id: str
+    model_key: str
+    output_ref: str
+    output_type: str | None = None
+    trace_ref: str | None = None
+    source_url: str
+    source_snapshot_hash: str
+
+
+class TaskSlice(BaseModel):
+    """Named query metadata for a benchmark-task subset."""
+
+    slice_id: str
+    description: str = ""
+    area: str | None = None
+    subarea: str | None = None
+    difficulty: str | None = None
+    language: str | None = None
+    repo_language: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
 class TaskOutcome(BaseModel):
     """Per-task outcome for true same-task decorrelation analysis."""
 
     benchmark: str
     benchmark_version: str
     task_id: str
+    task_fingerprint: str | None = None
     task_area: str
     task_subarea: str | None = None
     model_key: str
+    base_model_key: str | None = None
+    provider: str | None = None
     passed_or_score: float = Field(ge=0.0, le=1.0)
+    agent_scaffold: str | None = None
+    prompt_template_id: str | None = None
+    attempt_budget: int | None = Field(default=None, ge=1)
+    temperature: float | None = None
+    reasoning_effort: str | None = None
+    tools_enabled: bool | None = None
+    error_type: str | None = None
+    cost_usd: float | None = Field(default=None, ge=0.0)
+    latency_s: float | None = Field(default=None, ge=0.0)
+    output_type: str | None = None
+    evaluator_id: str | None = None
     raw_output_ref: str | None = None
+    output_ref: str | None = None
+    trace_ref: str | None = None
     run_id_or_submission_id: str
     harness: str
     date_observed: str
+    run_date: str | None = None
+
+    @model_validator(mode="after")
+    def _fill_identity(self) -> TaskOutcome:
+        self.base_model_key = self.base_model_key or _base_model_key(self.model_key)
+        self.provider = self.provider or _provider_for_name(self.model_key)
+        self.task_fingerprint = self.task_fingerprint or _task_fingerprint(
+            self.benchmark,
+            self.benchmark_version,
+            self.task_id,
+            self.harness,
+            self.evaluator_id,
+        )
+        self.output_ref = self.output_ref or self.raw_output_ref
+        self.run_date = self.run_date or self.date_observed
+        return self
 
 
 class AreaMatrixCell(BaseModel):
@@ -428,6 +547,11 @@ class LiveFetchResult(BaseModel):
     sources: list[SourceFetchResult]
 
 
+class TaskCatalogFetchResult(BaseModel):
+    tasks: list[BenchmarkTask]
+    sources: list[SourceFetchResult]
+
+
 class ValidationIssue(BaseModel):
     severity: ValidationSeverity
     code: str
@@ -448,11 +572,23 @@ class DataQualityReport(BaseModel):
     issues: list[ValidationIssue] = Field(default_factory=list)
 
 
+class BenchmarkWarehouseReport(BaseModel):
+    task_count: int
+    outcome_count: int
+    model_answer_count: int = 0
+    tasks_by_area: dict[str, int] = Field(default_factory=dict)
+    outcomes_by_group: dict[str, int] = Field(default_factory=dict)
+    missing_task_metadata_outcomes: int = 0
+    mixed_group_issues: list[str] = Field(default_factory=list)
+
+
 class FetchError(RuntimeError):
     """A live public benchmark source could not be fetched or parsed."""
 
 
 SourceParser = Callable[[str, str, str, str, int | None], list[ModelAreaScore]]
+TaskParser = Callable[[str, str, str, str, int | None], list[BenchmarkTask]]
+OutcomeGroupKey = tuple[str, str, str, str | None, int | None, str | None, str, str | None]
 
 
 @dataclass(frozen=True)
@@ -464,9 +600,11 @@ class SourceSpec:
     parser: SourceParser
     areas: tuple[str, ...]
     description: str
+    task_parser: TaskParser | None = None
 
 
 SOURCE_PARSERS: dict[LiveSource, SourceParser] = {}
+SOURCE_TASK_PARSERS: dict[LiveSource, TaskParser] = {}
 SOURCE_DESCRIPTIONS: dict[LiveSource, str] = {
     "aider": "Aider polyglot coding-edit leaderboard.",
     "swe_bench": "SWE-bench leaderboard JSON for repository repair tasks.",
@@ -501,6 +639,10 @@ def register_source(spec: SourceSpec) -> None:
     SOURCE_AREAS[spec.source] = spec.areas
     SOURCE_DESCRIPTIONS[spec.source] = spec.description
     SOURCE_PARSERS[spec.source] = spec.parser
+    if spec.task_parser is not None:
+        SOURCE_TASK_PARSERS[spec.source] = spec.task_parser
+    else:
+        SOURCE_TASK_PARSERS.pop(spec.source, None)
     _refresh_live_sources()
 
 
@@ -512,6 +654,7 @@ def get_source_spec(source: LiveSource) -> SourceSpec:
             parser=SOURCE_PARSERS[source],
             areas=SOURCE_AREAS[source],
             description=SOURCE_DESCRIPTIONS.get(source, ""),
+            task_parser=SOURCE_TASK_PARSERS.get(source),
         )
     except KeyError as exc:
         known = ", ".join(LIVE_SOURCES)
@@ -589,12 +732,93 @@ def fetch_live_model_area_scores(
     return LiveFetchResult(scores=all_scores, sources=fetch_results)
 
 
+def fetch_live_benchmark_tasks(
+    sources: Sequence[LiveSource] = LIVE_SOURCES,
+    *,
+    timeout_s: float = 30.0,
+    limit_per_source: int | None = None,
+    strict: bool = False,
+) -> TaskCatalogFetchResult:
+    tasks: list[BenchmarkTask] = []
+    fetch_results: list[SourceFetchResult] = []
+    for source in sources:
+        retrieved_at = datetime.now(UTC).isoformat(timespec="seconds")
+        try:
+            spec = get_source_spec(source)
+            if spec.task_parser is None:
+                fetch_results.append(
+                    SourceFetchResult(
+                        source=source,
+                        url=spec.url,
+                        availability="unavailable",
+                        snapshot_hash="",
+                        retrieved_at=retrieved_at,
+                        record_count=0,
+                        error_reason="source does not expose task metadata parser",
+                    )
+                )
+                continue
+            raw = _fetch_url(spec.url, timeout_s=timeout_s)
+            snapshot_hash = hashlib.sha256(raw).hexdigest()
+            text = raw.decode("utf-8", errors="replace")
+            parsed_tasks = spec.task_parser(
+                text,
+                spec.url,
+                snapshot_hash,
+                retrieved_at,
+                limit_per_source,
+            )
+        except FetchError as exc:
+            if strict:
+                raise
+            fetch_results.append(
+                SourceFetchResult(
+                    source=source,
+                    url=SOURCE_URLS.get(source, ""),
+                    availability="failed",
+                    snapshot_hash="",
+                    retrieved_at=retrieved_at,
+                    record_count=0,
+                    error_reason=str(exc),
+                )
+            )
+            continue
+        tasks.extend(parsed_tasks)
+        fetch_results.append(
+            SourceFetchResult(
+                source=source,
+                url=spec.url,
+                availability="ran",
+                snapshot_hash=snapshot_hash,
+                retrieved_at=retrieved_at,
+                record_count=len(parsed_tasks),
+            )
+        )
+    return TaskCatalogFetchResult(tasks=tasks, sources=fetch_results)
+
+
 def load_model_area_scores(path: str | Path) -> list[ModelAreaScore]:
     return [ModelAreaScore.model_validate(row) for row in _load_records(path)]
 
 
+def load_benchmark_tasks(path: str | Path) -> list[BenchmarkTask]:
+    return [BenchmarkTask.model_validate(row) for row in _load_records(path)]
+
+
 def load_task_outcomes(path: str | Path) -> list[TaskOutcome]:
     return [TaskOutcome.model_validate(row) for row in _load_records(path)]
+
+
+def load_model_answer_artifacts(path: str | Path) -> list[ModelAnswerArtifact]:
+    return [ModelAnswerArtifact.model_validate(row) for row in _load_records(path)]
+
+
+def write_benchmark_tasks(path: str | Path, tasks: Iterable[BenchmarkTask]) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        for task in tasks:
+            handle.write(json.dumps(task.model_dump(mode="json"), sort_keys=True) + "\n")
 
 
 def write_task_outcomes(path: str | Path, outcomes: Iterable[TaskOutcome]) -> None:
@@ -603,6 +827,17 @@ def write_task_outcomes(path: str | Path, outcomes: Iterable[TaskOutcome]) -> No
     with output_path.open("w", encoding="utf-8") as handle:
         for outcome in outcomes:
             handle.write(json.dumps(outcome.model_dump(mode="json"), sort_keys=True) + "\n")
+
+
+def write_model_answer_artifacts(
+    path: str | Path,
+    artifacts: Iterable[ModelAnswerArtifact],
+) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        for artifact in artifacts:
+            handle.write(json.dumps(artifact.model_dump(mode="json"), sort_keys=True) + "\n")
 
 
 def write_model_area_scores(path: str | Path, scores: Iterable[ModelAreaScore]) -> None:
@@ -664,6 +899,7 @@ def build_task_outcome_panel_metrics(
             model_keys=list(model_keys or []),
             common_task_count=0,
         )
+    _assert_single_outcome_group(outcomes)
     target_models = sorted(set(model_keys or [outcome.model_key for outcome in outcomes]))
     by_task: dict[str, dict[str, float]] = {}
     for outcome in outcomes:
@@ -719,13 +955,51 @@ def build_task_outcome_reports(
     *,
     model_keys: Sequence[str] | None = None,
 ) -> list[TaskOutcomePanelMetrics]:
-    grouped: dict[tuple[str, str], list[TaskOutcome]] = {}
+    grouped: dict[OutcomeGroupKey, list[TaskOutcome]] = {}
     for outcome in outcomes:
-        grouped.setdefault((outcome.benchmark, outcome.benchmark_version), []).append(outcome)
+        grouped.setdefault(_outcome_group_key(outcome), []).append(outcome)
     return [
         build_task_outcome_panel_metrics(group_outcomes, model_keys=model_keys)
         for _, group_outcomes in sorted(grouped.items())
     ]
+
+
+def build_benchmark_warehouse_report(
+    tasks: Sequence[BenchmarkTask],
+    outcomes: Sequence[TaskOutcome] = (),
+    model_answers: Sequence[ModelAnswerArtifact] = (),
+) -> BenchmarkWarehouseReport:
+    task_keys = {
+        (task.benchmark, task.benchmark_version, task.task_id)
+        for task in tasks
+    }
+    tasks_by_area: dict[str, int] = {}
+    for task in tasks:
+        tasks_by_area[task.area] = tasks_by_area.get(task.area, 0) + 1
+    outcomes_by_group: dict[str, int] = {}
+    mixed_group_issues: list[str] = []
+    for outcome in outcomes:
+        group = _outcome_group_label(outcome)
+        outcomes_by_group[group] = outcomes_by_group.get(group, 0) + 1
+    for group, group_outcomes in _outcomes_by_group(outcomes).items():
+        try:
+            _assert_single_outcome_group(group_outcomes)
+        except ValueError as exc:
+            mixed_group_issues.append(f"{group}: {exc}")
+    missing_task_metadata = sum(
+        1
+        for outcome in outcomes
+        if (outcome.benchmark, outcome.benchmark_version, outcome.task_id) not in task_keys
+    )
+    return BenchmarkWarehouseReport(
+        task_count=len(tasks),
+        outcome_count=len(outcomes),
+        model_answer_count=len(model_answers),
+        tasks_by_area=dict(sorted(tasks_by_area.items())),
+        outcomes_by_group=dict(sorted(outcomes_by_group.items())),
+        missing_task_metadata_outcomes=missing_task_metadata,
+        mixed_group_issues=mixed_group_issues,
+    )
 
 
 def build_data_quality_report(
@@ -789,7 +1063,10 @@ def build_data_quality_report(
                 ),
                 max_issues,
             )
-        if score.data_level == "task_outcome" and not score.same_harness_comparable:
+        if (
+            score.data_level in ("same_run_task_outcome", "task_outcome")
+            and not score.same_harness_comparable
+        ):
             _add_issue(
                 issues,
                 ValidationIssue(
@@ -803,7 +1080,11 @@ def build_data_quality_report(
                 ),
                 max_issues,
             )
-        if score.n_tasks is None and score.data_level in ("task_outcome", "subtask"):
+        if score.n_tasks is None and score.data_level in (
+            "same_run_task_outcome",
+            "task_outcome",
+            "subtask_score",
+        ):
             _add_issue(
                 issues,
                 ValidationIssue(
@@ -1031,7 +1312,7 @@ def _parse_aider(
                 prompting_mode=fields.get("Command"),
                 source_url=source_url,
                 source_snapshot_hash=snapshot_hash,
-                data_level="aggregate",
+                data_level="aggregate_score",
                 scoring="deterministic_tests",
                 saturation_weight=_saturation_weight(pass_rate / 100.0),
                 same_harness_comparable=True,
@@ -1097,7 +1378,7 @@ def _parse_swe_bench(
                     prompting_mode="agent_system" if result.get("os_system") is not None else None,
                     source_url=source_url,
                     source_snapshot_hash=snapshot_hash,
-                    data_level="aggregate",
+                    data_level="aggregate_score",
                     scoring="deterministic_tests",
                     saturation_weight=_saturation_weight(resolved / 100.0),
                     same_harness_comparable=False,
@@ -1155,7 +1436,7 @@ def _parse_terminal_bench(
                 prompting_mode=f"agent={agent}" if agent else "agent_plus_model",
                 source_url=source_url,
                 source_snapshot_hash=snapshot_hash,
-                data_level="aggregate",
+                data_level="aggregate_score",
                 scoring="deterministic_tests",
                 saturation_weight=_saturation_weight(accuracy),
                 same_harness_comparable=False,
@@ -1248,7 +1529,7 @@ def _parse_livecodebench(
                 prompting_mode="single_attempt",
                 source_url=source_url,
                 source_snapshot_hash=snapshot_hash,
-                data_level="subtask",
+                data_level="subtask_score",
                 scoring="deterministic_tests",
                 saturation_weight=_saturation_weight(_average(scores)),
                 same_harness_comparable=True,
@@ -1275,7 +1556,7 @@ def _parse_livecodebench(
                     prompting_mode="single_attempt",
                     source_url=source_url,
                     source_snapshot_hash=snapshot_hash,
-                    data_level="subtask",
+                    data_level="subtask_score",
                     scoring="deterministic_tests",
                     saturation_weight=_saturation_weight(_average(diff_values)),
                     same_harness_comparable=True,
@@ -1383,7 +1664,7 @@ def _benchlm_score(
         prompting_mode="mixed_public_benchmarks",
         source_url=source_url,
         source_snapshot_hash=snapshot_hash,
-        data_level="aggregate",
+        data_level="aggregate_score",
         scoring="objective",
         freshness_weight=min(1.0, 0.35 + (confidence or 1.0) * 0.2),
         saturation_weight=_saturation_weight(normalized),
@@ -1439,7 +1720,7 @@ def _parse_open_llm_leaderboard(
                     prompting_mode="leaderboard_v2",
                     source_url=source_url,
                     source_snapshot_hash=snapshot_hash,
-                    data_level="aggregate",
+                    data_level="aggregate_score",
                     scoring="objective",
                     saturation_weight=_saturation_weight(score),
                     same_harness_comparable=True,
@@ -1507,7 +1788,7 @@ def _parse_uibenchkit(
                     prompting_mode=entry.get("method"),
                     source_url=source_url,
                     source_snapshot_hash=snapshot_hash,
-                    data_level="aggregate",
+                    data_level="aggregate_score",
                     scoring="objective",
                     saturation_weight=_saturation_weight(score),
                     same_harness_comparable=True,
@@ -1576,7 +1857,7 @@ def _parse_livebench(
                 prompting_mode="leaderboard",
                 source_url=source_url,
                 source_snapshot_hash=snapshot_hash,
-                data_level="subtask",
+                data_level="subtask_score",
                 scoring="objective",
                 same_harness_comparable=True,
             )
@@ -1733,10 +2014,116 @@ def _artificial_analysis_score(
         prompting_mode="public_api",
         source_url=source_url,
         source_snapshot_hash=snapshot_hash,
-        data_level="aggregate",
+        data_level="aggregate_score",
         scoring="objective",
         same_harness_comparable=False,
     )
+
+
+def _parse_livebench_tasks(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[BenchmarkTask]:
+    del retrieved_at
+    parsed = json.loads(text)
+    raw_rows = parsed.get("rows")
+    if not isinstance(raw_rows, list):
+        raise FetchError("LiveBench dataset rows response lacked rows")
+    tasks: dict[str, BenchmarkTask] = {}
+    for wrapped in raw_rows[:limit]:
+        if not isinstance(wrapped, Mapping):
+            continue
+        row = wrapped.get("row")
+        if not isinstance(row, Mapping):
+            continue
+        question_id = _as_str(row.get("question_id"))
+        category = _as_str(row.get("category"))
+        task = _as_str(row.get("task"))
+        if question_id is None or category is None:
+            continue
+        area = LIVEBENCH_CATEGORY_AREAS.get(category, category)
+        tasks.setdefault(
+            question_id,
+            BenchmarkTask(
+                benchmark="livebench",
+                benchmark_version="leaderboard",
+                task_id=question_id,
+                split="leaderboard",
+                area=area,
+                subarea=task,
+                domain=category,
+                tags=[tag for tag in (category, task) if tag],
+                input_modality="text",
+                output_modality="text",
+                output_type="short_answer",
+                evaluator_kind="objective",
+                evaluator_id=f"livebench:{task or category}",
+                harness="LiveBench",
+                public_or_hidden_tests="public",
+                license=None,
+                source_url=source_url,
+                source_snapshot_hash=snapshot_hash,
+            ),
+        )
+    return list(tasks.values())
+
+
+def _parse_livecodebench_tasks(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+    *,
+    benchmark_version: str,
+    area: str,
+    output_type: str,
+) -> list[BenchmarkTask]:
+    del retrieved_at
+    parsed = json.loads(text)
+    performances = parsed.get("performances")
+    if not isinstance(performances, list):
+        raise FetchError("LiveCodeBench JSON lacked performances")
+    tasks: dict[str, BenchmarkTask] = {}
+    for row in performances[:limit]:
+        if not isinstance(row, Mapping):
+            continue
+        question_id = row.get("question_id")
+        if question_id is None:
+            continue
+        task_id = str(question_id)
+        difficulty = _as_str(row.get("difficulty"))
+        platform = _as_str(row.get("platform"))
+        tasks.setdefault(
+            task_id,
+            BenchmarkTask(
+                benchmark="livecodebench",
+                benchmark_version=benchmark_version,
+                task_id=task_id,
+                split="leaderboard",
+                area=area,
+                subarea=platform,
+                domain=platform,
+                source_date=_timestamp_ms_to_date(row.get("date")),
+                difficulty=difficulty,
+                tags=[tag for tag in (platform, difficulty) if tag],
+                input_modality="text",
+                output_modality="code",
+                output_type=output_type,
+                language="python",
+                tool_required=False,
+                evaluator_kind="deterministic_tests",
+                evaluator_id=f"livecodebench:{benchmark_version}",
+                harness=f"LiveCodeBench {benchmark_version}",
+                public_or_hidden_tests="hidden",
+                source_url=source_url,
+                source_snapshot_hash=snapshot_hash,
+            ),
+        )
+    return list(tasks.values())
 
 
 def _load_records(path: str | Path) -> list[Mapping[str, Any]]:
@@ -1821,7 +2208,7 @@ def _build_cell(
     records = [record for record, _, _ in weighted_records]
     task_counts = [record.n_tasks for record in records if record.n_tasks is not None]
     warnings = []
-    if all(record.data_level in ("aggregate", "subtask") for record in records):
+    if all(record.data_level in ("aggregate_score", "subtask_score") for record in records):
         warnings.append("aggregate proxy; not same-task decorrelation evidence")
     if len({record.source_snapshot_hash for record in records}) == 1:
         warnings.append("single-source cell; corroborate before making claims")
@@ -1850,11 +2237,11 @@ def _build_cell(
 
 def _decorrelation_evidence(records: Sequence[ModelAreaScore]) -> DecorrelationEvidenceLevel:
     levels = {record.data_level for record in records}
-    if "task_outcome" in levels:
+    if "same_run_task_outcome" in levels or "task_outcome" in levels:
         return "task_vector"
     if "model_answer" in levels:
         return "model_answer_replayable"
-    if levels & {"aggregate", "subtask"}:
+    if levels & {"aggregate_score", "subtask_score"}:
         return "aggregate_proxy"
     return "none"
 
@@ -1883,6 +2270,63 @@ def _failure_correlations(
                 )
             )
     return rows
+
+
+def _task_fingerprint(
+    benchmark: str,
+    benchmark_version: str,
+    task_id: str,
+    harness: str,
+    evaluator_id: str | None,
+) -> str:
+    payload = json.dumps(
+        {
+            "benchmark": benchmark,
+            "benchmark_version": benchmark_version,
+            "task_id": task_id,
+            "harness": harness,
+            "evaluator_id": evaluator_id,
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _outcome_group_key(
+    outcome: TaskOutcome,
+) -> OutcomeGroupKey:
+    return (
+        outcome.benchmark,
+        outcome.benchmark_version,
+        outcome.harness,
+        outcome.evaluator_id,
+        outcome.attempt_budget,
+        outcome.output_type,
+        outcome.task_area,
+        outcome.task_subarea,
+    )
+
+
+def _outcome_group_label(outcome: TaskOutcome) -> str:
+    return "|".join(str(value) for value in _outcome_group_key(outcome))
+
+
+def _outcomes_by_group(
+    outcomes: Sequence[TaskOutcome],
+) -> dict[str, list[TaskOutcome]]:
+    grouped: dict[str, list[TaskOutcome]] = {}
+    for outcome in outcomes:
+        grouped.setdefault(_outcome_group_label(outcome), []).append(outcome)
+    return grouped
+
+
+def _assert_single_outcome_group(outcomes: Sequence[TaskOutcome]) -> None:
+    groups = {_outcome_group_key(outcome) for outcome in outcomes}
+    if len(groups) > 1:
+        raise ValueError(
+            "task outcomes must share benchmark/version/harness/evaluator/"
+            "attempt_budget/output_type/task area before correlation"
+        )
 
 
 def _pearson(left_values: Sequence[float], right_values: Sequence[float]) -> float | None:
@@ -2158,6 +2602,13 @@ def _normalize_fraction(value: float) -> float:
     return value / 100.0 if value > 1.0 else value
 
 
+def _timestamp_ms_to_date(value: object) -> str | None:
+    number = _as_float(value)
+    if number is None:
+        return None
+    return datetime.fromtimestamp(number / 1000.0, tz=UTC).date().isoformat()
+
+
 def _as_int(value: object) -> int | None:
     number = _as_float(value)
     return int(number) if number is not None else None
@@ -2220,6 +2671,13 @@ def _register_builtin_sources() -> None:
         "livebench": _parse_livebench,
         "artificial_analysis": _parse_artificial_analysis,
     }
+    task_parsers: dict[LiveSource, TaskParser] = {
+        "livebench": _parse_livebench_tasks,
+        "livecodebench_generation": _parse_livecodebench_generation_tasks,
+        "livecodebench_execution": _parse_livecodebench_execution_tasks,
+        "livecodebench_repair": _parse_livecodebench_repair_tasks,
+        "livecodebench_testgen": _parse_livecodebench_testgen_tasks,
+    }
     for source, parser in parsers.items():
         register_source(
             SourceSpec(
@@ -2228,6 +2686,7 @@ def _register_builtin_sources() -> None:
                 parser=parser,
                 areas=SOURCE_AREAS[source],
                 description=SOURCE_DESCRIPTIONS[source],
+                task_parser=task_parsers.get(source),
             )
         )
 
@@ -2252,6 +2711,25 @@ def _parse_livecodebench_generation(
     )
 
 
+def _parse_livecodebench_generation_tasks(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[BenchmarkTask]:
+    return _parse_livecodebench_tasks(
+        text,
+        source_url,
+        snapshot_hash,
+        retrieved_at,
+        limit,
+        benchmark_version="generation-live",
+        area="competitive_programming",
+        output_type="code_generation",
+    )
+
+
 def _parse_livecodebench_execution(
     text: str,
     source_url: str,
@@ -2270,6 +2748,25 @@ def _parse_livecodebench_execution(
         default_subarea="pass_at_1_cot",
         metric_key="Pass@1-COT",
         fallback_metric_key="Pass@1",
+    )
+
+
+def _parse_livecodebench_execution_tasks(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[BenchmarkTask]:
+    return _parse_livecodebench_tasks(
+        text,
+        source_url,
+        snapshot_hash,
+        retrieved_at,
+        limit,
+        benchmark_version="execution-live",
+        area="code_execution",
+        output_type="code_execution",
     )
 
 
@@ -2293,6 +2790,25 @@ def _parse_livecodebench_repair(
     )
 
 
+def _parse_livecodebench_repair_tasks(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[BenchmarkTask]:
+    return _parse_livecodebench_tasks(
+        text,
+        source_url,
+        snapshot_hash,
+        retrieved_at,
+        limit,
+        benchmark_version="repair-live",
+        area="code_repair",
+        output_type="code_repair",
+    )
+
+
 def _parse_livecodebench_testgen(
     text: str,
     source_url: str,
@@ -2310,6 +2826,25 @@ def _parse_livecodebench_testgen(
         area="test_generation",
         default_subarea="pass_at_1",
         metric_key="pass@1",
+    )
+
+
+def _parse_livecodebench_testgen_tasks(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[BenchmarkTask]:
+    return _parse_livecodebench_tasks(
+        text,
+        source_url,
+        snapshot_hash,
+        retrieved_at,
+        limit,
+        benchmark_version="testgen-live",
+        area="test_generation",
+        output_type="test_generation",
     )
 
 

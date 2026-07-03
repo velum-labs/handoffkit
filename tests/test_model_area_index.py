@@ -8,15 +8,18 @@ from model_area_index import (
     ModelAreaScore,
     SourceSpec,
     TaskOutcome,
+    build_benchmark_warehouse_report,
     build_data_quality_report,
     build_model_area_matrix,
     build_task_outcome_panel_metrics,
+    fetch_live_benchmark_tasks,
     fetch_live_model_area_scores,
     format_model_area_matrix_markdown,
     get_source_spec,
     get_source_specs,
     recommend_panel,
     register_source,
+    write_benchmark_tasks,
     write_model_area_scores,
     write_task_outcomes,
 )
@@ -150,6 +153,51 @@ def test_task_outcome_metrics_compute_oracle_and_failure_correlation() -> None:
         if {row.left_model_key, row.right_model_key} == {"gpt", "opus"}
     )
     assert gpt_opus.correlation == pytest.approx(-0.5)
+
+
+def test_task_outcome_metrics_reject_mixed_harness_groups() -> None:
+    outcomes = [
+        _outcome("t1", "gpt", 1.0).model_copy(update={"harness": "h1"}),
+        _outcome("t1", "opus", 0.0).model_copy(update={"harness": "h2"}),
+    ]
+
+    with pytest.raises(ValueError, match="must share benchmark/version/harness"):
+        build_task_outcome_panel_metrics(outcomes)
+
+
+def test_fetch_live_benchmark_tasks_and_warehouse_report(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    payloads = {
+        "performances_generation": _LCB_GENERATION_JSON,
+        "livebench": _LIVEBENCH_JSON,
+    }
+
+    def fake_fetch(url: str, *, timeout_s: float) -> bytes:
+        del timeout_s
+        for token, payload in payloads.items():
+            if token in url:
+                return payload.encode()
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr("model_area_index.core._fetch_url", fake_fetch)
+
+    fetched = fetch_live_benchmark_tasks(
+        sources=("livecodebench_generation", "livebench"),
+        limit_per_source=10,
+        strict=True,
+    )
+    task_path = tmp_path / "tasks.jsonl"
+    write_benchmark_tasks(task_path, fetched.tasks)
+
+    assert fetched.sources[0].availability == "ran"
+    assert any(task.benchmark == "livecodebench" for task in fetched.tasks)
+    assert any(task.benchmark == "livebench" for task in fetched.tasks)
+    assert all(task.task_fingerprint for task in fetched.tasks)
+    report = build_benchmark_warehouse_report(fetched.tasks, [_outcome("missing", "gpt", 1.0)])
+    assert report.task_count == len(fetched.tasks)
+    assert report.missing_task_metadata_outcomes == 1
 
 
 def test_recommender_prefers_provider_diversity_for_coding_agent_profile() -> None:
@@ -352,7 +400,7 @@ def test_source_registry_is_discoverable_and_extensible(
                 date_observed=retrieved_at,
                 source_url=source_url,
                 source_snapshot_hash=snapshot_hash,
-                data_level="aggregate",
+                data_level="aggregate_score",
                 scoring="objective",
             )
         ]
@@ -442,7 +490,7 @@ def _score(
         harness="official",
         source_url="https://example.com",
         source_snapshot_hash="test",
-        data_level="aggregate",
+        data_level="aggregate_score",
         scoring="objective",
         same_harness_comparable=True,
     )

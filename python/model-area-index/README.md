@@ -1,9 +1,9 @@
 # model-area-index
 
 Standalone, no-run model capability indexing for panel selection and routing
-priors. The package fetches public benchmark artifacts, normalizes them into
-`ModelAreaScore` rows, builds model-by-area matrices, and keeps aggregate
-capability evidence separate from same-task outcome evidence.
+priors. The package treats public benchmarks as a small metadata warehouse:
+task catalog first, task outcomes second, and model-area summaries as derived
+rollups only.
 
 ## Core concepts
 
@@ -14,6 +14,9 @@ capability evidence separate from same-task outcome evidence.
   `is_open_weight`.
 - `TaskOutcome`: per-task same-harness outcome rows, used only when true
   oracle/headroom or failure-correlation metrics are justified.
+- `BenchmarkTask`: task catalog metadata used for slicing and planning.
+- `ModelAnswerArtifact`: pointer to raw completions, patches, traces, or logs.
+- `TaskSlice`: named metadata query for a task subset.
 - `ModelAreaMatrix`: rows are models, columns are areas, cells include raw
   score, normalized score, confidence, source count, evidence level, and
   warnings.
@@ -60,7 +63,7 @@ def parse_my_source(text, source_url, snapshot_hash, retrieved_at, limit):
             date_observed=retrieved_at,
             source_url=source_url,
             source_snapshot_hash=snapshot_hash,
-            data_level="aggregate",
+            data_level="aggregate_score",
             scoring="objective",
         )
     ]
@@ -86,9 +89,19 @@ source failure.
 
 ## Evidence boundaries
 
-Aggregate rows are useful for shortlisting and routing priors. They are not
-proof of uncorrelated errors. Use `TaskOutcome` rows with shared task ids and
-shared scoring rules when computing oracle headroom or failure correlations.
+Evidence levels are explicit:
+
+- `aggregate_score`: published benchmark/sub-benchmark score.
+- `subtask_score`: score for a difficulty/language/domain slice.
+- `task_metadata_only`: task exists, but no public model outcome.
+- `model_answer`: public output exists and may be re-graded.
+- `task_outcome`: exact model-task-harness score.
+- `same_run_task_outcome`: your own paired same-run result.
+
+Aggregate and subtask rows are useful for shortlisting and routing priors. They
+are not proof of uncorrelated errors. Use `TaskOutcome` rows with shared task
+ids and shared scoring rules when computing oracle headroom or failure
+correlations.
 
 ## Identity boundaries
 
@@ -125,6 +138,13 @@ aggregate/subtask score for the matrix. Real same-task evidence belongs in
 `TaskOutcome` rows. The CLI accepts `--task-outcome-snapshot <jsonl>` and emits
 separate `task_outcome_metrics` with oracle score, oracle headroom, unique-win
 rates, and pairwise failure correlations.
+
+The grouping rule is strict: correlation metrics require shared benchmark,
+version, harness, evaluator, attempt budget, output type, area, and subarea.
+
+Use `--write-task-catalog` to fetch public `BenchmarkTask` metadata from sources
+that expose task ids. Use `--task-catalog-snapshot` with `--task-outcome-snapshot`
+to emit a `benchmark_warehouse_report`.
 
 Panel recommendations use those `TaskOutcomePanelMetrics` when supplied. Without
 task outcomes, the recommender applies only an aggregate capability-vector
