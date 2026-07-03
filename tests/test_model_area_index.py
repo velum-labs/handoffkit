@@ -23,7 +23,10 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
         "aider.chat": _AIDER_HTML,
         "swe-bench": _SWE_JSON,
         "tbench.ai": _TERMINAL_HTML,
-        "LiveCodeBench": _LCB_JSON,
+        "performances_generation": _LCB_GENERATION_JSON,
+        "performances_execution": _LCB_EXECUTION_JSON,
+        "performances_repair": _LCB_REPAIR_JSON,
+        "performances_testgen": _LCB_TESTGEN_JSON,
     }
 
     def fake_fetch(url: str, *, timeout_s: float) -> bytes:
@@ -38,12 +41,15 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     fetched = fetch_live_model_area_scores()
     matrix = build_model_area_matrix(fetched.scores)
 
-    assert len(fetched.sources) == 4
+    assert len(fetched.sources) == 7
     assert {source.record_count for source in fetched.sources}
     assert "coding_edit" in matrix.areas
     assert "swe_repair" in matrix.areas
     assert "terminal_agentic" in matrix.areas
     assert "competitive_programming" in matrix.areas
+    assert "code_execution" in matrix.areas
+    assert "code_repair" in matrix.areas
+    assert "test_generation" in matrix.areas
     assert matrix.rows["gpt-5-high"].cells["coding_edit"].raw_score == pytest.approx(0.88)
     assert matrix.rows["claude-opus"].cells["swe_repair"].raw_score == pytest.approx(0.8)
     assert matrix.rows["gpt-5-5"].cells["terminal_agentic"].raw_score == pytest.approx(0.83)
@@ -53,6 +59,9 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     assert deepseek_cell.raw_score is not None
     assert gpt_cell.raw_score is not None
     assert deepseek_cell.raw_score > gpt_cell.raw_score
+    assert matrix.rows["claude-2"].cells["code_execution"].raw_score == pytest.approx(0.7)
+    assert matrix.rows["qwen2-ins-72b"].cells["code_repair"].raw_score == pytest.approx(0.8)
+    assert matrix.rows["dscoder-33b-ins"].cells["test_generation"].raw_score == pytest.approx(0.3)
 
 
 def test_benchmark_local_normalization_does_not_mix_areas() -> None:
@@ -234,13 +243,53 @@ _TERMINAL_HTML = (
     r'\"modelNames\":[\"gpt-5.5\"],\"modelProviders\":[\"openai\"]}]'
 )
 
-_LCB_JSON = json.dumps(
+_LCB_GENERATION_JSON = json.dumps(
     {
         "performances": [
             {"question_id": "a", "model": "DeepSeek-V3", "difficulty": "easy", "pass@1": 100},
             {"question_id": "b", "model": "DeepSeek-V3", "difficulty": "hard", "pass@1": 50},
             {"question_id": "a", "model": "GPT-5", "difficulty": "easy", "pass@1": 50},
             {"question_id": "b", "model": "GPT-5", "difficulty": "hard", "pass@1": 50},
+        ]
+    }
+)
+
+_LCB_EXECUTION_JSON = json.dumps(
+    {
+        "performances": [
+            {
+                "model": "Claude-2",
+                "sample_id": "sample_0",
+                "question_id": 2777,
+                "Pass@1": 0.0,
+                "Pass@1-COT": 70.0,
+            }
+        ]
+    }
+)
+
+_LCB_REPAIR_JSON = json.dumps(
+    {
+        "performances": [
+            {
+                "question_id": "1873_A",
+                "model": "Qwen2-Ins-72B",
+                "difficulty": "easy",
+                "pass@1": 80.0,
+            }
+        ]
+    }
+)
+
+_LCB_TESTGEN_JSON = json.dumps(
+    {
+        "performances": [
+            {
+                "question_id": "2727",
+                "model": "DSCoder-33b-Ins",
+                "difficulty": "easy",
+                "pass@1": 30.0,
+            }
         ]
     }
 )

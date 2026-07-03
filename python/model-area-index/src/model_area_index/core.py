@@ -32,13 +32,24 @@ PanelProfile = Literal[
     "local-mlx",
     "mixed-frontier-open",
 ]
-LiveSource = Literal["aider", "swe_bench", "terminal_bench", "livecodebench"]
+LiveSource = Literal[
+    "aider",
+    "swe_bench",
+    "terminal_bench",
+    "livecodebench_generation",
+    "livecodebench_execution",
+    "livecodebench_repair",
+    "livecodebench_testgen",
+]
 
 LIVE_SOURCES: tuple[LiveSource, ...] = (
     "aider",
     "swe_bench",
     "terminal_bench",
-    "livecodebench",
+    "livecodebench_generation",
+    "livecodebench_execution",
+    "livecodebench_repair",
+    "livecodebench_testgen",
 )
 SOURCE_URLS: dict[LiveSource, str] = {
     "aider": "https://aider.chat/docs/leaderboards/",
@@ -47,9 +58,21 @@ SOURCE_URLS: dict[LiveSource, str] = {
         "master/data/leaderboards.json"
     ),
     "terminal_bench": "https://www.tbench.ai/leaderboard/terminal-bench/2.1",
-    "livecodebench": (
+    "livecodebench_generation": (
         "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/"
         "main/src/mocks/performances_generation.json"
+    ),
+    "livecodebench_execution": (
+        "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/"
+        "main/src/mocks/performances_execution.json"
+    ),
+    "livecodebench_repair": (
+        "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/"
+        "main/src/mocks/performances_repair.json"
+    ),
+    "livecodebench_testgen": (
+        "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/"
+        "main/src/mocks/performances_testgen.json"
     ),
 }
 USER_AGENT = "model-area-index/0.1 (+https://github.com/velum-labs/handoffkit)"
@@ -502,8 +525,55 @@ def _parse_source(
             return _parse_swe_bench(text, url, snapshot_hash, retrieved_at, limit)
         case "terminal_bench":
             return _parse_terminal_bench(text, url, snapshot_hash, retrieved_at, limit)
-        case "livecodebench":
-            return _parse_livecodebench(text, url, snapshot_hash, retrieved_at, limit)
+        case "livecodebench_generation":
+            return _parse_livecodebench(
+                text,
+                url,
+                snapshot_hash,
+                retrieved_at,
+                limit,
+                benchmark_version="generation-live",
+                area="competitive_programming",
+                default_subarea="pass_at_1",
+                metric_key="pass@1",
+            )
+        case "livecodebench_execution":
+            return _parse_livecodebench(
+                text,
+                url,
+                snapshot_hash,
+                retrieved_at,
+                limit,
+                benchmark_version="execution-live",
+                area="code_execution",
+                default_subarea="pass_at_1_cot",
+                metric_key="Pass@1-COT",
+                fallback_metric_key="Pass@1",
+            )
+        case "livecodebench_repair":
+            return _parse_livecodebench(
+                text,
+                url,
+                snapshot_hash,
+                retrieved_at,
+                limit,
+                benchmark_version="repair-live",
+                area="code_repair",
+                default_subarea="pass_at_1",
+                metric_key="pass@1",
+            )
+        case "livecodebench_testgen":
+            return _parse_livecodebench(
+                text,
+                url,
+                snapshot_hash,
+                retrieved_at,
+                limit,
+                benchmark_version="testgen-live",
+                area="test_generation",
+                default_subarea="pass_at_1",
+                metric_key="pass@1",
+            )
 
 
 def _parse_aider(
@@ -709,6 +779,12 @@ def _parse_livecodebench(
     snapshot_hash: str,
     retrieved_at: str,
     limit: int | None,
+    *,
+    benchmark_version: str,
+    area: str,
+    default_subarea: str,
+    metric_key: str,
+    fallback_metric_key: str | None = None,
 ) -> list[ModelAreaScore]:
     parsed = json.loads(text)
     performances = parsed.get("performances")
@@ -720,7 +796,9 @@ def _parse_livecodebench(
         if not isinstance(row, Mapping):
             continue
         model = _as_str(row.get("model"))
-        score = _as_float(row.get("pass@1"))
+        score = _as_float(row.get(metric_key))
+        if score is None and fallback_metric_key is not None:
+            score = _as_float(row.get(fallback_metric_key))
         if model is None or score is None:
             continue
         normalized = score / 100.0 if score > 1.0 else score
@@ -738,13 +816,13 @@ def _parse_livecodebench(
                 model_family=_family_for_name(model),
                 model_version_or_alias=model,
                 benchmark="livecodebench",
-                benchmark_version="generation-live",
-                area="competitive_programming",
-                subarea="pass_at_1",
+                benchmark_version=benchmark_version,
+                area=area,
+                subarea=default_subarea,
                 score_raw=_average(scores),
                 n_tasks=len(scores),
                 date_observed=retrieved_at,
-                harness="LiveCodeBench generation raw performances",
+                harness=f"LiveCodeBench {benchmark_version} raw performances",
                 prompting_mode="single_attempt",
                 source_url=source_url,
                 source_snapshot_hash=snapshot_hash,
@@ -765,13 +843,13 @@ def _parse_livecodebench(
                     model_family=_family_for_name(model),
                     model_version_or_alias=model,
                     benchmark="livecodebench",
-                    benchmark_version="generation-live",
-                    area="competitive_programming",
+                    benchmark_version=benchmark_version,
+                    area=area,
                     subarea=f"{difficulty}_pass_at_1",
                     score_raw=_average(diff_values),
                     n_tasks=len(diff_values),
                     date_observed=retrieved_at,
-                    harness="LiveCodeBench generation raw performances",
+                    harness=f"LiveCodeBench {benchmark_version} raw performances",
                     prompting_mode="single_attempt",
                     source_url=source_url,
                     source_snapshot_hash=snapshot_hash,

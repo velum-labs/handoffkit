@@ -1,5 +1,5 @@
 {
-  "generated_from_records": 542,
+  "generated_from_records": 795,
   "models": [
     "abanteai-mentatbot-gpt-4o-2024-05-13",
     "acoder",
@@ -42,12 +42,16 @@
     "bytedance-marscode-agent-gpt-4o-2024-05-13",
     "chatgpt-4o-latest-2025-02-15",
     "chatgpt-4o-latest-2025-03-29",
+    "claude-2",
     "claude-3-5-haiku-20241022",
+    "claude-3-5-sonnet-20240620",
     "claude-3-5-sonnet-20241022",
     "claude-3-7-sonnet-20250219",
     "claude-3-7-sonnet-20250219-32k-thinking-tokens",
     "claude-3-7-sonnet-20250219-no-thinking",
     "claude-3-haiku",
+    "claude-3-opus",
+    "claude-3-sonnet",
     "claude-4-5-haiku",
     "claude-4-5-haiku-high-reasoning",
     "claude-4-5-opus",
@@ -60,6 +64,7 @@
     "claude-4-opus-20250514",
     "claude-4-sonnet-20250514",
     "claude-fable-5",
+    "claude-instant-1",
     "claude-opus-4",
     "claude-opus-4-20250514-32k-thinking",
     "claude-opus-4-20250514-no-think",
@@ -71,16 +76,24 @@
     "claude-sonnet-4-20250514-32k-thinking",
     "claude-sonnet-4-20250514-no-thinking",
     "claude-sonnet-4-thinking",
+    "cllama-13b-ins",
+    "cllama-34b-ins",
+    "cllama-7b-ins",
     "codart-ai",
     "codefuse-aais",
     "codefuse-cgm",
     "codefuse-pycfuse-svr",
+    "codellama-13b-ins",
+    "codellama-34b-ins",
+    "codellama-70b-ins",
+    "codellama-7b-ins",
     "coder-gpt-4-1106",
     "codeshellagent-gemini-2-0-flash-experimental",
     "codeshelltester-gpt-4o-2024-05-13",
     "codestory-aide-mixed-models",
     "codestory-midwit-agent-swe-search",
     "codestral-25-01",
+    "codestral-latest",
     "codesweep-swe-agent-kimi-k2-instruct",
     "codev",
     "command-a-03-2025-quality",
@@ -105,6 +118,16 @@
     "devlo",
     "devstral-2512",
     "devstral-small-2512",
+    "dracarys-72b-instruct",
+    "dracarys-llama-3-1-70b-instruct",
+    "dracarys2-72b-instruct",
+    "dracarys2-llama-3-1-70b-instruct",
+    "dscoder-1-3b-base",
+    "dscoder-1-3b-ins",
+    "dscoder-33b-base",
+    "dscoder-33b-ins",
+    "dscoder-6-7b-base",
+    "dscoder-6-7b-ins",
     "emergent-e1-v2024-10-12",
     "emergent-e1-v2024-12-23",
     "engine-labs-2024-11-25",
@@ -141,6 +164,12 @@
     "gemini-3-pro-preview",
     "gemini-3-pro-preview-2025-11-18",
     "gemini-exp-1206",
+    "gemini-flash-1-5-002",
+    "gemini-flash-1-5-may",
+    "gemini-pro",
+    "gemini-pro-1-5-002",
+    "gemini-pro-1-5-april-n-1",
+    "gemini-pro-1-5-may",
     "gemma-3-27b-it",
     "glm-4-5",
     "glm-4-5-2025-08-22",
@@ -151,13 +180,18 @@
     "glm-5-high-reasoning",
     "globant-code-fixer-agent",
     "google-jules-gemini-2-0-flash-v20241212-experimental",
+    "gpt-3-5-turbo-0125",
+    "gpt-3-5-turbo-0301",
+    "gpt-4-0613",
     "gpt-4-1",
     "gpt-4-1-2025-04-14",
     "gpt-4-1-mini",
     "gpt-4-1-mini-2025-04-14",
     "gpt-4-1-nano",
     "gpt-4-5-preview",
+    "gpt-4-turbo-1106",
     "gpt-4-turbo-2024-04-09",
+    "gpt-4o-2024-05-13",
     "gpt-4o-2024-08-06",
     "gpt-4o-2024-11-20",
     "gpt-4o-mini-2024-07-18",
@@ -220,6 +254,13 @@
     "llama-4-maverick",
     "llama-4-maverick-instruct",
     "llama-4-scout-instruct",
+    "llama3-1-405b-ins-fp8",
+    "llama3-1-70b-ins",
+    "llama3-1-8b-ins",
+    "llama3-70b-ins",
+    "llama3-8b-ins",
+    "magicoders-cl-7b",
+    "magicoders-ds-6-7b",
     "masai-gpt-4o-2024-05-13",
     "masai-gpt-4o-2024-06-12",
     "mcts-refine-7b",
@@ -273,6 +314,9 @@
     "minimax-2-5",
     "minimax-m2",
     "minimax-m2-5-high-reasoning",
+    "mistral-large",
+    "mixtral-8x22b-ins",
+    "mixtral-8x7b-ins",
     "moatless-tools-claude-3-5-sonnet",
     "moatless-tools-claude-3-5-sonnet-20241022",
     "moatless-tools-claude-4-sonnet",
@@ -286,6 +330,8 @@
     "nfactorial-2024-11-05",
     "o1-2024-12-17-high",
     "o1-mini-2024-09-12",
+    "o1-mini-2024-09-12-n-1",
+    "o1-preview-2024-09-12-n-1",
     "o3",
     "o3-2025-04-16",
     "o3-high",
@@ -300,6 +346,9 @@
     "o4-mini-high",
     "o4-mini-low",
     "o4-mini-medium",
+    "oc-ds-1-3b",
+    "oc-ds-33b",
+    "oc-ds-6-7b",
     "opencsg-starship-agentic-coder-gpt-4-0806",
     "opencsg-starship-codegenagent-gpt-4-0613",
     "openhands",
@@ -321,12 +370,15 @@
     "patchkitty-0-9-claude-3-5-sonnet-20241022",
     "patchpilot-co-patcher",
     "patchpilot-v1-1",
+    "phind-34b-v2",
     "prometheus-v1-2-1-gpt-5",
     "prometheus-v1-2-gpt-5",
     "qodo-command",
     "quasar-alpha",
     "qwen-max-2025-01-25",
     "qwen2-5-coder-32b-instruct",
+    "qwen2-5-ins-32b",
+    "qwen2-ins-72b",
     "qwen3-235b-a22b",
     "qwen3-235b-a22b-diff-no-think-alibaba-api",
     "qwen3-32b",
@@ -354,6 +406,7 @@
     "solver-2024-10-28",
     "sonar-foundation-agent-claude-4-5-opus",
     "sonar-foundation-agent-claude-4-5-sonnet",
+    "starcoder",
     "supercoder2-0",
     "swe-agent-1-0-claude-3-7-sonnet",
     "swe-agent-claude-3-5-sonnet",
@@ -387,16 +440,20 @@
     "ugaiforge",
     "w-b-programmer-o1-crosscheck5",
     "warp",
+    "wcoder-34b-v1",
     "yi-lightning",
     "zencoder-2025-03-10",
     "zencoder-2025-04-01",
     "zencoder-2025-04-30"
   ],
   "areas": [
+    "code_execution",
+    "code_repair",
     "coding_edit",
     "competitive_programming",
     "swe_repair",
-    "terminal_agentic"
+    "terminal_agentic",
+    "test_generation"
   ],
   "rows": {
     "abanteai-mentatbot-gpt-4o-2024-05-13": {
@@ -1506,6 +1563,49 @@
         }
       }
     },
+    "claude-2": {
+      "model_key": "claude-2",
+      "provider": "anthropic",
+      "model_family": "claude",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.48475991649269307,
+          "normalized_score": 0.7729407928898334,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.3308835531437227,
+          "normalized_score": 0.3764880954334364,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "claude-3-5-haiku-20241022": {
       "model_key": "claude-3-5-haiku-20241022",
       "provider": "anthropic",
@@ -1533,11 +1633,54 @@
         }
       }
     },
+    "claude-3-5-sonnet-20240620": {
+      "model_key": "claude-3-5-sonnet-20240620",
+      "provider": "anthropic",
+      "model_family": "claude",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.4661585055886681,
+          "normalized_score": 0.5997590819774857,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "claude-3-5-sonnet-20241022": {
       "model_key": "claude-3-5-sonnet-20241022",
       "provider": "anthropic",
       "model_family": "claude",
       "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.49608348328533913,
+          "normalized_score": 0.6678343951504685,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
         "coding_edit": {
           "area": "coding_edit",
           "raw_score": 0.516,
@@ -1664,6 +1807,42 @@
       "provider": "anthropic",
       "model_family": "claude",
       "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.34008350730688935,
+          "normalized_score": 0.697624711692891,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.257913759320954,
+          "normalized_score": 0.10974363313970256,
+          "confidence": 0.9974873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
         "competitive_programming": {
           "area": "competitive_programming",
           "raw_score": 0.23620063373052103,
@@ -1671,6 +1850,110 @@
           "confidence": 1.0,
           "source_count": 4,
           "n_tasks": 2110,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.3381469038080298,
+          "normalized_score": 0.37990066295862673,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "claude-3-opus": {
+      "model_key": "claude-3-opus",
+      "provider": "anthropic",
+      "model_family": "claude",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.8016701461377871,
+          "normalized_score": 0.9379188755117075,
+          "confidence": 0.7,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.5757913455133501,
+          "normalized_score": 0.7533065626533485,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "claude-3-sonnet": {
+      "model_key": "claude-3-sonnet",
+      "provider": "anthropic",
+      "model_family": "claude",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.4440501043841336,
+          "normalized_score": 0.7517479561893952,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.33337061381559624,
+          "normalized_score": 0.37604910599329444,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
           "benchmarks": [
             "livecodebench"
           ],
@@ -2008,6 +2291,49 @@
         }
       }
     },
+    "claude-instant-1": {
+      "model_key": "claude-instant-1",
+      "provider": "anthropic",
+      "model_family": "claude",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.43778705636743215,
+          "normalized_score": 0.7484875197739431,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.2668831611263068,
+          "normalized_score": 0.2640527130061345,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "claude-opus-4": {
       "model_key": "claude-opus-4",
       "provider": "anthropic",
@@ -2297,6 +2623,81 @@
         }
       }
     },
+    "cllama-13b-ins": {
+      "model_key": "cllama-13b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.18058455114822547,
+          "normalized_score": 0.614592264312712,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "cllama-34b-ins": {
+      "model_key": "cllama-34b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.29123173277661796,
+          "normalized_score": 0.672193307652365,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "cllama-7b-ins": {
+      "model_key": "cllama-7b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.1822546972860125,
+          "normalized_score": 0.6154617140234993,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "codart-ai": {
       "model_key": "codart-ai",
       "provider": "unknown",
@@ -2402,6 +2803,124 @@
           "warnings": [
             "aggregate proxy; not same-task decorrelation evidence"
           ]
+        }
+      }
+    },
+    "codellama-13b-ins": {
+      "model_key": "codellama-13b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.25766406172076495,
+          "normalized_score": 0.25559535832285113,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "codellama-34b-ins": {
+      "model_key": "codellama-34b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.24639915199113382,
+          "normalized_score": 0.2361484702924693,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "codellama-70b-ins": {
+      "model_key": "codellama-70b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": -1.0,
+          "normalized_score": 0.0,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.17803089751771603,
+          "normalized_score": 0.12273978169985154,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "codellama-7b-ins": {
+      "model_key": "codellama-7b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.15057656307767756,
+          "normalized_score": 0.07802120665394492,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
         }
       }
     },
@@ -2564,6 +3083,49 @@
           "warnings": [
             "aggregate proxy; not same-task decorrelation evidence"
           ]
+        }
+      }
+    },
+    "codestral-latest": {
+      "model_key": "codestral-latest",
+      "provider": "unknown",
+      "model_family": "codestral",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.5083507306889353,
+          "normalized_score": 0.7852217700547028,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.43917598721754086,
+          "normalized_score": 0.540604159585123,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
         }
       }
     },
@@ -3228,6 +3790,382 @@
           "warnings": [
             "aggregate proxy; not same-task decorrelation evidence"
           ]
+        }
+      }
+    },
+    "dracarys-72b-instruct": {
+      "model_key": "dracarys-72b-instruct",
+      "provider": "unknown",
+      "model_family": "dracarys",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.6394572025052192,
+          "normalized_score": 0.8534735723514992,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.5829976846139979,
+          "normalized_score": 0.7707512534655159,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dracarys-llama-3-1-70b-instruct": {
+      "model_key": "dracarys-llama-3-1-70b-instruct",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.6843423799582463,
+          "normalized_score": 0.8768400333289055,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.49005449097227777,
+          "normalized_score": 0.6162199107842188,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dracarys2-72b-instruct": {
+      "model_key": "dracarys2-72b-instruct",
+      "provider": "unknown",
+      "model_family": "dracarys2",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.8912317327766179,
+          "normalized_score": 0.9845431162526718,
+          "confidence": 0.7,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.5897910251387353,
+          "normalized_score": 0.7632418197573095,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dracarys2-llama-3-1-70b-instruct": {
+      "model_key": "dracarys2-llama-3-1-70b-instruct",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.7555323590814196,
+          "normalized_score": 0.9139003272512105,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.5207850845759618,
+          "normalized_score": 0.6671455939102117,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dscoder-1-3b-base": {
+      "model_key": "dscoder-1-3b-base",
+      "provider": "unknown",
+      "model_family": "dscoder",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.25156576200417535,
+          "normalized_score": 0.6515438770211687,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dscoder-1-3b-ins": {
+      "model_key": "dscoder-1-3b-ins",
+      "provider": "unknown",
+      "model_family": "dscoder",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.2611691022964509,
+          "normalized_score": 0.6565432128581952,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.1566195090234686,
+          "normalized_score": 0.08701049765553226,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dscoder-33b-base": {
+      "model_key": "dscoder-33b-base",
+      "provider": "unknown",
+      "model_family": "dscoder",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.44801670146137784,
+          "normalized_score": 0.7538128992525147,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dscoder-33b-ins": {
+      "model_key": "dscoder-33b-ins",
+      "provider": "unknown",
+      "model_family": "dscoder",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.4325678496868476,
+          "normalized_score": 0.745770489427733,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.35962132275935565,
+          "normalized_score": 0.41520393022200347,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dscoder-6-7b-base": {
+      "model_key": "dscoder-6-7b-base",
+      "provider": "unknown",
+      "model_family": "dscoder",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.35657620041753657,
+          "normalized_score": 0.7062105275869148,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "dscoder-6-7b-ins": {
+      "model_key": "dscoder-6-7b-ins",
+      "provider": "unknown",
+      "model_family": "dscoder",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.348643006263048,
+          "normalized_score": 0.7020806414606754,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.32437066150177746,
+          "normalized_score": 0.3574086768884188,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
         }
       }
     },
@@ -4199,6 +5137,210 @@
         }
       }
     },
+    "gemini-flash-1-5-002": {
+      "model_key": "gemini-flash-1-5-002",
+      "provider": "google",
+      "model_family": "gemini",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.34871207004069243,
+          "normalized_score": 0.33780085643713154,
+          "confidence": 0.9224873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "gemini-flash-1-5-may": {
+      "model_key": "gemini-flash-1-5-may",
+      "provider": "google",
+      "model_family": "gemini",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.6313152400835073,
+          "normalized_score": 0.8492350050114115,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.39784166122713593,
+          "normalized_score": 0.4811122184822436,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "gemini-pro": {
+      "model_key": "gemini-pro",
+      "provider": "google",
+      "model_family": "gemini",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.4173277661795407,
+          "normalized_score": 0.7378367608167997,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.2981648924257717,
+          "normalized_score": 0.317611867468059,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "gemini-pro-1-5-002": {
+      "model_key": "gemini-pro-1-5-002",
+      "provider": "google",
+      "model_family": "gemini",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.3849763254444831,
+          "normalized_score": 0.4445764116117608,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "gemini-pro-1-5-april-n-1": {
+      "model_key": "gemini-pro-1-5-april-n-1",
+      "provider": "google",
+      "model_family": "gemini",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.6659707724425887,
+          "normalized_score": 0.8672760865102462,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "gemini-pro-1-5-may": {
+      "model_key": "gemini-pro-1-5-may",
+      "provider": "google",
+      "model_family": "gemini",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.7542797494780794,
+          "normalized_score": 0.9132482399681202,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.48717396328405616,
+          "normalized_score": 0.6201300747182911,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "gemma-3-27b-it": {
       "model_key": "gemma-3-27b-it",
       "provider": "unknown",
@@ -4469,6 +5611,117 @@
         }
       }
     },
+    "gpt-3-5-turbo-0125": {
+      "model_key": "gpt-3-5-turbo-0125",
+      "provider": "openai",
+      "model_family": "gpt",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.38055203153767764,
+          "normalized_score": 0.44647727371368473,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "gpt-3-5-turbo-0301": {
+      "model_key": "gpt-3-5-turbo-0301",
+      "provider": "openai",
+      "model_family": "gpt",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.418580375782881,
+          "normalized_score": 0.7384888480998901,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.3375686507438186,
+          "normalized_score": 0.3810984672443867,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "gpt-4-0613": {
+      "model_key": "gpt-4-0613",
+      "provider": "openai",
+      "model_family": "gpt",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.6855949895615866,
+          "normalized_score": 0.8774921206119959,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.5429669566075546,
+          "normalized_score": 0.7031538901828668,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "gpt-4-1": {
       "model_key": "gpt-4-1",
       "provider": "openai",
@@ -4631,11 +5884,90 @@
         }
       }
     },
+    "gpt-4-turbo-1106": {
+      "model_key": "gpt-4-turbo-1106",
+      "provider": "openai",
+      "model_family": "gpt",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.8221294363256785,
+          "normalized_score": 0.9485696344688508,
+          "confidence": 0.7,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.5799401066120191,
+          "normalized_score": 0.7629172534405014,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "gpt-4-turbo-2024-04-09": {
       "model_key": "gpt-4-turbo-2024-04-09",
       "provider": "openai",
       "model_family": "gpt",
       "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.8448851774530273,
+          "normalized_score": 0.9604158867783265,
+          "confidence": 0.7,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.3626669039519602,
+          "normalized_score": 0.3949276167419445,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
         "competitive_programming": {
           "area": "competitive_programming",
           "raw_score": 0.34865069527053527,
@@ -4643,6 +5975,85 @@
           "confidence": 0.925,
           "source_count": 4,
           "n_tasks": 2110,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.6616196340353357,
+          "normalized_score": 0.9102222480572637,
+          "confidence": 0.8000312467454697,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "gpt-4o-2024-05-13": {
+      "model_key": "gpt-4o-2024-05-13",
+      "provider": "openai",
+      "model_family": "gpt",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.9209232196706101,
+          "normalized_score": 1.0,
+          "confidence": 0.45,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.40130086965496753,
+          "normalized_score": 0.4627064923105992,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.718362623964108,
+          "normalized_score": 1.0,
+          "confidence": 0.8000312467454697,
+          "source_count": 4,
+          "n_tasks": 884,
           "benchmarks": [
             "livecodebench"
           ],
@@ -4661,6 +6072,24 @@
       "provider": "openai",
       "model_family": "gpt",
       "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.4011652238015107,
+          "normalized_score": 0.46198214715924246,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
         "coding_edit": {
           "area": "coding_edit",
           "raw_score": 0.23099999999999998,
@@ -4753,6 +6182,24 @@
       "provider": "openai",
       "model_family": "gpt",
       "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.37142676093942284,
+          "normalized_score": 0.3744642550952486,
+          "confidence": 0.9224873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
         "coding_edit": {
           "area": "coding_edit",
           "raw_score": 0.036000000000000004,
@@ -6384,6 +7831,253 @@
         }
       }
     },
+    "llama3-1-405b-ins-fp8": {
+      "model_key": "llama3-1-405b-ins-fp8",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.39424490644791793,
+          "normalized_score": 0.4221152480662418,
+          "confidence": 0.9224873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "llama3-1-70b-ins": {
+      "model_key": "llama3-1-70b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.34190645054236696,
+          "normalized_score": 0.2731437105684312,
+          "confidence": 0.9974873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "llama3-1-8b-ins": {
+      "model_key": "llama3-1-8b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.20486138650074504,
+          "normalized_score": 0.006891966199028471,
+          "confidence": 0.9974873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "llama3-70b-ins": {
+      "model_key": "llama3-70b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.5860125260960334,
+          "normalized_score": 0.8256511816063083,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.4406555247045443,
+          "normalized_score": 0.5424927387221655,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "llama3-8b-ins": {
+      "model_key": "llama3-8b-ins",
+      "provider": "open-weight",
+      "model_family": "llama",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.35615866388308975,
+          "normalized_score": 0.705993165159218,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.27002837744312347,
+          "normalized_score": 0.27813632964490503,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "magicoders-cl-7b": {
+      "model_key": "magicoders-cl-7b",
+      "provider": "unknown",
+      "model_family": "magicoders",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": -1.0,
+          "normalized_score": 0.0,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.22230542652529187,
+          "normalized_score": 0.19531277746579517,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "magicoders-ds-6-7b": {
+      "model_key": "magicoders-ds-6-7b",
+      "provider": "unknown",
+      "model_family": "magicoders",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": -1.0,
+          "normalized_score": 0.0,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.3227529906883932,
+          "normalized_score": 0.35457312888922754,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "masai-gpt-4o-2024-05-13": {
       "model_key": "masai-gpt-4o-2024-05-13",
       "provider": "openai",
@@ -7815,6 +9509,117 @@
         }
       }
     },
+    "mistral-large": {
+      "model_key": "mistral-large",
+      "provider": "open-weight",
+      "model_family": "mistral",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": 0.6083507306889352,
+          "normalized_score": 0.8372800714880874,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.3522157053161375,
+          "normalized_score": 0.34061601538920705,
+          "confidence": 0.9224873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.485276868006986,
+          "normalized_score": 0.6102681586481576,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "mixtral-8x22b-ins": {
+      "model_key": "mixtral-8x22b-ins",
+      "provider": "open-weight",
+      "model_family": "mixtral",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.45168941766702775,
+          "normalized_score": 0.5531070272694791,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "mixtral-8x7b-ins": {
+      "model_key": "mixtral-8x7b-ins",
+      "provider": "open-weight",
+      "model_family": "mixtral",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.334004720808148,
+          "normalized_score": 0.37402618134936616,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "moatless-tools-claude-3-5-sonnet": {
       "model_key": "moatless-tools-claude-3-5-sonnet",
       "provider": "anthropic",
@@ -8163,6 +9968,56 @@
           "warnings": [
             "aggregate proxy; not same-task decorrelation evidence"
           ]
+        }
+      }
+    },
+    "o1-mini-2024-09-12-n-1": {
+      "model_key": "o1-mini-2024-09-12-n-1",
+      "provider": "openai",
+      "model_family": "o-series",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.6407934708227413,
+          "normalized_score": 1.0,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "o1-preview-2024-09-12-n-1": {
+      "model_key": "o1-preview-2024-09-12-n-1",
+      "provider": "openai",
+      "model_family": "o-series",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.5434774343922752,
+          "normalized_score": 0.7756444119859541,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
         }
       }
     },
@@ -8557,6 +10412,81 @@
           "confidence": 0.65,
           "source_count": 4,
           "n_tasks": 2110,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "oc-ds-1-3b": {
+      "model_key": "oc-ds-1-3b",
+      "provider": "unknown",
+      "model_family": "oc",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.1012344290491057,
+          "normalized_score": 0.0,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "oc-ds-33b": {
+      "model_key": "oc-ds-33b",
+      "provider": "unknown",
+      "model_family": "oc",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.15240791441103108,
+          "normalized_score": 0.08387677421528576,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "oc-ds-6-7b": {
+      "model_key": "oc-ds-6-7b",
+      "provider": "unknown",
+      "model_family": "oc",
+      "cells": {
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.2228545190273951,
+          "normalized_score": 0.1963416458453885,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
           "benchmarks": [
             "livecodebench"
           ],
@@ -9137,6 +11067,49 @@
         }
       }
     },
+    "phind-34b-v2": {
+      "model_key": "phind-34b-v2",
+      "provider": "unknown",
+      "model_family": "phind",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": -1.0,
+          "normalized_score": 0.0,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        },
+        "test_generation": {
+          "area": "test_generation",
+          "raw_score": 0.2911406939428274,
+          "normalized_score": 0.3023953847603578,
+          "confidence": 0.8643303524935281,
+          "source_count": 4,
+          "n_tasks": 884,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "prometheus-v1-2-1-gpt-5": {
       "model_key": "prometheus-v1-2-1-gpt-5",
       "provider": "openai",
@@ -9316,6 +11289,56 @@
           "warnings": [
             "aggregate proxy; not same-task decorrelation evidence"
           ]
+        }
+      }
+    },
+    "qwen2-5-ins-32b": {
+      "model_key": "qwen2-5-ins-32b",
+      "provider": "alibaba",
+      "model_family": "qwen",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.42006200969606466,
+          "normalized_score": 0.5132635572758913,
+          "confidence": 0.8599873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
+    "qwen2-ins-72b": {
+      "model_key": "qwen2-ins-72b",
+      "provider": "alibaba",
+      "model_family": "qwen",
+      "cells": {
+        "code_repair": {
+          "area": "code_repair",
+          "raw_score": 0.3510481244358739,
+          "normalized_score": 0.2826226723606275,
+          "confidence": 0.9974873734152916,
+          "source_count": 4,
+          "n_tasks": 1426,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
         }
       }
     },
@@ -10043,6 +12066,31 @@
           "warnings": [
             "aggregate proxy; not same-task decorrelation evidence"
           ]
+        }
+      }
+    },
+    "starcoder": {
+      "model_key": "starcoder",
+      "provider": "unknown",
+      "model_family": "starcoder",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": -1.0,
+          "normalized_score": 0.0,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
         }
       }
     },
@@ -10937,6 +12985,31 @@
         }
       }
     },
+    "wcoder-34b-v1": {
+      "model_key": "wcoder-34b-v1",
+      "provider": "unknown",
+      "model_family": "wcoder",
+      "cells": {
+        "code_execution": {
+          "area": "code_execution",
+          "raw_score": -1.0,
+          "normalized_score": 0.0,
+          "confidence": 1.0,
+          "source_count": 1,
+          "n_tasks": 479,
+          "benchmarks": [
+            "livecodebench"
+          ],
+          "data_levels": [
+            "task_outcome"
+          ],
+          "decorrelation_evidence_level": "task_vector",
+          "cost_usd": null,
+          "latency_s": null,
+          "warnings": []
+        }
+      }
+    },
     "yi-lightning": {
       "model_key": "yi-lightning",
       "provider": "unknown",
@@ -11052,29 +13125,50 @@
       "source": "aider",
       "url": "https://aider.chat/docs/leaderboards/",
       "snapshot_hash": "cea6cab3ac65e4d41cce072fcac5540497d757b3a6f72d997b7c3607b44c470e",
-      "retrieved_at": "2026-07-03T04:22:52+00:00",
+      "retrieved_at": "2026-07-03T04:45:36+00:00",
       "record_count": 69
     },
     {
       "source": "swe_bench",
       "url": "https://raw.githubusercontent.com/swe-bench/swe-bench.github.io/master/data/leaderboards.json",
       "snapshot_hash": "c3bf3a74d7d67ba7e2777e197f96894601917e8e186a078133897ed3e81566e5",
-      "retrieved_at": "2026-07-03T04:22:52+00:00",
+      "retrieved_at": "2026-07-03T04:45:36+00:00",
       "record_count": 372
     },
     {
       "source": "terminal_bench",
       "url": "https://www.tbench.ai/leaderboard/terminal-bench/2.1",
       "snapshot_hash": "9851e83fc03b57bb7113ee4cec7bd093ac62d65cde2587e2e47234eb034994e9",
-      "retrieved_at": "2026-07-03T04:22:53+00:00",
+      "retrieved_at": "2026-07-03T04:45:37+00:00",
       "record_count": 13
     },
     {
-      "source": "livecodebench",
+      "source": "livecodebench_generation",
       "url": "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/main/src/mocks/performances_generation.json",
       "snapshot_hash": "e75b9074733b3e265451762650fe71537ad5470cb581c432a1b85e020b822b3c",
-      "retrieved_at": "2026-07-03T04:22:53+00:00",
+      "retrieved_at": "2026-07-03T04:45:37+00:00",
       "record_count": 88
+    },
+    {
+      "source": "livecodebench_execution",
+      "url": "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/main/src/mocks/performances_execution.json",
+      "snapshot_hash": "580ade078b22ba2c049f0f137ea3942b8fc68a907cd7d6b58f931a4555a79142",
+      "retrieved_at": "2026-07-03T04:45:37+00:00",
+      "record_count": 37
+    },
+    {
+      "source": "livecodebench_repair",
+      "url": "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/main/src/mocks/performances_repair.json",
+      "snapshot_hash": "29329509aa410a336772e921e3ee9dc6ea873290420974f6428b6c877190fb9a",
+      "retrieved_at": "2026-07-03T04:45:37+00:00",
+      "record_count": 68
+    },
+    {
+      "source": "livecodebench_testgen",
+      "url": "https://raw.githubusercontent.com/LiveCodeBench/livecodebench.github.io/main/src/mocks/performances_testgen.json",
+      "snapshot_hash": "9c1a6a1a767f395d9b4a5be0d2015907a4b735c81ded75a5467b8fe8534da566",
+      "retrieved_at": "2026-07-03T04:45:37+00:00",
+      "record_count": 148
     }
   ],
   "recommendation": {
