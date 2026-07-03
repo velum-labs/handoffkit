@@ -38,6 +38,8 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
         "open-llm-leaderboard": _OPEN_LLM_JSON,
         "comparison_dcgen": _UIBENCH_DCGEM_CSV,
         "comparison_design2code": _UIBENCH_DESIGN2CODE_CSV,
+        "livebench": _LIVEBENCH_JSON,
+        "artificialanalysis.ai": _ARTIFICIAL_ANALYSIS_JSON,
     }
 
     def fake_fetch(url: str, *, timeout_s: float) -> bytes:
@@ -52,7 +54,7 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     fetched = fetch_live_model_area_scores()
     matrix = build_model_area_matrix(fetched.scores)
 
-    assert len(fetched.sources) == 11
+    assert len(fetched.sources) == 13
     assert {source.record_count for source in fetched.sources}
     assert "coding_edit" in matrix.areas
     assert "swe_repair" in matrix.areas
@@ -68,6 +70,9 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     assert "instruction_following" in matrix.areas
     assert "hard_science_reasoning" in matrix.areas
     assert "agentic" in matrix.areas
+    assert "data_analysis" in matrix.areas
+    assert "intelligence" in matrix.areas
+    assert "latency" in matrix.areas
     report = build_data_quality_report(fetched.scores)
     assert report.checked_rows == len(fetched.scores)
     assert report.error_count == 0
@@ -92,6 +97,14 @@ def test_fetch_live_model_area_scores_parses_representative_sources(
     assert matrix.rows["gemini-3-pro-preview"].cells["ui_to_code"].raw_score == pytest.approx(
         (0.86 + 0.80 + 0.92 + 0.84 + 0.81 + 0.91) / 6
     )
+    gpt_high = next(score for score in fetched.scores if score.model_key == "gpt-5-high")
+    assert gpt_high.base_model_key == "gpt-5"
+    assert gpt_high.reasoning_effort == "high"
+    swe_agent = next(score for score in fetched.scores if score.benchmark == "swe-bench")
+    assert swe_agent.is_agent_system is True
+    assert swe_agent.harness_or_agent == "swe-bench-agent"
+    aa_score = next(score for score in fetched.scores if score.benchmark == "artificial-analysis")
+    assert aa_score.provider_model_id == "aa-gpt"
 
 
 def test_benchmark_local_normalization_does_not_mix_areas() -> None:
@@ -308,7 +321,7 @@ def test_source_registry_is_discoverable_and_extensible(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     specs = get_source_specs()
-    assert len(specs) >= 11
+    assert len(specs) >= 13
     assert get_source_spec("benchlm").areas
 
     original_urls = dict(model_area_core.SOURCE_URLS)
@@ -600,4 +613,66 @@ _UIBENCH_DESIGN2CODE_CSV = "\n".join(
         "fg_position_avg,fg_color_avg,fg_clip_avg",
         "design2code,uicopilot,gpt-5,2026-03-08,0.85,0.70,0.75,0.69,0.67,0.86",
     ]
+)
+
+_LIVEBENCH_JSON = json.dumps(
+    {
+        "rows": [
+            {
+                "row": {
+                    "question_id": "q1",
+                    "task": "table_join",
+                    "model": "open-model",
+                    "score": 1.0,
+                    "category": "data_analysis",
+                }
+            },
+            {
+                "row": {
+                    "question_id": "q2",
+                    "task": "table_join",
+                    "model": "open-model",
+                    "score": 0.0,
+                    "category": "data_analysis",
+                }
+            },
+            {
+                "row": {
+                    "question_id": "q3",
+                    "task": "logic",
+                    "model": "reasoner",
+                    "score": 1.0,
+                    "category": "reasoning",
+                }
+            },
+        ]
+    }
+)
+
+_ARTIFICIAL_ANALYSIS_JSON = json.dumps(
+    {
+        "data": [
+            {
+                "id": "aa-gpt",
+                "slug": "gpt-5-high",
+                "name": "GPT-5 (high)",
+                "model_creator": {"name": "OpenAI"},
+                "evaluations": {
+                    "artificial_analysis_intelligence_index": 53.1,
+                    "artificial_analysis_coding_index": 71.6,
+                    "mmlu_pro": 0.82,
+                    "gpqa": 0.7,
+                    "livecodebench": 0.6,
+                },
+                "pricing": {
+                    "price_1m_input_tokens": 5,
+                    "price_1m_output_tokens": 30,
+                },
+                "performance": {
+                    "median_output_tokens_per_second": 68.14,
+                    "median_time_to_first_token_seconds": 10.03,
+                },
+            }
+        ]
+    }
 )

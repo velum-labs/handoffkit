@@ -8,6 +8,10 @@ capability evidence separate from same-task outcome evidence.
 ## Core concepts
 
 - `ModelAreaScore`: one public benchmark signal for one model in one area.
+  Besides the display `model_key`, each row also carries canonical identity
+  hints: `base_model_key`, `provider_model_id`, `model_alias`,
+  `reasoning_effort`, `harness_or_agent`, `is_agent_system`, and
+  `is_open_weight`.
 - `TaskOutcome`: per-task same-harness outcome rows, used only when true
   oracle/headroom or failure-correlation metrics are justified.
 - `ModelAreaMatrix`: rows are models, columns are areas, cells include raw
@@ -28,6 +32,9 @@ Built-ins are registered through the same source registry exposed to callers:
 - BenchLM category leaderboards
 - Hugging Face Open LLM Leaderboard
 - UIBenchKit DCGen / Design2Code
+- LiveBench model judgments via the Hugging Face dataset server
+- Artificial Analysis API (requires `ARTIFICIAL_ANALYSIS_API_KEY`; tolerant
+  fetch mode records a source failure when the key is absent)
 
 ## Add a source
 
@@ -82,6 +89,15 @@ source failure.
 Aggregate rows are useful for shortlisting and routing priors. They are not
 proof of uncorrelated errors. Use `TaskOutcome` rows with shared task ids and
 shared scoring rules when computing oracle headroom or failure correlations.
+
+## Identity boundaries
+
+The package stores model identity facets separately so downstream analysis can
+avoid treating wrappers and reasoning-effort variants as independent model
+families. The built-in inference is still conservative metadata extraction, not
+a vendor-authoritative alias database. For high-stakes analysis, prefer source
+rows that provide explicit provider model IDs and override the identity fields in
+the parser.
 
 ## Data-quality validation
 

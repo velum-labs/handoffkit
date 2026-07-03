@@ -8,6 +8,7 @@ import html
 import io
 import json
 import math
+import os
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -51,6 +52,8 @@ LIVE_SOURCES: tuple[LiveSource, ...] = (
     "open_llm_leaderboard",
     "uibenchkit_dcgen",
     "uibenchkit_design2code",
+    "livebench",
+    "artificial_analysis",
 )
 SOURCE_URLS: dict[LiveSource, str] = {
     "aider": "https://aider.chat/docs/leaderboards/",
@@ -88,6 +91,11 @@ SOURCE_URLS: dict[LiveSource, str] = {
         "https://raw.githubusercontent.com/chinh02/uibenchkit-experiments/main/"
         "leaderboard/comparison_design2code.csv"
     ),
+    "livebench": (
+        "https://datasets-server.huggingface.co/rows?dataset=livebench%2Fmodel_judgment"
+        "&config=default&split=leaderboard&offset=0&length=100"
+    ),
+    "artificial_analysis": "https://artificialanalysis.ai/api/v2/language/models",
 }
 SOURCE_AREAS: dict[LiveSource, tuple[str, ...]] = {
     "aider": ("coding_edit",),
@@ -128,6 +136,25 @@ SOURCE_AREAS: dict[LiveSource, tuple[str, ...]] = {
         "ui_layout_structure",
         "ui_text_fidelity",
         "ui_color_fidelity",
+    ),
+    "livebench": (
+        "reasoning",
+        "math",
+        "coding_general",
+        "language",
+        "instruction_following",
+        "data_analysis",
+    ),
+    "artificial_analysis": (
+        "intelligence",
+        "coding_general",
+        "math",
+        "knowledge",
+        "hard_science_reasoning",
+        "competitive_programming",
+        "cost",
+        "latency",
+        "throughput",
     ),
 }
 USER_AGENT = "model-area-index/0.1 (+https://github.com/velum-labs/handoffkit)"
@@ -210,6 +237,22 @@ OPEN_LLM_EVAL_AREAS: dict[str, str] = {
     "musr": "multi_step_reasoning",
     "mmlu_pro": "knowledge",
 }
+LIVEBENCH_CATEGORY_AREAS: dict[str, str] = {
+    "reasoning": "reasoning",
+    "math": "math",
+    "coding": "coding_general",
+    "language": "language",
+    "instruction_following": "instruction_following",
+    "data_analysis": "data_analysis",
+}
+ARTIFICIAL_ANALYSIS_EVAL_AREAS: dict[str, str] = {
+    "artificial_analysis_intelligence_index": "intelligence",
+    "artificial_analysis_coding_index": "coding_general",
+    "artificial_analysis_math_index": "math",
+    "mmlu_pro": "knowledge",
+    "gpqa": "hard_science_reasoning",
+    "livecodebench": "competitive_programming",
+}
 UIBENCHKIT_TASK_COUNTS: dict[str, int] = {
     "dcgen": 348,
     "design2code": 484,
@@ -220,6 +263,13 @@ class ModelAreaScore(BaseModel):
     """Aggregate or subtask public evidence for one model in one capability area."""
 
     model_key: str
+    base_model_key: str | None = None
+    provider_model_id: str | None = None
+    model_alias: str | None = None
+    reasoning_effort: str | None = None
+    harness_or_agent: str | None = None
+    is_agent_system: bool = False
+    is_open_weight: bool = False
     provider: str
     model_family: str
     model_version_or_alias: str
@@ -250,6 +300,26 @@ class ModelAreaScore(BaseModel):
     def _validate_score(self) -> ModelAreaScore:
         if not math.isfinite(self.score_raw):
             raise ValueError("score_raw must be finite")
+        alias = self.model_alias or self.model_version_or_alias
+        self.model_alias = alias
+        self.provider_model_id = self.provider_model_id or _provider_model_id(alias)
+        self.base_model_key = self.base_model_key or _base_model_key(
+            self.provider_model_id or alias
+        )
+        self.reasoning_effort = self.reasoning_effort or _reasoning_effort(
+            " ".join(part for part in (alias, self.prompting_mode, self.harness) if part)
+        )
+        self.harness_or_agent = self.harness_or_agent or _harness_or_agent(
+            self.prompting_mode,
+            self.harness,
+            self.benchmark,
+        )
+        self.is_agent_system = self.is_agent_system or self.harness_or_agent is not None
+        self.is_open_weight = self.is_open_weight or _is_open_weight_identity(
+            self.provider,
+            self.model_family,
+            alias,
+        )
         return self
 
 
@@ -409,6 +479,8 @@ SOURCE_DESCRIPTIONS: dict[LiveSource, str] = {
     "open_llm_leaderboard": "Hugging Face Open LLM Leaderboard formatted API.",
     "uibenchkit_dcgen": "UIBenchKit DCGen UI-to-code leaderboard CSV.",
     "uibenchkit_design2code": "UIBenchKit Design2Code leaderboard CSV.",
+    "livebench": "LiveBench model judgments via Hugging Face dataset server.",
+    "artificial_analysis": "Artificial Analysis language model API.",
 }
 
 
@@ -912,7 +984,13 @@ def format_model_area_matrix_markdown(matrix: ModelAreaMatrix) -> str:
 
 
 def _fetch_url(url: str, *, timeout_s: float) -> bytes:
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+    headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
+    if "artificialanalysis.ai/api/" in url:
+        api_key = os.environ.get("ARTIFICIAL_ANALYSIS_API_KEY")
+        if api_key is None:
+            raise FetchError("ARTIFICIAL_ANALYSIS_API_KEY is required for Artificial Analysis")
+        headers["x-api-key"] = api_key
+    request = Request(url, headers=headers)
     try:
         with urlopen(request, timeout=timeout_s) as response:
             return response.read()
@@ -1440,6 +1518,227 @@ def _parse_uibenchkit(
     return rows
 
 
+def _parse_livebench(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    parsed = json.loads(text)
+    raw_rows = parsed.get("rows")
+    if not isinstance(raw_rows, list):
+        raise FetchError("LiveBench dataset rows response lacked rows")
+    grouped: dict[tuple[str, str, str], list[Mapping[str, object]]] = {}
+    for wrapped in raw_rows[:limit]:
+        if not isinstance(wrapped, Mapping):
+            continue
+        row = wrapped.get("row")
+        if not isinstance(row, Mapping):
+            continue
+        model = _as_str(row.get("model"))
+        category = _as_str(row.get("category"))
+        task = _as_str(row.get("task")) or "all"
+        score = _as_float(row.get("score"))
+        if model is None or category is None or score is None:
+            continue
+        area = LIVEBENCH_CATEGORY_AREAS.get(category)
+        if area is None:
+            continue
+        grouped.setdefault((model, area, task), []).append(row)
+
+    rows: list[ModelAreaScore] = []
+    for (model, area, task), values in grouped.items():
+        scores = [
+            _normalize_fraction(_as_float(value.get("score")) or 0.0)
+            for value in values
+        ]
+        question_ids = {
+            str(value.get("question_id"))
+            for value in values
+            if value.get("question_id") is not None
+        }
+        rows.append(
+            ModelAreaScore(
+                model_key=_model_key(model),
+                provider=_provider_for_name(model),
+                model_family=_family_for_name(model),
+                model_version_or_alias=model,
+                benchmark="livebench",
+                benchmark_version="leaderboard",
+                area=area,
+                subarea=task,
+                score_raw=_average(scores),
+                score_normalized=_average(scores),
+                n_tasks=len(question_ids) if question_ids else len(scores),
+                date_observed=retrieved_at,
+                harness="LiveBench model_judgment dataset-server rows",
+                prompting_mode="leaderboard",
+                source_url=source_url,
+                source_snapshot_hash=snapshot_hash,
+                data_level="subtask",
+                scoring="objective",
+                same_harness_comparable=True,
+            )
+        )
+    if not rows:
+        raise FetchError("LiveBench dataset rows parsed zero rows")
+    return rows
+
+
+def _parse_artificial_analysis(
+    text: str,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    limit: int | None,
+) -> list[ModelAreaScore]:
+    parsed = json.loads(text)
+    entries = parsed.get("data")
+    if not isinstance(entries, list):
+        raise FetchError("Artificial Analysis response lacked data")
+    rows: list[ModelAreaScore] = []
+    for entry in entries[:limit]:
+        if not isinstance(entry, Mapping):
+            continue
+        name = _as_str(entry.get("name")) or _as_str(entry.get("slug"))
+        if name is None:
+            continue
+        creator = entry.get("model_creator")
+        provider = (
+            _provider_for_name(_as_str(creator.get("name")) or name)
+            if isinstance(creator, Mapping)
+            else _provider_for_name(name)
+        )
+        evaluations = entry.get("evaluations")
+        if isinstance(evaluations, Mapping):
+            for metric, area in ARTIFICIAL_ANALYSIS_EVAL_AREAS.items():
+                score = _as_float(evaluations.get(metric))
+                if score is None:
+                    continue
+                normalized = _normalize_fraction(score)
+                rows.append(
+                    _artificial_analysis_score(
+                        entry,
+                        name=name,
+                        provider=provider,
+                        area=area,
+                        subarea=metric,
+                        score=normalized,
+                        score_direction="higher_is_better",
+                        source_url=source_url,
+                        snapshot_hash=snapshot_hash,
+                        retrieved_at=retrieved_at,
+                    )
+                )
+        pricing = entry.get("pricing")
+        if isinstance(pricing, Mapping):
+            price = (
+                _as_float(pricing.get("price_1m_blended_3_to_1"))
+                or _mean_present(
+                    [
+                        _as_float(pricing.get("price_1m_input_tokens")),
+                        _as_float(pricing.get("price_1m_output_tokens")),
+                    ]
+                )
+            )
+            if price is not None:
+                rows.append(
+                    _artificial_analysis_score(
+                        entry,
+                        name=name,
+                        provider=provider,
+                        area="cost",
+                        subarea="price_per_1m_tokens",
+                        score=price,
+                        score_direction="lower_is_better",
+                        cost_usd=price,
+                        source_url=source_url,
+                        snapshot_hash=snapshot_hash,
+                        retrieved_at=retrieved_at,
+                    )
+                )
+        performance = entry.get("performance")
+        if not isinstance(performance, Mapping):
+            performance = entry
+        latency = _as_float(performance.get("median_time_to_first_token_seconds"))
+        if latency is not None:
+            rows.append(
+                _artificial_analysis_score(
+                    entry,
+                    name=name,
+                    provider=provider,
+                    area="latency",
+                    subarea="median_time_to_first_token_seconds",
+                    score=latency,
+                    score_direction="lower_is_better",
+                    latency_s=latency,
+                    source_url=source_url,
+                    snapshot_hash=snapshot_hash,
+                    retrieved_at=retrieved_at,
+                )
+            )
+        throughput = _as_float(performance.get("median_output_tokens_per_second"))
+        if throughput is not None:
+            rows.append(
+                _artificial_analysis_score(
+                    entry,
+                    name=name,
+                    provider=provider,
+                    area="throughput",
+                    subarea="median_output_tokens_per_second",
+                    score=throughput,
+                    score_direction="higher_is_better",
+                    source_url=source_url,
+                    snapshot_hash=snapshot_hash,
+                    retrieved_at=retrieved_at,
+                )
+            )
+    if not rows:
+        raise FetchError("Artificial Analysis parsed zero rows")
+    return rows
+
+
+def _artificial_analysis_score(
+    entry: Mapping[str, object],
+    *,
+    name: str,
+    provider: str,
+    area: str,
+    subarea: str,
+    score: float,
+    score_direction: ScoreDirection,
+    source_url: str,
+    snapshot_hash: str,
+    retrieved_at: str,
+    cost_usd: float | None = None,
+    latency_s: float | None = None,
+) -> ModelAreaScore:
+    return ModelAreaScore(
+        model_key=_model_key(_as_str(entry.get("slug")) or name),
+        provider_model_id=_as_str(entry.get("id")) or _as_str(entry.get("slug")),
+        provider=provider,
+        model_family=_family_for_name(name),
+        model_version_or_alias=name,
+        benchmark="artificial-analysis",
+        benchmark_version=str(entry.get("intelligence_index_version") or "live"),
+        area=area,
+        subarea=subarea,
+        score_raw=score,
+        score_direction=score_direction,
+        cost_usd=cost_usd,
+        latency_s=latency_s,
+        date_observed=retrieved_at,
+        harness="Artificial Analysis API",
+        prompting_mode="public_api",
+        source_url=source_url,
+        source_snapshot_hash=snapshot_hash,
+        data_level="aggregate",
+        scoring="objective",
+        same_harness_comparable=False,
+    )
+
+
 def _load_records(path: str | Path) -> list[Mapping[str, Any]]:
     input_path = Path(path)
     text = input_path.read_text(encoding="utf-8").strip()
@@ -1720,6 +2019,78 @@ def _model_key(value: str) -> str:
     return slug or "unknown-model"
 
 
+def _provider_model_id(value: str) -> str:
+    cleaned = value.strip()
+    command_model = re.search(r"--model\s+([^\s`]+)", cleaned)
+    if command_model is not None:
+        cleaned = command_model.group(1)
+    return cleaned
+
+
+def _base_model_key(value: str) -> str:
+    key = _model_key(value)
+    key = re.sub(r"-(xhigh|high|medium|low|max|thinking|reasoning)$", "", key)
+    key = re.sub(r"-(default|deep)-think$", "", key)
+    key = re.sub(r"-n-[0-9]+$", "", key)
+    key = re.sub(r"-32k(-think(ing)?)?$", "", key)
+    return key or _model_key(value)
+
+
+def _reasoning_effort(value: str) -> str | None:
+    lower = value.lower()
+    for effort in ("xhigh", "high", "medium", "low", "max"):
+        if re.search(rf"(^|[^a-z0-9]){effort}([^a-z0-9]|$)", lower):
+            return effort
+    if "deep think" in lower or "deep-think" in lower:
+        return "deep"
+    if "thinking" in lower or "reasoning" in lower:
+        return "reasoning"
+    return None
+
+
+def _harness_or_agent(
+    prompting_mode: str | None,
+    harness: str | None,
+    benchmark: str,
+) -> str | None:
+    values = [value for value in (prompting_mode, harness, benchmark) if value is not None]
+    for value in values:
+        lower = value.lower()
+        if "terminal-bench" in lower:
+            return "terminal-bench-agent"
+        if "swe-bench" in lower:
+            return "swe-bench-agent"
+    for value in values:
+        if value is None:
+            continue
+        match = re.search(r"agent=([^,\s]+)", value)
+        if match is not None:
+            return match.group(1)
+        lower = value.lower()
+        if "agent" in lower:
+            return _model_key(value)
+    return None
+
+
+def _is_open_weight_identity(provider: str, model_family: str, alias: str) -> bool:
+    lower = f"{provider} {model_family} {alias}".lower()
+    return any(
+        token in lower
+        for token in (
+            "open-weight",
+            "llama",
+            "mistral",
+            "mixtral",
+            "qwen",
+            "glm",
+            "yi-",
+            "deepseek",
+            "nemotron",
+            "gemma",
+        )
+    )
+
+
 def _provider_for_name(value: str) -> str:
     lower = value.lower()
     if any(token in lower for token in ("claude", "anthropic")):
@@ -1783,6 +2154,10 @@ def _as_float(value: object) -> float | None:
     return None
 
 
+def _normalize_fraction(value: float) -> float:
+    return value / 100.0 if value > 1.0 else value
+
+
 def _as_int(value: object) -> int | None:
     number = _as_float(value)
     return int(number) if number is not None else None
@@ -1842,6 +2217,8 @@ def _register_builtin_sources() -> None:
         "open_llm_leaderboard": _parse_open_llm_leaderboard,
         "uibenchkit_dcgen": _parse_uibenchkit,
         "uibenchkit_design2code": _parse_uibenchkit,
+        "livebench": _parse_livebench,
+        "artificial_analysis": _parse_artificial_analysis,
     }
     for source, parser in parsers.items():
         register_source(
