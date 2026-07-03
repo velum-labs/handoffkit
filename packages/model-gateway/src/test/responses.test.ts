@@ -326,6 +326,28 @@ test("chatToResponses emits a custom_tool_call item with raw input for a custom-
   assert.equal(output[1]?.arguments, '{"cmd":"ls"}');
 });
 
+test("chatToResponses preserves provider cost metadata", () => {
+  const response = chatToResponses(
+    {
+      id: "cmpl-cost",
+      choices: [{ message: { content: "ok" } }],
+      usage: { prompt_tokens: 3, completion_tokens: 2 },
+      provider_cost: {
+        source: "provider",
+        cost_usd: 0.0042,
+        generation_id: "gen_test"
+      }
+    },
+    "fusion-panel"
+  );
+
+  assert.deepEqual(response.provider_cost, {
+    source: "provider",
+    cost_usd: 0.0042,
+    generation_id: "gen_test"
+  });
+});
+
 test("chatToResponses passes non-JSON custom tool arguments through as raw input", () => {
   const openai = {
     choices: [

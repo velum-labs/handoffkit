@@ -491,12 +491,45 @@ async function runProvider(input: {
 }): Promise<CodexRunProvider> {
   switch (input.provider.kind) {
     case "ambient":
-    case "responses":
       return {
         provider: input.provider,
         modelCallRecords: [],
         close: async () => undefined
       };
+    case "responses": {
+      const records: ModelCallRecordV1[] = [];
+      const capture = createTrajectoryCapture();
+      const apiKey =
+        input.provider.apiKey ??
+        (input.provider.apiKeyEnvName !== undefined
+          ? input.env[input.provider.apiKeyEnvName]
+          : input.env.OPENAI_API_KEY);
+      const gateway = await startGateway({
+        backend: new KernelBackend(new OpenAiBackend({
+          baseUrl: normalizeApiBaseUrl(stripResponsesRoute(input.provider.baseUrl)),
+          ...(apiKey !== undefined ? { apiKey } : {}),
+          defaultModel: input.model.model
+        }), {
+          workflowIds: { chat: "native-passthrough-turn", models: "native-passthrough-models", embeddings: "native-passthrough-embeddings" }
+        }),
+        provenance: {
+          onModelCall(record) {
+            records.push(record);
+          },
+          onModelCallRaw(context, result) {
+            capture.sink.onModelCallRaw?.(context, result);
+            input.onCapturedTrajectory?.(capture.reconstruct());
+          }
+        }
+      });
+      return {
+        provider: input.provider,
+        configBaseUrl: gateway.url(),
+        modelCallRecords: records,
+        reconstruct: capture.reconstruct,
+        close: () => gateway.close()
+      };
+    }
     case "openai-compatible": {
       const records: ModelCallRecordV1[] = [];
       const capture = createTrajectoryCapture();

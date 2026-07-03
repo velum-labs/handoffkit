@@ -71,8 +71,8 @@ export type GatewayRunnerConfig = {
    * Straggler policy: once the first candidate succeeds, still-running siblings
    * get this much longer before being aborted and settled as failed, so one
    * stuck model cannot hold a finished sibling's result hostage until the panel
-   * timeout. Default 300s (long-running members are often the strongest ones);
-   * set 0 to disable (wait for every candidate).
+   * timeout. Default 10 minutes (long-running members are often the strongest
+   * ones); set 0 to disable (wait for every candidate).
    */
   stragglerGraceMs?: number;
   judgeModel?: string;
@@ -117,15 +117,16 @@ export type GatewayRunnerConfig = {
  * Default straggler grace window: once the first panel candidate succeeds,
  * still-running siblings get this much longer before they are dropped.
  *
- * Sized generously (5 minutes) because slower panel members are often the
+ * Sized generously (10 minutes) because slower panel members are often the
  * stronger ones: a fast, shallow first finisher must not evict a deliberate
  * sibling that is still doing useful work. Real-trace calibration: qwen3
  * answered a docs-analysis turn in 27s while kimi-k2 took 4m to produce the
- * better candidate — a 2-minute window would have dropped kimi. The hard
- * `panelTimeoutMs` (default 15m) still bounds the whole phase, so the grace
- * window only trades tail latency, never unbounded hangs.
+ * better candidate (and 10m18s for a full implementation turn) — a short
+ * window would have dropped kimi. The hard `panelTimeoutMs` (default 15m)
+ * still bounds the whole phase, so the grace window only trades tail
+ * latency, never unbounded hangs.
  */
-const DEFAULT_STRAGGLER_GRACE_MS = 300_000;
+const DEFAULT_STRAGGLER_GRACE_MS = 600_000;
 
 /** Join the system-role messages (the launched tool's harness/custom prompt). */
 function harnessSystemFromMessages(messages: readonly ChatMessageLike[]): string | undefined {

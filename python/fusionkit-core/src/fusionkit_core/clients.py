@@ -1203,6 +1203,11 @@ def _optional_float(value: Any) -> float | None:
         return None
     if isinstance(value, int | float):
         return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
     return None
 
 
@@ -1213,6 +1218,13 @@ def _optional_int(value: Any) -> int | None:
         return value
     if isinstance(value, float) and value.is_integer():
         return int(value)
+    if isinstance(value, str):
+        try:
+            parsed = float(value)
+        except ValueError:
+            return None
+        if parsed.is_integer():
+            return int(parsed)
     return None
 
 

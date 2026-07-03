@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 import pytest
@@ -13,7 +13,15 @@ from fusionkit_core.judge import (
     analysis_reasoning_markdown,
     parse_analysis,
 )
-from fusionkit_core.types import ChatMessage, FusionAnalysis, ModelResponse, StreamChunk, Trajectory
+from fusionkit_core.types import (
+    ChatMessage,
+    FusionAnalysis,
+    ModelResponse,
+    ProviderCost,
+    StreamChunk,
+    Trajectory,
+    Usage,
+)
 
 
 def _trajectory(trajectory_id: str, model_id: str, final_output: str) -> Trajectory:
@@ -73,6 +81,66 @@ async def test_fuse_no_tools_is_terminal_and_folds_synthesis_onto_trajectory() -
     contributions = synthesis.metrics["trajectory_contributions"]
     assert contributions[0]["trajectory_id"] == "traj_alpha"
     assert contributions[1]["trajectory_id"] == "traj_beta"
+
+
+@pytest.mark.asyncio
+async def test_fuse_carries_provider_cost_from_verbatim_judge_selection() -> None:
+    class CostedJudge:
+        model_id = "judge"
+        max_context = None
+
+        async def chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Mapping[str, Any]] | None = None,
+            tool_choice: str | Mapping[str, Any] | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> ModelResponse:
+            return ModelResponse(
+                model_id=self.model_id,
+                content=(
+                    '{"consensus":["alpha wins"],"contradictions":[],"unique_insights":[],'
+                    '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[],'
+                    '"best_trajectory":"traj_alpha"}'
+                ),
+                usage=Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+                provider_cost=ProviderCost(
+                    source="provider",
+                    cost_usd=0.0042,
+                    generation_id="gen_judge",
+                    lookup_status="ok",
+                ),
+            )
+
+        async def stream_chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Mapping[str, Any]] | None = None,
+            tool_choice: str | Mapping[str, Any] | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            if False:
+                yield StreamChunk()
+            raise AssertionError("stream_chat should not be called")
+
+        async def aclose(self) -> None:
+            return None
+
+    result = await JudgeSynthesizer(select_best=True).fuse(
+        [ChatMessage(role="user", content="Pick best")],
+        [_trajectory("traj_alpha", "alpha", "OK")],
+        judge_client=CostedJudge(),
+        sampling=SamplingConfig(),
+        tools=None,
+    )
+
+    assert result.response.content == "OK"
+    assert result.response.provider_cost is not None
+    assert result.response.provider_cost.cost_usd == 0.0042
+    assert result.response.provider_cost.generation_id == "gen_judge"
+    assert result.response.usage.total_tokens == 15
 
 
 @pytest.mark.asyncio

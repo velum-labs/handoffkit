@@ -85,7 +85,13 @@ async function startOpenAiCompatibleServer(): Promise<{
             id: "chatcmpl_test",
             model,
             choices: [{ message: { role: "assistant", content: "gateway-ok" } }],
-            usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 }
+            usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
+            provider_cost: {
+              source: "provider",
+              cost_usd: 0.0042,
+              generation_id: "gen_test",
+              lookup_status: "ok"
+            }
           })
         );
         return;
@@ -432,6 +438,61 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
     assert.ok(stepIndex >= 0 && finishedIndex >= 0 && stepIndex < finishedIndex);
   } finally {
     removeTraceListener(listener);
+    await upstream.close();
+    cleanup();
+  }
+});
+
+test("Codex Responses provider is wrapped for provenance and provider cost capture", async () => {
+  const { outputRoot, cleanup } = tempOutputRoot();
+  const upstream = await startOpenAiCompatibleServer();
+  let gatewayBaseUrl: string | undefined;
+  const runner: CodexExecRunner = async (input) => {
+    const codexHome = input.env.CODEX_HOME;
+    assert.ok(codexHome);
+    const config = readFileSync(join(codexHome, "config.toml"), "utf8");
+    const match = /base_url = "([^"]+)"/.exec(config);
+    assert.ok(match);
+    gatewayBaseUrl = match[1];
+    const response = await fetch(`${gatewayBaseUrl}/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        input: "hello from fake codex",
+        stream: false
+      })
+    });
+    assert.equal(response.status, 200);
+    await response.text();
+    return { stdout: "codex gateway ok", stderr: "", exitCode: 0 };
+  };
+
+  try {
+    const result = await ensemble.run(
+      descriptor(outputRoot, {
+        harness: codexHarness({
+          env: {},
+          provider: {
+            kind: "responses",
+            baseUrl: `${upstream.url}/v1/responses`,
+            requiresOpenAiAuth: false
+          },
+          runner
+        })
+      })
+    );
+
+    assert.match(gatewayBaseUrl ?? "", /^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+    assert.equal(upstream.requests.length, 1);
+    assert.equal(result.modelCallRecords.length, 1);
+    const record = result.modelCallRecords[0];
+    assert.equal(record?.metadata?.dialect, "openai-responses");
+    const providerCost = record?.metadata?.provider_cost;
+    assert.ok(typeof providerCost === "object" && providerCost !== null && !Array.isArray(providerCost));
+    assert.equal((providerCost as Record<string, unknown>).generation_id, "gen_test");
+    assert.equal(record?.metadata?.cost_estimate, 0.0042);
+    assert.equal(result.candidates[0]?.metadata?.model_call_count, 1);
+  } finally {
     await upstream.close();
     cleanup();
   }

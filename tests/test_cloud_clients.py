@@ -428,14 +428,14 @@ async def test_openrouter_chat_attaches_generation_cost(monkeypatch) -> None:
             return {
                 "data": {
                     "id": "gen-chat",
-                    "total_cost": 0.0123,
-                    "tokens_prompt": 10,
-                    "tokens_completion": 5,
-                    "native_tokens_prompt": 11,
-                    "native_tokens_completion": 6,
+                    "total_cost": "0.0123",
+                    "tokens_prompt": "10",
+                    "tokens_completion": "5",
+                    "native_tokens_prompt": "11",
+                    "native_tokens_completion": "6",
                     "provider_name": "OpenRouter",
-                    "upstream_inference_cost": 0.01,
-                    "cache_discount": 0.002,
+                    "upstream_inference_cost": "0.01",
+                    "cache_discount": "0.002",
                 }
             }
 

@@ -100,6 +100,7 @@ class _TurnDiagnostics:
     synth_pack: dict[str, Any] | None = None
     judge_degraded: str | None = None
     synth_fallback: str | None = None
+    analysis_response: ModelResponse | None = None
 
     def to_metrics(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
@@ -273,6 +274,9 @@ class JudgeSynthesizer:
         result = self._build_fuse_result(
             response, trajectories, resolved_analysis, prepared.diagnostics
         )
+        result.response = _with_analysis_provider_cost(
+            result.response, prepared.diagnostics.analysis_response
+        )
         if result.terminal:
             # Parity with fuse_stream's Act III: surface the judge's analysis on
             # the reasoning channel of the terminal response (ahead of any of
@@ -342,6 +346,9 @@ class JudgeSynthesizer:
             result = self._build_fuse_result(
                 selected, trajectories, resolved_analysis, prepared.diagnostics
             )
+            result.response = _with_analysis_provider_cost(
+                result.response, prepared.diagnostics.analysis_response
+            )
             self._emit_step(
                 trace_id,
                 judge_span,
@@ -385,6 +392,9 @@ class JudgeSynthesizer:
             yield StreamChunk(delta=response.content)
         result = self._build_fuse_result(
             response, trajectories, resolved_analysis, prepared.diagnostics
+        )
+        result.response = _with_analysis_provider_cost(
+            result.response, prepared.diagnostics.analysis_response
         )
         self._emit_step(
             trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
@@ -666,6 +676,8 @@ class JudgeSynthesizer:
                 "usage": _usage_payload(response),
             },
         )
+        if diagnostics is not None:
+            diagnostics.analysis_response = response
         return parse_analysis(response.content)
 
     def _emit_step(
@@ -750,6 +762,7 @@ class _StreamAccumulator:
         self._seen_tool_ids: set[str] = set()
         self._finish_reason: str | None = None
         self._usage = Usage()
+        self._provider_cost = None
 
     def add(self, chunk: StreamChunk) -> None:
         self.yielded = True
@@ -765,6 +778,8 @@ class _StreamAccumulator:
             self._finish_reason = chunk.finish_reason
         if chunk.usage is not None:
             self._usage = chunk.usage
+        if chunk.provider_cost is not None:
+            self._provider_cost = chunk.provider_cost
 
     def response(self, model_id: str) -> ModelResponse:
         tool_calls = [
@@ -778,6 +793,7 @@ class _StreamAccumulator:
             finish_reason=self._finish_reason or ("tool_calls" if tool_calls else "stop"),
             usage=self._usage,
             tool_calls=tool_calls,
+            provider_cost=self._provider_cost,
             reasoning="".join(self._reasoning_parts) or None,
         )
 
@@ -1068,6 +1084,26 @@ def _usage_payload(response: Any) -> dict[str, Any]:
     if model_id is not None:
         out["model_id"] = model_id
     return out
+
+
+def _usage_is_empty(usage: Usage) -> bool:
+    return (
+        usage.prompt_tokens is None
+        and usage.completion_tokens is None
+        and usage.total_tokens is None
+    )
+
+
+def _with_analysis_provider_cost(
+    response: ModelResponse,
+    analysis_response: ModelResponse | None,
+) -> ModelResponse:
+    if response.provider_cost is not None or analysis_response is None:
+        return response
+    update: dict[str, Any] = {"provider_cost": analysis_response.provider_cost}
+    if _usage_is_empty(response.usage):
+        update["usage"] = analysis_response.usage
+    return response.model_copy(update=update)
 
 
 __all__ = [

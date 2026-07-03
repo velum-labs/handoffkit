@@ -76,8 +76,13 @@ type OpenAiChoice = {
   finish_reason?: string | null;
 };
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
-type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage };
-type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsage };
+type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; provider_cost?: unknown };
+type OpenAiResponse = {
+  id?: string;
+  choices?: OpenAiChoice[];
+  usage?: OpenAiUsage;
+  provider_cost?: unknown;
+};
 
 function randomId(): string {
   return Math.random().toString(36).slice(2, 12);
@@ -398,7 +403,8 @@ export function chatToResponses(
               ? { total_tokens: inputTokens + outputTokens }
               : {})
           }
-        : null
+        : null,
+    ...(openai.provider_cost !== undefined ? { provider_cost: openai.provider_cost } : {})
   };
 }
 
@@ -448,6 +454,7 @@ export function openAiSseToResponses(
   let finished = false;
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
+  let providerCost: unknown;
 
   type Controller = ReadableStreamDefaultController<Uint8Array>;
 
@@ -469,7 +476,8 @@ export function openAiSseToResponses(
                 : {})
             }
           : null
-        : null
+        : null,
+    ...(status === "completed" && providerCost !== undefined ? { provider_cost: providerCost } : {})
   });
 
   const ensureCreated = (controller: Controller): void => {
@@ -719,6 +727,7 @@ export function openAiSseToResponses(
       inputTokens = chunk.usage.prompt_tokens ?? inputTokens;
       outputTokens = chunk.usage.completion_tokens ?? outputTokens;
     }
+    if (chunk.provider_cost !== undefined) providerCost = chunk.provider_cost;
     const choice = chunk.choices?.[0];
     if (choice === undefined) return;
     const delta = choice.delta ?? {};
