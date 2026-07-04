@@ -25,12 +25,13 @@ deviation: a base-engine parser correction).
 |---|---|---|---|
 | **C0** — coverage | Do deployable models have per-task public data? | **PARTIAL** | Terminal-Bench covers the deployable agentic frontier (52k trial rows, GPT-5.5/Opus-4.x/Gemini-3-class systems); LLMRouterBench covers near-deployable variants at tier A; LiveBench/BigCodeBench lag the frontier |
 | **C1** — existence | Do strong systems make complementary errors? | **PASS** | Headroom over best single: +9.0pp CI [+6.5, +12.5] (SWE-bench Verified, system-level); +12.3pp [+7.6, +14.9] (Terminal-Bench); +11.3pp [+9.3, +12.2] (LLMRouterBench LCB, tier A); floors met |
-| **C2** — selection value | Does complementarity-selected beat top-K-by-average out of sample? | **INCONCLUSIVE / FAIL** (see caveat) | No held-out Δ_oracle CI lower bound > 0 anywhere; SWE-bench Verified outright negative (−3.0pp CI [−3.7, −2.1]) |
+| **C2** — selection value | Does complementarity-selected beat top-K-by-average out of sample? | **INCONCLUSIVE / FAIL** | No held-out Δ_oracle CI lower bound > 0 anywhere; V-selection re-test also found no positive Δ_V CI and SWE-bench Verified remained negative |
 | **C3** — transfer | Does public signal transfer to our harness? | **PASS** | Pre-named panels: +7.0pp headroom CI [+1.7, +10.5] (P1/P3), +5.1pp [0.0, +12.5] (P2) on 60 LCB tasks × 5 models; failure-dependence sign agreement public↔calibrated **10/10**; judged replay beat best single (38.6% vs 28.1%) |
 
 Sources: `analysis/phase0/c0_coverage.md`, `c1_c2_report.md`,
-`c2_preregistration.md`, `c3_plan.md`, `c3_transfer_report.md`,
-`harness_inventory.md`, `cost_table.md`.
+`c2_preregistration.md`, `c2v_preregistration.md`, `c2v_report.md`,
+`c3_plan.md`, `c3_transfer_report.md`, `harness_inventory.md`,
+`cost_table.md`.
 
 ## What the evidence says, plainly
 
@@ -45,17 +46,13 @@ Sources: `analysis/phase0/c0_coverage.md`, `c1_c2_report.md`,
    harness. But selecting panels by train-split complementarity did **not**
    beat the dumb top-K-by-average baseline out of sample anywhere in public
    data, and lost outright on SWE-bench Verified. Oracle-on-train selection
-   overfits; average-score selection is a genuinely strong baseline.
-   **Verification caveat on C2's scope:** the pre-registered selector was
-   *oracle(S)-only*, which happily picks weak-but-decorrelated systems
-   (e.g. `MCTS-Refine-7B`, `Fin-R1` appear in its chosen panels). The
-   spec's actual objective `V(S) = best_pass + capture×headroom` penalizes
-   weak members and was **not** tested. C2's verdict is strong evidence
-   against oracle-max selection, weaker evidence against V-selection. A
-   V-selection re-test on the same cached data is free and should run
-   before C2 is treated as fully settled — though the descope decision
-   below does not depend on it (shortlist-and-veto authority is justified
-   either way).
+   overfits; average-score selection is a genuinely strong baseline. The
+   follow-up C2V re-test used the spec objective
+   `V(S) = best_pass + 0.7×headroom` on the same held-out splits: it found
+   no positive Δ_V CI, 2/14 panels identical to the top-K baseline, no
+   capture-sensitivity panel changes, and SWE-bench Verified still negative.
+   C2 is therefore settled for public-prior selection under both oracle-only
+   and value selection, subject to the public-data limitations below.
 3. **Coverage is adequate for priors, inadequate for authority.** The
    deployable frontier appears in public per-task data mostly as
    scaffold-confounded A− rows (Terminal-Bench, SWE-bench submissions) or
@@ -142,16 +139,13 @@ unknown ($1–10/task estimated) and is blocked on harness work, not budget.
 1. **Re-run the C3 slice with a larger completion budget** (≥ 16k tokens
    for thinking models) — fixes the confirmed kimi truncation artifact and
    yields the first valid read on the committed default panel (~$5).
-2. **Re-test C2 with V-selection** (`best_pass + capture×headroom`) on the
-   already-cached public matrices — free, and closes the verification
-   caveat on C2's scope.
-3. Harden the C3 pilot script into `calibration.py` + the
+2. Harden the C3 pilot script into `calibration.py` + the
    `CandidateBank → tier-CAL` adapter (spec §15.3) and run the first real
    150-task two-slice calibration round (spec §15.1) with the P2 panel and
    a proper judge protocol.
-4. Start M1 (reduced warehouse) with the three sources that produced
+3. Start M1 (reduced warehouse) with the three sources that produced
    evidence in this study; port the Phase-0 scripts as the reference
    implementations.
-5. Harness work for repo_bugfix calibration (HandoffKit patch-and-test
+4. Harness work for repo_bugfix calibration (HandoffKit patch-and-test
    path) — the highest-value unlock, since repo tasks are the product's
    core and the public A− data is densest there.
