@@ -117,7 +117,6 @@ async function settleWithStragglerGrace<T>(
         options.abandon(ordinal);
       }
     }, graceMs);
-    timer.unref?.();
   };
   const settled = await Promise.all(
     runs.map((run, ordinal) =>
