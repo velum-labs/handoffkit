@@ -1225,7 +1225,167 @@ scriptable without the CLI.
 - **Quality-gate test**: seeded bad rows (duplicate, undeclared domain,
   restricted-license in export) each trigger their check.
 
-### 19. Milestones with acceptance criteria
+### 19. Implementation chronology and build order
+
+The milestones in §20 define *acceptance gates*; this section defines the
+*order of construction* — what to code first, what depends on what, what can
+proceed in parallel, and where the go/no-go checkpoints sit. Four principles
+govern the ordering:
+
+1. **Walking skeleton first.** Get the thinnest possible end-to-end slice
+   working (one source → warehouse → outcome matrix → panel selection →
+   printed output) before adding any breadth. Every later component slots
+   into a pipeline that already runs.
+2. **Front-load the riskiest assumption.** The whole project rests on one
+   empirical bet: that public per-task data contains an exploitable
+   decorrelation signal — that panels selected for complementarity actually
+   beat panels selected by average score. If that bet fails, nothing else is
+   worth building. So the chronology forces that test as early as possible
+   (checkpoints C1 and C2 below), before parser breadth, cards, or any
+   billed calibration.
+3. **Freeze schemas early.** Everything imports `models.py`; churn there
+   multiplies across every parser and analytics module. Phase 0 ends with a
+   schema review and a deliberate freeze; later schema changes are treated
+   as migrations.
+4. **Separate breadth work from depth work.** Source parsers are
+   embarrassingly parallel breadth work (each is an independent pure
+   function with its own golden test). Analytics is sequential depth work.
+   After Phase 0, they proceed on independent tracks and can be split
+   across engineers.
+
+#### Dependency graph
+
+```
+models.py ──────────────┬──────────────┬─────────────────┬──────────────┐
+                        ▼              ▼                 ▼              ▼
+                  registry.py    outcomes.py       quality.py     taxonomy.py
+                        │              │                 │              │
+        ┌───────────────┤              ▼                 │              │
+        ▼               ▼         select.py              │              │
+  sources/livecodebench sources/llmrouterbench │         │              │
+        │               │              │                 │              │
+        │       identity.py ◀── required before          │              │
+        │               │       sources/swebench_experiments             │
+        │               ▼              │                 │              │
+        │       sources/{swebench, livebench,            │              │
+        │                bigcodebench, terminal_bench}   │              │
+        │               │              │                 │              │
+        └───────┬───────┘              │                 │              │
+                ▼                      ▼                 ▼              ▼
+          normalize.py ─────────▶ cards.py ◀─────────────┴──────────────┘
+        (+ aggregates,                 │
+           preferences)                ▼
+                              calibration.py ──▶ validate.py ──▶ router (rules)
+                              (fusionkit-evals bridge)
+```
+
+Critical path: **Phase 0 → 1 → 2 → identity → SWE-bench ingestion → cards →
+calibration → validation → router.** Everything else hangs off the path and
+parallelizes.
+
+#### Phase 0 — package bootstrap (blocks everything)
+
+Build: `pyproject.toml` + workspace registration; `models.py` complete
+(§7 schemas, all of them — resist "add fields later"); JSONL read/write
+helpers; empty CLI entry point; CI wiring (`ruff`, `pyright`, `pytest`
+running on the new package).
+Exit: fixture rows round-trip through every schema; CI green; schema review
+held and schemas declared frozen.
+
+#### Phase 1 — walking skeleton (one thin slice, checkpoint C1)
+
+Build, in order: `registry.py` (SourceSpec + fetch loop);
+`sources/livecodebench.py` — chosen first because it is the cleanest payload
+(plain JSON, tier A, no identity complications) — with its golden-snapshot
+test; `outcomes.py` (matrix building, `oracle`, `headroom`, `failure_phi`,
+`unique_win_rate`); a minimal `select.py` (greedy, no capture/cost knobs
+yet); `matrix` and `select` CLI commands printing to stdout.
+
+**Checkpoint C1 — earliest falsification test.** From one live LiveCodeBench
+fetch: print a real pairwise failure-correlation matrix and a greedy panel
+for `algorithmic`, and check that headroom over the best single model is
+materially positive (≥ 5 points) for at least one 2–3 model panel of
+current-generation models. This is the first moment the central hypothesis
+touches real data. If every strong model's failures correlate above ~0.8
+and headroom is ~0, stop and reassess before writing another parser.
+
+#### Phase 2 — hypothesis validation at scale (checkpoint C2, before breadth)
+
+Build: `sources/llmrouterbench.py` (bulk per-instance ingestion — the
+largest dataset and the designated offline testbed); the selection
+acceptance harness (greedy vs. exhaustive top-K on held-out coding
+subsets); bootstrap stability measurement.
+
+**Checkpoint C2 — the go/no-go gate.** On LLMRouterBench held-out coding
+subsets: (a) greedy panels reach ≥ 90% of exhaustive-search oracle gain for
+K ≤ 3; (b) complementarity-selected panels beat top-K-by-average-score
+panels on held-out tasks; (c) selection is ≥ 80% stable under task
+bootstrap. Passing C2 justifies all subsequent investment. Failing (b) in
+particular means the decorrelation signal in public data is too weak to
+drive selection — the pivot would be toward calibration-first (Layer 2)
+with the index reduced to shortlisting, a much smaller build.
+
+#### Phase 3 — evidence breadth, identity, governance (three parallel tracks)
+
+- **Track A — parsers** (one engineer, or split per source):
+  `identity.py` first (SWE-bench ingestion is useless without it), then
+  `sources/swebench_experiments.py` (the biggest prize: repo-level A− rows
+  + patch/log artifacts), then `sources/livebench.py`,
+  `sources/bigcodebench.py`, `sources/terminal_bench.py`. Each lands with
+  its golden test; each is independently shippable.
+- **Track B — governance**: `quality.py` full check suite;
+  `taxonomy.py` source→label mappings + the label-lifecycle retention test
+  runner (runnable as soon as two domains have outcome rows).
+- **Track C — analytics depth**: `normalize.py` (cohort z-scores, anchor
+  linking), Wilson/shrinkage intervals, the capture-discounted value
+  function and fallback ladder in `select.py`, clustered bootstrap.
+
+Tracks share only frozen schemas; two or three engineers can run them
+concurrently with merge points at the end of the phase.
+
+#### Phase 4 — product surface
+
+Build: `sources/aggregates.py` + `sources/preferences.py` (shortlisting
+coverage and judge-training data — deliberately deferred until now because
+they inform no go/no-go decision); `cards.py` (evidence floors, license
+stripping, `BenchmarkPanel` preset emission); full CLI; the determinism
+test (same snapshots in → byte-identical artifacts out).
+Exit: first 3–4 panel cards generated from public data alone, human-reviewed.
+
+#### Phase 5 — calibration bridge (first billed spend)
+
+Build: `calibration.py` (informativeness scoring + weight-stability check;
+`CandidateBank → tier-CAL TaskOutcome` adapter; run-manifest emission).
+Execute calibration round 1 through the existing `fusionkit-evals` harness
+on the selected slice; measure `capture(d)` from judge logs; implement
+`validate.py` (§12 fidelity metrics); regenerate cards with calibrated
+numbers. Spend is gated on C2 having passed and on a human review of the
+selected slice.
+Exit: Spearman ρ per domain published; measured capture in cards; tier-CAL
+rows in the warehouse.
+
+#### Phase 6 — routing and operations
+
+Build: rule-based router from cards; the refresh pipeline (re-mine →
+shortlist delta → 50–150-task delta calibration → re-issue cards),
+exercised once end-to-end on a newly shipped model; the scheduled live-fetch
+job (CI stays snapshot-only); the identity review-queue workflow.
+
+#### What deliberately comes last
+
+Cards polish, CLI ergonomics, aggregate-leaderboard sources, preference
+ingestion, and the router are all *behind* the falsification checkpoints on
+purpose: each is only valuable if C1/C2 hold, and none de-risks anything.
+The learned router (§16 stage 2) is outside this chronology entirely — it
+starts only after multiple calibration rounds have accumulated training
+data.
+
+Mapping to §20 acceptance gates: M1 ≈ Phases 0–1, M2 ≈ Phase 3 track A
+(+identity), M3 ≈ Phases 2 + 3C, M4 ≈ Phase 4, M5 ≈ Phase 5, M6 ≈ Phase 6.
+The phases resequence the milestones so that the riskiest claims are tested
+first; the acceptance criteria themselves are unchanged.
+
+### 20. Milestones with acceptance criteria
 
 **M1 — Warehouse + first tier-A sources.** Package skeleton, schemas,
 registry, LiveCodeBench + LiveBench + BigCodeBench parsers (per-question →
@@ -1263,7 +1423,7 @@ a held-out slice; one full refresh exercised on a newly shipped model
 *Accept:* router regret + unnecessary-ensemble + missed-opportunity rates
 reported; refresh completed without a full re-run.
 
-### 20. Risk register
+### 21. Risk register
 
 | Risk | Mitigation |
 |---|---|
@@ -1276,7 +1436,7 @@ reported; refresh completed without a full re-run.
 | Hand-set constants (capture prior, info weights, n_eff discounts) are wrong | Each is replaced by a measured quantity at first opportunity (§12.4, §15.3); until then, sensitivity checks gate decisions that depend on them |
 | Judge over-credit (headroom counted as realized) | `capture(d)` discount everywhere; measured, conservative prior before that |
 | Sparse-cell overconfidence | Shrinkage + intervals; `insufficient_evidence` exclusion; per-cell n floors in calibration design |
-| Index goes stale | Refresh triggers on cards; delta-calibration path (§19 M6) keeps refresh cheap |
+| Index goes stale | Refresh triggers on cards; delta-calibration path (§20 M6) keeps refresh cheap |
 
 ---
 
