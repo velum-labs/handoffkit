@@ -20,6 +20,7 @@ from fusionkit_core.clients import (
 from fusionkit_core.config import (
     FusionConfig,
     FusionMode,
+    PromptOverrides,
     SamplingConfig,
     model_sampling_defaults,
 )
@@ -130,6 +131,9 @@ class FuseTrajectoriesRequest(BaseModel):
     tool_choice: str | dict[str, Any] | None = None
     judge_model: str | None = None
     synthesizer_model: str | None = None
+    # Per-request system-prompt overrides (a named ensemble's committed
+    # prompts). Fields win per key; unset falls back to the config overrides.
+    prompts: PromptOverrides | None = None
     stream: bool = False
 
 
@@ -304,6 +308,7 @@ def create_app(
                 sampling=config.sampling,
                 tools=tools,
                 tool_choice=tool_choice,
+                prompts=request.prompts,
                 trace_id=trace_id,
                 span_id=resolved_span,
             )
@@ -320,6 +325,7 @@ def create_app(
                 sampling=config.sampling,
                 tools=tools,
                 tool_choice=tool_choice,
+                prompts=request.prompts,
                 trace_id=trace_id,
                 span_id=resolved_span,
             )

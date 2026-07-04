@@ -24,7 +24,12 @@ export function cursorIdeInstructions(model: string): string {
 }
 
 /** Human-facing setup for Cursor (IDE plan/chat panel only; needs a public URL). */
-export function cursorInstructions(publicUrl: string, model: string): string {
+export function cursorInstructions(
+  publicUrl: string,
+  model: string,
+  fusedModels: readonly string[] = []
+): string {
+  const otherFused = fusedModels.filter((id) => id !== model);
   return [
     "Cursor backs only its plan/chat panel with a custom model, and cannot reach",
     "localhost — so this uses a public tunnel. In Cursor: Settings -> Models ->",
@@ -33,6 +38,12 @@ export function cursorInstructions(publicUrl: string, model: string): string {
     `  Override OpenAI Base URL : ${publicUrl}/v1`,
     `  Model name               : ${model}`,
     `  OpenAI API Key           : fusionkit-local (any non-empty value)`,
+    ...(otherFused.length > 0
+      ? [
+          "",
+          `Other registered ensembles work as model names too: ${otherFused.join(", ")}.`
+        ]
+      : []),
     "",
     "Use the chat/plan panel (Cmd/Ctrl+L). Composer, inline edit, apply, and",
     "autocomplete remain on Cursor's own backend and are not affected."
@@ -47,6 +58,8 @@ async function launchCursorFusion(ctx: ToolLaunchContext): Promise<number> {
   const started = await startCursorBridge({
     fusionUrl: ctx.gatewayUrl,
     modelLabel: ctx.modelLabel,
+    ...(ctx.fusedModels !== undefined ? { fusedModels: ctx.fusedModels } : {}),
+    ...(ctx.nativeModels !== undefined ? { nativeModels: ctx.nativeModels } : {}),
     ...(ctx.logsDir !== undefined ? { logFile: join(ctx.logsDir, "cursor-bridge.log") } : {}),
     ...(ctx.caCertPath !== undefined ? { caCertPath: ctx.caCertPath } : {}),
     log: ctx.log
@@ -81,7 +94,7 @@ async function launchCursorLocal(ctx: ToolLaunchContext): Promise<number> {
     return 1;
   }
   ctx.log("");
-  ctx.log(cursorInstructions(publicUrl, ctx.modelLabel));
+  ctx.log(cursorInstructions(publicUrl, ctx.modelLabel, ctx.fusedModels ?? []));
   ctx.log("");
   ctx.log("Gateway is running; leave this process up while you use Cursor. Ctrl+C to stop.");
   await new Promise<void>(() => {
@@ -112,6 +125,7 @@ async function launchCursorIde(ctx: ToolLaunchContext): Promise<number> {
     repo,
     gatewayUrl: ctx.gatewayUrl,
     modelLabel: ctx.modelLabel,
+    ...(ctx.fusedModels !== undefined ? { fusedModels: ctx.fusedModels } : {}),
     ...(ctx.nativeModels !== undefined ? { nativeModels: ctx.nativeModels } : {}),
     ...(ctx.authToken !== undefined ? { apiKey: ctx.authToken } : {}),
     ...(ctx.caCertPath !== undefined ? { caCertPath: ctx.caCertPath } : {})

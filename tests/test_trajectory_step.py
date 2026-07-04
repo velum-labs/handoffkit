@@ -151,6 +151,103 @@ def test_step_emits_tool_calls_and_injects_candidate_context(tmp_path) -> None:
     assert "patched add() to use +" in judge.system_prompt
 
 
+class _RecordingFinalClient:
+    """A judge/synth client that records every system prompt and answers."""
+
+    model_id = "judge"
+    max_context: int | None = None
+
+    def __init__(self, responses: Sequence[str]) -> None:
+        self._responses = list(responses)
+        self._calls = 0
+        self.system_prompts: list[str] = []
+
+    async def chat(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        extra: Mapping[str, Any] | None = None,
+    ) -> ModelResponse:
+        del sampling, tools, tool_choice, extra
+        for message in messages:
+            if message.role == "system":
+                self.system_prompts.append(message.content)
+        content = self._responses[self._calls % len(self._responses)]
+        self._calls += 1
+        return ModelResponse(model_id="judge", content=content)
+
+    async def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        extra: Mapping[str, Any] | None = None,
+    ) -> AsyncIterator[StreamChunk]:
+        del sampling, tools, tool_choice, extra
+        for message in messages:
+            if message.role == "system":
+                self.system_prompts.append(message.content)
+        content = self._responses[self._calls % len(self._responses)]
+        self._calls += 1
+        yield StreamChunk(delta=content)
+
+    async def aclose(self) -> None:
+        return None
+
+
+_ANALYSIS_JSON = (
+    '{"consensus":[],"contradictions":[],"unique_insights":[],'
+    '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}'
+)
+
+
+def test_step_applies_per_request_prompt_overrides(tmp_path) -> None:
+    """A named ensemble's prompts ride the fuse request and override the config's."""
+    judge = _RecordingFinalClient([_ANALYSIS_JSON, "fused answer"])
+    app = create_app(_config(), clients={"judge": judge}, run_store_path=tmp_path / "runs")
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/fusion/trajectories:fuse",
+        json={
+            "messages": [{"role": "user", "content": "fix the add() bug"}],
+            "trajectories": [_TRAJECTORY],
+            "prompts": {
+                "judge_system": "ENSEMBLE JUDGE PROMPT",
+                "synthesizer_system": "ENSEMBLE SYNTH PROMPT",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "fused answer"
+    # The judge gap-analysis used the per-request judge prompt, and the
+    # synthesizer step used the per-request synthesizer prompt.
+    assert judge.system_prompts[0] == "ENSEMBLE JUDGE PROMPT"
+    assert judge.system_prompts[1].startswith("ENSEMBLE SYNTH PROMPT")
+
+
+def test_step_without_prompts_uses_config_defaults(tmp_path) -> None:
+    """Omitting per-request prompts keeps the configured/built-in prompts."""
+    judge = _RecordingFinalClient([_ANALYSIS_JSON, "fused answer"])
+    app = create_app(_config(), clients={"judge": judge}, run_store_path=tmp_path / "runs")
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/fusion/trajectories:fuse",
+        json={
+            "messages": [{"role": "user", "content": "fix the add() bug"}],
+            "trajectories": [_TRAJECTORY],
+        },
+    )
+
+    assert response.status_code == 200
+    assert judge.system_prompts[0] != "ENSEMBLE JUDGE PROMPT"
+
+
 def test_step_streams_sse_with_tool_calls(tmp_path) -> None:
     app = create_app(
         _config(), clients={"judge": _ToolCallClient()}, run_store_path=tmp_path / "runs"

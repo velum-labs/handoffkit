@@ -276,7 +276,7 @@ test("init scaffolds a .fusionkit/fusion.json and refuses to clobber without --f
     const configPath = join(fixture.repo, ".fusionkit", "fusion.json");
     assert.ok(existsSync(configPath));
     const config = JSON.parse(readFileSync(configPath, "utf8")) as { version: string };
-    assert.equal(config.version, "fusionkit.fusion.v2");
+    assert.equal(config.version, "fusionkit.fusion.v3");
 
     const again = warrant(["init", "--repo", fixture.repo]);
     assert.equal(again.status, 1);
@@ -382,9 +382,9 @@ test("ensemble mock smoke writes records and concise summary", () => {
       "this prompt should not be printed in full"
     ]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /ensemble cli_mock \[succeeded\]/);
-    assert.match(result.stdout, /candidates: 2/);
-    assert.ok(!result.stdout.includes("this prompt should not be printed in full"));
+    assert.match(result.stderr, /ensemble cli_mock \[succeeded\]/);
+    assert.match(result.stderr, /candidates: 2/);
+    assert.ok(!result.stderr.includes("this prompt should not be printed in full"));
     assert.ok(existsSync(join(fixture.output, "summary.json")));
     assert.ok(existsSync(join(fixture.output, "harness-run-request.json")));
     assert.ok(existsSync(join(fixture.output, "harness-run-result.json")));
@@ -419,7 +419,7 @@ test("ensemble command smoke records command output", () => {
       "command prompt"
     ]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /ensemble cli_command \[succeeded\]/);
+    assert.match(result.stderr, /ensemble cli_command \[succeeded\]/);
     const summary = readFileSync(join(fixture.output, "summary.json"), "utf8");
     assert.ok(summary.includes("cli_command_command_0"));
     const candidate = readFileSync(
@@ -451,7 +451,7 @@ test("ensemble command failure exits nonzero but writes summary", () => {
       "command prompt"
     ]);
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /ensemble cli_fail \[failed\]/);
+    assert.match(result.stderr, /ensemble cli_fail \[failed\]/);
     assert.ok(existsSync(join(fixture.output, "summary.json")));
   } finally {
     fixture.cleanup();
@@ -709,8 +709,8 @@ test("ensemble dashboard writes markdown and run-result records", () => {
       "1000"
     ]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /harness dashboard/);
-    assert.match(result.stdout, /records: 6/);
+    assert.match(result.stderr, /harness dashboard/);
+    assert.match(result.stderr, /records: 6/);
     assert.ok(existsSync(join(fixture.output, "dashboard.md")));
     assert.ok(existsSync(join(fixture.output, "harness-run-results", "mock-success.json")));
     assert.ok(existsSync(join(fixture.output, "harness-run-results", "cursor-skipped.json")));
@@ -740,7 +740,7 @@ test("ensemble dashboard live-smoke flag remains env-gated by default", () => {
       "codex"
     ]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /records: 6/);
+    assert.match(result.stderr, /records: 6/);
     const dashboard = readFileSync(join(fixture.output, "dashboard.md"), "utf8");
     assert.match(dashboard, /live smoke not requested/);
     assert.equal(dashboard.includes("claude-code-live"), false);
@@ -790,8 +790,8 @@ test("ensemble task-file input works without printing prompt contents", () => {
       "cli_file"
     ]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /ensemble cli_file \[succeeded\]/);
-    assert.ok(!result.stdout.includes("secret-ish task text"));
+    assert.match(result.stderr, /ensemble cli_file \[succeeded\]/);
+    assert.ok(!result.stderr.includes("secret-ish task text"));
     assert.ok(existsSync(join(fixture.output, "summary.json")));
   } finally {
     fixture.cleanup();
@@ -823,7 +823,7 @@ test("ensemble e2e runs a FusionKit-backed command matrix and writes a report", 
       "Run the FusionKit-backed command harness."
     ]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /unified e2e \[succeeded:1\]/);
+    assert.match(result.stderr, /unified e2e \[succeeded:1\]/);
     assert.ok(existsSync(join(fixture.output, "unified-e2e-report.json")));
     const report = readFileSync(join(fixture.output, "unified-e2e-report.json"), "utf8");
     assert.match(report, /"harness": "command"/);
@@ -876,7 +876,7 @@ test("ensemble gateway test runs the unified front-door acceptance suite", async
       "FUSION_OK"
     ]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /front-door acceptance report/);
+    assert.match(result.stderr, /front-door acceptance report/);
     assert.ok(existsSync(reportPath));
     const report = JSON.parse(readFileSync(reportPath, "utf8")) as {
       front_doors: Array<{ id: string; status: string; reason?: string }>;

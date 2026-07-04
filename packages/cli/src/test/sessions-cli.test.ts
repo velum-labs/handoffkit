@@ -67,46 +67,46 @@ function turn(index: number): Record<string, unknown> {
 
 test("`sessions list` shows nothing in an empty store", () => {
   const root = sessionsDir();
-  const { status, stdout } = runCli(["sessions", "list"], root);
+  const { status, stderr: out } = runCli(["sessions", "list"], root);
   assert.equal(status, 0);
-  assert.match(stdout, /no sessions yet/);
+  assert.match(out, /no sessions yet/);
 });
 
 test("`sessions list` shows id, tool, panel, turn count, most-recent first", () => {
   const root = sessionsDir();
   seedSession(root, "1111aaaa2222bbbb", baseMeta("codex", Date.now() - 10_000), [turn(1)]);
   seedSession(root, "3333cccc4444dddd", baseMeta("claude", Date.now()), [turn(1), turn(2)]);
-  const { status, stdout } = runCli(["sessions", "list"], root);
+  const { status, stderr: out } = runCli(["sessions", "list"], root);
   assert.equal(status, 0);
-  assert.match(stdout, /1111aaaa2222bbbb/);
-  assert.match(stdout, /3333cccc4444dddd/);
-  assert.match(stdout, /codex/);
-  assert.match(stdout, /claude/);
-  assert.match(stdout, /gpt\+sonnet/);
-  assert.match(stdout, /2 turns/);
+  assert.match(out, /1111aaaa2222bbbb/);
+  assert.match(out, /3333cccc4444dddd/);
+  assert.match(out, /codex/);
+  assert.match(out, /claude/);
+  assert.match(out, /gpt\+sonnet/);
+  assert.match(out, /2 turns/);
   // Most-recently-active session is listed first.
-  assert.ok(stdout.indexOf("3333cccc4444dddd") < stdout.indexOf("1111aaaa2222bbbb"));
+  assert.ok(out.indexOf("3333cccc4444dddd") < out.indexOf("1111aaaa2222bbbb"));
 });
 
 test("bare `sessions` defaults to listing", () => {
   const root = sessionsDir();
   seedSession(root, "abcd1234abcd1234", baseMeta("codex", Date.now()), [turn(1)]);
-  const { status, stdout } = runCli(["sessions"], root);
+  const { status, stderr: out } = runCli(["sessions"], root);
   assert.equal(status, 0);
-  assert.match(stdout, /abcd1234abcd1234/);
+  assert.match(out, /abcd1234abcd1234/);
 });
 
 test("`sessions show` resolves a unique prefix and prints details + recent turns", () => {
   const root = sessionsDir();
   seedSession(root, "deadbeefdeadbeef", baseMeta("codex", Date.now()), [turn(1), turn(2)]);
-  const { status, stdout } = runCli(["sessions", "show", "deadbeef"], root);
+  const { status, stderr: out } = runCli(["sessions", "show", "deadbeef"], root);
   assert.equal(status, 0);
-  assert.match(stdout, /deadbeefdeadbeef/);
-  assert.match(stdout, /codex/);
-  assert.match(stdout, /gpt=gpt-5\.5/);
-  assert.match(stdout, /recent turns/);
-  assert.match(stdout, /turn 2/);
-  assert.match(stdout, /task number 2/);
+  assert.match(out, /deadbeefdeadbeef/);
+  assert.match(out, /codex/);
+  assert.match(out, /gpt=gpt-5\.5/);
+  assert.match(out, /recent turns/);
+  assert.match(out, /turn 2/);
+  assert.match(out, /task number 2/);
 });
 
 test("`sessions show` fails for an unknown id", () => {
@@ -121,8 +121,8 @@ test("`sessions rm` deletes a session by prefix", () => {
   seedSession(root, "feedface00000000", baseMeta("codex", Date.now()), [turn(1)]);
   const removed = runCli(["sessions", "rm", "feedface"], root);
   assert.equal(removed.status, 0);
-  assert.match(removed.stdout, /removed session/);
+  assert.match(removed.stderr, /removed session/);
   // It is gone from the listing afterwards.
   const list = runCli(["sessions", "list"], root);
-  assert.match(list.stdout, /no sessions yet/);
+  assert.match(list.stderr, /no sessions yet/);
 });

@@ -4,8 +4,8 @@
  * piped or captured. UI is written to stderr by convention so the launched
  * coding tool's stdout stays pristine.
  *
- * The only dependency is `figlet`, used purely for the one-shot wordmark banner;
- * everything else is zero-dependency ANSI.
+ * `figlet` is used purely for the one-shot wordmark banner; everything else is
+ * plain ANSI shared by the Ink presenter and the plain-text fallback.
  */
 import figlet from "figlet";
 
@@ -43,15 +43,24 @@ export const glyph = {
   arrow: () => (supportsColor() ? "\u203a" : ">"),
   pointer: () => (supportsColor() ? "\u276f" : ">"),
   warn: () => (supportsColor() ? "\u26a0" : "[!]"),
-  pending: () => (supportsColor() ? "\u25cb" : "( )")
+  pending: () => (supportsColor() ? "\u25cb" : "( )"),
+  checkboxOn: () => (supportsColor() ? "\u25c9" : "[x]"),
+  checkboxOff: () => (supportsColor() ? "\u25ef" : "[ ]")
 };
 
 /** Frames for the in-place spinner (braille dots when color is on). */
-export const SPINNER_FRAMES: readonly string[] = supportsColorFrames();
-
-function supportsColorFrames(): readonly string[] {
-  return ["\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"];
-}
+export const SPINNER_FRAMES: readonly string[] = [
+  "\u280b",
+  "\u2819",
+  "\u2839",
+  "\u2838",
+  "\u283c",
+  "\u2834",
+  "\u2826",
+  "\u2827",
+  "\u2807",
+  "\u280f"
+];
 
 /** The product tagline, shown beneath the banner/header. */
 const BRAND_TAGLINE = "real model fusion behind your coding agent";
@@ -72,7 +81,7 @@ export function stripAnsi(text: string): string {
 }
 
 /** Visible (printed) width of a string, ignoring ANSI escapes. */
-function visibleWidth(text: string): number {
+export function visibleWidth(text: string): number {
   return stripAnsi(text).length;
 }
 

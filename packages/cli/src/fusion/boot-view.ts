@@ -1,7 +1,14 @@
-import type { StackEvent, StackReporter } from "../fusion-quickstart.js";
+/**
+ * The live boot checklist: one row per panel server, an optional synthesizer
+ * row, and the gateway row. Maps {@link StackEvent}s onto the presenter's
+ * checklist surface so the user watches the real stack come up (spinners,
+ * elapsed time, check marks) instead of staring at a silent pause — and the
+ * checklist settles cleanly before the coding agent inherits the terminal.
+ */
+import { createPresenter } from "@fusionkit/cli-ui";
+import type { Presenter, StepInput } from "@fusionkit/cli-ui";
 
-import { StepList } from "./steps.js";
-import type { StepInput } from "./steps.js";
+import type { StackEvent, StackReporter } from "./env.js";
 
 export type BootView = {
   /** Feed this to `startFusionStack({ report })` to drive the live checklist. */
@@ -12,26 +19,22 @@ export type BootView = {
 
 export type BootServer = { id: string; label: string };
 
-/**
- * A live boot checklist: one row per panel server, an optional synthesizer row,
- * and the gateway row. Maps {@link StackEvent}s onto a {@link StepList} so the
- * user watches the real stack come up (spinners, elapsed time, check marks)
- * instead of staring at a silent pause.
- */
-export function createBootView(input: {
-  servers: readonly BootServer[];
-  includeSynth: boolean;
-  includeDashboard?: boolean;
-  title?: string;
-}): BootView {
+export function createBootView(
+  input: {
+    servers: readonly BootServer[];
+    includeSynth: boolean;
+    includeDashboard?: boolean;
+    title?: string;
+  },
+  presenter: Presenter = createPresenter()
+): BootView {
   const steps: StepInput[] = [
     ...(input.includeDashboard === true ? [{ id: "dashboard", label: "observability dashboard" }] : []),
     ...input.servers.map((server) => ({ id: `srv:${server.id}`, label: `panel · ${server.label}` })),
     ...(input.includeSynth ? [{ id: "synth", label: "synthesizer (fusionkit serve)" }] : []),
     { id: "gw", label: "fusion gateway" }
   ];
-  const list = new StepList(steps, input.title !== undefined ? { title: input.title } : {});
-  list.start();
+  const list = presenter.checklist(steps, input.title !== undefined ? { title: input.title } : {});
 
   const report: StackReporter = (event: StackEvent) => {
     switch (event.kind) {

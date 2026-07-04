@@ -20,20 +20,32 @@ import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { formatDurationMs, FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import { DEFAULT_ENSEMBLE_NAME, formatDurationMs, FUSION_PANEL_MODEL, fusionModelId } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
 import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+
+import {
+  bold,
+  brandBanner,
+  canPromptInteractively,
+  confirm,
+  dim,
+  glyph,
+  gray,
+  green,
+  isInteractive,
+  select,
+  uiStream,
+  yellow
+} from "@fusionkit/cli-ui";
 
 import { resolveSessionId } from "./commands/sessions.js";
 import { gatewaySetupSnippets, setGatewayChatter, setGatewayStatusSink } from "./gateway.js";
 import { toolRegistry } from "./tools.js";
 import { createPortlessSession } from "./shared/portless.js";
 import { PreflightError, runPreflight } from "./shared/preflight.js";
-import { createBootView } from "./ui/boot.js";
-import { confirm, select } from "./ui/prompt.js";
-import { canPromptInteractively, isInteractive, uiStream } from "./ui/runtime.js";
-import { bold, brandBanner, dim, glyph, gray, green, yellow } from "./ui/theme.js";
+import { createBootView } from "./fusion/boot-view.js";
 
 import { hasCloudConsent, recordCloudConsent } from "./fusion/consent.js";
 import {
@@ -43,12 +55,12 @@ import {
   gitToplevel,
   loadEnvFileInto
 } from "./fusion/env.js";
-import type { FusionTool, PanelModelSpec, RunFusionOptions, StackReporter } from "./fusion/env.js";
+import type { EnsembleRunSpec, FusionTool, PanelModelSpec, RunFusionOptions, StackReporter } from "./fusion/env.js";
 import { openUrl, startObservability } from "./fusion/observability.js";
 import type { Observability } from "./fusion/observability.js";
 import { ensureLocalPanelSupported } from "./fusion/platform.js";
 import { provisionFusionEngine } from "./fusion/provision.js";
-import { resolveNarratorModel, startFusionStack } from "./fusion/stack.js";
+import { resolveNarratorModel, startFusionStack, unionPanelSpecs } from "./fusion/stack.js";
 import type { FusionStack } from "./fusion/stack.js";
 import { localPanelMemoryWarning, preflightRequirements, validateProviderKeys } from "./fusion/preflight.js";
 
@@ -65,7 +77,7 @@ export const FUSION_TOOLS: readonly FusionTool[] = [
   "serve"
 ];
 
-/** The model label the launched tool uses; the gateway ignores it for routing. */
+/** The default fused model label (the `default` ensemble's advertised id). */
 const FUSION_MODEL_LABEL = FUSION_PANEL_MODEL;
 
 /** Whether portless is enabled: explicit flag/config wins, else on unless PORTLESS=0. */
@@ -112,6 +124,10 @@ export function fusionPreambleLines(input: {
   repo: string;
   models: readonly PanelModelSpec[];
   judgeLabel: string;
+  /** The session-default fused model id (default: `fusion-panel`). */
+  modelLabel?: string;
+  /** Every registered ensemble (session default first) for multi-ensemble repos. */
+  ensembles?: readonly EnsembleRunSpec[];
   endpoints?: Record<string, string>;
   observe?: boolean;
   budgetUsd?: number;
@@ -120,13 +136,20 @@ export function fusionPreambleLines(input: {
 }): string[] {
   const lines = [
     `tool: ${input.tool} -> FusionKit gateway`,
-    `model: ${FUSION_MODEL_LABEL}`,
+    `model: ${input.modelLabel ?? FUSION_MODEL_LABEL}`,
     `repo: ${input.repo}`,
     `judge: ${input.judgeLabel}`,
     `panel: ${input.models.map((model) => panelMemberSummary(model, input.endpoints)).join(", ")}`
   ];
   const auth = toolAuthSummary(input.tool);
   if (auth !== undefined) lines.splice(1, 0, auth);
+  // Other registered ensembles: each is selectable in the tool's own picker.
+  for (const ensemble of input.ensembles ?? []) {
+    if (fusionModelId(ensemble.name) === (input.modelLabel ?? FUSION_MODEL_LABEL)) continue;
+    lines.push(
+      `ensemble ${ensemble.name} (${fusionModelId(ensemble.name)}): ${ensemble.models.map((spec) => spec.id).join(", ")}`
+    );
+  }
   if (input.resumeId !== undefined) lines.push(`resume: ${input.resumeId}`);
   if (input.observe === true) lines.push("observe: on");
   if (input.budgetUsd !== undefined) lines.push(`budget: $${input.budgetUsd}`);
@@ -188,7 +211,7 @@ export async function runFusion(
   toolArgs: string[],
   options: RunFusionOptions = {}
 ): Promise<number> {
-  const log = options.log ?? ((line: string) => console.error(line));
+  const log = options.log ?? ((line: string) => uiStream().write(`${line}\n`));
   const root = mkdtempSync(join(tmpdir(), "fusionkit-fusion-"));
   const logsDir = join(root, "logs");
   mkdirSync(logsDir, { recursive: true });
@@ -212,43 +235,120 @@ export async function runFusion(
   // an explicitly set (even empty) key is never overridden.
   loadEnvFileInto(join(process.cwd(), ".env"), process.env);
   if (repo !== process.cwd()) loadEnvFileInto(join(repo, ".env"), process.env);
-  let models = options.models ?? (options.local === true ? [...DEFAULT_TRIO] : [...DEFAULT_CLOUD_PANEL]);
 
-  // Adaptive default panel: when the user did not pick a panel themselves,
-  // work with the keys they have instead of failing preflight for the full
-  // trio. Members whose key env is missing are dropped with an explicit note;
-  // if NO key is present the full panel flows into preflight, which then names
-  // every missing key with a fix hint.
-  const panelNotes: string[] = [];
-  if (options.models === undefined && options.local !== true && options.endpoints === undefined) {
-    const hasCredential = (spec: PanelModelSpec): boolean => {
-      if (spec.auth !== undefined) return true;
-      const provider = spec.provider ?? "mlx";
-      if (provider === "mlx") return true;
-      const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);
-      if (keyEnv === undefined) return true;
-      return (process.env[keyEnv] ?? "").length > 0;
-    };
-    const present = models.filter(hasCredential);
-    if (present.length > 0 && present.length < models.length) {
-      for (const spec of models) {
-        if (hasCredential(spec)) continue;
-        const keyEnv = spec.keyEnv ?? defaultKeyEnv(spec.provider ?? "mlx");
-        panelNotes.push(
-          `panel: ${spec.id} (${spec.model}) skipped — ${keyEnv ?? "its API key"} is not set (export it to add ${spec.id} back)`
-        );
+  // Resolve the named-ensemble list: config-provided ensembles, else one
+  // implicit `default` ensemble from the flag/default panel. Every ensemble is
+  // registered as its own gateway model; the selected one (--ensemble, then the
+  // config's defaultEnsemble, then the first) is the session default.
+  const fallbackPanel = (): PanelModelSpec[] =>
+    options.local === true ? DEFAULT_TRIO.map((spec) => ({ ...spec })) : DEFAULT_CLOUD_PANEL.map((spec) => ({ ...spec }));
+  // Ensemble names whose panel fell back to the built-in trio (adaptive-drop eligible).
+  const defaultedPanels = new Set<string>();
+  let ensembles: EnsembleRunSpec[];
+  if (options.ensembles !== undefined && options.ensembles.length > 0 && options.endpoints === undefined) {
+    ensembles = options.ensembles.map((ensemble) => {
+      const defaulted = ensemble.models.length === 0;
+      if (defaulted) defaultedPanels.add(ensemble.name);
+      return {
+        ...ensemble,
+        models: (defaulted ? fallbackPanel() : ensemble.models).map((spec) => ({ ...spec }))
+      };
+    });
+  } else {
+    if (options.models === undefined) defaultedPanels.add(DEFAULT_ENSEMBLE_NAME);
+    ensembles = [
+      {
+        name: DEFAULT_ENSEMBLE_NAME,
+        models: (options.models ?? fallbackPanel()).map((spec) => ({ ...spec })),
+        ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
+        ...(options.prompts !== undefined ? { prompts: options.prompts } : {})
       }
-      models = present;
-    }
+    ];
   }
+  const selectedName = options.ensemble ?? ensembles[0]?.name ?? DEFAULT_ENSEMBLE_NAME;
+  const selectedIndex = ensembles.findIndex((ensemble) => ensemble.name === selectedName);
+  if (selectedIndex === -1) {
+    throw new Error(
+      `unknown ensemble "${selectedName}" (have: ${ensembles.map((ensemble) => ensemble.name).join(", ")})`
+    );
+  }
+  if (selectedIndex > 0) ensembles.unshift(...ensembles.splice(selectedIndex, 1));
+  const selected = ensembles[0] as EnsembleRunSpec;
+  // Explicit flags override the selected ensemble only.
+  if (options.ensembles !== undefined && options.ensembles.length > 0) {
+    if (options.models !== undefined) {
+      selected.models = options.models.map((spec) => ({ ...spec }));
+      defaultedPanels.delete(selected.name);
+    }
+    if (options.judgeModel !== undefined) selected.judgeModel = options.judgeModel;
+  }
+  const modelLabel = fusionModelId(selected.name);
+
+  // Adaptive default panel: when an ensemble's panel is the built-in default
+  // (nobody picked it), work with the keys the user has instead of failing
+  // preflight for the full trio. Members whose key env is missing are dropped
+  // with an explicit note; if NO key is present the full panel flows into
+  // preflight, which then names every missing key with a fix hint. Non-selected
+  // ensembles are additionally soft: a keyless member is dropped (it would fail
+  // its slot anyway) and an ensemble left empty is skipped with a warning
+  // rather than failing the launch.
+  const panelNotes: string[] = [];
+  const hasCredential = (spec: PanelModelSpec): boolean => {
+    if (spec.auth !== undefined) return true;
+    const provider = spec.provider ?? "mlx";
+    if (provider === "mlx") return true;
+    const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);
+    if (keyEnv === undefined) return true;
+    return (process.env[keyEnv] ?? "").length > 0;
+  };
+  const skipNote = (spec: PanelModelSpec, ensembleName: string): void => {
+    const keyEnv = spec.keyEnv ?? defaultKeyEnv(spec.provider ?? "mlx");
+    const where = ensembleName === selected.name ? "panel" : `ensemble ${ensembleName}`;
+    panelNotes.push(
+      `${where}: ${spec.id} (${spec.model}) skipped — ${keyEnv ?? "its API key"} is not set (export it to add ${spec.id} back)`
+    );
+  };
+  if (options.endpoints === undefined) {
+    if (defaultedPanels.has(selected.name) && options.local !== true) {
+      const present = selected.models.filter(hasCredential);
+      if (present.length > 0 && present.length < selected.models.length) {
+        for (const spec of selected.models) {
+          if (!hasCredential(spec)) skipNote(spec, selected.name);
+        }
+        selected.models = present;
+      }
+    }
+    ensembles = ensembles.filter((ensemble) => {
+      if (ensemble.name === selected.name) return true;
+      const present = ensemble.models.filter(hasCredential);
+      if (present.length === ensemble.models.length) return true;
+      for (const spec of ensemble.models) {
+        if (!hasCredential(spec)) skipNote(spec, ensemble.name);
+      }
+      if (present.length === 0) {
+        panelNotes.push(
+          `ensemble ${ensemble.name} (${fusionModelId(ensemble.name)}) skipped — no member has a usable credential`
+        );
+        return false;
+      }
+      ensemble.models = present;
+      return true;
+    });
+  }
+
+  // The selected ensemble's panel (preamble, session metadata) and the union of
+  // members across every ensemble (one router endpoint each: preflight, key
+  // probes, memory sizing, consent, and the stack itself).
+  const models = selected.models;
+  const unionModels = unionPanelSpecs(ensembles);
 
   // Cross-platform gating (WS8): a local MLX panel only runs on Apple Silicon.
   // Fail early with a pointer at the cross-platform cloud path instead of
   // crashing deep in the MLX backend on Linux/Windows.
-  ensureLocalPanelSupported(models);
+  ensureLocalPanelSupported(unionModels);
 
   // Fail fast on missing prerequisites before we start spawning a stack.
-  runPreflight(preflightRequirements(tool, models, options));
+  runPreflight(preflightRequirements(tool, unionModels, options));
 
   const spawnsRouter = !(options.endpoints !== undefined && options.synthesisUrl !== undefined);
 
@@ -265,7 +365,7 @@ export async function runFusion(
   // Validate provider keys concurrently with the prompt/boot preamble: a bad
   // key should fail here in ~2s with the env var named, not after the router's
   // 60s readiness timeout. Awaited right before the stack boots.
-  const keyValidation = spawnsRouter ? validateProviderKeys(models) : Promise.resolve([]);
+  const keyValidation = spawnsRouter ? validateProviderKeys(unionModels) : Promise.resolve([]);
 
   // Size the local (MLX) members against this machine's usable memory,
   // concurrently with the preamble like the key probes. A panel that does not
@@ -275,10 +375,10 @@ export async function runFusion(
   // panel member or provider/model token loads nothing locally).
   const narratorResolution =
     options.reasoningModel !== undefined && options.reasoning !== false
-      ? resolveNarratorModel(options.reasoningModel, models)
+      ? resolveNarratorModel(options.reasoningModel, unionModels)
       : undefined;
   const memoryCheck = spawnsRouter
-    ? localPanelMemoryWarning(models, {
+    ? localPanelMemoryWarning(unionModels, {
         ...(narratorResolution?.kind === "mlx" ? { extraModels: [narratorResolution.model] } : {})
       }).catch(() => undefined)
     : Promise.resolve(undefined);
@@ -299,11 +399,12 @@ export async function runFusion(
     resumeId = sessionStore.list()[0]?.id;
     log(resumeId !== undefined ? `fusion: continuing latest session ${resumeId}` : "fusion: no prior session to continue; starting fresh.");
   }
+  const sessionJudgeModel = selected.judgeModel ?? options.judgeModel;
   const sessionMeta: SessionMetaInput = {
     tool,
     repo,
     models: models.map((spec) => ({ id: spec.id, model: spec.model })),
-    ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {})
+    ...(sessionJudgeModel !== undefined ? { judgeModel: sessionJudgeModel } : {})
   };
 
   // Bring up the portless session (programmatic RouteStore). Portless is a
@@ -312,12 +413,14 @@ export async function runFusion(
   // logs a one-line hint, so a fresh install always runs out of the box.
   const portless = await createPortlessSession({ enabled: portlessEnabled(options), log });
 
-  const judgeLabel = options.judgeModel ?? models[0]?.model ?? "(first panel model)";
+  const judgeLabel = selected.judgeModel ?? options.judgeModel ?? models[0]?.model ?? "(first panel model)";
   const preambleLines = fusionPreambleLines({
     tool,
     repo,
     models,
     judgeLabel,
+    modelLabel,
+    ensembles,
     ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
     ...(options.observe !== undefined ? { observe: options.observe } : {}),
     ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
@@ -400,14 +503,14 @@ export async function runFusion(
   // spend — once per repo+panel: an interactive approval is persisted, so the
   // prompt is a one-time moment, not a per-run toll. --yes still skips it.
   const spawningCloud =
-    options.endpoints === undefined && models.some((model) => (model.provider ?? "mlx") !== "mlx");
+    options.endpoints === undefined && unionModels.some((model) => (model.provider ?? "mlx") !== "mlx");
   if (useBootView && spawningCloud && options.yes !== true && canPromptInteractively()) {
-    if (hasCloudConsent(repo, models)) {
+    if (hasCloudConsent(repo, unionModels)) {
       uiStream().write(`${gray("cloud panel previously approved for this repo — starting.")}\n`);
     } else {
       // Subscription members are billed by the subscription (and subject to its
       // rate limits); API-key members incur per-token provider usage.
-      const usesSubscription = models.some((model) => model.auth !== undefined);
+      const usesSubscription = unionModels.some((model) => model.auth !== undefined);
       const cost = usesSubscription ? "provider usage / subscription limits apply" : "provider usage applies";
       const proceed = await confirm({
         message: `Run the cloud panel? Each prompt fans out across ${models.length} model(s) + a judge (${cost}).`,
@@ -417,7 +520,7 @@ export async function runFusion(
         uiStream().write(`${gray("aborted — nothing was started.")}\n`);
         return 130;
       }
-      recordCloudConsent(repo, models);
+      recordCloudConsent(repo, unionModels);
       uiStream().write(`${gray("approved — remembered for this repo and panel (won't ask again).")}\n`);
     }
   }
@@ -444,7 +547,7 @@ export async function runFusion(
   const bootStartedAt = Date.now();
   const boot = useBootView
     ? createBootView({
-        servers: spawnsRouter ? [{ id: "router", label: `router · ${models.map((model) => model.id).join(", ")}` }] : [],
+        servers: spawnsRouter ? [{ id: "router", label: `router · ${unionModels.map((model) => model.id).join(", ")}` }] : [],
         includeSynth: false,
         includeDashboard: options.observe === true,
         title: dim("booting the fusion stack")
@@ -488,18 +591,21 @@ export async function runFusion(
     }
 
     const panelHarness = toolRegistry.panelHarnessKindFor(tool);
+    const stackPrompts = selected.prompts ?? options.prompts;
+    const stackJudgeModel = selected.judgeModel ?? options.judgeModel;
     stack = await startFusionStack({
       repo,
       outputRoot: join(root, "runs"),
-      models,
+      models: unionModels,
+      ensembles,
       logsDir,
       portless,
       ...(panelHarness !== undefined ? { harness: panelHarness } : {}),
       ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
-      ...(options.prompts !== undefined ? { prompts: options.prompts } : {}),
-      ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
+      ...(stackPrompts !== undefined ? { prompts: stackPrompts } : {}),
+      ...(stackJudgeModel !== undefined ? { judgeModel: stackJudgeModel } : {}),
       ...(options.synthesisUrl !== undefined ? { synthesisUrl: options.synthesisUrl } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(options.port !== undefined ? { port: options.port } : {}),
@@ -530,7 +636,7 @@ export async function runFusion(
     // coding tool owns the screen from here on, so no live UI may remain.
     boot.stop();
     uiStream().write(
-      `${green(glyph.tick())} ${bold("fusion ready")} ${dim(`in ${bootSeconds}s${reusedNote}`)}  ${dim(stack.fusionUrl)} ${dim(`(model: ${FUSION_MODEL_LABEL})`)}\n`
+      `${green(glyph.tick())} ${bold("fusion ready")} ${dim(`in ${bootSeconds}s${reusedNote}`)}  ${dim(stack.fusionUrl)} ${dim(`(model: ${modelLabel})`)}\n`
     );
     uiStream().write(`${dim(`logs: ${logsDir}`)}\n`);
     if (observability !== undefined) {
@@ -539,7 +645,7 @@ export async function runFusion(
       uiStream().write(`${dim("tip: add --observe to watch every fused turn in a live dashboard")}\n`);
     }
   } else {
-    log(`fusion: gateway on ${stack.fusionUrl} (model: ${FUSION_MODEL_LABEL})`);
+    log(`fusion: gateway on ${stack.fusionUrl} (model: ${modelLabel})`);
     log(`fusion: ready in ${bootSeconds}s${reusedNote}`);
     log(`fusion: logs in ${logsDir}`);
   }
@@ -596,8 +702,9 @@ export async function runFusion(
     const ctx: ToolLaunchContext = {
       mode: "fusion",
       gatewayUrl: stack.fusionUrl,
-      modelLabel: FUSION_MODEL_LABEL,
-      nativeModels: models.map((spec) => spec.model),
+      modelLabel,
+      fusedModels: ensembles.map((ensemble) => fusionModelId(ensemble.name)),
+      nativeModels: [...new Set(unionModels.map((spec) => spec.model))],
       toolArgs,
       repo,
       ...(options.ide === true ? { ide: true } : {}),

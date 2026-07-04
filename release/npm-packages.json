@@ -102,6 +102,10 @@
       "name": "@fusionkit/tool-opencode"
     },
     {
+      "path": "packages/cli-ui",
+      "name": "@fusionkit/cli-ui"
+    },
+    {
       "path": "packages/cli",
       "name": "@fusionkit/cli"
     }

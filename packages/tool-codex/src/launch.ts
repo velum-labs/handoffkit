@@ -14,9 +14,18 @@ function tomlKey(name: string): string {
   return /^[A-Za-z0-9_-]+$/.test(name) ? name : JSON.stringify(name);
 }
 
-/** The fused-plus-native model list, fused first, deduped. */
-function modelList(model: string, nativeModels: readonly string[]): string[] {
-  return [model, ...nativeModels.filter((native) => native !== model)];
+/** The fused-plus-native model list: the default fused model first, then every
+ *  other fused ensemble model, then the natives, deduped. */
+function modelList(
+  model: string,
+  fusedModels: readonly string[],
+  nativeModels: readonly string[]
+): string[] {
+  const ids = [model];
+  for (const id of [...fusedModels, ...nativeModels]) {
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 
 /**
@@ -48,25 +57,29 @@ export function readCodexCatalogTemplate(home: string = homedir()): CodexModelPr
 /**
  * Codex `model_catalog_json` contents: a `ModelsResponse` ({ models: [...] }).
  * Codex's `/model` picker for a custom provider is driven by this catalog, so
- * listing the fused model (first/default) plus each native model is what makes
- * in-session switching work. Each entry is cloned from the installed Codex's own
- * `template` preset and only its identity fields are overridden, so the catalog
- * stays valid across Codex schema changes. (Codex still validates the file at
- * startup, so {@link launchCodex} relaunches without it on any mismatch.)
+ * listing the fused model (first/default), every other fused ensemble model,
+ * plus each native model is what makes in-session switching work. Each entry is
+ * cloned from the installed Codex's own `template` preset and only its identity
+ * fields are overridden, so the catalog stays valid across Codex schema changes.
+ * (Codex still validates the file at startup, so {@link launchCodex} relaunches
+ * without it on any mismatch.)
  */
 export function codexModelCatalogJson(
   model: string,
   nativeModels: readonly string[],
-  template: CodexModelPreset
+  template: CodexModelPreset,
+  fusedModels: readonly string[] = []
 ): string {
-  const models = modelList(model, nativeModels).map((id, index) => ({
+  const fused = new Set([model, ...fusedModels]);
+  const models = modelList(model, fusedModels, nativeModels).map((id, index) => ({
     ...template,
     slug: id,
-    display_name: id === model ? `${id} (fusion)` : id,
-    description:
-      id === model
+    display_name: fused.has(id) ? `${id} (fusion)` : id,
+    description: fused.has(id)
+      ? id === model
         ? "Fused answer across the panel (default)."
-        : "Native model, proxied to its real provider via the FusionKit gateway.",
+        : "Fused answer across this ensemble's panel."
+      : "Native model, proxied to its real provider via the FusionKit gateway.",
     visibility: "list",
     priority: index,
     availability_nux: null,
@@ -81,18 +94,20 @@ export function codexModelCatalogJson(
  * Written into an ephemeral CODEX_HOME so the user's own config is untouched.
  * (This is the launcher shim; the harness has its own richer config builder.)
  *
- * The fused model is the default. Native models are surfaced two ways so they
- * are selectable from Codex's own `/model` picker in-session: via
- * `model_catalog_json` (the catalog that drives the picker for a custom
- * provider) and via a `[profiles.*]` entry each (also usable at launch with
- * `--profile <model>`, and a fallback on Codex builds that derive the picker
- * from config).
+ * The session-default fused model is the default. Every other fused ensemble
+ * model and the native models are surfaced two ways so they are selectable from
+ * Codex's own `/model` picker in-session: via `model_catalog_json` (the catalog
+ * that drives the picker for a custom provider) and via a `[profiles.*]` entry
+ * each (also usable at launch with `--profile <model>` — e.g.
+ * `--profile fusion-deep` to spawn a Codex session/sub-agent on another
+ * ensemble — and a fallback on Codex builds that derive the picker from config).
  */
 export function codexLaunchConfigToml(
   gatewayUrl: string,
   model: string,
   nativeModels: readonly string[] = [],
-  modelCatalogPath?: string
+  modelCatalogPath?: string,
+  fusedModels: readonly string[] = []
 ): string {
   const lines = [`model = "${model}"`, `model_provider = "${LOCAL_MODEL_LABEL}"`];
   if (modelCatalogPath !== undefined) {
@@ -107,7 +122,7 @@ export function codexLaunchConfigToml(
     `requires_openai_auth = false`,
     ""
   );
-  for (const profile of modelList(model, nativeModels)) {
+  for (const profile of modelList(model, fusedModels, nativeModels)) {
     lines.push(
       `[profiles.${tomlKey(profile)}]`,
       `model = ${JSON.stringify(profile)}`,
@@ -123,18 +138,24 @@ export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   const home = mkdtempSync(join(tmpdir(), "fusionkit-codex-"));
   ctx.registerDisposer(() => rmSync(home, { recursive: true, force: true }));
   const nativeModels = ctx.nativeModels ?? [];
+  const fusedModels = ctx.fusedModels ?? [];
   const configPath = join(home, "config.toml");
 
-  // The catalog only adds value when there are native models to surface, and it
-  // is built from the installed Codex's own catalog entry so it matches that
-  // version's schema. Without that template we skip it and rely on profiles.
+  // The catalog only adds value when there are extra models to surface (other
+  // fused ensembles and/or natives), and it is built from the installed Codex's
+  // own catalog entry so it matches that version's schema. Without that
+  // template we skip it and rely on profiles.
   const template = readCodexCatalogTemplate();
+  const extraModels = nativeModels.length > 0 || fusedModels.some((id) => id !== ctx.modelLabel);
   let catalogPath: string | undefined;
-  if (nativeModels.length > 0 && template !== undefined) {
+  if (extraModels && template !== undefined) {
     catalogPath = join(home, CATALOG_FILE);
-    writeFileSync(catalogPath, codexModelCatalogJson(ctx.modelLabel, nativeModels, template));
+    writeFileSync(catalogPath, codexModelCatalogJson(ctx.modelLabel, nativeModels, template, fusedModels));
   }
-  writeFileSync(configPath, codexLaunchConfigToml(ctx.gatewayUrl, ctx.modelLabel, nativeModels, catalogPath));
+  writeFileSync(
+    configPath,
+    codexLaunchConfigToml(ctx.gatewayUrl, ctx.modelLabel, nativeModels, catalogPath, fusedModels)
+  );
 
   ctx.prepareForPassthrough();
   if (ctx.mode === "fusion") {
@@ -149,7 +170,10 @@ export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   // relaunch once so a schema mismatch never bricks `fusionkit codex`.
   if (code !== 0 && catalogPath !== undefined && Date.now() - startedAt < EARLY_EXIT_MS) {
     ctx.log("fusion: codex exited early; retrying without the model catalog (fusion still works)...");
-    writeFileSync(configPath, codexLaunchConfigToml(ctx.gatewayUrl, ctx.modelLabel, nativeModels));
+    writeFileSync(
+      configPath,
+      codexLaunchConfigToml(ctx.gatewayUrl, ctx.modelLabel, nativeModels, undefined, fusedModels)
+    );
     return await spawnTool("codex", ctx.toolArgs, { CODEX_HOME: home }, ctx.repo);
   }
   return code;

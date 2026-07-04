@@ -2,6 +2,8 @@ import { join, resolve } from "node:path";
 
 import { Command } from "commander";
 
+import { uiStream } from "@fusionkit/cli-ui";
+
 import {
   codexConfigSnippet,
   gatewaySetupSnippets,
@@ -85,9 +87,8 @@ export function buildGatewayCommand(): Command {
         port,
         ...(opts.authToken !== undefined ? { authToken: opts.authToken } : {})
       });
-      console.log(`fusion harness gateway listening on ${instance.url()}`);
-      console.log("");
-      console.log(gatewaySetupSnippets(instance.url(), "http://127.0.0.1:<cursorkit-port>"));
+      uiStream().write(`fusion harness gateway listening on ${instance.url()}\n\n`);
+      uiStream().write(gatewaySetupSnippets(instance.url(), "http://127.0.0.1:<cursorkit-port>") + "\n");
     });
   gateway.addCommand(serve, { isDefault: true });
 
@@ -114,8 +115,8 @@ export function buildGatewayCommand(): Command {
         agentIds,
         installDir: resolve(opts.installDir)
       });
-      console.log(`installed ${installed.length} ACP registry adapter(s):`);
-      for (const line of installed) console.log(`  ${line}`);
+      uiStream().write(`installed ${installed.length} ACP registry adapter(s):\n`);
+      for (const line of installed) uiStream().write(`  ${line}\n`);
     });
   gateway.addCommand(acpRegistry);
 
@@ -139,7 +140,7 @@ export function buildGatewayCommand(): Command {
           host: opts.host ?? "127.0.0.1",
           outPath
         });
-        console.log(`front-door acceptance report: ${reportPath}`);
+        uiStream().write(`front-door acceptance report: ${reportPath}\n`);
         if (failed) process.exitCode = 1;
       })
   );
@@ -152,7 +153,8 @@ export function buildGatewayCommand(): Command {
     .option("--port <n>", "bind port", "8787")
     .action((opts: { fusionBackend?: string; host: string; port: string }) => {
       const base = opts.fusionBackend ?? `http://${opts.host}:${opts.port}`;
-      console.log(codexConfigSnippet(base));
+      // The snippet is a machine payload (meant to be piped into config.toml).
+      process.stdout.write(codexConfigSnippet(base) + "\n");
     });
 
   return gateway;

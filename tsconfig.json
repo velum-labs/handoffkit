@@ -71,6 +71,9 @@
       "path": "packages/testkit"
     },
     {
+      "path": "packages/cli-ui"
+    },
+    {
       "path": "packages/cli"
     },
     {

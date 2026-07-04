@@ -14,6 +14,8 @@ import type { EnsembleDescriptor } from "@fusionkit/ensemble";
 import { assertHarnessRunRequestV1, assertHarnessRunResultV1 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
 
+import { uiStream } from "@fusionkit/cli-ui";
+
 import { runHarnessSmokeDashboard } from "../dashboard.js";
 import { fail } from "../shared/errors.js";
 import {
@@ -23,6 +25,7 @@ import {
   parseTimeoutMs,
   unifiedHarnessKinds
 } from "../shared/options.js";
+import { registerEnsembleConfig } from "./ensemble-config.js";
 import { buildGatewayCommand } from "./ensemble-gateway.js";
 import {
   type HandoffPayload,
@@ -139,7 +142,7 @@ async function runEnsembleRun(task: string[], opts: EnsembleRunOpts): Promise<vo
   assertHarnessRunRequestV1(result.harnessRunRequest);
   assertHarnessRunResultV1(result.harnessRunResult);
   writeEnsembleOutput(outDir, result);
-  console.log(renderEnsembleSummary(outDir, result));
+  uiStream().write(renderEnsembleSummary(outDir, result) + "\n");
   if (result.harnessRunResult.status !== "succeeded" || result.failureSummary) {
     process.exitCode = 1;
   }
@@ -227,7 +230,7 @@ async function runEnsembleDashboard(extra: string[], opts: EnsembleDashboardOpts
     timeoutMs,
     liveSmoke: liveSmokeTargets(opts.liveSmoke)
   });
-  console.log(renderHarnessSmokeDashboardSummary(dashboard));
+  uiStream().write(renderHarnessSmokeDashboardSummary(dashboard) + "\n");
   if (
     dashboard.records.some(
       (record) => record.purpose === "live" && record.result.status !== "succeeded"
@@ -267,11 +270,11 @@ async function runEnsembleE2E(task: string[], opts: EnsembleE2EOpts): Promise<vo
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([status, count]) => `${status}:${count}`)
     .join(", ");
-  console.log(`unified e2e [${countText}]`);
-  console.log(`results: ${result.results.length}`);
-  console.log(`report: ${result.reportPath}`);
+  uiStream().write(`unified e2e [${countText}]\n`);
+  uiStream().write(`results: ${result.results.length}\n`);
+  uiStream().write(`report: ${result.reportPath}\n`);
   for (const row of result.results) {
-    console.log(`  ${row.harness}: ${row.status} (${row.message})`);
+    uiStream().write(`  ${row.harness}: ${row.status} (${row.message})\n`);
   }
   if (result.results.some((row) => row.status === "failed")) {
     process.exitCode = 1;
@@ -279,7 +282,11 @@ async function runEnsembleE2E(task: string[], opts: EnsembleE2EOpts): Promise<vo
 }
 
 export function registerEnsemble(program: Command): void {
-  const ensemble = new Command("ensemble").description("local ensemble + FusionKit harness tooling");
+  const ensemble = new Command("ensemble").description(
+    "manage named ensembles + local ensemble/harness tooling"
+  );
+
+  registerEnsembleConfig(ensemble);
 
   ensemble
     .command("run")

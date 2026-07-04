@@ -7,14 +7,18 @@
  *
  * Sessions are persisted by the fusion gateway under ~/.fusionkit/sessions (or
  * $FUSIONKIT_SESSIONS_DIR). Ids are the conversation session key; any unique
- * prefix is accepted by `show`/`rm`/`--resume`, like a git short SHA.
+ * prefix is accepted by `show`/`rm`/`--resume`, like a git short SHA. Every
+ * subcommand supports `--json` for scripting.
  */
 import type { Command } from "commander";
 
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
 import type { SessionCost, SessionStore, SessionSummary } from "@fusionkit/model-gateway";
 
-import { bold, brandBanner, cyan, dim, glyph, gray, green, red } from "../ui/theme.js";
+import { bold, cyan, dim, gray, green, relativeTime } from "@fusionkit/cli-ui";
+
+import { contextFor } from "../shared/context.js";
+import type { CommandContext } from "../shared/context.js";
 
 /**
  * Resolve a session reference (a full id or a unique prefix) to a stored id.
@@ -25,18 +29,6 @@ export function resolveSessionId(store: SessionStore, ref: string): string | und
   const matches = store.list().filter((session) => session.id.startsWith(ref));
   if (matches.length === 1) return matches[0]?.id;
   return undefined;
-}
-
-/** A compact human-friendly "time ago" for a timestamp (epoch millis). */
-function relativeTime(epochMs: number): string {
-  const seconds = Math.max(0, Math.round((Date.now() - epochMs) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return `${days}d ago`;
 }
 
 /** A compact summary of a session's running cost (WS7), e.g. `$0.0421 · 12.3k tokens · 4 turns (1 unpriced)`. */
@@ -52,23 +44,46 @@ function panelLabel(session: SessionSummary): string {
   return models.map((model) => model.id).join("+");
 }
 
-function runList(store: SessionStore): number {
+function summaryPayload(session: SessionSummary): Record<string, unknown> {
+  return {
+    id: session.id,
+    tool: session.tool ?? null,
+    repo: session.repo ?? null,
+    models: session.models ?? [],
+    turnCount: session.turnCount,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    cost: session.cost ?? null
+  };
+}
+
+function runList(store: SessionStore, ctx: CommandContext): number {
   const sessions = store.list();
-  console.log(`\n${brandBanner("sessions")}\n`);
-  if (sessions.length === 0) {
-    console.log(dim(`no sessions yet — run \`fusionkit codex\` (stored in ${store instanceof FileSystemSessionStore ? store.root : "memory"}).`));
+  if (ctx.json) {
+    ctx.emit({ sessions: sessions.map(summaryPayload) });
     return 0;
   }
-  for (const session of sessions) {
-    const tool = session.tool ?? "?";
-    console.log(
-      `${green(session.id)}  ${bold(tool)} ${dim(`· ${panelLabel(session)}`)}` +
-        `  ${dim(`· ${session.turnCount} turn${session.turnCount === 1 ? "" : "s"}`)}` +
-        `  ${dim(`· ${relativeTime(session.updatedAt)}`)}`
+  const { presenter } = ctx;
+  presenter.blank();
+  presenter.banner("sessions");
+  presenter.blank();
+  if (sessions.length === 0) {
+    presenter.line(
+      dim(`no sessions yet — run \`fusionkit codex\` (stored in ${store instanceof FileSystemSessionStore ? store.root : "memory"}).`)
     );
+    return 0;
   }
-  console.log("");
-  console.log(dim(`${sessions.length} session(s). Resume with \`fusionkit <tool> --resume <id>\` or \`--continue\`.`));
+  presenter.table(
+    sessions.map((session) => [
+      green(session.id),
+      bold(session.tool ?? "?"),
+      dim(panelLabel(session)),
+      dim(`${session.turnCount} turn${session.turnCount === 1 ? "" : "s"}`),
+      dim(relativeTime(session.updatedAt))
+    ])
+  );
+  presenter.blank();
+  presenter.line(dim(`${sessions.length} session(s). Resume with \`fusionkit <tool> --resume <id>\` or \`--continue\`.`));
   return 0;
 }
 
@@ -78,49 +93,78 @@ function preview(content: unknown): string {
   return oneLine.length > 100 ? `${oneLine.slice(0, 100)}…` : oneLine;
 }
 
-function runShow(store: SessionStore, ref: string): number {
+function runShow(store: SessionStore, ref: string, ctx: CommandContext): number {
   const id = resolveSessionId(store, ref);
   const session = id !== undefined ? store.load(id) : undefined;
   if (session === undefined) {
-    console.error(red(`no session matches "${ref}".`));
+    if (ctx.json) {
+      ctx.emit({ error: { code: "not-found", message: `no session matches "${ref}"` } });
+      return 1;
+    }
+    ctx.presenter.error(`no session matches "${ref}".`);
     return 1;
   }
   const { meta, turns } = session;
-  console.log(`\n${brandBanner("session")}\n`);
-  console.log(`${dim("id:")}      ${green(meta.id)}`);
-  console.log(`${dim("tool:")}    ${meta.tool ?? gray("(unknown)")}`);
-  if (meta.repo !== undefined) console.log(`${dim("repo:")}    ${meta.repo}`);
-  console.log(`${dim("panel:")}   ${(meta.models ?? []).map((model) => `${model.id}=${model.model}`).join(", ") || gray("(unknown)")}`);
-  if (meta.judgeModel !== undefined) console.log(`${dim("judge:")}   ${meta.judgeModel}`);
-  console.log(`${dim("created:")} ${new Date(meta.createdAt).toISOString()}`);
-  console.log(`${dim("updated:")} ${new Date(meta.updatedAt).toISOString()} ${dim(`(${relativeTime(meta.updatedAt)})`)}`);
-  console.log(`${dim("turns:")}   ${turns.length}`);
-  if (meta.cost !== undefined) console.log(`${dim("cost:")}    ${costLabel(meta.cost)}`);
+  if (ctx.json) {
+    ctx.emit({ session: { meta, turns } });
+    return 0;
+  }
+
+  const { presenter } = ctx;
+  presenter.blank();
+  presenter.banner("session");
+  presenter.blank();
+  presenter.keyValue([
+    { label: "id", value: green(meta.id) },
+    { label: "tool", value: meta.tool ?? gray("(unknown)") },
+    ...(meta.repo !== undefined ? [{ label: "repo", value: meta.repo }] : []),
+    {
+      label: "panel",
+      value: (meta.models ?? []).map((model) => `${model.id}=${model.model}`).join(", ") || gray("(unknown)")
+    },
+    ...(meta.judgeModel !== undefined ? [{ label: "judge", value: meta.judgeModel }] : []),
+    { label: "created", value: new Date(meta.createdAt).toISOString() },
+    {
+      label: "updated",
+      value: `${new Date(meta.updatedAt).toISOString()} ${dim(`(${relativeTime(meta.updatedAt)})`)}`
+    },
+    { label: "turns", value: String(turns.length) },
+    ...(meta.cost !== undefined ? [{ label: "cost", value: costLabel(meta.cost) }] : [])
+  ]);
 
   const recent = turns.slice(-5);
   if (recent.length > 0) {
-    console.log(bold(`\nrecent turns`));
+    presenter.blank();
+    presenter.heading("recent turns");
     for (const turn of recent) {
       const lastUser = [...turn.messages].reverse().find((message) => message.role === "user");
       const statuses = turn.candidates.map((candidate) => `${candidate.model_id}:${candidate.status}`).join(", ");
-      console.log(`  ${cyan(`turn ${turn.turn}`)} ${dim(`· ${turn.candidates.length} candidate(s) [${statuses}]`)}`);
-      if (lastUser !== undefined) console.log(`    ${dim(preview(lastUser.content))}`);
+      presenter.line(`  ${cyan(`turn ${turn.turn}`)} ${dim(`· ${turn.candidates.length} candidate(s) [${statuses}]`)}`);
+      if (lastUser !== undefined) presenter.line(`    ${dim(preview(lastUser.content))}`);
     }
   }
-  console.log("");
-  console.log(dim(`resume: fusionkit <tool> --resume ${meta.id.slice(0, 8)}`));
+  presenter.blank();
+  presenter.line(dim(`resume: fusionkit <tool> --resume ${meta.id.slice(0, 8)}`));
   return 0;
 }
 
-function runRemove(store: SessionStore, ref: string): number {
+function runRemove(store: SessionStore, ref: string, ctx: CommandContext): number {
   const id = resolveSessionId(store, ref);
   if (id === undefined) {
-    console.error(red(`no session matches "${ref}".`));
+    if (ctx.json) {
+      ctx.emit({ error: { code: "not-found", message: `no session matches "${ref}"` } });
+      return 1;
+    }
+    ctx.presenter.error(`no session matches "${ref}".`);
     return 1;
   }
   const removed = store.remove(id);
-  if (removed) console.log(`${green(glyph.tick())} removed session ${cyan(id)}`);
-  else console.log(`${gray(glyph.bullet())} ${id} was not stored`);
+  if (ctx.json) {
+    ctx.emit({ removed, id });
+    return removed ? 0 : 1;
+  }
+  if (removed) ctx.presenter.success(`removed session ${cyan(id)}`);
+  else ctx.presenter.note(`${id} was not stored`);
   return removed ? 0 : 1;
 }
 
@@ -130,23 +174,26 @@ export function registerSessions(program: Command): void {
   const sessions = program
     .command("sessions")
     .description("list, inspect, and remove durable gateway sessions")
-    .action(() => {
-      process.exit(runList(store));
+    .option("--json", "emit machine-readable JSON")
+    .action((_opts: { json?: boolean }, command: Command) => {
+      process.exit(runList(store, contextFor(command)));
     });
 
   sessions
     .command("list")
     .description("list stored sessions (id, tool, panel, turns, last activity)")
-    .action(() => {
-      process.exit(runList(store));
+    .option("--json", "emit machine-readable JSON")
+    .action((_opts: { json?: boolean }, command: Command) => {
+      process.exit(runList(store, contextFor(command)));
     });
 
   sessions
     .command("show")
     .argument("<id>", "session id (or a unique prefix)")
     .description("show a session's details and its most recent turns")
-    .action((id: string) => {
-      process.exit(runShow(store, id));
+    .option("--json", "emit machine-readable JSON")
+    .action((id: string, _opts: { json?: boolean }, command: Command) => {
+      process.exit(runShow(store, id, contextFor(command)));
     });
 
   sessions
@@ -154,7 +201,8 @@ export function registerSessions(program: Command): void {
     .alias("remove")
     .argument("<id>", "session id (or a unique prefix) to delete")
     .description("delete a stored session")
-    .action((id: string) => {
-      process.exit(runRemove(store, id));
+    .option("--json", "emit machine-readable JSON")
+    .action((id: string, _opts: { json?: boolean }, command: Command) => {
+      process.exit(runRemove(store, id, contextFor(command)));
     });
 }

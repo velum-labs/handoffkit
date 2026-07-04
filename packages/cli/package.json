@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
+    "@fusionkit/cli-ui": "workspace:*",
     "@fusionkit/ensemble": "workspace:*",
     "@fusionkit/handoff": "workspace:*",
     "@fusionkit/harness-core": "workspace:*",

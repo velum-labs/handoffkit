@@ -9,10 +9,12 @@ import { registerEnsemble } from "./commands/ensemble.js";
 import { registerFusion } from "./commands/fusion.js";
 import { registerLocal } from "./commands/local.js";
 import { registerModels } from "./commands/models.js";
+import { registerPrompts } from "./commands/prompts.js";
 import { registerRuntime } from "./commands/runtime.js";
 import { registerSessions } from "./commands/sessions.js";
 import { registerSetup } from "./commands/setup.js";
 import { registerVersion } from "./commands/version.js";
+import { attachGlobalFlags } from "./shared/context.js";
 import { readPackageVersion } from "./shared/package-version.js";
 
 /**
@@ -35,6 +37,7 @@ export function buildProgram(): Command {
       "print the CLI (npm) and pinned synthesizer (PyPI) versions"
     )
     .enablePositionalOptions();
+  attachGlobalFlags(program);
 
   registerEnsemble(program);
   registerLocal(program);
@@ -43,6 +46,7 @@ export function buildProgram(): Command {
   registerRuntime(program);
   registerSessions(program);
   registerConfig(program);
+  registerPrompts(program);
   registerSetup(program);
   registerDoctor(program);
   registerVersion(program);

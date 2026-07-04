@@ -91,6 +91,33 @@ export type PassthroughModel = {
   endpointUrl: string;
 };
 
+/**
+ * One named ensemble advertised as its own fused model. A request whose `model`
+ * matches `modelId` (or its `claude-` alias) runs *this* ensemble: only its
+ * members fan out on the panel, and the fuse step carries its judge/synthesizer
+ * endpoint ids and prompt overrides. The first configured route is the default
+ * fallback for the advertised default model and any unrecognised id.
+ */
+export type FusedModelRoute = {
+  /** Advertised gateway model id (e.g. "fusion-panel", "fusion-deep"). */
+  modelId: string;
+  /** The ensemble name (e.g. "default", "deep"). */
+  name: string;
+  /** Panel member router endpoint ids that fan out for this ensemble. */
+  memberEndpointIds: readonly string[];
+  /** Router endpoint id sent as `judge_model` on the fuse step. */
+  judgeEndpointId?: string;
+  /** The judge's provider model name (WS7 cost attribution + narration). */
+  judgeModelName?: string;
+  /** Router endpoint id sent as `synthesizer_model` on the fuse step. */
+  synthesizerEndpointId?: string;
+  /**
+   * Per-ensemble system-prompt overrides, already wire-keyed
+   * (`judge_system` / `synthesizer_system`) for the fuse step body.
+   */
+  prompts?: Readonly<Record<string, string>>;
+};
+
 export type ChatMessageLike = {
   role: string;
   content?: unknown;
@@ -121,6 +148,12 @@ export type PanelRunInput = {
   sessionKey: string;
   /** 1-based user-turn index this panel run belongs to. */
   turn: number;
+  /**
+   * The advertised fused model id of the ensemble this run belongs to (e.g.
+   * "fusion-deep"), so the runner fans out only that ensemble's members. Absent
+   * on single-ensemble gateways (the runner uses its full panel).
+   */
+  ensembleModelId?: string;
   /**
    * Panel model ids (the router endpoint ids) to omit from this run. Set on a
    * rate-limit failover turn (WS5) to drop the throttled vendor — it would only
@@ -205,6 +238,12 @@ export type FusionBackendOptions = {
   stepTimeoutMs?: number;
   /** Mint a trace id (injectable for tests). */
   mintTraceId?: () => string;
+  /**
+   * Named ensembles advertised as their own fused models (multi-ensemble
+   * repos). The first route is the default. When unset, the backend behaves as
+   * a single-ensemble gateway: every fused request runs the one implicit panel.
+   */
+  fusedModels?: readonly FusedModelRoute[];
   /**
    * Native models exposed alongside the fused model. A request whose `model`
    * matches one of these is proxied to its real provider (via the router)
@@ -761,6 +800,7 @@ export class FusionBackend implements Backend {
   readonly #stepTimeoutMs: number;
   readonly #mintTraceId: () => string;
   readonly #kernelStateStore: FusionBackendKernelStateStore;
+  readonly #fusedRoutes: readonly FusedModelRoute[];
   readonly #passthrough: readonly PassthroughModel[];
   readonly #onRateLimit: OnRateLimitPolicy;
   readonly #store: SessionStore | undefined;
@@ -795,6 +835,7 @@ export class FusionBackend implements Backend {
     this.#panelTimeoutMs = options.panelTimeoutMs ?? DEFAULT_PANEL_TIMEOUT_MS;
     this.#stepTimeoutMs = options.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
     this.#mintTraceId = options.mintTraceId ?? newTraceId;
+    this.#fusedRoutes = options.fusedModels ?? [];
     this.#passthrough = options.passthrough ?? [];
     this.#onRateLimit = options.onRateLimit ?? "fusion";
     this.#store = options.store;
@@ -814,12 +855,46 @@ export class FusionBackend implements Backend {
   }
 
   /**
+   * The fused ensemble route (if any) a requested id selects exactly — by its
+   * advertised model id or the `claude-`prefixed alias Claude Code's picker
+   * sends. Unrecognised ids do NOT match here; they fall through to the default
+   * route via {@link FusionBackend.#routeFor}.
+   */
+  #fusedFor(requested: string | undefined): FusedModelRoute | undefined {
+    if (requested === undefined || requested.length === 0) return undefined;
+    const direct = this.#fusedRoutes.find((route) => route.modelId === requested);
+    if (direct !== undefined) return direct;
+    if (requested.startsWith(CLAUDE_ALIAS_PREFIX)) {
+      const stripped = requested.slice(CLAUDE_ALIAS_PREFIX.length);
+      return this.#fusedRoutes.find((route) => route.modelId === stripped);
+    }
+    return undefined;
+  }
+
+  /** The default fused route: the advertised default model's, else the first. */
+  #defaultRoute(): FusedModelRoute | undefined {
+    if (this.#fusedRoutes.length === 0) return undefined;
+    return this.#fusedRoutes.find((route) => route.modelId === this.defaultModel) ?? this.#fusedRoutes[0];
+  }
+
+  /**
+   * The fused route a request's turn runs: an exact fused-id match, else the
+   * default ensemble (unrecognised ids and failover re-entries land here).
+   * Undefined only when no routes are configured (single-ensemble behavior).
+   */
+  #routeFor(req: FrontdoorRequestValue): FusedModelRoute | undefined {
+    return this.#fusedFor(req.chat.model) ?? this.#defaultRoute();
+  }
+
+  /**
    * The native model (if any) a requested id selects — by advertised id, router
    * endpoint id, or the `claude-`prefixed alias Claude Code's picker sends (see
    * `claudeModelAlias`), so a vendor model chosen inside Claude routes correctly.
+   * Fused ensemble ids always win over passthrough matching.
    */
   #passthroughFor(requested: string | undefined): PassthroughModel | undefined {
     if (requested === undefined || requested.length === 0) return undefined;
+    if (this.#fusedFor(requested) !== undefined) return undefined;
     const direct = this.#passthrough.find(
       (entry) => entry.modelId === requested || entry.endpointId === requested
     );
@@ -833,10 +908,14 @@ export class FusionBackend implements Backend {
     return undefined;
   }
 
-  /** Discovery list: the fused model first, then each native passthrough model. */
+  /** Discovery list: the default fused model first, then every other fused
+   *  ensemble model, then each native passthrough model. */
   listModelIds(): readonly string[] {
-    const fusion = this.defaultModel ?? FUSION_PANEL_MODEL;
+    const fusion = this.defaultModel ?? this.#defaultRoute()?.modelId ?? FUSION_PANEL_MODEL;
     const ids = [fusion];
+    for (const route of this.#fusedRoutes) {
+      if (!ids.includes(route.modelId)) ids.push(route.modelId);
+    }
     for (const entry of this.#passthrough) {
       if (!ids.includes(entry.modelId)) ids.push(entry.modelId);
     }
@@ -844,12 +923,15 @@ export class FusionBackend implements Backend {
   }
 
   /**
-   * Map a requested model to the upstream id the backend runs. A native model
+   * Map a requested model to the upstream id the backend runs. A fused ensemble
+   * id keeps its own id (that ensemble's panel + judge run); a native model
    * keeps its own id (so {@link chat} proxies it to the real provider); anything
-   * else — including the fused model and unrecognised ids — resolves to the
-   * fused default so the panel + judge handle it.
+   * else — unrecognised ids included — resolves to the fused default so the
+   * default ensemble's panel + judge handle it.
    */
   resolveModel(requested: string | undefined): string | undefined {
+    const fused = this.#fusedFor(requested);
+    if (fused !== undefined) return fused.modelId;
     const native = this.#passthroughFor(requested);
     if (native !== undefined) return native.modelId;
     return this.defaultModel;
@@ -1182,7 +1264,7 @@ export class FusionBackend implements Backend {
     const req: FrontdoorRequestValue = {
       requestId: newSpanId(),
       chat,
-      sessionKey: this.#sessionKey(messages),
+      sessionKey: this.#sessionKey(messages, this.#sessionScope(chat.model)),
       // The user-turn index: a follow-up user message is a new turn, while a
       // harness tool-loop continuation keeps the count (and reuses candidates).
       turn: messages.filter((message) => message.role === "user").length,
@@ -1229,10 +1311,11 @@ export class FusionBackend implements Backend {
   #openTurnNarration(req: FrontdoorRequestValue): TurnNarration | undefined {
     if (!this.#reasoningTraces) return undefined;
     const session = this.#ensureSession(req.sessionKey);
+    const judgeModel = this.#judgeModelNameFor(req);
     return createTurnNarrator({
       traceId: session.traceId,
       turn: req.turn,
-      ...(this.#judgeModel !== undefined ? { judgeModel: this.#judgeModel } : {}),
+      ...(judgeModel !== undefined ? { judgeModel } : {}),
       ...(session.lastJudgePick !== undefined ? { lastPick: session.lastJudgePick } : {}),
       ...(this.#narrationWriter !== undefined ? { writer: this.#narrationWriter } : {})
     });
@@ -1264,11 +1347,17 @@ export class FusionBackend implements Backend {
     return req[FRONTDOOR_SIGNAL];
   }
 
-  #fusedCostModel(): string {
+  #fusedCostModel(req?: FrontdoorRequestValue): string {
     // WS7: a fused turn's gateway-observed usage is the judge/synthesis call's,
-    // priced against the configured judge model (falling back to the advertised
-    // fused id, whose cost is reported unknown).
-    return this.#costModel ?? this.defaultModel ?? FUSION_PANEL_MODEL;
+    // priced against the resolved ensemble's judge model (then the configured
+    // judge model, then the advertised fused id, whose cost is reported unknown).
+    const routeJudge = req !== undefined ? this.#routeFor(req)?.judgeModelName : undefined;
+    return routeJudge ?? this.#costModel ?? this.defaultModel ?? FUSION_PANEL_MODEL;
+  }
+
+  /** The judge model name shown in judge traces/narration for a request's route. */
+  #judgeModelNameFor(req: FrontdoorRequestValue): string | undefined {
+    return this.#routeFor(req)?.judgeModelName ?? this.#judgeModel;
   }
 
   #buildStepBody(req: FrontdoorRequestValue, candidates: readonly WireTrajectory[]): string {
@@ -1280,7 +1369,19 @@ export class FusionBackend implements Backend {
     };
     if (req.chat.tools !== undefined) stepBody.tools = req.chat.tools;
     if (req.chat.tool_choice !== undefined) stepBody.tool_choice = req.chat.tool_choice;
-    if (this.#judgeModel !== undefined) stepBody.judge_model = this.#judgeModel;
+    // Per-ensemble judge/synthesizer/prompts: the route carries router *endpoint
+    // ids* (trajectories:fuse routes by endpoint id) and wire-keyed prompt
+    // overrides. Without a route the configured judge (if any) applies — the
+    // Python side resolves its own configured judge/synthesizer otherwise.
+    const route = this.#routeFor(req);
+    const judgeModel = route?.judgeEndpointId ?? this.#judgeModel;
+    if (judgeModel !== undefined) stepBody.judge_model = judgeModel;
+    if (route?.synthesizerEndpointId !== undefined) {
+      stepBody.synthesizer_model = route.synthesizerEndpointId;
+    }
+    if (route?.prompts !== undefined && Object.keys(route.prompts).length > 0) {
+      stepBody.prompts = route.prompts;
+    }
     return JSON.stringify(stepBody);
   }
 
@@ -1295,6 +1396,7 @@ export class FusionBackend implements Backend {
 
   #emitJudgeRequest(req: FrontdoorRequestValue, session: Session, candidates: readonly WireTrajectory[]): void {
     if (!getTraceEmitter().isEnabled()) return;
+    const judgeModel = this.#judgeModelNameFor(req);
     emitTrace({
       component: "judge",
       event_type: "judge.request",
@@ -1302,7 +1404,7 @@ export class FusionBackend implements Backend {
       spanId: req.judgeSpanId,
       parentSpanId: session.sessionSpan,
       payload: judgeRequestPayload({
-        ...(this.#judgeModel !== undefined ? { judgeModel: this.#judgeModel } : {}),
+        ...(judgeModel !== undefined ? { judgeModel } : {}),
         messages: req.chat.messages ?? [],
         trajectories: [...candidates],
         ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
@@ -1425,6 +1527,7 @@ export class FusionBackend implements Backend {
       req.sessionKey,
       req.turn,
       req.chat.messages ?? [],
+      this.#routeFor(req)?.modelId,
       req.excludeModelIds
     );
     // Bounded, failing loudly so a panel crash or an empty/all-failed candidate
@@ -1484,7 +1587,7 @@ export class FusionBackend implements Backend {
 
   async #finalizeFused(req: FrontdoorRequestValue, response: Response): Promise<Response> {
     const session = this.#ensureSession(req.sessionKey);
-    const fusedCostModel = this.#fusedCostModel();
+    const fusedCostModel = this.#fusedCostModel(req);
     // Failover handoff: prepend the notice to the single fused answer so the user
     // sees why the turn moved to the ensemble. Consumes the body, so this returns
     // before the (clone-based) trace capture below.
@@ -1583,7 +1686,7 @@ export class FusionBackend implements Backend {
     this.#meterEntry(
       req.sessionKey,
       {
-        model: this.#fusedCostModel(),
+        model: this.#fusedCostModel(req),
         usage: usageWithProviderCost(parseUsageFromSse(sseBuffer), providerCost),
         stage: "judge_synth",
         turn: req.turn,
@@ -1650,14 +1753,33 @@ export class FusionBackend implements Backend {
     );
   }
 
-  /** A stable key for the conversation: system text + first user message. */
-  #sessionKey(messages: ChatMessageLike[]): string {
+  /**
+   * The session-key discriminator for a request: the resolved fused ensemble's
+   * model id when this gateway serves multiple ensembles and the request routes
+   * to fusion. Two ensembles used against the same conversation prefix then get
+   * distinct sessions (their own panel runs, worktrees, and cost ledgers).
+   * Single-ensemble gateways return undefined so session keys — and therefore
+   * persisted session ids and `--resume` targets — stay identical to before.
+   */
+  #sessionScope(model: string | undefined): string | undefined {
+    if (this.#fusedRoutes.length <= 1) return undefined;
+    if (this.#passthroughFor(model) !== undefined) return undefined;
+    return (this.#fusedFor(model) ?? this.#defaultRoute())?.modelId;
+  }
+
+  /** A stable key for the conversation: system text + first user message
+   *  (+ the fused ensemble scope on multi-ensemble gateways). */
+  #sessionKey(messages: ChatMessageLike[], scope?: string): string {
     const system = messages
       .filter((message) => message.role === "system")
       .map((message) => textOfContent(message.content))
       .join("\n");
     const firstUser = messages.find((message) => message.role === "user");
-    const seed = JSON.stringify([system, firstUser ? textOfContent(firstUser.content) : ""]);
+    const seed = JSON.stringify([
+      system,
+      firstUser ? textOfContent(firstUser.content) : "",
+      ...(scope !== undefined ? [scope] : [])
+    ]);
     return createHash("sha256").update(seed).digest("hex").slice(0, 16);
   }
 
@@ -1973,6 +2095,7 @@ export class FusionBackend implements Backend {
     sessionKey: string,
     turn: number,
     messages: ChatMessageLike[],
+    ensembleModelId?: string,
     excludeModelIds?: readonly string[]
   ): Promise<WireTrajectory[]> {
     const existing = session.turns.get(turn);
@@ -1991,6 +2114,7 @@ export class FusionBackend implements Backend {
       sessionKey,
       turn,
       signal: abort.signal,
+      ...(ensembleModelId !== undefined ? { ensembleModelId } : {}),
       ...(excludeModelIds !== undefined && excludeModelIds.length > 0 ? { excludeModelIds } : {})
     });
     session.turns.set(turn, candidates);

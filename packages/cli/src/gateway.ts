@@ -52,16 +52,45 @@ import type {
   SessionStore,
   WireTrajectory
 } from "@fusionkit/model-gateway";
+import { uiStream } from "@fusionkit/cli-ui";
 import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
 import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
+import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
+import type { PromptOverrides } from "./fusion-config.js";
 import { toolRegistry } from "./tools.js";
+
+/**
+ * One named ensemble as the gateway routes it: the advertised fused model id,
+ * the panel members that fan out for it, the judge/synthesizer router endpoint
+ * ids sent on the fuse step, the judge's model name (WS7 cost attribution),
+ * and its prompt overrides.
+ */
+export type GatewayEnsembleConfig = {
+  name: string;
+  /** Advertised gateway model id (`fusion-panel` / `fusion-<name>`). */
+  modelId: string;
+  models: EnsembleModel[];
+  /** Router endpoint id the fuse step's `judge_model` routes to. */
+  judgeEndpointId: string;
+  /** The judge's provider model name (cost attribution + narration). */
+  judgeModelName: string;
+  synthesizerEndpointId?: string;
+  prompts?: PromptOverrides;
+};
 
 export type GatewayRunnerConfig = {
   fusionBackendUrl: string;
   repo: string;
   outputRoot: string;
   harnesses: UnifiedHarnessKind[];
+  /** The union of panel members across every ensemble. */
   models: EnsembleModel[];
+  /**
+   * Named ensembles, session-default first. Each registers as its own fused
+   * model; a request to it fans out only its members. When unset, `models` is
+   * the one implicit ensemble behind the default fused model.
+   */
+  ensembles?: GatewayEnsembleConfig[];
   command?: string;
   timeoutMs?: number;
   /**
@@ -367,7 +396,11 @@ export async function startFusionStepGateway(input: {
   const { config } = input;
   const base = config.fusionBackendUrl.replace(/\/+$/, "");
   const stepUrl = `${base}/v1/fusion/trajectories:fuse`;
-  const defaultModel = input.defaultModel ?? FUSION_PANEL_MODEL;
+  const ensembles = config.ensembles ?? [];
+  const defaultModel = input.defaultModel ?? ensembles[0]?.modelId ?? FUSION_PANEL_MODEL;
+  // Per-ensemble member lookup for the panel runner, keyed by the advertised
+  // fused model id the backend resolved the request to.
+  const ensemblesByModelId = new Map(ensembles.map((ensemble) => [ensemble.modelId, ensemble]));
 
   // Native multi-turn: one resume-cursor map per conversation (keyed by
   // session), each holding a cursor per panel model. When the harness-driver
@@ -392,15 +425,26 @@ export async function startFusionStepGateway(input: {
     sessionSpanId,
     sessionKey,
     turn,
+    ensembleModelId,
     excludeModelIds,
     signal
   }) => {
+    // The resolved ensemble's members fan out (the union is only the router
+    // surface); an unknown/absent ensemble id falls back to the full model list.
+    const ensembleModels =
+      ensembleModelId !== undefined
+        ? (ensemblesByModelId.get(ensembleModelId)?.models ?? config.models)
+        : config.models;
     // WS5 failover excludes the throttled vendor (by router endpoint id == panel
     // model id) so the ensemble fuses over the healthy survivors this turn.
     const panelModels =
       excludeModelIds === undefined || excludeModelIds.length === 0
-        ? config.models
-        : config.models.filter((model) => !excludeModelIds.includes(model.id));
+        ? ensembleModels
+        : ensembleModels.filter((model) => !excludeModelIds.includes(model.id));
+    const ensembleJudge =
+      ensembleModelId !== undefined
+        ? ensemblesByModelId.get(ensembleModelId)?.judgeModelName
+        : undefined;
     emitTrace({
       component: "gateway",
       event_type: "session.started",
@@ -413,7 +457,8 @@ export async function startFusionStepGateway(input: {
           repo: config.repo,
           fusion_backend_url: config.fusionBackendUrl,
           harnesses: config.harnesses,
-          judge_model: config.judgeModel ?? null,
+          ...(ensembleModelId !== undefined ? { ensemble_model_id: ensembleModelId } : {}),
+          judge_model: ensembleJudge ?? config.judgeModel ?? null,
           models: panelModels.map((model) => ({
             id: model.id,
             model: model.model,
@@ -428,8 +473,8 @@ export async function startFusionStepGateway(input: {
         excludeModelIds !== undefined && excludeModelIds.length > 0
           ? ` (excluding ${excludeModelIds.join(", ")} after a vendor rate-limit)`
           : "";
-      console.error(
-        `fusion: running panel (${panelModels.map((m) => m.id).join(", ")}) for session ${sessionKey}${excluded}...`
+      uiStream().write(
+        `fusion: running panel (${panelModels.map((m) => m.id).join(", ")}) for session ${sessionKey}${excluded}...\n`
       );
     }
     emitGatewayStatus({ phase: "panel", models: panelModels.map((m) => m.id), turn });
@@ -459,15 +504,15 @@ export async function startFusionStepGateway(input: {
       });
       const trajectories = normalizeWireTrajectories(wire);
       if (gatewayChatter) {
-        console.error(
+        uiStream().write(
           `fusion: panel produced ${trajectories.length} candidate trajectories ` +
-            `(${trajectories.map((t) => `${t.model_id}:${t.status}`).join(", ")})`
+            `(${trajectories.map((t) => `${t.model_id}:${t.status}`).join(", ")})\n`
         );
       }
       emitGatewayStatus({ phase: "judging", candidates: trajectories.length, turn });
       return trajectories;
     } catch (error) {
-      console.error(`fusion: panel run failed: ${error instanceof Error ? error.message : String(error)}`);
+      uiStream().write(`fusion: panel run failed: ${error instanceof Error ? error.message : String(error)}\n`);
       emitGatewayStatus({ phase: "idle" });
       throw error;
     }
@@ -487,6 +532,32 @@ export async function startFusionStepGateway(input: {
             : [{ modelId: model.model, endpointId: model.id, endpointUrl }];
         });
 
+  // Each named ensemble is advertised as its own fused model. The route carries
+  // what a fused turn for it needs: which members fan out (checked by the panel
+  // runner above), the judge/synthesizer router endpoint ids for the fuse step,
+  // the judge model name for cost/narration, and its prompt overrides (wire keys
+  // per PROMPT_CONFIG_KEY, ready to POST).
+  const fusedModels = ensembles.map((ensemble) => ({
+    modelId: ensemble.modelId,
+    name: ensemble.name,
+    memberEndpointIds: ensemble.models.map((model) => model.id),
+    judgeEndpointId: ensemble.judgeEndpointId,
+    judgeModelName: ensemble.judgeModelName,
+    ...(ensemble.synthesizerEndpointId !== undefined
+      ? { synthesizerEndpointId: ensemble.synthesizerEndpointId }
+      : {}),
+    ...(ensemble.prompts !== undefined
+      ? {
+          prompts: Object.fromEntries(
+            Object.entries(ensemble.prompts).map(([id, text]) => [
+              PROMPT_CONFIG_KEY[id as keyof typeof PROMPT_CONFIG_KEY],
+              text
+            ])
+          )
+        }
+      : {})
+  }));
+
   // FusionBackend is itself kernel-native: every request is dispatched through
   // `FusionRuntime` as the `fusion-frontdoor-request` graph (routing into the
   // `fusion-frontdoor-turn` graph), and the fuse step runs through
@@ -497,6 +568,7 @@ export async function startFusionStepGateway(input: {
     runPanels,
     runFuseStep: createKernelFuseStepRunner(),
     defaultModel,
+    ...(fusedModels.length > 0 ? { fusedModels } : {}),
     passthrough,
     ...(config.onRateLimit !== undefined ? { onRateLimit: config.onRateLimit } : {}),
     ...(config.panelTimeoutMs !== undefined ? { panelTimeoutMs: config.panelTimeoutMs } : {}),

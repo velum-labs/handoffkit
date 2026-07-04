@@ -12,27 +12,21 @@ import type { Command } from "commander";
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 import type { MlxEnv } from "@fusionkit/adapter-ai-sdk";
 
+import { bold, cyan, dim, formatBytes, gray, red } from "@fusionkit/cli-ui";
+import type { Presenter } from "@fusionkit/cli-ui";
+
 import { catalogEntry, detectHost, recommendFor, usableRamGB } from "../fusion/local-catalog.js";
 import { ownedMlxEnv } from "../fusion/mlx.js";
 import { estimateModelSizing } from "../fusion/model-sizing.js";
-import { ProgressBar, formatBytes } from "../ui/progress.js";
-import { Spinner } from "../ui/spinner.js";
-import { bold, brandBanner, cyan, dim, glyph, gray, green, red, yellow } from "../ui/theme.js";
+import { contextFor } from "../shared/context.js";
+import type { CommandContext } from "../shared/context.js";
 
 function firstLine(message: string): string {
   return (message.split("\n")[0] ?? message).trim();
 }
 
-async function runList(): Promise<number> {
+async function runList(ctx: CommandContext): Promise<number> {
   const host = detectHost();
-  console.log(`\n${brandBanner("local models")}\n`);
-  if (!host.appleSilicon) {
-    console.log(
-      yellow(`${glyph.warn()} local MLX needs Apple Silicon (macOS arm64); this host is ${host.platform}/${host.arch}.`)
-    );
-    console.log("");
-  }
-
   const env = ownedMlxEnv();
   const downloaded = new Map<string, number>();
   try {
@@ -40,66 +34,100 @@ async function runList(): Promise<number> {
   } catch {
     // best-effort; an unprovisioned/missing runtime simply shows nothing cached
   }
+  const catalog = recommendFor(host);
 
-  console.log(bold("downloaded"));
+  if (ctx.json) {
+    ctx.emit({
+      host: { platform: host.platform, arch: host.arch, appleSilicon: host.appleSilicon },
+      downloaded: [...downloaded.entries()].map(([repo, sizeBytes]) => ({ repo, sizeBytes })),
+      catalog: catalog.map((entry) => ({
+        repo: entry.repo,
+        label: entry.label,
+        params: entry.params,
+        quant: entry.quant,
+        sizeGB: entry.sizeGB,
+        minRamGB: entry.minRamGB,
+        fits: entry.fits,
+        downloaded: downloaded.has(entry.repo)
+      })),
+      runtimeDir: env.dir,
+      diskBytes: env.info().diskBytes
+    });
+    return 0;
+  }
+
+  const { presenter } = ctx;
+  presenter.blank();
+  presenter.banner("local models");
+  presenter.blank();
+  if (!host.appleSilicon) {
+    presenter.warn(`local MLX needs Apple Silicon (macOS arm64); this host is ${host.platform}/${host.arch}.`);
+    presenter.blank();
+  }
+
+  presenter.heading("downloaded");
   if (downloaded.size === 0) {
-    console.log(`  ${dim("none yet — pick one below and run `fusionkit models download <repo>`")}`);
+    presenter.line(`  ${dim("none yet — pick one below and run `fusionkit models download <repo>`")}`);
   } else {
     for (const [repo, size] of downloaded) {
-      console.log(`  ${green(glyph.tick())} ${repo} ${dim(formatBytes(size))}`);
+      presenter.status("ok", repo, formatBytes(size));
     }
   }
 
-  console.log("");
-  console.log(bold("catalog"));
-  for (const entry of recommendFor(host)) {
+  presenter.blank();
+  presenter.heading("catalog");
+  for (const entry of catalog) {
     const have = downloaded.has(entry.repo);
-    const mark = have ? green(glyph.tick()) : gray(glyph.bullet());
     const status = have ? "downloaded" : `~${entry.sizeGB} GB`;
     const ram = entry.fits ? "" : red(` · needs ${entry.minRamGB}GB RAM`);
-    console.log(
-      `  ${mark} ${entry.label} ${dim(`(${entry.repo})`)}\n      ${dim(`${entry.params} ${entry.quant} · ${status}`)}${ram}${dim(` · ${entry.blurb}`)}`
-    );
+    presenter.status(have ? "ok" : "pending", `${entry.label} ${dim(`(${entry.repo})`)}`);
+    presenter.line(`      ${dim(`${entry.params} ${entry.quant} · ${status}`)}${ram}${dim(` · ${entry.blurb}`)}`);
   }
 
-  console.log("");
-  console.log(dim(`runtime: ${env.dir} · ${formatBytes(env.info().diskBytes)} on disk`));
+  presenter.blank();
+  presenter.line(dim(`runtime: ${env.dir} · ${formatBytes(env.info().diskBytes)} on disk`));
   return 0;
 }
 
-async function provision(env: MlxEnv): Promise<boolean> {
-  const spinner = new Spinner("preparing the local MLX runtime").start();
+/** Provision the owned MLX runtime with a live task line. Exported for reuse. */
+export async function provisionMlxRuntime(env: MlxEnv, presenter: Presenter): Promise<boolean> {
+  const task = presenter.task("preparing the local MLX runtime");
   let phaseLabel = "preparing the local MLX runtime";
   try {
     await env.ensureProvisioned({
       onEvent: (event) => {
         if (event.type === "phase") {
           phaseLabel = event.label;
-          spinner.update(phaseLabel);
+          task.update(phaseLabel);
         } else if (event.type === "log") {
           const line = event.line.trim();
           const tail = line.length > 60 ? `…${line.slice(line.length - 60)}` : line;
-          spinner.update(`${phaseLabel} ${dim(`· ${tail}`)}`);
+          task.update(`${phaseLabel} ${dim(`· ${tail}`)}`);
         }
       }
     });
-    spinner.succeed("local MLX runtime ready");
+    task.succeed("local MLX runtime ready");
     return true;
   } catch (error) {
     if (error instanceof MlxCapabilityError) {
-      spinner.fail(`MLX runtime unavailable: ${firstLine(error.message)}`);
+      task.fail(`MLX runtime unavailable: ${firstLine(error.message)}`);
     } else {
-      spinner.fail(`could not prepare the MLX runtime: ${firstLine(error instanceof Error ? error.message : String(error))}`);
+      task.fail(
+        `could not prepare the MLX runtime: ${firstLine(error instanceof Error ? error.message : String(error))}`
+      );
     }
     return false;
   }
 }
 
-async function runDownload(repo: string, force: boolean): Promise<number> {
+async function runDownload(repo: string, force: boolean, ctx: CommandContext): Promise<number> {
   const host = detectHost();
-  console.error(`\n${brandBanner("download")}\n`);
+  const { presenter } = ctx;
+  presenter.blank();
+  presenter.banner("download");
+  presenter.blank();
   if (!host.appleSilicon) {
-    console.error(red(`local MLX needs Apple Silicon (macOS arm64); this host is ${host.platform}/${host.arch}.`));
+    presenter.error(`local MLX needs Apple Silicon (macOS arm64); this host is ${host.platform}/${host.arch}.`);
     return 1;
   }
 
@@ -112,32 +140,31 @@ async function runDownload(repo: string, force: boolean): Promise<number> {
   });
   if (!force && sizing.source !== "unknown" && sizing.requiredGB > usableRamGB(host)) {
     const measured = sizing.source === "hub" ? "measured from the model files" : "catalog estimate";
-    console.error(
-      red(
-        `${repo} needs ~${sizing.requiredGB.toFixed(0)}GB to run, but this host has ${Math.round(host.totalRamGB)}GB ` +
-          `(~${Math.floor(usableRamGB(host))}GB usable for models).`
-      )
+    presenter.error(
+      `${repo} needs ~${sizing.requiredGB.toFixed(0)}GB to run, but this host has ${Math.round(host.totalRamGB)}GB ` +
+        `(~${Math.floor(usableRamGB(host))}GB usable for models).`
     );
-    console.error(dim(`${measured} — re-run with --force to download anyway.`));
+    presenter.line(dim(`${measured} — re-run with --force to download anyway.`));
     return 1;
   }
 
   const env = ownedMlxEnv();
-  if (!(await provision(env))) return 1;
+  if (!(await provisionMlxRuntime(env, presenter))) return 1;
 
-  if (entry !== undefined) console.error(dim(`${entry.label} · ${entry.params} ${entry.quant} · ~${entry.sizeGB} GB`));
+  if (entry !== undefined) presenter.line(dim(`${entry.label} · ${entry.params} ${entry.quant} · ~${entry.sizeGB} GB`));
 
   const controller = new AbortController();
   const onSignal = (): void => controller.abort();
   process.once("SIGINT", onSignal);
-  const bar = new ProgressBar(cyan(repo)).start();
+  const bar = presenter.progress(cyan(repo));
   try {
     const path = await env.downloadModel(repo, {
       onProgress: (progress) => bar.update(progress),
       signal: controller.signal
     });
     bar.succeed(cyan(repo));
-    console.error(dim(path));
+    presenter.line(dim(path));
+    if (ctx.json) ctx.emit({ downloaded: repo, path });
     return 0;
   } catch (error) {
     if (controller.signal.aborted) {
@@ -151,13 +178,17 @@ async function runDownload(repo: string, force: boolean): Promise<number> {
   }
 }
 
-function runRemove(repo: string): number {
+function runRemove(repo: string, ctx: CommandContext): number {
   const env = ownedMlxEnv();
   const removed = env.removeModel(repo);
+  if (ctx.json) {
+    ctx.emit({ removed, repo });
+    return 0;
+  }
   if (removed) {
-    console.log(`${green(glyph.tick())} removed ${cyan(repo)} from ${dim(env.dir)}`);
+    ctx.presenter.success(`removed ${cyan(repo)} from ${dim(env.dir)}`);
   } else {
-    console.log(`${gray(glyph.bullet())} ${repo} was not in the local cache`);
+    ctx.presenter.note(`${repo} was not in the local cache`);
   }
   return 0;
 }
@@ -166,15 +197,17 @@ export function registerModels(program: Command): void {
   const models = program
     .command("models")
     .description("list, download, and remove local MLX models")
-    .action(async () => {
-      process.exit(await runList());
+    .option("--json", "emit machine-readable JSON")
+    .action(async (_opts: { json?: boolean }, command: Command) => {
+      process.exit(await runList(contextFor(command)));
     });
 
   models
     .command("list")
     .description("show the curated catalog and which models are downloaded")
-    .action(async () => {
-      process.exit(await runList());
+    .option("--json", "emit machine-readable JSON")
+    .action(async (_opts: { json?: boolean }, command: Command) => {
+      process.exit(await runList(contextFor(command)));
     });
 
   models
@@ -182,8 +215,8 @@ export function registerModels(program: Command): void {
     .argument("<repo>", "Hugging Face repo id (e.g. mlx-community/Qwen3-1.7B-4bit)")
     .option("--force", "download even if the model is too large to run on this host")
     .description("download a model's weights into the owned cache (resumable)")
-    .action(async (repo: string, opts: { force?: boolean }) => {
-      process.exit(await runDownload(repo, opts.force === true));
+    .action(async (repo: string, opts: { force?: boolean }, command: Command) => {
+      process.exit(await runDownload(repo, opts.force === true, contextFor(command)));
     });
 
   models
@@ -191,7 +224,8 @@ export function registerModels(program: Command): void {
     .alias("remove")
     .argument("<repo>", "Hugging Face repo id to remove from the cache")
     .description("remove a model's weights from the owned cache")
-    .action((repo: string) => {
-      process.exit(runRemove(repo));
+    .option("--json", "emit machine-readable JSON")
+    .action((repo: string, _opts: { json?: boolean }, command: Command) => {
+      process.exit(runRemove(repo, contextFor(command)));
     });
 }

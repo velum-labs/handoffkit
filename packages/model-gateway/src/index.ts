@@ -64,6 +64,7 @@ export type {
 } from "./frontdoor/types.js";
 export type {
   ChatMessageLike,
+  FusedModelRoute,
   FuseStepRunInput,
   FuseStepRunner,
   FusionBackendKernelSessionState,

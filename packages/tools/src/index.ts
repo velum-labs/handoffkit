@@ -40,7 +40,13 @@ export type {
 } from "./types.js";
 export { createToolRegistry } from "./registry.js";
 export type { ToolRegistry } from "./registry.js";
-export { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL, LOCAL_MODEL_LABEL } from "./constants.js";
+export {
+  CURSOR_BRIDGE_MODEL_NAME,
+  DEFAULT_ENSEMBLE_NAME,
+  FUSION_PANEL_MODEL,
+  fusionModelId,
+  LOCAL_MODEL_LABEL
+} from "./constants.js";
 export {
   envFlagEnabled,
   HARNESS_DRIVERS_FLAG,

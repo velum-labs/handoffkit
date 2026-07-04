@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
-from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
+from fusionkit_core.config import FusionConfig, FusionMode, PromptOverrides, SamplingConfig
 from fusionkit_core.contracts import FusionRunRequestV1
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import FuseResult
+from fusionkit_core.judge import FuseResult, JudgeSynthesizer
 from fusionkit_core.run import CreateRunResult, FusionRunManager, NativeRunError
 from fusionkit_core.run_models import (
     RunEventPage,
@@ -152,6 +152,30 @@ class FusionKernel:
             messages, sampling, tools=tools, tool_choice=tool_choice
         )
 
+    def _judge_synthesizer_for(self, prompts: PromptOverrides | None) -> JudgeSynthesizer:
+        """The engine's judge/synthesizer, or a per-request variant.
+
+        Per-request ``prompts`` (a named ensemble's committed overrides) win per
+        field; unset fields fall back to the config-level overrides, then the
+        built-in prompts. The transient :class:`JudgeSynthesizer` is cheap - it
+        holds only prompt strings and policy flags.
+        """
+        if prompts is None or (
+            prompts.judge_system is None and prompts.synthesizer_system is None
+        ):
+            return self._engine.judge_synthesizer
+        config = self._engine.config
+        merged = PromptOverrides(
+            judge_system=prompts.judge_system or config.prompts.judge_system,
+            synthesizer_system=prompts.synthesizer_system or config.prompts.synthesizer_system,
+        )
+        return JudgeSynthesizer(
+            merged,
+            harness_passthrough=config.harness_prompt_passthrough,
+            select_best=config.synthesis_select_best,
+            context_policy=config.context,
+        )
+
     async def fuse_trajectories(
         self,
         messages: Sequence[ChatMessage],
@@ -162,10 +186,11 @@ class FusionKernel:
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        prompts: PromptOverrides | None = None,
         trace_id: str | None = None,
         span_id: str | None = None,
     ) -> FuseResult:
-        return await self._engine.judge_synthesizer.fuse(
+        return await self._judge_synthesizer_for(prompts).fuse(
             messages,
             trajectories,
             judge_client=self.client(judge_model),
@@ -187,10 +212,11 @@ class FusionKernel:
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        prompts: PromptOverrides | None = None,
         trace_id: str | None = None,
         span_id: str | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
-        return self._engine.judge_synthesizer.fuse_stream(
+        return self._judge_synthesizer_for(prompts).fuse_stream(
             messages,
             trajectories,
             judge_client=self.client(judge_model),

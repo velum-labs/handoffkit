@@ -88,8 +88,29 @@ export type PanelModelSpec = {
   localCompute?: PanelLocalComputeSpec;
 };
 
+/**
+ * One named ensemble as the run orchestrator consumes it: its panel members,
+ * judge/synthesizer model names, and prompt overrides. An empty `models` array
+ * means "use the hardware-shaped default trio".
+ */
+export type EnsembleRunSpec = {
+  name: string;
+  models: PanelModelSpec[];
+  judgeModel?: string;
+  synthesizerModel?: string;
+  prompts?: PromptOverrides;
+};
+
 export type RunFusionOptions = {
   models?: PanelModelSpec[];
+  /**
+   * Named ensembles (config-provided). Every ensemble is registered as its own
+   * gateway model; `ensemble` names the session default. When unset, a single
+   * `default` ensemble is built from `models`/`judgeModel`/`prompts`.
+   */
+  ensembles?: EnsembleRunSpec[];
+  /** The session-default ensemble name (`--ensemble`); must name a defined ensemble. */
+  ensemble?: string;
   endpoints?: Record<string, string>;
   fusionkitDir?: string;
   repo?: string;

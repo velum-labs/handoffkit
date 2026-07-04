@@ -237,6 +237,40 @@ test("codexModelCatalogJson clones the installed template and overrides identity
   assert.ok(catalog.models.every((entry) => Array.isArray(entry.supported_reasoning_levels)));
 });
 
+test("codexLaunchConfigToml adds a profile per fused ensemble model", () => {
+  const toml = codexLaunchConfigToml(
+    "http://127.0.0.1:9999",
+    "fusion-panel",
+    ["gpt-5.5"],
+    undefined,
+    ["fusion-panel", "fusion-deep", "fusion-cheap"]
+  );
+  // The session default stays the default model; every ensemble is a profile,
+  // so `codex --profile fusion-deep` spawns a session on another ensemble.
+  assert.ok(toml.includes('model = "fusion-panel"'));
+  assert.ok(toml.includes("[profiles.fusion-panel]"));
+  assert.ok(toml.includes("[profiles.fusion-deep]"));
+  assert.ok(toml.includes("[profiles.fusion-cheap]"));
+  assert.ok(toml.includes('[profiles."gpt-5.5"]'));
+  // Fused profiles come before the natives.
+  assert.ok(toml.indexOf("[profiles.fusion-deep]") < toml.indexOf('[profiles."gpt-5.5"]'));
+});
+
+test("codexModelCatalogJson lists every fused ensemble as a fusion entry", () => {
+  const template = { slug: "x", display_name: "x", description: "stock", priority: 9 };
+  const catalog = JSON.parse(
+    codexModelCatalogJson("fusion-panel", ["gpt-5.5"], template, ["fusion-panel", "fusion-deep"])
+  ) as { models: Array<Record<string, unknown>> };
+  assert.deepEqual(
+    catalog.models.map((entry) => entry.slug),
+    ["fusion-panel", "fusion-deep", "gpt-5.5"]
+  );
+  assert.equal(catalog.models[0]?.display_name, "fusion-panel (fusion)");
+  assert.equal(catalog.models[1]?.display_name, "fusion-deep (fusion)");
+  assert.equal(catalog.models[2]?.display_name, "gpt-5.5");
+  assert.match(String(catalog.models[1]?.description), /ensemble/);
+});
+
 test("codex adapter skips clearly when credentials are absent", async () => {
   const { outputRoot, cleanup } = tempOutputRoot();
   const emptyCodexHome = mkdtempSync(join(tmpdir(), "ensemble-codex-empty-home-"));

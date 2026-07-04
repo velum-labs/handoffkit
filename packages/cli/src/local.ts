@@ -1,3 +1,4 @@
+import { uiStream } from "@fusionkit/cli-ui";
 import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
 import type { BackendConfig } from "@fusionkit/model-gateway";
 import { KernelBackend } from "@fusionkit/ensemble";
@@ -73,7 +74,7 @@ export async function runLocal(
   toolArgs: string[],
   options: RunLocalOptions = {}
 ): Promise<number> {
-  const log = options.log ?? ((line: string) => console.error(line));
+  const log = options.log ?? ((line: string) => uiStream().write(`${line}\n`));
   const config = options.config ?? resolveBackendConfig();
   const model = backendModel(config);
   const publicUrl = options.publicUrl ?? readEnv(process.env, "FUSIONKIT_PUBLIC_URL");

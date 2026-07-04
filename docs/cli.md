@@ -28,12 +28,33 @@ Task-focused walkthroughs: [inference endpoint](quickstart-inference.md),
 ```sh
 fusionkit setup                      # pre-provision (warm) the fusion engine into the uvx cache
 fusionkit doctor                     # check prerequisites (uv, agents, keys, git, platform capability)
-fusionkit init                       # scaffold a committed .fusionkit/ for this repo
+fusionkit init                       # scaffold a committed .fusionkit/ for this repo (interactive wizard)
 fusionkit codex                      # run the ensemble behind Codex (or: claude | cursor | serve)
 fusionkit serve                      # run the raw OpenAI/Anthropic-compatible ensemble endpoint
 fusionkit config show                # the effective config + where each value came from
+fusionkit config set budgetUsd 5     # edit any setting from the CLI (validated before writing)
+fusionkit ensemble list              # the named ensembles (each its own fusion-<name> model)
 fusionkit sessions                   # list durable sessions you can --resume
 ```
+
+## Output contract
+
+Every command renders its human UI on **stderr** (rich Ink rendering on an
+interactive TTY; ordered plain lines in CI/pipes); **stdout** is reserved for
+machine payloads. The global flags compose with every command:
+
+| Flag | Meaning |
+| --- | --- |
+| `--json` | Emit a machine-readable JSON result on stdout (implies non-interactive). Errors become `{ "error": { "code", "message" } }`. |
+| `--no-input` | Never prompt; prompts resolve to their defaults (the CI posture). |
+| `--yes` | Accept confirmations (cost consent, destructive prompts) without asking. |
+| `--quiet` | Suppress informational output; warnings and errors still print. |
+
+Global flags precede the subcommand name (like every fusionkit flag);
+informational commands also accept `--json` after the subcommand, e.g.
+`fusionkit doctor --json`. `NO_COLOR`, `FORCE_COLOR`, and `FUSIONKIT_NO_TUI=1`
+are honored, and piped answers still drive prompts
+(`printf "2\n" | fusionkit init`).
 
 ## Command groups
 
@@ -41,12 +62,13 @@ fusionkit sessions                   # list durable sessions you can --resume
 | --- | --- | --- |
 | `codex` \| `claude` \| `cursor` \| `serve` | Run the model ensemble behind a coding harness (or `serve` to print raw-endpoint setup). The headline product path. | `packages/cli/src/commands/fusion.ts` |
 | `fusion [tool]` | The generic launcher behind the per-tool shortcuts; omit the tool on a TTY to pick interactively. `fusion stop` reaps portless singleton services. | `packages/cli/src/commands/fusion.ts` |
-| `init` | Scaffold a committed `.fusionkit/` folder (panel, judge, tool, prompts) for a repo. | `packages/cli/src/commands/fusion.ts` |
-| `config` | Inspect the one config source of truth: `config show` / `config path` / `config export-yaml`. | `packages/cli/src/commands/config.ts` |
+| `init` | Scaffold a committed `.fusionkit/` folder (panel, judge, tool, prompts, extras, named ensembles) for a repo. | `packages/cli/src/commands/fusion.ts` |
+| `config` | Inspect **and edit** the one config source of truth: `config show` / `path` / `get` / `set` / `unset` / `edit` / `export-yaml`. | `packages/cli/src/commands/config.ts` |
+| `prompts` | Manage the judge/synthesizer prompt overrides: `prompts list` / `prompts edit <id>` (opens `$EDITOR`, seeded from the engine default) / `prompts reset <id>`, with `--ensemble` for per-ensemble overrides. | `packages/cli/src/commands/prompts.ts` |
 | `sessions` | List, inspect, and remove durable gateway sessions: `sessions [list]` / `sessions show <id>` / `sessions rm <id>`. | `packages/cli/src/commands/sessions.ts` |
 | `models` | Manage the local MLX model cache: `models list` / `models download` / `models rm`. | `packages/cli/src/commands/models.ts` |
 | `local <tool>` | Back a vendor agent (claude / codex / opencode / cursor) with a single local model and no fusion. | `packages/cli/src/commands/local.ts` |
-| `ensemble` | Lower-level ensemble + harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts` |
+| `ensemble` | Manage named ensembles (`list` / `add` / `edit` / `remove` / `rename` / `use`) plus the lower-level harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts`, `ensemble-config.ts` |
 | `setup` | Pre-provision (warm) the pinned `fusionkit` engine into the `uvx` cache; `--force` re-warms, `--fusionkit-dir` targets a local checkout. | `packages/cli/src/commands/setup.ts` |
 | `doctor`, `status` | Preflight the environment (prerequisites, per-platform capability, engine-cached state) and preview the effective fusion config + run plan. `doctor --provision` also warms the engine. | `packages/cli/src/commands/doctor.ts` |
 
@@ -69,10 +91,11 @@ Shared flags (full list in `applyFusionOptions`):
 
 | Flag | Meaning | Workstream |
 | --- | --- | --- |
-| `--model ID=MODEL` / `ID=PROVIDER:MODEL` | Panel member (repeatable). `--models` is an alias. | core |
+| `--model ID=MODEL` / `ID=PROVIDER:MODEL` | Panel member (repeatable; overrides the selected ensemble's panel). `--models` is an alias. | core |
 | `--model-endpoint ID=URL` | Use a pre-running OpenAI-compatible endpoint as a panel member. | core |
 | `--key-env ID=ENV` | Env var holding a model's API key. | core |
-| `--judge-model MODEL` | Model used for judge synthesis. | core |
+| `--ensemble NAME` | The session-default ensemble from `.fusionkit/fusion.json` (all defined ensembles still register as their own `fusion-<name>` models). | core |
+| `--judge-model MODEL` | Model used for judge synthesis (applies to the selected ensemble). | core |
 | `--local` / `--no-local` | Use the local MLX trio instead of the cloud panel. | core |
 | `--observe` / `--no-observe` | Boot the local scope dashboard and stream trace events. | core |
 | `--repo DIR` | The coding workspace the panel fuses over. | core |
@@ -116,12 +139,27 @@ stops. See [Configuration](configuration.md) for setting `budgetUsd` and
 
 `fusionkit` has one config source of truth: a committed `.fusionkit/` folder at
 your repo root. Flags win over `.fusionkit/fusion.json`, which wins over built-in
-defaults. Inspect and derive it:
+defaults. The whole surface is editable from the CLI — no hand-editing needed:
 
 ```sh
-fusionkit config show              # effective config + provenance (flag / .fusionkit / default)
-fusionkit config path              # the .fusionkit/fusion.json location
-fusionkit config export-yaml       # the derived `fusionkit serve` router YAML (raw endpoint)
+fusionkit config show                          # effective config + provenance (flag / .fusionkit / default)
+fusionkit config set budgetUsd 5               # set any value (dot paths; validated before writing)
+fusionkit config set ensembles.default.judgeModel gpt-5.5
+fusionkit config unset budgetUsd               # back to the built-in default
+fusionkit config edit                          # interactive editor over every setting
+fusionkit config path                          # the .fusionkit/fusion.json location
+fusionkit config export-yaml                   # the derived `fusionkit serve` router YAML (raw endpoint)
+```
+
+Named ensembles are managed the same way:
+
+```sh
+fusionkit ensemble list                        # every ensemble + its fusion-<name> model id
+fusionkit ensemble add fast                    # interactive panel builder (or --model/--judge flags)
+fusionkit ensemble edit fast --add-model flash=google:gemini-2.5-flash
+fusionkit ensemble use fast                    # make it the session default
+fusionkit ensemble rename fast quick           # prompt overrides move with it
+fusionkit ensemble remove quick
 ```
 
 The full model is documented in [Configuration](configuration.md).

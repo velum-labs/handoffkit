@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 
+import { uiStream } from "@fusionkit/cli-ui";
 import { Plane, startPlaneServer } from "@fusionkit/plane";
 import { Runner } from "@fusionkit/runner";
 import { PlaneClient } from "@fusionkit/sdk";
@@ -26,8 +27,8 @@ export function registerDeployment(program: Command): void {
     .description("print the control-panel login token")
     .action((opts: { dir?: string }) => {
       const home = loadHome(resolveDir(opts.dir));
-      console.log(`login token ${home.config.adminToken}`);
-      console.log(`url ${home.config.planeUrl}/ui/`);
+      process.stdout.write(`login token ${home.config.adminToken}\n`);
+      process.stdout.write(`url ${home.config.planeUrl}/ui/\n`);
     });
 
   program
@@ -39,9 +40,9 @@ export function registerDeployment(program: Command): void {
       const client = new PlaneClient(home.config.planeUrl, home.config.adminToken);
       const result = await client.listRuns();
       for (const run of result.runs) {
-        console.log(`${run.runId}\t${run.status}\t${run.agentKind}\t${run.pool}`);
+        process.stdout.write(`${run.runId}\t${run.status}\t${run.agentKind}\t${run.pool}\n`);
       }
-      if (result.runs.length === 0) console.log("no runs");
+      if (result.runs.length === 0) process.stdout.write("no runs\n");
     });
 
   program
@@ -66,7 +67,7 @@ export function registerDeployment(program: Command): void {
         host: home.config.host,
         port: home.config.port
       });
-      console.error(`plane listening on ${home.config.host}:${server.port}`);
+      uiStream().write(`plane listening on ${home.config.host}:${server.port}\n`);
       const stop = async (): Promise<void> => {
         await new Promise<void>((resolve, reject) => {
           server.server.close((error) => (error ? reject(error) : resolve()));

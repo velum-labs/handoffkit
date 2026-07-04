@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { KernelBackend } from "@fusionkit/ensemble";
 import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
-import { providerForAuthMode } from "@fusionkit/registry";
+import { fusionModelId, providerForAuthMode } from "@fusionkit/registry";
 import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
   Gateway,
@@ -22,7 +22,7 @@ import type {
 } from "@fusionkit/model-gateway";
 
 import { startFusionStepGateway } from "../gateway.js";
-import type { GatewayRunnerConfig } from "../gateway.js";
+import type { GatewayEnsembleConfig, GatewayRunnerConfig } from "../gateway.js";
 import { createPortlessSession } from "../shared/portless.js";
 import type { PortlessSession } from "../shared/portless.js";
 import { freePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
@@ -39,7 +39,7 @@ import {
   panelProviderForAuthMode,
   providerDefaultBaseUrl
 } from "./env.js";
-import type { PanelAuthMode, PanelModelSpec, PanelProvider, StackReporter } from "./env.js";
+import type { EnsembleRunSpec, PanelAuthMode, PanelModelSpec, PanelProvider, StackReporter } from "./env.js";
 import { detectHost } from "./local-catalog.js";
 
 /**
@@ -110,12 +110,76 @@ export function describeServerCrash(input: {
   return `${input.label} crashed mid-run (${cause}); ${consequence}.${logHint}`;
 }
 
-/** Pick the panel spec that backs the judge (by model name), else the first. */
-function judgeSpecFor(specs: PanelModelSpec[], judgeModel: string | undefined): PanelModelSpec {
+/** Pick the panel spec that backs the judge (by member id or model name), else the first. */
+function judgeSpecFor(specs: readonly PanelModelSpec[], judgeModel: string | undefined): PanelModelSpec {
   const first = specs[0];
   if (first === undefined) throw new Error("at least one panel model is required");
   if (judgeModel === undefined) return first;
-  return specs.find((spec) => spec.model === judgeModel) ?? first;
+  return specs.find((spec) => spec.id === judgeModel || spec.model === judgeModel) ?? first;
+}
+
+/**
+ * Lower a resolved ensemble list into the gateway's per-ensemble routing config:
+ * each ensemble's advertised model id, its members, its judge/synthesizer
+ * endpoint ids (router routing is by endpoint id), the judge's model name (WS7
+ * cost attribution), and its prompt overrides.
+ */
+export function gatewayEnsembleConfigs(ensembles: readonly EnsembleRunSpec[]): GatewayEnsembleConfig[] {
+  return ensembles.map((ensemble) => {
+    const judgeSpec = judgeSpecFor(ensemble.models, ensemble.judgeModel);
+    const synthSpec =
+      ensemble.synthesizerModel !== undefined
+        ? judgeSpecFor(ensemble.models, ensemble.synthesizerModel)
+        : undefined;
+    return {
+      name: ensemble.name,
+      modelId: fusionModelId(ensemble.name),
+      models: ensemble.models.map((spec) => ({ id: spec.id, model: spec.model })),
+      judgeEndpointId: judgeSpec.id,
+      judgeModelName: judgeSpec.model,
+      ...(synthSpec !== undefined ? { synthesizerEndpointId: synthSpec.id } : {}),
+      ...(ensemble.prompts !== undefined && Object.keys(ensemble.prompts).length > 0
+        ? { prompts: ensemble.prompts }
+        : {})
+    };
+  });
+}
+
+/**
+ * The union of panel members across ensembles, deduped by member id. A member
+ * id shared by two ensembles must be the identical spec (one router endpoint
+ * per id), otherwise this throws with the conflicting id named.
+ */
+export function unionPanelSpecs(ensembles: readonly EnsembleRunSpec[]): PanelModelSpec[] {
+  const byId = new Map<string, PanelModelSpec>();
+  const union: PanelModelSpec[] = [];
+  for (const ensemble of ensembles) {
+    for (const spec of ensemble.models) {
+      const existing = byId.get(spec.id);
+      if (existing === undefined) {
+        byId.set(spec.id, spec);
+        union.push(spec);
+        continue;
+      }
+      if (!samePanelSpec(existing, spec)) {
+        throw new Error(
+          `panel member id "${spec.id}" is defined differently across ensembles; ` +
+            `give the variants distinct ids (each id becomes one router endpoint)`
+        );
+      }
+    }
+  }
+  return union;
+}
+
+function samePanelSpec(a: PanelModelSpec, b: PanelModelSpec): boolean {
+  return (
+    a.model === b.model &&
+    (a.provider ?? "mlx") === (b.provider ?? "mlx") &&
+    a.baseUrl === b.baseUrl &&
+    a.keyEnv === b.keyEnv &&
+    a.auth === b.auth
+  );
 }
 
 /** The router endpoint id reserved for a dedicated narration-writer model. */
@@ -516,7 +580,15 @@ export type FusionStack = {
 export type StartFusionStackOptions = {
   repo: string;
   outputRoot: string;
+  /** The union of panel members across every ensemble (one router endpoint each). */
   models: PanelModelSpec[];
+  /**
+   * Named ensembles, session-default first. Each is registered as its own
+   * gateway model; a request to it fans out only its members and fuses with its
+   * judge/synthesizer/prompts. When unset, the whole `models` list is the one
+   * implicit `default` ensemble (with `judgeModel`/`prompts` below).
+   */
+  ensembles?: EnsembleRunSpec[];
   /**
    * The harness kind the panel runs through (the launched tool's harness). Every
    * panel model is driven by this one harness; defaults to the generic `agent`
@@ -739,6 +811,12 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
 
   try {
     if (report) report({ kind: "gateway.start" });
+    // Per-ensemble routing config: which members/judge/synthesizer/prompts each
+    // advertised fused model id runs. The first entry is the session default.
+    const ensembleConfigs =
+      options.ensembles !== undefined && options.ensembles.length > 0
+        ? gatewayEnsembleConfigs(options.ensembles)
+        : undefined;
     // The judge-streamed-trajectory front door: each panel model produces a
     // trajectory and the judge emits the trajectory the user's tool executes.
     const gatewayConfig: GatewayRunnerConfig = {
@@ -748,6 +826,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       harnesses: [options.harness ?? "agent"],
       models,
       judgeModel: judgeModelName,
+      ...(ensembleConfigs !== undefined ? { ensembles: ensembleConfigs } : {}),
       modelEndpoints,
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(Object.keys(pricing).length > 0 ? { pricing } : {}),

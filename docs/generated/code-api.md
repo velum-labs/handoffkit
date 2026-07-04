@@ -223,7 +223,7 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export type { ChatFn, ChatNarrationWriterOptions } from "./frontdoor/narration-writer.js";`
 - `export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";`
 - `export type { FrontdoorChatBody, FrontdoorRequestValue, FrontdoorRoute, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";`
-- `export type { ChatMessageLike, FuseStepRunInput, FuseStepRunner, FusionBackendKernelSessionState, FusionBackendKernelStateStore, FusionBackendOptions, OnRateLimitPolicy, PanelRunInput, PanelRunner, PassthroughModel, SessionMetaInput } from "./fusion-backend.js";`
+- `export type { ChatMessageLike, FusedModelRoute, FuseStepRunInput, FuseStepRunner, FusionBackendKernelSessionState, FusionBackendKernelStateStore, FusionBackendOptions, OnRateLimitPolicy, PanelRunInput, PanelRunner, PassthroughModel, SessionMetaInput } from "./fusion-backend.js";`
 - `export type { WireTrajectory } from "@fusionkit/protocol";`
 - `export { defaultSessionsDir, FileSystemSessionStore, InMemorySessionStore } from "./session-store.js";`
 - `export type { PersistedSession, SessionMeta, SessionStore, SessionSummary, SessionTurnRecord } from "./session-store.js";`
@@ -372,6 +372,12 @@ it without cycles.
   The provider a subscription auth mode speaks (claude-code -> anthropic, codex -> codex).
 - `export const FUSION_PANEL_MODEL: string ...`
   The model label the fused panel is fronted under (gateway + tool pickers).
+- `export const DEFAULT_ENSEMBLE_NAME ...`
+  The name of the implicit/default ensemble (advertised as {@link FUSION_PANEL_MODEL}).
+- `export const FUSION_MODEL_ID_PREFIX ...`
+  The id prefix every non-default ensemble's fused model is advertised under.
+- `export function fusionModelId(ensemble: string): string ...`
+  The advertised model id for a named ensemble: `fusion-<name>`, except the default ensemble which keeps the canonical {@link FUSION_PANEL_MODEL} id (`fusion-panel`) for full back-compat with single-ensemble configs.
 - `export const CURSOR_BRIDGE_MODEL_NAME: string ...`
   The model name the Cursor bridge exposes to cursor-agent.
 - `export const LOCAL_MODEL_LABEL: string ...`
@@ -631,7 +637,7 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export type { ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
-- `export { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL, LOCAL_MODEL_LABEL } from "./constants.js";`
+- `export { CURSOR_BRIDGE_MODEL_NAME, DEFAULT_ENSEMBLE_NAME, FUSION_PANEL_MODEL, fusionModelId, LOCAL_MODEL_LABEL } from "./constants.js";`
 - `export { envFlagEnabled, HARNESS_DRIVERS_FLAG, harnessDriversEnabled, legacyEnvName, readEnv } from "./env-compat.js";`
 - `export { buildChildEnv, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
 - `export type { BuildChildEnvInput } from "./env.js";`

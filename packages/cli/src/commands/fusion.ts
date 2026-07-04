@@ -2,11 +2,14 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
+import { uiStream } from "@fusionkit/cli-ui";
+
 import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
 import { initHome } from "../config.js";
 import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
+import { configDefaultEnsembleName } from "../fusion/effective-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { fail } from "../shared/errors.js";
 import { resolveDir } from "../shared/plane.js";
@@ -28,6 +31,7 @@ type FusionOpts = {
   models?: string[];
   modelEndpoint?: string[];
   keyEnv?: string[];
+  ensemble?: string;
   judgeModel?: string;
   synthesisUrl?: string;
   fusionkitDir?: string;
@@ -59,6 +63,10 @@ function applyFusionOptions(command: Command): Command {
     .option("--models <spec>", "alias of --model", collect)
     .option("--model-endpoint <spec>", "pre-running OpenAI-compatible endpoint ID=URL (repeatable)", collect)
     .option("--key-env <spec>", "env var holding a model's API key ID=ENV (repeatable)", collect)
+    .option(
+      "--ensemble <name>",
+      "the session-default ensemble from .fusionkit/fusion.json (every defined ensemble is still registered as its own model)"
+    )
     .option("--judge-model <model>", "model used for judge synthesis")
     .option("--synthesis-url <url>", "pre-running fusionkit serve for synthesis")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for the uvx synthesizer)")
@@ -104,6 +112,7 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
     keyEnvs[id] = value;
   }
 
+  if (opts.ensemble !== undefined) options.ensemble = opts.ensemble;
   if (opts.judgeModel !== undefined) options.judgeModel = opts.judgeModel;
   if (opts.synthesisUrl !== undefined) options.synthesisUrl = opts.synthesisUrl;
   if (opts.fusionkitDir !== undefined) options.fusionkitDir = resolve(opts.fusionkitDir);
@@ -162,10 +171,28 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
 
 /** Fill any option the user did not set explicitly from `fusionkit.json`. */
 function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
-  if (options.models === undefined && options.endpoints === undefined && config.panel !== undefined && config.panel.length > 0) {
-    options.models = config.panel.map((spec) => ({ ...spec }));
+  // Named ensembles: every defined ensemble flows through (each registers as
+  // its own gateway model); `--ensemble` (or the config's defaultEnsemble)
+  // picks the session default. Flag `--model`/`--judge-model` overrides apply
+  // to the selected ensemble inside `runFusion`.
+  if (
+    options.ensembles === undefined &&
+    options.endpoints === undefined &&
+    config.ensembles !== undefined &&
+    Object.keys(config.ensembles).length > 0
+  ) {
+    options.ensembles = Object.entries(config.ensembles).map(([name, ensemble]) => ({
+      name,
+      models: (ensemble.panel ?? []).map((spec) => ({ ...spec })),
+      ...(ensemble.judgeModel !== undefined ? { judgeModel: ensemble.judgeModel } : {}),
+      ...(ensemble.synthesizerModel !== undefined ? { synthesizerModel: ensemble.synthesizerModel } : {}),
+      ...(ensemble.prompts !== undefined ? { prompts: ensemble.prompts } : {})
+    }));
+    if (options.ensemble === undefined) {
+      const configured = configDefaultEnsembleName(config);
+      if (configured !== undefined) options.ensemble = configured;
+    }
   }
-  if (options.judgeModel === undefined && config.judgeModel !== undefined) options.judgeModel = config.judgeModel;
   if (options.local === undefined && config.local !== undefined) options.local = config.local;
   if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
   if (options.reasoning === undefined && config.reasoning !== undefined) options.reasoning = config.reasoning;
@@ -256,12 +283,14 @@ export function registerFusion(program: Command): void {
         "\nRun `fusionkit init` to scaffold a committed .fusionkit/ folder for this repo." +
         "\nRun `fusionkit fusion stop` to reap portless singleton services (router, dashboard, ...)."
     )
-    .action(async (positionalTool: string | undefined, args: string[], opts: FusionOpts) => {
+    .action(async (positionalTool: string | undefined, args: string[], _opts: FusionOpts, command: Command) => {
+      // Merge program-level flags (--yes and friends may precede `fusion`).
+      const opts = command.optsWithGlobals<FusionOpts>();
       // `fusion stop` reaps persistent portless singletons left running by prior
       // runs (the router, dashboard, ...).
       if (positionalTool === "stop") {
-        const stopped = await reapFusionServices((line) => console.error(line));
-        console.error(`fusion: stopped ${stopped} portless service(s)`);
+        const stopped = await reapFusionServices((line) => uiStream().write(`${line}\n`));
+        uiStream().write(`fusion: stopped ${stopped} portless service(s)\n`);
         process.exit(0);
       }
 
@@ -292,7 +321,8 @@ export function registerFusion(program: Command): void {
         "after",
         `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
       )
-      .action(async (args: string[], opts: FusionOpts) => {
+      .action(async (args: string[], _opts: FusionOpts, command: Command) => {
+        const opts = command.optsWithGlobals<FusionOpts>();
         const { options } = resolveContext(opts);
         const code = await runFusion(tool, args, options);
         process.exit(code);

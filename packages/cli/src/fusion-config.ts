@@ -3,25 +3,34 @@
  * the repo root:
  *
  *   .fusionkit/
- *     fusion.json        - all settings (panel, judge, default tool, run defaults)
- *     prompts/<id>.md    - optional system-prompt overrides (one file per prompt)
+ *     fusion.json               - all settings (ensembles, default tool, run defaults)
+ *     prompts/<id>.md           - default-ensemble system-prompt overrides
+ *     prompts/<ensemble>/<id>.md - per-ensemble overrides (fall back to the flat files)
  *
  * The folder is safe to commit: it stores only the env-var *names* that hold API
  * keys (`keyEnv`), never the secret values. A prompt file that exists and is
  * non-empty overrides the matching built-in synthesizer prompt; absent/empty
  * falls back to the built-in default.
  *
+ * A repo may define multiple named ensembles (`ensembles`), each with its own
+ * panel, judge, synthesizer, and prompts. Every ensemble is registered as its
+ * own selectable model (`fusion-<name>`; the `default` ensemble keeps the
+ * canonical `fusion-panel` id), and `defaultEnsemble` picks which one a session
+ * defaults to.
+ *
  * Precedence at run time is: explicit CLI flags > .fusionkit > built-in
  * defaults. CLI flags always win, so the folder is a default layer, not a lock.
  *
  * Legacy `fusionkit.json` files at the repo root are auto-migrated into
  * `.fusionkit/fusion.json` on first load (the original is left intact as a
- * back-compat fallback).
+ * back-compat fallback). Legacy v1/v2 configs (a flat `panel` + `judgeModel`)
+ * are upgraded in memory into `ensembles.default`.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+import { DEFAULT_ENSEMBLE_NAME } from "@fusionkit/registry";
 
 import type { PanelTrust } from "@fusionkit/ensemble";
 
@@ -37,14 +46,29 @@ export const FUSION_PROMPTS_DIRNAME = "prompts";
 /** Legacy single-file config at the repo root (pre-`.fusionkit/`). */
 export const FUSION_CONFIG_FILENAME = "fusionkit.json";
 
-export const FUSION_CONFIG_VERSION = "fusionkit.fusion.v2";
-/** Versions `parseFusionConfig` will load; `v1` is upgraded to `v2` in memory. */
-const SUPPORTED_CONFIG_VERSIONS = ["fusionkit.fusion.v1", "fusionkit.fusion.v2"] as const;
+export const FUSION_CONFIG_VERSION = "fusionkit.fusion.v3";
+/** Versions `parseFusionConfig` will load; older versions upgrade to `v3` in memory. */
+const SUPPORTED_CONFIG_VERSIONS = [
+  "fusionkit.fusion.v1",
+  "fusionkit.fusion.v2",
+  "fusionkit.fusion.v3"
+] as const;
+
+/** Valid ensemble names: lowercase alphanumerics and dashes, starting alphanumeric. */
+const ENSEMBLE_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+/**
+ * Reserved ensemble names. `panel` would collide with the default ensemble's
+ * canonical `fusion-panel` model id (`fusion-<name>` for every other name).
+ */
+const RESERVED_ENSEMBLE_NAMES = new Set(["panel"]);
+
+export { DEFAULT_ENSEMBLE_NAME };
 
 /**
  * The committable system-prompt override ids. Each maps to a
- * `.fusionkit/prompts/<id>.md` file and to a `FusionConfig.prompts` key in the
- * Python synthesizer (see {@link PROMPT_CONFIG_KEY}).
+ * `.fusionkit/prompts/<id>.md` file (default ensemble) or
+ * `.fusionkit/prompts/<ensemble>/<id>.md`, and to a `FusionConfig.prompts` key
+ * in the Python synthesizer (see {@link PROMPT_CONFIG_KEY}).
  */
 export const PROMPT_IDS = ["judge", "synthesizer"] as const;
 export type PromptId = (typeof PROMPT_IDS)[number];
@@ -57,11 +81,32 @@ export const PROMPT_CONFIG_KEY: Record<PromptId, string> = {
 
 export type PromptOverrides = Partial<Record<PromptId, string>>;
 
+/**
+ * One named ensemble: its panel, judge, synthesizer, and (hydrated at load
+ * time, never stored inline) its prompt overrides. A missing/empty `panel` on
+ * the default ensemble means "use the built-in trio"; every other ensemble must
+ * declare a non-empty panel.
+ */
+export type EnsembleConfig = {
+  panel?: PanelModelSpec[];
+  judgeModel?: string;
+  /** Synthesizer model; defaults to the judge on the Python side. */
+  synthesizerModel?: string;
+  /**
+   * Per-ensemble system-prompt overrides, hydrated from
+   * `.fusionkit/prompts/<ensemble>/*.md` with the flat `.fusionkit/prompts/*.md`
+   * files as the per-id fallback. Not stored inline in `fusion.json`.
+   */
+  prompts?: PromptOverrides;
+};
+
 export type FusionConfig = {
   version: typeof FUSION_CONFIG_VERSION;
   tool?: FusionTool;
-  panel?: PanelModelSpec[];
-  judgeModel?: string;
+  /** Named ensembles, each registered as its own `fusion-<name>` model. */
+  ensembles?: Record<string, EnsembleConfig>;
+  /** Which ensemble a session defaults to (default: `default`, else first). */
+  defaultEnsemble?: string;
   local?: boolean;
   observe?: boolean;
   portless?: boolean;
@@ -80,8 +125,10 @@ export type FusionConfig = {
    */
   reasoningModel?: string;
   /**
-   * System-prompt overrides, loaded from `.fusionkit/prompts/*.md`. Not stored
-   * inline in `config.json` — it is hydrated from the prompt files on load.
+   * Default-ensemble prompt overrides, loaded from the flat
+   * `.fusionkit/prompts/*.md` files. Not stored inline in `fusion.json` — it is
+   * hydrated from the prompt files on load. Per-ensemble overrides live on each
+   * {@link EnsembleConfig.prompts}.
    */
   prompts?: PromptOverrides;
 };
@@ -108,14 +155,18 @@ export function legacyFusionConfigPath(repoRoot: string): string {
   return join(repoRoot, FUSION_CONFIG_FILENAME);
 }
 
-/** The `.fusionkit/prompts/` directory holding the override files. */
-export function fusionPromptsDir(repoRoot: string): string {
-  return join(fusionConfigDir(repoRoot), FUSION_PROMPTS_DIRNAME);
+/**
+ * The prompts directory: the flat `.fusionkit/prompts/` (default ensemble)
+ * or `.fusionkit/prompts/<ensemble>/` for a named ensemble.
+ */
+export function fusionPromptsDir(repoRoot: string, ensemble?: string): string {
+  const base = join(fusionConfigDir(repoRoot), FUSION_PROMPTS_DIRNAME);
+  return ensemble === undefined || ensemble === DEFAULT_ENSEMBLE_NAME ? base : join(base, ensemble);
 }
 
-/** The `.fusionkit/prompts/<id>.md` file for a single prompt override. */
-export function fusionPromptPath(repoRoot: string, id: PromptId): string {
-  return join(fusionPromptsDir(repoRoot), `${id}.md`);
+/** The prompt override file for a single prompt id (optionally per-ensemble). */
+export function fusionPromptPath(repoRoot: string, id: PromptId, ensemble?: string): string {
+  return join(fusionPromptsDir(repoRoot, ensemble), `${id}.md`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -130,57 +181,57 @@ function optionalNonNegativeNumber(value: unknown, path: string): number | undef
   return value;
 }
 
-function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
+function validatePanelEntry(entry: unknown, path: string): PanelModelSpec {
   if (!isRecord(entry)) {
-    throw new FusionConfigError(`panel[${index}] must be an object`);
+    throw new FusionConfigError(`${path} must be an object`);
   }
   const { id, model, provider, baseUrl, keyEnv, auth } = entry;
   if (typeof id !== "string" || id.length === 0) {
-    throw new FusionConfigError(`panel[${index}].id must be a non-empty string`);
+    throw new FusionConfigError(`${path}.id must be a non-empty string`);
   }
   if (typeof model !== "string" || model.length === 0) {
-    throw new FusionConfigError(`panel[${index}].model must be a non-empty string`);
+    throw new FusionConfigError(`${path}.model must be a non-empty string`);
   }
   const spec: PanelModelSpec = { id, model };
   if (provider !== undefined) {
     if (typeof provider !== "string" || !(PANEL_PROVIDERS as readonly string[]).includes(provider)) {
       throw new FusionConfigError(
-        `panel[${index}].provider must be one of ${PANEL_PROVIDERS.join(", ")}`
+        `${path}.provider must be one of ${PANEL_PROVIDERS.join(", ")}`
       );
     }
     spec.provider = provider as PanelProvider;
   }
   if (baseUrl !== undefined) {
-    if (typeof baseUrl !== "string") throw new FusionConfigError(`panel[${index}].baseUrl must be a string`);
+    if (typeof baseUrl !== "string") throw new FusionConfigError(`${path}.baseUrl must be a string`);
     spec.baseUrl = baseUrl;
   }
   if (keyEnv !== undefined) {
-    if (typeof keyEnv !== "string") throw new FusionConfigError(`panel[${index}].keyEnv must be a string`);
+    if (typeof keyEnv !== "string") throw new FusionConfigError(`${path}.keyEnv must be a string`);
     spec.keyEnv = keyEnv;
   }
   if (auth !== undefined) {
     if (typeof auth !== "string" || !(PANEL_AUTH_MODES as readonly string[]).includes(auth)) {
       throw new FusionConfigError(
-        `panel[${index}].auth must be one of ${PANEL_AUTH_MODES.join(", ")}`
+        `${path}.auth must be one of ${PANEL_AUTH_MODES.join(", ")}`
       );
     }
     spec.auth = auth as PanelAuthMode;
   }
   if (entry.pricing !== undefined) {
     if (!isRecord(entry.pricing)) {
-      throw new FusionConfigError(`panel[${index}].pricing must be an object`);
+      throw new FusionConfigError(`${path}.pricing must be an object`);
     }
     const inputPer1mTokens = optionalNonNegativeNumber(
       entry.pricing.inputPer1mTokens,
-      `panel[${index}].pricing.inputPer1mTokens`
+      `${path}.pricing.inputPer1mTokens`
     );
     const outputPer1mTokens = optionalNonNegativeNumber(
       entry.pricing.outputPer1mTokens,
-      `panel[${index}].pricing.outputPer1mTokens`
+      `${path}.pricing.outputPer1mTokens`
     );
     const currency = entry.pricing.currency;
     if (currency !== undefined && typeof currency !== "string") {
-      throw new FusionConfigError(`panel[${index}].pricing.currency must be a string`);
+      throw new FusionConfigError(`${path}.pricing.currency must be a string`);
     }
     spec.pricing = {
       ...(inputPer1mTokens !== undefined ? { inputPer1mTokens } : {}),
@@ -190,11 +241,11 @@ function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
   }
   if (entry.localCompute !== undefined) {
     if (!isRecord(entry.localCompute)) {
-      throw new FusionConfigError(`panel[${index}].localCompute must be an object`);
+      throw new FusionConfigError(`${path}.localCompute must be an object`);
     }
     const usdPerDeviceHour = optionalNonNegativeNumber(
       entry.localCompute.usdPerDeviceHour,
-      `panel[${index}].localCompute.usdPerDeviceHour`
+      `${path}.localCompute.usdPerDeviceHour`
     );
     spec.localCompute = {
       ...(usdPerDeviceHour !== undefined ? { usdPerDeviceHour } : {})
@@ -203,10 +254,65 @@ function validatePanelEntry(entry: unknown, index: number): PanelModelSpec {
   return spec;
 }
 
+function validatePanel(raw: unknown, path: string): PanelModelSpec[] {
+  if (!Array.isArray(raw)) throw new FusionConfigError(`${path} must be an array`);
+  return raw.map((entry, index) => validatePanelEntry(entry, `${path}[${index}]`));
+}
+
+/** Validate an ensemble name: shape, reserved names. */
+export function validateEnsembleName(name: string, source: string): void {
+  if (!ENSEMBLE_NAME_PATTERN.test(name)) {
+    throw new FusionConfigError(
+      `${source}: ensemble name ${JSON.stringify(name)} must match ${ENSEMBLE_NAME_PATTERN} ` +
+        `(lowercase letters, digits, dashes)`
+    );
+  }
+  if (RESERVED_ENSEMBLE_NAMES.has(name)) {
+    throw new FusionConfigError(
+      `${source}: ensemble name ${JSON.stringify(name)} is reserved ` +
+        `(it would collide with the "fusion-${name}" model id)`
+    );
+  }
+}
+
+function validateEnsembleEntry(
+  name: string,
+  raw: unknown,
+  source: string
+): EnsembleConfig {
+  const path = `ensembles.${name}`;
+  if (!isRecord(raw)) throw new FusionConfigError(`${source}: ${path} must be an object`);
+  const ensemble: EnsembleConfig = {};
+  if (raw.panel !== undefined) {
+    ensemble.panel = validatePanel(raw.panel, `${path}.panel`);
+  }
+  if (name !== DEFAULT_ENSEMBLE_NAME && (ensemble.panel === undefined || ensemble.panel.length === 0)) {
+    throw new FusionConfigError(
+      `${source}: ${path}.panel must be a non-empty array (only the "${DEFAULT_ENSEMBLE_NAME}" ensemble may omit it)`
+    );
+  }
+  if (raw.judgeModel !== undefined) {
+    if (typeof raw.judgeModel !== "string" || raw.judgeModel.length === 0) {
+      throw new FusionConfigError(`${source}: ${path}.judgeModel must be a non-empty string`);
+    }
+    ensemble.judgeModel = raw.judgeModel;
+  }
+  if (raw.synthesizerModel !== undefined) {
+    if (typeof raw.synthesizerModel !== "string" || raw.synthesizerModel.length === 0) {
+      throw new FusionConfigError(`${source}: ${path}.synthesizerModel must be a non-empty string`);
+    }
+    ensemble.synthesizerModel = raw.synthesizerModel;
+  }
+  return ensemble;
+}
+
 /**
  * Validate a parsed settings object as a {@link FusionConfig}, throwing on any
  * problem. Prompt overrides are loaded separately from `.fusionkit/prompts/`,
- * not from this object. A `v1` version is accepted and upgraded to `v2`.
+ * not from this object. `v1`/`v2` versions are accepted and upgraded to `v3` in
+ * memory (a flat `panel`/`judgeModel` becomes `ensembles.default`); a `v3`
+ * config may still use the flat keys as shorthand for the default ensemble
+ * when no `ensembles` map is present.
  */
 export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
   if (!isRecord(raw)) throw new FusionConfigError(`${source}: must be a JSON object`);
@@ -223,14 +329,50 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
     }
     config.tool = raw.tool as FusionTool;
   }
-  if (raw.panel !== undefined) {
-    if (!Array.isArray(raw.panel)) throw new FusionConfigError(`${source}: panel must be an array`);
-    config.panel = raw.panel.map((entry, index) => validatePanelEntry(entry, index));
+
+  // Ensembles: the v3 map, with the legacy/shorthand flat `panel`/`judgeModel`
+  // upgrading into `ensembles.default` when no map is present.
+  if (raw.ensembles !== undefined) {
+    if (!isRecord(raw.ensembles)) {
+      throw new FusionConfigError(`${source}: ensembles must be an object mapping name -> ensemble`);
+    }
+    if (raw.panel !== undefined || raw.judgeModel !== undefined) {
+      throw new FusionConfigError(
+        `${source}: flat panel/judgeModel cannot be combined with ensembles; move them into ensembles.${DEFAULT_ENSEMBLE_NAME}`
+      );
+    }
+    const ensembles: Record<string, EnsembleConfig> = {};
+    for (const [name, entry] of Object.entries(raw.ensembles)) {
+      validateEnsembleName(name, source);
+      ensembles[name] = validateEnsembleEntry(name, entry, source);
+    }
+    if (Object.keys(ensembles).length === 0) {
+      throw new FusionConfigError(`${source}: ensembles must define at least one ensemble`);
+    }
+    config.ensembles = ensembles;
+  } else if (raw.panel !== undefined || raw.judgeModel !== undefined) {
+    const legacy: EnsembleConfig = {};
+    if (raw.panel !== undefined) legacy.panel = validatePanel(raw.panel, "panel");
+    if (raw.judgeModel !== undefined) {
+      if (typeof raw.judgeModel !== "string") throw new FusionConfigError(`${source}: judgeModel must be a string`);
+      legacy.judgeModel = raw.judgeModel;
+    }
+    config.ensembles = { [DEFAULT_ENSEMBLE_NAME]: legacy };
   }
-  if (raw.judgeModel !== undefined) {
-    if (typeof raw.judgeModel !== "string") throw new FusionConfigError(`${source}: judgeModel must be a string`);
-    config.judgeModel = raw.judgeModel;
+
+  if (raw.defaultEnsemble !== undefined) {
+    if (typeof raw.defaultEnsemble !== "string" || raw.defaultEnsemble.length === 0) {
+      throw new FusionConfigError(`${source}: defaultEnsemble must be a non-empty string`);
+    }
+    if (config.ensembles === undefined || config.ensembles[raw.defaultEnsemble] === undefined) {
+      throw new FusionConfigError(
+        `${source}: defaultEnsemble ${JSON.stringify(raw.defaultEnsemble)} does not name a defined ensemble ` +
+          `(have: ${Object.keys(config.ensembles ?? {}).join(", ") || "none"})`
+      );
+    }
+    config.defaultEnsemble = raw.defaultEnsemble;
   }
+
   if (raw.local !== undefined) {
     if (typeof raw.local !== "boolean") throw new FusionConfigError(`${source}: local must be a boolean`);
     config.local = raw.local;
@@ -305,15 +447,17 @@ function readAndParse(path: string): FusionConfig {
 }
 
 /**
- * Read the committed prompt overrides from `.fusionkit/prompts/*.md`. Only files
- * that exist and are non-empty (after trimming) become overrides.
+ * Read the committed prompt overrides for one ensemble. The flat
+ * `.fusionkit/prompts/*.md` files are the default ensemble's prompts; a named
+ * ensemble reads `.fusionkit/prompts/<ensemble>/*.md`. Only files that exist
+ * and are non-empty (after trimming) become overrides.
  */
-export function readFusionPrompts(repoRoot: string): PromptOverrides {
-  const dir = fusionPromptsDir(repoRoot);
+export function readFusionPrompts(repoRoot: string, ensemble?: string): PromptOverrides {
+  const dir = fusionPromptsDir(repoRoot, ensemble);
   const prompts: PromptOverrides = {};
   if (!existsSync(dir)) return prompts;
   for (const id of PROMPT_IDS) {
-    const path = fusionPromptPath(repoRoot, id);
+    const path = fusionPromptPath(repoRoot, id, ensemble);
     if (!existsSync(path)) continue;
     const text = readFileSync(path, "utf8").trim();
     if (text.length > 0) prompts[id] = text;
@@ -321,14 +465,32 @@ export function readFusionPrompts(repoRoot: string): PromptOverrides {
   return prompts;
 }
 
+/**
+ * Hydrate prompt overrides: the flat files become the config's top-level
+ * `prompts` (the default ensemble's, and the per-id fallback for every named
+ * ensemble), and each named ensemble's directory overrides them per id.
+ */
 function withPrompts(repoRoot: string, config: FusionConfig): FusionConfig {
-  const prompts = readFusionPrompts(repoRoot);
-  if (Object.keys(prompts).length === 0) return config;
-  return { ...config, prompts };
+  const flat = readFusionPrompts(repoRoot);
+  const hydrated: FusionConfig = { ...config };
+  if (Object.keys(flat).length > 0) hydrated.prompts = flat;
+  if (config.ensembles !== undefined) {
+    const ensembles: Record<string, EnsembleConfig> = {};
+    for (const [name, ensemble] of Object.entries(config.ensembles)) {
+      const own = name === DEFAULT_ENSEMBLE_NAME ? {} : readFusionPrompts(repoRoot, name);
+      const merged: PromptOverrides = { ...flat, ...own };
+      ensembles[name] = {
+        ...ensemble,
+        ...(Object.keys(merged).length > 0 ? { prompts: merged } : {})
+      };
+    }
+    hydrated.ensembles = ensembles;
+  }
+  return hydrated;
 }
 
 /**
- * Load the per-repo config. Prefers `.fusionkit/config.json`; if it is absent
+ * Load the per-repo config. Prefers `.fusionkit/fusion.json`; if it is absent
  * but a legacy `fusionkit.json` exists, auto-migrates it into the folder (the
  * original is left intact) and loads from there. Returns `undefined` when no
  * config exists; throws {@link FusionConfigError} on malformed content.
@@ -359,9 +521,9 @@ export function loadFusionConfig(
 }
 
 /**
- * Write `.fusionkit/config.json` (creating the folder), refusing to clobber
+ * Write `.fusionkit/fusion.json` (creating the folder), refusing to clobber
  * unless `force`. Prompt overrides are stored as files, not inline, so any
- * `prompts` on the config object is omitted here.
+ * `prompts` on the config object (or on any ensemble) is omitted here.
  */
 export function writeFusionConfig(
   repoRoot: string,
@@ -373,26 +535,36 @@ export function writeFusionConfig(
     throw new FusionConfigError(`${path} already exists (pass --force to overwrite)`);
   }
   mkdirSync(fusionConfigDir(repoRoot), { recursive: true });
-  const { prompts: _prompts, ...persisted } = config;
-  writeFileSync(path, JSON.stringify(persisted, null, 2) + "\n");
+  const { prompts: _prompts, ensembles, ...persisted } = config;
+  const output: Record<string, unknown> = { ...persisted };
+  if (ensembles !== undefined) {
+    output.ensembles = Object.fromEntries(
+      Object.entries(ensembles).map(([name, ensemble]) => {
+        const { prompts: _ensemblePrompts, ...rest } = ensemble;
+        return [name, rest];
+      })
+    );
+  }
+  writeFileSync(path, JSON.stringify(output, null, 2) + "\n");
   return path;
 }
 
 /**
- * Write prompt override files into `.fusionkit/prompts/`. Existing files are
- * left untouched unless `force`. Returns the paths actually written.
+ * Write prompt override files into `.fusionkit/prompts/` (or the ensemble's
+ * subdirectory). Existing files are left untouched unless `force`. Returns the
+ * paths actually written.
  */
 export function writeFusionPrompts(
   repoRoot: string,
   prompts: PromptOverrides,
-  options: { force?: boolean } = {}
+  options: { force?: boolean; ensemble?: string } = {}
 ): string[] {
-  mkdirSync(fusionPromptsDir(repoRoot), { recursive: true });
+  mkdirSync(fusionPromptsDir(repoRoot, options.ensemble), { recursive: true });
   const written: string[] = [];
   for (const id of PROMPT_IDS) {
     const text = prompts[id];
     if (text === undefined) continue;
-    const path = fusionPromptPath(repoRoot, id);
+    const path = fusionPromptPath(repoRoot, id, options.ensemble);
     if (existsSync(path) && options.force !== true) continue;
     writeFileSync(path, text.endsWith("\n") ? text : `${text}\n`);
     written.push(path);

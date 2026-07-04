@@ -5,6 +5,10 @@ import {
   registerBuiltInWorkflows
 } from "@fusionkit/ensemble";
 
+import { dim } from "@fusionkit/cli-ui";
+
+import { contextFor } from "../shared/context.js";
+
 const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[]; description: string }> = {
   direct: {
     scheduler: "direct-fast-path",
@@ -82,13 +86,23 @@ export function registerRuntime(program: Command): void {
   runtime
     .command("list")
     .description("list built-in runtime workflows")
-    .action(() => {
+    .option("--json", "emit machine-readable JSON")
+    .action((_opts: { json?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
       registerBuiltInWorkflows();
       const ids = [...new Set([...listWorkflows(), ...Object.keys(WORKFLOW_DETAILS)])].sort();
-      for (const id of ids) {
-        const detail = WORKFLOW_DETAILS[id];
-        console.log(detail === undefined ? id : `${id}\t${detail.scheduler}\t${detail.description}`);
+      if (ctx.json) {
+        ctx.emit({
+          workflows: ids.map((id) => ({ id, ...(WORKFLOW_DETAILS[id] ?? {}) }))
+        });
+        return;
       }
+      ctx.presenter.table(
+        ids.map((id) => {
+          const detail = WORKFLOW_DETAILS[id];
+          return detail === undefined ? [id] : [id, detail.scheduler, dim(detail.description)];
+        })
+      );
     });
 
   runtime
@@ -101,6 +115,7 @@ export function registerRuntime(program: Command): void {
       if (detail === undefined) {
         throw new Error(`unknown built-in workflow ${workflow}; run 'fusionkit runtime list'`);
       }
-      console.log(JSON.stringify({ id: workflow, ...detail }, null, 2));
+      // The explanation is a machine payload by design (stdout JSON).
+      process.stdout.write(JSON.stringify({ id: workflow, ...detail }, null, 2) + "\n");
     });
 }

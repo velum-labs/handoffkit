@@ -25,15 +25,23 @@ function makeConfigRepo(config: FusionConfig): { dir: string; cleanup: () => voi
   return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
+const CLOUD_PANEL = [
+  { id: "gpt", model: "gpt-5.5", provider: "openai", keyEnv: "OPENAI_API_KEY" },
+  { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic", keyEnv: "ANTHROPIC_API_KEY" }
+] as const;
+
 const CLOUD_CONFIG: FusionConfig = {
   version: FUSION_CONFIG_VERSION,
   tool: "claude",
-  panel: [
-    { id: "gpt", model: "gpt-5.5", provider: "openai", keyEnv: "OPENAI_API_KEY" },
-    { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic", keyEnv: "ANTHROPIC_API_KEY" }
-  ],
-  judgeModel: "claude-sonnet-4-6"
+  ensembles: {
+    default: {
+      panel: CLOUD_PANEL.map((spec) => ({ ...spec })),
+      judgeModel: "claude-sonnet-4-6"
+    }
+  }
 };
+
+const CLOUD_JUDGE = "claude-sonnet-4-6";
 
 test("config help lists its subcommands", () => {
   const result = runCli(["config", "--help"]);
@@ -59,13 +67,13 @@ test("config show renders the effective panel and provenance tags", () => {
   try {
     const result = runCli(["config", "show", "--repo", fixture.dir]);
     assert.equal(result.status, 0, result.stderr);
-    // Panel members and their config-sourced provenance.
-    assert.match(result.stdout, /gpt = openai:gpt-5\.5/);
-    assert.match(result.stdout, /sonnet = anthropic:claude-sonnet-4-6/);
-    assert.match(result.stdout, /\.fusionkit/);
+    // Panel members and their config-sourced provenance (UI renders on stderr).
+    assert.match(result.stderr, /gpt = openai:gpt-5\.5/);
+    assert.match(result.stderr, /sonnet = anthropic:claude-sonnet-4-6/);
+    assert.match(result.stderr, /\.fusionkit/);
     // A field left unset falls through to the built-in default tag.
-    assert.match(result.stdout, /default/);
-    assert.match(result.stdout, /precedence:/);
+    assert.match(result.stderr, /default/);
+    assert.match(result.stderr, /precedence/);
   } finally {
     fixture.cleanup();
   }
@@ -76,8 +84,8 @@ test("config show falls back to the default cloud trio with no config", () => {
   try {
     const result = runCli(["config", "show", "--repo", dir]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /gemini = google:gemini-2\.5-pro/);
-    assert.match(result.stdout, /3 model\(s\)/);
+    assert.match(result.stderr, /gemini = google:gemini-2\.5-pro/);
+    assert.match(result.stderr, /3 model\(s\)/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -89,8 +97,8 @@ test("config export-yaml stdout is exactly the derived router YAML (no drift)", 
     const result = runCli(["config", "export-yaml", "--repo", fixture.dir]);
     assert.equal(result.status, 0, result.stderr);
 
-    const specs = CLOUD_CONFIG.panel ?? [];
-    const expected = exportRouterYaml({ specs, judgeModel: CLOUD_CONFIG.judgeModel });
+    const specs = CLOUD_PANEL.map((spec) => ({ ...spec }));
+    const expected = exportRouterYaml({ specs, judgeModel: CLOUD_JUDGE });
     // The command output must equal the reused generator (no duplicated logic).
     assert.equal(result.stdout, expected);
     // ...which is itself exactly routerConfigYaml with the judge endpoint id.
@@ -135,7 +143,10 @@ test("config export-yaml -o writes the YAML to a file and reports it on stderr",
     assert.equal(result.stdout, "");
     assert.match(result.stderr, /wrote/);
     const written = readFileSync(outPath, "utf8");
-    const expected = exportRouterYaml({ specs: CLOUD_CONFIG.panel ?? [], judgeModel: CLOUD_CONFIG.judgeModel });
+    const expected = exportRouterYaml({
+      specs: CLOUD_PANEL.map((spec) => ({ ...spec })),
+      judgeModel: CLOUD_JUDGE
+    });
     assert.equal(written, expected);
   } finally {
     fixture.cleanup();

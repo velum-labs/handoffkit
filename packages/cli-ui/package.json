@@ -1,0 +1,38 @@
+{
+  "name": "@fusionkit/cli-ui",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/cli-ui"
+  },
+  "description": "The fusionkit terminal UX layer: an Ink-based presenter, prompt facade, and plain-text fallback shared by every user-facing surface.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "figlet": "1.11.0",
+    "ink": "7.1.0",
+    "react": "19.2.7"
+  },
+  "devDependencies": {
+    "@types/figlet": "1.7.0",
+    "@types/react": "19.2.17",
+    "ink-testing-library": "4.0.0"
+  }
+}

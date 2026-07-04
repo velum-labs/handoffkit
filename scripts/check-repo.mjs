@@ -404,12 +404,18 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@zed-industries/agent-client-protocol", "0.4.5"],
   ["@types/figlet", "1.7.0"],
   ["@types/node", "22.19.20"],
+  ["@types/react", "19.2.17"],
   ["@velum-labs/cursorkit", "0.1.2"],
   ["@velum-labs/model-fusion-protocol", "0.5.0"],
   ["@vercel/sandbox", "2.2.0"],
   ["ai", "6.0.200"],
   ["commander", "14.0.3"],
   ["figlet", "1.11.0"],
+  // The CLI's Ink-based presentation layer (@fusionkit/cli-ui): React for
+  // terminals plus its testing harness, pinned exactly like everything else.
+  ["ink", "7.1.0"],
+  ["ink-testing-library", "4.0.0"],
+  ["react", "19.2.7"],
   ["jose", "6.2.3"],
   ["just-bash", "3.0.1"],
   ["minimatch", "10.2.5"],
@@ -489,6 +495,29 @@ if (sourceListing.status === 0) {
     for (let i = 0; i < lines.length; i++) {
       if (todoMarker.test(lines[i])) {
         fail(`deferred-work marker in ${file}:${i + 1} — fix it or document the decision`);
+      }
+    }
+  }
+}
+
+// The CLI renders exclusively through the @fusionkit/cli-ui presenter (UI on
+// stderr, machine payloads on stdout). Raw console.* calls bypass that
+// contract — non-interactive degradation, --json purity, NO_COLOR — so they
+// are disallowed in the CLI and UI sources (tests excluded).
+const noConsoleListing = spawnSync(
+  "git",
+  ["ls-files", "packages/cli/src/**/*.ts", "packages/cli-ui/src/**/*.ts", "packages/cli-ui/src/**/*.tsx"],
+  { encoding: "utf8" }
+);
+if (noConsoleListing.status === 0) {
+  const consolePattern = /\bconsole\.(log|error|warn|info|debug|trace)\(/;
+  for (const file of noConsoleListing.stdout.split("\n").filter((line) => line.length > 0)) {
+    if (file.includes("/test/")) continue;
+    if (!existsSync(file)) continue;
+    const lines = readFileSync(file, "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (consolePattern.test(lines[i])) {
+        fail(`raw console output in ${file}:${i + 1} — render through the @fusionkit/cli-ui presenter instead`);
       }
     }
   }

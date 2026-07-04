@@ -35,6 +35,14 @@ export type ToolLaunchContext = {
   /** The model name/label the launched tool advertises in its own UI. */
   modelLabel: string;
   /**
+   * Every fused ensemble model id the gateway registers (session default —
+   * {@link modelLabel} — first, then each other `fusion-<name>` ensemble). A
+   * tool that enumerates models in its config lists them all so a sub-agent (or
+   * the user's picker) can target any ensemble. Absent/single in
+   * single-ensemble launches.
+   */
+  fusedModels?: readonly string[];
+  /**
    * Native panel model ids exposed alongside the fused model, so a tool that
    * must enumerate models in its config (e.g. opencode) can list them in its
    * picker. The gateway routes each to its real provider; the fused
