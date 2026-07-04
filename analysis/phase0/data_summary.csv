@@ -1,0 +1,8 @@
+source_id,title,tier,n_systems,n_tasks,n_clusters,coverage_min,coverage_median,coverage_max
+swe_verified,SWE-bench experiments VERIFIED (system-level A-),A- system-level,72,500,12,1.0,1.0,1.0
+swe_test,SWE-bench experiments TEST (system-level A-),A- system-level,6,2294,12,1.0,1.0,1.0
+terminalbench,Terminal-Bench trajectories (system-level A-),A- system-level,109,89,89,1.0,1.0,1.0
+llmrouterbench_livecodebench,LLMRouterBench LiveCodeBench coding subset (tier A),A,37,1055,1055,1.0,1.0,1.0
+llmrouterbench_swebench,LLMRouterBench SWE-Bench verified subset (tier A),A,14,500,12,1.0,1.0,1.0
+llmrouterbench_mbpp,LLMRouterBench mbpp coding subset (tier A),A,20,974,974,0.998973,1.0,1.0
+llmrouterbench_humaneval,LLMRouterBench humaneval coding subset (tier A),A,22,164,164,1.0,1.0,1.0
