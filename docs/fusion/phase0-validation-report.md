@@ -26,21 +26,31 @@ deviation: a base-engine parser correction).
 | **C0** — coverage | Do deployable models have per-task public data? | **PARTIAL** | Terminal-Bench covers the deployable agentic frontier (52k trial rows, GPT-5.5/Opus-4.x/Gemini-3-class systems); LLMRouterBench covers near-deployable variants at tier A; LiveBench/BigCodeBench lag the frontier |
 | **C1** — existence | Do strong systems make complementary errors? | **PASS** | Headroom over best single: +9.0pp CI [+6.5, +12.5] (SWE-bench Verified, system-level); +12.3pp [+7.6, +14.9] (Terminal-Bench); +11.3pp [+9.3, +12.2] (LLMRouterBench LCB, tier A); floors met |
 | **C2** — selection value | Does complementarity-selected beat top-K-by-average out of sample? | **INCONCLUSIVE / FAIL** | No held-out Δ_oracle CI lower bound > 0 anywhere; V-selection re-test also found no positive Δ_V CI and SWE-bench Verified remained negative |
-| **C3** — transfer | Does public signal transfer to our harness? | **PASS** | Pre-named panels: +7.0pp headroom CI [+1.7, +10.5] (P1/P3), +5.1pp [0.0, +12.5] (P2) on 60 LCB tasks × 5 models; failure-dependence sign agreement public↔calibrated **10/10**; judged replay beat best single (38.6% vs 28.1%) |
+| **C3** — transfer | Does public signal transfer to our harness? | **PASS, then REVISED by 16k re-run** | Original 4k-budget run: +5.1–7.0pp headroom, sign agreement **10/10**, judged replay beat best single. **16k re-run, same 60 tasks (`c3r16k_report.md`):** gpt-5.5 48.3%→**80.0%** (the 4k cap was truncating it on 26/60 tasks); all panel headroom collapses to **+1.7pp [0.0, +5.0]**; the slice is *lopsided* (gpt-5.5 +38pp over next). Sign transfer stands; the quantitative headroom evidence on this slice does not |
 
 Sources: `analysis/phase0/c0_coverage.md`, `c1_c2_report.md`,
 `c2_preregistration.md`, `c2v_preregistration.md`, `c2v_report.md`,
-`c3_plan.md`, `c3_transfer_report.md`, `harness_inventory.md`,
-`cost_table.md`.
+`c3_plan.md`, `c3_transfer_report.md`, `c3r16k_report.md`,
+`harness_inventory.md`, `cost_table.md`.
 
 ## What the evidence says, plainly
 
-1. **The fusion thesis itself is supported.** Complementary errors are real
-   and material at every level measured: among public systems (C1), and —
-   decisively — on our own harness with our own models (C3: every
-   pre-named panel cleared the 5pp headroom bar, and a judged replay
-   converted headroom into a +10.5pp realized gain over the best single
-   model on that slice).
+1. **The fusion thesis is supported where models are peers — and refuted
+   where they are not.** Complementary errors are real and material among
+   public systems of comparable strength (C1: +8–12pp headroom across three
+   sources). But the corrected C3 measurement (16k re-run) shows our
+   deployable slice is **lopsided**: with gpt-5.5 measured properly at 80%,
+   no panel offers more than +1.7pp [0.0, +5.0] of selection headroom on
+   single-shot algorithmic tasks in that window. The honest routing answer
+   there is *single model, don't fuse* — which is exactly the kind of
+   answer this system exists to produce, and it echoes the repo's own
+   lopsidedness warning (`LOPSIDED_SCORE_GAP`). Two things keep the fusion
+   thesis alive: (a) peer panels on harder/agentic domains (where C1
+   headroom lives), and (b) synthesis-style fusion, which the original
+   run's replay showed can *exceed* the candidate-selection ceiling —
+   lopsidedness caps selection, not synthesis. Contamination caveat: the
+   2025-02..04 task window likely predates gpt-5.5's cutoff, which may
+   inflate its measured dominance.
 2. **Public per-task data predicts *structure*, not *rankings*.** The
    failure-dependence signs transferred 10/10 from public data to our
    harness. But selecting panels by train-split complementarity did **not**
@@ -98,20 +108,27 @@ Concretely, relative to the spec:
 
 ## Panel guidance from this study (interim, calibration-backed)
 
-For the algorithmic domain, among models runnable with current credentials:
-the measured best single is `gpt-5.5` (48.3% pass@1 on the C3 slice), and
-`P2 = {gpt-5.5, claude-sonnet-4-6, deepseek-chat}` had the highest measured
-oracle (54.2%, headroom +5.1pp). The committed product default panel
-(`kimi-k2-thinking` + `qwen3-coder`, per `.fusionkit/fusion.json`) measured
-far below it (oracle 35.1%). **The kimi-k2-thinking 5.2% figure is a
-confirmed measurement artifact, not model weakness:** verification found
-51 of its 58 completions hit the run's 4096 `max_tokens` cap — the thinking
-budget consumed the window before code was emitted, so extraction failed.
-(GPT-5.5 also truncated on 26/60 but emits code early enough to pass.)
-Consequences: P1/P3 headroom is *understated*, the P1 capture measurement is
-polluted, and no conclusion about the committed default panel is valid until
-the slice is re-run with a materially larger completion budget for thinking
-models. That re-run is the cheapest highest-value follow-up (~$5).
+Updated after the 16k re-run (`c3r16k_report.md`), which corrected the
+truncation artifacts:
+
+- **Single-shot algorithmic (this slice): don't fuse.** `gpt-5.5` measured
+  80.0% [68.2, 88.2] — +38pp over the next model — and no panel offers more
+  than +1.7pp [0.0, +5.0] of selection headroom. Route single-model.
+  (Contamination caveat: pre-cutoff task window; re-check on a post-cutoff
+  slice before hardening this into policy.)
+- **The committed default panel (`kimi-k2-thinking` + `qwen3-coder`) is not
+  competitive on this workload shape**: its panel oracle is 31.7% vs
+  gpt-5.5 alone at 80.0%. However, kimi-k2-thinking is *still* not validly
+  measured — 52/60 of its completions hit even the 16k cap (sonnet also
+  truncated 14/60, so its 41.7% is a floor). A ≥32k-budget or
+  reasoning-capped re-measure is needed before final judgment on the
+  default panel's members.
+- **Where fusion still has a case:** peer panels on harder/agentic domains
+  (C1's +8–12pp headroom lives there), and synthesis-style fusion (the
+  original replay exceeded the selection oracle). Both are exactly what the
+  next calibration round should target — agentic/repo tasks and a
+  synthesis-focused judge protocol — rather than more single-shot
+  algorithmic slices.
 
 ## Layer-3 signal decision (pre-work item, §Phase-0)
 
@@ -136,16 +153,25 @@ unknown ($1–10/task estimated) and is blocked on harness work, not budget.
 
 ## Immediate next steps
 
-1. **Re-run the C3 slice with a larger completion budget** (≥ 16k tokens
-   for thinking models) — fixes the confirmed kimi truncation artifact and
-   yields the first valid read on the committed default panel (~$5).
-2. Harden the C3 pilot script into `calibration.py` + the
-   `CandidateBank → tier-CAL` adapter (spec §15.3) and run the first real
-   150-task two-slice calibration round (spec §15.1) with the P2 panel and
-   a proper judge protocol.
-3. Start M1 (reduced warehouse) with the three sources that produced
-   evidence in this study; port the Phase-0 scripts as the reference
-   implementations.
-4. Harness work for repo_bugfix calibration (HandoffKit patch-and-test
-   path) — the highest-value unlock, since repo tasks are the product's
-   core and the public A− data is densest there.
+1. ~~Re-run the C3 slice with a larger completion budget~~ **Done**
+   (`c3r16k_report.md`, $10.62): gpt-5.5 80%, slice lopsided, headroom
+   +1.7pp; kimi still truncating at 16k.
+2. ~~Re-test C2 with V-selection~~ **Done** (`c2v_report.md`, free): no
+   positive Δ_V anywhere; C2 fully settled — no public ranking authority.
+3. **Post-cutoff contamination check** (~$10): re-run the 5-model slice on
+   the newest available LCB window (or newly published contest tasks) to
+   confirm gpt-5.5's dominance isn't training-set leakage.
+4. **Thinking-model measurement fix**: re-measure kimi-k2-thinking (and
+   sonnet) with ≥32k budget or provider reasoning caps before final default-
+   panel judgment (~$8, kimi+sonnet only).
+5. Harden the C3 pilot script into `calibration.py` + the
+   `CandidateBank → tier-CAL` adapter (spec §15.3); the first real
+   calibration round should target **agentic/synthesis fusion value**, not
+   more single-shot algorithmic slices (that question is answered: don't
+   fuse there).
+6. Start M1 (reduced warehouse) with the three sources that produced
+   evidence; port the Phase-0 scripts as reference implementations.
+7. Harness work for repo_bugfix calibration (HandoffKit patch-and-test
+   path) — the highest-value unlock: repo tasks are the product's core,
+   the public A− data is densest there, and C1 says that's where peer-panel
+   headroom lives.
