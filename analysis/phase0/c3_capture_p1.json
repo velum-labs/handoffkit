@@ -1,0 +1,11 @@
+{
+  "best_single": 0.2807017543859649,
+  "capture": 1.5,
+  "fused_pass_rate": 0.38596491228070173,
+  "judge_id": "gpt55",
+  "mode": "judge_select_best_replay",
+  "n": 57,
+  "oracle": 0.3508771929824561,
+  "panel": "P1_public_complementarity",
+  "spend_usd": 1.6677187500000001
+}
