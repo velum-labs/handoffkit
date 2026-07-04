@@ -9,7 +9,8 @@ import {
   chatToResponses,
   customToolNames,
   openAiSseToResponses,
-  responsesToChat
+  responsesToChat,
+  responsesToolRegistry
 } from "../adapters/responses.js";
 import { startGateway } from "../server.js";
 
@@ -300,7 +301,7 @@ test("responsesToChat maps echoed custom_tool_call / custom_tool_call_output ite
 });
 
 test("chatToResponses emits a custom_tool_call item with raw input for a custom-declared tool", () => {
-  const custom = new Set(["apply_patch"]);
+  const custom = new Map([["apply_patch", { kind: "custom" as const }]]);
   const openai = {
     id: "cmpl-3",
     choices: [
@@ -359,7 +360,7 @@ test("chatToResponses passes non-JSON custom tool arguments through as raw input
       }
     ]
   };
-  const response = chatToResponses(openai, "fusion-panel", new Set(["apply_patch"]));
+  const response = chatToResponses(openai, "fusion-panel", new Map([["apply_patch", { kind: "custom" as const }]]));
   const output = response.output as Array<Record<string, unknown>>;
   assert.equal(output[0]?.type, "custom_tool_call");
   assert.equal(output[0]?.input, PATCH);
@@ -373,7 +374,7 @@ test("openAiSseToResponses streams a custom tool call as custom_tool_call events
     chatChunk({}, "tool_calls"),
     "data: [DONE]\n\n"
   );
-  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", new Set(["apply_patch"]))).text();
+  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", new Map([["apply_patch", { kind: "custom" as const }]]))).text();
   assert.ok(text.includes('"type":"custom_tool_call"'));
   assert.ok(text.includes("event: response.custom_tool_call_input.delta"));
   assert.ok(text.includes("event: response.custom_tool_call_input.done"));
@@ -393,13 +394,147 @@ test("openAiSseToResponses streams a custom tool call as custom_tool_call events
   assert.equal(item?.input, PATCH);
 });
 
+// Typed (nameless) tool declarations, verbatim shapes from Codex 0.142:
+// `tool_search` is client-executed discovery; `web_search` is server-executed.
+const TOOL_SEARCH_DECL = {
+  type: "tool_search",
+  execution: "client",
+  description: "Searches over deferred tool metadata.",
+  parameters: {
+    type: "object",
+    properties: { query: { type: "string" }, limit: { type: "number" } },
+    required: ["query"]
+  }
+};
+const WEB_SEARCH_DECL = { type: "web_search", external_web_access: false };
+
+test("responsesToolRegistry classifies function, custom, and client-typed tools", () => {
+  const registry = responsesToolRegistry({
+    tools: [
+      { type: "function", name: "shell", parameters: {} },
+      { type: "custom", name: "apply_patch" },
+      TOOL_SEARCH_DECL,
+      WEB_SEARCH_DECL
+    ]
+  });
+  assert.equal(registry.get("shell")?.kind, "function");
+  assert.equal(registry.get("apply_patch")?.kind, "custom");
+  assert.equal(registry.get("tool_search")?.kind, "typed");
+  // Server-executed typed tools are not callable through the gateway.
+  assert.equal(registry.has("web_search"), false);
+});
+
+test("responsesToChat projects a client-typed tool under its type and excludes server-typed tools", () => {
+  const chat = responsesToChat(
+    {
+      input: "find tools",
+      tools: [{ type: "function", name: "shell", parameters: {} }, TOOL_SEARCH_DECL, WEB_SEARCH_DECL]
+    },
+    "local-model"
+  );
+  const tools = chat.tools as Array<{ function: { name: string; description?: string; parameters: unknown } }>;
+  assert.deepEqual(
+    tools.map((tool) => tool.function.name),
+    ["shell", "tool_search"]
+  );
+  assert.equal(tools[1]?.function.description, TOOL_SEARCH_DECL.description);
+  assert.deepEqual(tools[1]?.function.parameters, TOOL_SEARCH_DECL.parameters);
+});
+
+test("responsesToChat resolves a typed tool_choice to the projected function name", () => {
+  const chat = responsesToChat(
+    { input: "x", tools: [TOOL_SEARCH_DECL], tool_choice: { type: "tool_search" } },
+    "local-model"
+  );
+  assert.deepEqual(chat.tool_choice, { type: "function", function: { name: "tool_search" } });
+});
+
+test("responsesToChat replays echoed typed call/output items into chat history", () => {
+  const args = { query: "spawn sub-agent", limit: 8 };
+  const discovered = [{ type: "namespace", name: "multi_agent_v1", tools: [{ name: "spawn_agent" }] }];
+  const chat = responsesToChat(
+    {
+      input: [
+        { type: "message", role: "user", content: "spawn a sub-agent" },
+        {
+          type: "tool_search_call",
+          call_id: "call_ts",
+          status: "completed",
+          execution: "client",
+          arguments: args
+        },
+        { type: "tool_search_output", call_id: "call_ts", status: "completed", execution: "client", tools: discovered }
+      ]
+    },
+    "local-model"
+  );
+  const messages = chat.messages as Record<string, unknown>[];
+  assert.equal(messages.length, 3);
+  const toolCalls = (messages[1] as { tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> })
+    .tool_calls ?? [];
+  assert.equal(toolCalls[0]?.id, "call_ts");
+  assert.equal(toolCalls[0]?.function.name, "tool_search");
+  assert.deepEqual(JSON.parse(toolCalls[0]?.function.arguments ?? ""), args);
+  assert.equal(messages[2]?.role, "tool");
+  assert.equal((messages[2] as { tool_call_id?: string }).tool_call_id, "call_ts");
+  const result = JSON.parse(String(messages[2]?.content)) as { tools?: unknown };
+  assert.deepEqual(result.tools, discovered);
+});
+
+test("chatToResponses emits a native typed item for a call resolved as typed", () => {
+  const registry = responsesToolRegistry({ tools: [TOOL_SEARCH_DECL] });
+  const openai = {
+    choices: [
+      {
+        message: {
+          content: null,
+          tool_calls: [{ id: "call_ts", function: { name: "tool_search", arguments: '{"query":"spawn","limit":4}' } }]
+        }
+      }
+    ]
+  };
+  const response = chatToResponses(openai, "fusion-panel", registry);
+  const output = response.output as Array<Record<string, unknown>>;
+  assert.equal(output.length, 1);
+  assert.equal(output[0]?.type, "tool_search_call");
+  assert.equal(output[0]?.call_id, "call_ts");
+  assert.equal(output[0]?.execution, "client");
+  assert.equal(output[0]?.status, "completed");
+  // Native typed items carry arguments as a JSON value, not a string.
+  assert.deepEqual(output[0]?.arguments, { query: "spawn", limit: 4 });
+});
+
+test("openAiSseToResponses streams a typed tool call as its native item", async () => {
+  const registry = responsesToolRegistry({ tools: [TOOL_SEARCH_DECL] });
+  const args = '{"query":"spawn sub-agent","limit":8}';
+  const upstream = sseStream(
+    chatChunk({ tool_calls: [{ index: 0, id: "call_ts", function: { name: "tool_search", arguments: args.slice(0, 10) } }] }),
+    chatChunk({ tool_calls: [{ index: 0, function: { arguments: args.slice(10) } }] }),
+    chatChunk({}, "tool_calls"),
+    "data: [DONE]\n\n"
+  );
+  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", registry)).text();
+  assert.ok(text.includes('"type":"tool_search_call"'));
+  assert.ok(!text.includes('"type":"function_call"'), "typed calls never surface as function_call items");
+  assert.ok(!text.includes("response.function_call_arguments"), "typed calls emit no argument delta events");
+  const completed = text.split("\n\n").find((event) => event.startsWith("event: response.completed"));
+  assert.ok(completed !== undefined);
+  const payload = JSON.parse(completed.slice(completed.indexOf("data:") + 5)) as {
+    response: { output: Array<{ type: string; call_id?: string; arguments?: unknown; execution?: string }> };
+  };
+  const item = payload.response.output.find((entry) => entry.type === "tool_search_call");
+  assert.equal(item?.call_id, "call_ts");
+  assert.equal(item?.execution, "client");
+  assert.deepEqual(item?.arguments, { query: "spawn sub-agent", limit: 8 });
+});
+
 test("openAiSseToResponses keeps function tools on the incremental function_call path", async () => {
   const upstream = sseStream(
     chatChunk({ tool_calls: [{ index: 0, id: "call_s", function: { name: "shell", arguments: '{"cmd":"ls"}' } }] }),
     chatChunk({}, "tool_calls"),
     "data: [DONE]\n\n"
   );
-  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", new Set(["apply_patch"]))).text();
+  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", new Map([["apply_patch", { kind: "custom" as const }]]))).text();
   assert.ok(text.includes('"type":"function_call"'));
   assert.ok(text.includes("event: response.function_call_arguments.delta"));
   assert.ok(!text.includes("custom_tool_call"));

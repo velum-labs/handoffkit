@@ -574,7 +574,9 @@ const kernelWrapperGuards = [
   },
   {
     file: "packages/tool-codex/src/harness.ts",
-    snippets: ["new KernelBackend(new OpenAiBackend({", "native-passthrough-turn"]
+    // The member's chat core (its router endpoint + the fused sub-agent route)
+    // must stay wrapped in the kernel backend.
+    snippets: ["new KernelBackend(", "memberChatBackend(", "new OpenAiBackend({", "native-passthrough-turn"]
   },
   {
     file: "packages/ensemble/src/run.ts",

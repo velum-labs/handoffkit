@@ -142,6 +142,12 @@ export type RunFusionOptions = {
   reasoningModel?: string;
   /** Skip the interactive cost/scope confirmation for the cloud panel. */
   yes?: boolean;
+  /**
+   * Auto-provision one native sub-agent per ensemble in the launched tool
+   * (Codex roles, Claude --agents, Cursor/opencode agent files). Default on;
+   * `--no-subagents` (or `subagents: false` in .fusionkit) turns it off.
+   */
+  subagents?: boolean;
   /** Route services through portless (stable named URLs + singletons). Default on. */
   portless?: boolean;
   /** Cursor only: wire the desktop IDE (not just cursor-agent) to the gateway. */

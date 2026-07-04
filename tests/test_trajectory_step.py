@@ -8,6 +8,8 @@ from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall, Usage
 from fusionkit_server import create_app
+from fusionkit_server.app import _normalize_tool_choice, _normalize_tools
+from fusionkit_server.openai_endpoint import _to_tools
 
 
 def _config() -> FusionConfig:
@@ -268,3 +270,104 @@ def test_step_streams_sse_with_tool_calls(tmp_path) -> None:
     assert "text/event-stream" in response.headers["content-type"]
     assert "write_file" in response.text
     assert "data: [DONE]" in response.text
+
+
+# ---- typed (nameless) tool passthrough ----
+
+_TOOL_SEARCH_DEF = {
+    "type": "tool_search",
+    "execution": "client",
+    "description": "Searches over deferred tool metadata.",
+    "parameters": {"type": "object", "properties": {"query": {"type": "string"}}},
+}
+
+
+def test_normalize_tools_resolves_typed_nameless_tools() -> None:
+    normalized = _normalize_tools(
+        [
+            {"type": "function", "function": {"name": "shell", "parameters": {"type": "object"}}},
+            dict(_TOOL_SEARCH_DEF),
+            {"description": "no identity at all"},
+        ]
+    )
+    assert normalized is not None
+    assert [tool["name"] for tool in normalized] == ["shell", "tool_search"]
+    assert normalized[1]["description"] == _TOOL_SEARCH_DEF["description"]
+    assert normalized[1]["parameters"] == _TOOL_SEARCH_DEF["parameters"]
+
+
+def test_normalize_tool_choice_resolves_typed_choice() -> None:
+    assert _normalize_tool_choice({"type": "tool_search"}) == {"name": "tool_search"}
+    assert _normalize_tool_choice({"type": "function", "function": {"name": "shell"}}) == {
+        "name": "shell"
+    }
+    # Mode markers never resolve to a tool identity.
+    assert _normalize_tool_choice({"type": "auto"}) is None
+    assert _normalize_tool_choice("auto") == "auto"
+
+
+def test_openai_endpoint_to_tools_never_emits_empty_names() -> None:
+    converted = _to_tools(
+        [
+            {"type": "function", "function": {"name": "shell", "parameters": {"type": "object"}}},
+            dict(_TOOL_SEARCH_DEF),
+            {"description": "nameless and untyped"},
+        ]
+    )
+    assert converted is not None
+    assert [tool["name"] for tool in converted] == ["shell", "tool_search"]
+    assert all(tool["name"] for tool in converted)
+
+
+class _ToolSearchClient(_ToolCallClient):
+    """A judge that answers by calling the typed-projected tool_search tool."""
+
+    async def chat(
+        self,
+        messages: Sequence[ChatMessage],
+        sampling: SamplingConfig | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        extra: Mapping[str, Any] | None = None,
+    ) -> ModelResponse:
+        del sampling, tool_choice, extra
+        self.seen_tools = tools
+        for message in messages:
+            if message.role == "system":
+                self.system_prompt = message.content
+        return ModelResponse(
+            model_id="judge",
+            content="",
+            tool_calls=[
+                ToolCall(id="call_ts", name="tool_search", arguments='{"query": "spawn"}')
+            ],
+            finish_reason="tool_calls",
+            usage=Usage(prompt_tokens=1, completion_tokens=1),
+        )
+
+
+def test_step_passes_typed_tools_through_and_returns_the_call_verbatim(tmp_path) -> None:
+    """A typed nameless tool (Codex's tool_search) survives the fuse path: it is
+    advertised to the judge under its type and the judge's call round-trips."""
+    judge = _ToolSearchClient()
+    app = create_app(_config(), clients={"judge": judge}, run_store_path=tmp_path / "runs")
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/fusion/trajectories:fuse",
+        json={
+            "messages": [{"role": "user", "content": "spawn a sub-agent"}],
+            "trajectories": [_TRAJECTORY],
+            "tools": [
+                {"name": "write_file", "parameters": {"type": "object", "properties": {}}},
+                dict(_TOOL_SEARCH_DEF),
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    tool_calls = body["choices"][0]["message"]["tool_calls"]
+    assert tool_calls[0]["function"]["name"] == "tool_search"
+    assert judge.seen_tools is not None
+    assert [tool["name"] for tool in judge.seen_tools] == ["write_file", "tool_search"]

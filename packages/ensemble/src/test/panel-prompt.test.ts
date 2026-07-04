@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { panelMemberPreamble } from "../harness.js";
-import { PANEL_CANDIDATE_CONTRACT, buildPanelPrompt } from "../unified.js";
+import { PANEL_CANDIDATE_CONTRACT, buildPanelPrompt, panelCandidateContract } from "../unified.js";
 
 const PANEL = [
   { id: "qwen-fast", model: "qwen" },
@@ -57,6 +57,39 @@ test("buildPanelPrompt: the candidate contract is appended last in both identity
     // The contract follows the membership suffix, never precedes the task.
     assert.ok(out.indexOf(PANEL_CANDIDATE_CONTRACT) > out.indexOf("Fix the bug."));
   }
+});
+
+test("the candidate contract guards against fusion-* sub-agent attempts", () => {
+  // Same-model sub-agents are allowed; fused gateway models are declared
+  // unreachable so members answer instead of flailing (the observed 5-minute
+  // "boot fusionkit serve in the worktree" failure mode).
+  assert.ok(PANEL_CANDIDATE_CONTRACT.includes("sub-agents always run on your own model"));
+  assert.ok(PANEL_CANDIDATE_CONTRACT.includes('"fusion-*"'));
+  assert.ok(PANEL_CANDIDATE_CONTRACT.includes("not reachable from inside the panel"));
+  assert.ok(PANEL_CANDIDATE_CONTRACT.includes("answer directly"));
+  // The parameterless contract builder is the guarded default.
+  assert.equal(panelCandidateContract(), PANEL_CANDIDATE_CONTRACT);
+  assert.equal(panelCandidateContract([]), PANEL_CANDIDATE_CONTRACT);
+});
+
+test("with fused sub-agent access, the contract names the spawnable ensembles instead of guarding", () => {
+  const contract = panelCandidateContract(["fusion-panel", "fusion-kimi"]);
+  assert.ok(contract.includes("fusion-panel, fusion-kimi"));
+  assert.ok(contract.includes("available as sub-agent models"));
+  assert.ok(contract.includes("never try to boot a server or gateway"));
+  assert.ok(!contract.includes("not reachable from inside the panel"));
+  // The base contract (permissions, no-questions) is unchanged.
+  assert.ok(contract.includes("never ask for permission or clarification"));
+});
+
+test("buildPanelPrompt threads the fused model ids into the contract tail", () => {
+  const out = buildPanelPrompt({
+    prompt: "Fix the bug.",
+    panel: PANEL,
+    fusedModelIds: ["fusion-panel", "fusion-kimi"]
+  });
+  assert.ok(out.includes("fusion-panel, fusion-kimi"));
+  assert.ok(!out.includes("not reachable from inside the panel"));
 });
 
 test("panelMemberPreamble: names the model and its 1-based peer index", () => {

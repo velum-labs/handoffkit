@@ -42,6 +42,7 @@ type FusionOpts = {
   reasoningModel?: string | boolean;
   yes?: boolean;
   force?: boolean;
+  subagents?: boolean;
   authToken?: string;
   port?: string;
   portless?: boolean;
@@ -83,6 +84,8 @@ function applyFusionOptions(command: Command): Command {
         `(e.g. openai/gpt-5.5-mini), or a local MLX repo (default: ${DEFAULT_REASONING_MODEL}; Apple Silicon)`
     )
     .option("--yes", "skip the interactive cloud-panel cost confirmation")
+    .option("--subagents", "auto-provision one native sub-agent per ensemble in the launched tool (default)")
+    .option("--no-subagents", "skip sub-agent auto-provisioning (Codex roles, Claude --agents, agent file scaffolds)")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .option("--port <n>", "gateway port (default: ephemeral)")
     .option("--portless", "route services through portless stable URLs (default; needs the proxy)")
@@ -127,6 +130,9 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
     options.reasoningModel = opts.reasoningModel === true ? DEFAULT_REASONING_MODEL : String(opts.reasoningModel);
   }
   if (opts.yes === true) options.yes = true;
+  // subagents is tri-state: only set when the user passed the flag (or its
+  // --no- form), so an unset flag can fall through to the config.
+  if (opts.subagents !== undefined) options.subagents = opts.subagents;
   if (opts.portless !== undefined) options.portless = opts.portless;
   if (opts.ide === true) options.ide = true;
   const onRateLimit = parseOnRateLimit(opts.onRateLimit);
@@ -209,6 +215,9 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   }
   if (options.panelTrust === undefined && config.panelTrust !== undefined) {
     options.panelTrust = config.panelTrust;
+  }
+  if (options.subagents === undefined && config.subagents !== undefined) {
+    options.subagents = config.subagents;
   }
   if (options.prompts === undefined && config.prompts !== undefined) options.prompts = config.prompts;
 }

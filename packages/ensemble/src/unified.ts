@@ -50,6 +50,37 @@ export type UnifiedHarnessKind =
  */
 export type PanelTrust = "full" | "guarded";
 
+/** One fused ensemble as panel members see it (for sub-agent provisioning). */
+export type FusedSubagentEnsemble = {
+  name: string;
+  /** Advertised front-door model id (`fusion-panel` / `fusion-<name>`). */
+  modelId: string;
+  /** Panel member ids (for human/model-facing descriptions). */
+  memberIds: readonly string[];
+  judgeModel?: string;
+};
+
+/**
+ * Fused sub-agent access for panel members: everything a member harness needs
+ * to let its model spawn sub-agents on the fused ensembles (`fusion-*`): the
+ * front-door gateway URL those turns route to, the registered ensembles, and
+ * the panel depth the member's fused calls must carry (so the front door does
+ * not re-provision fused access one level further down). Only provided to
+ * depth-0 panels; deeper members get same-model sub-agents only.
+ */
+export type FusedSubagentAccess = {
+  /** Front-door fusion gateway base URL (no `/v1` suffix). */
+  gatewayUrl: string;
+  /** Registered ensembles, session default first. */
+  ensembles: readonly FusedSubagentEnsemble[];
+  /** The session-default fused model id. */
+  defaultModelId: string;
+  /** Gateway bearer token, when the front door requires auth. */
+  authToken?: string;
+  /** The depth stamped on the member's fused requests (parent depth + 1). */
+  depth: number;
+};
+
 /**
  * Options the unified runner passes to a tool's harness factory. The per-tool
  * packages map these onto their own harness options (provider base URL, etc.).
@@ -78,6 +109,19 @@ export type ToolHarnessResolveOptions = {
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
   panelTrust?: PanelTrust;
+  /**
+   * Enable the harness's native sub-agents for panel members (a member may
+   * parallelize its own work on its own model, and — when `fusedSubagents` is
+   * provided — delegate to the fused ensembles). Default true; the repo
+   * `subagents: false` / `--no-subagents` switch turns it off.
+   */
+  subagents?: boolean;
+  /**
+   * Fused sub-agent access for this panel's members (see
+   * {@link FusedSubagentAccess}). Absent for depth >= 1 panels and when
+   * sub-agents are disabled.
+   */
+  fusedSubagents?: FusedSubagentAccess;
   /**
    * Native-session resume cursors keyed by ensemble model id, owned by the
    * caller across turns of one conversation. Driver-backed harnesses resume
@@ -133,6 +177,8 @@ function resolveToolAdapter(
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
     ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
+    ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+    ...(options.fusedSubagents !== undefined ? { fusedSubagents: options.fusedSubagents } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {})
   });
 }
@@ -210,6 +256,10 @@ export type UnifiedHarnessE2EOptions = {
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
   panelTrust?: PanelTrust;
+  /** Enable native sub-agents inside panel members (see ToolHarnessResolveOptions). */
+  subagents?: boolean;
+  /** Fused sub-agent access for panel members (see FusedSubagentAccess). */
+  fusedSubagents?: FusedSubagentAccess;
   /**
    * Native-session resume cursors keyed by ensemble model id, owned by the
    * caller across turns of one conversation. Only the harness-core driver
@@ -242,7 +292,7 @@ const PANEL_MEMBER_SUFFIX =
  * that the launched tool's own prompt cannot know. Harmless for models that
  * already behave agentically.
  */
-export const PANEL_CANDIDATE_CONTRACT =
+const PANEL_CANDIDATE_CONTRACT_BASE =
   "Panel candidate contract: you are one of several independent candidates attempting this " +
   "request in a disposable scratch workspace. The user cannot see your work and cannot reply - " +
   "never ask for permission or clarification, and never end your turn with a question. Act via " +
@@ -252,7 +302,40 @@ export const PANEL_CANDIDATE_CONTRACT =
   "escalated permissions is auto-rejected - reading and editing files in your workspace never " +
   "needs escalation. If a command is rejected or fails, fix the command and retry; do not " +
   "conclude that access is blocked. Never end your turn by describing what you are about to " +
-  "do - either call a tool or report what you already did.";
+  "do - either call a tool or report what you already did. ";
+
+/** The sub-agent tail when fused ensembles are NOT reachable (the default). */
+const PANEL_SUBAGENT_GUARD =
+  "If your harness offers sub-agent tools you may use them to parallelize your own work; " +
+  "sub-agents always run on your own model. Fusion ensemble models (any \"fusion-*\" id) are " +
+  "not reachable from inside the panel - never try to call, spawn on, or boot a server for " +
+  "them; if the request mentions them, answer directly with your own analysis instead.";
+
+/** The sub-agent tail when this member can spawn on the fused ensembles. */
+function panelSubagentFusedTail(fusedModelIds: readonly string[]): string {
+  return (
+    "If your harness offers sub-agent tools you may use them to parallelize or delegate " +
+    "your own work; sub-agents run on your own model unless you pass one of the fusion " +
+    `ensemble model ids (${fusedModelIds.join(", ")}), which are available as sub-agent ` +
+    "models - spawn on one by id when the request asks for that ensemble. They are already " +
+    "served for you; never try to boot a server or gateway for them yourself."
+  );
+}
+
+export const PANEL_CANDIDATE_CONTRACT = PANEL_CANDIDATE_CONTRACT_BASE + PANEL_SUBAGENT_GUARD;
+
+/**
+ * The candidate contract for one panel run: the fixed base plus the sub-agent
+ * tail matching whether this member can reach the fused ensembles.
+ */
+export function panelCandidateContract(fusedModelIds?: readonly string[]): string {
+  return (
+    PANEL_CANDIDATE_CONTRACT_BASE +
+    (fusedModelIds !== undefined && fusedModelIds.length > 0
+      ? panelSubagentFusedTail(fusedModelIds)
+      : PANEL_SUBAGENT_GUARD)
+  );
+}
 
 /**
  * Compose the shared panel-member prompt: optionally pass through the launched
@@ -267,6 +350,8 @@ export function buildPanelPrompt(input: {
   panel: EnsembleModel[];
   harnessSystem?: string;
   panelIdentity?: boolean;
+  /** Fused model ids this member can spawn sub-agents on (see FusedSubagentAccess). */
+  fusedModelIds?: readonly string[];
 }): string {
   const parts: string[] = [];
   const harnessSystem = input.harnessSystem?.trim();
@@ -283,7 +368,7 @@ export function buildPanelPrompt(input: {
   } else {
     parts.push(PANEL_MEMBER_SUFFIX);
   }
-  parts.push(PANEL_CANDIDATE_CONTRACT);
+  parts.push(panelCandidateContract(input.fusedModelIds));
   return parts.join("\n\n");
 }
 
@@ -581,6 +666,10 @@ export type FusionPanelOptions = {
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
   panelTrust?: PanelTrust;
+  /** Enable native sub-agents inside panel members (see ToolHarnessResolveOptions). */
+  subagents?: boolean;
+  /** Fused sub-agent access for panel members (see FusedSubagentAccess). */
+  fusedSubagents?: FusedSubagentAccess;
   /** Native-session resume cursors keyed by model id (see UnifiedHarnessE2EOptions). */
   resumeCursors?: Map<string, ResumeCursor>;
 };
@@ -603,7 +692,10 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
       prompt: options.prompt,
       panel: options.models,
       ...(options.harnessSystem !== undefined ? { harnessSystem: options.harnessSystem } : {}),
-      ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
+      ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+      ...(options.fusedSubagents !== undefined
+        ? { fusedModelIds: options.fusedSubagents.ensembles.map((ensemble) => ensemble.modelId) }
+        : {})
     }),
     harnesses: [harness],
     models: options.models,
@@ -617,6 +709,8 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
     ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
+    ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+    ...(options.fusedSubagents !== undefined ? { fusedSubagents: options.fusedSubagents } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {})
   };
   const descriptor = descriptorFor(harness, e2eOptions);

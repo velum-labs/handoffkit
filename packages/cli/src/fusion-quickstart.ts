@@ -613,6 +613,7 @@ export async function runFusion(
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
       ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
       ...(options.reasoningModel !== undefined ? { reasoningModel: options.reasoningModel } : {}),
       sessionStore,
@@ -704,6 +705,15 @@ export async function runFusion(
       gatewayUrl: stack.fusionUrl,
       modelLabel,
       fusedModels: ensembles.map((ensemble) => fusionModelId(ensemble.name)),
+      // The detail sub-agent auto-provisioning needs: each launcher defines one
+      // native sub-agent per ensemble from this list (session default first).
+      fusedEnsembles: ensembles.map((ensemble) => ({
+        name: ensemble.name,
+        modelId: fusionModelId(ensemble.name),
+        memberIds: ensemble.models.map((spec) => spec.id),
+        ...(ensemble.judgeModel !== undefined ? { judgeModel: ensemble.judgeModel } : {})
+      })),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
       nativeModels: [...new Set(unionModels.map((spec) => spec.model))],
       toolArgs,
       repo,

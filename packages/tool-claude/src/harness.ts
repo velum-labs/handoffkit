@@ -1,6 +1,13 @@
 import { artifactHash } from "@fusionkit/protocol";
 import type { NetworkPolicy, RunEvent } from "@fusionkit/protocol";
-import { claudeModelAlias, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
+import {
+  claudeModelAlias,
+  ModelRoutedBackend,
+  OpenAiBackend,
+  PANEL_DEPTH_HEADER,
+  startGateway
+} from "@fusionkit/model-gateway";
+import type { Backend } from "@fusionkit/model-gateway";
 import { CapabilityMismatchError } from "@fusionkit/runner";
 import type { SessionBackendResult } from "@fusionkit/runner";
 import {
@@ -11,7 +18,7 @@ import {
 import type { ClaudeCodeBindingOptions, HarnessSessionRun } from "@fusionkit/session-harness";
 import { PROVIDERS } from "@fusionkit/registry";
 
-import { claudeEnv } from "./launch.js";
+import { claudeAgentsJson, claudeEnv } from "./launch.js";
 import {
   buildChildEnv,
   captureWorktreeDiff,
@@ -26,6 +33,7 @@ import { createClaudeStreamStepEmitter, parseClaudeStreamJson, resolveClaudeCliM
 import type {
   CandidateHardeningMetadata,
   EnsembleDescriptor,
+  FusedSubagentAccess,
   HarnessAdapter,
   HarnessCandidateOutput,
   HarnessRunInput
@@ -110,6 +118,16 @@ export type ClaudeCodeHarnessOptions = ClaudeCodeBindingOptions & {
   traceId?: string;
   parentSpanId?: string;
   turn?: number;
+  /** Enable native sub-agents inside panel members (default on). */
+  subagents?: boolean;
+  /**
+   * Fused sub-agent access: router-gateway members get one session-scoped
+   * `--agents` definition per fused ensemble, and their translation gateway
+   * routes `fusion-*` (and `claude-fusion-*`) requests to the front-door
+   * fusion gateway stamped with the panel depth. Native-Anthropic members are
+   * unaffected (their turns never pass a gateway that could route fusion ids).
+   */
+  fusedSubagents?: FusedSubagentAccess;
 };
 
 type CredentialGate =
@@ -388,23 +406,42 @@ function startCandidateRouterGateway(input: {
   endpointUrl: string;
   endpointId: string;
   apiKey: string;
+  fusedSubagents?: FusedSubagentAccess;
 }): ReturnType<typeof startGateway> {
+  const primary: Backend = new OpenAiBackend({
+    baseUrl: normalizeApiBaseUrl(input.endpointUrl),
+    apiKey: input.apiKey,
+    defaultModel: input.endpointId,
+    forceModel: input.endpointId
+  });
+  // Fused sub-agent access: the member's Task-tool agents pin `claude-fusion-*`
+  // model ids; route those (and the raw `fusion-*` ids) to the front-door
+  // fusion gateway — which strips the claude alias itself — stamped with the
+  // panel depth so fused access never recurses another level down.
+  const fused = input.fusedSubagents;
+  const backend: Backend =
+    fused === undefined || fused.ensembles.length === 0
+      ? primary
+      : new ModelRoutedBackend({
+          routedModelIds: fused.ensembles.flatMap((ensemble) => [
+            ensemble.modelId,
+            claudeModelAlias(ensemble.modelId)
+          ]),
+          routed: new OpenAiBackend({
+            baseUrl: normalizeApiBaseUrl(fused.gatewayUrl),
+            ...(fused.authToken !== undefined ? { apiKey: fused.authToken } : {}),
+            headers: { [PANEL_DEPTH_HEADER]: String(fused.depth) }
+          }),
+          primary
+        });
   return startGateway({
-    backend: new KernelBackend(
-      new OpenAiBackend({
-        baseUrl: normalizeApiBaseUrl(input.endpointUrl),
-        apiKey: input.apiKey,
-        defaultModel: input.endpointId,
-        forceModel: input.endpointId
-      }),
-      {
-        workflowIds: {
-          chat: "native-passthrough-turn",
-          models: "native-passthrough-models",
-          embeddings: "native-passthrough-embeddings"
-        }
+    backend: new KernelBackend(backend, {
+      workflowIds: {
+        chat: "native-passthrough-turn",
+        models: "native-passthrough-models",
+        embeddings: "native-passthrough-embeddings"
       }
-    )
+    })
   });
 }
 
@@ -435,6 +472,8 @@ async function driveClaudePrint(input: {
   env: Record<string, string>;
   /** When set, point the CLI at this Anthropic-dialect gateway instead of api.anthropic.com. */
   gateway?: { baseUrl: string; authToken: string };
+  /** Session-scoped `--agents` JSON (fused sub-agent definitions). */
+  agentsJson?: string;
   onStdoutLine?: (line: string) => void;
   /** Aborts the claude child process (panel cancellation / straggler policy). */
   signal?: AbortSignal;
@@ -450,7 +489,8 @@ async function driveClaudePrint(input: {
     "--permission-mode",
     "bypassPermissions",
     "--model",
-    input.model
+    input.model,
+    ...(input.agentsJson !== undefined ? ["--agents", input.agentsJson] : [])
   ];
   const childEnv: Record<string, string> = { ...input.env };
   if (input.gateway !== undefined) {
@@ -582,11 +622,14 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
       // same claude-alias passthrough trick the front door's model picker uses.
       const endpointUrl = options.modelEndpoints?.[model.id] ?? options.fusionBackendUrl;
       const viaRouter = !isNativeAnthropicModel(model.model) && endpointUrl !== undefined;
+      const fusedSubagents =
+        options.subagents !== false && viaRouter ? options.fusedSubagents : undefined;
       const routerGateway = viaRouter
         ? await startCandidateRouterGateway({
             endpointUrl,
             endpointId: model.id,
-            apiKey: options.apiKey ?? "local"
+            apiKey: options.apiKey ?? "local",
+            ...(fusedSubagents !== undefined ? { fusedSubagents } : {})
           })
         : undefined;
       const cliModel = viaRouter ? claudeModelAlias(model.id) : resolveClaudeCliModel(model.model);
@@ -605,6 +648,12 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
           env: buildChildEnv({ base: env, allow: [...AUTH_ENV_NAMES, /^CLAUDE_/] }),
           ...(routerGateway !== undefined
             ? { gateway: { baseUrl: routerGateway.url(), authToken: options.apiKey ?? "local" } }
+            : {}),
+          // Fused sub-agents: one session-scoped agent per ensemble, so the
+          // member's Task tool can delegate to any `fusion-<name>` ensemble
+          // (its translation gateway routes those turns to the front door).
+          ...(fusedSubagents !== undefined
+            ? { agentsJson: claudeAgentsJson(fusedSubagents.ensembles, fusedSubagents.defaultModelId) }
             : {}),
           onStdoutLine: emitStep,
           ...(runInput.signal !== undefined ? { signal: runInput.signal } : {})

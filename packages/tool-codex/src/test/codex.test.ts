@@ -12,13 +12,18 @@ import { addTraceListener, removeTraceListener } from "@fusionkit/protocol";
 import type { FusionTraceEvent } from "@fusionkit/protocol";
 
 import {
+  codexAgentRoles,
+  codexAgentRoleToml,
   codexConfigToml,
   codexHarness,
   codexLaunchConfigToml,
+  codexMemberCatalogJson,
   codexModelCatalogJson,
-  defaultCodexRunner
+  defaultCodexRunner,
+  memberChatBackend
 } from "../index.js";
 import type { CodexExecRunner } from "../index.js";
+import { OpenAiBackend } from "@fusionkit/model-gateway";
 
 function tempOutputRoot(): { outputRoot: string; cleanup: () => void } {
   const outputRoot = mkdtempSync(join(tmpdir(), "ensemble-codex-out-"));
@@ -269,6 +274,206 @@ test("codexModelCatalogJson lists every fused ensemble as a fusion entry", () =>
   assert.equal(catalog.models[1]?.display_name, "fusion-deep (fusion)");
   assert.equal(catalog.models[2]?.display_name, "gpt-5.5");
   assert.match(String(catalog.models[1]?.description), /ensemble/);
+});
+
+test("codexLaunchConfigToml pins multi_agent and emits one role per ensemble", () => {
+  const roles = [
+    {
+      name: "fusion-panel",
+      modelId: "fusion-panel",
+      description: 'Fused answer from the default "default" ensemble (kimi, qwen3).',
+      developerInstructions: 'You run on the fused "default" ensemble.',
+      configPath: "/tmp/home/agents/fusion-panel.toml"
+    },
+    {
+      name: "fusion-deep",
+      modelId: "fusion-deep",
+      description: 'Fused answer from the "deep" ensemble (opus, gpt).',
+      developerInstructions: 'You run on the fused "deep" ensemble.',
+      configPath: "/tmp/home/agents/fusion-deep.toml"
+    }
+  ];
+  const toml = codexLaunchConfigToml(
+    "http://127.0.0.1:9999",
+    "fusion-panel",
+    ["gpt-5.5"],
+    undefined,
+    ["fusion-panel", "fusion-deep"],
+    roles
+  );
+  // The feature pin makes sub-agents OOTB even under managed/older defaults.
+  assert.ok(toml.includes("[features]"));
+  assert.ok(toml.includes("multi_agent = true"));
+  // Conservative fan-out ceiling: a fused sub-agent is a whole panel run.
+  assert.ok(toml.includes("[agents]"));
+  assert.ok(toml.includes("max_depth = 1"));
+  // One role per ensemble, pinned to its role config file.
+  assert.ok(toml.includes("[agents.fusion-panel]"));
+  assert.ok(toml.includes("[agents.fusion-deep]"));
+  assert.ok(toml.includes('config_file = "/tmp/home/agents/fusion-deep.toml"'));
+  assert.ok(toml.includes('description = "Fused answer from the \\"deep\\" ensemble (opus, gpt)."'));
+});
+
+test("codexLaunchConfigToml omits features/agents sections without roles", () => {
+  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", ["gpt-5.5"]);
+  assert.ok(!toml.includes("[features]"));
+  assert.ok(!toml.includes("[agents"));
+});
+
+test("codexAgentRoles + codexAgentRoleToml pin each role to its ensemble model", () => {
+  const roles = codexAgentRoles(
+    "/tmp/home",
+    [
+      { name: "default", modelId: "fusion-panel", memberIds: ["kimi", "qwen3"] },
+      { name: "deep", modelId: "fusion-deep", memberIds: ["opus"], judgeModel: "opus-4" }
+    ],
+    "fusion-panel"
+  );
+  assert.deepEqual(
+    roles.map((role) => role.name),
+    ["fusion-panel", "fusion-deep"]
+  );
+  // Deliberately NOT under a directory named "agents": Codex auto-discovers
+  // *.toml files there as role definitions in their own right, so a file also
+  // referenced by [agents.<key>].config_file gets registered twice and Codex
+  // rejects it as "duplicate agent role name ... declared in the same config
+  // layer". See codexAgentRoles' AGENT_ROLES_DIR comment.
+  assert.equal(roles[0]?.configPath, join("/tmp/home", "agent-roles", "fusion-panel.toml"));
+  assert.doesNotMatch(roles[0]?.configPath ?? "", /[\\/]agents[\\/]/);
+  assert.match(roles[0]?.description ?? "", /default "default" ensemble \(kimi, qwen3\)/);
+  assert.match(roles[1]?.description ?? "", /"deep" ensemble \(opus\)/);
+  assert.match(roles[1]?.developerInstructions ?? "", /fused "deep" ensemble/);
+  const toml = codexAgentRoleToml("fusion-deep", "fusion-deep", roles[1]?.developerInstructions ?? "");
+  assert.ok(toml.includes('name = "fusion-deep"'));
+  assert.ok(toml.includes('model = "fusion-deep"'));
+  assert.ok(toml.includes('model_provider = "fusionkit-local"'));
+  assert.ok(toml.includes('developer_instructions = "You run on the fused \\"deep\\" ensemble.'));
+});
+
+test("codexModelCatalogJson preserves unknown template fields (multi-agent gating survives)", () => {
+  const template = {
+    slug: "gpt-5.5",
+    display_name: "GPT-5.5",
+    description: "stock",
+    multi_agent_version: "v1",
+    experimental_supported_tools: ["spawn_agent"],
+    context_window: 272000
+  };
+  const catalog = JSON.parse(codexModelCatalogJson("fusion-panel", [], template)) as {
+    models: Array<Record<string, unknown>>;
+  };
+  // Cloned wholesale: fields our code does not know about survive untouched,
+  // so per-model multi-agent enablement metadata carries over.
+  assert.equal(catalog.models[0]?.multi_agent_version, "v1");
+  assert.deepEqual(catalog.models[0]?.experimental_supported_tools, ["spawn_agent"]);
+  assert.equal(catalog.models[0]?.context_window, 272000);
+});
+
+test("codexConfigToml (harness) wires the member catalog and sub-agent blocks", () => {
+  const toml = codexConfigToml({
+    model: "kimi",
+    sandboxMode: "danger-full-access",
+    approvalPolicy: "never",
+    modelCatalogPath: "/tmp/candidate/model-catalog.json",
+    subagents: true,
+    provider: {
+      baseUrl: "http://127.0.0.1:8080",
+      requiresOpenAiAuth: false
+    }
+  });
+  assert.ok(toml.includes('model_catalog_json = "/tmp/candidate/model-catalog.json"'));
+  assert.ok(toml.includes("[features]"));
+  assert.ok(toml.includes("multi_agent = true"));
+  assert.ok(toml.includes("max_depth = 1"));
+  assert.ok(toml.includes("max_threads = 3"));
+});
+
+test("codexConfigToml (harness) stays minimal without sub-agent inputs", () => {
+  const toml = codexConfigToml({
+    model: "kimi",
+    sandboxMode: "read-only",
+    approvalPolicy: "never"
+  });
+  assert.ok(!toml.includes("model_catalog_json"));
+  assert.ok(!toml.includes("[features]"));
+  assert.ok(!toml.includes("[agents]"));
+});
+
+test("codexMemberCatalogJson names the member's model on a cloned template entry", () => {
+  const catalog = JSON.parse(
+    codexMemberCatalogJson("kimi", {
+      slug: "gpt-5.5",
+      display_name: "GPT-5.5",
+      multi_agent_version: "v1",
+      context_window: 272000
+    })
+  ) as { models: Array<Record<string, unknown>> };
+  assert.equal(catalog.models.length, 1);
+  assert.equal(catalog.models[0]?.slug, "kimi");
+  assert.equal(catalog.models[0]?.display_name, "kimi");
+  // Unknown template fields survive (the multi-agent gating metadata).
+  assert.equal(catalog.models[0]?.multi_agent_version, "v1");
+  assert.equal(catalog.models[0]?.context_window, 272000);
+});
+
+test("codexMemberCatalogJson lists the fused ensemble models behind the member's own", () => {
+  const catalog = JSON.parse(
+    codexMemberCatalogJson(
+      "qwen3",
+      { slug: "gpt-5.5", display_name: "GPT-5.5", multi_agent_version: "v1" },
+      ["fusion-panel", "fusion-kimi", "qwen3"]
+    )
+  ) as { models: Array<Record<string, unknown>> };
+  // The member's own id is deduped; fused ids follow in order.
+  assert.deepEqual(
+    catalog.models.map((entry) => entry.slug),
+    ["qwen3", "fusion-panel", "fusion-kimi"]
+  );
+  assert.equal(catalog.models[0]?.priority, 0);
+  assert.equal(catalog.models[1]?.multi_agent_version, "v1");
+  assert.match(String(catalog.models[1]?.description), /fusion front door/);
+});
+
+test("memberChatBackend routes fused model requests to the front door with the depth header", async () => {
+  const calls: Array<{ url: string; model: string; depth: string | null }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    calls.push({
+      url: String(input),
+      model: body.model ?? "",
+      depth: headers.get("x-fusionkit-panel-depth")
+    });
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const backend = memberChatBackend(
+      new OpenAiBackend({ baseUrl: "http://127.0.0.1:1111/v1", defaultModel: "qwen3" }),
+      {
+        gatewayUrl: "http://127.0.0.1:2222",
+        ensembles: [
+          { name: "default", modelId: "fusion-panel", memberIds: ["kimi", "qwen3"] },
+          { name: "kimi", modelId: "fusion-kimi", memberIds: ["kimi"] }
+        ],
+        defaultModelId: "fusion-panel",
+        depth: 1
+      }
+    );
+    await backend.chat({ model: "qwen3", messages: [] });
+    await backend.chat({ model: "fusion-kimi", messages: [] });
+    assert.equal(calls.length, 2);
+    assert.match(calls[0]?.url ?? "", /127\.0\.0\.1:1111/);
+    assert.equal(calls[0]?.depth, null);
+    assert.match(calls[1]?.url ?? "", /127\.0\.0\.1:2222\/v1\/chat\/completions/);
+    assert.equal(calls[1]?.depth, "1");
+    // The member's model + the fused ids are all advertised/resolvable.
+    assert.deepEqual([...backend.listModelIds?.() ?? []], ["qwen3", "fusion-panel", "fusion-kimi"]);
+    assert.equal(backend.resolveModel?.("fusion-kimi"), "fusion-kimi");
+    assert.equal(backend.resolveModel?.("unknown"), "qwen3");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("codex adapter skips clearly when credentials are absent", async () => {

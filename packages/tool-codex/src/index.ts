@@ -46,6 +46,8 @@ export const codexTool: ToolIntegration = {
       ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
       ...(options.turn !== undefined ? { turn: options.turn } : {}),
       ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+      ...(options.fusedSubagents !== undefined ? { fusedSubagents: options.fusedSubagents } : {}),
       // Panel candidates run unattended in disposable worktrees, so default to
       // maximum autonomy. `guarded` falls back to the side-effects-derived
       // sandbox (workspace-write), which `sandboxModeFor` picks when unset.
@@ -138,8 +140,10 @@ export {
   codexEndReason,
   codexHarness,
   codexHarnessCredentialSkipReason,
+  codexMemberCatalogJson,
   createCodexHarness,
-  defaultCodexRunner
+  defaultCodexRunner,
+  memberChatBackend
 } from "./harness.js";
 export type {
   CodexAmbientProvider,
@@ -156,10 +160,14 @@ export type {
   CodexSandboxMode
 } from "./harness.js";
 export {
+  codexAgentRoles,
+  codexAgentRoleToml,
   codexLaunchConfigToml,
   codexModelCatalogJson,
+  codexRoleDescription,
   launchCodex,
   readCodexCatalogTemplate
 } from "./launch.js";
+export type { CodexAgentRole } from "./launch.js";
 export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 export type { CodexDriverConfig } from "./driver.js";

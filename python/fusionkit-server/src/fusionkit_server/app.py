@@ -819,9 +819,33 @@ def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
     return ChatMessage(**kwargs)
 
 
+# `type` values that mark a wire shape or a choice mode, never a tool identity.
+_NON_TOOL_TYPES = frozenset({"function", "custom", "auto", "none", "required", "any", "tool"})
+
+
+def _resolved_tool_name(entry: dict[str, Any], function: dict[str, Any]) -> str:
+    """The provider-facing name for a tool definition.
+
+    Named tools keep their name. A *typed* nameless tool (e.g. an OpenAI
+    Responses `{type: "tool_search", ...}` / `{type: "web_search", ...}` entry)
+    is projected under its ``type``: the caller executes those tools client-side
+    and dispatches the returned tool call by that same name, so the projection
+    round-trips losslessly. Shape/mode markers (``function``, ``auto``, ...)
+    are never treated as tool identities.
+    """
+    name = function.get("name", "")
+    if isinstance(name, str) and name:
+        return name
+    kind = entry.get("type", "") if isinstance(entry, dict) else ""
+    if isinstance(kind, str) and kind and kind not in _NON_TOOL_TYPES:
+        return kind
+    return ""
+
+
 def _normalize_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
-    """Accept OpenAI-nested ({type:function, function:{...}}) or flat tool defs and
-    return the flat {name, description, parameters} shape FusionKit's clients expect."""
+    """Accept OpenAI-nested ({type:function, function:{...}}), flat, or typed
+    nameless tool defs and return the flat {name, description, parameters}
+    shape FusionKit's clients expect (typed tools projected under their type)."""
     if not tools:
         return None
     normalized: list[dict[str, Any]] = []
@@ -831,10 +855,10 @@ def _normalize_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]
         )
         if not isinstance(function, dict):
             continue
-        name = function.get("name", "")
-        # Skip tools without a usable name (some agent CLIs advertise custom or
-        # freeform tool shapes that resolve to an empty name, which providers reject).
-        if not isinstance(name, str) or not name:
+        name = _resolved_tool_name(entry, function)
+        # Skip only tools with no resolvable identity at all: nothing for the
+        # model to call and nothing the caller could dispatch back.
+        if not name:
             continue
         normalized.append(
             {
@@ -851,8 +875,10 @@ def _normalize_tool_choice(choice: str | dict[str, Any] | None) -> str | dict[st
         return choice
     if isinstance(choice, dict):
         function = choice.get("function") if "function" in choice else choice
-        name = function.get("name") if isinstance(function, dict) else None
-        if isinstance(name, str) and name:
+        name = (
+            _resolved_tool_name(choice, function) if isinstance(function, dict) else ""
+        )
+        if name:
             return {"name": name}
     return None
 

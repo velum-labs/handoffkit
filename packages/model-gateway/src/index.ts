@@ -12,8 +12,19 @@
  */
 export { startGateway } from "./server.js";
 export type { Gateway, GatewayOptions } from "./server.js";
-export { joinPath, OpenAiBackend } from "./backend.js";
-export type { Backend, BackendRequestOptions, OpenAiBackendOptions } from "./backend.js";
+export {
+  joinPath,
+  ModelRoutedBackend,
+  OpenAiBackend,
+  PANEL_DEPTH_HEADER,
+  parsePanelDepth
+} from "./backend.js";
+export type {
+  Backend,
+  BackendRequestOptions,
+  ModelRoutedBackendOptions,
+  OpenAiBackendOptions
+} from "./backend.js";
 export { FusionBackend } from "./fusion-backend.js";
 export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";
 export {
@@ -131,11 +142,17 @@ export {
 export type { AnthropicRequest } from "./adapters/anthropic.js";
 export {
   chatToResponses,
+  customToolNames,
   handleResponses,
   openAiSseToResponses,
-  responsesToChat
+  responsesToChat,
+  responsesToolRegistry
 } from "./adapters/responses.js";
-export type { ResponsesRequest } from "./adapters/responses.js";
+export type {
+  ResponsesRequest,
+  ResponsesToolKind,
+  ResponsesToolRegistry
+} from "./adapters/responses.js";
 export {
   FUSION_EVIDENCE_HEADER,
   FUSION_REPORT_HEADER,

@@ -623,6 +623,8 @@ export type StartFusionStackOptions = {
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
   panelTrust?: PanelTrust;
+  /** Same-model sub-agents inside panel members (see GatewayRunnerConfig). Default on. */
+  subagents?: boolean;
   /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. Default on. */
   reasoning?: boolean;
   /**
@@ -843,6 +845,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       ...(options.sessionMeta !== undefined ? { sessionMeta: options.sessionMeta } : {}),
       ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
       ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
       ...(options.reasoning !== undefined ? { reasoningTraces: options.reasoning } : {}),
       ...(narrationWriter !== undefined ? { narrationWriter } : {})
     };

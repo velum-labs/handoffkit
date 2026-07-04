@@ -44,9 +44,23 @@ export type AnthropicRequest = {
   top_p?: number;
   stop_sequences?: string[];
   stream?: boolean;
-  tools?: Array<{ name: string; description?: string; input_schema?: unknown }>;
+  tools?: Array<{ type?: string; name: string; description?: string; input_schema?: unknown }>;
   tool_choice?: { type: "auto" | "any" | "tool"; name?: string };
 };
+
+/**
+ * Whether an Anthropic tool is *server-executed* (run by Anthropic's backend,
+ * e.g. `web_search_20250305` / `code_execution_*`). Nothing behind this gateway
+ * can execute those, so advertising them to the fused model would only produce
+ * calls nobody answers. Everything else — plain client tools (no `type` /
+ * `custom`) and Anthropic-defined client tools (`bash_*`, `text_editor_*`,
+ * `computer_*`), all of which the caller executes via ordinary `tool_use`
+ * blocks — is projected through.
+ */
+function isAnthropicServerTool(tool: { type?: string }): boolean {
+  const type = tool.type ?? "";
+  return type.startsWith("web_search") || type.startsWith("code_execution");
+}
 
 // ---- OpenAI shapes we read back ----
 
@@ -201,14 +215,24 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
     chat.stop = body.stop_sequences;
   }
   if (Array.isArray(body.tools) && body.tools.length > 0) {
-    chat.tools = body.tools.map((tool) => ({
-      type: "function",
-      function: {
-        name: tool.name,
-        ...(tool.description !== undefined ? { description: tool.description } : {}),
-        parameters: tool.input_schema ?? { type: "object", properties: {} }
-      }
-    }));
+    const excluded = body.tools.filter(isAnthropicServerTool);
+    if (excluded.length > 0 && process.env.FUSION_DEBUG) {
+      console.error(
+        `[fusion-debug] anthropic: excluding ${excluded.length} server-executed tool(s) ` +
+          `from the fused turn: ${excluded.map((tool) => tool.name).join(", ")}`
+      );
+    }
+    const tools = body.tools
+      .filter((tool) => !isAnthropicServerTool(tool) && typeof tool.name === "string" && tool.name.length > 0)
+      .map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          ...(tool.description !== undefined ? { description: tool.description } : {}),
+          parameters: tool.input_schema ?? { type: "object", properties: {} }
+        }
+      }));
+    if (tools.length > 0) chat.tools = tools;
   }
   if (body.tool_choice !== undefined) chat.tool_choice = mapToolChoice(body.tool_choice);
   if (body.stream === true) chat.stream_options = { include_usage: true };
@@ -521,29 +545,38 @@ export function openAiSseToAnthropic(
       }, 3000);
     },
     async pull(controller) {
-      const { done, value } = await reader.read();
-      if (done) {
-        if (!state.finished) finalize(controller, "end_turn");
-        controller.close();
-        return;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      let newline = buffer.indexOf("\n");
-      while (newline >= 0) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        newline = buffer.indexOf("\n");
-        if (!line.startsWith("data:")) continue;
-        const payload = line.slice(5).trim();
-        if (payload === "[DONE]") {
+      // Keep reading upstream until at least one chunk is enqueued (or the
+      // stream closes). A pull that resolves without enqueuing anything can
+      // stall Node's webstreams pull scheduling permanently (e.g. a late
+      // upstream line after finalize already ran, once the keepalive timer is
+      // cleared) — see the identical loop in the Responses adapter.
+      for (;;) {
+        const sizeBefore = controller.desiredSize ?? 0;
+        const { done, value } = await reader.read();
+        if (done) {
           if (!state.finished) finalize(controller, "end_turn");
-          continue;
+          controller.close();
+          return;
         }
-        try {
-          process(controller, JSON.parse(payload) as OpenAiChunk);
-        } catch {
-          // ignore malformed lines; the upstream stream is authoritative
+        buffer += decoder.decode(value, { stream: true });
+        let newline = buffer.indexOf("\n");
+        while (newline >= 0) {
+          const line = buffer.slice(0, newline).trim();
+          buffer = buffer.slice(newline + 1);
+          newline = buffer.indexOf("\n");
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (payload === "[DONE]") {
+            if (!state.finished) finalize(controller, "end_turn");
+            continue;
+          }
+          try {
+            process(controller, JSON.parse(payload) as OpenAiChunk);
+          } catch {
+            // ignore malformed lines; the upstream stream is authoritative
+          }
         }
+        if ((controller.desiredSize ?? 0) !== sizeBefore) return;
       }
     },
     cancel(reason) {
@@ -575,12 +608,13 @@ export async function handleAnthropicMessages(
   backend: Backend,
   body: AnthropicRequest,
   modelCallId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  panelDepth?: number
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
   const chat = anthropicToChat(body, upstreamModel);
-  const upstream = await backend.chat(chat, signal, { modelCallId });
+  const upstream = await backend.chat(chat, signal, { modelCallId, ...(panelDepth !== undefined ? { panelDepth } : {}) });
 
   if (!upstream.ok) {
     const detail = await upstream.text();

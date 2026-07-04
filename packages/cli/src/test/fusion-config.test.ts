@@ -158,6 +158,18 @@ test("parseFusionConfig accepts panelTrust levels and rejects unknown ones", () 
   );
 });
 
+test("parseFusionConfig accepts the subagents opt-out and rejects bad values", () => {
+  const off = parseFusionConfig({ version: FUSION_CONFIG_VERSION, subagents: false }, "test");
+  assert.equal(off.subagents, false);
+  // Unset stays undefined (defaults to on downstream).
+  const unset = parseFusionConfig({ version: FUSION_CONFIG_VERSION }, "test");
+  assert.equal(unset.subagents, undefined);
+  assert.throws(
+    () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, subagents: "yes" }, "test"),
+    FusionConfigError
+  );
+});
+
 test("parseFusionConfig accepts reasoning + reasoningModel and rejects bad values", () => {
   const config = parseFusionConfig(
     {

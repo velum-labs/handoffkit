@@ -404,3 +404,53 @@ test("the panel re-runs per user turn but is reused within a turn's tool loop", 
     await step.close();
   }
 });
+
+test("a harness-injected subagent notification continues the turn instead of fanning out a new panel", async () => {
+  const tasksSeen: string[] = [];
+  const step = await startStepServer((req, res) => {
+    void (async () => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+    })();
+  });
+  try {
+    let panelCalls = 0;
+    const backend = new FusionBackend({
+      stepUrl: step.url,
+      runPanels: async (input) => {
+        panelCalls += 1;
+        tasksSeen.push(input.task);
+        return [candidate("a")];
+      }
+    });
+    const system = { role: "system", content: "S" };
+    const first = { role: "user", content: "spawn a sub-agent and ask it to say OK" };
+    await (await backend.chat({ messages: [system, first], stream: false })).json();
+    assert.equal(panelCalls, 1);
+
+    // Codex delivers the spawned sub-agent's completion as a *user* message.
+    // It must not count as a new user turn (no second panel fanout), and it
+    // must never become a panel task.
+    const notification = {
+      role: "user",
+      content: '<subagent_notification>\n{"agent_path":"abc","status":{"completed":"OK"}}\n</subagent_notification>'
+    };
+    await (
+      await backend.chat({
+        messages: [
+          system,
+          first,
+          { role: "assistant", content: "spawned" },
+          notification
+        ],
+        stream: false
+      })
+    ).json();
+    assert.equal(panelCalls, 1, "a subagent notification reuses the turn's cached candidates");
+    assert.deepEqual(tasksSeen, ["spawn a sub-agent and ask it to say OK"]);
+  } finally {
+    await step.close();
+  }
+});

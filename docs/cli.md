@@ -103,6 +103,7 @@ Shared flags (full list in `applyFusionOptions`):
 | `--port N` / `--portless` / `--no-portless` | Gateway port / portless stable URLs. | core |
 | `--auth-token TOKEN` | Require a bearer token on the gateway. | core |
 | `--yes` | Skip the interactive cloud-panel cost confirmation. | core |
+| `--subagents` / `--no-subagents` | Auto-provision one native sub-agent per ensemble in the launched tool (default on): Codex roles, Claude `--agents`, `.cursor/agents/` scaffolds, opencode agents. | core |
 | `--ide` | Cursor only: wire the Cursor IDE to the gateway via a local desktop proxy (no public tunnel). | WS6 |
 | `--on-rate-limit fusion\|passthrough\|fail` | Vendor rate-limit / credit handoff policy (default `fusion`). | WS5 |
 | `--budget USD` | Stop the session once it has spent this much (gateway-observed USD). | WS7 |

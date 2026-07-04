@@ -161,6 +161,13 @@ export type PanelRunInput = {
    */
   excludeModelIds?: readonly string[];
   /**
+   * Fusion panel depth of the request that triggered this run (0/absent = a
+   * user front-door turn; >= 1 = a panel member's own fused sub-agent turn).
+   * Runners must not provision fused sub-agent access for depth >= 1 members,
+   * so delegation stops after one level.
+   */
+  panelDepth?: number;
+  /**
    * Aborted when the panel run should stop (the turn's panel deadline fired).
    * Runners must cancel in-flight candidate work — child processes included —
    * instead of letting it burn tokens after the turn has already failed.
@@ -419,6 +426,20 @@ function textOfContent(content: unknown): string {
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * True for harness-injected user messages that are not real user turns. Codex
+ * delivers a spawned sub-agent's completion as a `<subagent_notification>`
+ * *user* message mid-conversation; counting it as a user turn would fan out a
+ * whole new panel whose "task" is the notification blob (observed live: a
+ * 3.5-minute spurious panel run followed by the client hanging up). Such
+ * messages continue the same turn — cached candidates, judge answers from the
+ * notification — exactly like a tool-loop continuation.
+ */
+function isHarnessNotification(message: ChatMessageLike): boolean {
+  if (message.role !== "user") return false;
+  return textOfContent(message.content).trimStart().startsWith("<subagent_notification>");
 }
 
 /** A candidate set is usable when at least one trajectory did not fail. */
@@ -1267,10 +1288,17 @@ export class FusionBackend implements Backend {
       sessionKey: this.#sessionKey(messages, this.#sessionScope(chat.model)),
       // The user-turn index: a follow-up user message is a new turn, while a
       // harness tool-loop continuation keeps the count (and reuses candidates).
-      turn: messages.filter((message) => message.role === "user").length,
+      // Harness-injected notifications (sub-agent completions) are not user
+      // turns either — they continue the turn they arrived in.
+      turn: messages.filter(
+        (message) => message.role === "user" && !isHarnessNotification(message)
+      ).length,
       // Minted once so this turn's judge.request and judge.final share a span.
       judgeSpanId: newSpanId(),
       streaming: chat.stream === true,
+      ...(options.panelDepth !== undefined && options.panelDepth > 0
+        ? { panelDepth: options.panelDepth }
+        : {}),
       ...(options.modelCallId !== undefined ? { modelCallId: options.modelCallId } : {}),
       ...(signal !== undefined ? { [FRONTDOOR_SIGNAL]: signal } : {})
     };
@@ -1528,7 +1556,8 @@ export class FusionBackend implements Backend {
       req.turn,
       req.chat.messages ?? [],
       this.#routeFor(req)?.modelId,
-      req.excludeModelIds
+      req.excludeModelIds,
+      req.panelDepth
     );
     // Bounded, failing loudly so a panel crash or an empty/all-failed candidate
     // set never silently fuses into a blank answer. When the deadline fires the
@@ -1790,8 +1819,10 @@ export class FusionBackend implements Backend {
     // so take the latest user turn (the active instruction) and fall back to
     // system text only if there is no user content at all. Using the latest
     // user message means a follow-up turn's panel solves the follow-up request.
+    // Harness-injected notifications are never the task — a panel must not fan
+    // out to "solve" a sub-agent completion blob.
     const userText = messages
-      .filter((message) => message.role === "user")
+      .filter((message) => message.role === "user" && !isHarnessNotification(message))
       .map((message) => textOfContent(message.content).trim())
       .filter((text) => text.length > 0);
     const latest = userText.at(-1);
@@ -2096,7 +2127,8 @@ export class FusionBackend implements Backend {
     turn: number,
     messages: ChatMessageLike[],
     ensembleModelId?: string,
-    excludeModelIds?: readonly string[]
+    excludeModelIds?: readonly string[],
+    panelDepth?: number
   ): Promise<WireTrajectory[]> {
     const existing = session.turns.get(turn);
     if (existing !== undefined) return existing;
@@ -2115,7 +2147,8 @@ export class FusionBackend implements Backend {
       turn,
       signal: abort.signal,
       ...(ensembleModelId !== undefined ? { ensembleModelId } : {}),
-      ...(excludeModelIds !== undefined && excludeModelIds.length > 0 ? { excludeModelIds } : {})
+      ...(excludeModelIds !== undefined && excludeModelIds.length > 0 ? { excludeModelIds } : {}),
+      ...(panelDepth !== undefined && panelDepth > 0 ? { panelDepth } : {})
     });
     session.turns.set(turn, candidates);
     // Write a usable turn through to the durable store; evict a failed turn so a

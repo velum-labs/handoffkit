@@ -30,6 +30,7 @@ export {
   RUNTIME_TIMEOUT_MS
 } from "@fusionkit/runtime-utils";
 export type {
+  FusedEnsembleInfo,
   ToolDashboardLiveSmoke,
   ToolDashboardMetadata,
   ToolDashboardSmoke,

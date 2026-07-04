@@ -52,6 +52,22 @@ is not a remote mutation because nothing exists remotely between commands.
 - `export { governedCompute, GovernedSandbox, withCompute } from "./sandbox.js";`
 - `export type { CommandResult, GovernedCompute, GovernedComputeConfig, SandboxRunRecord } from "./sandbox.js";`
 
+### `packages/cli-ui/src/index.ts`
+
+@fusionkit/cli-ui — the fusionkit terminal UX layer.
+
+One presenter contract, two implementations: rich Ink (React) rendering on
+interactive TTYs, ordered plain-text lines everywhere else (CI, pipes,
+`FUSIONKIT_NO_TUI=1`). All UI goes to stderr; stdout stays reserved for
+machine payloads and the launched tool's output.
+
+- `export { PlainPresenter, renderKeyValueLines, renderTableLines } from "./plain.js";`
+- `export { InkPresenter, mountInk, settleInk } from "./ink/presenter.js";`
+- `export { select, multiselect, confirm, text, done, note } from "./prompt.js";`
+- `export type { SelectOption } from "./prompt.js";`
+- `export function createPresenter(options: ...`
+  The presenter for this invocation: Ink when attached to an interactive TTY, plain line logs otherwise. `forceNonInteractive()` (the `--json` / `--no-input` flags) flips this to plain for the rest of the process.
+
 ### `packages/cli/src/index.ts`
 
 Entry point for the FusionKit command line package. The executable itself lives in src/index.ts, while cli.ts builds the Commander command tree.
@@ -71,8 +87,8 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { createMockJudgeSynthesizer } from "./judge.js";`
 - `export type { JudgeCandidateEvidence, JudgeInput, JudgePatch, JudgeSynthesizer, JudgeSynthesisOutput, MockJudgeSynthesizerOptions, SynthesisFailureSummary } from "./judge.js";`
 - `export { ensemble, runEnsemble } from "./run.js";`
-- `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolHarnessProvider } from "./unified.js";`
-- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusionPanelOptions, PanelTrust, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
+- `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, panelCandidateContract, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolHarnessProvider } from "./unified.js";`
+- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusedSubagentAccess, FusedSubagentEnsemble, FusionPanelOptions, PanelTrust, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
 - `export { ambientTraceId, emitTrace, getTraceEmitter, newSpanId, newTraceId, TRACE_CANDIDATE_HEADER, TRACE_ID_HEADER, TRACE_PARENT_SPAN_HEADER, TRACE_SPAN_HEADER, TraceEmitter } from "./trace.js";`
 - `export type { EmitInput, FusionTraceComponent, FusionTraceEvent, FusionTraceEventType } from "./trace.js";`
 - `export { runJudgeSynthesis } from "./synthesis.js";`
@@ -206,8 +222,8 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 
 - `export { startGateway } from "./server.js";`
 - `export type { Gateway, GatewayOptions } from "./server.js";`
-- `export { joinPath, OpenAiBackend } from "./backend.js";`
-- `export type { Backend, BackendRequestOptions, OpenAiBackendOptions } from "./backend.js";`
+- `export { joinPath, ModelRoutedBackend, OpenAiBackend, PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";`
+- `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { FusionBackend } from "./fusion-backend.js";`
 - `export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";`
 - `export { FrontdoorArtifactTypes, FrontdoorFuseError, FrontdoorOperatorKinds, FrontdoorPanelError, frontdoorBudgetGateOperator, frontdoorBudgetStopOperator, frontdoorFinalizeOperator, frontdoorFuseOperator, frontdoorPanelOperator, frontdoorResolveModelOperator, frontdoorStreamingFuseOperator, frontdoorVendorProxyOperator } from "./frontdoor/operators.js";`
@@ -236,8 +252,8 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";`
 - `export { anthropicModelsResponse, anthropicToChat, chatToAnthropicMessage, claudeModelAlias, countTokensEstimate, handleAnthropicMessages, handleCountTokens, mapStopReason, openAiSseToAnthropic } from "./adapters/anthropic.js";`
 - `export type { AnthropicRequest } from "./adapters/anthropic.js";`
-- `export { chatToResponses, handleResponses, openAiSseToResponses, responsesToChat } from "./adapters/responses.js";`
-- `export type { ResponsesRequest } from "./adapters/responses.js";`
+- `export { chatToResponses, customToolNames, handleResponses, openAiSseToResponses, responsesToChat, responsesToolRegistry } from "./adapters/responses.js";`
+- `export type { ResponsesRequest, ResponsesToolKind, ResponsesToolRegistry } from "./adapters/responses.js";`
 - `export { FUSION_EVIDENCE_HEADER, FUSION_REPORT_HEADER, FUSION_RUN_ID_HEADER, FUSION_STATUS_HEADER, formatAnthropic, formatChat, formatResponses, promptFromAnthropic, promptFromChat, promptFromResponses, startFusionGateway } from "./fusion-gateway.js";`
 - `export type { ChatRequest, FrontDoorDialect, FrontDoorRunner, FrontDoorRunnerInput, FrontDoorRunnerResult, FusionGateway, FusionGatewayOptions } from "./fusion-gateway.js";`
 - `export { ACP_PROTOCOL_VERSION, runAcpAgent } from "./acp-agent.js";`
@@ -589,7 +605,7 @@ Claude Code tool integration entry point. It exposes launcher environment helper
 - `export const claudeTool: ToolIntegration ...`
 - `export { claudeCodeHarness, claudeCodeHarnessCredentialSkipReason, createClaudeCodeHarness } from "./harness.js";`
 - `export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./harness.js";`
-- `export { claudeEnv, launchClaude } from "./launch.js";`
+- `export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";`
 - `export { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";`
 - `export type { ClaudeDriverConfig } from "./driver.js";`
 
@@ -598,9 +614,10 @@ Claude Code tool integration entry point. It exposes launcher environment helper
 Codex tool integration entry point. It exposes the Codex launcher and ensemble harness adapter used by the FusionKit CLI.
 
 - `export const codexTool: ToolIntegration ...`
-- `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, createCodexHarness, defaultCodexRunner } from "./harness.js";`
+- `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, codexMemberCatalogJson, createCodexHarness, defaultCodexRunner, memberChatBackend } from "./harness.js";`
 - `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
-- `export { codexLaunchConfigToml, codexModelCatalogJson, launchCodex, readCodexCatalogTemplate } from "./launch.js";`
+- `export { codexAgentRoles, codexAgentRoleToml, codexLaunchConfigToml, codexModelCatalogJson, codexRoleDescription, launchCodex, readCodexCatalogTemplate } from "./launch.js";`
+- `export type { CodexAgentRole } from "./launch.js";`
 - `export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";`
 - `export type { CodexDriverConfig } from "./driver.js";`
 
@@ -615,6 +632,7 @@ Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cur
 - `export { startCursorBridge } from "./bridge.js";`
 - `export { CURSOR_AGENT_TOOL_MAX_ITERATIONS, CURSOR_AGENT_TOOL_POLICY, cursorBridgeEnv, cursorBridgeModelEnv, cursorIdeEnv, cursorIdeModelsJson } from "./bridge-config.js";`
 - `export { cursorIdeInstructions, cursorInstructions, launchCursor } from "./launch.js";`
+- `export { CURSOR_AGENTS_DIRNAME, cursorSubagentMarkdown, scaffoldCursorSubagents } from "./subagents.js";`
 - `export { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";`
 - `export type { CursorDriverConfig } from "./driver.js";`
 
@@ -634,7 +652,7 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, runCliCapture, sleep, spawnLogged, spawnTool, terminate, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
 - `export type { CliCaptureOptions, CliCaptureResult, LoggedChild, LoggedSpawnOptions } from "./proc.js";`
 - `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";`
-- `export type { ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
+- `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
 - `export { CURSOR_BRIDGE_MODEL_NAME, DEFAULT_ENSEMBLE_NAME, FUSION_PANEL_MODEL, fusionModelId, LOCAL_MODEL_LABEL } from "./constants.js";`

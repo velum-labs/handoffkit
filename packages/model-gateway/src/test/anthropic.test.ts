@@ -140,6 +140,30 @@ test("anthropicToChat maps system, tools, and tool results", () => {
   assert.equal(tools[0]?.function.name, "search");
 });
 
+test("anthropicToChat projects typed client tools but excludes server-executed tools", () => {
+  const chat = anthropicToChat(
+    {
+      model: "claude-x",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [
+        // Plain client tool (Claude Code's sub-agent door) — always projected.
+        { name: "Task", description: "spawn a sub-agent", input_schema: { type: "object" } },
+        // Anthropic-defined *client* tool: caller executes it via tool_use.
+        { type: "bash_20250124", name: "bash" },
+        // Server-executed tools: nothing behind the gateway can run them.
+        { type: "web_search_20250305", name: "web_search", max_uses: 5 } as never,
+        { type: "code_execution_20250522", name: "code_execution" }
+      ]
+    },
+    "local-model"
+  );
+  const tools = chat.tools as Array<{ function: { name: string } }>;
+  assert.deepEqual(
+    tools.map((tool) => tool.function.name),
+    ["Task", "bash"]
+  );
+});
+
 test("anthropicToChat groups parallel tool_use into one assistant message", () => {
   // Anthropic batches parallel tool calls as multiple tool_use blocks in a
   // single assistant message; they must stay one assistant message followed by

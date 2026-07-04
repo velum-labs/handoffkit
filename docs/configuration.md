@@ -60,6 +60,7 @@ includes per-field provenance).
 | `observe`         | boot the observability dashboard by default                        | `false` |
 | `onRateLimit`     | vendor rate-limit/credit handoff: `fusion` \| `passthrough` \| `fail` | `fusion` |
 | `budgetUsd`       | optional session spend cap in gateway-observed USD                 | unset |
+| `subagents`       | auto-provision one native sub-agent per ensemble in the launched tool | `true` |
 | `portless`        | route services through portless stable URLs                        | `true`  |
 | `port`            | fixed gateway port (else ephemeral)                                | ephemeral |
 | prompts           | hydrated from `.fusionkit/prompts/` (never stored inline)          | built-in |
@@ -135,29 +136,71 @@ Notes:
   with a warning (keyless members are dropped per ensemble) instead of failing
   the launch.
 
-### Sub-agents on a specific ensemble
+### Sub-agents on a specific ensemble (out of the box)
 
-Because each ensemble is just a model id, the tools' native sub-agent
-mechanisms work unchanged:
+Every launch auto-provisions **one native sub-agent per ensemble** in the
+launched tool, so "spawn a sub-agent on the deep ensemble" works with zero
+setup. Disable it all with `--no-subagents` (or `subagents: false` in
+`fusion.json`).
 
-- **Claude Code** — a custom agent file selects an ensemble via its aliased id
-  (Claude's picker filter requires a `claude` prefix; the gateway maps it back):
+- **Codex** — the ephemeral `CODEX_HOME` pins `[features] multi_agent = true`
+  and defines one `[agents.fusion-<name>]` role per ensemble (role config pins
+  `model = "fusion-<name>"`), so the model can `spawn_agent` on any ensemble
+  and `codex --profile fusion-deep` still works for whole sessions. Roles are
+  session-scoped; nothing touches `~/.codex`. If Codex rejects the generated
+  catalog or roles at startup (schema drift), the launcher retries without
+  them — fusion always still works.
+- **Claude Code** — the launcher passes a session-scoped `--agents` JSON with
+  one agent per ensemble (`model: claude-fusion-<name>`; Claude requires the
+  `claude` prefix and the gateway maps it back). Ask Claude to "use the
+  fusion-deep agent", or pass your own `--agents` — a user-supplied flag always
+  wins. Committed `.claude/agents/*.md` files keep working as before.
+- **Cursor** — Cursor only reads agent files from the repo, so the launcher
+  scaffolds `.cursor/agents/fusion-<name>.md` per ensemble (never overwriting
+  an existing file — edit and commit them to keep). Requires a recent
+  `cursor-agent`; older CLI versions have known Task-tool delegation bugs.
+- **opencode** — the ephemeral `opencode.json` defines one `subagent`-mode
+  agent per ensemble (invoke via the Task tool or `@fusion-<name>` mentions).
 
-  ```markdown
-  <!-- .claude/agents/deep-reviewer.md -->
-  ---
-  name: deep-reviewer
-  description: Reviews complex changes on the deep ensemble.
-  model: claude-fusion-deep
-  ---
-  You are a meticulous reviewer...
-  ```
+The plain model ids also keep working everywhere: `codex --profile
+fusion-deep`, Claude's `/model` picker (`claude-fusion-deep`),
+`cursor-agent --model fusion-deep`, and opencode's picker.
 
-- **Codex** — every ensemble gets a `[profiles.<model-id>]` entry and a model
-  catalog row, so `codex --profile fusion-deep` (or the in-session `/model`
-  picker) targets it.
-- **Cursor** — every ensemble appears in the model picker (IDE mode) / is
-  accepted by the bridge (`cursor-agent --model fusion-deep`).
+**Typed tools pass through the gateway losslessly.** Some front-door tools are
+declared by `type` instead of a name (Codex's `tool_search`, the door to its
+deferred multi-agent tools) — the gateway projects every *client-executed*
+typed tool to the fused model under its type as the function name, and emits
+the model's calls back as the tool's native item (`tool_search_call`), which is
+the shape the CLI dispatches. Server-executed tools (`web_search`, Anthropic's
+`web_search_*`/`code_execution_*`) are excluded from the fused turn since
+nothing behind the gateway can run them.
+
+For Codex specifically this means fused-turn spawning works through its
+**tool-discovery loop**: `spawn_agent` & co. are deferred, so the synthesizer
+first calls `tool_search` (one extra fused turn — candidates stay cached), the
+CLI executes the search client-side, and the gateway then advertises the
+discovered tools (with their namespace, which Codex's dispatch requires) on the
+follow-up turn, where the synthesizer calls `spawn_agent` on any
+`fusion-<name>` role.
+
+**Panel members** (the headless harnesses producing candidates) can spawn
+sub-agents too — on their own model *or on any fused ensemble*:
+
+- A Codex member's ephemeral home carries the multi-agent feature pin (depth 1,
+  at most 3 threads) and a model catalog listing its own model **plus every
+  `fusion-<name>` id**, so `spawn_agent(model: "fusion-kimi")` validates. The
+  member's capture gateway routes those fused requests to the front-door
+  fusion gateway; its own-model traffic keeps hitting its router endpoint.
+- A router-gateway Claude member gets one session-scoped `--agents` definition
+  per ensemble (same as the launcher), and its translation gateway routes the
+  `claude-fusion-*` agent models to the front door. Native-Anthropic members
+  (running directly against api.anthropic.com) stay same-model.
+
+Fused delegation is **one level deep by design**: a member's fused turn reaches
+the front door stamped with a panel-depth header, and the panel it fans out
+gets no fused access of its own (its members are same-model only) — so a
+misbehaving model can never recurse panels into a fork bomb. `--no-subagents` /
+`subagents: false` disables all of it.
 
 ### Default panels
 

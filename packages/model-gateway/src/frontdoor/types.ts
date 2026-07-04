@@ -47,6 +47,12 @@ export type FrontdoorRequestValue = {
   judgeSpanId: string;
   /** Whether the client asked for a streamed (SSE) response. */
   streaming: boolean;
+  /**
+   * Fusion panel depth of the caller (0 = user request; >= 1 = issued from
+   * inside a panel member, e.g. a member's fused sub-agent turn). Panel runs
+   * for depth >= 1 requests do not re-provision fused sub-agent access.
+   */
+  panelDepth?: number;
   /** Panel members to exclude this turn (WS5 failover drops the throttled vendor). */
   excludeModelIds?: readonly string[];
   /** A leading assistant content-delta notice (failover handoff). */

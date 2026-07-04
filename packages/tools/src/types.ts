@@ -24,6 +24,22 @@ export type ToolDashboardHarnessInput = {
 export type ToolLaunchMode = "fusion" | "local";
 
 /**
+ * One registered fused ensemble, as launchers need it to auto-provision the
+ * tool's native sub-agent for it: the ensemble name, the gateway model id it
+ * answers to, its panel member ids (for human-facing descriptions), and its
+ * judge model name.
+ */
+export type FusedEnsembleInfo = {
+  name: string;
+  /** Advertised gateway model id (`fusion-panel` / `fusion-<name>`). */
+  modelId: string;
+  /** Panel member ids (e.g. `kimi`, `qwen3`) for role/agent descriptions. */
+  memberIds: readonly string[];
+  /** The judge model name, when configured. */
+  judgeModel?: string;
+};
+
+/**
  * Everything a tool needs from the host to launch its real binary, injected so
  * tool packages never import the CLI (which would be a dependency cycle). The
  * host wires these to its process/portless/teardown machinery.
@@ -42,6 +58,21 @@ export type ToolLaunchContext = {
    * single-ensemble launches.
    */
   fusedModels?: readonly string[];
+  /**
+   * Every registered ensemble with the detail sub-agent auto-provisioning
+   * needs (session default first). Launchers use it to define one native
+   * sub-agent per ensemble (Codex `[agents.*]` roles, Claude `--agents`,
+   * Cursor `.cursor/agents/*.md`, opencode agent map). Absent in
+   * single-model/local launches.
+   */
+  fusedEnsembles?: readonly FusedEnsembleInfo[];
+  /**
+   * Auto-provision one native sub-agent per ensemble in the launched tool.
+   * Default true; `--no-subagents` (or `subagents: false` in .fusionkit)
+   * disables every launcher's sub-agent provisioning, including repo file
+   * scaffolds.
+   */
+  subagents?: boolean;
   /**
    * Native panel model ids exposed alongside the fused model, so a tool that
    * must enumerate models in its config (e.g. opencode) can list them in its

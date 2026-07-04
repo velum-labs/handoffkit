@@ -50,7 +50,9 @@ export const claudeTool: ToolIntegration = {
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
       ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
       ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
-      ...(options.turn !== undefined ? { turn: options.turn } : {})
+      ...(options.turn !== undefined ? { turn: options.turn } : {}),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+      ...(options.fusedSubagents !== undefined ? { fusedSubagents: options.fusedSubagents } : {})
     }),
   harness: {
     harnessKind: "claude_code",
@@ -130,6 +132,6 @@ export {
   createClaudeCodeHarness
 } from "./harness.js";
 export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./harness.js";
-export { claudeEnv, launchClaude } from "./launch.js";
+export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";
 export { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";
 export type { ClaudeDriverConfig } from "./driver.js";

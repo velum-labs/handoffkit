@@ -24,6 +24,7 @@ export {
 export {
   buildPanelPrompt,
   createFusionKitJudgeSynthesizer,
+  panelCandidateContract,
   runFusionPanelWorkflow,
   runFusionPanels,
   runUnifiedHarnessE2E,
@@ -32,6 +33,8 @@ export {
 export type {
   CursorHarnessRunnerInput,
   CursorHarnessRunnerResult,
+  FusedSubagentAccess,
+  FusedSubagentEnsemble,
   FusionPanelOptions,
   PanelTrust,
   ToolHarnessProvider,

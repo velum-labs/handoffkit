@@ -16,6 +16,7 @@ import {
 } from "@fusionkit/ensemble";
 import type {
   EnsembleModel,
+  FusedSubagentAccess,
   PanelTrust,
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
@@ -137,6 +138,12 @@ export type GatewayRunnerConfig = {
    * side-effects-derived confinement.
    */
   panelTrust?: PanelTrust;
+  /**
+   * Enable same-model sub-agents inside panel members (a member may
+   * parallelize its own work; children reuse its model/endpoint). Default on;
+   * `--no-subagents` / `subagents: false` turns it off.
+   */
+  subagents?: boolean;
   /**
    * Reasoning traces: narrate panel/judge progress into a streaming fused
    * turn's response (rendered by the tool's native thinking UI). Default on.
@@ -402,6 +409,31 @@ export async function startFusionStepGateway(input: {
   // fused model id the backend resolved the request to.
   const ensemblesByModelId = new Map(ensembles.map((ensemble) => [ensemble.modelId, ensemble]));
 
+  // This gateway's own URL, known once it is listening (below). Panel members
+  // get it as their fused sub-agent door: their harnesses route `fusion-*`
+  // requests back here (stamped with the panel depth) so a member can spawn
+  // sub-agents on any registered ensemble.
+  let selfGatewayUrl: string | undefined;
+  const fusedSubagentsFor = (panelDepth: number): FusedSubagentAccess | undefined => {
+    // One level of fused delegation only: a member's fused sub-agent turn
+    // (depth >= 1) fans out a plain panel whose members are same-model-only.
+    if (panelDepth > 0) return undefined;
+    if (config.subagents === false) return undefined;
+    if (selfGatewayUrl === undefined || ensembles.length === 0) return undefined;
+    return {
+      gatewayUrl: selfGatewayUrl,
+      ensembles: ensembles.map((ensemble) => ({
+        name: ensemble.name,
+        modelId: ensemble.modelId,
+        memberIds: ensemble.models.map((model) => model.id),
+        ...(ensemble.judgeModelName !== undefined ? { judgeModel: ensemble.judgeModelName } : {})
+      })),
+      defaultModelId: defaultModel,
+      ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
+      depth: panelDepth + 1
+    };
+  };
+
   // Native multi-turn: one resume-cursor map per conversation (keyed by
   // session), each holding a cursor per panel model. When the harness-driver
   // cutover flag is on, a follow-up turn resumes each member's native session
@@ -427,6 +459,7 @@ export async function startFusionStepGateway(input: {
     turn,
     ensembleModelId,
     excludeModelIds,
+    panelDepth,
     signal
   }) => {
     // The resolved ensemble's members fan out (the union is only the router
@@ -499,6 +532,11 @@ export async function startFusionStepGateway(input: {
         stragglerGraceMs: config.stragglerGraceMs ?? DEFAULT_STRAGGLER_GRACE_MS,
         ...(config.panelIdentity !== undefined ? { panelIdentity: config.panelIdentity } : {}),
         ...(config.panelTrust !== undefined ? { panelTrust: config.panelTrust } : {}),
+        ...(config.subagents !== undefined ? { subagents: config.subagents } : {}),
+        ...((): { fusedSubagents?: FusedSubagentAccess } => {
+          const fusedSubagents = fusedSubagentsFor(panelDepth ?? 0);
+          return fusedSubagents !== undefined ? { fusedSubagents } : {};
+        })(),
         ...(harnessSystem !== undefined ? { harnessSystem } : {}),
         ...(driversEnabled ? { resumeCursors: resumeCursorsFor(sessionKey) } : {})
       });
@@ -592,12 +630,14 @@ export async function startFusionStepGateway(input: {
     // config.resolved_judge_model, so omitting this keeps routing correct while
     // the judge gap-analysis still runs on the configured judge.
   });
-  return await startGateway({
+  const gateway = await startGateway({
     backend,
     host: input.host,
     port: input.port,
     ...(input.authToken !== undefined ? { authToken: input.authToken } : {})
   });
+  selfGatewayUrl = gateway.url();
+  return gateway;
 }
 
 export async function startConfiguredGateway(input: {

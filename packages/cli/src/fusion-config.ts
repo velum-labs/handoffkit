@@ -125,6 +125,11 @@ export type FusionConfig = {
    */
   reasoningModel?: string;
   /**
+   * Auto-provision one native sub-agent per ensemble in the launched tool
+   * (Codex roles, Claude --agents, Cursor/opencode agent files). Default on.
+   */
+  subagents?: boolean;
+  /**
    * Default-ensemble prompt overrides, loaded from the flat
    * `.fusionkit/prompts/*.md` files. Not stored inline in `fusion.json` — it is
    * hydrated from the prompt files on load. Per-ensemble overrides live on each
@@ -430,6 +435,12 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
       throw new FusionConfigError(`${source}: reasoningModel must be a non-empty string`);
     }
     config.reasoningModel = raw.reasoningModel;
+  }
+  if (raw.subagents !== undefined) {
+    if (typeof raw.subagents !== "boolean") {
+      throw new FusionConfigError(`${source}: subagents must be a boolean`);
+    }
+    config.subagents = raw.subagents;
   }
   return config;
 }

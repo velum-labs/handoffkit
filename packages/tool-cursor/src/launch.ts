@@ -7,6 +7,7 @@ import type { ToolLaunchContext } from "@fusionkit/tools";
 
 import { cursorIdeEnv } from "./bridge-config.js";
 import { startCursorBridge } from "./bridge.js";
+import { scaffoldCursorSubagents } from "./subagents.js";
 
 /** Human-facing setup for the turnkey Cursor IDE (desktop proxy) flow. */
 export function cursorIdeInstructions(model: string): string {
@@ -160,6 +161,15 @@ async function launchCursorIde(ctx: ToolLaunchContext): Promise<number> {
 
 /** Boot Cursor, branching on whether it backs the fusion panel or a local model. */
 export async function launchCursor(ctx: ToolLaunchContext): Promise<number> {
+  // OOTB sub-agents: Cursor only reads agent definitions from the repo's
+  // `.cursor/agents/`, so scaffold one per ensemble (idempotent — existing
+  // files are never overwritten) in every launch mode before the spawn.
+  if (ctx.subagents !== false && ctx.fusedEnsembles !== undefined && ctx.fusedEnsembles.length > 0) {
+    scaffoldCursorSubagents(ctx.repo ?? process.cwd(), ctx.fusedEnsembles, {
+      defaultModelId: ctx.modelLabel,
+      log: ctx.log
+    });
+  }
   if (ctx.ide === true) {
     return await launchCursorIde(ctx);
   }

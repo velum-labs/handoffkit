@@ -66,19 +66,34 @@ def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
 
 
 def _to_tools(tools: Any) -> list[dict[str, Any]] | None:
+    """Flatten tool defs like the fusion server's ``_normalize_tools``: nested
+    or flat function tools keep their name, typed nameless tools (e.g.
+    ``{type: "tool_search"}``) are projected under their type, and entries with
+    no resolvable identity are skipped (never emitted with ``name: ""``, which
+    providers reject)."""
     if not tools:
         return None
     converted = []
     for entry in tools:
+        if not isinstance(entry, dict):
+            continue
         function = entry.get("function", entry)
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name", "")
+        if not (isinstance(name, str) and name):
+            kind = entry.get("type", "")
+            name = kind if isinstance(kind, str) and kind not in ("", "function", "custom") else ""
+        if not name:
+            continue
         converted.append(
             {
-                "name": function.get("name", ""),
+                "name": name,
                 "description": function.get("description", ""),
                 "parameters": function.get("parameters", {"type": "object", "properties": {}}),
             }
         )
-    return converted
+    return converted or None
 
 
 async def _astream_sse(

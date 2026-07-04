@@ -131,5 +131,10 @@ export {
   cursorIdeModelsJson
 } from "./bridge-config.js";
 export { cursorIdeInstructions, cursorInstructions, launchCursor } from "./launch.js";
+export {
+  CURSOR_AGENTS_DIRNAME,
+  cursorSubagentMarkdown,
+  scaffoldCursorSubagents
+} from "./subagents.js";
 export { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";
 export type { CursorDriverConfig } from "./driver.js";
