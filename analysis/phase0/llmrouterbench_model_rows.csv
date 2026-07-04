@@ -1,0 +1,34 @@
+model,pool,base_group,coding_rows,datasets,freshness
+Claude-sonnet-4,performance-cost,anthropic/claude-sonnet-4 family,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Gemini-2.5-flash,performance-cost,google/gemini-2.5-flash,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Gemini-2.5-pro,performance-cost,google/gemini-2.5-pro,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+GPT-5-chat,performance-cost,openai/gpt-5 family,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+GPT-5-medium,performance-cost,openai/gpt-5 family,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Qwen3-235b-a22b-2507,performance-cost,,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Qwen3-235b-a22b-thinking-2507,performance-cost,,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Deepseek-v3-0324,performance-cost,deepseek/deepseek-v3-chat,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Deepseek-v3.1-terminus,performance-cost,deepseek/deepseek-v3-chat,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Deepseek-r1-0528,performance-cost,,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+GLM-4.6,performance-cost,,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Kimi-k2-0905,performance-cost,moonshot/kimi-k2 family,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+Intern-s1,performance-cost,,1555,LiveCodeBench=1055; SWE-Bench=500,README Apr 2026 / HF bundle current at collection
+DeepHermes-3-Llama-3-8B-Preview,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+DeepSeek-R1-0528-Qwen3-8B,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+DeepSeek-R1-Distill-Qwen-7B,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Fin-R1,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+GLM-Z1-9B-0414,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Intern-S1-mini,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Llama-3.1-8B-Instruct,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Llama-3.1-8B-UltraMedical,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Llama-3.1-Nemotron-Nano-8B-v1,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+MiMo-7B-RL-0530,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+MiniCPM4.1-8B,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+NVIDIA-Nemotron-Nano-9B-v2,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+OpenThinker3-7B,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Qwen2.5-Coder-7B-Instruct,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Qwen3-8B,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Cogito-v1-preview-llama-8B,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Gemma-2-9b-it,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Glm-4-9b-chat,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Granite-3.3-8b-instruct,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection
+Internlm3-8b-instruct,performance,,2193,HumanEval=164; MBPP=974; LiveCodeBench=1055,README Apr 2026 / HF bundle current at collection

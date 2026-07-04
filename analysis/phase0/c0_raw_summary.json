@@ -1,0 +1,46 @@
+{
+  "generated_at": "2026-07-04T07:54:28.656724+00:00",
+  "elapsed_seconds": 10.02,
+  "livebench": {
+    "total_rows": 60372,
+    "distinct_models": 195,
+    "split_examples": 60372,
+    "parquet_urls": [
+      "https://huggingface.co/datasets/livebench/model_judgment/resolve/refs%2Fconvert%2Fparquet/default/leaderboard/0000.parquet"
+    ]
+  },
+  "livebench_categories": [
+    {
+      "category": "language",
+      "rows": 31179
+    },
+    {
+      "category": "coding",
+      "rows": 21541
+    },
+    {
+      "category": "instruction_following",
+      "rows": 7652
+    }
+  ],
+  "terminalbench": {
+    "total_rows": 52104,
+    "distinct_models": 49,
+    "distinct_agents": 26,
+    "split_examples": 52104,
+    "parquet_urls": [
+      "https://huggingface.co/datasets/yoonholee/terminalbench-trajectories/resolve/refs%2Fconvert%2Fparquet/default/train/0000.parquet",
+      "https://huggingface.co/datasets/yoonholee/terminalbench-trajectories/resolve/refs%2Fconvert%2Fparquet/default/train/0001.parquet"
+    ]
+  },
+  "counts": {
+    "deployable_models": 31,
+    "deployable_groups": 17,
+    "swebench_submissions": 235,
+    "llmrouterbench_models": 33,
+    "livebench_models": 195,
+    "terminalbench_agent_models": 109,
+    "bigcodebench_release_assets": 10,
+    "bigcodebench_model_suites": 351
+  }
+}
