@@ -1,9 +1,47 @@
 # Coding Capability Index — Implementation Specification
 
-**Status:** proposal, ready to implement
+**Status:** Phase 0 executed 2026-07-04 — **build the reduced scope only**
+(see the addendum below and `phase0-validation-report.md`)
 **Audience:** an engineer with no prior context on this project
 **Deliverable:** a Python workspace package (`capability-index`) plus
 integration glue into the existing `fusionkit-evals` benchmark stack
+
+---
+
+## ⚠ Post-validation addendum (read before implementing)
+
+The §19 Phase-0 validation study was executed (all four checkpoints, plus
+two follow-up experiments; full results in
+`docs/fusion/phase0-validation-report.md`, program history in
+`docs/fusion/capability-index-program.md`). The verdicts bind this spec:
+
+| Checkpoint | Result | Consequence for this spec |
+|---|---|---|
+| C0 coverage | PARTIAL | Sources S2/S5/S6 confirmed viable; S1 unproven; frontier coverage is A−/variant-level |
+| C1 existence | PASS | Complementarity math (§11.3) validated on real data |
+| C2 selection value | **FAIL — settled** (incl. V-objective re-test) | **§11.4's public-prior panel *ranking* paths are cancelled.** Public data retains shortlist-and-veto authority only |
+| C3 transfer | PASS revised | Sign transfer 10/10 held; headroom evidence was a truncation artifact; the tested slice is lopsided |
+
+Binding scope changes:
+
+1. **Build the reduced index**: warehouse core (§5–§10, §13), shortlist +
+   pair-veto analytics, evidence-report cards only. Panel *selection*
+   authority lives exclusively in the calibration loop (§15), which is
+   promoted from validator to primary engine.
+2. **Cancel/defer**: greedy/exhaustive public-prior panel ranking (§11.4
+   beyond veto duty), aggregate-proxy diversity fallback, S1/S9 ingestion,
+   the learned router (§16 stage 2).
+3. **New measurement requirements** learned from the truncation incident:
+   any calibration run MUST record completion-budget truncation per row and
+   refuse pass-rate claims for models whose truncation rate exceeds ~10%;
+   thinking models need ≥16k (often ≥32k) completion budgets.
+4. The first calibration round targets **agentic/repo tasks and
+   synthesis-style fusion**, not single-shot algorithmic slices (that
+   routing question is answered: lopsided → don't fuse).
+
+The remainder of the document is preserved as written (including the parts
+now descoped) as the reference design; implementers follow the addendum
+where they conflict.
 
 ---
 
