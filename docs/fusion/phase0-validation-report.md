@@ -3,7 +3,19 @@
 **Executes:** §19 Phase 0 of `docs/fusion/capability-index-spec.md`
 **Analysis artifacts:** `analysis/phase0/` (this document is the decision
 record; the per-checkpoint reports hold the full tables and methods)
-**Billed spend:** $6.41 of the $60 pilot cap ($250 recommended ceiling)
+**Billed spend:** $5.56 by ledger (`c3_spend_ledger.jsonl`, charged-cost sum;
+the pilot report's $6.41 figure came from a metrics-side aggregation that
+double-counts some OpenRouter estimates — the discrepancy is conservative)
+of the $60 pilot cap ($250 recommended ceiling)
+
+**Independent verification:** all decision-driving numbers in this document
+were recomputed from the committed CSV/JSON artifacts by a second pass
+(per-model pass rates + Wilson CIs, panel oracle/headroom, bootstrap CIs,
+capture, spend ledger); the C3 script was audited to confirm it grades via
+the real `fusionkit-evals` path (`verify_solution` + `LocalSandbox` +
+`extract_code` over `livecodebench_data` tasks), and the C2 pre-registration
+was checked for consistency with the executed analysis (one recorded
+deviation: a base-engine parser correction).
 
 ---
 
@@ -13,7 +25,7 @@ record; the per-checkpoint reports hold the full tables and methods)
 |---|---|---|---|
 | **C0** — coverage | Do deployable models have per-task public data? | **PARTIAL** | Terminal-Bench covers the deployable agentic frontier (52k trial rows, GPT-5.5/Opus-4.x/Gemini-3-class systems); LLMRouterBench covers near-deployable variants at tier A; LiveBench/BigCodeBench lag the frontier |
 | **C1** — existence | Do strong systems make complementary errors? | **PASS** | Headroom over best single: +9.0pp CI [+6.5, +12.5] (SWE-bench Verified, system-level); +12.3pp [+7.6, +14.9] (Terminal-Bench); +11.3pp [+9.3, +12.2] (LLMRouterBench LCB, tier A); floors met |
-| **C2** — selection value | Does complementarity-selected beat top-K-by-average out of sample? | **INCONCLUSIVE / FAIL** | No held-out Δ_oracle CI lower bound > 0 anywhere; SWE-bench Verified outright negative (−3.0pp CI [−3.7, −2.1]) |
+| **C2** — selection value | Does complementarity-selected beat top-K-by-average out of sample? | **INCONCLUSIVE / FAIL** (see caveat) | No held-out Δ_oracle CI lower bound > 0 anywhere; SWE-bench Verified outright negative (−3.0pp CI [−3.7, −2.1]) |
 | **C3** — transfer | Does public signal transfer to our harness? | **PASS** | Pre-named panels: +7.0pp headroom CI [+1.7, +10.5] (P1/P3), +5.1pp [0.0, +12.5] (P2) on 60 LCB tasks × 5 models; failure-dependence sign agreement public↔calibrated **10/10**; judged replay beat best single (38.6% vs 28.1%) |
 
 Sources: `analysis/phase0/c0_coverage.md`, `c1_c2_report.md`,
@@ -34,6 +46,16 @@ Sources: `analysis/phase0/c0_coverage.md`, `c1_c2_report.md`,
    beat the dumb top-K-by-average baseline out of sample anywhere in public
    data, and lost outright on SWE-bench Verified. Oracle-on-train selection
    overfits; average-score selection is a genuinely strong baseline.
+   **Verification caveat on C2's scope:** the pre-registered selector was
+   *oracle(S)-only*, which happily picks weak-but-decorrelated systems
+   (e.g. `MCTS-Refine-7B`, `Fin-R1` appear in its chosen panels). The
+   spec's actual objective `V(S) = best_pass + capture×headroom` penalizes
+   weak members and was **not** tested. C2's verdict is strong evidence
+   against oracle-max selection, weaker evidence against V-selection. A
+   V-selection re-test on the same cached data is free and should run
+   before C2 is treated as fully settled — though the descope decision
+   below does not depend on it (shortlist-and-veto authority is justified
+   either way).
 3. **Coverage is adequate for priors, inadequate for authority.** The
    deployable frontier appears in public per-task data mostly as
    scaffold-confounded A− rows (Terminal-Bench, SWE-bench submissions) or
@@ -84,10 +106,15 @@ the measured best single is `gpt-5.5` (48.3% pass@1 on the C3 slice), and
 `P2 = {gpt-5.5, claude-sonnet-4-6, deepseek-chat}` had the highest measured
 oracle (54.2%, headroom +5.1pp). The committed product default panel
 (`kimi-k2-thinking` + `qwen3-coder`, per `.fusionkit/fusion.json`) measured
-far below it (oracle 35.1%, and kimi-k2-thinking passed only 5.2% single-shot
-on this slice — partly a thinking-budget/extraction artifact worth
-investigating before drawing conclusions). A calibrated re-check of the
-default panel is warranted.
+far below it (oracle 35.1%). **The kimi-k2-thinking 5.2% figure is a
+confirmed measurement artifact, not model weakness:** verification found
+51 of its 58 completions hit the run's 4096 `max_tokens` cap — the thinking
+budget consumed the window before code was emitted, so extraction failed.
+(GPT-5.5 also truncated on 26/60 but emits code early enough to pass.)
+Consequences: P1/P3 headroom is *understated*, the P1 capture measurement is
+polluted, and no conclusion about the committed default panel is valid until
+the slice is re-run with a materially larger completion budget for thinking
+models. That re-run is the cheapest highest-value follow-up (~$5).
 
 ## Layer-3 signal decision (pre-work item, §Phase-0)
 
@@ -112,16 +139,19 @@ unknown ($1–10/task estimated) and is blocked on harness work, not budget.
 
 ## Immediate next steps
 
-1. Harden the C3 pilot script into `calibration.py` + the
-   `CandidateBank → tier-CAL` adapter (spec §15.3) and re-run on a 150-task
-   two-slice design (spec §15.1) with the P2 panel and a proper judge
-   protocol — this is the first *real* calibration round.
-2. Investigate the kimi-k2-thinking single-shot collapse (extraction/
-   token-budget artifact vs real weakness) before any conclusion about the
-   committed default panel.
-3. Start M1 (reduced warehouse) with the three sources that produced
+1. **Re-run the C3 slice with a larger completion budget** (≥ 16k tokens
+   for thinking models) — fixes the confirmed kimi truncation artifact and
+   yields the first valid read on the committed default panel (~$5).
+2. **Re-test C2 with V-selection** (`best_pass + capture×headroom`) on the
+   already-cached public matrices — free, and closes the verification
+   caveat on C2's scope.
+3. Harden the C3 pilot script into `calibration.py` + the
+   `CandidateBank → tier-CAL` adapter (spec §15.3) and run the first real
+   150-task two-slice calibration round (spec §15.1) with the P2 panel and
+   a proper judge protocol.
+4. Start M1 (reduced warehouse) with the three sources that produced
    evidence in this study; port the Phase-0 scripts as the reference
    implementations.
-4. Harness work for repo_bugfix calibration (HandoffKit patch-and-test
+5. Harness work for repo_bugfix calibration (HandoffKit patch-and-test
    path) — the highest-value unlock, since repo tasks are the product's
    core and the public A− data is densest there.
