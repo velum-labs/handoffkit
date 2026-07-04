@@ -176,7 +176,12 @@ def model_specs(model_ids: Sequence[str], *, sonnet_model: str | None = None) ->
     return specs
 
 
-def fusion_config(specs: Sequence[EndpointSpec], *, max_tokens: int) -> FusionConfig:
+def fusion_config(
+    specs: Sequence[EndpointSpec],
+    *,
+    max_tokens: int,
+    request_timeout_s: float = 180.0,
+) -> FusionConfig:
     endpoints = [
         ModelEndpoint(
             id=spec.endpoint_id,
@@ -189,7 +194,7 @@ def fusion_config(specs: Sequence[EndpointSpec], *, max_tokens: int) -> FusionCo
                 output_per_1m_tokens=spec.output_price,
             ),
             max_context=spec.max_context,
-            timeout_s=180.0,
+            timeout_s=request_timeout_s,
         )
         for spec in specs
     ]
@@ -364,9 +369,39 @@ def read_task_manifest(path: Path) -> dict[str, dict[str, Any]]:
     return {str(row["task_id"]): row for row in data["tasks"]}
 
 
+def read_task_manifest_ids(path: Path) -> list[str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return [str(row["task_id"]) for row in data["tasks"]]
+
+
+def prepared_tasks_from_bank(
+    path: Path,
+    *,
+    manifest: Path,
+    subset: int,
+) -> list[dict[str, Any]]:
+    bank = CandidateBank.model_validate_json(path.read_text(encoding="utf-8"))
+    bank_ids = [task.task_id for task in bank.tasks]
+    manifest_ids = read_task_manifest_ids(manifest)
+    if bank_ids != manifest_ids:
+        raise ValueError(
+            f"source bank task ids do not match manifest: {len(bank_ids)} bank ids, "
+            f"{len(manifest_ids)} manifest ids"
+        )
+    return [
+        {
+            "task_id": task.task_id,
+            "prompt": task.prompt,
+            "tests": task.tests,
+            "difficulty": task.difficulty,
+        }
+        for task in bank.tasks[:subset]
+    ]
+
+
 async def provider_smoke(args: argparse.Namespace) -> int:
     specs = model_specs(args.models.split(","), sonnet_model=args.sonnet_model)
-    config = fusion_config(specs, max_tokens=16)
+    config = fusion_config(specs, max_tokens=16, request_timeout_s=args.request_timeout_s)
     clients = build_clients(config)
     endpoints = endpoint_by_id(config)
     rows = []
@@ -408,14 +443,21 @@ async def provider_smoke(args: argparse.Namespace) -> int:
 
 async def build_bank(args: argparse.Namespace) -> int:
     specs = model_specs(args.models.split(","), sonnet_model=args.sonnet_model)
-    config = fusion_config(specs, max_tokens=args.max_tokens)
+    config = fusion_config(
+        specs,
+        max_tokens=args.max_tokens,
+        request_timeout_s=args.request_timeout_s,
+    )
     clients = build_clients(config)
     engine = FusionEngine(config, clients)
     endpoints = endpoint_by_id(config)
     sandbox = LocalSandbox()
-    problems = selected_problem_rows(args.subset, min_date=args.min_date, version=args.version)
-    write_task_manifest(args.tasks, problems, version=args.version)
-    prepared = prepare_tasks(problems, max_tests=args.max_tests)
+    if args.source_bank is not None:
+        prepared = prepared_tasks_from_bank(args.source_bank, manifest=args.tasks, subset=args.subset)
+    else:
+        problems = selected_problem_rows(args.subset, min_date=args.min_date, version=args.version)
+        write_task_manifest(args.tasks, problems, version=args.version)
+        prepared = prepare_tasks(problems, max_tests=args.max_tests)
     signature = hashlib.sha256(
         json.dumps(
             {
@@ -848,38 +890,43 @@ def public_mapping_note(left: str, right: str) -> str:
 async def capture(args: argparse.Namespace) -> int:
     bank = CandidateBank.model_validate_json(args.bank.read_text(encoding="utf-8"))
     outcomes = read_outcomes(args.outcomes)
+    panel_members = PANELS[args.panel_id]
     succeeded = {
         row["task_id"]
         for row in outcomes
-        if row["endpoint_id"] in PANELS["P1_public_complementarity"]
+        if row["endpoint_id"] in panel_members
         and row["call_status"] == "succeeded"
     }
     counts = defaultdict(int)
     for row in outcomes:
         if (
-            row["endpoint_id"] in PANELS["P1_public_complementarity"]
+            row["endpoint_id"] in panel_members
             and row["call_status"] == "succeeded"
         ):
             counts[row["task_id"]] += 1
-    task_ids = {task_id for task_id in succeeded if counts[task_id] == 3}
+    task_ids = {task_id for task_id in succeeded if counts[task_id] == len(panel_members)}
     tasks = [
         task.model_copy(
             update={
                 "candidates": [
                     candidate
                     for candidate in task.candidates
-                    if candidate.model_id in PANELS["P1_public_complementarity"]
+                    if candidate.model_id in panel_members
                 ]
             }
         )
         for task in bank.tasks
         if task.task_id in task_ids
     ]
-    replay_models = list(PANELS["P1_public_complementarity"])
+    replay_models = list(panel_members)
     if args.judge_id not in replay_models:
         replay_models.append(args.judge_id)
     specs = model_specs(replay_models, sonnet_model=args.sonnet_model)
-    config = fusion_config(specs, max_tokens=args.max_tokens)
+    config = fusion_config(
+        specs,
+        max_tokens=args.max_tokens,
+        request_timeout_s=args.request_timeout_s,
+    )
     clients = build_clients(config)
     tracked = {
         model_id: CostTrackingClient(clients[model_id], config.endpoint_for(model_id))
@@ -915,7 +962,7 @@ async def capture(args: argparse.Namespace) -> int:
     oracle = 0.0
     if tasks:
         model_rates = []
-        for model_id in PANELS["P1_public_complementarity"]:
+        for model_id in panel_members:
             vals = [
                 int(candidate.passed)
                 for task in tasks
@@ -931,7 +978,8 @@ async def capture(args: argparse.Namespace) -> int:
     if oracle > best:
         capture_value = (evaluation.score - best) / (oracle - best)
     payload = {
-        "panel": "P1_public_complementarity",
+        "panel": args.panel_id,
+        "members": panel_members,
         "judge_id": args.judge_id,
         "mode": "judge_select_best_replay",
         "n": len(tasks),
@@ -1069,6 +1117,7 @@ def parser() -> argparse.ArgumentParser:
     build.add_argument("--bank", type=Path, default=DEFAULT_BANK)
     build.add_argument("--outcomes", type=Path, default=DEFAULT_OUTCOMES)
     build.add_argument("--tasks", type=Path, default=DEFAULT_TASKS)
+    build.add_argument("--source-bank", type=Path, default=None)
     analyze_parser = sub.add_parser("analyze")
     analyze_parser.add_argument("--outcomes", type=Path, default=DEFAULT_OUTCOMES)
     analyze_parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER)
@@ -1081,6 +1130,11 @@ def parser() -> argparse.ArgumentParser:
     capture_parser.add_argument("--outcomes", type=Path, default=DEFAULT_OUTCOMES)
     capture_parser.add_argument("--output", type=Path, default=DEFAULT_CAPTURE)
     capture_parser.add_argument("--judge-id", default="kimi")
+    capture_parser.add_argument(
+        "--panel-id",
+        choices=sorted(PANELS),
+        default="P1_public_complementarity",
+    )
     capture_parser.add_argument("--cache-dir", type=Path, default=CACHE / "c3_capture_cache")
     capture_parser.add_argument("--test-timeout-s", type=float, default=8.0)
     return root
@@ -1090,6 +1144,7 @@ def add_common(command: argparse.ArgumentParser) -> None:
     command.add_argument("--models", default="gpt55,sonnet,kimi,deepseek,qwen3")
     command.add_argument("--sonnet-model", default=None)
     command.add_argument("--max-tokens", type=int, default=4096)
+    command.add_argument("--request-timeout-s", type=float, default=180.0)
     command.add_argument("--concurrency", type=int, default=1)
     command.add_argument("--phase", default="c3")
     command.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER)
