@@ -39,9 +39,14 @@ function jsonError(code: string, message: string, details?: string[]): never {
 main().catch((error: unknown) => {
   if (error instanceof PolicyDeniedError) {
     if (isJsonMode()) jsonError("policy-denied", "policy denied (fail closed)", [...error.reasons]);
-    uiStream().write(`POLICY DENIED (fail closed):\n`);
-    for (const reason of error.reasons) uiStream().write(`  - ${reason}\n`);
-    process.exit(2);
+    exitWithCliError(
+      new CliError({
+        code: "policy-denied",
+        message: "policy denied (fail closed)",
+        details: [...error.reasons],
+        exitCode: 2
+      })
+    );
   }
   if (error instanceof PreflightError) {
     if (isJsonMode()) jsonError("preflight", error.message);
