@@ -417,7 +417,7 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
               ? {
                   error: {
                     kind: "provider_error" as const,
-                    message: result.reason ?? "Claude CLI run failed.",
+                    message: result.reason || "Claude CLI run failed.",
                     retryable: false
                   }
                 }
@@ -428,7 +428,7 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
           ? {
               error: {
                 kind: "provider_error" as const,
-                message: result.reason ?? "Claude CLI run failed.",
+                message: result.reason || "Claude CLI run failed.",
                 retryable: false
               }
             }

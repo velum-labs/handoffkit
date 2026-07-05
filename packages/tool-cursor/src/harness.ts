@@ -360,9 +360,12 @@ async function driveCursorAgentPrint(input: {
     exitCode: result.exitCode,
     ...(status === "failed"
       ? {
+          // Never an empty string: the protocol schema rejects empty
+          // error.message, and a killed cursor-agent can leave stderr blank.
           reason: parsed.isError
             ? parsed.finalOutput || "cursor-agent reported an error"
-            : result.stderr.slice(0, 500)
+            : result.stderr.trim().slice(0, 500) ||
+              `cursor-agent exited with code ${result.exitCode}`
         }
       : {})
   };
@@ -552,7 +555,7 @@ export function createCursorHarness(
               ? {
                   error: {
                     kind: "provider_error",
-                    message: result.reason ?? "Cursor run failed.",
+                    message: result.reason || "Cursor run failed.",
                     retryable: false
                   }
                 }
@@ -563,7 +566,7 @@ export function createCursorHarness(
           ? {
               error: {
                 kind: "provider_error",
-                message: result.reason ?? "Cursor run failed.",
+                message: result.reason || "Cursor run failed.",
                 retryable: false
               }
             }

@@ -570,6 +570,38 @@ test("generic ensemble descriptor swaps mock harness for Codex harness", async (
   }
 });
 
+// Regression: a candidate that dies with a blank stderr (e.g. a straggler
+// aborted after the grace window, killed via SIGINT) used to produce
+// error.message = "" and fail the whole run at contract validation with
+// "error.message must be a non-empty string".
+test("a failed run with empty stderr still yields a valid candidate record", async () => {
+  const { outputRoot, cleanup } = tempOutputRoot();
+  const runner: CodexExecRunner = () => ({
+    stdout: "",
+    stderr: "",
+    exitCode: 130,
+    aborted: true,
+    abortReason: "straggler_abandoned"
+  });
+
+  try {
+    const result = await ensemble.run(
+      descriptor(outputRoot, {
+        harness: codexHarness({ env: { CODEX_API_KEY: "test-key" }, runner })
+      })
+    );
+
+    assert.equal(result.candidates[0]?.status, "failed");
+    assert.equal(result.candidates[0]?.error?.kind, "provider_error");
+    assert.equal(
+      result.candidates[0]?.error?.message,
+      "Codex CLI run aborted (straggler_abandoned)."
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test("defaultCodexRunner captures stdout/stderr and exit code from a real process", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "codex-runner-"));
   const stubCli = join(workdir, "codex-stub");

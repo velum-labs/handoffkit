@@ -487,6 +487,23 @@ function writeCodexHome(input: {
  * (interrupt/abort) even though the exit code is 0. Persisted into the session
  * record so early stops are attributable from the trace UI.
  */
+/**
+ * Human-readable failure message for a failed codex run. Never empty: the
+ * protocol's harness-candidate-record schema rejects empty `error.message`,
+ * and an aborted CLI (e.g. a straggler dropped after the grace window) often
+ * dies with SIGINT and a blank stderr.
+ */
+export function codexFailureMessage(result: CodexExecResult, endReason: HarnessEndReason): string {
+  if (result.timedOut === true) return "Codex CLI timed out.";
+  const stderr = result.stderr.trim().slice(0, 500);
+  if (stderr.length > 0) return stderr;
+  if (result.aborted === true) {
+    return `Codex CLI run aborted (${result.abortReason ?? "aborted"}).`;
+  }
+  if (endReason.detail !== undefined && endReason.detail.length > 0) return endReason.detail;
+  return `Codex CLI exited with code ${result.exitCode}.`;
+}
+
 export function codexEndReason(result: CodexExecResult): HarnessEndReason {
   let sawTurnCompleted = false;
   let failureDetail: string | undefined;
@@ -884,6 +901,14 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         const status: HarnessCandidateOutput["status"] =
           result.exitCode === 0 && result.timedOut !== true ? "succeeded" : "failed";
         const endReason = codexEndReason(result);
+        const failureError =
+          status === "failed"
+            ? {
+                kind: result.timedOut === true ? ("timeout" as const) : ("provider_error" as const),
+                message: codexFailureMessage(result, endReason),
+                retryable: result.timedOut === true
+              }
+            : undefined;
         const outputHash = artifactHash(transcript);
         const modelCallRecord = provider.modelCallRecords.at(-1);
         const reconstructed = provider.reconstruct?.();
@@ -939,26 +964,10 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
               plan_id: `plan_${descriptor.id}_${model.id}_${ordinal}_codex`,
               status,
               output_hash: outputHash,
-              ...(status === "failed"
-                ? {
-                    error: {
-                      kind: result.timedOut === true ? "timeout" : "provider_error",
-                      message: result.timedOut === true ? "Codex CLI timed out." : result.stderr.slice(0, 500),
-                      retryable: result.timedOut === true
-                    }
-                  }
-                : {})
+              ...(failureError !== undefined ? { error: failureError } : {})
             }
           ],
-          ...(status === "failed"
-            ? {
-                error: {
-                  kind: result.timedOut === true ? "timeout" : "provider_error",
-                  message: result.timedOut === true ? "Codex CLI timed out." : result.stderr.slice(0, 500),
-                  retryable: result.timedOut === true
-                }
-              }
-            : {}),
+          ...(failureError !== undefined ? { error: failureError } : {}),
           metadata: metadataFor({
             command,
             args,
