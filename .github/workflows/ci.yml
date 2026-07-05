@@ -1,5 +1,7 @@
 name: CI
 
+# Fork-safety: CI uses plain `pull_request` triggers (never `pull_request_target`)
+# and read-only permissions, so PRs from forks run without access to secrets.
 on:
   push:
     branches: [main]
