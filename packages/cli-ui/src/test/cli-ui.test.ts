@@ -4,7 +4,18 @@ import { test } from "node:test";
 import { formatBytes, relativeTime } from "../format.js";
 import { PlainPresenter, renderKeyValueLines, renderTableLines } from "../plain.js";
 import { isInteractive } from "../runtime.js";
-import { bold, box, brandBanner, brandHeader, cyan, glyph, gradient, stripAnsi, supportsColor } from "../theme.js";
+import {
+  bold,
+  box,
+  brandBanner,
+  brandHeader,
+  cyan,
+  glyph,
+  gradient,
+  stripAnsi,
+  supportsColor,
+  wrapAnsi
+} from "../theme.js";
 
 function withNoColor(work: () => void): void {
   const prev = process.env.NO_COLOR;
@@ -74,6 +85,39 @@ test("box frames a titled block, aligned to the widest line", () => {
     );
     assert.match(out, /bbbb/);
   });
+});
+
+test("box wraps overflowing lines instead of overflowing the frame", () => {
+  withNoColor(() => {
+    const long = Array.from({ length: 30 }, (_, index) => `word${index}`).join(" ");
+    const out = box("t", ["short", long]);
+    const lines = out.split("\n");
+    const widths = lines.map((line) => stripAnsi(line).length);
+    assert.ok(lines.length > 4, "the long line should wrap into extra body lines");
+    assert.ok(
+      widths.every((width) => width === widths[0]),
+      `frame lines should share a width, got ${widths.join(",")}`
+    );
+    // Without terminal columns the box caps at 84 total width.
+    assert.ok((widths[0] ?? 0) <= 84, `frame width should stay within the cap, got ${widths[0]}`);
+  });
+});
+
+test("wrapAnsi keeps every wrapped line within width and self-contained", () => {
+  const styled = `\u001b[2m${Array.from({ length: 12 }, () => "chunk").join(" ")}\u001b[22m end`;
+  const lines = wrapAnsi(styled, 24);
+  assert.ok(lines.length > 1, "should wrap");
+  for (const line of lines) {
+    assert.ok(stripAnsi(line).length <= 24, `line too wide: ${JSON.stringify(line)}`);
+  }
+  // The dim style stays open across breaks: continuations reopen it and every
+  // styled line closes with a full reset.
+  assert.ok(lines[0]?.startsWith("\u001b[2m"));
+  assert.ok(lines[0]?.endsWith("\u001b[0m"));
+  assert.ok(lines[1]?.startsWith("\u001b[2m"));
+  // A word longer than the width is hard-split rather than overflowing.
+  const hard = wrapAnsi("x".repeat(50), 20);
+  assert.deepEqual(hard.map((line) => line.length), [20, 20, 10]);
 });
 
 test("formatBytes uses binary units", () => {
