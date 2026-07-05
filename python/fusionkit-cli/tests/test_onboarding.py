@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 
 import fusionkit_cli.main as cli
@@ -20,6 +21,17 @@ from fusionkit_core.credentials import (
 from typer.testing import CliRunner
 
 runner = CliRunner()
+
+# Rich-rendered help output varies with the ambient terminal (CI forces color
+# and an 80-column width, which wraps and styles tokens). Pin the environment
+# and strip ANSI escapes so help assertions are deterministic everywhere.
+_HELP_ENV = {"COLUMNS": "200", "TERM": "dumb", "NO_COLOR": "1", "FORCE_COLOR": "0"}
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _help_output(*args: str) -> tuple[int, str]:
+    result = runner.invoke(app, list(args), env=_HELP_ENV)
+    return result.exit_code, _ANSI_RE.sub("", result.output)
 
 
 def _available(mode, path=None) -> SubscriptionStatus:
@@ -253,20 +265,20 @@ def test_auth_status_runs(tmp_path) -> None:
 
 
 def test_root_help_shows_bench_group_but_hides_legacy_bench_aliases() -> None:
-    result = runner.invoke(app, ["--help"])
+    exit_code, output = _help_output("--help")
 
-    assert result.exit_code == 0, result.output
-    assert "bench" in result.output
-    assert "serve" in result.output
-    assert "fusion-bench" not in result.output
-    assert "tiny-bench" not in result.output
+    assert exit_code == 0, output
+    assert "bench" in output
+    assert "serve" in output
+    assert "fusion-bench" not in output
+    assert "tiny-bench" not in output
 
 
 def test_hidden_legacy_bench_alias_and_new_group_both_resolve() -> None:
-    legacy = runner.invoke(app, ["tiny-bench", "--help"])
-    grouped = runner.invoke(app, ["bench", "tiny", "--help"])
+    legacy_code, legacy_output = _help_output("tiny-bench", "--help")
+    grouped_code, grouped_output = _help_output("bench", "tiny", "--help")
 
-    assert legacy.exit_code == 0, legacy.output
-    assert grouped.exit_code == 0, grouped.output
-    assert "--config" in legacy.output
-    assert "--config" in grouped.output
+    assert legacy_code == 0, legacy_output
+    assert grouped_code == 0, grouped_output
+    assert "--config" in legacy_output
+    assert "--config" in grouped_output
