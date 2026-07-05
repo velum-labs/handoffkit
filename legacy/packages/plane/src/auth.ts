@@ -1,4 +1,4 @@
-import { sha256Hex } from "@fusionkit/protocol";
+import { scryptSync } from "node:crypto";
 
 import type { PrincipalRecord, PrincipalRole } from "./store.js";
 
@@ -10,14 +10,19 @@ export type Principal = {
 };
 
 /**
- * Tokens are stored only as their sha256. Every token the plane issues is
- * 256 bits of CSPRNG output, so a plain SHA-256 lookup key is safe: there
- * is nothing to brute-force and no need for a slow password hash. (Short,
- * human-chosen tokens are never issued; if they were, this would need a
- * peppered KDF instead.)
+ * Tokens are stored only as a one-way hash used as a deterministic lookup
+ * key. Every token the plane issues is 256 bits of CSPRNG output, so even a
+ * fast hash would leave nothing to brute-force; scrypt with a fixed
+ * application salt is used anyway so a leaked store resists offline attack
+ * regardless of how a deployment mints tokens. The salt must stay fixed:
+ * hashes double as store lookup keys (`getPrincipalByTokenHash`), so a
+ * per-token salt would break authentication. Changing this scheme
+ * invalidates previously stored token hashes (re-issue tokens on upgrade).
  */
+const TOKEN_HASH_SALT = "warrant-plane-token-index-v2";
+
 export function hashToken(token: string): string {
-  return sha256Hex(token);
+  return scryptSync(token, TOKEN_HASH_SALT, 32).toString("hex");
 }
 
 export function toPrincipal(record: PrincipalRecord): Principal {

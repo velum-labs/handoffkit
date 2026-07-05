@@ -54,7 +54,7 @@ import type {
   WireTrajectory
 } from "@fusionkit/model-gateway";
 import { uiStream } from "@fusionkit/cli-ui";
-import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
+import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
 import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
 import type { PromptOverrides } from "./fusion-config.js";
@@ -401,7 +401,7 @@ export async function startFusionStepGateway(input: {
   defaultModel?: string;
 }): Promise<Gateway> {
   const { config } = input;
-  const base = config.fusionBackendUrl.replace(/\/+$/, "");
+  const base = trimTrailingSlashes(config.fusionBackendUrl);
   const stepUrl = `${base}/v1/fusion/trajectories:fuse`;
   const ensembles = config.ensembles ?? [];
   const defaultModel = input.defaultModel ?? ensembles[0]?.modelId ?? FUSION_PANEL_MODEL;

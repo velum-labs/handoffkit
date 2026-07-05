@@ -126,7 +126,10 @@ function normalizeSandboxWorkdir(workdir: string): string {
       `vercel sandbox workdir must not contain '..': ${workdir}`
     );
   }
-  return workdir.replace(/\/+$/, "") || "/";
+  // Linear-time trailing-slash trim (a `/\/+$/` regex backtracks polynomially).
+  let end = workdir.length;
+  while (end > 0 && workdir.charCodeAt(end - 1) === 0x2f) end -= 1;
+  return workdir.slice(0, end) || "/";
 }
 
 function posixJoin(base: string, rel: string): string {

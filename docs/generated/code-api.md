@@ -355,6 +355,8 @@ No module JSDoc was found.
 - `export function captureWorktreeDiff(cwd: string): string | undefined ...`
   The `git diff` of a working tree, or undefined when clean or not a repo.
 - `export function definedEnv(env: EnvInput): Record<string, string> ...`
+- `export function trimTrailingSlashes(value: string): string ...`
+  Strip trailing "/" characters in linear time (a `/\/+$/` regex backtracks polynomially on adversarial input, which code scanning rightly flags).
 - `export function normalizeApiBaseUrl(baseUrl: string): string ...`
 - `export type BuildChildEnvInput ...`
 - `export function buildChildEnv(input: BuildChildEnvInput ...`
@@ -447,7 +449,7 @@ Tool integration entry point. It exposes the launcher and harness integration co
 
 - `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, runCliCapture, sleep, spawnLogged, spawnTool, terminate, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
 - `export type { CliCaptureOptions, CliCaptureResult, LoggedChild, LoggedSpawnOptions } from "./proc.js";`
-- `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";`
+- `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS, trimTrailingSlashes } from "@fusionkit/runtime-utils";`
 - `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`

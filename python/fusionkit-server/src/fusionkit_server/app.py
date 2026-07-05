@@ -340,11 +340,11 @@ def create_app(
             )
         except ProviderCallError as exc:
             return _provider_error_response(exc)
-        except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+        except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
             traceback.print_exc()
             return _openai_error_response(
-                exc.__class__.__name__,
-                f"fusion step failed: {exc}",
+                "internal_error",
+                "fusion step failed; see the server logs for details",
                 status_code=502,
             )
         return _openai_step_response(request.model, result.response, _fusion_extension(result))
@@ -398,11 +398,11 @@ async def _passthrough_chat(
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)
-    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
         traceback.print_exc()
         return _openai_error_response(
-            exc.__class__.__name__,
-            f"passthrough chat failed: {exc}",
+            "internal_error",
+            "passthrough chat failed; see the server logs for details",
             status_code=502,
         )
     return _openai_step_response(request.model, response)
@@ -437,10 +437,10 @@ async def _fusion_tool_step(
         return _openai_error_response(
             "all_models_failed", f"fusion step failed: {exc}", status_code=502
         )
-    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
         traceback.print_exc()
         return _openai_error_response(
-            exc.__class__.__name__, f"fusion step failed: {exc}", status_code=502
+            "internal_error", "fusion step failed; see the server logs for details", status_code=502
         )
     return _openai_step_response(request.model, result.response, _fusion_extension(result))
 
@@ -606,10 +606,13 @@ def _sse_error_event(exc: BaseException) -> str:
         if exc.retry_after is not None:
             body["retry_after"] = exc.retry_after
     else:
+        # Unclassified exceptions must not leak internals (messages can embed
+        # paths, config, or stack fragments); the full traceback is logged
+        # server-side where the stream is caught.
         body = {
-            "message": str(exc),
-            "type": exc.__class__.__name__,
-            "code": exc.__class__.__name__,
+            "message": "internal error during streaming; see the server logs for details",
+            "type": "internal_error",
+            "code": "internal_error",
         }
     return f"data: {json.dumps({'error': body})}\n\n"
 

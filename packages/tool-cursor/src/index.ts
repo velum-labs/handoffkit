@@ -1,7 +1,7 @@
 /**
  * Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cursorkit bridge, and the Cursor ensemble harness adapter.
  */
-import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
+import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
 import type { ToolIntegration } from "@fusionkit/tools";
 import { createDriverHarness } from "@fusionkit/ensemble";
 import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";
@@ -25,7 +25,7 @@ export const cursorTool: ToolIntegration = {
     [
       "Cursor (via Cursorkit backend):",
       `  cursor-agent --endpoint ${note ?? gatewayUrl} --model ${FUSION_PANEL_MODEL}`,
-      `  Cursorkit model backend: ${gatewayUrl.replace(/\/+$/, "")}/v1/chat/completions`
+      `  Cursorkit model backend: ${trimTrailingSlashes(gatewayUrl)}/v1/chat/completions`
     ].join("\n"),
   modes: ["fusion", "local"],
   harnessKinds: ["cursor-acp", "cursor-desktop"],

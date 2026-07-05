@@ -3,9 +3,12 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { defaultPolicy, FileKeyProvider, Plane, resolveMasterKey, SecretStore, startPlaneServer } from "@fusionkit/plane";
-import { Runner } from "@fusionkit/runner";
-import { PlaneClient } from "@fusionkit/sdk";
+// legacy/docker is not a workspace package, so bare @fusionkit/* specifiers do
+// not resolve from here; import the built workspace dist files directly (the
+// image copies the repo layout to /app, so these paths hold in both contexts).
+import { defaultPolicy, FileKeyProvider, Plane, resolveMasterKey, SecretStore, startPlaneServer } from "../packages/plane/dist/index.js";
+import { Runner } from "../packages/runner/dist/index.js";
+import { PlaneClient } from "../packages/sdk/dist/index.js";
 
 const DEFAULT_HOME = process.env.FUSIONKIT_HOME ?? process.env.WARRANT_HOME ?? "/data/warrant";
 const DEFAULT_HOST = "127.0.0.1";

@@ -27,7 +27,8 @@ export {
   CANDIDATE_ISOLATION_DEFAULTS,
   escapeMarkdownCell,
   markdownTable,
-  RUNTIME_TIMEOUT_MS
+  RUNTIME_TIMEOUT_MS,
+  trimTrailingSlashes
 } from "@fusionkit/runtime-utils";
 export type {
   FusedEnsembleInfo,
