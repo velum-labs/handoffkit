@@ -6,7 +6,8 @@ updated (in place) at the close of every experiment round or scope
 decision; everything else in the program is an immutable record or a design
 reference. If this document and any other document disagree, this one wins.
 
-**Last updated:** 2026-07-04 (after Phase 0 close: C0–C3, C2V, C3-R16K)
+**Last updated:** 2026-07-05 (OSS-first scope adopted; launch plan
+`oss-ensemble-launch-plan.md` supersedes the previous next-steps list)
 
 ---
 
@@ -52,21 +53,34 @@ binding version).
   truncation; pass-rate claims are refused for any model with >~10%
   truncation; thinking models get ≥16k (often ≥32k) budgets.
 - **Routing rule already evidence-backed:** lopsided slice → single model.
+- **OSS-first (D8, 2026-07-05):** panels are built from OSS models; closed
+  frontier models (gpt-5.5, Claude, Gemini) serve as routing baselines and
+  price anchors, not panel members. Product claims are Pareto claims
+  (score *and* cost-per-solve), not saturation claims.
 
 ## Active next steps (priority order)
 
-1. Post-cutoff contamination check on the C3 slice (~$10) — confirms or
-   weakens the "don't fuse on algorithmic" answer.
-2. Thinking-model re-measure at ≥32k (kimi, sonnet; ~$8) — first valid
-   member-level verdict on the committed default panel.
-3. Synthesis-focused calibration round (clean judge protocol, synthesis vs
-   selection ablation, on a slice with headroom) — chases the
-   oracle-exceeding result.
-4. Repo-bugfix harness unlock (HandoffKit patch-and-test path) — where C1
-   says peer-panel headroom lives.
-5. M1 reduced warehouse (port Phase-0 scripts as reference
-   implementations).
-6. Rule router v0 once 1–4 fill the per-domain table.
+Maintained in detail in `oss-ensemble-launch-plan.md` (adopted
+2026-07-05); summary:
+
+1. **Step 1 — OSS peer-field scan** (~$0): per-domain field shape,
+   shortlists of 6–8 OSS models, lineage veto applied.
+2. **Step 2 — Thinking-model re-measure at ≥32k** (~$8): first valid
+   scores for kimi-k2-thinking / sonnet-class members.
+3. **Step 3 — Flagship capture pilot** (~$30–50/iteration): fused OSS
+   panel vs best member vs frontier baseline vs oracle, clean judge
+   protocol; produces the capture-rate belief.
+4. **Step 4 — Repo-bugfix harness unlock** (engineering): HandoffKit
+   patch-and-test path wired into calibration; may run before Step 3 if
+   quick.
+5. **Step 5 — Full benchmark confirmation** (~$100–500): survivor only,
+   frozen config, official harness.
+6. **Step 6 — Launch**: predefined ensemble in the CLI + public evidence
+   card.
+
+The previously listed contamination check on the C3 slice is demoted (not
+cancelled): with gpt-5.5 excluded from OSS-first panels, its dominance no
+longer drives panel decisions; the check rides along with Step 5 hygiene.
 
 ## Open questions
 
@@ -81,6 +95,7 @@ binding version).
 | Document | Role | Mutability |
 |---|---|---|
 | `capability-index-status.md` (this) | Current beliefs, scope, next steps | **Living** — updated every round |
+| `oss-ensemble-launch-plan.md` | Execution plan for the launch funnel | Living, revised at gate decisions |
 | `capability-index-program.md` | History + decision log | **Append-only** |
 | `capability-index-spec.md` | Design reference | Living, design changes only, with changelog |
 | `phase0-validation-report.md` | Phase-0 record | **Closed** 2026-07-04 |
@@ -89,6 +104,9 @@ binding version).
 
 ## Changelog
 
+- **2026-07-05** — OSS-first scope adopted (D8); next steps replaced by
+  the staged launch funnel in `oss-ensemble-launch-plan.md`; C3
+  contamination check demoted to Step-5 hygiene.
 - **2026-07-04** — Document created at Phase-0 close. Initial beliefs,
   scope (reduced build, ranking cancelled), and next steps recorded from
   C0–C3 + C2V + C3-R16K outcomes.

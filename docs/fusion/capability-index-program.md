@@ -104,6 +104,33 @@ thinking-model latency × 5 models × 60 tasks) and outlived its subagent
 session; it was recovered from its tmux session, completed cleanly (exit 0),
 and analyzed. Future long runs: concurrency 3–4 + periodic checkpointing.
 
+### Stage 8 — Strategy re-think: OSS-first product framing and launch funnel (2026-07-05)
+
+A product-level brainstorm reframed the program around the actual launch:
+a CLI where users build their own ensembles or consume our predefined,
+evidence-backed ones, with the value proposition "frontier-class coding
+performance at OSS prices." Two structural consequences:
+
+- **OSS-first panels (D8).** Ensembles are built from OSS models; closed
+  frontier models become routing baselines and price anchors rather than
+  panel members. This re-weights the Phase-0 evidence favorably: the
+  strongest C1 headroom lived in OSS-heavy peer fields (+11.3pp LCB,
+  +23pp MBPP-class), while the "don't fuse" verdict was driven by a
+  closed model (gpt-5.5) that is no longer a candidate member. It also
+  re-frames product claims as **Pareto claims** (score *and*
+  cost-per-solve) instead of saturation claims.
+- **The matching problem was re-framed as a funnel (D9).** Instead of
+  trying to compute optimal panels from public data (falsified by C2/C2V),
+  the plan is a staged filter: free public-data scan → ~$30 calibration
+  pilots measuring *fused* performance (capture rate) → full official
+  benchmark only for survivors → launch card. Rigor is staged to match
+  the money at risk. Full plan: `docs/fusion/oss-ensemble-launch-plan.md`.
+
+The centerpiece measurement is the **capture pilot** (plan Step 3): fused
+OSS panel vs best member vs frontier baseline vs oracle on one slice —
+the first direct measurement of synthesis capture under a leak-free judge
+protocol, and the number the launch claim rests on.
+
 ---
 
 ## 2. Results as of Phase-0 close (2026-07-04)
@@ -204,3 +231,5 @@ so there is exactly one place to update as priorities shift.
 | D5 | 2026-07-04 | Next calibration round targets agentic/repo + synthesis-style fusion, not more single-shot slices | C1 headroom location + synthesis-beats-oracle observation | Status doc next steps |
 | D6 | 2026-07-04 | Layer-3 scoped to cost/latency/drift only (no production ground-truth signal exists yet); router regret measurable only on calibration slices | Phase-0 pre-work assessment | Phase-0 report; status doc |
 | D7 | 2026-07-04 | Document structure: immutable records + living status doc + append-only history/decision log | Sustainability review after three in-place revisions of the Phase-0 report | Status doc "Update protocol" |
+| D8 | 2026-07-05 | **OSS-first panels**: closed frontier models are routing baselines / price anchors, not panel members; product claims are Pareto (score + $/solve) | Product direction (cheaper-to-run ensembles) + C1 headroom concentrating in OSS peer fields + C3 lopsidedness being closed-model-driven | Status doc binding scope; launch plan §1, Step 0 |
+| D9 | 2026-07-05 | Adopt the staged launch funnel (scan → capture pilot → full benchmark → card) as the active plan; rigor staged to money at risk; contamination check demoted to Step-5 hygiene | Strategy re-think (Stage 8); C2/C2V falsifying public-data matching; $5.56 pilot cost proving calibration is the cheap step | `oss-ensemble-launch-plan.md`; status doc next steps |
