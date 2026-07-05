@@ -85,14 +85,103 @@ export function visibleWidth(text: string): number {
   return stripAnsi(text).length;
 }
 
+/** Track open SGR codes across a sequence boundary (theme styles only). */
+function applySgr(active: string[], sequence: string): void {
+  const body = sequence.slice(2, -1);
+  const drop = (codes: readonly string[]): void => {
+    for (let index = active.length - 1; index >= 0; index--) {
+      const code = active[index] ?? "";
+      if (codes.includes(code) || (codes.includes("38") && code.startsWith("38;"))) active.splice(index, 1);
+    }
+  };
+  if (body === "" || body === "0") active.length = 0;
+  else if (body === "22") drop(["1", "2"]);
+  else if (body === "23") drop(["3"]);
+  else if (body === "24") drop(["4"]);
+  else if (body === "39") drop(["31", "32", "33", "34", "35", "36", "90", "38"]);
+  else active.push(body);
+}
+
+/**
+ * Greedy word-wrap that is safe for ANSI-styled text: visible width is
+ * measured without escapes, and styles that are open at a line break are
+ * closed at the end of the line and re-opened on the next, so every returned
+ * line renders standalone.
+ */
+export function wrapAnsi(text: string, width: number): string[] {
+  if (width <= 0) return [text];
+  const lines: string[] = [];
+  for (const paragraph of text.split("\n")) {
+    if (visibleWidth(paragraph) <= width) {
+      lines.push(paragraph);
+      continue;
+    }
+    // Codes open at the current position; re-opened at each new line start.
+    const active: string[] = [];
+    let line = "";
+    let lineWidth = 0;
+
+    const endLine = (): void => {
+      lines.push(active.length > 0 ? `${line}\u001b[0m` : line);
+      line = active.map((code) => `\u001b[${code}m`).join("");
+      lineWidth = 0;
+    };
+
+    for (const word of paragraph.split(" ")) {
+      const wordWidth = visibleWidth(word);
+      if (lineWidth > 0) {
+        if (lineWidth + 1 + wordWidth <= width) {
+          line += " ";
+          lineWidth += 1;
+        } else {
+          endLine();
+        }
+      }
+      if (wordWidth <= width) {
+        for (const escape of word.match(ANSI_PATTERN) ?? []) applySgr(active, escape);
+        line += word;
+        lineWidth += wordWidth;
+        continue;
+      }
+      // A single word wider than the line (URL, long id): hard split.
+      let index = 0;
+      while (index < word.length) {
+        const escape = /^\u001b\[[0-9;]*m/.exec(word.slice(index));
+        if (escape !== null) {
+          applySgr(active, escape[0]);
+          line += escape[0];
+          index += escape[0].length;
+          continue;
+        }
+        if (lineWidth >= width) endLine();
+        line += word[index] ?? "";
+        lineWidth += 1;
+        index += 1;
+      }
+    }
+    if (stripAnsi(line).length > 0) {
+      lines.push(active.length > 0 ? `${line}\u001b[0m` : line);
+    }
+  }
+  return lines;
+}
+
 /** Frame tones: neutral (dim) for informational boxes, error (red) for failures. */
 export type BoxTone = "neutral" | "error";
+
+/** The widest a box may draw on the current terminal (frame included). */
+function maxBoxWidth(stream: NodeJS.WriteStream = process.stderr): number {
+  const columns = stream.columns;
+  if (columns === undefined || columns <= 0) return 84;
+  return Math.min(Math.max(columns, 24), 100);
+}
 
 /**
  * A hand-crafted rounded box around a titled block of lines. Uses box-drawing
  * characters when color (≈ a unicode TTY) is on, ASCII otherwise. Lines may
  * contain ANSI styling; widths are measured against the visible text so the
- * frame always aligns.
+ * frame always aligns. The box never draws wider than the terminal — content
+ * lines that would overflow are word-wrapped (ANSI-safely) instead.
  */
 export function box(title: string, lines: string[], options: { tone?: BoxTone } = {}): string {
   const rounded = supportsColor();
@@ -105,14 +194,24 @@ export function box(title: string, lines: string[], options: { tone?: BoxTone } 
   const frame: (text: string) => string = options.tone === "error" ? red : dim;
 
   const titleText = options.tone === "error" ? bold(red(title)) : bold(title);
-  const contentWidth = Math.max(visibleWidth(titleText), ...lines.map(visibleWidth), 0);
+  // "│ " + content + " │" -> the frame consumes 4 columns.
+  const maxContent = maxBoxWidth() - 4;
+  const wrapped = lines.flatMap((line) => {
+    if (visibleWidth(line) <= maxContent) return [line];
+    // Indent wrapped continuations so they read as part of the first line.
+    return wrapAnsi(line, maxContent - 2).map((part, index) => (index === 0 ? part : `  ${part}`));
+  });
+  const contentWidth = Math.min(
+    Math.max(visibleWidth(titleText), ...wrapped.map(visibleWidth), 0),
+    maxContent
+  );
   const inner = contentWidth + 2; // one space of padding each side
 
   // Build with un-nested styles: color the frame pieces, bold only the title,
   // so a bold reset (SGR 22) never prematurely closes a surrounding style.
   const titleRule = h.repeat(Math.max(0, inner - visibleWidth(titleText) - 3));
   const top = `${frame(`${tl}${h} `)}${titleText}${frame(` ${titleRule}${tr}`)}`;
-  const body = lines.map((line) => {
+  const body = wrapped.map((line) => {
     const pad = " ".repeat(Math.max(0, contentWidth - visibleWidth(line)));
     return `${frame(v)} ${line}${pad} ${frame(v)}`;
   });

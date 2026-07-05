@@ -86,8 +86,13 @@ export function wrapText(text: string, width: number): string[] {
   return out;
 }
 
-/** The usable content width for wrapped UI text on the current terminal. */
-export function contentWidth(stream: NodeJS.WriteStream = process.stderr, max = 100): number {
+/**
+ * The usable content width for wrapped UI text on the current terminal. The
+ * default cap matches the widest box content (`box()` caps frames at 100
+ * columns and its frame consumes 4), so pre-wrapped text nests in boxes
+ * without re-wrapping.
+ */
+export function contentWidth(stream: NodeJS.WriteStream = process.stderr, max = 96): number {
   const columns = stream.columns;
   if (columns === undefined || columns <= 0) return Math.min(80, max);
   return Math.min(Math.max(columns - 4, 20), max);
