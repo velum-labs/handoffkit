@@ -30,7 +30,7 @@ consumer of that contract, not a replacement for it.
 
 Fixtures under `spec/model-fusion-contract/fixture` are compatibility tests, not
 examples. Keep that fixture matrix small and stable. Product benchmark fixtures live
-under `python/fusionkit-evals/fixtures`, not in the contract fixture tree.
+under `python/fusionkit-evals/src/fusionkit_evals/data/fixtures`, not in the contract fixture tree.
 
 ### Native Runs Are The Product Boundary
 
@@ -107,7 +107,7 @@ flowchart LR
 - `python/fusionkit-server/src/fusionkit_server/app.py`: native and compatibility HTTP endpoints.
 - `python/fusionkit-evals/src/fusionkit_evals/tiny.py`: tiny Phase 1 smoke benchmark runner.
 - `python/fusionkit-evals/src/fusionkit_evals/fusion_bench.py`: record join layer and fusion-bench rows.
-- `python/fusionkit-evals/fixtures/tiny-phase1`: 25 synthetic benchmark task records.
+- `python/fusionkit-evals/src/fusionkit_evals/data/fixtures/tiny-phase1`: 25 synthetic benchmark task records.
 
 ## Verification Commands
 

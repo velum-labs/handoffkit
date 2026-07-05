@@ -756,7 +756,8 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
     capabilities: () => ({
       workspace_read: "supported",
       apply_patch: "supported",
-      // TODO(@000alen): why degraded? Codex adapter capability metadata should be the source of truth, with ToolDashboardMetadata documenting the shell_command limitation.
+      // Codex shell execution is available, but dashboard metadata still treats
+      // it as constrained because policy and sandbox settings can narrow access.
       shell_command: "degraded",
       artifact_capture: "supported",
       model_gateway_responses: "supported",

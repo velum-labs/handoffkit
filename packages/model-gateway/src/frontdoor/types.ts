@@ -10,7 +10,8 @@
 
 import type { WireTrajectory } from "@fusionkit/protocol";
 
-import type { ChatMessageLike } from "../fusion-backend.js";
+import type { ChatMessageLike } from "../fusion-types.js";
+import type { FusionGatewayLogger } from "../logger.js";
 import type { TurnNarration } from "./narration.js";
 
 /** The parsed OpenAI Chat Completions body the front door reads (data only). */
@@ -80,6 +81,8 @@ export type VendorProxyOutcome =
  * identity, spans, headers, and cost from the request + the kernel state store.
  */
 export type FrontdoorServices = {
+  /** Logger for human-facing gateway diagnostics. */
+  readonly logger: FusionGatewayLogger;
   /** The configured USD budget cap, if any. */
   readonly budgetUsd: number | undefined;
   /** The conversation's accrued gateway-observed cost (USD). */

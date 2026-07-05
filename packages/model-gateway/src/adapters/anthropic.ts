@@ -9,6 +9,8 @@
  */
 
 import type { Backend } from "../backend.js";
+import { defaultFusionGatewayLogger } from "../logger.js";
+import type { OpenAiChoice } from "./openai-chat-wire.js";
 
 const ENCODER = new TextEncoder();
 
@@ -64,26 +66,6 @@ function isAnthropicServerTool(tool: { type?: string }): boolean {
 
 // ---- OpenAI shapes we read back ----
 
-type OpenAiToolCall = { id?: string; index?: number; function?: { name?: string; arguments?: string } };
-// `reasoning_content` carries fusion narration beats; `reasoning` carries the
-// upstream model's raw thinking tokens (local MLX / router passthrough). Both
-// map onto Anthropic thinking blocks, which stream deltas continuously anyway.
-type OpenAiDelta = {
-  content?: string | null;
-  reasoning?: string | null;
-  reasoning_content?: string | null;
-  tool_calls?: OpenAiToolCall[];
-};
-type OpenAiChoice = {
-  delta?: OpenAiDelta;
-  message?: {
-    content?: string | null;
-    reasoning?: string | null;
-    reasoning_content?: string | null;
-    tool_calls?: OpenAiToolCall[];
-  };
-  finish_reason?: string | null;
-};
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
 type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage };
 type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsage };
@@ -217,7 +199,7 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
   if (Array.isArray(body.tools) && body.tools.length > 0) {
     const excluded = body.tools.filter(isAnthropicServerTool);
     if (excluded.length > 0 && process.env.FUSION_DEBUG) {
-      console.error(
+      defaultFusionGatewayLogger.error(
         `[fusion-debug] anthropic: excluding ${excluded.length} server-executed tool(s) ` +
           `from the fused turn: ${excluded.map((tool) => tool.name).join(", ")}`
       );

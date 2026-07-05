@@ -17,6 +17,18 @@
  * only — never a computed verdict.
  */
 import type { TrajectoryStep } from "@fusionkit/ensemble";
+import {
+  asArray,
+  asObject,
+  asString,
+  createStreamJsonStepEmitter,
+  parseStreamJsonTrajectory,
+  streamJsonResultContentText,
+  stringifyStreamJsonValue,
+  STREAM_JSON_MAX_TEXT,
+  STREAM_JSON_MAX_TOOL_INPUT,
+  truncateStreamJsonText
+} from "@fusionkit/harness-core";
 
 export type CursorStreamTrajectory = {
   steps: TrajectoryStep[];
@@ -28,63 +40,6 @@ export type CursorStreamTrajectory = {
 };
 
 export type CursorStreamStepEmitter = (line: string) => void;
-
-const MAX_TEXT = 4000;
-const MAX_TOOL_INPUT = 600;
-
-function truncate(text: string, limit: number): string {
-  return text.length <= limit ? text : `${text.slice(0, limit)}...[truncated]`;
-}
-
-function asObject(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function stringify(value: unknown): string {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-/** A tool_result `content` is either a string or an array of text/parts. */
-function resultContentText(content: unknown): string {
-  const direct = asString(content);
-  if (direct !== undefined) return direct;
-  return asArray(content)
-    .map((part) => {
-      const obj = asObject(part);
-      if (obj === undefined) return "";
-      if (obj.type === "text") return asString(obj.text) ?? "";
-      return "";
-    })
-    .filter((text) => text.length > 0)
-    .join("");
-}
-
-function parseStreamJsonLine(line: string): Record<string, unknown> | undefined {
-  const trimmed = line.trim();
-  if (trimmed.length === 0 || trimmed[0] !== "{") return undefined;
-  let event: unknown;
-  try {
-    event = JSON.parse(trimmed);
-  } catch {
-    return undefined;
-  }
-  return asObject(event);
-}
 
 /** Parse a single stream-json event into zero or more (un-indexed) steps. */
 function stepsForEvent(event: Record<string, unknown>): Omit<TrajectoryStep, "index">[] {
@@ -101,16 +56,16 @@ function stepsForEvent(event: Record<string, unknown>): Omit<TrajectoryStep, "in
       const blockType = asString(b.type);
       if (blockType === "thinking") {
         const text = asString(b.thinking) ?? "";
-        if (text.length > 0) out.push({ type: "reasoning", text: truncate(text, MAX_TEXT) });
+        if (text.length > 0) out.push({ type: "reasoning", text: truncateStreamJsonText(text, STREAM_JSON_MAX_TEXT) });
       } else if (blockType === "text") {
         const text = asString(b.text) ?? "";
-        if (text.length > 0) out.push({ type: "output", text: truncate(text, MAX_TEXT) });
+        if (text.length > 0) out.push({ type: "output", text: truncateStreamJsonText(text, STREAM_JSON_MAX_TEXT) });
       } else if (blockType === "tool_use" || blockType === "tool_call") {
         out.push({
           type: "tool_call",
           ...(asString(b.name) !== undefined ? { tool_name: asString(b.name) } : {}),
           ...(asString(b.id) !== undefined ? { tool_call_id: asString(b.id) } : {}),
-          tool_input: truncate(stringify(b.input ?? b.arguments ?? {}), MAX_TOOL_INPUT)
+          tool_input: truncateStreamJsonText(stringifyStreamJsonValue(b.input ?? b.arguments ?? {}), STREAM_JSON_MAX_TOOL_INPUT)
         });
       }
     }
@@ -125,7 +80,7 @@ function stepsForEvent(event: Record<string, unknown>): Omit<TrajectoryStep, "in
         ...(asString(b.tool_use_id) !== undefined
           ? { tool_call_id: asString(b.tool_use_id) }
           : {}),
-        text: truncate(resultContentText(b.content), MAX_TEXT),
+        text: truncateStreamJsonText(streamJsonResultContentText(b.content), STREAM_JSON_MAX_TEXT),
         ...(isError ? { is_error: true } : {})
       });
     }
@@ -135,26 +90,14 @@ function stepsForEvent(event: Record<string, unknown>): Omit<TrajectoryStep, "in
 
 /** Create an incremental parser for `cursor-agent --output-format stream-json` lines. */
 export function createCursorStreamStepEmitter(onStep: (step: TrajectoryStep) => void): CursorStreamStepEmitter {
-  let index = 0;
-  let lastText = "";
-  const push = (step: Omit<TrajectoryStep, "index">): void => {
-    const indexed = { index, ...step };
-    index += 1;
-    if (indexed.text !== undefined) lastText = indexed.text;
-    onStep(indexed);
-  };
-  return (line: string): void => {
-    const obj = parseStreamJsonLine(line);
-    if (obj === undefined) return;
-    if (asString(obj.type) === "result") {
-      const result = asString(obj.result);
-      if (result !== undefined && result.length > 0 && lastText !== result) {
-        push({ type: "output", text: truncate(result, MAX_TEXT) });
-      }
-      return;
-    }
-    for (const step of stepsForEvent(obj)) push(step);
-  };
+  return createStreamJsonStepEmitter<Omit<TrajectoryStep, "index">>({
+    onStep,
+    stepsForEvent,
+    resultStep: (result) => ({
+      type: "output",
+      text: truncateStreamJsonText(result, STREAM_JSON_MAX_TEXT)
+    })
+  });
 }
 
 /**
@@ -162,37 +105,20 @@ export function createCursorStreamStepEmitter(onStep: (step: TrajectoryStep) => 
  * stream-json` stdout. Non-JSON lines (and irrelevant system events) are ignored.
  */
 export function parseCursorStreamJson(stdout: string): CursorStreamTrajectory {
-  const steps: TrajectoryStep[] = [];
-  let finalOutput = "";
-  let sawResult = false;
-  let isError = false;
-  const push = (step: Omit<TrajectoryStep, "index">): void => {
-    steps.push({ index: steps.length, ...step });
+  const parsed = parseStreamJsonTrajectory<Omit<TrajectoryStep, "index">>({
+    stdout,
+    stepsForEvent,
+    resultStep: (result) => ({
+      type: "output",
+      text: truncateStreamJsonText(result, STREAM_JSON_MAX_TEXT)
+    }),
+    // Preserve previous behavior: an interrupted run falls back only to assistant output.
+    fallbackText: (step) => (step.type === "output" ? step.text : "")
+  });
+  return {
+    steps: parsed.steps,
+    finalOutput: parsed.finalOutput,
+    sawResult: parsed.sawResult,
+    isError: parsed.isError
   };
-  for (const line of stdout.split("\n")) {
-    const obj = parseStreamJsonLine(line);
-    if (obj === undefined) continue;
-    if (asString(obj.type) === "result") {
-      sawResult = true;
-      if (obj.is_error === true) isError = true;
-      const result = asString(obj.result);
-      if (result !== undefined && result.length > 0) finalOutput = result;
-      continue;
-    }
-    for (const step of stepsForEvent(obj)) push(step);
-  }
-  // The terminal `result` is the canonical final answer. If it was absent (e.g.
-  // an interrupted run), fall back to the last assistant output step.
-  if (finalOutput.length === 0) {
-    for (let i = steps.length - 1; i >= 0; i -= 1) {
-      const step = steps[i];
-      if (step?.type === "output" && step.text !== undefined && step.text.length > 0) {
-        finalOutput = step.text;
-        break;
-      }
-    }
-  } else if (steps.at(-1)?.text !== finalOutput) {
-    push({ type: "output", text: truncate(finalOutput, MAX_TEXT) });
-  }
-  return { steps, finalOutput, sawResult, isError };
 }

@@ -12,37 +12,12 @@
 
 import type { RuntimeEvent } from "@fusionkit/kernel";
 
+import { defaultFusionGatewayLogger } from "../logger.js";
+import type { FusionGatewayLogger } from "../logger.js";
+import { errorEvent, noticeChunk, reasoningChunk } from "../sse-wire.js";
 import type { ReasoningDeltaEvent } from "./narration.js";
 
 const KEEPALIVE_MS = 3000;
-
-/** A terminal SSE chunk that marks the turn as failed (not a normal stop). */
-function errorEvent(message: string): string {
-  return (
-    `data: ${JSON.stringify({
-      choices: [{ index: 0, delta: { content: message }, finish_reason: "error" }]
-    })}\n\n` + "data: [DONE]\n\n"
-  );
-}
-
-/** An OpenAI chat content-delta SSE chunk (used for a leading handoff notice). */
-function noticeChunk(text: string): string {
-  return `data: ${JSON.stringify({
-    choices: [{ index: 0, delta: { content: text }, finish_reason: null }]
-  })}\n\n`;
-}
-
-/**
- * An OpenAI chat chunk carrying reasoning (not answer) text, on the de-facto
- * `reasoning_content` delta field. The chat door passes it through verbatim;
- * the Responses/Anthropic translators map it onto their native reasoning /
- * thinking channels. Clients that don't know the field ignore the chunk.
- */
-function reasoningChunk(text: string): string {
-  return `data: ${JSON.stringify({
-    choices: [{ index: 0, delta: { reasoning_content: text }, finish_reason: null }]
-  })}\n\n`;
-}
 
 export type EventsToSseOptions = {
   /** A leading assistant content delta emitted before the panel phase (failover). */
@@ -51,12 +26,15 @@ export type EventsToSseOptions = {
   onError?: (message: string) => void;
   /** Called after a clean completion (e.g. to record any post-stream state). */
   onComplete?: () => void;
+  /** Logger for human-facing gateway diagnostics. */
+  logger?: FusionGatewayLogger;
 };
 
 export function eventsToSseResponse(
   events: AsyncIterable<RuntimeEvent | ReasoningDeltaEvent>,
   options: EventsToSseOptions = {}
 ): Response {
+  const logger = options.logger ?? defaultFusionGatewayLogger;
   const encoder = new TextEncoder();
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -90,7 +68,7 @@ export function eventsToSseResponse(
               break;
             case "error": {
               const message = `fusion error: ${event.error.message}`;
-              console.error(`fusion: ${event.error.message}`);
+              logger.error(`fusion: ${event.error.message}`);
               options.onError?.(event.error.message);
               controller.enqueue(encoder.encode(errorEvent(message)));
               break;
@@ -105,7 +83,7 @@ export function eventsToSseResponse(
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`fusion: ${message}`);
+        logger.error(`fusion: ${message}`);
         options.onError?.(message);
         controller.enqueue(encoder.encode(errorEvent(`fusion error: ${message}`)));
       } finally {

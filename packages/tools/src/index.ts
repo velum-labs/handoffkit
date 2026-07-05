@@ -64,3 +64,13 @@ export {
 } from "./env.js";
 export type { BuildChildEnvInput } from "./env.js";
 export { buildSkippedCandidate } from "./candidate.js";
+export {
+  deriveFusedSubagents,
+  fusedSubagentDescription,
+  fusedSubagentDeveloperInstructions,
+  fusedSubagentMembers
+} from "./fused-subagents.js";
+export type {
+  FusedSubagentDefinition,
+  FusedSubagentDescriptionStyle
+} from "./fused-subagents.js";

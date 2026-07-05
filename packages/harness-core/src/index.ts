@@ -65,6 +65,26 @@ export { EventLog } from "./logging.js";
 export type { EventLogOptions } from "./logging.js";
 
 export {
+  asArray,
+  asObject,
+  asString,
+  createStreamJsonStepEmitter,
+  parseStreamJsonLine,
+  parseStreamJsonTrajectory,
+  streamJsonResultContentText,
+  stringifyStreamJsonValue,
+  STREAM_JSON_MAX_TEXT,
+  STREAM_JSON_MAX_TOOL_INPUT,
+  truncateStreamJsonText
+} from "./stream-json.js";
+export type {
+  ParsedStreamJson,
+  ParseStreamJsonOptions,
+  StreamJsonEmitterOptions,
+  StreamJsonStepText
+} from "./stream-json.js";
+
+export {
   DEFAULT_TMP_MANIFEST,
   createTrackedTmpDir,
   releaseTrackedTmpDir,

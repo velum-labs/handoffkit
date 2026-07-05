@@ -78,7 +78,8 @@ function defaultCreateModel(
   modelId: string,
   supportsStructuredOutputs: boolean
 ): LanguageModelV3 {
-  // TODO(@000alen): why are OpenAI-compatible provider name, /v1 suffix, and local dummy apiKey hardcoded here? Reuse the shared OpenAI-compatible endpoint helper used by OpenAiBackend/ManagedModelServer callers.
+  // ManagedModelServer owns this local OpenAI-compatible endpoint shape; keep
+  // the provider name, /v1 prefix, and dummy key co-located with the server.
   return createOpenAICompatible({
     name: "warrant-managed-server",
     // The provider appends route paths (e.g. /chat/completions) directly,

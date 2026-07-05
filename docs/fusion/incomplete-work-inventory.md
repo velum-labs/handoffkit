@@ -119,7 +119,7 @@ these stubs.
 | **MF-02** | HandoffKit protocol validators for harness / tool / receipt records |
 | **MF-03** | CursorKit fixture validation + `cursor-run-result` → `harness-run-result` mapping |
 | **MF-04** | MLX provider-only validation without runtime imports |
-| **MF-50** | Dirty-dozen benchmark manifest (seed exists under `python/fusionkit-evals/benchmarks/dirty-dozen/`) |
+| **MF-50** | Dirty-dozen benchmark manifest (seed exists under `python/fusionkit-evals/src/fusionkit_evals/data/benchmarks/dirty-dozen/`) |
 | **MF-60–MF-62** | Governance / isolation fixtures: redacted transcripts, secret denial, disclosure, retention, container isolation, MicroVM hardening (`legacy/specs/2026-06-16-eng-596-microvm-design-spike.md`, `legacy/specs/2026-06-16-eng-597-secret-disclosure-receipts.md`) |
 
 **Reserved:** Protobuf / Buf for internal streaming / gRPC — not required for v1

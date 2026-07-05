@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { deriveFusedSubagents } from "@fusionkit/tools";
 import type { FusedEnsembleInfo } from "@fusionkit/tools";
 
 /** The repo-scoped Cursor agents directory. */
@@ -16,17 +17,20 @@ export const CURSOR_AGENTS_DIRNAME = join(".cursor", "agents");
 
 /** The agent file contents for one ensemble (YAML frontmatter + prompt). */
 export function cursorSubagentMarkdown(ensemble: FusedEnsembleInfo, isDefault: boolean): string {
-  const members = ensemble.memberIds.join(", ");
-  const flavor = isDefault ? "default " : "";
+  const subagent = deriveFusedSubagents(
+    [ensemble],
+    isDefault ? ensemble.modelId : "",
+    "delegate-task"
+  )[0];
+  if (subagent === undefined) throw new Error("missing fused sub-agent definition");
   return [
     "---",
     `name: ${ensemble.modelId}`,
-    `description: Delegate a task to the ${flavor}"${ensemble.name}" fusion ensemble (${members} fused by a judge). Use when the user asks for the ${ensemble.name} ensemble.`,
+    `description: ${subagent.description}`,
     `model: ${ensemble.modelId}`,
     "---",
     "",
-    `You run on the fused "${ensemble.name}" ensemble; every reply is already a`,
-    "panel-and-judge fusion. Answer the delegated task directly and completely.",
+    subagent.developerInstructions,
     ""
   ].join("\n");
 }

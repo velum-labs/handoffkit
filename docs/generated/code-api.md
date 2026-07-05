@@ -135,6 +135,8 @@ implement this contract; the panel fanout and launchers consume it.
 - `export { AsyncChannel } from "./channel.js";`
 - `export { EventLog } from "./logging.js";`
 - `export type { EventLogOptions } from "./logging.js";`
+- `export { asArray, asObject, asString, createStreamJsonStepEmitter, parseStreamJsonLine, parseStreamJsonTrajectory, streamJsonResultContentText, stringifyStreamJsonValue, STREAM_JSON_MAX_TEXT, STREAM_JSON_MAX_TOOL_INPUT, truncateStreamJsonText } from "./stream-json.js";`
+- `export type { ParsedStreamJson, ParseStreamJsonOptions, StreamJsonEmitterOptions, StreamJsonStepText } from "./stream-json.js";`
 - `export { DEFAULT_TMP_MANIFEST, createTrackedTmpDir, releaseTrackedTmpDir, sweepTrackedTmpDirs } from "./tmp-sweep.js";`
 - `export { buildChildEnv, freePort, runCliCapture, spawnLogged, terminate, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./process.js";`
 - `export type { BuildChildEnvInput, CliCaptureOptions, CliCaptureResult, LoggedChild, LoggedSpawnOptions } from "./process.js";`
@@ -454,6 +456,8 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export { buildChildEnv, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
 - `export type { BuildChildEnvInput } from "./env.js";`
 - `export { buildSkippedCandidate } from "./candidate.js";`
+- `export { deriveFusedSubagents, fusedSubagentDescription, fusedSubagentDeveloperInstructions, fusedSubagentMembers } from "./fused-subagents.js";`
+- `export type { FusedSubagentDefinition, FusedSubagentDescriptionStyle } from "./fused-subagents.js";`
 
 ### `packages/workspace/src/index.ts`
 
