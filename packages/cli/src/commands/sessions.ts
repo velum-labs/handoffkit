@@ -19,6 +19,7 @@ import { bold, cyan, dim, gray, green, relativeTime } from "@fusionkit/cli-ui";
 
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
+import { argOrPick } from "../shared/pickers.js";
 
 /**
  * Resolve a session reference (a full id or a unique prefix) to a stored id.
@@ -168,6 +169,23 @@ function runRemove(store: SessionStore, ref: string, ctx: CommandContext): numbe
   return removed ? 0 : 1;
 }
 
+/** The omitted-id picker: recency-ordered sessions with tool/turns/cost hints. */
+async function pickSessionId(store: SessionStore, verb: string): Promise<string> {
+  return argOrPick<string>({
+    given: undefined,
+    message: `Which session to ${verb}?`,
+    placeholder: "type to filter",
+    missing: `missing session id — pass an id or unique prefix (see \`fusionkit sessions\`)`,
+    empty: "no stored sessions yet — run `fusionkit codex` first",
+    options: () =>
+      store.list().map((session) => ({
+        value: session.id,
+        label: session.id.slice(0, 12),
+        hint: `${session.tool ?? "?"} · ${session.turnCount} turn${session.turnCount === 1 ? "" : "s"} · ${relativeTime(session.updatedAt)}`
+      }))
+  });
+}
+
 export function registerSessions(program: Command): void {
   const store = new FileSystemSessionStore(defaultSessionsDir());
 
@@ -189,20 +207,22 @@ export function registerSessions(program: Command): void {
 
   sessions
     .command("show")
-    .argument("<id>", "session id (or a unique prefix)")
+    .argument("[id]", "session id (or a unique prefix); omit on a TTY to pick")
     .description("show a session's details and its most recent turns")
     .option("--json", "emit machine-readable JSON")
-    .action((id: string, _opts: { json?: boolean }, command: Command) => {
-      process.exit(runShow(store, id, contextFor(command)));
+    .action(async (id: string | undefined, _opts: { json?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
+      process.exit(runShow(store, id ?? (await pickSessionId(store, "show")), ctx));
     });
 
   sessions
     .command("rm")
     .alias("remove")
-    .argument("<id>", "session id (or a unique prefix) to delete")
+    .argument("[id]", "session id (or a unique prefix) to delete; omit on a TTY to pick")
     .description("delete a stored session")
     .option("--json", "emit machine-readable JSON")
-    .action((id: string, _opts: { json?: boolean }, command: Command) => {
-      process.exit(runRemove(store, id, contextFor(command)));
+    .action(async (id: string | undefined, _opts: { json?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
+      process.exit(runRemove(store, id ?? (await pickSessionId(store, "delete")), ctx));
     });
 }

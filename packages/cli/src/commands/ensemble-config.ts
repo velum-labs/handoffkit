@@ -40,6 +40,7 @@ import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
 import { collect, parseIdValue, parsePanelModelSpec } from "../shared/options.js";
+import { argOrPick } from "../shared/pickers.js";
 
 type EnsembleCommandOpts = {
   repo?: string;
@@ -397,6 +398,32 @@ function runUse(name: string, opts: EnsembleCommandOpts, ctx: CommandContext): n
   return 0;
 }
 
+/** Resolve an omitted ensemble name with a fuzzy picker over the config. */
+async function ensembleNameOrPick(
+  given: string | undefined,
+  opts: EnsembleCommandOpts,
+  ctx: CommandContext,
+  verb: string
+): Promise<string> {
+  const { root } = repoRootFor(opts);
+  const config = loadConfigOrFail(root, ctx.presenter);
+  const shape = persistedShape(config);
+  const ensembles = shapeEnsembles(shape);
+  const defaultName = defaultNameOf(shape);
+  return argOrPick<string>({
+    given,
+    message: `Which ensemble to ${verb}?`,
+    missing: `missing ensemble name (see \`fusionkit ensemble list\`)`,
+    empty: "no ensembles configured — add one with `fusionkit ensemble add <name>`",
+    options: () =>
+      Object.entries(ensembles).map(([name, ensembleConfig]) => ({
+        value: name,
+        label: name,
+        hint: `${(ensembleConfig.panel ?? []).length || "built-in"} member(s)${name === defaultName ? " · session default" : ""}`
+      }))
+  });
+}
+
 /** Attach the ensemble-management subcommands to the `ensemble` group. */
 export function registerEnsembleConfig(ensemble: Command): void {
   ensemble
@@ -424,7 +451,7 @@ export function registerEnsembleConfig(ensemble: Command): void {
 
   ensemble
     .command("edit")
-    .argument("<name>", "ensemble to edit")
+    .argument("[name]", "ensemble to edit; omit on a TTY to pick")
     .description("edit an ensemble's members, judge, and synthesizer")
     .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
     .option("--add-model <spec>", "add a panel member ID=MODEL or ID=PROVIDER:MODEL (repeatable)", collect)
@@ -433,20 +460,22 @@ export function registerEnsembleConfig(ensemble: Command): void {
     .option("--judge <model>", "set the judge model")
     .option("--synthesizer <model>", "set the synthesizer model")
     .option("--json", "emit machine-readable JSON")
-    .action(async (name: string, opts: EnsembleCommandOpts, command: Command) => {
-      process.exit(await runEdit(name, opts, contextFor(command)));
+    .action(async (name: string | undefined, opts: EnsembleCommandOpts, command: Command) => {
+      const ctx = contextFor(command);
+      process.exit(await runEdit(await ensembleNameOrPick(name, opts, ctx, "edit"), opts, ctx));
     });
 
   ensemble
     .command("remove")
     .alias("rm")
-    .argument("<name>", "ensemble to remove")
+    .argument("[name]", "ensemble to remove; omit on a TTY to pick")
     .description("remove a named ensemble")
     .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
     .option("--yes", "skip the confirmation")
     .option("--json", "emit machine-readable JSON")
-    .action(async (name: string, opts: EnsembleCommandOpts, command: Command) => {
-      process.exit(await runRemove(name, opts, contextFor(command)));
+    .action(async (name: string | undefined, opts: EnsembleCommandOpts, command: Command) => {
+      const ctx = contextFor(command);
+      process.exit(await runRemove(await ensembleNameOrPick(name, opts, ctx, "remove"), opts, ctx));
     });
 
   ensemble
@@ -462,11 +491,12 @@ export function registerEnsembleConfig(ensemble: Command): void {
 
   ensemble
     .command("use")
-    .argument("<name>", "ensemble sessions should default to")
+    .argument("[name]", "ensemble sessions should default to; omit on a TTY to pick")
     .description("set the session-default ensemble (defaultEnsemble)")
     .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON")
-    .action((name: string, opts: EnsembleCommandOpts, command: Command) => {
-      process.exit(runUse(name, opts, contextFor(command)));
+    .action(async (name: string | undefined, opts: EnsembleCommandOpts, command: Command) => {
+      const ctx = contextFor(command);
+      process.exit(runUse(await ensembleNameOrPick(name, opts, ctx, "use"), opts, ctx));
     });
 }

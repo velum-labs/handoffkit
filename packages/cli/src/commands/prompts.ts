@@ -32,6 +32,7 @@ import { fetchDefaultPrompts } from "../fusion/prompts.js";
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
+import { argOrPick } from "../shared/pickers.js";
 
 type PromptOpts = { repo?: string; ensemble?: string; json?: boolean; fusionkitDir?: string };
 
@@ -201,26 +202,36 @@ export function registerPrompts(program: Command): void {
       process.exit(runList(opts, contextFor(command)));
     });
 
+  const promptIdOrPick = async (given: string | undefined, verb: string): Promise<string> =>
+    argOrPick<string>({
+      given,
+      message: `Which prompt to ${verb}?`,
+      missing: `missing prompt id — expected one of ${PROMPT_IDS.join(", ")}`,
+      options: () => PROMPT_IDS.map((id) => ({ value: id, label: id }))
+    });
+
   prompts
     .command("edit")
-    .argument("<id>", `prompt to edit: ${PROMPT_IDS.join(" | ")}`)
+    .argument("[id]", `prompt to edit: ${PROMPT_IDS.join(" | ")}; omit on a TTY to pick`)
     .description("open a prompt override in $EDITOR, seeded from the engine's default")
     .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
     .option("--ensemble <name>", "edit this ensemble's override instead of the default")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
     .option("--json", "emit machine-readable JSON")
-    .action(async (id: string, opts: PromptOpts, command: Command) => {
-      process.exit(await runEdit(id, opts, contextFor(command)));
+    .action(async (id: string | undefined, opts: PromptOpts, command: Command) => {
+      const ctx = contextFor(command);
+      process.exit(await runEdit(await promptIdOrPick(id, "edit"), opts, ctx));
     });
 
   prompts
     .command("reset")
-    .argument("<id>", `prompt to reset: ${PROMPT_IDS.join(" | ")}`)
+    .argument("[id]", `prompt to reset: ${PROMPT_IDS.join(" | ")}; omit on a TTY to pick`)
     .description("remove a prompt override (the built-in default applies again)")
     .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
     .option("--ensemble <name>", "reset this ensemble's override instead of the default")
     .option("--json", "emit machine-readable JSON")
-    .action((id: string, opts: PromptOpts, command: Command) => {
-      process.exit(runReset(id, opts, contextFor(command)));
+    .action(async (id: string | undefined, opts: PromptOpts, command: Command) => {
+      const ctx = contextFor(command);
+      process.exit(runReset(await promptIdOrPick(id, "reset"), opts, ctx));
     });
 }

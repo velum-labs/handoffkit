@@ -20,6 +20,7 @@ import { ownedMlxEnv } from "../fusion/mlx.js";
 import { estimateModelSizing } from "../fusion/model-sizing.js";
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
+import { argOrPick } from "../shared/pickers.js";
 
 function firstLine(message: string): string {
   return (message.split("\n")[0] ?? message).trim();
@@ -212,20 +213,53 @@ export function registerModels(program: Command): void {
 
   models
     .command("download")
-    .argument("<repo>", "Hugging Face repo id (e.g. mlx-community/Qwen3-1.7B-4bit)")
+    .argument("[repo]", "Hugging Face repo id (e.g. mlx-community/Qwen3-1.7B-4bit); omit on a TTY to pick")
     .option("--force", "download even if the model is too large to run on this host")
     .description("download a model's weights into the owned cache (resumable)")
-    .action(async (repo: string, opts: { force?: boolean }, command: Command) => {
-      process.exit(await runDownload(repo, opts.force === true, contextFor(command)));
+    .action(async (repo: string | undefined, opts: { force?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
+      const picked = await argOrPick<string>({
+        given: repo,
+        message: "Which model to download?",
+        placeholder: "type to filter the catalog",
+        missing: "missing model repo — pass a Hugging Face repo id (see `fusionkit models`)",
+        options: () =>
+          recommendFor(detectHost()).map((entry) => ({
+            value: entry.repo,
+            label: entry.repo,
+            hint: `${entry.label} · ${entry.params} ${entry.quant} · ~${entry.sizeGB} GB${entry.fits ? "" : ` · needs ${entry.minRamGB}GB RAM`}`
+          }))
+      });
+      process.exit(await runDownload(picked, opts.force === true, ctx));
     });
 
   models
     .command("rm")
     .alias("remove")
-    .argument("<repo>", "Hugging Face repo id to remove from the cache")
+    .argument("[repo]", "Hugging Face repo id to remove from the cache; omit on a TTY to pick")
     .description("remove a model's weights from the owned cache")
     .option("--json", "emit machine-readable JSON")
-    .action((repo: string, _opts: { json?: boolean }, command: Command) => {
-      process.exit(runRemove(repo, contextFor(command)));
+    .action(async (repo: string | undefined, _opts: { json?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
+      let downloaded: Array<{ repo: string; sizeBytes: number }> = [];
+      if (repo === undefined) {
+        try {
+          downloaded = (await ownedMlxEnv().scanModels()).map((model) => ({
+            repo: model.repo,
+            sizeBytes: model.sizeBytes
+          }));
+        } catch {
+          // an unprovisioned runtime has nothing cached; the picker fails as empty
+        }
+      }
+      const picked = await argOrPick<string>({
+        given: repo,
+        message: "Which model to remove?",
+        missing: "missing model repo — pass a Hugging Face repo id (see `fusionkit models`)",
+        empty: "no downloaded models to remove",
+        options: () =>
+          downloaded.map((model) => ({ value: model.repo, label: model.repo, hint: formatBytes(model.sizeBytes) }))
+      });
+      process.exit(runRemove(picked, ctx));
     });
 }
