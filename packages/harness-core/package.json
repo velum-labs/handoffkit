@@ -33,5 +33,15 @@
     "registry": "https://registry.npmjs.org",
     "access": "public",
     "provenance": true
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "harness",
+    "driver",
+    "testing"
+  ]
 }

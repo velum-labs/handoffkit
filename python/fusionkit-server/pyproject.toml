@@ -2,14 +2,37 @@
 name = "fusionkit-server"
 version = "0.8.0"
 description = "OpenAI-compatible HTTP server for fusionkit."
+readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
+authors = [{ name = "Velum Labs" }]
+keywords = [
+  "fusionkit",
+  "model-fusion",
+  "llm",
+  "ensemble",
+  "openai-compatible",
+  "fastapi",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+]
 dependencies = [
   "fastapi>=0.124.4",
   "fusionkit-core==0.8.0",
   "uvicorn>=0.38.0",
 ]
+
+[project.urls]
+Homepage = "https://fusionkit.velum-labs.com"
+Repository = "https://github.com/velum-labs/handoffkit"
+Documentation = "https://fusionkit.velum-labs.com"
 
 [project.optional-dependencies]
 server = ["uvicorn[standard]>=0.38.0"]

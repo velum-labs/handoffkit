@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/sdk"
   },
-  "description": "Warrant SDK: a thin client over the plane API plus offline receipt verification.",
+  "description": "Legacy governance stack (not part of the FusionKit product): Warrant SDK: a thin client over the plane API plus offline receipt verification.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -27,5 +27,15 @@
   },
   "dependencies": {
     "@fusionkit/protocol": "workspace:*"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "legacy",
+    "governance",
+    "sdk"
+  ]
 }

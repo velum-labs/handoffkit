@@ -34,5 +34,15 @@
     "@fusionkit/tools": "workspace:*",
     "@openai/codex-sdk": "0.142.5",
     "zod": "4.4.3"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "codex",
+    "harness",
+    "adapter"
+  ]
 }

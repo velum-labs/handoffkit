@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/handoff"
   },
-  "description": "Handoff SDK: continuation-first developer surface (checkpoint, continueIn, parallel, review, pull) built entirely on Warrant primitives.",
+  "description": "Legacy governance stack (not part of the FusionKit product): Handoff SDK: continuation-first developer surface (checkpoint, continueIn, parallel, review, pull) built entirely on Warrant primitives.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -29,5 +29,15 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/sdk": "workspace:*",
     "@fusionkit/workspace": "workspace:*"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "legacy",
+    "handoff",
+    "continuation"
+  ]
 }

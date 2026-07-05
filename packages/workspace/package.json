@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/workspace"
   },
-  "description": "Workspace capture, materialization, and divergence-safe pull. Shared by the CLI, runner, and handoff SDK.",
+  "description": "Git workspace capture, worktree materialization, and divergence-safe pull for FusionKit panels and CLI workflows.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -28,5 +28,15 @@
   "dependencies": {
     "@fusionkit/protocol": "workspace:*",
     "minimatch": "10.2.5"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "git",
+    "worktree",
+    "workspace"
+  ]
 }

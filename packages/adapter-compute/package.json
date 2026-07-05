@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/adapter-compute"
   },
-  "description": "ComputeSDK-shaped compute surface over governed runner sessions: sandbox.create(), runCommand, and filesystem, where every operation is a signed contract with a receipt.",
+  "description": "Legacy governance stack (not part of the FusionKit product): ComputeSDK-shaped compute surface over governed runner sessions: sandbox.create(), runCommand, and filesystem, where every operation is a signed contract with a receipt.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -34,5 +34,15 @@
   },
   "devDependencies": {
     "@fusionkit/testkit": "workspace:*"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "legacy",
+    "compute",
+    "sandbox"
+  ]
 }

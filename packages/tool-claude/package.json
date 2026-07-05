@@ -39,5 +39,15 @@
   },
   "devDependencies": {
     "@fusionkit/workspace": "workspace:*"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "claude-code",
+    "harness",
+    "adapter"
+  ]
 }

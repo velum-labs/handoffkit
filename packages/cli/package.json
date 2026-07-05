@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/cli"
   },
-  "description": "fusionkit — real model fusion behind your coding agent (codex, claude, cursor).",
+  "description": "fusionkit \u2014 real model fusion behind your coding agent (codex, claude, cursor).",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -60,5 +60,16 @@
   "devDependencies": {
     "@fusionkit/testkit": "workspace:*",
     "@types/figlet": "1.7.0"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "cli",
+    "codex",
+    "claude-code",
+    "cursor"
+  ]
 }

@@ -1,32 +1,39 @@
 # Changelog
 
+Release notes for the FusionKit monorepo: `@fusionkit/*` npm packages, the `@velum-labs/model-fusion-protocol` contract package, and the PyPI `fusionkit` package set. Release tags are named `handoffkit-v*` for historical reasons.
+
 ## 0.8.0 - 2026-06-29
 
-- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+- Added failover, durable sessions, unified configuration, and turnkey Cursor IDE support for fused harness runs.
+- Switched `@fusionkit/*` package publishing to npm OIDC trusted publishing with provenance.
 
 ## 0.7.4 - 2026-06-25
 
-- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+- Emitted per-candidate observability trace events from tool harnesses.
 
 ## 0.7.3 - 2026-06-24
 
-- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+- Reconstructed trajectories for Cursor-backed fusion panel runs.
+- Removed unused candidate-summary diff artifact plumbing from the ensemble package.
 
 ## 0.7.2 - 2026-06-23
 
-- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+- Reconstructed trajectories from streamed SSE response bodies so streamed panel runs keep their evidence.
 
 ## 0.7.1 - 2026-06-23
 
-- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+- Preserved failed panel candidates in fusion results instead of silently dropping them.
+- Corrected stale `trajectory:step` endpoint labels and comments to `trajectories:fuse`.
 
 ## 0.7.0 - 2026-06-23
 
-- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+- Adopted `@velum-labs/model-fusion-protocol` 0.5.0 with OpenAI Responses item support.
+- Released the matching PyPI `fusionkit` 0.7.0 package set.
 
 ## 0.6.0 - 2026-06-23
 
-- Release cut via the cross-repo coordinator (`scripts/release.mjs`).
+- Adopted `@velum-labs/model-fusion-protocol` 0.4.0 and the matching PyPI `fusionkit` 0.6.0 package set.
+- Pointed the gateway and ensemble packages at the unified fuse endpoint.
 
 ## 0.5.4 - 2026-06-22
 
@@ -72,6 +79,4 @@
 
 - Release cut via the cross-repo coordinator (`scripts/release.mjs`).
 
-Release notes for the handoffkit release units, maintained by the cross-repo
-release coordinator (`scripts/release.mjs`). See `docs/releasing.md` for the
-plan/apply workflow.
+Older entries are preserved as historical release-coordinator cuts. See `docs/releasing.md` for the plan/apply workflow.

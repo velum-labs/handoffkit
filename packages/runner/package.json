@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/runner"
   },
-  "description": "Warrant runner: outbound-only execution of vendor agent harnesses inside governed sessions with deny-by-default egress.",
+  "description": "Legacy governance stack (not part of the FusionKit product): Warrant runner: outbound-only execution of vendor agent harnesses inside governed sessions with deny-by-default egress.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -30,5 +30,15 @@
     "@fusionkit/runtime-utils": "workspace:*",
     "@fusionkit/sdk": "workspace:*",
     "@fusionkit/workspace": "workspace:*"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "legacy",
+    "governance",
+    "runner"
+  ]
 }

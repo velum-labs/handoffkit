@@ -33,5 +33,15 @@
     "@fusionkit/tools": "workspace:*",
     "@zed-industries/agent-client-protocol": "0.4.5",
     "zod": "4.4.3"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "cursor",
+    "harness",
+    "adapter"
+  ]
 }

@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/session-vercel-sandbox"
   },
-  "description": "Vercel Sandbox session backend for Warrant runners: each governed session runs in a Firecracker microVM with VM-level isolation and domain-based egress policy.",
+  "description": "Legacy governance stack (not part of the FusionKit product): Vercel Sandbox session backend for Warrant runners: each governed session runs in a Firecracker microVM with VM-level isolation and domain-based egress policy.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -31,5 +31,15 @@
     "@fusionkit/runner": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
     "ms": "2.1.3"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "legacy",
+    "vercel-sandbox",
+    "microvm"
+  ]
 }
