@@ -41,7 +41,7 @@ evals = [
 # (adapters/livecodebench_adapter.py). Pinned <4 because the dataset uses a
 # loading script, which datasets>=4 dropped.
 livecodebench = [
-  "datasets<4",
+  "datasets<6",
 ]
 
 [build-system]

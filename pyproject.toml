@@ -25,7 +25,7 @@ fusionkit-mlx = { workspace = true }
 [dependency-groups]
 dev = [
   "coverage>=7.13.0",
-  "datasets<4",
+  "datasets<6",
   "httpx>=0.28.1",
   "httpx2>=2.4.0",
   "jsonschema>=4.26.0",
