@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
-    "@ai-sdk/provider": "3.0.10",
+    "@ai-sdk/provider": "4.0.2",
     "@fusionkit/example-utils": "workspace:*",
     "@fusionkit/handoff": "workspace:*",
     "@fusionkit/testkit": "workspace:*",
