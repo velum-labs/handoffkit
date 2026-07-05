@@ -69,7 +69,7 @@ Use the existing manifest path:
 ```bash
 uv run fusionkit fusion-bench \
   --config path/to/config.toml \
-  --manifest python/fusionkit-evals/benchmarks/dirty-dozen \
+  --manifest python/fusionkit-evals/src/fusionkit_evals/data/benchmarks/dirty-dozen \
   --output .fusionkit/dirty-dozen/rows.jsonl \
   --report .fusionkit/dirty-dozen/report.md
 ```

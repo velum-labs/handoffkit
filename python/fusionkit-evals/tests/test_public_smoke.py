@@ -100,7 +100,7 @@ async def test_public_smoke_report_keeps_skips_separate(tmp_path) -> None:
 
 
 def test_public_smoke_docs_contain_claim_disclaimer() -> None:
-    docs_path = Path(__file__).resolve().parents[1] / "docs" / "public-benchmark-smoke.md"
+    docs_path = Path(__file__).resolve().parents[3] / "docs" / "public-benchmark-smoke.md"
     docs = docs_path.read_text(encoding="utf-8")
 
     assert "not public benchmark runs" in docs

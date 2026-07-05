@@ -5,6 +5,8 @@ import time
 import traceback
 import uuid
 from collections.abc import AsyncIterator
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as distribution_version
 from pathlib import Path
 from typing import Any, assert_never, cast
 
@@ -137,13 +139,20 @@ class FuseTrajectoriesRequest(BaseModel):
     stream: bool = False
 
 
+def _package_version() -> str:
+    try:
+        return distribution_version("fusionkit-server")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
 def create_app(
     config: FusionConfig,
     clients: dict[str, ChatClient] | None = None,
     run_manager: FusionRunManager | None = None,
     run_store_path: Path | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="fusionkit", version="0.2.0")
+    app = FastAPI(title="fusionkit", version=_package_version())
     model_clients = clients or build_clients(config)
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)

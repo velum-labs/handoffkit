@@ -250,3 +250,23 @@ def test_auth_status_runs(tmp_path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "Subscriptions" in result.output
+
+
+def test_root_help_shows_bench_group_but_hides_legacy_bench_aliases() -> None:
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "bench" in result.output
+    assert "serve" in result.output
+    assert "fusion-bench" not in result.output
+    assert "tiny-bench" not in result.output
+
+
+def test_hidden_legacy_bench_alias_and_new_group_both_resolve() -> None:
+    legacy = runner.invoke(app, ["tiny-bench", "--help"])
+    grouped = runner.invoke(app, ["bench", "tiny", "--help"])
+
+    assert legacy.exit_code == 0, legacy.output
+    assert grouped.exit_code == 0, grouped.output
+    assert "--config" in legacy.output
+    assert "--config" in grouped.output

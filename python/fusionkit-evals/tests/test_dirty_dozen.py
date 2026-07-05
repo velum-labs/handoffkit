@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 from typing import cast
 
 import pytest
@@ -17,6 +16,7 @@ from fusionkit_evals.dirty_dozen import (
     load_dirty_dozen_tasks,
 )
 from fusionkit_evals.fusion_bench import FusionBenchRunner, build_fusion_bench_report
+from fusionkit_evals.resources import packaged_data_path
 
 
 def test_dirty_dozen_loader_validates_manifest_matrix() -> None:
@@ -136,13 +136,7 @@ async def test_dirty_dozen_report_keeps_harness_skips_separate(tmp_path) -> None
 
 
 def test_dirty_dozen_readme_documents_setup_scoring_and_contamination() -> None:
-    readme_path = (
-        Path(__file__).resolve().parents[1]
-        / "python"
-        / "fusionkit-evals"
-        / "benchmarks"
-        / "README.md"
-    )
+    readme_path = packaged_data_path("benchmarks", "README.md")
     readme = readme_path.read_text(encoding="utf-8")
 
     assert "Clean-Checkout Setup" in readme

@@ -37,6 +37,7 @@ from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.providers import estimate_cost
 from fusionkit_core.registry import FUSION_PANEL_ALIAS
 from fusionkit_core.types import ChatMessage
+
 from fusionkit_evals.bench_runtime import classify_exception, retry_async
 from fusionkit_evals.code_extract import extract_code
 from fusionkit_evals.polyglot import (

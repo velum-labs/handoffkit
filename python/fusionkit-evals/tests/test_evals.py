@@ -85,7 +85,7 @@ def test_tiny_benchmark_malformed_fixture_is_rejected(tmp_path) -> None:
 
 def test_contract_benchmark_fixture_matrix_remains_compatibility_sized() -> None:
     contract_fixture_dir = (
-        Path(__file__).resolve().parents[1]
+        Path(__file__).resolve().parents[3]
         / "spec"
         / "model-fusion-contract"
         / "fixture"

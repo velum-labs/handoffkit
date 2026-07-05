@@ -17,9 +17,10 @@ from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.types import ChatMessage
 from pydantic import BaseModel, Field
 
+from fusionkit_evals.resources import packaged_data_path
 from fusionkit_evals.scorers import contains_expected, exact_match
 
-TINY_FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "fixtures" / "tiny-phase1"
+TINY_FIXTURE_ROOT = packaged_data_path("fixtures", "tiny-phase1")
 DISCLAIMER = "tiny synthetic Phase 1 smoke gate; not public benchmark performance"
 
 Scorer = Callable[[str, str | None], float | None]

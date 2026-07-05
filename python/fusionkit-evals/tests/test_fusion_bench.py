@@ -39,6 +39,7 @@ from fusionkit_evals.fusion_reports import (
     write_fusion_bench_markdown_report,
     write_fusion_bench_report_jsonl,
 )
+from fusionkit_evals.resources import packaged_data_path
 from typer.testing import CliRunner
 
 _HANDOFFKIT_NODE_SHIM = (
@@ -57,9 +58,7 @@ def test_fusion_bench_loads_tiny_manifests() -> None:
 
 
 def test_fusion_bench_loads_adversarial_native_fusion_ranker_fixtures() -> None:
-    tasks = load_benchmark_tasks(
-        "python/fusionkit-evals/fixtures/adversarial-native-fusion"
-    )
+    tasks = load_benchmark_tasks(packaged_data_path("fixtures", "adversarial-native-fusion"))
 
     assert len(tasks) == 2
     assert all(task.record.task_kind == "model_fusion" for task in tasks)
@@ -71,9 +70,7 @@ def test_fusion_bench_loads_adversarial_native_fusion_ranker_fixtures() -> None:
 
 
 def test_adversarial_ranker_fixture_reports_regret_not_quality_claim() -> None:
-    task = load_benchmark_tasks(
-        "python/fusionkit-evals/fixtures/adversarial-native-fusion"
-    )[0]
+    task = load_benchmark_tasks(packaged_data_path("fixtures", "adversarial-native-fusion"))[0]
     row = _report_row(
         task.record.task_id,
         output="Because there is evidence, therefore the answer is 5.",
@@ -713,7 +710,7 @@ def _handoffkit_cli_or_skip() -> Path:
         candidates.append(Path(env_cli))
     candidates.extend(
         [
-            Path(__file__).resolve().parents[1]
+            Path(__file__).resolve().parents[3]
             / "packages"
             / "cli"
             / "dist"

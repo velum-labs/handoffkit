@@ -31,15 +31,12 @@ from fusionkit_evals.public_bench_report import (
     build_benchmark_comparison,
     format_benchmark_comparison_markdown,
 )
+from fusionkit_evals.resources import packaged_data_path
 from typer.testing import CliRunner
 
-_SAMPLE_ENVELOPE = (
-    Path(__file__).resolve().parents[1]
-    / "python"
-    / "fusionkit-evals"
-    / "fixtures"
-    / "public-bench"
-    / "aider-polyglot-subset.sample.json"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+_SAMPLE_ENVELOPE = packaged_data_path(
+    "fixtures", "public-bench", "aider-polyglot-subset.sample.json"
 )
 
 
@@ -321,9 +318,7 @@ def test_public_bench_baselines_cli_outputs_suite_table() -> None:
 
 
 def test_public_bench_docs_document_strategy_and_boundaries() -> None:
-    docs_path = (
-        Path(__file__).resolve().parents[1] / "docs" / "public-benchmark-comparison.md"
-    )
+    docs_path = REPO_ROOT / "docs" / "public-benchmark-comparison.md"
     docs = docs_path.read_text(encoding="utf-8")
 
     assert "Borrow the harness" in docs

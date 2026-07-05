@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import pytest
-from fusionkit_core.config import FusionConfig, PromptOverrides, SamplingConfig
+from fusionkit_core.config import FusionConfig, PromptOverrides, SamplingConfig, load_config
 from fusionkit_core.judge import JudgeSynthesizer
 from fusionkit_core.prompts import (
     AGENT_STEP_CONTRACT,
@@ -109,6 +110,50 @@ def test_prompt_overrides_parsed_from_config_mapping() -> None:
     )
     assert config.prompts.judge_system == "CUSTOM JUDGE"
     assert config.prompts.synthesizer_system == "CUSTOM SYNTH"
+
+
+def test_load_config_uses_prompt_files_when_yaml_unset(tmp_path: Path) -> None:
+    config_path = tmp_path / "fusionkit.yaml"
+    config_path.write_text(
+        "endpoints:\n"
+        "  - id: a\n"
+        "    model: m\n"
+        "    base_url: http://x\n"
+        "default_model: a\n",
+        encoding="utf-8",
+    )
+    prompts_dir = tmp_path / ".fusionkit" / "prompts"
+    prompts_dir.mkdir(parents=True)
+    (prompts_dir / "judge.md").write_text("FILE JUDGE\n", encoding="utf-8")
+    (prompts_dir / "synthesizer.md").write_text("FILE SYNTH\n", encoding="utf-8")
+
+    config = load_config(config_path)
+
+    assert config.prompts.judge_system == "FILE JUDGE"
+    assert config.prompts.synthesizer_system == "FILE SYNTH"
+
+
+def test_yaml_prompt_overrides_win_over_prompt_files(tmp_path: Path) -> None:
+    config_path = tmp_path / "fusionkit.yaml"
+    config_path.write_text(
+        "endpoints:\n"
+        "  - id: a\n"
+        "    model: m\n"
+        "    base_url: http://x\n"
+        "default_model: a\n"
+        "prompts:\n"
+        "  judge_system: YAML JUDGE\n",
+        encoding="utf-8",
+    )
+    prompts_dir = tmp_path / ".fusionkit" / "prompts"
+    prompts_dir.mkdir(parents=True)
+    (prompts_dir / "judge.md").write_text("FILE JUDGE\n", encoding="utf-8")
+    (prompts_dir / "synthesizer.md").write_text("FILE SYNTH\n", encoding="utf-8")
+
+    config = load_config(config_path)
+
+    assert config.prompts.judge_system == "YAML JUDGE"
+    assert config.prompts.synthesizer_system == "FILE SYNTH"
 
 
 @pytest.mark.asyncio
