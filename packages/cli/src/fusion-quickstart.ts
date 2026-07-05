@@ -24,6 +24,7 @@ import { DEFAULT_ENSEMBLE_NAME, formatDurationMs, FUSION_PANEL_MODEL, fusionMode
 import type { ToolLaunchContext } from "@fusionkit/tools";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
 import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+import { cursorInstructions } from "@fusionkit/tool-cursor";
 
 import {
   bold,
@@ -47,6 +48,7 @@ import { gatewaySetupSnippets, setGatewayChatter, setGatewayStatusSink } from ".
 import { toolRegistry } from "./tools.js";
 import { createPortlessSession } from "./shared/portless.js";
 import { PreflightError, runPreflight } from "./shared/preflight.js";
+import { generateSessionToken, startPublicTunnel } from "./shared/tunnel.js";
 import { createBootView } from "./fusion/boot-view.js";
 
 import { hasCloudConsent, recordCloudConsent } from "./fusion/consent.js";
@@ -241,6 +243,9 @@ export async function runFusion(
   const root = mkdtempSync(join(tmpdir(), "fusionkit-fusion-"));
   const logsDir = join(root, "logs");
   mkdirSync(logsDir, { recursive: true });
+  // `serve --expose` publishes the gateway on a public tunnel, so a bearer
+  // token is always enforced — auto-generated when the user did not set one.
+  const authToken = options.authToken ?? (options.expose === true ? generateSessionToken() : undefined);
   // Default the fused repo to the current directory's git repo: the panel models
   // and the launched harness must operate on the SAME codebase, and the launched
   // tool runs in this repo (below). No hidden sample repo — if the user wants a
@@ -643,7 +648,7 @@ export async function runFusion(
       ...(stackPrompts !== undefined ? { prompts: stackPrompts } : {}),
       ...(stackJudgeModel !== undefined ? { judgeModel: stackJudgeModel } : {}),
       ...(options.synthesisUrl !== undefined ? { synthesisUrl: options.synthesisUrl } : {}),
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(authToken !== undefined ? { authToken } : {}),
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
@@ -761,6 +766,26 @@ export async function runFusion(
     if (tool === "serve") {
       log("");
       log(gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>"));
+      if (options.expose === true) {
+        // Publish the gateway for clients that cannot reach loopback (Cursor
+        // BYOK goes through Cursor's backend, which blocks private networks).
+        // Tunnel the raw loopback port: a portless HTTPS name is not dialable
+        // by cloudflared.
+        const tunnel = await startPublicTunnel({
+          gatewayUrl: `http://127.0.0.1:${stack.gatewayPort}`,
+          log
+        });
+        disposers.push(() => tunnel.close());
+        log("");
+        log(cursorInstructions(
+          tunnel.url,
+          modelLabel,
+          ensembles.map((ensemble) => fusionModelId(ensemble.name)),
+          authToken
+        ));
+        log("");
+        log(`Public gateway (bearer token required): ${tunnel.url}/v1`);
+      }
       log("");
       log("Gateway is running. Point any tool at it, or Ctrl+C to stop.");
       await new Promise<void>(() => {
@@ -790,7 +815,7 @@ export async function runFusion(
       toolArgs,
       repo,
       ...(options.ide === true ? { ide: true } : {}),
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(authToken !== undefined ? { authToken } : {}),
       ...(portless.caCertPath !== undefined ? { caCertPath: portless.caCertPath } : {}),
       logsDir,
       log,

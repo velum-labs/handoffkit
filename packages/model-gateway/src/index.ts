@@ -128,6 +128,7 @@ export type { MlxBackendOptions } from "./mlx-backend.js";
 export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";
 export type { BackendConfig } from "./config.js";
 export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
+export { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 export {
   anthropicModelsResponse,
   anthropicToChat,

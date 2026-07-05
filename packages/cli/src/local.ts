@@ -5,6 +5,8 @@ import { KernelBackend } from "@fusionkit/ensemble";
 import { LOCAL_MODEL_LABEL, readEnv } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
+import { generateSessionToken, startPublicTunnel } from "./shared/tunnel.js";
+import type { PublicTunnel, StartPublicTunnelOptions } from "./shared/tunnel.js";
 import { toolRegistry } from "./tools.js";
 
 /**
@@ -62,6 +64,8 @@ export type RunLocalOptions = {
   authToken?: string;
   /** Override the resolved backend (tests). */
   config?: BackendConfig;
+  /** Override the tunnel provisioner (tests). */
+  startTunnel?: (options: StartPublicTunnelOptions) => Promise<PublicTunnel>;
   log?: (line: string) => void;
 };
 
@@ -77,12 +81,33 @@ export async function runLocal(
   const log = options.log ?? ((line: string) => uiStream().write(`${line}\n`));
   const config = options.config ?? resolveBackendConfig();
   const model = backendModel(config);
-  const publicUrl = options.publicUrl ?? readEnv(process.env, "FUSIONKIT_PUBLIC_URL");
-  const gateway = await startLocalGateway(config, options.authToken);
+  let publicUrl = options.publicUrl ?? readEnv(process.env, "FUSIONKIT_PUBLIC_URL");
+  // Cursor's BYOK plan-panel flow needs a public HTTPS URL (Cursor's backend
+  // proxies BYOK traffic and blocks loopback). When the user did not bring
+  // their own tunnel, provision a Quick Tunnel — and since that URL is public,
+  // always enforce a gateway bearer token (auto-generated when unset).
+  const needsTunnel = tool === "cursor" && options.ide !== true && publicUrl === undefined;
+  const authToken = options.authToken ?? (needsTunnel ? generateSessionToken() : undefined);
+  const gateway = await startLocalGateway(config, authToken);
   log(`fusionkit local: gateway on ${gateway.url} (model: ${model})`);
 
   const disposers: Array<() => Promise<void> | void> = [];
   try {
+    if (needsTunnel) {
+      try {
+        const tunnel = await (options.startTunnel ?? startPublicTunnel)({
+          gatewayUrl: gateway.url,
+          log
+        });
+        disposers.push(() => tunnel.close());
+        publicUrl = tunnel.url;
+      } catch (error) {
+        // Degrade to the manual-tunnel instructions the launcher prints when
+        // no public URL is available, instead of failing the whole launch.
+        const first = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+        log(`fusionkit local: automatic tunnel unavailable (${first})`);
+      }
+    }
     if (tool === "serve") {
       log(`OpenAI:    ${gateway.url}/v1`);
       log(`Anthropic: ${gateway.url}/v1/messages`);
@@ -103,7 +128,7 @@ export async function runLocal(
       modelLabel: model,
       toolArgs,
       ...(options.ide === true ? { ide: true } : {}),
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(authToken !== undefined ? { authToken } : {}),
       ...(publicUrl !== undefined ? { publicUrl } : {}),
       log,
       prepareForPassthrough: () => undefined,

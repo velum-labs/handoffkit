@@ -586,6 +586,8 @@ export async function startRouter(options: {
 
 export type FusionStack = {
   fusionUrl: string;
+  /** The gateway's raw loopback port (for tunnels that need a dialable origin). */
+  gatewayPort: number;
   endpoints: Record<string, string>;
   /** True when a compatible running router was reused instead of spawned. */
   reusedRouter: boolean;
@@ -876,6 +878,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     if (report) report({ kind: "gateway.ready", detail: fusionUrl });
     return {
       fusionUrl,
+      gatewayPort: gateway.port(),
       endpoints: modelEndpoints,
       reusedRouter,
       close: async () => {

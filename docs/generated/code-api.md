@@ -194,6 +194,7 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";`
 - `export type { BackendConfig } from "./config.js";`
 - `export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";`
+- `export { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";`
 - `export { anthropicModelsResponse, anthropicToChat, chatToAnthropicMessage, claudeModelAlias, countTokensEstimate, handleAnthropicMessages, handleCountTokens, mapStopReason, openAiSseToAnthropic } from "./adapters/anthropic.js";`
 - `export type { AnthropicRequest } from "./adapters/anthropic.js";`
 - `export { chatToResponses, customToolNames, handleResponses, openAiSseToResponses, responsesToChat, responsesToolRegistry } from "./adapters/responses.js";`

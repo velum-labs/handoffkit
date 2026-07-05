@@ -1172,3 +1172,14 @@ test("fusionkit version --json emits the version matrix", async () => {
   assert.ok(typeof matrix.tools.codex === "string");
 });
 
+test("--expose is rejected for non-serve launch tools", () => {
+  const dir = mkdtempSync(join(tmpdir(), "fusionkit-expose-"));
+  try {
+    const result = warrant(["codex", "--expose"], { cwd: dir });
+    assert.equal(result.status, 1);
+    assert.match(result.stdout + result.stderr, /--expose only applies to `fusionkit serve`/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+

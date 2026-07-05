@@ -445,6 +445,11 @@ const TRUSTED_THIRD_PARTY = new Map([
   // Zed ACP for cursor-agent, opencode HTTP), pinned exactly like every other
   // dependency and bumped only as reviewed allowlist changes.
   ["@anthropic-ai/claude-agent-sdk", "0.3.198"],
+  // Cloudflare Quick Tunnel wrapper (unjs): auto-provisions the public HTTPS
+  // tunnel behind the OOTB Cursor BYOK flow (`fusionkit serve --expose`,
+  // `fusionkit local cursor`). Downloads the official cloudflared binary at
+  // runtime (no install scripts).
+  ["untun", "0.1.3"],
   ["@openai/codex-sdk", "0.142.5"],
   ["@opencode-ai/sdk", "1.17.13"],
   ["@zed-industries/agent-client-protocol", "0.4.5"],

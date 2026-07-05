@@ -119,6 +119,12 @@ export type RunFusionOptions = {
   authToken?: string;
   port?: number;
   timeoutMs?: number;
+  /**
+   * `serve` only: expose the gateway on a public HTTPS Quick Tunnel (for
+   * clients that cannot reach loopback, e.g. Cursor BYOK). Always enforces a
+   * gateway bearer token — auto-generated when `authToken` is unset.
+   */
+  expose?: boolean;
   /** Use the local MLX panel trio (Apple Silicon) instead of the cloud panel. */
   local?: boolean;
   /** Boot the local scope dashboard and stream trace events into it. */

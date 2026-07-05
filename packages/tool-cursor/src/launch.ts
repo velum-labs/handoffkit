@@ -28,7 +28,8 @@ export function cursorIdeInstructions(model: string): string {
 export function cursorInstructions(
   publicUrl: string,
   model: string,
-  fusedModels: readonly string[] = []
+  fusedModels: readonly string[] = [],
+  apiKey?: string
 ): string {
   const otherFused = fusedModels.filter((id) => id !== model);
   return [
@@ -36,9 +37,9 @@ export function cursorInstructions(
     "localhost — so this uses a public tunnel. In Cursor: Settings -> Models ->",
     "enable 'Override OpenAI Base URL', then set:",
     "",
-    `  Override OpenAI Base URL : ${publicUrl}/v1`,
+    `  Override OpenAI Base URL : ${publicUrl}/v1/cursor`,
     `  Model name               : ${model}`,
-    `  OpenAI API Key           : fusionkit-local (any non-empty value)`,
+    `  OpenAI API Key           : ${apiKey ?? "fusionkit-local (any non-empty value)"}`,
     ...(otherFused.length > 0
       ? [
           "",
@@ -87,6 +88,9 @@ async function launchCursorFusion(ctx: ToolLaunchContext): Promise<number> {
 async function launchCursorLocal(ctx: ToolLaunchContext): Promise<number> {
   const publicUrl = ctx.publicUrl;
   if (publicUrl === undefined || publicUrl.length === 0) {
+    // The CLI normally auto-provisions a Quick Tunnel before this launcher
+    // runs; landing here means that failed (or was bypassed), so print the
+    // manual fallback.
     ctx.log("");
     ctx.log("Cursor needs a public URL (it cannot reach localhost). Start a tunnel to");
     ctx.log(`${ctx.gatewayUrl} (e.g. 'cloudflared tunnel --url ${ctx.gatewayUrl}' or 'ngrok http`);
@@ -95,7 +99,7 @@ async function launchCursorLocal(ctx: ToolLaunchContext): Promise<number> {
     return 1;
   }
   ctx.log("");
-  ctx.log(cursorInstructions(publicUrl, ctx.modelLabel, ctx.fusedModels ?? []));
+  ctx.log(cursorInstructions(publicUrl, ctx.modelLabel, ctx.fusedModels ?? [], ctx.authToken));
   ctx.log("");
   ctx.log("Gateway is running; leave this process up while you use Cursor. Ctrl+C to stop.");
   await new Promise<void>(() => {

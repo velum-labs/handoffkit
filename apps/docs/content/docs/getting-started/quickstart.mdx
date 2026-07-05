@@ -101,14 +101,24 @@ and tool-calling examples.
 - `--observe`: boot the local trace dashboard.
 - `--yes`: skip the cloud-panel cost confirmation.
 
-fusionkit's own flags must precede the tool name; everything after the tool is
-forwarded to it. See the full [command reference](/docs/cli/commands).
+fusionkit's own flags go after the tool name and must precede any arguments
+forwarded to the tool. See the full [command reference](/docs/cli/commands).
 
 For non-interactive environments, combine `--yes` with a fixed port or disabled
 portless registration:
 
 ```bash
-fusionkit --yes --no-portless --port 8787 serve
+fusionkit serve --yes --no-portless --port 8787
+```
+
+To reach the gateway from clients that cannot connect to loopback (for
+example Cursor's BYOK base-URL override, which is proxied through Cursor's
+backend), add `--expose`: the gateway is published on a public HTTPS
+Cloudflare Quick Tunnel with a required bearer token, and the exact Cursor
+settings are printed at boot:
+
+```bash
+fusionkit serve --yes --expose
 ```
 
 ## Pick fused or direct models

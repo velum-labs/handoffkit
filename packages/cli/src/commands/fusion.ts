@@ -49,6 +49,7 @@ type FusionOpts = {
   port?: string;
   portless?: boolean;
   ide?: boolean;
+  expose?: boolean;
   onRateLimit?: string;
   budget?: string;
   panelTrust?: string;
@@ -90,6 +91,10 @@ function applyFusionOptions(command: Command): Command {
     .option("--portless", "route services through portless stable URLs (default; needs the proxy)")
     .option("--no-portless", "disable portless; use raw loopback ports (same as PORTLESS=0)")
     .option("--ide", "Cursor only: wire the Cursor IDE to the gateway (local desktop proxy, no tunnel)")
+    .option(
+      "--expose",
+      "serve only: publish the gateway on a public HTTPS tunnel (Cloudflare Quick Tunnel) with a required bearer token — e.g. for Cursor BYOK"
+    )
     .option(
       "--on-rate-limit <policy>",
       "vendor rate-limit/credit handoff: fusion (continue on the ensemble, default) | passthrough | fail"
@@ -134,6 +139,7 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.subagents !== undefined) options.subagents = opts.subagents;
   if (opts.portless !== undefined) options.portless = opts.portless;
   if (opts.ide === true) options.ide = true;
+  if (opts.expose === true) options.expose = true;
   const onRateLimit = parseOnRateLimit(opts.onRateLimit);
   if (onRateLimit !== undefined) options.onRateLimit = onRateLimit;
   const budgetUsd = parseBudget(opts.budget);
@@ -273,6 +279,9 @@ export function registerFusion(program: Command): void {
         const opts = command.optsWithGlobals<FusionOpts>();
         warnPassthroughTypos(command, args, tool);
         const { options } = resolveContext(opts);
+        if (options.expose === true && tool !== "serve") {
+          fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
+        }
         const code = await runFusion(tool, args, options);
         process.exit(code);
       });
@@ -316,6 +325,9 @@ export function registerFusion(program: Command): void {
       }
       const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
       warnPassthroughTypos(command, toolArgs, resolvedTool);
+      if (options.expose === true && resolvedTool !== "serve") {
+        fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
+      }
       const code = await runFusion(resolvedTool, toolArgs, options);
       process.exit(code);
     });

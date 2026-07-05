@@ -19,6 +19,7 @@ import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 
 import { chatToAnthropicMessage, openAiSseToAnthropic } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
+import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { chatToResponses, openAiSseToResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 
@@ -380,6 +381,13 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       return;
     }
 
+    // Cursor may probe the models list relative to its BYOK base URL
+    // (`.../v1/cursor`); mirror /v1/models there.
+    if (method === "GET" && path === "/v1/cursor/models") {
+      writeJson(res, 200, openAiModels(defaultModel));
+      return;
+    }
+
     if (method === "POST" && (path === "/v1/responses" || path === "/responses")) {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
@@ -409,6 +417,28 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ChatRequest;
+      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat, traceIdFor(req));
+      return;
+    }
+
+    // Cursor's BYOK base-URL override POSTs a Responses-API-shaped body to
+    // `{base_url}/chat/completions` while expecting Chat Completions back (a
+    // known Cursor hybrid). Translate it, then delegate to the exact code path
+    // the plain /v1/chat/completions route uses. Plain Chat Completions bodies
+    // (Cursor Ask mode) pass through untranslated.
+    if (method === "POST" && path === "/v1/cursor/chat/completions") {
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      if (!isCursorChatBody(raw)) {
+        writeJson(res, 400, {
+          error: {
+            message: 'request body must be a JSON object with "messages" or "input"',
+            type: "invalid_request_error"
+          }
+        });
+        return;
+      }
+      const body = translateCursorRequest(raw) as ChatRequest;
       await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat, traceIdFor(req));
       return;
     }
