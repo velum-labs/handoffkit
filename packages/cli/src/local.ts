@@ -8,7 +8,7 @@ import type { ToolLaunchContext } from "@fusionkit/tools";
 import { toolRegistry } from "./tools.js";
 
 /**
- * `warrant local <tool>` — back a vendor agent harness with a locally running
+ * `fusionkit local <tool>` — back a vendor agent harness with a locally running
  * model, with no change to how the tool is invoked. Each launcher ensures the
  * model gateway is up, applies the tool's native configuration shim
  * (environment, config file, or — for Cursor — IDE settings + a public

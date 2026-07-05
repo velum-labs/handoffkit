@@ -23,7 +23,7 @@ try {
 }
 
 function list() {
-  console.log(bold("warrant examples"));
+  console.log(bold("fusionkit examples"));
   console.log("");
   for (const demo of DEMOS) {
     console.log(`  ${bold(demo.id)}  ${demo.title}${demo.interactive ? dim("  (interactive)") : ""}`);

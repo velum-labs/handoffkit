@@ -718,7 +718,7 @@ def _handoffkit_cli_or_skip() -> Path:
             / "cli"
             / "dist"
             / "index.js",
-            Path("/opt/velum/repos/handoffkit/packages/cli/dist/index.js"),
+            Path("/tmp/example/repo/packages/cli/dist/index.js"),
         ]
     )
     for cli in candidates:

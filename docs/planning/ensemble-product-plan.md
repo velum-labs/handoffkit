@@ -1,3 +1,5 @@
+> Historical product plan (June 2026). Many workstreams have since landed; see docs/scope.md and the fusion docs for current state.
+
 # FusionKit — Ensemble Product Build Plan
 
 Goal: ship a tool people install to **run ensembles of models** — local and commercial cloud — for both **normal inference** (text generation + tool calling) and **coding with harnesses** (Cursor, Codex, Claude Code), including **automatic handoff to the ensemble when a vendor rate-limits or runs out of credits**.

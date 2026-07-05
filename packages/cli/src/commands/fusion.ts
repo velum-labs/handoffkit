@@ -175,7 +175,7 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   return options;
 }
 
-/** Fill any option the user did not set explicitly from `fusionkit.json`. */
+/** Fill any option the user did not set explicitly from `.fusionkit/fusion.json`. */
 function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   // Named ensembles: every defined ensemble flows through (each registers as
   // its own gateway model); `--ensemble` (or the config's defaultEnsemble)

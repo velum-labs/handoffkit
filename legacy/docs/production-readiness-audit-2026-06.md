@@ -1,3 +1,5 @@
+> Historical internal audit (2026-06-26). Retained for reference; contents are stale and do not describe the current product.
+
 # Velum Labs — Production Readiness Audit
 
 Deep cross-repo audit — 4 parallel read-only agents, quantitative metrics, file-level evidence. Date: **2026-06-26**.

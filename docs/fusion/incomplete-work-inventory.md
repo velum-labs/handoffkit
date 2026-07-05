@@ -6,12 +6,13 @@ alongside:
 
 - `docs/fusion/kernel-migration.md` — kernel cutover phases and parity checklist
 - `docs/fusion/MOA_IMPLEMENTATION_STATUS.md` — what the runtime kernel already ships
-- `ENSEMBLE_PRODUCT_PLAN.md` — product gap-closing workstreams
+- `docs/planning/ensemble-product-plan.md` — product gap-closing workstreams
 - `docs/fusion/FUSION_VALUE_RUBRIC.md` — production gates and measurement criteria
 - `docs/scope.md` — product vs governance package boundaries
 
 **Last reviewed:** 2026-07-02. Some source documents (especially
-`PRODUCTION_READINESS_AUDIT.md` and `ENSEMBLE_PRODUCT_PLAN.md`, dated 2026-06) are
+`legacy/docs/production-readiness-audit-2026-06.md` and
+`docs/planning/ensemble-product-plan.md`, dated 2026-06) are
 partially stale where kernel migration, durable sessions, pre-stream failover, and
 kernel-native streaming have landed since they were written.
 
@@ -54,7 +55,7 @@ From `docs/fusion/MOA_IMPLEMENTATION_STATUS.md`:
 
 ---
 
-## 3. Product gaps (`ENSEMBLE_PRODUCT_PLAN.md`)
+## 3. Product gaps (`docs/planning/ensemble-product-plan.md`)
 
 Many items remain accurate; some have progressed (sessions, pre-stream failover,
 kernel streaming, `openai-compatible` panel provider).
@@ -149,12 +150,12 @@ default `fusionkit codex` path:
 | Item | Location | Status |
 | --- | --- | --- |
 | Codex `shell_command: "degraded"` | `packages/tool-codex/src/harness.ts` | `TODO(@000alen): why degraded? Codex adapter capability metadata should be the source of truth, with ToolDashboardMetadata documenting the shell_command limitation.` |
-| `panelIdentity` / `harnessPromptPassthrough` CLI flags | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` §12 | Wired internally; **not exposed** on `fusionkit codex` CLI or `.fusionkit` config |
-| Phase 3 optional: custom-instruction delta extraction | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` | Not done |
-| Harness prompt open questions Q1–Q4 | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` | Unresolved |
+| `panelIdentity` / `harnessPromptPassthrough` CLI flags | `docs/specs/harness-prompt-passthrough.md` §12 | Wired internally; **not exposed** on `fusionkit codex` CLI or `.fusionkit` config |
+| Phase 3 optional: custom-instruction delta extraction | `docs/specs/harness-prompt-passthrough.md` | Not done |
+| Harness prompt open questions Q1–Q4 | `docs/specs/harness-prompt-passthrough.md` | Unresolved |
 | **pi agent** | `packages/runner` | Non-spawnable placeholder argv (harness-only hashing) |
 | **Cursor ACP live probe** | `packages/tool-cursor/src/acp.ts` | Opt-in via `FUSIONKIT_GATEWAY_LIVE_CURSOR=1`; otherwise `blocked` |
-| **Cursorkit tool loop** | `PRODUCTION_READINESS_AUDIT.md` | 9 / 31 agent tools wired; full OpenAI `tool_calls` → Cursor message loop incomplete |
+| **Cursorkit tool loop** | `legacy/docs/production-readiness-audit-2026-06.md` | 9 / 31 agent tools wired; full OpenAI `tool_calls` → Cursor message loop incomplete |
 | **opencode** | `packages/tool-opencode` | Local model only; no fusion panel |
 
 ---
@@ -231,7 +232,7 @@ install and remove compile-time imports from product packages (`tool-claude`,
 
 ## 11. Packaging, GTM, and ecosystem
 
-From `PRODUCTION_READINESS_AUDIT.md` (verify which items remain open):
+From `legacy/docs/production-readiness-audit-2026-06.md` (verify which items remain open):
 
 - No commercial license on 42+ packages
 - GTM validation gate (15–20 interviews) not done

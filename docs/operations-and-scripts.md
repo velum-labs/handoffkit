@@ -125,7 +125,7 @@ Important files include:
 | File | Purpose |
 | --- | --- |
 | `release/desired.json` | Desired package versions and release targets. |
-| `release/state.json` | Current known release state. |
+| `release/state.json` | Local gitignored release-state cache regenerated with `node scripts/release.mjs refresh`. |
 | `release/workspace.release.json` | Workspace release metadata and package ordering. |
 | `release/npm-packages.json` | Published npm package list. |
 

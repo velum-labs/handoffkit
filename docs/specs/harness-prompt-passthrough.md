@@ -1,9 +1,11 @@
+> Implemented design spec. Retained as historical design context for harness prompt pass-through and role/identity awareness.
+
 # Spec: Harness‑Prompt Pass‑Through + Role/Identity Awareness
 
 Status: Implemented (Phase 1 + Phase 2); one CLI/config wire‑up deferred (see §12)
-Scope: `fusionkit` (Python core) + `handoffkit` (TS gateway/ensemble)
+Scope: `fusionkit` (Python core) + this repository (FusionKit monorepo) TS gateway/ensemble
 Owner: TBD
-Related: `ENSEMBLE_PRODUCT_PLAN.md`
+Related: `docs/planning/ensemble-product-plan.md`
 
 ## Implementation status
 
@@ -270,9 +272,9 @@ silently disable disclosure or stale the dynamic model list.
 | 2 | `fusionkit/.../judge.py` `_prepare_conversation` | Split `messages` into harness‑system + body; pass `harness_system`, `identity`; fold into single system message. |
 | 3 | `fusionkit/.../judge.py` `analyze` | Same split; system = `harness_system + JUDGE_SUFFIX`. |
 | 4 | `fusionkit/.../judge.py` `fuse` / `fuse_stream` | Build `FusionIdentity` from `synth_client.model_id`, `judge_client.model_id`, trajectory ids; thread down. |
-| 5 | `handoffkit/.../fusion-backend.ts` `#task` (+ `runPanels` wiring) | Compose panel prompt: custom instructions + user request + identity suffix; thread through `runFusionPanels`. |
-| 6 | `handoffkit/.../tool-codex/src/harness.ts` `run` / `codexArgs` | Prepend identity suffix (and, if not threaded earlier, the passed‑through instructions) to `descriptor.prompt`; `model.id`/`ordinal` already in scope (`harness.ts:524`). |
-| 7 | `handoffkit` ensemble panel runner (`runFusionPanels`) | Accept the composed task / messages so #5 reaches the harness. |
+| 5 | this repository (FusionKit monorepo) `.../fusion-backend.ts` `#task` (+ `runPanels` wiring) | Compose panel prompt: custom instructions + user request + identity suffix; thread through `runFusionPanels`. |
+| 6 | this repository (FusionKit monorepo) `.../tool-codex/src/harness.ts` `run` / `codexArgs` | Prepend identity suffix (and, if not threaded earlier, the passed‑through instructions) to `descriptor.prompt`; `model.id`/`ordinal` already in scope (`harness.ts:524`). |
+| 7 | this repository (FusionKit monorepo) ensemble panel runner (`runFusionPanels`) | Accept the composed task / messages so #5 reaches the harness. |
 
 No changes to `fusion-gateway.ts` wire formats, `adapters/*`, or the step body
 schema are required for the synthesizer path.

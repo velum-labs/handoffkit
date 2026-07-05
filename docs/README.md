@@ -54,6 +54,8 @@ the tree but are not part of the ensemble product (see [Product scope](scope.md)
 ## Other topic docs
 
 - [FusionKit handoff executor](fusionkit-handoff-executor.md)
+- [Historical ensemble product plan](planning/ensemble-product-plan.md)
+- [Implemented harness prompt pass-through spec](specs/harness-prompt-passthrough.md)
 - [Release publishing](release-publishing.md)
 
 ## Taxonomy summary

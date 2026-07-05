@@ -81,6 +81,8 @@ Generated API pages should not be edited by hand. OpenAPI pages regenerate from 
 | `model-fusion-protocol-consumption.md` | Reference | How consumers use model-fusion protocol records and generated bindings. |
 | `model-fusion-protocol-release.md` | Operations | Protocol release process and propagation. |
 | `model-fusion-learnings.md` | Design archive | Durable lessons from model-fusion implementation work. |
+| `planning/ensemble-product-plan.md` | Design archive | Historical ensemble product plan retained with a stale-content banner. |
+| `specs/harness-prompt-passthrough.md` | Design archive | Implemented harness prompt pass-through design spec retained for context. |
 | `local-mlx-panel-demo.md` | Task guide | Local MLX panel demo behavior and setup. |
 | `handoffkit-fusion-bench.md` | Evaluation and tuning | Fusion benchmark workflow that bridges retained naming and current evaluation. |
 | `benchmarking-runbook.md` | Evaluation and tuning | Benchmark execution and troubleshooting runbook. |

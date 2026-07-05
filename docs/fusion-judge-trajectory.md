@@ -89,7 +89,7 @@ it.
 ## Test drive
 
 ```bash
-cd /Users/alen/Documents/Development/handoffkit && pnpm build
+cd /path/to/this/repo && pnpm build
 
 # One command: real cloud panel (gpt-5.5 + sonnet + gemini), judge gpt-5.5, codex as the
 # front-door harness, and the scope dashboard observing it live on :4317.

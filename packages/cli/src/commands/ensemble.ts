@@ -95,7 +95,7 @@ async function runEnsembleRun(task: string[], opts: EnsembleRunOpts): Promise<vo
     fail('--harness must be "mock" or "command"');
   }
   const repo = resolve(opts.repo);
-  const outDir = resolve(opts.out ?? ".warrant/ensemble-cli");
+  const outDir = resolve(opts.out ?? ".fusionkit/ensemble-cli");
   const timeoutMs = parseTimeoutMs(opts.timeoutMs, 30000);
   if (harnessId === "command" && !opts.command) {
     fail("--command is required when --harness command");

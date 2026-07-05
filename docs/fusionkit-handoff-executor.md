@@ -51,7 +51,7 @@ The `--out` directory receives run records, candidate records, judge synthesis r
 
 Live Codex responses smoke evidence from the implementation pass:
 
-- Artifact dir: `/Users/alen/.openclaw/workspace/artifacts/handoffkit-codex-live-responses-20260617T032450Z`
+- Artifact dir: `~/fusionkit-artifacts/handoffkit-codex-live-responses-20260617T032450Z`
 - `harness-run-result`: `succeeded`
 - candidate: `succeeded`
 - provider kind: `responses`
