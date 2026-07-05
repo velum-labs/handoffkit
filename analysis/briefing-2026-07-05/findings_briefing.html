@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSS Ensemble Program — Findings Briefing (2026-07-05)</title>
+<style>
+  :root{
+    --ink:#1a2233; --muted:#5b6579; --line:#e3e7ef; --bg:#f7f8fb; --card:#ffffff;
+    --blue:#2563eb; --blue-soft:#dbeafe; --green:#16a34a; --green-soft:#dcfce7;
+    --red:#dc2626; --red-soft:#fee2e2; --amber:#d97706; --amber-soft:#fef3c7;
+    --violet:#7c3aed; --violet-soft:#ede9fe; --gray-bar:#cbd5e1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);}
+  .wrap{max-width:1060px;margin:0 auto;padding:32px 28px 80px;}
+  header.hero{background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);color:#fff;border-radius:14px;padding:30px 34px;margin-bottom:26px;}
+  header.hero h1{margin:0 0 6px;font-size:26px;letter-spacing:.2px}
+  header.hero p{margin:0;color:#c7d2fe;font-size:15px}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .chip{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:5px 14px;font-size:13px;color:#e0e7ff}
+  .chip b{color:#fff}
+  h2{font-size:20px;margin:38px 0 6px;display:flex;align-items:center;gap:10px}
+  h2 .num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--blue);color:#fff;font-size:14px;flex:none}
+  .sub{color:var(--muted);margin:0 0 14px;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px;}
+  .grid{display:grid;gap:14px}
+  .grid.c2{grid-template-columns:1fr 1fr}
+  .grid.c3{grid-template-columns:1fr 1fr 1fr}
+  @media(max-width:800px){.grid.c2,.grid.c3{grid-template-columns:1fr}}
+  .kpi{border-left:4px solid var(--blue);padding-left:14px}
+  .kpi .v{font-size:22px;font-weight:700}
+  .kpi .l{font-size:13px;color:var(--muted)}
+  .tag{display:inline-block;border-radius:6px;padding:2px 9px;font-size:12px;font-weight:600;vertical-align:1px}
+  .tag.pass{background:var(--green-soft);color:var(--green)}
+  .tag.fail{background:var(--red-soft);color:var(--red)}
+  .tag.warn{background:var(--amber-soft);color:var(--amber)}
+  .tag.info{background:var(--blue-soft);color:var(--blue)}
+  .tag.dir{background:var(--violet-soft);color:var(--violet)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;color:var(--muted);font-weight:600;padding:7px 10px;border-bottom:2px solid var(--line);white-space:nowrap}
+  td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  /* bar charts */
+  .barrow{display:grid;grid-template-columns:190px 1fr 120px;align-items:center;gap:12px;margin:7px 0}
+  .barrow .lab{font-size:13px;text-align:right;color:var(--ink)}
+  .barrow .val{font-size:13px;color:var(--muted);white-space:nowrap}
+  .track{background:#eef1f6;border-radius:6px;height:22px;position:relative;overflow:hidden}
+  .fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-size:12px;font-weight:600;min-width:34px}
+  .fill.blue{background:var(--blue)} .fill.green{background:var(--green)}
+  .fill.gray{background:#94a3b8} .fill.red{background:var(--red)}
+  .fill.violet{background:var(--violet)} .fill.amber{background:var(--amber)}
+  .fill.hatch{background:repeating-linear-gradient(45deg,#ef4444 0 8px,#fca5a5 8px 16px)}
+  .stack{position:relative}
+  .stack .over{position:absolute;top:0;left:0;height:100%;border-right:3px dashed rgba(0,0,0,.45)}
+  /* CI interval plot */
+  .ciplot{position:relative;height:26px;background:#eef1f6;border-radius:6px}
+  .ciplot .zero{position:absolute;top:0;bottom:0;width:2px;background:#64748b}
+  .ciplot .range{position:absolute;top:7px;height:12px;border-radius:6px;opacity:.85}
+  .ciplot .pt{position:absolute;top:4px;width:8px;height:18px;border-radius:3px;background:#0f172a}
+  .cilegend{font-size:12px;color:var(--muted);margin-top:8px}
+  .funnel{display:flex;gap:0;align-items:stretch;flex-wrap:wrap}
+  .fstep{flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:12px 14px;position:relative}
+  .fstep:first-child{border-radius:10px 0 0 10px}
+  .fstep:last-child{border-radius:0 10px 10px 0}
+  .fstep h4{margin:0 0 4px;font-size:13.5px}
+  .fstep p{margin:0;font-size:12px;color:var(--muted)}
+  .fstep .st{font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px;display:inline-block;padding:1px 8px;border-radius:5px}
+  .st.done{background:var(--green-soft);color:var(--green)}
+  .st.part{background:var(--amber-soft);color:var(--amber)}
+  .st.next{background:var(--blue-soft);color:var(--blue)}
+  .st.later{background:#eef1f6;color:var(--muted)}
+  .path{border:1px solid var(--line);border-radius:12px;padding:18px 20px;background:#fff;position:relative}
+  .path h3{margin:0 0 4px;font-size:16px}
+  .path .meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px}
+  .path .meta span{font-size:12px;background:#eef1f6;border-radius:6px;padding:2px 9px;color:var(--muted)}
+  .path ul{margin:6px 0 0 18px;padding:0;font-size:13.5px}
+  .path li{margin:3px 0}
+  .path.rec{border:2px solid var(--blue);box-shadow:0 2px 10px rgba(37,99,235,.12)}
+  .path .rectag{position:absolute;top:-11px;right:14px;background:var(--blue);color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px;letter-spacing:.4px}
+  .qs li{margin:8px 0}
+  .qs b{color:var(--ink)}
+  .note{font-size:12.5px;color:var(--muted);margin-top:10px}
+  .caveat{border-left:4px solid var(--amber);background:var(--amber-soft);border-radius:8px;padding:10px 14px;font-size:13px;margin-top:12px}
+  footer{margin-top:44px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:14px}
+  @media print{ body{background:#fff} .wrap{padding:0} .card,.path{break-inside:avoid} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>OSS Coding Ensembles — What We Know So Far</h1>
+  <p>Findings briefing &amp; decision workshop · velum-labs / handoffkit · 2026-07-05 · all numbers recomputed from committed artifacts</p>
+  <div class="chips">
+    <div class="chip">Total experiment spend <b>$33.66</b></div>
+    <div class="chip">Experiment rounds <b>8</b> (C0–C3, C2V, C3-R16K, OSS scan, 32k ladder)</div>
+    <div class="chip">Pre-registered tests <b>5</b></div>
+    <div class="chip">Binding decisions <b>D1–D11</b></div>
+  </div>
+</header>
+
+<!-- TLDR -->
+<div class="grid c3">
+  <div class="card kpi"><div class="v">+11 to +23pp</div><div class="l">Oracle headroom of best OSS-only panels across all 5 covered domains — the fusion opportunity is real and everywhere we looked</div></div>
+  <div class="card kpi" style="border-color:var(--red)"><div class="v">0 / 14</div><div class="l">Pre-registered cases where picking panels from public data beat "top-K by average score" out of sample — public data shortlists, it does not rank</div></div>
+  <div class="card kpi" style="border-color:var(--violet)"><div class="v">150%</div><div class="l">Capture in the one synthesis replay (fused 38.6% vs oracle ceiling 35.1%) — the wildcard that says fusion value may live in synthesis, not selection. Unreplicated; caveats apply</div></div>
+</div>
+
+<!-- FUNNEL -->
+<h2><span class="num">1</span>Where we are in the launch funnel</h2>
+<p class="sub">Strategy adopted 2026-07-05: a staged filter where bad combinations die cheaply. Nine-tenths of planned spend sits behind two more gates.</p>
+<div class="card">
+  <div class="funnel">
+    <div class="fstep"><span class="st done">Done</span><h4>Phase-0 validation</h4><p>Is fusion real? Can public data pick panels? $16.64. Verdicts settled.</p></div>
+    <div class="fstep"><span class="st done">Done</span><h4>Step 1 · OSS field scan</h4><p>$0. All 5 covered domains peer-shaped for OSS. Shortlists + lineage vetoes produced.</p></div>
+    <div class="fstep"><span class="st done">Done</span><h4>Step 2 · Budget ladder</h4><p>$16.51. Sonnet validly measured (45%). Kimi-thinking ruled unmeasurable single-shot.</p></div>
+    <div class="fstep"><span class="st part">Partial</span><h4>Step 3 · Capture pilot</h4><p>$0.51 so far. Prereg frozen (LCB fallback). 29/60 kimi-instruct rows done. Paused.</p></div>
+    <div class="fstep"><span class="st next">Gate</span><h4>Step 4 · Repo harness</h4><p>Engineering, $0 API. Unlocks the launch-grade domain. The bottleneck.</p></div>
+    <div class="fstep"><span class="st later">Later</span><h4>Steps 5–6 · Benchmark → Launch</h4><p>$100–500, survivors only. Frozen config, official grading, evidence card.</p></div>
+  </div>
+</div>
+
+<!-- FINDING: complementarity -->
+<h2><span class="num">2</span>Complementary errors are real — the raw material exists</h2>
+<p class="sub">Checkpoint C1 (public per-task data, three independent sources): the best 2–3 system panels beat their own best member's ceiling by a wide, statistically solid margin. <em>Oracle headroom = extra tasks solvable if a perfect referee always picked a passing member.</em></p>
+<div class="card">
+  <div class="barrow"><div class="lab">SWE-bench Verified (72 systems)</div><div class="track"><div class="fill blue" style="width:36%">+9.0pp</div></div><div class="val">CI [+6.5, +12.5]</div></div>
+  <div class="barrow"><div class="lab">Terminal-Bench (109 systems)</div><div class="track"><div class="fill blue" style="width:49%">+12.3pp</div></div><div class="val">CI [+7.6, +14.9]</div></div>
+  <div class="barrow"><div class="lab">LiveCodeBench (37 models)</div><div class="track"><div class="fill blue" style="width:45%">+11.3pp</div></div><div class="val">CI [+9.3, +12.2]</div></div>
+  <div class="note">Bars scaled to +25pp max. Source: <code>analysis/phase0/c1_c2_report.md</code>. Floors on sample size and failure counts met in all three.</div>
+</div>
+
+<!-- FINDING: public data can't rank -->
+<h2><span class="num">3</span>…but public data cannot pick the panel (settled, twice)</h2>
+<p class="sub">Checkpoints C2 + C2V: choose a panel on half the tasks, score it on the held-out half, against the dumb baseline "take the top-K models by average score." Complementarity-smart selection never reliably won — and lost outright on SWE-bench Verified. Tested with two selection objectives across 7 datasets.</p>
+<div class="card">
+  <table>
+    <tr><th>Source · K</th><th style="width:46%">Held-out Δ vs top-K baseline (95% CI)</th><th>Verdict</th></tr>
+    <tr><td>SWE-V · K=2</td><td><div class="ciplot"><div class="zero" style="left:56.25%"></div><div class="range" style="left:20.6%;width:10%;background:var(--red)"></div><div class="pt" style="left:37.5%"></div></div></td><td><span class="tag fail">loses</span> −3.0pp [−3.7, −2.1]</td></tr>
+    <tr><td>SWE-V · K=3</td><td><div class="ciplot"><div class="zero" style="left:56.25%"></div><div class="range" style="left:8.1%;width:28.1%;background:var(--red)"></div><div class="pt" style="left:31.9%"></div></div></td><td><span class="tag fail">loses</span> −3.9pp [−5.7, −1.2]</td></tr>
+    <tr><td>Terminal-Bench · K=2</td><td><div class="ciplot"><div class="zero" style="left:56.25%"></div><div class="range" style="left:6.25%;width:80.6%;background:var(--gray-bar)"></div><div class="pt" style="left:45%"></div></div></td><td><span class="tag warn">inconclusive</span> −1.8pp [−8.0, +4.9]</td></tr>
+    <tr><td>LCB · K=2</td><td><div class="ciplot"><div class="zero" style="left:56.25%"></div><div class="range" style="left:51.25%;width:15.6%;background:var(--gray-bar)"></div><div class="pt" style="left:58.75%"></div></div></td><td><span class="tag warn">inconclusive</span> +0.4pp [−0.8, +1.7]</td></tr>
+    <tr><td>LRB SWE · K=3</td><td><div class="ciplot"><div class="zero" style="left:56.25%"></div><div class="range" style="left:50.6%;width:39.4%;background:var(--gray-bar)"></div><div class="pt" style="left:75%"></div></div></td><td><span class="tag warn">inconclusive</span> +3.0pp [−0.9, +5.4]</td></tr>
+  </table>
+  <div class="cilegend">Interval plots span −9pp … +7pp; dark tick = point estimate, vertical line = zero. A win requires the whole interval right of zero — it never happened in 14 source×K cases under either objective. Sources: <code>c1_c2_report.md</code>, <code>c2v_report.md</code>.</div>
+  <div class="note"><b>Consequence (binding, D2):</b> public data may <em>shortlist</em> candidates and <em>veto</em> redundant pairs. Final panel membership must come from calibration runs in our own harness — which cost ~$6–17 per round, so this is not a cost problem.</div>
+</div>
+
+<!-- FINDING: field shape -->
+<h2><span class="num">4</span>Field shape decides whether to fuse — and OSS fields are peer-shaped</h2>
+<p class="sub">Fusion only pays when several models are comparably strong ("peer field"). Against closed frontier models, our algorithmic slice is hopelessly lopsided. Exclude closed models — the OSS-first product decision (D8) — and every covered domain becomes peer-shaped.</p>
+<div class="grid c2">
+  <div class="card">
+    <h3 style="margin:0 0 10px;font-size:15px">The lopsided view: 60-task algorithmic slice, our harness</h3>
+    <div class="barrow"><div class="lab">gpt-5.5 (closed)</div><div class="track"><div class="fill gray" style="width:80%">80.0%</div></div><div class="val">[68.2, 88.2]</div></div>
+    <div class="barrow"><div class="lab">claude-sonnet-4-6 (closed)</div><div class="track"><div class="fill gray" style="width:45%">45.0%</div></div><div class="val">[33.1, 57.5]</div></div>
+    <div class="barrow"><div class="lab">qwen3-coder (OSS)</div><div class="track"><div class="fill green" style="width:30%;min-width:0"></div></div><div class="val">30.0% — valid</div></div>
+    <div class="barrow"><div class="lab">kimi-k2-thinking (OSS)</div><div class="track"><div class="fill hatch" style="width:28%;min-width:0"></div></div><div class="val">28.3% — invalid</div></div>
+    <div class="barrow"><div class="lab">deepseek-chat (OSS)</div><div class="track"><div class="fill green" style="width:22%;min-width:0"></div></div><div class="val">21.7% — valid</div></div>
+    <div class="note">gpt-5.5 leads by +35pp → <b>routing answer: don't fuse against it here; the OSS claim on this slice is price, not score</b>. (Contamination check on gpt-5.5 still pending; hatched bar = truncation-invalid.)</div>
+  </div>
+  <div class="card">
+    <h3 style="margin:0 0 10px;font-size:15px">The OSS-only view: #1 vs #2 gap per domain (public data)</h3>
+    <div class="barrow"><div class="lab">Algorithmic (LCB)</div><div class="track"><div class="fill green" style="width:8%;min-width:0"></div></div><div class="val">+1.7pp — peers</div></div>
+    <div class="barrow"><div class="lab">Repo bugfix (model-level)</div><div class="track"><div class="fill green" style="width:16%;min-width:0"></div></div><div class="val">+3.2pp — peers</div></div>
+    <div class="barrow"><div class="lab">Repo bugfix (system-level)</div><div class="track"><div class="fill green" style="width:29%;min-width:0"></div></div><div class="val">+5.8pp — peers</div></div>
+    <div class="barrow"><div class="lab">MBPP/HumanEval</div><div class="track"><div class="fill green" style="width:30%;min-width:0"></div></div><div class="val">+6.0pp — peers</div></div>
+    <div class="barrow"><div class="lab">Terminal/agentic</div><div class="track"><div class="fill amber" style="width:46%;min-width:0"></div></div><div class="val">+9.2pp — borderline</div></div>
+    <div class="note">Bars scaled to +20pp. Rule of thumb from Phase-0: &gt;15–20pp gap = lopsided, don't fuse. No OSS domain crosses it. Source: <code>analysis/oss-scan/report.md</code>.</div>
+  </div>
+</div>
+
+<!-- FINDING: OSS headroom by domain -->
+<h2><span class="num">5</span>Where the OSS fusion opportunity is largest</h2>
+<p class="sub">Best OSS-only panel per domain (lineage-vetoed, public data): best member alone vs the panel's oracle ceiling. The gap is what a fusion pipeline gets to capture.</p>
+<div class="card">
+  <div class="barrow"><div class="lab">Repo bugfix (model-level)</div><div class="track stack"><div class="fill blue" style="width:45.6%">45.6%</div><div class="over" style="width:28.6%"></div></div><div class="val"><b>+17.0pp</b> [+14.3, +20.5]</div></div>
+  <div class="barrow"><div class="lab">Terminal / agentic</div><div class="track stack"><div class="fill blue" style="width:50.1%">50.1%</div><div class="over" style="width:36.6%"></div></div><div class="val"><b>+13.5pp</b> [+8.5, +16.4]</div></div>
+  <div class="barrow"><div class="lab">Repo bugfix (system-level)</div><div class="track stack"><div class="fill blue" style="width:66.4%">66.4%</div><div class="over" style="width:53.4%"></div></div><div class="val"><b>+13.0pp</b> [+9.5, +13.8]</div></div>
+  <div class="barrow"><div class="lab">Algorithmic (LCB)</div><div class="track stack"><div class="fill blue" style="width:79%">79.0%</div><div class="over" style="width:67.7%"></div></div><div class="val"><b>+11.3pp</b> [+9.3, +12.2]</div></div>
+  <div class="barrow"><div class="lab">MBPP / HumanEval</div><div class="track stack"><div class="fill blue" style="width:84.4%">84.4%</div><div class="over" style="width:61.7%"></div></div><div class="val"><b>+22.7pp</b> [+20.2, +23.9]</div></div>
+  <div class="note">Dashed line = best single member; full bar = panel oracle. MBPP/HumanEval is largest but saturated/low-demand. <b>Repo bugfix combines the biggest clean-tier headroom with the strongest user demand — that is the recommended flagship (D10).</b> Seed panel: deepseek-r1-0528 + deepseek-v3.1-terminus + qwen3-235b-thinking. Frontier price anchor: claude-opus-4.1 at 41.6%.</div>
+</div>
+
+<!-- FINDING: truncation -->
+<h2><span class="num">6</span>Measurement integrity: the truncation ladder</h2>
+<p class="sub">Our single most repeated lesson: thinking-style models produce garbage numbers unless completion budgets are huge — and published benchmark scores rarely disclose this. We enforce: &gt;10% truncated rows ⇒ pass rate refused.</p>
+<div class="grid c2">
+  <div class="card">
+    <h3 style="margin:0 0 10px;font-size:15px">kimi-k2-thinking: pass rate rises with budget, never becomes valid</h3>
+    <div class="barrow"><div class="lab">16k budget</div><div class="track"><div class="fill red" style="width:11.7%"></div></div><div class="val">11.7% · 52/60 trunc</div></div>
+    <div class="barrow"><div class="lab">32k budget</div><div class="track"><div class="fill red" style="width:21.7%"></div></div><div class="val">21.7% · 42/60 trunc</div></div>
+    <div class="barrow"><div class="lab">64k budget</div><div class="track"><div class="fill red" style="width:28.3%"></div></div><div class="val">28.3% · 31/60 trunc</div></div>
+    <div class="note">Mean 49k completion tokens at the 64k rung. Pre-registered verdict (D11): <b>not measurable at practical budgets; excluded from single-shot panels.</b> Its pass rate is a function of token budget — treat all published single-shot Kimi-thinking scores with suspicion.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin:0 0 10px;font-size:15px">claude-sonnet-4-6: fixed by 32k — first valid measurement</h3>
+    <div class="barrow"><div class="lab">16k budget</div><div class="track"><div class="fill amber" style="width:41.7%">41.7%</div></div><div class="val">14/60 trunc ✗</div></div>
+    <div class="barrow"><div class="lab">32k budget</div><div class="track"><div class="fill green" style="width:45%">45.0%</div></div><div class="val">0/60 trunc ✓</div></div>
+    <div class="note">This is also a product asset: <b>truncation-audited measurement is a differentiator</b> — our evidence cards can show validity where leaderboards can't.</div>
+  </div>
+</div>
+
+<!-- FINDING: synthesis wildcard -->
+<h2><span class="num">7</span>The wildcard: synthesis once beat the theoretical selection ceiling</h2>
+<p class="sub">In the original C3 replay, the fused answer stream scored above the frozen bank's oracle — impossible for any pick-the-best-candidate scheme, possible only if synthesis combines partial answers into new passing ones.</p>
+<div class="card">
+  <div class="barrow"><div class="lab">Best single member</div><div class="track"><div class="fill gray" style="width:28.1%">28.1%</div></div><div class="val"></div></div>
+  <div class="barrow"><div class="lab">Oracle ceiling (selection max)</div><div class="track"><div class="fill blue" style="width:35.1%">35.1%</div></div><div class="val"></div></div>
+  <div class="barrow"><div class="lab">Fused output (judged replay)</div><div class="track"><div class="fill violet" style="width:38.6%">38.6%</div></div><div class="val"><b>capture 150%</b></div></div>
+  <div class="caveat"><b>Why this is "directional", not proven:</b> the replay used a GPT-5.5 fallback judge (the committed Kimi judge failed on a malformed response), and some uplift came from the judge synthesizing answers itself rather than pure selection. The pre-registered, leak-free protocol to test this cleanly is exactly what capture-pilot-1 (paused, 29/60 member rows done, $0.51 spent) is designed to run. <b>If it replicates, the product story upgrades from "cheaper" to "better and cheaper" — the single highest-leverage open question in the program.</b></div>
+</div>
+
+<!-- SPEND -->
+<h2><span class="num">8</span>What the evidence cost</h2>
+<div class="card">
+  <div class="barrow"><div class="lab">Phase-0 (C0–C3, C2V, C3-R16K)</div><div class="track"><div class="fill blue" style="width:83%">$16.64</div></div><div class="val">6 experiments</div></div>
+  <div class="barrow"><div class="lab">Step 2 budget ladder</div><div class="track"><div class="fill blue" style="width:82%">$16.51</div></div><div class="val">3 budgets × reruns</div></div>
+  <div class="barrow"><div class="lab">Step 1 OSS scan</div><div class="track"><div class="fill green" style="width:2%"></div></div><div class="val">$0 (public data)</div></div>
+  <div class="barrow"><div class="lab">Step 3 pilot (paused)</div><div class="track"><div class="fill amber" style="width:3%"></div></div><div class="val">$0.51 of ~$15</div></div>
+  <div class="note">Total <b>$33.66</b>. Every decision-driving number was independently recomputed from raw CSV/JSON artifacts before adoption; two Phase-0 headline results were <em>reversed</em> by that verification (truncation artifact; spend double-count) — the process is earning its keep.</div>
+</div>
+
+<!-- FUTURE PATHS -->
+<h2><span class="num">9</span>Future paths — the brainstorm menu</h2>
+<p class="sub">Each path states what it buys, what it costs, and what would kill it. They are mostly compatible; the real discussion is sequencing and where the launch claim comes from.</p>
+
+<div class="grid c2">
+  <div class="path rec"><span class="rectag">RECOMMENDED NEXT</span>
+    <h3>A · Finish the mechanics pilot (capture-pilot-1)</h3>
+    <div class="meta"><span>~$10–15 remaining</span><span>days, not weeks</span><span>prereg already frozen</span></div>
+    <ul>
+      <li><b>Buys:</b> the first clean capture-rate number — does our synthesis pipeline actually convert headroom into passed tasks? Directly tests the 150% wildcard under a leak-free judge protocol.</li>
+      <li><b>Note:</b> on the algorithmic slice it is a <em>mechanics</em> measurement, not launch evidence (frontier wins that slice on score regardless).</li>
+      <li><b>Kill/branch:</b> capture ≪ 50% ⇒ fusion pipeline R&amp;D becomes the priority, pause domain expansion. Capture ≥ 100% ⇒ synthesis is the moat; accelerate B.</li>
+    </ul>
+  </div>
+  <div class="path rec"><span class="rectag">PARALLEL, $0 API</span>
+    <h3>B · Unlock repo-bugfix grading (Step 4)</h3>
+    <div class="meta"><span>engineering only</span><span>the launch bottleneck</span></div>
+    <ul>
+      <li><b>Buys:</b> ability to run the flagship pilot on the domain with the best headroom (+17pp) and demand. Everything launch-grade sits behind this.</li>
+      <li><b>Path:</b> wire HandoffKit's existing patch-and-test path into the calibration machinery; prove on ~10 SWE-style tasks.</li>
+      <li><b>Kill:</b> none — this is required for any repo-domain claim, ever.</li>
+    </ul>
+  </div>
+  <div class="path">
+    <h3>C · Flagship capture pilot on repo bugfix (Step 3, take 2)</h3>
+    <div class="meta"><span>~$30–50/iteration</span><span>needs B</span><span>non-member judge</span></div>
+    <ul>
+      <li><b>Buys:</b> the table the launch card is built from — fused OSS panel vs best member vs claude-opus-4.1 vs oracle, with $/solve.</li>
+      <li><b>Gate:</b> fused ≥ best member AND beats the anchor on cost-per-solve.</li>
+      <li><b>Kill:</b> two failed iterations with different panels ⇒ domain or fusion approach is wrong.</li>
+    </ul>
+  </div>
+  <div class="path">
+    <h3>D · Ship "honest routing" as v1 instead of waiting for fusion</h3>
+    <div class="meta"><span>~$0 new evidence needed</span><span>strategic alternative</span></div>
+    <ul>
+      <li><b>Buys:</b> earlier launch. The CLI + DIY ensembles + evidence-backed routing rules ("this domain → this single model; kimi-thinking invalid single-shot; sonnet needs 32k") are already supported by data.</li>
+      <li><b>Risk:</b> weaker differentiation — routing advice without a fused-model product is easier to copy.</li>
+      <li><b>Fits with:</b> A–C continuing underneath; predefined ensembles land as v1.1.</li>
+    </ul>
+  </div>
+  <div class="path">
+    <h3>E · Full benchmark + evidence card (Steps 5–6)</h3>
+    <div class="meta"><span>$100–500</span><span>survivors only</span><span>frozen config</span></div>
+    <ul>
+      <li><b>Buys:</b> the public, reproducible launch claim (rolling benchmarks preferred: LCB current window / Terminal-Bench / SWE-Verified).</li>
+      <li><b>Rides along:</b> gpt-5.5 contamination check (~$10) lands here as hygiene.</li>
+      <li><b>Kill:</b> second narrow failure after one C-loop ⇒ domain is wrong, not protocol.</li>
+    </ul>
+  </div>
+  <div class="path">
+    <h3>F · Deliberately deferred (agreed non-goals)</h3>
+    <div class="meta"><span>$0</span><span>revisit after launch</span></div>
+    <ul>
+      <li>M1 warehouse build — Phase-0 scripts suffice; funnel results should shape the schema.</li>
+      <li>Learned per-task router — rule router first; needs per-domain tables filled.</li>
+      <li>Public-data panel <em>ranking</em> — falsified twice; permanently out unless new data types appear.</li>
+      <li>Benchmark saturation race — we make Pareto (score + $/solve) claims, not SOTA claims.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- DISCUSSION -->
+<h2><span class="num">10</span>Discussion questions for this meeting</h2>
+<div class="card">
+  <ol class="qs">
+    <li><b>Launch shape:</b> is v1 "predefined fused ensembles" (wait for C+E) or "honest routing + DIY ensembles now" (path D) with fusion as v1.1? What is the minimum evidence bar we're comfortable putting our name on?</li>
+    <li><b>The capture bet:</b> if pilot-1 shows capture ≥100% replicates, synthesis design becomes our moat — do we then invest in judge/synthesis R&amp;D as a first-class workstream (prompts, multi-round synthesis, non-member judges)?</li>
+    <li><b>Domain priority:</b> repo bugfix has the best headroom+demand but needs harness work; terminal/agentic is second and partially covered by public infrastructure. Do we accept the engineering cost of B before any launch-grade number exists?</li>
+    <li><b>Price anchor:</b> which frontier model do we price against on the card — claude-opus-4.1 (the scan's anchor), gpt-5.5, or "cheapest frontier that beats our score"? This choice defines the $/solve headline.</li>
+    <li><b>Kimi asset:</b> "kimi-k2-thinking is unmeasurable single-shot below 64k" is a finding nobody else publishes. Do we use measurement-integrity results as public content (credibility play), or keep them internal?</li>
+    <li><b>Spend authority:</b> the next ~$65 (A + C) is decision-grade; Step 5 is $100–500. Approve the full funnel now, or gate at C's result?</li>
+  </ol>
+</div>
+
+<!-- BELIEF LEDGER -->
+<h2><span class="num">11</span>Belief ledger (what we'd defend, and how hard)</h2>
+<div class="card">
+  <table>
+    <tr><th>Belief</th><th>Confidence</th><th>Record</th></tr>
+    <tr><td>Strong peer systems make complementary errors (+8–12pp headroom)</td><td><span class="tag pass">High</span></td><td><code>phase0/c1_c2_report.md</code></td></tr>
+    <tr><td>Public per-task data cannot rank panels (either objective)</td><td><span class="tag pass">High — settled</span></td><td><code>c1_c2_report.md</code>, <code>c2v_report.md</code></td></tr>
+    <tr><td>All covered domains are peer-shaped for OSS-only fields; repo bugfix has the largest clean headroom (+17pp)</td><td><span class="tag info">Medium-high (Layer-1 priors)</span></td><td><code>oss-scan/report.md</code></td></tr>
+    <tr><td>Failure-dependence <em>signs</em> transfer from public data to our harness (10/10)</td><td><span class="tag info">Medium-high (one domain)</span></td><td><code>c3_transfer_report.md</code></td></tr>
+    <tr><td>Single-shot algorithmic vs frontier: lopsided, don't fuse for score</td><td><span class="tag info">Medium (contamination check pending)</span></td><td><code>c3r16k_report.md</code></td></tr>
+    <tr><td>kimi-k2-thinking unmeasurable single-shot at practical budgets; sonnet valid at 45% @32k</td><td><span class="tag pass">High</span></td><td><code>thinking-32k/report.md</code></td></tr>
+    <tr><td>Synthesis fusion can exceed the selection oracle (capture 150%)</td><td><span class="tag dir">Directional — pilot-1 tests it</span></td><td><code>c3_transfer_report.md</code></td></tr>
+  </table>
+</div>
+
+<footer>
+  Generated 2026-07-05 from committed artifacts on branch <code>cursor/capability-index-report-c275</code> (PR #54).
+  Living status: <code>docs/fusion/capability-index-status.md</code> · Plan: <code>docs/fusion/oss-ensemble-launch-plan.md</code> · History &amp; decisions D1–D11: <code>docs/fusion/capability-index-program.md</code>.
+  All pass rates recomputed from raw outcome CSVs; spend from JSONL ledgers.
+</footer>
+
+</div>
+</body>
+</html>
