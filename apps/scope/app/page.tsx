@@ -35,6 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useSessions } from "@/lib/api";
 import type { SessionSummary } from "@/lib/api";
 import { fmtDateTime, fmtDuration, fmtRelative, shortTraceId } from "@/lib/format";
+import { replaceSearchParams } from "@/lib/url-state";
 import { cn } from "@/lib/utils";
 
 const STATUS_FILTERS = ["all", "running", "succeeded", "failed", "skipped"] as const;
@@ -157,23 +158,49 @@ function ReplayButton({ onDone }: { onDone: () => void }) {
   );
 }
 
+function statusFromParam(value: string | null): StatusFilter {
+  return STATUS_FILTERS.includes(value as StatusFilter) ? (value as StatusFilter) : "all";
+}
+
+function sortFromParam(value: string | null): SortKey {
+  return value === "duration" || value === "events" ? value : "started";
+}
+
 function SessionsPageBody() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { sessions, loading, error, live, refetch } = useSessions();
 
-  const [query, setQuery] = useState(searchParams.get("q") ?? "");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("started");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  // Filter/sort state lives in the URL (?q=&status=&sort=&dir=) so filtered
+  // views are shareable and survive reload/back navigation.
+  const [query, setQueryState] = useState(searchParams.get("q") ?? "");
+  const [statusFilter, setStatusFilterState] = useState<StatusFilter>(
+    statusFromParam(searchParams.get("status"))
+  );
+  const [sortKey, setSortKey] = useState<SortKey>(sortFromParam(searchParams.get("sort")));
+  const [sortDir, setSortDir] = useState<SortDir>(
+    searchParams.get("dir") === "asc" ? "asc" : "desc"
+  );
+
+  const setQuery = (value: string): void => {
+    setQueryState(value);
+    replaceSearchParams({ q: value });
+  };
+
+  const setStatusFilter = (status: StatusFilter): void => {
+    setStatusFilterState(status);
+    replaceSearchParams({ status: status === "all" ? undefined : status });
+  };
 
   const onSort = (key: SortKey): void => {
-    if (key === sortKey) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
+    let nextDir: SortDir = "desc";
+    if (key === sortKey) nextDir = sortDir === "asc" ? "desc" : "asc";
+    setSortKey(key);
+    setSortDir(nextDir);
+    replaceSearchParams({
+      sort: key === "started" ? undefined : key,
+      dir: nextDir === "desc" ? undefined : nextDir
+    });
   };
 
   const counts = useMemo(() => {

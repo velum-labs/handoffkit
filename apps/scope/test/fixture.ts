@@ -168,6 +168,48 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       payload: { status: "succeeded", tool_call_count: 2, verification_status: "passed" }
     }),
     ev({
+      span_id: "span_cost_gpt",
+      parent_span_id: "span_root",
+      ts: base + 620,
+      component: "gateway",
+      event_type: "log",
+      payload: {
+        kind: "cost.metered",
+        stage: "panel",
+        model: "openai:gpt-5.5",
+        usage: { promptTokens: 800, completionTokens: 120, totalTokens: 920 },
+        turn_cost_usd: 0.0031,
+        provider_cost_usd: 0.0031,
+        unknown_cost: false,
+        unknown_usage: false,
+        session_total_usd: 0.0031,
+        provider_total_usd: 0.0031,
+        local_compute_total_usd: 0,
+        currency: "USD"
+      }
+    }),
+    ev({
+      span_id: "span_cost_opus",
+      parent_span_id: "span_root",
+      ts: base + 640,
+      component: "gateway",
+      event_type: "log",
+      payload: {
+        kind: "cost.metered",
+        stage: "panel",
+        model: "anthropic:claude-opus-4-8",
+        usage: { promptTokens: 780, completionTokens: 190, totalTokens: 970 },
+        turn_cost_usd: 0.0058,
+        provider_cost_usd: 0.0058,
+        unknown_cost: false,
+        unknown_usage: false,
+        session_total_usd: 0.0089,
+        provider_total_usd: 0.0089,
+        local_compute_total_usd: 0,
+        currency: "USD"
+      }
+    }),
+    ev({
       span_id: "span_judge",
       parent_span_id: "span_root",
       ts: base + 700,
@@ -227,6 +269,27 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
         rationale: "Operator fix plus a regression test is the most complete solution.",
         final_output: "export const add = (left, right) => left + right;",
         record: { synthesis_id: "synth_001", final_output: "export const add = (left, right) => left + right;" }
+      }
+    }),
+    ev({
+      span_id: "span_cost_judge",
+      parent_span_id: "span_root",
+      ts: base + 1050,
+      component: "gateway",
+      event_type: "log",
+      payload: {
+        kind: "cost.metered",
+        stage: "judge_synth",
+        model: "gpt-5.5",
+        usage: { promptTokens: 2100, completionTokens: 260, totalTokens: 2360 },
+        turn_cost_usd: 0.0104,
+        provider_cost_usd: 0.0104,
+        unknown_cost: false,
+        unknown_usage: false,
+        session_total_usd: 0.0193,
+        provider_total_usd: 0.0193,
+        local_compute_total_usd: 0,
+        currency: "USD"
       }
     }),
     ev({

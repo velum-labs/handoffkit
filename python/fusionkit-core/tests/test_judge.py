@@ -594,3 +594,128 @@ def test_analysis_reasoning_markdown_sanitizes_judge_text() -> None:
     assert headline == "**Weighing the candidates**"
     assert "*" not in body and "`" not in body and "\n" not in body.strip()
     assert len(body) < 220, "judge text is hard-capped per line"
+
+
+def _capture_judge_events(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
+    captured: list[tuple[str, dict[str, Any]]] = []
+
+    def capture(
+        trace_id: str | None,
+        span_id: str | None,
+        event_type: str,
+        *,
+        payload: dict[str, Any],
+    ) -> None:
+        captured.append((event_type, payload))
+
+    monkeypatch.setattr("fusionkit_core.judge._emit_judge", capture)
+    return captured
+
+
+@pytest.mark.asyncio
+async def test_fuse_emits_scored_synthesis_and_final_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _capture_judge_events(monkeypatch)
+    judge = FakeModelClient(
+        "judge",
+        [
+            '{"consensus":["both fixed add"],"contradictions":[],'
+            '"unique_insights":["beta adds a test"],'
+            '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":["combine"]}',
+            "fused answer",
+        ],
+    )
+    trajectories = [
+        _trajectory("traj_alpha", "alpha", "Changed add."),
+        _trajectory("traj_beta", "beta", "Changed add and added a test."),
+    ]
+
+    await JudgeSynthesizer().fuse(
+        [ChatMessage(role="user", content="Fix add()")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=judge,
+        sampling=SamplingConfig(),
+        tools=None,
+        trace_id="trace_test",
+    )
+
+    assert [event_type for event_type, _ in captured] == [
+        "judge.thinking",
+        "judge.scored",
+        "judge.synthesis",
+        "judge.final",
+    ]
+    scored = dict(captured)["judge.scored"]
+    assert scored["analysis"]["consensus"] == ["both fixed add"]
+    assert scored["analysis"]["unique_insights"] == ["beta adds a test"]
+    assert scored["input_ids"] == ["traj_alpha", "traj_beta"]
+    synthesis = dict(captured)["judge.synthesis"]
+    assert synthesis["raw_output"] == "fused answer"
+    assert synthesis["empty"] is False
+
+
+@pytest.mark.asyncio
+async def test_fuse_select_verbatim_emits_no_synthesis_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _capture_judge_events(monkeypatch)
+    judge = FakeModelClient(
+        "judge",
+        [
+            '{"consensus":["alpha wins"],"contradictions":[],"unique_insights":[],'
+            '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[],'
+            '"best_trajectory":"traj_alpha"}'
+        ],
+    )
+
+    result = await JudgeSynthesizer(select_best=True).fuse(
+        [ChatMessage(role="user", content="Pick best")],
+        [_trajectory("traj_alpha", "alpha", "OK")],
+        judge_client=judge,
+        sampling=SamplingConfig(),
+        tools=None,
+        trace_id="trace_test",
+    )
+
+    assert result.trajectory is not None
+    assert result.trajectory.synthesis is not None
+    assert result.trajectory.synthesis.decision == "select_trajectory"
+    types = [event_type for event_type, _ in captured]
+    assert "judge.synthesis" not in types
+    assert types[-1] == "judge.final"
+    final = captured[-1][1]
+    assert final["decision"] == "select_trajectory"
+    assert final["selected_trajectory_id"] == "traj_alpha"
+
+
+@pytest.mark.asyncio
+async def test_fuse_empty_synthesis_emits_empty_synthesis_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _capture_judge_events(monkeypatch)
+    judge = FakeModelClient(
+        "judge",
+        [
+            '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
+            '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
+            "",  # the synthesizer returns nothing
+        ],
+    )
+    trajectories = [_trajectory("traj_alpha", "alpha", "Best answer.")]
+
+    result = await JudgeSynthesizer().fuse(
+        [ChatMessage(role="user", content="Fix add()")],
+        trajectories,
+        judge_client=judge,
+        synthesizer_client=judge,
+        sampling=SamplingConfig(),
+        tools=None,
+        trace_id="trace_test",
+    )
+
+    assert result.synthesis_empty is True
+    synthesis = dict(captured)["judge.synthesis"]
+    assert synthesis["empty"] is True
+    assert synthesis["raw_output"] == "Best answer.", "falls back to the best candidate output"

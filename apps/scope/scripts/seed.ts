@@ -5,10 +5,11 @@
  *   pnpm dev          # in one shell (collector + UI)
  *   pnpm seed         # in another; then open the dashboard
  *
- * Posts three sessions derived from the shared test fixture — one succeeded,
- * one failed, and one still running — with recent timestamps so relative times
- * read naturally. Each invocation uses fresh trace ids, so re-seeding adds new
- * sessions instead of corrupting earlier ones.
+ * Posts four sessions derived from the shared test fixture — succeeded,
+ * failed, still running, and one where the judge selects a candidate verbatim
+ * — with recent timestamps so relative times read naturally. Each invocation
+ * uses fresh trace ids, so re-seeding adds new sessions instead of corrupting
+ * earlier ones.
  *
  * Usage: pnpm seed [--url http://127.0.0.1:4317]
  */
@@ -75,6 +76,31 @@ function runningSession(traceId: string): FusionTraceEvent[] {
   return retime(events, 5_000);
 }
 
+/**
+ * A session where the judge selects the opus candidate verbatim instead of
+ * synthesizing: no judge.synthesis event, and judge.final carries the
+ * select_trajectory decision (exercises the Judge page standings).
+ */
+function selectSession(traceId: string): FusionTraceEvent[] {
+  const events = syntheticSession(traceId)
+    .filter((event) => event.event_type !== "judge.synthesis")
+    .map((event): FusionTraceEvent => {
+      if (event.event_type !== "judge.final") return event;
+      return {
+        ...event,
+        payload: {
+          decision: "select_trajectory",
+          selected_trajectory_id: "cand_opus",
+          rationale:
+            "The opus candidate already includes the regression test; use its answer verbatim.",
+          final_output: "export const add = (left, right) => left + right; // + regression test",
+          usage: { total_tokens: 480 }
+        }
+      };
+    });
+  return retime(events, 55 * 60_000);
+}
+
 async function ingest(url: string, events: FusionTraceEvent[]): Promise<void> {
   const traceId = events[0].trace_id;
   const response = await fetch(`${url}/api/ingest`, {
@@ -99,7 +125,8 @@ async function main(): Promise<void> {
   const sessions = [
     succeededSession(`trace_demo_${runId}_ok`),
     failedSession(`trace_demo_${runId}_fail`),
-    runningSession(`trace_demo_${runId}_live`)
+    runningSession(`trace_demo_${runId}_live`),
+    selectSession(`trace_demo_${runId}_select`)
   ];
   try {
     for (const events of sessions) await ingest(url, events);
@@ -110,7 +137,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  console.log(`Seeded 3 demo sessions. Open ${url} to explore them.`);
+  console.log(`Seeded ${sessions.length} demo sessions. Open ${url} to explore them.`);
 }
 
 void main();

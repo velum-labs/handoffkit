@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useModels } from "@/lib/api";
-import { fmtDateTime, fmtNumber, fmtRelative } from "@/lib/format";
+import { fmtDateTime, fmtNumber, fmtRelative, fmtUsd } from "@/lib/format";
 
 const chartTooltipStyle = {
   background: "var(--popover)",
@@ -61,7 +61,7 @@ function ModelChart({
 
 export default function ModelsPage() {
   const router = useRouter();
-  const { models, loading, error, live } = useModels();
+  const { models, costs, loading, error, live } = useModels();
 
   const chartData = models.map((model) => ({
     name: model.modelId.length > 16 ? `${model.modelId.slice(0, 15)}…` : model.modelId,
@@ -98,7 +98,7 @@ export default function ModelsPage() {
             <StatStripSkeleton />
             <TableSkeleton rows={4} />
           </div>
-        ) : models.length === 0 ? (
+        ) : models.length === 0 && costs.entries === 0 ? (
           <EmptyState
             icon={<Cpu className="size-8" />}
             title="No model calls observed"
@@ -122,9 +122,61 @@ export default function ModelsPage() {
                   value: totals.running > 0 ? fmtNumber(totals.running) : "0",
                   mono: true
                 },
-                { label: "Tokens", value: fmtNumber(totals.tokens), mono: true }
+                { label: "Tokens", value: fmtNumber(totals.tokens), mono: true },
+                {
+                  label: "Spend",
+                  value:
+                    costs.entries > 0
+                      ? `${fmtUsd(costs.totalUsd)}${costs.unknownEntries > 0 ? "+" : ""}`
+                      : undefined,
+                  mono: true
+                }
               ]}
             />
+
+            {costs.entries > 0 ? (
+              <Section
+                title="Spend"
+                count={fmtUsd(costs.totalUsd)}
+                summary={costs.perStage
+                  .map((stage) => `${stage.stage} ${fmtUsd(stage.usd)}`)
+                  .join(" · ")}
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Model</TableHead>
+                      <TableHead>Stage</TableHead>
+                      <TableHead className="text-right">Entries</TableHead>
+                      <TableHead className="text-right">Tokens</TableHead>
+                      <TableHead className="text-right">Cost</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {costs.perModel.map((row) => (
+                      <TableRow key={`${row.model}-${row.stage}`}>
+                        <TableCell className="mono text-sm">{row.model}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="font-normal">
+                            {row.stage}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="mono text-right">{fmtNumber(row.entries)}</TableCell>
+                        <TableCell className="mono text-right">{fmtNumber(row.tokens)}</TableCell>
+                        <TableCell className="mono text-right">{fmtUsd(row.usd)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {costs.unknownEntries > 0 ? (
+                  <p className="text-muted-foreground mt-2 text-xs">
+                    {fmtNumber(costs.unknownEntries)}{" "}
+                    {costs.unknownEntries === 1 ? "entry" : "entries"} could not be priced (unknown
+                    model pricing or usage), so the real total is higher.
+                  </p>
+                ) : null}
+              </Section>
+            ) : null}
 
             <Section title="Charts" defaultOpen={false} summary="calls and tokens per model">
               <div className="space-y-6">

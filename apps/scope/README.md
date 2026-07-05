@@ -2,7 +2,8 @@
 
 A local dashboard for the fusion stack (FusionKit + HandoffKit + Cursorkit). It
 collects `fusion-trace-event.v1` events into a local SQLite store and renders
-sessions, panel-model trajectories, the judge's thinking-to-final flow,
+sessions, panel-model trajectories, the judge's thinking-to-final flow, judge
+decision stats (synthesize vs. select, per-model win rates), spend rollups,
 per-model rollups, and environment snapshots — live, over an SSE stream.
 
 `apps/scope` is a standalone pnpm workspace (not part of the root workspace).
@@ -16,8 +17,9 @@ pnpm dev          # portless → http://scope.localhost (proxies next dev on :43
 pnpm dev:app      # plain next dev on http://127.0.0.1:4317
 ```
 
-The UI is empty until events arrive. Seed demo data (one succeeded, one failed,
-one still-running session) against the running dev server:
+The UI is empty until events arrive. Seed demo data (succeeded, failed,
+still-running, and judge-selects-verbatim sessions, including cost entries)
+against the running dev server:
 
 ```bash
 pnpm seed                                   # defaults to http://127.0.0.1:4317

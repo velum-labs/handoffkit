@@ -28,6 +28,16 @@ export function fmtNumber(value: number): string {
   return value.toLocaleString();
 }
 
+/**
+ * USD amounts across the range LLM spend actually spans: cents-precision for
+ * dollar-scale, four decimals for the sub-cent per-call costs.
+ */
+export function fmtUsd(usd: number): string {
+  if (usd === 0) return "$0";
+  if (usd >= 0.1) return `$${usd.toFixed(2)}`;
+  return `$${usd.toFixed(4)}`;
+}
+
 /** A compact relative timestamp ("just now", "2m ago", "3h ago"). */
 export function fmtRelative(ts: number, now: number = Date.now()): string {
   if (!ts) return "—";
