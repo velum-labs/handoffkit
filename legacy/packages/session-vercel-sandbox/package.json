@@ -26,7 +26,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@vercel/sandbox": "2.2.0",
+    "@vercel/sandbox": "2.4.0",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runner": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
