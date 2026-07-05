@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import traceback
 import uuid
@@ -8,7 +9,7 @@ from collections.abc import AsyncIterator
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, assert_never, cast
+from typing import Any, assert_never, cast, get_args
 
 from fastapi import FastAPI, Header, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -23,6 +24,7 @@ from fusionkit_core.config import (
     FusionConfig,
     FusionMode,
     PromptOverrides,
+    ProviderKind,
     SamplingConfig,
     model_sampling_defaults,
 )
@@ -55,6 +57,8 @@ from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER, new_span_id
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class FusionToolExecutionOptions(BaseModel):
@@ -282,15 +286,17 @@ def create_app(
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         judge_model = request.judge_model or config.resolved_judge_model
         synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
-        try:
-            kernel.client(judge_model)
-            kernel.client(synthesizer_model)
-        except KeyError as exc:
-            return _openai_error_response(
-                "unknown_model",
-                f"Unknown model endpoint {exc}.",
-                status_code=400,
-            )
+        for required_model in (judge_model, synthesizer_model):
+            try:
+                kernel.client(required_model)
+            except KeyError:
+                # Name the model from request/config data rather than echoing
+                # the exception text into the response body.
+                return _openai_error_response(
+                    "unknown_model",
+                    f"Unknown model endpoint {required_model!r}.",
+                    status_code=400,
+                )
         trajectories = [
             trajectory_from_contract(
                 TrajectoryV1.model_validate(
@@ -433,9 +439,14 @@ async def _fusion_tool_step(
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)
-    except PanelExhaustedError as exc:
+    except PanelExhaustedError:
+        # The aggregated per-model error text embeds upstream provider
+        # messages; log it server-side and keep the response body generic.
+        traceback.print_exc()
         return _openai_error_response(
-            "all_models_failed", f"fusion step failed: {exc}", status_code=502
+            "all_models_failed",
+            "fusion step failed: every panel model failed; see the server logs for details",
+            status_code=502,
         )
     except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
         traceback.print_exc()
@@ -593,18 +604,9 @@ async def _fused_completion_sse(
 
 def _sse_error_event(exc: BaseException) -> str:
     if isinstance(exc, ProviderCallError):
-        body: dict[str, Any] = {
-            "message": str(exc),
-            "type": "provider_error",
-            "code": exc.category,
-            # Mirror the non-streaming error body so a mid-stream failure carries
-            # the same canonical ``error_category`` failover signal (WS5).
-            "error_category": exc.category,
-            "category": exc.category,
-            "provider": exc.provider,
-        }
-        if exc.retry_after is not None:
-            body["retry_after"] = exc.retry_after
+        # Mirror the non-streaming error body so a mid-stream failure carries
+        # the same canonical ``error_category`` failover signal (WS5).
+        body: dict[str, Any] = _provider_error_body(exc)
     else:
         # Unclassified exceptions must not leak internals (messages can embed
         # paths, config, or stack fragments); the full traceback is logged
@@ -967,27 +969,56 @@ def _openai_step_response(
     return payload
 
 
-def _provider_error_response(exc: ProviderCallError) -> JSONResponse:
-    """Map a classified egress failure onto an OpenAI-style error body.
+# Closed vocabularies for laundering classified-error fields into response
+# bodies: values come from these literal maps, never from the exception object,
+# so upstream exception text cannot ride along into a client-visible payload.
+_SAFE_CATEGORIES: dict[str, ProviderErrorCategory] = {
+    name: name for name in get_args(ProviderErrorCategory)
+}
+_SAFE_PROVIDERS: dict[str, str] = {name: name for name in get_args(ProviderKind)}
 
-    The taxonomy ``category`` (and ``retry_after``) is surfaced verbatim so a
-    client - or the WS5 failover layer reading this response - can branch on it
-    without re-parsing the upstream provider error.
+
+def _safe_category(category: object) -> ProviderErrorCategory:
+    return _SAFE_CATEGORIES.get(str(category), "unknown")
+
+
+def _provider_error_body(exc: ProviderCallError) -> dict[str, Any]:
+    """Build the OpenAI-style error body for a classified egress failure.
+
+    The taxonomy ``category`` (and ``retry_after``) is surfaced so a client -
+    or the WS5 failover layer reading this response - can branch on it without
+    re-parsing the upstream provider error. The upstream provider's message is
+    logged server-side rather than echoed to the client: provider error bodies
+    can embed request excerpts and infrastructure details.
     """
+    category = _safe_category(exc.category)
+    provider = _SAFE_PROVIDERS.get(str(exc.provider), "custom")
+    logger.warning("provider call failed (%s/%s): %s", provider, category, exc)
     body: dict[str, Any] = {
-        "message": str(exc),
+        "message": (
+            f"{provider} call failed ({category}); see the server logs for the provider's message"
+        ),
         "type": "provider_error",
-        "code": exc.category,
+        "code": category,
         # ``error_category`` is the canonical machine-readable failover signal
         # the Node gateway (WS5) branches on without re-parsing provider text;
         # ``category``/``code`` are kept as aliases for existing readers.
-        "error_category": exc.category,
-        "category": exc.category,
-        "provider": exc.provider,
+        "error_category": category,
+        "category": category,
+        "provider": provider,
     }
-    if exc.retry_after is not None:
-        body["retry_after"] = exc.retry_after
-    return _json_response({"error": body}, status_code=_status_for_category(exc.category))
+    retry_after = exc.retry_after
+    if isinstance(retry_after, int | float):
+        body["retry_after"] = float(retry_after)
+    return body
+
+
+def _provider_error_response(exc: ProviderCallError) -> JSONResponse:
+    """Map a classified egress failure onto an OpenAI-style error body."""
+    body = _provider_error_body(exc)
+    return _json_response(
+        {"error": body}, status_code=_status_for_category(_safe_category(exc.category))
+    )
 
 
 def _status_for_category(category: ProviderErrorCategory) -> int:

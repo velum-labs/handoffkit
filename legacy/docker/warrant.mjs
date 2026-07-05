@@ -73,7 +73,7 @@ async function startPlane() {
     enrollToken: home.config.enrollToken,
     secretStore: new SecretStore(join(home.dir, "secrets.enc"), home.master)
   });
-  await startPlaneServer(plane, home.config.port, home.config.host);
+  await startPlaneServer(plane, { port: home.config.port, host: home.config.host });
 }
 
 async function startRunner() {

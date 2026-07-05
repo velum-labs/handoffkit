@@ -579,7 +579,9 @@ export function terminate(child: ChildProcess, graceMs = 5000): void {
 }
 
 export function escapeMarkdownCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
+  // Backslashes must be escaped first so pre-existing "\|" sequences in the
+  // input cannot smuggle an unescaped cell delimiter through.
+  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, "<br>");
 }
 
 export function markdownTable(headers: readonly string[], rows: readonly (readonly string[])[]): string[] {
