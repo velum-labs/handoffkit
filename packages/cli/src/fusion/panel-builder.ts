@@ -33,8 +33,8 @@ import { estimateModelSizing } from "./model-sizing.js";
 import type { ModelSizing } from "./model-sizing.js";
 import { buildAuthOptions, defaultModelForAuthChoice, specForAuthChoice } from "./panel-auth.js";
 import type { AuthChoice } from "./panel-auth.js";
-import { listModelsForAuth } from "./model-catalog.js";
-import type { ModelListResult } from "./model-catalog.js";
+import { catalogModelHint, listModelsForAuth } from "./catalog.js";
+import type { ModelListResult } from "./catalog.js";
 
 const out = uiStream();
 
@@ -82,8 +82,9 @@ function liveKeyEnvFor(choice: AuthChoice): string | undefined {
 }
 
 /**
- * Offer a model picker for an auth choice: a live list from the provider when a
- * key is present, curated otherwise, plus an "other" custom entry. Results are
+ * Offer a model picker for an auth choice: a live list from the provider when
+ * a key is present (with models.dev pricing/context hints), the keyless
+ * models.dev catalog otherwise, plus an "other" custom entry. Results are
  * cached per choice for the session so repeat members do not refetch.
  */
 async function pickModel(
@@ -92,7 +93,10 @@ async function pickModel(
 ): Promise<string> {
   const keyEnv = liveKeyEnvFor(choice);
   const toOptions = (result: ModelListResult): Array<{ value: string; label: string; hint?: string }> => [
-    ...result.models.map((model) => ({ value: model, label: model })),
+    ...result.models.map((model) => {
+      const hint = catalogModelHint(model);
+      return { value: model.id, label: model.id, ...(hint !== undefined ? { hint } : {}) };
+    }),
     { value: CUSTOM_MODEL, label: "other (type a model name)" }
   ];
   const fetchList = async (): Promise<ModelListResult> => {
@@ -109,11 +113,23 @@ async function pickModel(
   // can already type — stale-while-revalidate instead of a blocking fetch.
   const cached = cache.get(choice);
   const sourceNote = (result: ModelListResult | undefined): string => {
-    if (result?.source === "live") return `${choice} live`;
-    if (keyEnv !== undefined && process.env[keyEnv] === undefined) {
-      return `curated — set ${keyEnv} for the live list`;
+    const source = result?.source;
+    switch (source) {
+      case "live":
+        return `${choice} live`;
+      case "models.dev":
+        return `${choice} · models.dev`;
+      case "curated":
+        return keyEnv !== undefined && process.env[keyEnv] === undefined
+          ? `curated — set ${keyEnv} for the live list`
+          : "curated";
+      case undefined:
+        return `${choice} models`;
+      default: {
+        const exhaustive: never = source;
+        throw new Error(`unknown model source: ${String(exhaustive)}`);
+      }
     }
-    return `${choice} models`;
   };
   const chosen = await fuzzySelect<string>({
     message: `Model (${sourceNote(cached ?? undefined)})`,
@@ -127,7 +143,7 @@ async function pickModel(
       : {})
   });
   if (chosen === CUSTOM_MODEL) {
-    const suggestions = (cache.get(choice)?.models ?? []).slice();
+    const suggestions = (cache.get(choice)?.models ?? []).map((model) => model.id);
     const custom = await autocompleteText({
       message: "Model name",
       suggestions,

@@ -21,8 +21,18 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import {
+  curatedModels,
+  defaultKeyEnv as registryDefaultKeyEnv,
+  providerDefaultBaseUrl,
+  providerDiscovery
+} from "@fusionkit/registry";
+
 import { defaultKeyEnv } from "./env.js";
 import type { PanelProvider } from "./env.js";
+import { LOCAL_CATALOG_REPOS } from "./local-catalog.js";
+import { defaultModelForAuthChoice } from "./panel-auth.js";
+import type { AuthChoice } from "./panel-auth.js";
 
 export type CatalogModel = {
   /** The provider-native model id (what goes in `ID=PROVIDER:MODEL`). */
@@ -115,17 +125,23 @@ function formatPerMillion(perToken: string | number | undefined): string | undef
 
 type JsonRecord = Record<string, unknown>;
 
-async function fetchJson(url: string, headers: Record<string, string>): Promise<JsonRecord> {
-  const response = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+async function fetchJson(
+  url: string,
+  headers: Record<string, string>,
+  fetchImpl: typeof fetch = fetch
+): Promise<JsonRecord> {
+  const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`${url} -> HTTP ${response.status}`);
   return (await response.json()) as JsonRecord;
 }
 
 // The models.dev payload covers every provider in one document; memoize it per
-// process so refreshing several providers costs one fetch.
+// process so refreshing several providers costs one fetch. Injected fetchers
+// (tests) bypass the memo so they can never poison real lookups.
 let modelsDevBody: Promise<JsonRecord> | undefined;
 
-function fetchModelsDev(): Promise<JsonRecord> {
+function fetchModelsDev(fetchImpl: typeof fetch = fetch): Promise<JsonRecord> {
+  if (fetchImpl !== fetch) return fetchJson(MODELS_DEV_URL, {}, fetchImpl);
   modelsDevBody ??= fetchJson(MODELS_DEV_URL, {}).catch((error: unknown) => {
     modelsDevBody = undefined; // allow a later retry
     throw error;
@@ -146,8 +162,11 @@ function modelsDevPricing(cost: JsonRecord | undefined): string | undefined {
 }
 
 /** The models.dev catalog for one provider (its ids match ours directly). */
-async function fetchModelsDevCatalog(provider: PanelProvider): Promise<CatalogModel[]> {
-  const body = await fetchModelsDev();
+async function fetchModelsDevCatalog(
+  provider: PanelProvider,
+  fetchImpl: typeof fetch = fetch
+): Promise<CatalogModel[]> {
+  const body = await fetchModelsDev(fetchImpl);
   const entry = body[provider] as JsonRecord | undefined;
   const models = (entry?.models ?? {}) as Record<string, JsonRecord>;
   return Object.values(models)
@@ -168,10 +187,13 @@ async function fetchModelsDevCatalog(provider: PanelProvider): Promise<CatalogMo
 /** Merge models.dev pricing/context/labels into a provider-fetched list. */
 async function enrichWithModelsDev(
   provider: PanelProvider,
-  models: CatalogModel[]
+  models: CatalogModel[],
+  fetchImpl: typeof fetch = fetch
 ): Promise<CatalogModel[]> {
   try {
-    const metadata = new Map((await fetchModelsDevCatalog(provider)).map((model) => [model.id, model]));
+    const metadata = new Map(
+      (await fetchModelsDevCatalog(provider, fetchImpl)).map((model) => [model.id, model])
+    );
     return models.map((model) => {
       const extra = metadata.get(model.id);
       if (extra === undefined) return model;
@@ -197,13 +219,66 @@ async function fetchMlxCommunity(): Promise<CatalogModel[]> {
     .filter((model) => model.id.length > 0);
 }
 
+// OpenAI's /v1/models returns far more than chat models; drop the obvious
+// non-chat families so pickers and completion stay useful.
+const OPENAI_NON_CHAT = [
+  "embedding",
+  "whisper",
+  "tts",
+  "dall-e",
+  "dalle",
+  "realtime",
+  "audio",
+  "moderation",
+  "image",
+  "transcribe",
+  "search",
+  "babbage",
+  "davinci"
+];
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Chat-usable model ids from an OpenAI `/v1/models` payload. Exported for tests. */
+export function parseOpenAiModels(json: unknown): string[] {
+  if (!isRecord(json) || !Array.isArray(json.data)) return [];
+  return json.data
+    .map((entry) => (isRecord(entry) && typeof entry.id === "string" ? entry.id : ""))
+    .filter((id) => id.length > 0 && !OPENAI_NON_CHAT.some((bad) => id.includes(bad)));
+}
+
+/** Model ids from an Anthropic `/v1/models` payload. Exported for tests. */
+export function parseAnthropicModels(json: unknown): string[] {
+  if (!isRecord(json) || !Array.isArray(json.data)) return [];
+  return json.data
+    .map((entry) => (isRecord(entry) && typeof entry.id === "string" ? entry.id : ""))
+    .filter((id) => id.length > 0);
+}
+
+/** Chat-usable model ids from a Google `models` payload. Exported for tests. */
+export function parseGoogleModels(json: unknown): string[] {
+  if (!isRecord(json) || !Array.isArray(json.models)) return [];
+  return json.models
+    .filter((entry) => {
+      if (!isRecord(entry)) return false;
+      const methods = entry.supportedGenerationMethods;
+      // When the methods are present, require generateContent; otherwise keep it.
+      return !Array.isArray(methods) || methods.includes("generateContent");
+    })
+    .map((entry) => {
+      const name = isRecord(entry) && typeof entry.name === "string" ? entry.name : "";
+      return name.startsWith("models/") ? name.slice("models/".length) : name;
+    })
+    .filter((id) => id.length > 0);
+}
+
 async function fetchOpenAi(): Promise<CatalogModel[]> {
   const key = process.env[defaultKeyEnv("openai") ?? "OPENAI_API_KEY"] ?? "";
   const body = await fetchJson("https://api.openai.com/v1/models", { Authorization: `Bearer ${key}` });
-  const data = Array.isArray(body.data) ? (body.data as JsonRecord[]) : [];
-  return data
-    .map((model) => ({ id: String(model.id ?? "") }))
-    .filter((model) => model.id.length > 0)
+  return parseOpenAiModels(body)
+    .map((id) => ({ id }))
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
@@ -228,6 +303,7 @@ async function fetchGoogle(): Promise<CatalogModel[]> {
     `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`,
     {}
   );
+  const chatIds = new Set(parseGoogleModels(body));
   const data = Array.isArray(body.models) ? (body.models as JsonRecord[]) : [];
   return data
     .map((model) => ({
@@ -235,7 +311,7 @@ async function fetchGoogle(): Promise<CatalogModel[]> {
       ...(typeof model.displayName === "string" ? { label: model.displayName } : {}),
       ...(typeof model.inputTokenLimit === "number" ? { context: model.inputTokenLimit } : {})
     }))
-    .filter((model) => model.id.length > 0);
+    .filter((model) => chatIds.has(model.id));
 }
 
 async function fetchOpenRouter(): Promise<CatalogModel[]> {
@@ -327,4 +403,136 @@ export function catalogModelHint(model: CatalogModel): string | undefined {
     parts.push(`${Math.round(model.context / 1000)}k ctx`);
   }
   return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Auth-choice listing — the init / ensemble panel-builder picker
+// ---------------------------------------------------------------------------
+
+/** Where a model list came from (drives the picker's source note). */
+export type ModelSource = "live" | "models.dev" | "curated";
+export type ModelListResult = { models: CatalogModel[]; source: ModelSource };
+
+/** Curated fallbacks per auth choice, from the registry's model catalog. */
+function curatedFor(choice: AuthChoice): CatalogModel[] {
+  const ids = choice === "local" ? LOCAL_CATALOG_REPOS : curatedModels(choice);
+  return [...ids].map((id) => ({ id }));
+}
+
+/** Dedupe, then put the choice's default model first and sort the rest descending. */
+function finalize(ids: string[], choice: AuthChoice): string[] {
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  const preferred = defaultModelForAuthChoice(choice);
+  const rest = unique.filter((id) => id !== preferred).sort((a, b) => b.localeCompare(a));
+  return unique.includes(preferred) ? [preferred, ...rest] : rest;
+}
+
+/** Parse a live discovery payload according to the provider's response shape. */
+function parseDiscoveryResponse(shape: string, json: unknown): string[] {
+  switch (shape) {
+    case "openai":
+      return parseOpenAiModels(json);
+    case "anthropic":
+      return parseAnthropicModels(json);
+    case "google":
+      return parseGoogleModels(json);
+    default:
+      return [];
+  }
+}
+
+async function fetchProviderModels(
+  provider: string,
+  discovery: NonNullable<ReturnType<typeof providerDiscovery>>,
+  key: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number
+): Promise<string[]> {
+  const baseUrl = providerDefaultBaseUrl(provider);
+  if (baseUrl === undefined) return [];
+  let url = `${baseUrl}${discovery.path}`;
+  const headers: Record<string, string> = { ...discovery.extraHeaders };
+  switch (discovery.auth) {
+    case "bearer":
+      headers.authorization = `Bearer ${key}`;
+      break;
+    case "x-api-key":
+      headers["x-api-key"] = key;
+      break;
+    case "x-goog-api-key":
+      headers["x-goog-api-key"] = key;
+      break;
+    case "query-key":
+      url = `${url}?key=${encodeURIComponent(key)}`;
+      break;
+    default: {
+      const exhaustive: never = discovery.auth;
+      throw new Error(`unknown discovery auth style ${String(exhaustive)}`);
+    }
+  }
+  const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const json: unknown = await response.json();
+  return parseDiscoveryResponse(discovery.responseShape, json);
+}
+
+/**
+ * List the models to offer for an auth choice, best source first:
+ * - subscriptions (`claude-code`, `codex`) and `local` have no listing
+ *   endpoint -> curated registry lists;
+ * - API-key providers with a key -> the provider's own listing (the ground
+ *   truth of what this account can call), enriched with models.dev metadata;
+ * - API-key providers without a key -> the keyless models.dev catalog;
+ * - any failure (network, empty list) -> curated, so onboarding always has
+ *   something to pick.
+ */
+export async function listModelsForAuth(
+  choice: AuthChoice,
+  opts: {
+    env?: Record<string, string | undefined>;
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number;
+    /** Force live discovery even when the provider registry defaults the picker to curated. */
+    liveDiscovery?: boolean;
+  } = {}
+): Promise<ModelListResult> {
+  const curated = { models: curatedFor(choice), source: "curated" as const };
+  const discovery = providerDiscovery(choice);
+  const keyEnv = registryDefaultKeyEnv(choice);
+  if (discovery === undefined || keyEnv === undefined) return curated;
+  if (discovery.pickerDefaultSource === "curated" && opts.liveDiscovery !== true) {
+    return curated;
+  }
+
+  const env = opts.env ?? process.env;
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const provider = choice as PanelProvider;
+  const key = env[keyEnv];
+  if (key === undefined || key.length === 0) {
+    try {
+      const models = await fetchModelsDevCatalog(provider, fetchImpl);
+      return models.length > 0 ? { models, source: "models.dev" } : curated;
+    } catch {
+      return curated;
+    }
+  }
+  try {
+    const ids = await fetchProviderModels(
+      choice,
+      discovery,
+      key,
+      fetchImpl,
+      opts.timeoutMs ?? FETCH_TIMEOUT_MS
+    );
+    const ordered = finalize(ids, choice);
+    if (ordered.length === 0) return curated;
+    const models = await enrichWithModelsDev(
+      provider,
+      ordered.map((id) => ({ id })),
+      fetchImpl
+    );
+    return { models, source: "live" };
+  } catch {
+    return curated;
+  }
 }
