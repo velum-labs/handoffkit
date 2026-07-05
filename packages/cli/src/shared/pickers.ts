@@ -24,6 +24,9 @@ export async function argOrPick<T extends string>(input: {
   given: T | undefined;
   message: string;
   options: () => ReadonlyArray<SelectOption<T>>;
+  /** Optional live loader: the list starts on `options` and updates when this lands. */
+  refresh?: () => Promise<ReadonlyArray<SelectOption<T>>>;
+  refreshNote?: string;
   /** Failure when the argument is required (non-interactive). */
   missing: string;
   /** Failure when the picker would be empty (defaults to `missing`). */
@@ -33,10 +36,12 @@ export async function argOrPick<T extends string>(input: {
   if (input.given !== undefined) return input.given;
   if (!canPickInteractively()) fail(input.missing);
   const options = input.options();
-  if (options.length === 0) fail(input.empty ?? input.missing);
+  if (options.length === 0 && input.refresh === undefined) fail(input.empty ?? input.missing);
   return fuzzySelect<T>({
     message: input.message,
     options,
+    ...(input.refresh !== undefined ? { refresh: input.refresh } : {}),
+    ...(input.refreshNote !== undefined ? { refreshNote: input.refreshNote } : {}),
     ...(input.placeholder !== undefined ? { placeholder: input.placeholder } : {})
   });
 }

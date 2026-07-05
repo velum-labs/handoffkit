@@ -25,7 +25,7 @@ import { autocompleteText, select, text } from "@fusionkit/cli-ui";
 
 import { FusionConfigError, fusionConfigPath, parseFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
-import { defaultKeyEnv, FUSION_TOOLS } from "../fusion-quickstart.js";
+import { defaultKeyEnv, toolSelectOptions } from "../fusion-quickstart.js";
 import type { PanelModelSpec } from "../fusion-quickstart.js";
 import { cachedCatalog, CATALOG_PROVIDERS } from "../fusion/catalog.js";
 import { loadConfigOrFail, persistedShape, repoRootFor, validateAndWrite } from "../fusion/config-store.js";
@@ -35,9 +35,11 @@ import { exportRouterYaml } from "../fusion/stack.js";
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
+import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "../shared/options.js";
 import { argOrPick, canPickInteractively } from "../shared/pickers.js";
 
 import { runConfigEdit } from "./config-edit.js";
+import { registerPaletteAction } from "./palette.js";
 
 type ConfigOpts = { repo?: string; out?: string; json?: boolean };
 
@@ -338,6 +340,12 @@ function cachedModelIdSuggestions(): string[] {
  * for booleans, a picker for enums, ghost-completed text for model names, and
  * plain text otherwise. Only reached on an interactive TTY.
  */
+/** on/off toggle options for the boolean config keys. */
+const ON_OFF_OPTIONS = [
+  { value: "on", label: "on" },
+  { value: "off", label: "off" }
+] as const;
+
 async function promptConfigValue(address: ConfigPath): Promise<string> {
   if (address.kind === "top") {
     switch (address.key) {
@@ -347,35 +355,25 @@ async function promptConfigValue(address: ConfigPath): Promise<string> {
       case "reasoning":
         return select<string>({
           message: `${address.key}`,
-          options: [
-            { value: "on", label: "on" },
-            { value: "off", label: "off" }
-          ],
+          options: ON_OFF_OPTIONS,
           defaultIndex: 0
         });
       case "tool":
         return select<string>({
           message: "default tool",
-          options: FUSION_TOOLS.filter((tool) => tool !== "serve").map((tool) => ({ value: tool, label: tool })),
+          options: toolSelectOptions().filter((option) => option.value !== "serve"),
           defaultIndex: 0
         });
       case "onRateLimit":
         return select<string>({
           message: "on rate limit",
-          options: [
-            { value: "fusion", label: "fusion", hint: "continue on the ensemble (default)" },
-            { value: "passthrough", label: "passthrough", hint: "fall back to the vendor model" },
-            { value: "fail", label: "fail", hint: "surface the rate limit to the tool" }
-          ],
+          options: ON_RATE_LIMIT_OPTIONS,
           defaultIndex: 0
         });
       case "panelTrust":
         return select<string>({
           message: "panel trust",
-          options: [
-            { value: "full", label: "full", hint: "max autonomy (default)" },
-            { value: "guarded", label: "guarded", hint: "harness-fenced to the worktree" }
-          ],
+          options: PANEL_TRUST_OPTIONS,
           defaultIndex: 0
         });
       case "reasoningModel": {
@@ -504,6 +502,7 @@ function runUnset(path: string, opts: ConfigOpts, ctx: CommandContext): number {
 }
 
 export function registerConfig(program: Command): void {
+  registerPaletteAction({ label: "Edit the repo config", hint: "fusionkit config edit", argv: ["config", "edit"] });
   const config = program
     .command("config")
     .description("inspect and edit the one config source of truth (.fusionkit/fusion.json)");

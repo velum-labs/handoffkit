@@ -37,30 +37,19 @@ export const gray = wrap(90, 39);
 
 /** Status glyphs, with ASCII fallbacks when color (≈ unicode-friendly TTY) is off. */
 export const glyph = {
-  tick: () => (supportsColor() ? "\u2714" : "[ok]"),
-  cross: () => (supportsColor() ? "\u2716" : "[x]"),
-  bullet: () => (supportsColor() ? "\u2022" : "*"),
-  arrow: () => (supportsColor() ? "\u203a" : ">"),
-  pointer: () => (supportsColor() ? "\u276f" : ">"),
-  warn: () => (supportsColor() ? "\u26a0" : "[!]"),
-  pending: () => (supportsColor() ? "\u25cb" : "( )"),
-  checkboxOn: () => (supportsColor() ? "\u25c9" : "[x]"),
-  checkboxOff: () => (supportsColor() ? "\u25ef" : "[ ]")
+  tick: () => (supportsColor() ? "✔" : "[ok]"),
+  cross: () => (supportsColor() ? "✖" : "[x]"),
+  bullet: () => (supportsColor() ? "•" : "*"),
+  arrow: () => (supportsColor() ? "›" : ">"),
+  pointer: () => (supportsColor() ? "❯" : ">"),
+  warn: () => (supportsColor() ? "⚠" : "[!]"),
+  pending: () => (supportsColor() ? "○" : "( )"),
+  checkboxOn: () => (supportsColor() ? "◉" : "[x]"),
+  checkboxOff: () => (supportsColor() ? "◯" : "[ ]")
 };
 
 /** Frames for the in-place spinner (braille dots when color is on). */
-export const SPINNER_FRAMES: readonly string[] = [
-  "\u280b",
-  "\u2819",
-  "\u2839",
-  "\u2838",
-  "\u283c",
-  "\u2834",
-  "\u2826",
-  "\u2827",
-  "\u2807",
-  "\u280f"
-];
+export const SPINNER_FRAMES: readonly string[] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 /** The product tagline, shown beneath the banner/header. */
 const BRAND_TAGLINE = "real model fusion behind your coding agent";
@@ -176,21 +165,50 @@ function maxBoxWidth(stream: NodeJS.WriteStream = process.stderr): number {
   return Math.min(Math.max(columns, 24), 100);
 }
 
+/** One set of box-drawing characters (rounded unicode or plain ASCII). */
+type BoxChars = {
+  topLeft: string;
+  topRight: string;
+  bottomLeft: string;
+  bottomRight: string;
+  horizontal: string;
+  vertical: string;
+};
+
+const ROUNDED_BOX: BoxChars = {
+  topLeft: "╭",
+  topRight: "╮",
+  bottomLeft: "╰",
+  bottomRight: "╯",
+  horizontal: "─",
+  vertical: "│"
+};
+
+const ASCII_BOX: BoxChars = {
+  topLeft: "+",
+  topRight: "+",
+  bottomLeft: "+",
+  bottomRight: "+",
+  horizontal: "-",
+  vertical: "|"
+};
+
 /**
- * A hand-crafted rounded box around a titled block of lines. Uses box-drawing
+ * A titled, framed block rendered as plain strings. Rounded box-drawing
  * characters when color (≈ a unicode TTY) is on, ASCII otherwise. Lines may
  * contain ANSI styling; widths are measured against the visible text so the
  * frame always aligns. The box never draws wider than the terminal — content
  * lines that would overflow are word-wrapped (ANSI-safely) instead.
+ *
+ * Deliberately NOT Ink's `<Box borderStyle>`: Ink borders only exist inside a
+ * mounted live app, while these boxes are *transcript* output — written once
+ * to the stream and left in scrollback. They must render identically from the
+ * plain presenter (non-TTY, `--quiet`, CI), from the top-level error handler
+ * after any Ink app has unmounted, and inside string-snapshot tests, none of
+ * which can mount a React tree.
  */
 export function box(title: string, lines: string[], options: { tone?: BoxTone } = {}): string {
-  const rounded = supportsColor();
-  const tl = rounded ? "\u256d" : "+";
-  const tr = rounded ? "\u256e" : "+";
-  const bl = rounded ? "\u2570" : "+";
-  const br = rounded ? "\u256f" : "+";
-  const h = rounded ? "\u2500" : "-";
-  const v = rounded ? "\u2502" : "|";
+  const chars = supportsColor() ? ROUNDED_BOX : ASCII_BOX;
   const frame: (text: string) => string = options.tone === "error" ? red : dim;
 
   const titleText = options.tone === "error" ? bold(red(title)) : bold(title);
@@ -209,13 +227,13 @@ export function box(title: string, lines: string[], options: { tone?: BoxTone } 
 
   // Build with un-nested styles: color the frame pieces, bold only the title,
   // so a bold reset (SGR 22) never prematurely closes a surrounding style.
-  const titleRule = h.repeat(Math.max(0, inner - visibleWidth(titleText) - 3));
-  const top = `${frame(`${tl}${h} `)}${titleText}${frame(` ${titleRule}${tr}`)}`;
+  const titleRule = chars.horizontal.repeat(Math.max(0, inner - visibleWidth(titleText) - 3));
+  const top = `${frame(`${chars.topLeft}${chars.horizontal} `)}${titleText}${frame(` ${titleRule}${chars.topRight}`)}`;
   const body = wrapped.map((line) => {
     const pad = " ".repeat(Math.max(0, contentWidth - visibleWidth(line)));
-    return `${frame(v)} ${line}${pad} ${frame(v)}`;
+    return `${frame(chars.vertical)} ${line}${pad} ${frame(chars.vertical)}`;
   });
-  const bottom = frame(`${bl}${h.repeat(inner)}${br}`);
+  const bottom = frame(`${chars.bottomLeft}${chars.horizontal.repeat(inner)}${chars.bottomRight}`);
   return [top, ...body, bottom].join("\n");
 }
 

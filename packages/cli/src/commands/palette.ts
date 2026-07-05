@@ -4,32 +4,37 @@
  * equivalent command — usable with zero prior knowledge of the CLI, and
  * teaching it at the same time. Off-TTY (pipes, CI) bare invocation keeps
  * printing help, so scripts and captures never block on a prompt.
+ *
+ * Actions are not hardcoded here: each command module registers its own
+ * palette entries next to its Commander registration (via
+ * {@link registerPaletteAction}), so the palette can never drift from the
+ * commands that actually exist. Palette order follows the registration order
+ * in `cli.ts`.
  */
 import { brandBanner, canPromptInteractively, fuzzySelect, isInteractive, uiStream } from "@fusionkit/cli-ui";
 
-type PaletteAction = {
+export type PaletteAction = {
+  /** The human phrasing of the action, e.g. "Check my environment". */
   label: string;
+  /** The equivalent command, e.g. "fusionkit doctor" (shown dim, also searched). */
   hint: string;
+  /** The argv to dispatch (relative to the program); undefined = print help. */
   argv: readonly string[] | undefined;
 };
 
-const ACTIONS: readonly PaletteAction[] = [
-  { label: "Run codex with fusion", hint: "fusionkit codex", argv: ["codex"] },
-  { label: "Run claude with fusion", hint: "fusionkit claude", argv: ["claude"] },
-  { label: "Run cursor with fusion", hint: "fusionkit cursor", argv: ["cursor"] },
-  { label: "Run the gateway for any tool", hint: "fusionkit serve", argv: ["serve"] },
-  { label: "Set up this repo (.fusionkit/)", hint: "fusionkit init", argv: ["init"] },
-  { label: "Check my environment", hint: "fusionkit doctor", argv: ["doctor"] },
-  { label: "Warm the fusion engine", hint: "fusionkit setup", argv: ["setup"] },
-  { label: "Show the effective config", hint: "fusionkit status", argv: ["status"] },
-  { label: "Edit the repo config", hint: "fusionkit config edit", argv: ["config", "edit"] },
-  { label: "Browse stored sessions", hint: "fusionkit sessions", argv: ["sessions"] },
-  { label: "Manage named ensembles", hint: "fusionkit ensemble list", argv: ["ensemble", "list"] },
-  { label: "Manage local MLX models", hint: "fusionkit models", argv: ["models"] },
-  { label: "Stop background fusion services", hint: "fusionkit fusion stop", argv: ["fusion", "stop"] },
-  { label: "Show versions", hint: "fusionkit version", argv: ["version"] },
-  { label: "Show help", hint: "fusionkit --help", argv: undefined }
-];
+// Keyed by hint so a re-built program (tests build the tree repeatedly in one
+// process) re-registers idempotently instead of duplicating entries.
+const registry = new Map<string, PaletteAction>();
+
+/** Register palette entries; called by command modules during registration. */
+export function registerPaletteAction(...actions: readonly PaletteAction[]): void {
+  for (const action of actions) registry.set(action.hint, action);
+}
+
+/** Every registered action, in registration order, plus the help escape hatch. */
+export function paletteActions(): PaletteAction[] {
+  return [...registry.values(), { label: "Show help", hint: "fusionkit --help", argv: undefined }];
+}
 
 /**
  * Run the palette and return the argv to execute (relative to the program),
@@ -41,7 +46,7 @@ export async function runCommandPalette(): Promise<string[] | undefined> {
   const argv = await fuzzySelect<readonly string[] | undefined>({
     message: "What would you like to do?",
     placeholder: "type to search",
-    options: ACTIONS.map((action) => ({ value: action.argv, label: action.label, hint: action.hint }))
+    options: paletteActions().map((action) => ({ value: action.argv, label: action.label, hint: action.hint }))
   });
   return argv === undefined ? undefined : [...argv];
 }

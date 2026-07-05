@@ -3,9 +3,19 @@
  * behind "pick a model" fuzzy pickers and dynamic shell completion. Pickers
  * open instantly on cached entries and refresh in the background
  * (stale-while-revalidate); completion reads the cache only, never the
- * network. Only providers with a usable credential are fetched (OpenRouter's
- * list is public). A fetch failure degrades to the cache (or an empty list) —
+ * network. A fetch failure degrades to the cache (or an empty list) —
  * catalog data is a convenience, never a hard requirement.
+ *
+ * Sources, per provider:
+ * - With an API key: the provider's own listing endpoint (the ground truth of
+ *   what THIS account can call), enriched with pricing/context metadata from
+ *   models.dev.
+ * - Without a key: models.dev (https://models.dev — an open-source,
+ *   keyless model catalog), so pickers still show real model ids before any
+ *   credential exists. OpenRouter's own listing is public and already carries
+ *   pricing, so it stays native.
+ * - mlx: the Hugging Face public listing of the `mlx-community` org (where
+ *   virtually all usable MLX conversions live), most-downloaded first.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -30,11 +40,18 @@ type CatalogFile = {
   providers: Partial<Record<string, { fetchedAt: number; models: CatalogModel[] }>>;
 };
 
-/** Providers whose model list can be fetched (mlx/openai-compatible have no cloud list). */
+/** Cloud providers whose model list can be fetched (openai-compatible has no fixed list). */
 export const CATALOG_PROVIDERS: readonly PanelProvider[] = ["openai", "anthropic", "google", "openrouter"];
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5_000;
+
+/** The open-source keyless model catalog (used when no provider key is set). */
+const MODELS_DEV_URL = "https://models.dev/api.json";
+
+/** HF public listing of the mlx-community org, most-downloaded first. */
+const MLX_COMMUNITY_URL =
+  "https://huggingface.co/api/models?author=mlx-community&pipeline_tag=text-generation&sort=downloads&direction=-1&limit=200";
 
 export function catalogCachePath(): string {
   return process.env.FUSIONKIT_CATALOG_PATH ?? join(homedir(), ".fusionkit", "catalog.json");
@@ -60,12 +77,21 @@ function writeCatalogFile(file: CatalogFile): void {
   }
 }
 
-/** True when `provider`'s catalog can be fetched with the current env. */
-export function catalogProviderAvailable(provider: PanelProvider): boolean {
-  if (!CATALOG_PROVIDERS.includes(provider)) return false;
+/** True when `provider`'s own (account-scoped) listing can be fetched. */
+function providerListingAvailable(provider: PanelProvider): boolean {
   if (provider === "openrouter") return true; // public listing
   const keyEnv = defaultKeyEnv(provider);
   return keyEnv !== undefined && (process.env[keyEnv] ?? "").length > 0;
+}
+
+/**
+ * True when `provider`'s catalog can be fetched with the current env. Cloud
+ * providers are always fetchable (models.dev is keyless); mlx lists the
+ * public mlx-community org; only ad-hoc openai-compatible endpoints have no
+ * listable catalog.
+ */
+export function catalogProviderAvailable(provider: PanelProvider): boolean {
+  return CATALOG_PROVIDERS.includes(provider) || provider === "mlx";
 }
 
 /** The cached models for `provider` (possibly stale), or an empty list. */
@@ -93,6 +119,82 @@ async function fetchJson(url: string, headers: Record<string, string>): Promise<
   const response = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`${url} -> HTTP ${response.status}`);
   return (await response.json()) as JsonRecord;
+}
+
+// The models.dev payload covers every provider in one document; memoize it per
+// process so refreshing several providers costs one fetch.
+let modelsDevBody: Promise<JsonRecord> | undefined;
+
+function fetchModelsDev(): Promise<JsonRecord> {
+  modelsDevBody ??= fetchJson(MODELS_DEV_URL, {}).catch((error: unknown) => {
+    modelsDevBody = undefined; // allow a later retry
+    throw error;
+  });
+  return modelsDevBody;
+}
+
+/** Format a models.dev cost entry (already $/1M tokens) as a pricing note. */
+function modelsDevPricing(cost: JsonRecord | undefined): string | undefined {
+  const per = (value: unknown): string | undefined => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
+    return `$${value >= 10 ? value.toFixed(0) : String(value)}/M`;
+  };
+  const input = per(cost?.input);
+  const output = per(cost?.output);
+  if (input !== undefined && output !== undefined) return `${input} in · ${output} out`;
+  return input ?? output;
+}
+
+/** The models.dev catalog for one provider (its ids match ours directly). */
+async function fetchModelsDevCatalog(provider: PanelProvider): Promise<CatalogModel[]> {
+  const body = await fetchModelsDev();
+  const entry = body[provider] as JsonRecord | undefined;
+  const models = (entry?.models ?? {}) as Record<string, JsonRecord>;
+  return Object.values(models)
+    .map((model) => {
+      const pricing = modelsDevPricing(model.cost as JsonRecord | undefined);
+      const context = (model.limit as JsonRecord | undefined)?.context;
+      return {
+        id: String(model.id ?? ""),
+        ...(typeof model.name === "string" && model.name !== model.id ? { label: model.name } : {}),
+        ...(pricing !== undefined ? { pricing } : {}),
+        ...(typeof context === "number" ? { context } : {})
+      };
+    })
+    .filter((model) => model.id.length > 0)
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+/** Merge models.dev pricing/context/labels into a provider-fetched list. */
+async function enrichWithModelsDev(
+  provider: PanelProvider,
+  models: CatalogModel[]
+): Promise<CatalogModel[]> {
+  try {
+    const metadata = new Map((await fetchModelsDevCatalog(provider)).map((model) => [model.id, model]));
+    return models.map((model) => {
+      const extra = metadata.get(model.id);
+      if (extra === undefined) return model;
+      return {
+        ...model,
+        ...(model.label === undefined && extra.label !== undefined ? { label: extra.label } : {}),
+        ...(model.pricing === undefined && extra.pricing !== undefined ? { pricing: extra.pricing } : {}),
+        ...(model.context === undefined && extra.context !== undefined ? { context: extra.context } : {})
+      };
+    });
+  } catch {
+    return models; // enrichment is a bonus, never a requirement
+  }
+}
+
+/** The mlx-community org listing from the Hugging Face public API. */
+async function fetchMlxCommunity(): Promise<CatalogModel[]> {
+  const response = await fetch(MLX_COMMUNITY_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`${MLX_COMMUNITY_URL} -> HTTP ${response.status}`);
+  const body = (await response.json()) as JsonRecord[];
+  return (Array.isArray(body) ? body : [])
+    .map((model) => ({ id: String(model.id ?? "") }))
+    .filter((model) => model.id.length > 0);
 }
 
 async function fetchOpenAi(): Promise<CatalogModel[]> {
@@ -158,23 +260,36 @@ async function fetchOpenRouter(): Promise<CatalogModel[]> {
     .filter((model) => model.id.length > 0);
 }
 
-/** Fetch `provider`'s catalog live and update the cache. Throws on failure. */
+/**
+ * Fetch `provider`'s catalog live and update the cache. Throws on failure.
+ * Keyed providers use their own listing (account ground truth) enriched with
+ * models.dev metadata; keyless ones fall back to models.dev entirely.
+ */
 export async function refreshCatalog(provider: PanelProvider): Promise<CatalogModel[]> {
   let models: CatalogModel[];
   switch (provider) {
     case "openai":
-      models = await fetchOpenAi();
+      models = providerListingAvailable(provider)
+        ? await enrichWithModelsDev(provider, await fetchOpenAi())
+        : await fetchModelsDevCatalog(provider);
       break;
     case "anthropic":
-      models = await fetchAnthropic();
+      models = providerListingAvailable(provider)
+        ? await enrichWithModelsDev(provider, await fetchAnthropic())
+        : await fetchModelsDevCatalog(provider);
       break;
     case "google":
-      models = await fetchGoogle();
+      models = providerListingAvailable(provider)
+        ? await enrichWithModelsDev(provider, await fetchGoogle())
+        : await fetchModelsDevCatalog(provider);
       break;
     case "openrouter":
+      // Public listing with pricing built in; no fallback needed.
       models = await fetchOpenRouter();
       break;
     case "mlx":
+      models = await fetchMlxCommunity();
+      break;
     case "openai-compatible":
       return [];
     default: {

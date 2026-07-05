@@ -862,18 +862,26 @@ export async function runFusion(
   }
 }
 
+/**
+ * Selectable fusion tools (registry-derived launchers + the `serve`
+ * pseudo-tool), shared by every tool picker (`pickTool`, the init wizard).
+ */
+export function toolSelectOptions(): Array<{ value: FusionTool; label: string; hint: string }> {
+  return [
+    ...toolRegistry.launchableFusion().map((tool) => ({
+      value: tool.id,
+      label: tool.id,
+      hint: tool.pickerHint
+    })),
+    { value: "serve" as FusionTool, label: "serve", hint: "just run the gateway and print setup" }
+  ];
+}
+
 /** Interactive tool picker for when no `--tool` was provided on a TTY. */
 export async function pickTool(): Promise<FusionTool> {
   return select<FusionTool>({
     message: "Which coding agent should model fusion back?",
-    options: [
-      ...toolRegistry.launchableFusion().map((tool) => ({
-        value: tool.id,
-        label: tool.id,
-        hint: tool.pickerHint
-      })),
-      { value: "serve", label: "serve", hint: "just run the gateway and print setup" }
-    ],
+    options: toolSelectOptions(),
     defaultIndex: 0
   });
 }

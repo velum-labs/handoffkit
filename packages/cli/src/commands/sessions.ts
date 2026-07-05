@@ -21,6 +21,8 @@ import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { argOrPick } from "../shared/pickers.js";
 
+import { registerPaletteAction } from "./palette.js";
+
 /**
  * Resolve a session reference (a full id or a unique prefix) to a stored id.
  * Returns `undefined` when nothing matches or a prefix is ambiguous.
@@ -187,6 +189,7 @@ async function pickSessionId(store: SessionStore, verb: string): Promise<string>
 }
 
 export function registerSessions(program: Command): void {
+  registerPaletteAction({ label: "Browse stored sessions", hint: "fusionkit sessions", argv: ["sessions"] });
   const store = new FileSystemSessionStore(defaultSessionsDir());
 
   const sessions = program

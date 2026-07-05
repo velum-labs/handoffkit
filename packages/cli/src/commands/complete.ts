@@ -17,6 +17,7 @@ import { Command } from "commander";
 import { defaultSessionsDir, FileSystemSessionStore } from "@fusionkit/model-gateway";
 
 import { loadFusionConfig, PROMPT_IDS } from "../fusion-config.js";
+import { cachedCatalog } from "../fusion/catalog.js";
 import { persistedShape, repoRootFor, shapeEnsembles } from "../fusion/config-store.js";
 import { detectHost, recommendFor } from "../fusion/local-catalog.js";
 
@@ -53,7 +54,13 @@ function configPaths(): string[] {
 }
 
 function localModelRepos(): string[] {
-  return attempt(() => recommendFor(detectHost()).map((entry) => entry.repo), []);
+  // Curated first, then any cached mlx-community entries (cache only — shell
+  // completion must never hit the network).
+  return attempt(() => {
+    const curated = recommendFor(detectHost()).map((entry) => entry.repo);
+    const community = cachedCatalog("mlx").map((model) => model.id);
+    return [...new Set([...curated, ...community])];
+  }, []);
 }
 
 /**

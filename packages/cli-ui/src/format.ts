@@ -1,5 +1,8 @@
 /** Small human-readable formatters shared across surfaces. */
 
+/** The single-character horizontal ellipsis ("…"), used when truncating. */
+const ELLIPSIS = "…";
+
 /** Human-readable bytes (binary units), e.g. 1.2 GB. */
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -44,11 +47,10 @@ export function relativeTime(epochMs: number): string {
  */
 export function middleEllipsis(text: string, max: number): string {
   if (max <= 1 || text.length <= max) return text;
-  const ellipsis = "\u2026";
-  const keep = max - ellipsis.length;
+  const keep = max - ELLIPSIS.length;
   const head = Math.ceil(keep / 2);
   const tail = keep - head;
-  return `${text.slice(0, head)}${ellipsis}${tail > 0 ? text.slice(-tail) : ""}`;
+  return `${text.slice(0, head)}${ELLIPSIS}${tail > 0 ? text.slice(-tail) : ""}`;
 }
 
 /**

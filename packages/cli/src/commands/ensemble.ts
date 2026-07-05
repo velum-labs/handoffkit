@@ -27,6 +27,7 @@ import {
 } from "../shared/options.js";
 import { registerEnsembleConfig } from "./ensemble-config.js";
 import { buildGatewayCommand } from "./ensemble-gateway.js";
+import { registerPaletteAction } from "./palette.js";
 import {
   type HandoffPayload,
   handoffSideEffects,
@@ -282,6 +283,11 @@ async function runEnsembleE2E(task: string[], opts: EnsembleE2EOpts): Promise<vo
 }
 
 export function registerEnsemble(program: Command): void {
+  registerPaletteAction({
+    label: "Manage named ensembles",
+    hint: "fusionkit ensemble list",
+    argv: ["ensemble", "list"]
+  });
   const ensemble = new Command("ensemble").description(
     "manage named ensembles; advanced subcommands are harness-dev tools"
   );

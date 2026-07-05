@@ -96,8 +96,25 @@ export function isolationFlag(value: string | undefined): SessionIsolation | und
 
 export { PANEL_AUTH_MODES, PANEL_PROVIDERS };
 
+/**
+ * WS5 rate-limit / credit handoff picker options — the one description of each
+ * policy, shared by every interactive surface (`config set onRateLimit`, the
+ * init extras step). The flag-validation list below derives from it.
+ */
+export const ON_RATE_LIMIT_OPTIONS: ReadonlyArray<{
+  value: OnRateLimitPolicy;
+  label: string;
+  hint: string;
+}> = [
+  { value: "fusion", label: "fusion", hint: "continue on the ensemble (default)" },
+  { value: "passthrough", label: "passthrough", hint: "surface the vendor error to the tool" },
+  { value: "fail", label: "fail", hint: "stop the session" }
+];
+
 /** WS5 rate-limit / credit handoff policies (`--on-rate-limit`). */
-export const ON_RATE_LIMIT_POLICIES: readonly OnRateLimitPolicy[] = ["fusion", "passthrough", "fail"];
+export const ON_RATE_LIMIT_POLICIES: readonly OnRateLimitPolicy[] = ON_RATE_LIMIT_OPTIONS.map(
+  (option) => option.value
+);
 
 export function parseOnRateLimit(value: string | undefined): OnRateLimitPolicy | undefined {
   if (value === undefined) return undefined;
@@ -107,8 +124,16 @@ export function parseOnRateLimit(value: string | undefined): OnRateLimitPolicy |
   return value as OnRateLimitPolicy;
 }
 
+/** Panel trust picker options, shared by every interactive surface. */
+export const PANEL_TRUST_OPTIONS: ReadonlyArray<{ value: PanelTrust; label: string; hint: string }> = [
+  { value: "full", label: "full", hint: "maximum autonomy (default)" },
+  { value: "guarded", label: "guarded", hint: "harness-fenced to the worktree" }
+];
+
 /** Panel candidate trust levels (`--panel-trust`). `full` is the default. */
-export const PANEL_TRUST_LEVELS: readonly PanelTrust[] = ["full", "guarded"];
+export const PANEL_TRUST_LEVELS: readonly PanelTrust[] = PANEL_TRUST_OPTIONS.map(
+  (option) => option.value
+);
 
 export function parsePanelTrust(value: string | undefined): PanelTrust | undefined {
   if (value === undefined) return undefined;

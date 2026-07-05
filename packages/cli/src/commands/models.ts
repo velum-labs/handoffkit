@@ -15,12 +15,15 @@ import type { MlxEnv } from "@fusionkit/adapter-ai-sdk";
 import { bold, cyan, dim, formatBytes, gray, red } from "@fusionkit/cli-ui";
 import type { Presenter } from "@fusionkit/cli-ui";
 
+import { catalogFor } from "../fusion/catalog.js";
 import { catalogEntry, detectHost, recommendFor, usableRamGB } from "../fusion/local-catalog.js";
 import { ownedMlxEnv } from "../fusion/mlx.js";
 import { estimateModelSizing } from "../fusion/model-sizing.js";
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { argOrPick } from "../shared/pickers.js";
+
+import { registerPaletteAction } from "./palette.js";
 
 function firstLine(message: string): string {
   return (message.split("\n")[0] ?? message).trim();
@@ -195,6 +198,7 @@ function runRemove(repo: string, ctx: CommandContext): number {
 }
 
 export function registerModels(program: Command): void {
+  registerPaletteAction({ label: "Manage local MLX models", hint: "fusionkit models", argv: ["models"] });
   const models = program
     .command("models")
     .description("list, download, and remove local MLX models")
@@ -218,17 +222,30 @@ export function registerModels(program: Command): void {
     .description("download a model's weights into the owned cache (resumable)")
     .action(async (repo: string | undefined, opts: { force?: boolean }, command: Command) => {
       const ctx = contextFor(command);
+      // The curated hardware-aware catalog opens instantly (with RAM-fit
+      // hints); the live mlx-community listing streams in behind it so any
+      // published conversion is pickable, not just the curated few.
+      const curated = (): Array<{ value: string; label: string; hint: string }> =>
+        recommendFor(detectHost()).map((entry) => ({
+          value: entry.repo,
+          label: entry.repo,
+          hint: `${entry.label} · ${entry.params} ${entry.quant} · ~${entry.sizeGB} GB${entry.fits ? "" : ` · needs ${entry.minRamGB}GB RAM`}`
+        }));
       const picked = await argOrPick<string>({
         given: repo,
         message: "Which model to download?",
         placeholder: "type to filter the catalog",
         missing: "missing model repo — pass a Hugging Face repo id (see `fusionkit models`)",
-        options: () =>
-          recommendFor(detectHost()).map((entry) => ({
-            value: entry.repo,
-            label: entry.repo,
-            hint: `${entry.label} · ${entry.params} ${entry.quant} · ~${entry.sizeGB} GB${entry.fits ? "" : ` · needs ${entry.minRamGB}GB RAM`}`
-          }))
+        options: curated,
+        refresh: async () => {
+          const base = curated();
+          const known = new Set(base.map((option) => option.value));
+          const community = (await catalogFor("mlx"))
+            .filter((model) => !known.has(model.id))
+            .map((model) => ({ value: model.id, label: model.id, hint: "mlx-community" }));
+          return [...base, ...community];
+        },
+        refreshNote: "fetching the mlx-community catalog…"
       });
       process.exit(await runDownload(picked, opts.force === true, ctx));
     });
@@ -248,8 +265,15 @@ export function registerModels(program: Command): void {
             repo: model.repo,
             sizeBytes: model.sizeBytes
           }));
-        } catch {
-          // an unprovisioned runtime has nothing cached; the picker fails as empty
+        } catch (error) {
+          // An unprovisioned runtime legitimately has nothing cached, but any
+          // other scan failure must be said out loud — otherwise the "nothing
+          // to remove" message below would mask a broken runtime.
+          if (!(error instanceof MlxCapabilityError)) {
+            ctx.presenter.warn(
+              `could not scan the local model cache: ${firstLine(error instanceof Error ? error.message : String(error))}`
+            );
+          }
         }
       }
       const picked = await argOrPick<string>({

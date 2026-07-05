@@ -36,6 +36,7 @@ import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 
 import { formatBytes, glyph } from "@fusionkit/cli-ui";
 
+import { toolSelectOptions } from "./fusion-quickstart.js";
 import type { FusionTool, PanelModelSpec } from "./fusion-quickstart.js";
 import {
   DEFAULT_ENSEMBLE_NAME,
@@ -53,7 +54,7 @@ import type { HostInfo } from "./fusion/local-catalog.js";
 import { ownedMlxEnv } from "./fusion/mlx.js";
 import { buildPanel, isAllLocal, judgeOptions, withKeyEnv } from "./fusion/panel-builder.js";
 import { fetchDefaultPrompts } from "./fusion/prompts.js";
-import { ON_RATE_LIMIT_POLICIES, PANEL_TRUST_LEVELS } from "./shared/options.js";
+import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "./shared/options.js";
 
 export { defaultMemberId, judgeOptions } from "./fusion/panel-builder.js";
 
@@ -248,20 +249,13 @@ async function promptExtras(config: FusionConfig): Promise<void> {
 
   config.onRateLimit = await select({
     message: "When a vendor passthrough model hits a rate limit / credit wall",
-    options: [
-      { value: ON_RATE_LIMIT_POLICIES[0], label: "fusion", hint: "continue on the ensemble (default)" },
-      { value: ON_RATE_LIMIT_POLICIES[1], label: "passthrough", hint: "surface the vendor error to the tool" },
-      { value: ON_RATE_LIMIT_POLICIES[2], label: "fail", hint: "stop the session" }
-    ] as Array<{ value: (typeof ON_RATE_LIMIT_POLICIES)[number]; label: string; hint: string }>,
+    options: ON_RATE_LIMIT_OPTIONS,
     defaultIndex: 0
   });
 
   const trust = await select({
     message: "Panel candidate autonomy",
-    options: [
-      { value: PANEL_TRUST_LEVELS[0], label: "full", hint: "maximum autonomy (default)" },
-      { value: PANEL_TRUST_LEVELS[1], label: "guarded", hint: "harness-fenced to the worktree" }
-    ] as Array<{ value: (typeof PANEL_TRUST_LEVELS)[number]; label: string; hint: string }>,
+    options: PANEL_TRUST_OPTIONS,
     defaultIndex: 0
   });
   if (trust !== undefined) config.panelTrust = trust;
@@ -367,12 +361,7 @@ export async function runFusionInit(input: {
       run: async (state) => {
         const tool = await select<FusionTool>({
           message: "Default coding agent",
-          options: [
-            { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
-            { value: "claude", label: "claude", hint: "Claude Code" },
-            { value: "cursor", label: "cursor", hint: "cursor-agent (logged-in CLI)" },
-            { value: "serve", label: "serve", hint: "just run the gateway and print setup" }
-          ],
+          options: toolSelectOptions(),
           defaultIndex: 0
         });
         return { ...state, tool };
