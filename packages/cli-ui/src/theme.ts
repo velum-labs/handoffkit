@@ -85,13 +85,16 @@ export function visibleWidth(text: string): number {
   return stripAnsi(text).length;
 }
 
+/** Frame tones: neutral (dim) for informational boxes, error (red) for failures. */
+export type BoxTone = "neutral" | "error";
+
 /**
  * A hand-crafted rounded box around a titled block of lines. Uses box-drawing
  * characters when color (≈ a unicode TTY) is on, ASCII otherwise. Lines may
  * contain ANSI styling; widths are measured against the visible text so the
  * frame always aligns.
  */
-export function box(title: string, lines: string[]): string {
+export function box(title: string, lines: string[], options: { tone?: BoxTone } = {}): string {
   const rounded = supportsColor();
   const tl = rounded ? "\u256d" : "+";
   const tr = rounded ? "\u256e" : "+";
@@ -99,20 +102,21 @@ export function box(title: string, lines: string[]): string {
   const br = rounded ? "\u256f" : "+";
   const h = rounded ? "\u2500" : "-";
   const v = rounded ? "\u2502" : "|";
+  const frame: (text: string) => string = options.tone === "error" ? red : dim;
 
-  const titleText = bold(title);
+  const titleText = options.tone === "error" ? bold(red(title)) : bold(title);
   const contentWidth = Math.max(visibleWidth(titleText), ...lines.map(visibleWidth), 0);
   const inner = contentWidth + 2; // one space of padding each side
 
-  // Build with un-nested styles: dim the frame pieces, bold only the title, so
-  // a bold reset (SGR 22) never prematurely closes a surrounding dim.
+  // Build with un-nested styles: color the frame pieces, bold only the title,
+  // so a bold reset (SGR 22) never prematurely closes a surrounding style.
   const titleRule = h.repeat(Math.max(0, inner - visibleWidth(titleText) - 3));
-  const top = `${dim(`${tl}${h} `)}${titleText}${dim(` ${titleRule}${tr}`)}`;
+  const top = `${frame(`${tl}${h} `)}${titleText}${frame(` ${titleRule}${tr}`)}`;
   const body = lines.map((line) => {
     const pad = " ".repeat(Math.max(0, contentWidth - visibleWidth(line)));
-    return `${dim(v)} ${line}${pad} ${dim(v)}`;
+    return `${frame(v)} ${line}${pad} ${frame(v)}`;
   });
-  const bottom = dim(`${bl}${h.repeat(inner)}${br}`);
+  const bottom = frame(`${bl}${h.repeat(inner)}${br}`);
   return [top, ...body, bottom].join("\n");
 }
 

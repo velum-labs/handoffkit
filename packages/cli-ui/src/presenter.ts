@@ -52,6 +52,26 @@ export type TableOptions = {
   head?: string[];
   /** Indentation (spaces) applied to every row. */
   indent?: number;
+  /** Per-column alignment (numbers read best right-aligned). Defaults to left. */
+  align?: readonly ("left" | "right")[];
+};
+
+/**
+ * One error, three renderings: a red-framed panel on rich/plain UI, prefixed
+ * lines when boxes would be noise, and the same fields in `--json` payloads.
+ */
+export type ErrorPanelInput = {
+  /** Panel title (defaults to "error"). */
+  title?: string;
+  message: string;
+  /** Supporting evidence, e.g. a distilled log tail (rendered dim). */
+  details?: readonly string[];
+  /** A human explanation of what likely went wrong / what to check. */
+  hint?: string;
+  /** A copy-pasteable next command, rendered as `→ try: <command>`. */
+  tryCommand?: string;
+  /** A docs URL for the failure area. */
+  docs?: string;
 };
 
 export type StatusKind = "ok" | "warn" | "fail" | "info" | "pending";
@@ -86,6 +106,8 @@ export interface Presenter {
   table(rows: readonly (readonly string[])[], options?: TableOptions): void;
   /** A titled rounded box. */
   box(title: string, lines: readonly string[]): void;
+  /** A red-framed failure panel: message, evidence, hint, and the next command. */
+  errorPanel(input: ErrorPanelInput): void;
 
   /** A live multi-step checklist. */
   checklist(steps: readonly StepInput[], options?: { title?: string }): ChecklistController;

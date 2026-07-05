@@ -3,9 +3,10 @@
  * `FUSIONKIT_NO_TUI=1`, and the `node --test` subprocess suites. Live surfaces
  * print one line per state transition instead of animating in place.
  */
-import { formatBytes } from "./format.js";
+import { contentWidth, formatBytes, wrapText } from "./format.js";
 import type {
   ChecklistController,
+  ErrorPanelInput,
   KeyValueRow,
   Presenter,
   ProgressController,
@@ -71,8 +72,9 @@ function stepGlyph(status: StepStatus): string {
 }
 
 /** Pad table cells against their visible (ANSI-stripped) width. */
-function padCell(text: string, width: number): string {
-  return text + " ".repeat(Math.max(0, width - stripAnsi(text).length));
+function padCell(text: string, width: number, align: "left" | "right" = "left"): string {
+  const pad = " ".repeat(Math.max(0, width - stripAnsi(text).length));
+  return align === "right" ? pad + text : text + pad;
 }
 
 export function renderTableLines(
@@ -87,8 +89,41 @@ export function renderTableLines(
   );
   const indent = " ".repeat(options.indent ?? 0);
   return all.map((row) =>
-    (indent + row.map((cell, index) => padCell(cell, widths[index] ?? 0)).join("  ")).trimEnd()
+    (
+      indent +
+      row.map((cell, index) => padCell(cell, widths[index] ?? 0, options.align?.[index] ?? "left")).join("  ")
+    ).trimEnd()
   );
+}
+
+/**
+ * Render the failure panel as styled lines: a red-framed box with the message,
+ * dim evidence lines, the hint, and a `try:` next command. Shared by the plain
+ * and Ink presenters (identical settled output) and reused by the top-level
+ * error handler.
+ */
+export function renderErrorPanelLines(input: ErrorPanelInput): string[] {
+  const width = contentWidth();
+  const body: string[] = wrapText(input.message, width).map((line) => red(line));
+  if (input.details !== undefined && input.details.length > 0) {
+    body.push("");
+    for (const detail of input.details) {
+      for (const line of wrapText(detail, width - 2)) body.push(dim(`  ${line}`));
+    }
+  }
+  if (input.hint !== undefined) {
+    body.push("");
+    for (const line of wrapText(input.hint, width)) body.push(line);
+  }
+  if (input.tryCommand !== undefined) {
+    body.push("");
+    body.push(`${dim("try:")}  ${cyan(input.tryCommand)}`);
+  }
+  if (input.docs !== undefined) {
+    if (input.tryCommand === undefined) body.push("");
+    body.push(`${dim("docs:")} ${dim(input.docs)}`);
+  }
+  return box(input.title ?? "error", body, { tone: "error" }).split("\n");
 }
 
 export function renderKeyValueLines(rows: readonly KeyValueRow[]): string[] {
@@ -261,6 +296,9 @@ export class PlainPresenter implements Presenter {
   }
   box(title: string, lines: readonly string[]): void {
     this.writeLine(box(title, [...lines]));
+  }
+  errorPanel(input: ErrorPanelInput): void {
+    for (const line of renderErrorPanelLines(input)) this.writeLine(line);
   }
 
   checklist(steps: readonly StepInput[], options: { title?: string } = {}): ChecklistController {

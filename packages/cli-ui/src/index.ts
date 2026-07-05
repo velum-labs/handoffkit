@@ -15,10 +15,14 @@ export * from "./theme.js";
 export * from "./runtime.js";
 export * from "./format.js";
 export * from "./presenter.js";
-export { PlainPresenter, renderKeyValueLines, renderTableLines } from "./plain.js";
+export { PlainPresenter, renderErrorPanelLines, renderKeyValueLines, renderTableLines } from "./plain.js";
 export { InkPresenter, mountInk, settleInk } from "./ink/presenter.js";
-export { select, multiselect, confirm, text, done, note } from "./prompt.js";
-export type { SelectOption } from "./prompt.js";
+export { select, multiselect, confirm, text, fuzzySelect, autocompleteText, BACK, done, note } from "./prompt.js";
+export type { SelectOption, Back } from "./prompt.js";
+export { fuzzyFilter, fuzzyMatch } from "./fuzzy.js";
+export type { FuzzyMatch, FuzzyResult } from "./fuzzy.js";
+export { runWizard } from "./wizard.js";
+export type { WizardStep } from "./wizard.js";
 
 /**
  * The presenter for this invocation: Ink when attached to an interactive TTY,

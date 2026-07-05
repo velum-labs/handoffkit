@@ -12,9 +12,22 @@ import type { ReactElement } from "react";
 import { canPromptInteractively, isInteractive, uiStream } from "./runtime.js";
 import { bold, cyan, dim, glyph, gray, green } from "./theme.js";
 import { mountInk, settleInk } from "./ink/presenter.js";
-import { ConfirmPrompt, MultiSelectPrompt, SelectPrompt, TextPrompt } from "./ink/prompts.js";
+import {
+  ConfirmPrompt,
+  FuzzySelectPrompt,
+  GhostTextPrompt,
+  MultiSelectPrompt,
+  SelectPrompt,
+  TextPrompt
+} from "./ink/prompts.js";
+import type { FuzzyFeed, PromptOption } from "./ink/prompts.js";
+import { Store } from "./ink/store.js";
 
 export type SelectOption<T> = { value: T; label: string; hint?: string };
+
+/** Returned by prompts with `allowBack: true` when the user presses Esc. */
+export const BACK: unique symbol = Symbol("prompt.back");
+export type Back = typeof BACK;
 
 const out = uiStream();
 
@@ -76,9 +89,13 @@ function richPrompts(): boolean {
 
 /** Mount an Ink prompt, resolve on submit, and settle to a one-line answer. */
 function runInkPrompt<T>(
-  build: (handlers: { submit: (value: T, answer: string) => void; abort: () => void }) => ReactElement
-): Promise<T> {
-  return new Promise<T>((resolve) => {
+  build: (handlers: {
+    submit: (value: T, answer: string) => void;
+    abort: () => void;
+    back: () => void;
+  }) => ReactElement
+): Promise<T | Back> {
+  return new Promise<T | Back>((resolve) => {
     let settled = false;
     const node = build({
       submit: (value, answer) => {
@@ -94,6 +111,13 @@ function runInkPrompt<T>(
         settleInk(instance);
         out.write("\n");
         process.exit(130);
+      },
+      back: () => {
+        if (settled) return;
+        settled = true;
+        settleInk(instance);
+        out.write(`${gray(glyph.arrow())} ${dim("back")}\n`);
+        resolve(BACK);
       }
     });
     const instance = mountInk(node);
@@ -120,7 +144,19 @@ export async function select<T>(input: {
   message: string;
   options: ReadonlyArray<SelectOption<T>>;
   defaultIndex?: number;
-}): Promise<T> {
+  allowBack: true;
+}): Promise<T | Back>;
+export async function select<T>(input: {
+  message: string;
+  options: ReadonlyArray<SelectOption<T>>;
+  defaultIndex?: number;
+}): Promise<T>;
+export async function select<T>(input: {
+  message: string;
+  options: ReadonlyArray<SelectOption<T>>;
+  defaultIndex?: number;
+  allowBack?: boolean;
+}): Promise<T | Back> {
   const { options } = input;
   if (options.length === 0) throw new Error("select requires at least one option");
   const fallbackIndex = Math.min(Math.max(input.defaultIndex ?? 0, 0), options.length - 1);
@@ -128,13 +164,117 @@ export async function select<T>(input: {
   if (!richPrompts()) {
     return selectNumbered(input.message, options, fallbackIndex);
   }
-  return runInkPrompt<T>(({ submit, abort }) => (
+  return runInkPrompt<T>(({ submit, abort, back }) => (
     <SelectPrompt
       message={input.message}
       options={options}
       defaultIndex={fallbackIndex}
       onSubmit={(value, label) => submit(value, answerLine(input.message, label))}
       onAbort={abort}
+      onBack={input.allowBack === true ? back : undefined}
+    />
+  ));
+}
+
+/**
+ * Type-to-filter selection over a (possibly large or live-fetched) option
+ * list: fuzzy subsequence filtering with highlighted matches, arrow keys to
+ * move, enter to pick. `refresh` (when given) runs in the background while the
+ * picker is open — the list starts on the cached `options` and live-updates
+ * when fresh data lands (stale-while-revalidate). Falls back to the numbered
+ * prompt off-TTY, awaiting `refresh` first only when no cached options exist.
+ */
+export async function fuzzySelect<T>(input: {
+  message: string;
+  options: ReadonlyArray<SelectOption<T>>;
+  refresh?: () => Promise<ReadonlyArray<SelectOption<T>>>;
+  refreshNote?: string;
+  placeholder?: string;
+  allowBack: true;
+}): Promise<T | Back>;
+export async function fuzzySelect<T>(input: {
+  message: string;
+  options: ReadonlyArray<SelectOption<T>>;
+  refresh?: () => Promise<ReadonlyArray<SelectOption<T>>>;
+  refreshNote?: string;
+  placeholder?: string;
+}): Promise<T>;
+export async function fuzzySelect<T>(input: {
+  message: string;
+  options: ReadonlyArray<SelectOption<T>>;
+  refresh?: () => Promise<ReadonlyArray<SelectOption<T>>>;
+  refreshNote?: string;
+  placeholder?: string;
+  allowBack?: boolean;
+}): Promise<T | Back> {
+  let options = input.options;
+
+  if (!richPrompts()) {
+    if (options.length === 0 && input.refresh !== undefined) {
+      try {
+        options = await input.refresh();
+      } catch {
+        // no fresh data either; fall through to the empty-list guard
+      }
+    }
+    if (options.length === 0) throw new Error(`no options available: ${input.message}`);
+    return selectNumbered(input.message, options, 0);
+  }
+
+  const feed = new Store<FuzzyFeed<T>>({
+    options: options as ReadonlyArray<PromptOption<T>>,
+    loading: input.refresh !== undefined,
+    ...(input.refreshNote !== undefined ? { note: input.refreshNote } : {})
+  });
+  if (input.refresh !== undefined) {
+    void input
+      .refresh()
+      .then((fresh) => {
+        feed.set((state) => ({ ...state, options: fresh as ReadonlyArray<PromptOption<T>>, loading: false }));
+      })
+      .catch(() => {
+        feed.set((state) => ({ ...state, loading: false }));
+      });
+  }
+  return runInkPrompt<T>(({ submit, abort, back }) => (
+    <FuzzySelectPrompt
+      message={input.message}
+      feed={feed}
+      placeholder={input.placeholder}
+      onSubmit={(value, label) => submit(value, answerLine(input.message, label))}
+      onAbort={abort}
+      onBack={input.allowBack === true ? back : undefined}
+    />
+  ));
+}
+
+/**
+ * Free text with an inline ghost suggestion completed from `suggestions`
+ * (Tab or → accepts). Falls back to the plain text prompt off-TTY.
+ */
+export async function autocompleteText(input: {
+  message: string;
+  suggestions: ReadonlyArray<string>;
+  defaultValue?: string;
+  placeholder?: string;
+  allowBack?: boolean;
+}): Promise<string | Back> {
+  if (!richPrompts()) {
+    return text({
+      message: input.message,
+      ...(input.defaultValue !== undefined ? { defaultValue: input.defaultValue } : {}),
+      ...(input.placeholder !== undefined ? { placeholder: input.placeholder } : {})
+    });
+  }
+  return runInkPrompt<string>(({ submit, abort, back }) => (
+    <GhostTextPrompt
+      message={input.message}
+      suggestions={input.suggestions}
+      defaultValue={input.defaultValue ?? ""}
+      placeholder={input.placeholder}
+      onSubmit={(value) => submit(value, answerLine(input.message, value.length > 0 ? value : "(empty)"))}
+      onAbort={abort}
+      onBack={input.allowBack === true ? back : undefined}
     />
   ));
 }
@@ -195,6 +335,7 @@ export async function multiselect<T>(input: {
       .sort((left, right) => left - right);
     return indices.map((index) => optionAt(options, index).value);
   }
+  // No onBack handler is mounted, so BACK can never resolve here.
   return runInkPrompt<T[]>(({ submit, abort }) => (
     <MultiSelectPrompt
       message={input.message}
@@ -205,11 +346,21 @@ export async function multiselect<T>(input: {
       }
       onAbort={abort}
     />
-  ));
+  )) as Promise<T[]>;
 }
 
 /** Yes/no confirmation. Returns `defaultValue` on empty input. */
-export async function confirm(input: { message: string; defaultValue?: boolean }): Promise<boolean> {
+export async function confirm(input: {
+  message: string;
+  defaultValue?: boolean;
+  allowBack: true;
+}): Promise<boolean | Back>;
+export async function confirm(input: { message: string; defaultValue?: boolean }): Promise<boolean>;
+export async function confirm(input: {
+  message: string;
+  defaultValue?: boolean;
+  allowBack?: boolean;
+}): Promise<boolean | Back> {
   const def = input.defaultValue ?? false;
   if (!richPrompts()) {
     const hint = def ? "[Y/n]" : "[y/N]";
@@ -217,12 +368,13 @@ export async function confirm(input: { message: string; defaultValue?: boolean }
     if (answer.length === 0) return def;
     return answer === "y" || answer === "yes";
   }
-  return runInkPrompt<boolean>(({ submit, abort }) => (
+  return runInkPrompt<boolean>(({ submit, abort, back }) => (
     <ConfirmPrompt
       message={input.message}
       defaultValue={def}
       onSubmit={(value) => submit(value, answerLine(input.message, value ? "yes" : "no"))}
       onAbort={abort}
+      onBack={input.allowBack === true ? back : undefined}
     />
   ));
 }
@@ -232,7 +384,19 @@ export async function text(input: {
   message: string;
   defaultValue?: string;
   placeholder?: string;
-}): Promise<string> {
+  allowBack: true;
+}): Promise<string | Back>;
+export async function text(input: {
+  message: string;
+  defaultValue?: string;
+  placeholder?: string;
+}): Promise<string>;
+export async function text(input: {
+  message: string;
+  defaultValue?: string;
+  placeholder?: string;
+  allowBack?: boolean;
+}): Promise<string | Back> {
   if (!richPrompts()) {
     const suffix =
       input.defaultValue !== undefined && input.defaultValue.length > 0 ? dim(` (${input.defaultValue})`) : "";
@@ -240,13 +404,14 @@ export async function text(input: {
     if (answer.length === 0) return input.defaultValue ?? "";
     return answer;
   }
-  return runInkPrompt<string>(({ submit, abort }) => (
+  return runInkPrompt<string>(({ submit, abort, back }) => (
     <TextPrompt
       message={input.message}
       defaultValue={input.defaultValue ?? ""}
       {...(input.placeholder !== undefined ? { placeholder: input.placeholder } : {})}
       onSubmit={(value) => submit(value, answerLine(input.message, value.length > 0 ? value : "(empty)"))}
       onAbort={abort}
+      onBack={input.allowBack === true ? back : undefined}
     />
   ));
 }

@@ -11,6 +11,7 @@ import type { FusionConfig } from "../fusion-config.js";
 import { configDefaultEnsembleName } from "../fusion/effective-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { fail } from "../shared/errors.js";
+import { warnPassthroughTypos } from "../shared/flag-suggest.js";
 import {
   collect,
   parseBudget,
@@ -256,6 +257,7 @@ export function registerFusion(program: Command): void {
       )
       .action(async (args: string[], _opts: FusionOpts, command: Command) => {
         const opts = command.optsWithGlobals<FusionOpts>();
+        warnPassthroughTypos(command, args, tool);
         const { options } = resolveContext(opts);
         const code = await runFusion(tool, args, options);
         process.exit(code);
@@ -299,6 +301,7 @@ export function registerFusion(program: Command): void {
         }
       }
       const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
+      warnPassthroughTypos(command, toolArgs, resolvedTool);
       const code = await runFusion(resolvedTool, toolArgs, options);
       process.exit(code);
     });
