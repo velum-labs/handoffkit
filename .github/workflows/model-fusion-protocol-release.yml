@@ -77,7 +77,7 @@ jobs:
         run: uv run --with twine python -m twine check "${PYTHON_PROTOCOL_DIR}/dist/"*
 
       - name: Upload release build artifacts for dry-run/debugging
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: model-fusion-protocol-dist
           path: |
