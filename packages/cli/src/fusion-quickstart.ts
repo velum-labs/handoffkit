@@ -787,7 +787,7 @@ export async function runFusion(
         log(`Public gateway (bearer token required): ${tunnel.url}/v1`);
       }
       log("");
-      log("Gateway is running. Point any tool at it, or Ctrl+C to stop.");
+      log(`${green(glyph.tick())} ${bold("gateway is running")} ${dim("— point any tool at it, or Ctrl+C to stop")}`);
       await new Promise<void>(() => {
         /* run until interrupted */
       });

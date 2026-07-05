@@ -5,9 +5,10 @@ import {
   registerBuiltInWorkflows
 } from "@fusionkit/ensemble";
 
-import { dim } from "@fusionkit/cli-ui";
+import { bold, contentWidth, cyan, dim, wrapText } from "@fusionkit/cli-ui";
 
 import { contextFor } from "../shared/context.js";
+import { CliError } from "../shared/errors.js";
 
 const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[]; description: string }> = {
   direct: {
@@ -97,25 +98,56 @@ export function registerRuntime(program: Command): void {
         });
         return;
       }
-      ctx.presenter.table(
-        ids.map((id) => {
-          const detail = WORKFLOW_DETAILS[id];
-          return detail === undefined ? [id] : [id, detail.scheduler, dim(detail.description)];
-        })
-      );
+      const { presenter } = ctx;
+      presenter.header();
+      presenter.heading("runtime workflows");
+      const width = contentWidth();
+      for (const id of ids) {
+        const detail = WORKFLOW_DETAILS[id];
+        presenter.blank();
+        presenter.line(
+          detail === undefined ? `  ${bold(id)}` : `  ${bold(id)}  ${dim(`(${detail.scheduler})`)}`
+        );
+        for (const line of wrapText(detail?.description ?? "", width - 4)) {
+          if (line.length > 0) presenter.line(dim(`    ${line}`));
+        }
+      }
+      presenter.blank();
+      presenter.note(`inspect one with ${bold("fusionkit runtime explain <workflow>")}`);
     });
 
   runtime
     .command("explain")
     .argument("<workflow>", "built-in workflow id")
     .description("explain a built-in workflow's scheduler and operator kinds")
-    .action((workflow: string) => {
+    .option("--json", "emit machine-readable JSON")
+    .action((workflow: string, _opts: { json?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
       registerBuiltInWorkflows();
       const detail = WORKFLOW_DETAILS[workflow];
       if (detail === undefined) {
-        throw new Error(`unknown built-in workflow ${workflow}; run 'fusionkit runtime list'`);
+        throw new CliError({
+          code: "unknown-workflow",
+          message: `unknown built-in workflow "${workflow}"`,
+          hint: "workflow ids come from the runtime kernel's built-in registry",
+          tryCommand: "fusionkit runtime list"
+        });
       }
-      // The explanation is a machine payload by design (stdout JSON).
-      process.stdout.write(JSON.stringify({ id: workflow, ...detail }, null, 2) + "\n");
+      if (ctx.json) {
+        ctx.emit({ id: workflow, ...detail });
+        return;
+      }
+      const { presenter } = ctx;
+      presenter.header();
+      presenter.keyValue([
+        { label: "workflow", value: bold(workflow) },
+        { label: "scheduler", value: detail.scheduler }
+      ]);
+      presenter.blank();
+      presenter.heading("operators");
+      for (const operator of detail.operators) presenter.line(`  ${cyan(operator)}`);
+      presenter.blank();
+      const width = contentWidth();
+      for (const line of wrapText(detail.description, width)) presenter.line(dim(line));
     });
 }

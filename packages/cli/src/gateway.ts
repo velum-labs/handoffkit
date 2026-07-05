@@ -53,7 +53,7 @@ import type {
   SessionStore,
   WireTrajectory
 } from "@fusionkit/model-gateway";
-import { uiStream } from "@fusionkit/cli-ui";
+import { bold, cyan, gray, uiStream } from "@fusionkit/cli-ui";
 import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
 import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
@@ -359,6 +359,20 @@ export function codexConfigSnippet(gatewayUrl: string): string {
   return setup.split("\n").slice(1).join("\n");
 }
 
+/**
+ * Style one tool's setup snippet: bold title line, gray config comments, cyan
+ * URLs, everything else dim — so the copy-pasteable parts stand out from the
+ * prose. All helpers no-op without color, so piped output stays plain.
+ */
+function styledSnippet(snippet: string): string {
+  const [title, ...body] = snippet.split("\n");
+  const styledBody = body.map((line) => {
+    if (line.trim().startsWith("#")) return gray(line);
+    return line.replace(/https?:\/\/[^\s"]+/g, (url) => cyan(url));
+  });
+  return [bold(title ?? snippet), ...styledBody].join("\n");
+}
+
 export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string): string {
   const toolSnippets = toolRegistry
     .list()
@@ -374,15 +388,22 @@ export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string):
     .map((tool) => tool.acpAdapterId)
     .filter((id): id is string => id !== undefined);
   return [
-    "Front-door setup:",
+    bold("point a coding agent at the gateway"),
     "",
-    ...toolSnippets.flatMap((snippet) => [snippet, ""]),
+    ...toolSnippets.flatMap((snippet) => [styledSnippet(snippet), ""]),
+    styledSnippet(
+      [
+        "Generic ACP local agent:",
+        "  fusionkit ensemble gateway acp --fusion-backend <fusion-backend>"
+      ].join("\n")
+    ),
     "",
-    "Generic ACP local agent:",
-    "  fusionkit ensemble gateway acp --fusion-backend <fusion-backend>",
-    "",
-    "ACP registry adapters:",
-    `  fusionkit ensemble gateway acp-registry install ${acpAdapterIds.join(" ")}`
+    styledSnippet(
+      [
+        "ACP registry adapters:",
+        `  fusionkit ensemble gateway acp-registry install ${acpAdapterIds.join(" ")}`
+      ].join("\n")
+    )
   ].join("\n");
 }
 

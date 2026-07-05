@@ -222,7 +222,7 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   const report: DoctorEntry[] = [];
 
   presenter.blank();
-  presenter.banner("environment check");
+  presenter.header("environment check");
   presenter.blank();
 
   presenter.heading("versions");

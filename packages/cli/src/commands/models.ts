@@ -62,7 +62,7 @@ async function runList(ctx: CommandContext): Promise<number> {
 
   const { presenter } = ctx;
   presenter.blank();
-  presenter.banner("local models");
+  presenter.header("local models");
   presenter.blank();
   if (!host.appleSilicon) {
     presenter.warn(`local MLX needs Apple Silicon (macOS arm64); this host is ${host.platform}/${host.arch}.`);
@@ -128,7 +128,7 @@ async function runDownload(repo: string, force: boolean, ctx: CommandContext): P
   const host = detectHost();
   const { presenter } = ctx;
   presenter.blank();
-  presenter.banner("download");
+  presenter.header("download");
   presenter.blank();
   if (!host.appleSilicon) {
     presenter.error(`local MLX needs Apple Silicon (macOS arm64); this host is ${host.platform}/${host.arch}.`);

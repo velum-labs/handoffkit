@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { uiStream } from "@fusionkit/cli-ui";
+import { dim, done, note, uiStream } from "@fusionkit/cli-ui";
 
 import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
@@ -308,8 +308,9 @@ export function registerFusion(program: Command): void {
       // `fusion stop` reaps persistent portless singletons left running by prior
       // runs (the router, dashboard, ...).
       if (positionalTool === "stop") {
-        const stopped = await reapFusionServices((line) => uiStream().write(`${line}\n`));
-        uiStream().write(`fusion: stopped ${stopped} portless service(s)\n`);
+        const stopped = await reapFusionServices((line) => uiStream().write(`${dim(line)}\n`));
+        if (stopped === 0) note("no background fusion services were running");
+        else done(`stopped ${stopped} background fusion service(s)`);
         process.exit(0);
       }
 

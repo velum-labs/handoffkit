@@ -68,7 +68,7 @@ function runList(store: SessionStore, ctx: CommandContext): number {
   }
   const { presenter } = ctx;
   presenter.blank();
-  presenter.banner("sessions");
+  presenter.header("sessions");
   presenter.blank();
   if (sessions.length === 0) {
     presenter.line(
@@ -115,7 +115,7 @@ function runShow(store: SessionStore, ref: string, ctx: CommandContext): number 
 
   const { presenter } = ctx;
   presenter.blank();
-  presenter.banner("session");
+  presenter.header("session");
   presenter.blank();
   presenter.keyValue([
     { label: "id", value: green(meta.id) },
