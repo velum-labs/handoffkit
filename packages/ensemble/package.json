@@ -125,7 +125,7 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runtime-utils": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
-    "@velum-labs/cursorkit": "0.1.2"
+    "@velum-labs/cursorkit": "0.2.0"
   },
   "keywords": [
     "fusionkit",
