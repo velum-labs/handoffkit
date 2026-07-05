@@ -1,5 +1,28 @@
 # Open Source Release Program
 
+## Status (2026-07-05)
+
+Owner decisions received: **no renaming for now** (D1/D7 deferred — repo slug,
+npm/PyPI names, scopes, domains, and schema URLs all unchanged) and **no
+extraction to private repos** (D2 resolved as isolation: the governance stack
+now lives under `legacy/` in this repo). Remediation executed on this branch:
+
+| Workstream | Status |
+| --- | --- |
+| WS-A identity | Partially executed inside other workstreams (stale `warrant` strings, CHANGELOG, CODEOWNERS); repo/scope renames deferred with D1/D7 |
+| WS-B legacy excision | **Done** (as isolation): 8 governance packages, 16 examples, Docker stack, 4 specs moved to `legacy/`; product decoupled; CLI governance commands removed |
+| WS-C hygiene | **Done**: root plan docs relocated, `release/state.json` + root `fusionkit.json` + migration script removed, `references/` license compliance, personal paths scrubbed |
+| WS-D TS deep clean | **Done**: gateway/kernel/ensemble god files decomposed, shared helpers extracted, kernel + tools test suites added |
+| WS-E Python deep clean | **Done**: evals wheel data fixed (verified by installing built wheels), PyPI metadata, CLI split + `bench` group, clients split, prompt parity, tests relocated |
+| WS-F CLI UX | **Done**: journey-ordered help + quickstart, doctor readiness gate (exit 1 with no creds), PATH-collision check, completions, env docs |
+| WS-G docs | **Done**: fusion-first README, legacy docs quarantined, accuracy fixes, Fumadocs scope cut, taxonomy refresh |
+| WS-H community | **Done**: SECURITY/CONTRIBUTING/CoC/NOTICE/templates/CODEOWNERS, missing LICENSEs, package READMEs + keywords |
+| WS-I CI/CD | **Done** (public-repo parts): CodeQL, uv dependabot, fork-safety documented, legacy docker job labeled; repo-guard updates deferred with D1 |
+| WS-J privacy | **Done**: `docs/privacy.md` + site page, OpenRouter disclosure in README and committed config |
+| WS-K benchmarks | **Deferred** (D5): needs owner-approved billed run and flagship panel decision |
+| WS-L publish ops | **Deferred** (D3): branch/tag pruning and repo settings are owner-supervised at flip time |
+
+
 This directory is the working plan for taking FusionKit public. It was produced by a
 full-repo audit (repo hygiene, TypeScript workspace, Python workspace, CLI UX/DX,
 documentation, and public surface / security) on 2026-07-05. **No code has been
