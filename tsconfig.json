@@ -14,7 +14,7 @@
       "path": "packages/model-gateway"
     },
     {
-      "path": "packages/adapter-compute"
+      "path": "legacy/packages/adapter-compute"
     },
     {
       "path": "packages/protocol"
@@ -23,25 +23,25 @@
       "path": "packages/workspace"
     },
     {
-      "path": "packages/sdk"
+      "path": "legacy/packages/sdk"
     },
     {
-      "path": "packages/plane"
+      "path": "legacy/packages/plane"
     },
     {
-      "path": "packages/runner"
+      "path": "legacy/packages/runner"
     },
     {
-      "path": "packages/session-hermetic"
+      "path": "legacy/packages/session-hermetic"
     },
     {
-      "path": "packages/session-vercel-sandbox"
+      "path": "legacy/packages/session-vercel-sandbox"
     },
     {
-      "path": "packages/session-harness"
+      "path": "legacy/packages/session-harness"
     },
     {
-      "path": "packages/handoff"
+      "path": "legacy/packages/handoff"
     },
     {
       "path": "packages/ensemble"
@@ -83,55 +83,55 @@
       "path": "examples/bench"
     },
     {
-      "path": "examples/microvm-isolation-bench"
+      "path": "legacy/examples/microvm-isolation-bench"
     },
     {
-      "path": "examples/seed"
+      "path": "legacy/examples/seed"
     },
     {
-      "path": "examples/governed-run"
+      "path": "legacy/examples/governed-run"
     },
     {
-      "path": "examples/dry-run"
+      "path": "legacy/examples/dry-run"
     },
     {
-      "path": "examples/consent-secrets"
+      "path": "legacy/examples/consent-secrets"
     },
     {
-      "path": "examples/egress-policy"
+      "path": "legacy/examples/egress-policy"
     },
     {
-      "path": "examples/offline-verify"
+      "path": "legacy/examples/offline-verify"
     },
     {
-      "path": "examples/handoff"
+      "path": "legacy/examples/handoff"
     },
     {
-      "path": "examples/parallel-fanout"
+      "path": "legacy/examples/parallel-fanout"
     },
     {
-      "path": "examples/control-panel"
+      "path": "legacy/examples/control-panel"
     },
     {
-      "path": "examples/ai-sdk-loop"
+      "path": "legacy/examples/ai-sdk-loop"
     },
     {
-      "path": "examples/compute-sandbox"
+      "path": "legacy/examples/compute-sandbox"
     },
     {
-      "path": "examples/golden-interface"
+      "path": "legacy/examples/golden-interface"
     },
     {
-      "path": "examples/model-escalation"
+      "path": "legacy/examples/model-escalation"
     },
     {
       "path": "examples/runtime-kernel"
     },
     {
-      "path": "examples/hermetic-session"
+      "path": "legacy/examples/hermetic-session"
     },
     {
-      "path": "examples/swarm"
+      "path": "legacy/examples/swarm"
     },
     {
       "path": "examples/mlx"

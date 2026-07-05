@@ -138,11 +138,11 @@ in the request's natural shape. See
 | [`@fusionkit/workspace`](packages/workspace) | Git workspace capture, worktree materialization, and divergence-safe pull. |
 | [`@fusionkit/adapter-ai-sdk`](packages/adapter-ai-sdk) | The managed local-model stack (`mlxServer`) + AI SDK model adapters used by `fusionkit models`/`--local`. |
 
-Several **governance / VM-isolation packages remain in the tree** but are
+Several **governance / VM-isolation packages live under [`legacy/`](legacy)** but are
 **not part of the ensemble product** (`plane`, `runner`, `sdk`, `handoff`,
 `adapter-compute`, `session-hermetic`, `session-vercel-sandbox`,
 `session-harness`). See **[docs/scope.md](docs/scope.md)** for the exact product
-vs. out-of-scope mapping and the planned separation steps.
+vs. out-of-scope mapping and remaining owner decisions.
 
 ## Python workspace
 
@@ -206,7 +206,8 @@ dependency means updating the allowlist pin, the review checkpoint.
 
 ## Out of product scope
 
-These remain in the repository (and are still published from it for now) but are
+These remain in the repository under [`legacy/`](legacy) and are still published
+from it for now, but are
 **not part of the FusionKit ensemble product**:
 
 - **Governance plane**: `@fusionkit/plane`, `@fusionkit/runner`,
@@ -216,8 +217,6 @@ These remain in the repository (and are still published from it for now) but are
   `@fusionkit/session-vercel-sandbox`, `@fusionkit/session-harness`,
   `@fusionkit/adapter-compute`.
 
-The shipped `fusionkit` command tree does not invoke them at runtime. They are
-retained because other packages and a cross-repo release coordinator still
-reference them; separating them cleanly is tracked in
-**[docs/scope.md](docs/scope.md)**. The governed-execution design itself is
-preserved in [`spec/`](spec).
+The shipped `fusionkit` command tree does not invoke them at runtime, and product
+packages do not depend on them. The governed-execution design itself is
+preserved in [`legacy/specs/`](legacy/specs).

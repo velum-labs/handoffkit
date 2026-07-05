@@ -35,7 +35,7 @@ function list() {
 }
 
 function runDemo(demo) {
-  const entry = `examples/${demo.directory}/dist/run.js`;
+  const entry = `${demo.location ?? "examples"}/${demo.directory}/dist/run.js`;
   if (!existsSync(entry)) {
     console.error(`missing built example: ${entry}`);
     console.error("run pnpm build before running demos");

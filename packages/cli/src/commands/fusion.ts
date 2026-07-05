@@ -6,13 +6,11 @@ import { uiStream } from "@fusionkit/cli-ui";
 
 import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
-import { initHome } from "../config.js";
 import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { configDefaultEnsembleName } from "../fusion/effective-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { fail } from "../shared/errors.js";
-import { resolveDir } from "../shared/plane.js";
 import {
   collect,
   parseBudget,
@@ -52,9 +50,6 @@ type FusionOpts = {
   panelTrust?: string;
   resume?: string;
   continue?: boolean;
-  dir?: string;
-  host?: string;
-  planeUrl?: string;
 };
 
 /** Attach the panel/gateway flags shared by `fusion` and the per-tool launchers. */
@@ -254,19 +249,7 @@ export function registerFusion(program: Command): void {
     .option("--repo <dir>", "coding workspace the panel fuses over")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
     .option("--force", "overwrite an existing .fusionkit/ config and prompts without prompting")
-    .option("--dir <dir>", "legacy plane home directory")
-    .option("--host <host>", "legacy plane bind address")
-    .option("--plane-url <url>", "legacy public plane URL")
-    .option("--port <n>", "legacy plane port")
     .action(async (opts: FusionOpts) => {
-      if (opts.host !== undefined || opts.planeUrl !== undefined || opts.dir !== undefined) {
-        initHome(resolveDir(opts.dir), {
-          ...(opts.host !== undefined ? { host: opts.host } : {}),
-          ...(opts.planeUrl !== undefined ? { planeUrl: opts.planeUrl } : {}),
-          ...(opts.port !== undefined ? { port: parsePort(opts.port, 7172) } : {})
-        });
-        return;
-      }
       const options = resolveOptions(opts);
       const repoRoot = configRepoRoot(options);
       const code = await runFusionInit({

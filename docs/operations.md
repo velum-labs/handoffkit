@@ -1,12 +1,12 @@
 # Operations
 
-This page summarizes how the implemented control plane and runner are meant to
-be operated locally or in a small deployment.
+This legacy page summarizes how the quarantined Warrant control plane and runner
+are meant to be operated locally or in a small deployment.
 
 ## Deployment shapes
 
-- **Local development** runs `warrant plane start` and `warrant runner start` in
-  separate terminals with local config and encrypted secret state.
+- **Local development** uses the legacy packages or Docker entrypoint under
+  `legacy/` with local config and encrypted secret state.
 - **Docker compose** starts the plane, a runner, and seeded showcase data for the
   control panel.
 - **Outbound runner pools** keep runners behind firewalls or on controlled hosts;
@@ -26,9 +26,9 @@ The plane owns online authority:
 - Receipt countersignature, audit export, metrics, structured logs, and the
   dependency-free control panel at `/ui/`.
 
-Primary source files are `packages/plane/src/plane.ts`,
-`packages/plane/src/server.ts`, `packages/plane/src/sqlite-store.ts`,
-`packages/plane/src/policy.ts`, and `packages/plane/src/secrets.ts`.
+Primary source files are `legacy/packages/plane/src/plane.ts`,
+`legacy/packages/plane/src/server.ts`, `legacy/packages/plane/src/sqlite-store.ts`,
+`legacy/packages/plane/src/policy.ts`, and `legacy/packages/plane/src/secrets.ts`.
 
 ## Runner responsibilities
 
@@ -41,15 +41,16 @@ Runners own execution, not authorization:
 - Record event evidence, collect outputs, sign runner receipts, and return them
   to the plane for countersignature.
 
-Primary source files are `packages/runner/src/runner.ts`,
-`packages/runner/src/backend.ts`, and the `packages/session-*` backends.
+Primary source files are `legacy/packages/runner/src/runner.ts`,
+`legacy/packages/runner/src/backend.ts`, and the `legacy/packages/session-*`
+backends.
 
 ## Storage and retention
 
-The current durable store is SQLite through `packages/plane/src/sqlite-store.ts`.
+The current durable store is SQLite through `legacy/packages/plane/src/sqlite-store.ts`.
 The `PlaneStore` interface is the seam for replacing SQLite with a multi-node
 store such as Postgres. Retention and garbage collection live in
-`packages/plane/src/retention.ts`.
+`legacy/packages/plane/src/retention.ts`.
 
 ## Security posture
 

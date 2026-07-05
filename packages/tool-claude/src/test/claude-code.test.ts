@@ -5,9 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { assertHarnessRunResultV1, requestHash } from "@fusionkit/protocol";
-import type { SessionBackendResult } from "@fusionkit/runner";
-import type { HarnessSessionRun } from "@fusionkit/session-harness";
+import { assertHarnessRunResultV1 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
 
 import { createMockHarness, runEnsemble } from "@fusionkit/ensemble";
@@ -68,7 +66,7 @@ function liveClaudeSmokeSkipReason(): string | false {
   return claudeCodeHarnessCredentialSkipReason() ?? false;
 }
 
-test("claude-code adapter can replace mock and skip clearly without credentials", async () => {
+test("claude-code adapter can replace mock and skip clearly when the CLI is unavailable", async () => {
   const result = await runEnsemble(
     descriptor({
       models: [{ id: "claude", model: "claude-sonnet-4-6" }],
@@ -82,65 +80,8 @@ test("claude-code adapter can replace mock and skip clearly without credentials"
   assert.equal(result.candidates[0]?.error?.kind, "capability_missing");
   assert.match(
     result.candidates[0]?.error?.message ?? "",
-    /missing Claude Code credential/
+    /Claude CLI "claude" was not found/
   );
-});
-
-test("claude-code adapter delegates through the harness session runner from a generic descriptor", async () => {
-  const repo = makeRepo();
-  const seen: {
-    agentKind?: string;
-    prompt?: string;
-    env?: Record<string, string>;
-    repoDir?: string;
-    networkDefaultDeny?: boolean;
-  } = {};
-  const runSession = async (run: HarnessSessionRun): Promise<SessionBackendResult> => {
-    seen.agentKind = run.binding.agentKind;
-    seen.prompt = run.prompt;
-    seen.env = run.env;
-    seen.repoDir = run.repoDir;
-    seen.networkDefaultDeny = run.network?.defaultDeny;
-    writeFileSync(join(run.repoDir, "CLAUDE_RESULT.md"), "fake claude result\n");
-    run.emit?.({
-      type: "command.executed",
-      argvHash: requestHash({ adapter: "claude-code" }),
-      exitCode: 0
-    });
-    return { exitCode: 0, log: Buffer.from("fake claude transcript") };
-  };
-
-  try {
-    const result = await runEnsemble(
-      descriptor({
-        models: [{ id: "claude", model: "claude-sonnet-4-6" }],
-        harness: claudeCodeHarness({
-          env: {
-            ANTHROPIC_API_KEY: "sk-ant-test",
-            VERCEL_TOKEN: "vercel-test"
-          },
-          runSession
-        }),
-        workspace: repo.repo,
-        baseGitSha: repo.head,
-        outputRoot: repo.outputRoot,
-        cleanupWorktrees: true
-      })
-    );
-
-    assert.equal(result.harnessRunResult.status, "succeeded");
-    assert.equal(result.candidates[0]?.status, "succeeded");
-    assert.equal(seen.agentKind, "claude-code");
-    assert.equal(seen.prompt, BASE_DESCRIPTOR.prompt);
-    assert.equal(seen.env?.ANTHROPIC_API_KEY, "sk-ant-test");
-    assert.equal(Object.hasOwn(seen.env ?? {}, "VERCEL_TOKEN"), false);
-    assert.equal(seen.networkDefaultDeny, true);
-    assert.notEqual(seen.repoDir, repo.repo);
-    assert.ok(result.artifacts.some((artifact) => artifact.kind === "patch"));
-    assert.match(result.candidates[0]?.metadata?.adapter as string, /claude-code/);
-  } finally {
-    repo.cleanup();
-  }
 });
 
 /**
@@ -217,7 +158,6 @@ test("local claude-code harness routes a non-Anthropic panel member through its 
       descriptor({
         models: [{ id: "openai", model: "gpt-5.5" }],
         harness: createClaudeCodeHarness({
-          execution: "local",
           command: cliPath,
           fusionBackendUrl: routerUrl,
           modelEndpoints: { openai: routerUrl },

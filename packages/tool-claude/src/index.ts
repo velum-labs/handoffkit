@@ -43,7 +43,6 @@ export const claudeTool: ToolIntegration = {
   launch: launchClaude,
   createHarness: (_kind, options) =>
     harnessDriversEnabled() ? claudeDriverHarness(options) : createClaudeCodeHarness({
-      execution: "local",
       fusionBackendUrl: options.fusionBackendUrl,
       ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),

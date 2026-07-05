@@ -4,7 +4,7 @@ AI SDK and local-model helpers for FusionKit.
 
 ## Architecture
 
-This package contains provider-compatible AI SDK adapters and the managed MLX local-model server helpers used by `fusionkit models` and `--local` flows.
+This package contains product-local AI SDK adapters and managed MLX local-model server helpers used by `fusionkit models` and `--local` flows; governed remote tools and handoff-aware model routing live in legacy `@fusionkit/handoff`.
 
 ## Usage
 

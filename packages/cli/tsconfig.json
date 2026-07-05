@@ -5,25 +5,48 @@
     "outDir": "dist",
     "esModuleInterop": true
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../adapter-ai-sdk" },
-    { "path": "../cli-ui" },
-    { "path": "../ensemble" },
-    { "path": "../handoff" },
-    { "path": "../harness-core" },
-    { "path": "../model-gateway" },
-    { "path": "../plane" },
-    { "path": "../protocol" },
-    { "path": "../registry" },
-    { "path": "../runner" },
-    { "path": "../sdk" },
-    { "path": "../testkit" },
-    { "path": "../tool-claude" },
-    { "path": "../tool-codex" },
-    { "path": "../tool-cursor" },
-    { "path": "../tool-opencode" },
-    { "path": "../tools" },
-    { "path": "../workspace" }
+    {
+      "path": "../adapter-ai-sdk"
+    },
+    {
+      "path": "../cli-ui"
+    },
+    {
+      "path": "../ensemble"
+    },
+    {
+      "path": "../harness-core"
+    },
+    {
+      "path": "../model-gateway"
+    },
+    {
+      "path": "../protocol"
+    },
+    {
+      "path": "../registry"
+    },
+    {
+      "path": "../tool-claude"
+    },
+    {
+      "path": "../tool-codex"
+    },
+    {
+      "path": "../tool-cursor"
+    },
+    {
+      "path": "../tool-opencode"
+    },
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../workspace"
+    }
   ]
 }

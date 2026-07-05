@@ -376,7 +376,7 @@ async def test_fusion_bench_invokes_real_handoffkit_codex_harness_success_with_s
 @pytest.mark.asyncio
 @pytest.mark.parametrize("harness_kind,expected_kind,expected_reason", [
     ("codex", "codex", "Codex credentials are absent"),
-    ("claude-code", "claude_code", "Claude Code harness skipped"),
+    ("claude-code", "claude_code", 'Claude CLI "claude" was not found on PATH'),
 ])
 async def test_fusion_bench_invokes_real_handoffkit_coding_harness_skip_records(
     tmp_path,

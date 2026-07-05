@@ -120,7 +120,7 @@ these stubs.
 | **MF-03** | CursorKit fixture validation + `cursor-run-result` → `harness-run-result` mapping |
 | **MF-04** | MLX provider-only validation without runtime imports |
 | **MF-50** | Dirty-dozen benchmark manifest (seed exists under `python/fusionkit-evals/benchmarks/dirty-dozen/`) |
-| **MF-60–MF-62** | Governance / isolation fixtures: redacted transcripts, secret denial, disclosure, retention, container isolation, MicroVM hardening (`spec/2026-06-16-eng-596-microvm-design-spike.md`, `spec/2026-06-16-eng-597-secret-disclosure-receipts.md`) |
+| **MF-60–MF-62** | Governance / isolation fixtures: redacted transcripts, secret denial, disclosure, retention, container isolation, MicroVM hardening (`legacy/specs/2026-06-16-eng-596-microvm-design-spike.md`, `legacy/specs/2026-06-16-eng-597-secret-disclosure-receipts.md`) |
 
 **Reserved:** Protobuf / Buf for internal streaming / gRPC — not required for v1
 (`spec/model-fusion-contract/README.md`).
@@ -153,7 +153,7 @@ default `fusionkit codex` path:
 | `panelIdentity` / `harnessPromptPassthrough` CLI flags | `docs/specs/harness-prompt-passthrough.md` §12 | Wired internally; **not exposed** on `fusionkit codex` CLI or `.fusionkit` config |
 | Phase 3 optional: custom-instruction delta extraction | `docs/specs/harness-prompt-passthrough.md` | Not done |
 | Harness prompt open questions Q1–Q4 | `docs/specs/harness-prompt-passthrough.md` | Unresolved |
-| **pi agent** | `packages/runner` | Non-spawnable placeholder argv (harness-only hashing) |
+| **pi agent** | `legacy/packages/runner` | Non-spawnable placeholder argv (harness-only hashing) |
 | **Cursor ACP live probe** | `packages/tool-cursor/src/acp.ts` | Opt-in via `FUSIONKIT_GATEWAY_LIVE_CURSOR=1`; otherwise `blocked` |
 | **Cursorkit tool loop** | `legacy/docs/production-readiness-audit-2026-06.md` | 9 / 31 agent tools wired; full OpenAI `tool_calls` → Cursor message loop incomplete |
 | **opencode** | `packages/tool-opencode` | Local model only; no fusion panel |
@@ -198,11 +198,11 @@ default `fusionkit codex` path:
 | `.cursor/plans/phase-2-providers-508e.md` | Claude Router backends: OpenRouter, DeepSeek, Groq, Gemini; DeepSeek `reasoning_content` risk; Gemini `webSearch` needs `extra_body` extension |
 | `.cursor/plans/fusion_observability_spine_83471272.plan.md` | scopekit dashboard completion + verification |
 | `.cursor/plans/comprehensive-documentation-rubric-508e.md` | Documentation quality bar (meta) |
-| `spec/2026-06-11-local-first-handoff-platform-spec.md` | Full handoff platform Phases 0–5 — implementation blocked until design agreed |
-| `spec/2026-06-11-governed-agent-execution-plane-spec.md` | Warrant plane v1 — microVM snapshots out of scope |
+| `legacy/specs/2026-06-11-local-first-handoff-platform-spec.md` | Full handoff platform Phases 0–5 — implementation blocked until design agreed |
+| `legacy/specs/2026-06-11-governed-agent-execution-plane-spec.md` | Warrant plane v1 — microVM snapshots out of scope |
 | `spec/2026-06-13-local-model-harness-bridge-spec.md` | Cursor IDE tunnel requirements |
-| `spec/2026-06-16-eng-596-microvm-design-spike.md` | MF-61 MicroVM path |
-| `spec/2026-06-16-eng-597-secret-disclosure-receipts.md` | MF-62 secret disclosure |
+| `legacy/specs/2026-06-16-eng-596-microvm-design-spike.md` | MF-61 MicroVM path |
+| `legacy/specs/2026-06-16-eng-597-secret-disclosure-receipts.md` | MF-62 secret disclosure |
 | `.cursor/skills/fusion-production-audit/SKILL.md` | Phased spend / benchmark audit playbook (operational, not code) |
 
 ---
@@ -216,7 +216,7 @@ Per `docs/scope.md` and `AGENTS.md`:
 - Still **compiled into product dependency closure** (`tool-claude` → `runner` /
   `session-harness`, `adapter-ai-sdk` → `handoff` / `sdk`).
 - **`fusionkit deployment` commands** (`ui`, `runs`, `plane start`, `runner start`) —
-  wired in `packages/cli/src/commands/deployment.ts` but not documented in
+  removed from the product CLI and quarantined under `legacy/`, formerly documented in
   `docs/cli.md`; hidden governance surface.
 - **Docker compose** — Warrant plane only; needs Docker workarounds in cloud sandbox.
 - **Container / microVM isolation in ensemble** — fake drivers in tests; real

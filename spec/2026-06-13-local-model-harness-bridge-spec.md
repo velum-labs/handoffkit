@@ -2,7 +2,7 @@
 
 Date: 2026-06-13
 Status: Draft
-Related: [Governed agent execution plane spec](2026-06-11-governed-agent-execution-plane-spec.md)
+Related: [Governed agent execution plane spec](../legacy/specs/2026-06-11-governed-agent-execution-plane-spec.md)
 
 Design note: this document specifies a new capability — making a locally
 running model transparently back the major vendor agent harnesses (Claude
@@ -136,7 +136,7 @@ Touched:
 - `velum-labs/mlx-lm` (owned fork) — add `/v1/embeddings`; tool-call/structured
   hardening; bump `MLX_LM_STRUCTURED_PIN` after review.
 - Reuse the transcript normalization patterns in
-  `packages/session-harness/src/transcript.ts` for uniform evidence when
+  `legacy/packages/session-harness/src/transcript.ts` for uniform evidence when
   provenance is enabled.
 
 ## 5. Per-harness integration

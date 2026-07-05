@@ -112,7 +112,7 @@ jobs:
           uv run --with twine python -m twine check dist/*
 
   docker:
-    name: docker compose smoke
+    name: legacy Warrant docker compose smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -122,17 +122,17 @@ jobs:
           persist-credentials: false
 
       - name: Build images
-        run: docker compose build
+        run: docker compose -f legacy/docker/docker-compose.yml build
 
       - name: Boot plane, runner, and seeder
-        run: docker compose up -d --wait plane runner
+        run: docker compose -f legacy/docker/docker-compose.yml up -d --wait plane runner
 
       - name: Wait for seeded showcase runs
         run: |
-          docker compose up seed
+          docker compose -f legacy/docker/docker-compose.yml up seed
           # "done." is the seeder's documented completion line; asserting on
           # it is the smoke contract, and a failure dumps the full logs.
-          docker compose logs seed | grep -q "done." || (docker compose logs && exit 1)
+          docker compose -f legacy/docker/docker-compose.yml logs seed | grep -q "done." || (docker compose -f legacy/docker/docker-compose.yml logs && exit 1)
 
       - name: Smoke-test the API and control panel
         run: |
@@ -142,11 +142,11 @@ jobs:
           curl -fsS http://localhost:7172/v1/health
           curl -fsS http://localhost:7172/v1/ready | grep -q '"ready":true'
           curl -fsS http://localhost:7172/ui/ | grep -q "Warrant — Control Panel"
-          TOKEN=$(docker compose exec plane warrant ui | grep "login token" | awk '{print $3}')
+          TOKEN=$(docker compose -f legacy/docker/docker-compose.yml exec plane warrant ui | grep "login token" | awk '{print $3}')
           curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:7172/v1/runs | grep -q '"runId"'
           curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:7172/v1/metrics | grep -q '"metrics"'
-          docker compose exec plane warrant runs
+          docker compose -f legacy/docker/docker-compose.yml exec plane warrant runs
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose -f legacy/docker/docker-compose.yml down -v

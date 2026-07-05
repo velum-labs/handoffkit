@@ -23,9 +23,8 @@ import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
  * idle period with no in-flight calls scales it to zero; the next call
  * transparently restarts it.
  *
- * Composes as the `local` leg of handoffModel: a provisioning failure,
- * cold-start timeout, or crash surfaces as a failed local call, which the
- * routing layer escalates to cloud.
+ * Composes as the local leg of any caller-owned fallback model: a provisioning
+ * failure, cold-start timeout, or crash surfaces as a failed local call.
  *
  * This is the app-process, local-first path. Runner/plane-side model-server
  * pools (governed, receipt-producing model serving) are a separate feature.

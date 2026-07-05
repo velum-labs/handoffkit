@@ -1,0 +1,24 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../packages/example-utils"
+    },
+    {
+      "path": "../seed"
+    },
+    {
+      "path": "../../../packages/testkit"
+    },
+    {
+      "path": "../../../packages/workspace"
+    }
+  ]
+}

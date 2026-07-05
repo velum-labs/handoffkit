@@ -14,13 +14,13 @@ This map ties every major repository area to the documentation that owns it. Use
 | `packages/protocol` | `docs/specs-and-apis.md`, `docs/model-fusion-protocol-consumption.md`, `docs/typescript-reference.md` | Contracts, validators, hashes, signing, generated OpenAPI SDKs, trace events, and protocol consumption. |
 | `packages/workspace` | `docs/typescript-reference.md`, `docs/repository-reference.md` | Git capture, materialization, safe paths, output collection, and divergence-safe pull. |
 | `packages/tools` and `packages/tool-*` | `docs/typescript-reference.md`, public Package Map | Tool integration contract, registry, launchers, harness adapters, Cursor bridge, Codex, Claude Code, and opencode integration. |
-| `packages/adapter-ai-sdk` | `docs/typescript-reference.md`, public Adapters | Remote tools, swarm tools, handoff models, routed models, worktree agents, and MLX server helpers. |
-| `packages/plane` | `docs/concepts.md`, `docs/architecture.md`, `docs/typescript-reference.md`, public Core Concepts | Control plane, policy, approvals, principals, secrets, contracts, receipts, metrics, retention, and UI. |
-| `packages/runner` | `docs/concepts.md`, `docs/architecture.md`, `docs/typescript-reference.md`, public Self-hosting | Claim loop, execution preparation, session backend lifecycle, egress integration, and runner receipts. |
-| `packages/sdk` | `docs/typescript-reference.md`, public Plane SDK | Plane client and offline receipt verification helpers. |
-| `packages/handoff` | `docs/handoff-sdk.md`, `docs/typescript-reference.md`, public Handoff SDK | Continuations, checkpoints, `continueIn`, review, pull, tools, routing, triggers, and policies. |
-| `packages/adapter-compute` | `docs/typescript-reference.md`, public Adapters | ComputeSDK-shaped sandbox surface backed by governed sessions. |
-| `packages/session-*` | `docs/typescript-reference.md`, `docs/architecture.md`, public Self-hosting | Hermetic sessions, Vercel Sandbox sessions, AI SDK harness sessions, transcript recording, and auth helpers. |
+| `packages/adapter-ai-sdk` | `docs/typescript-reference.md`, public Adapters | Product-local AI SDK utilities, worktree agents, and MLX server helpers. |
+| `legacy/packages/plane` | `docs/concepts.md`, `docs/architecture.md`, `docs/typescript-reference.md`, public Core Concepts | Control plane, policy, approvals, principals, secrets, contracts, receipts, metrics, retention, and UI. |
+| `legacy/packages/runner` | `docs/concepts.md`, `docs/architecture.md`, `docs/typescript-reference.md`, public Self-hosting | Claim loop, execution preparation, session backend lifecycle, egress integration, and runner receipts. |
+| `legacy/packages/sdk` | `docs/typescript-reference.md`, public Plane SDK | Plane client and offline receipt verification helpers. |
+| `legacy/packages/handoff` | `docs/handoff-sdk.md`, `docs/typescript-reference.md`, public Handoff SDK | Continuations, checkpoints, `continueIn`, review, pull, tools, routing, triggers, and policies. |
+| `legacy/packages/adapter-compute` | `docs/typescript-reference.md`, public Adapters | ComputeSDK-shaped sandbox surface backed by governed sessions. |
+| `legacy/packages/session-*` | `docs/typescript-reference.md`, `docs/architecture.md`, public Self-hosting | Hermetic sessions, Vercel Sandbox sessions, AI SDK harness sessions, transcript recording, and auth helpers. |
 | `packages/testkit` and `packages/example-utils` | `docs/typescript-reference.md`, `docs/apps-and-examples.md` | Test fixtures, in-process stacks, git fixtures, example manifests, narration, and mock models. |
 | `python/fusionkit-core` | `docs/python-reference.md`, `docs/generated/code-api.md`, `docs/specs-and-apis.md` | Config, clients, fusion engine, judge, run manager, contracts, run store, providers, prompts, traces, artifacts, metrics, and producers. |
 | `python/fusionkit-server` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Inference endpoint, public API Reference | FastAPI app, OpenAI-compatible routes, trajectory fusion route, and native run endpoints. |

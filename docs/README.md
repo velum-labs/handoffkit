@@ -93,7 +93,7 @@ The full inventory is in [Documentation taxonomy](documentation-taxonomy.md).
 - Keep public package entry points annotated with module JSDoc or Python
   docstrings, then run `pnpm docs:generate-code` to refresh
   [Generated code API reference](generated/code-api.md).
-- Keep policy/security claims tied to implemented controls in `packages/plane`,
-  `packages/runner`, `packages/protocol`, and the session backend packages.
+- Keep policy/security claims tied to implemented controls in `legacy/packages/plane`,
+  `legacy/packages/runner`, `packages/protocol`, and the session backend packages.
 - Treat root `README.md` as the user-facing landing page; put deeper operational
   and maintainer detail here.

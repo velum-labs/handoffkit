@@ -17,10 +17,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./render": {
-      "types": "./dist/render.d.ts",
-      "default": "./dist/render.js"
     }
   },
   "files": [
@@ -37,14 +33,10 @@
     "@fusionkit/adapter-ai-sdk": "workspace:*",
     "@fusionkit/cli-ui": "workspace:*",
     "@fusionkit/ensemble": "workspace:*",
-    "@fusionkit/handoff": "workspace:*",
     "@fusionkit/harness-core": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
-    "@fusionkit/plane": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runner": "workspace:*",
-    "@fusionkit/sdk": "workspace:*",
     "@fusionkit/tool-claude": "workspace:*",
     "@fusionkit/tool-codex": "workspace:*",
     "@fusionkit/tool-cursor": "workspace:*",
@@ -58,7 +50,6 @@
     "portless": "0.14.0"
   },
   "devDependencies": {
-    "@fusionkit/testkit": "workspace:*",
     "@types/figlet": "1.7.0"
   },
   "keywords": [

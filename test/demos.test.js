@@ -102,3 +102,10 @@ test("demo 14 (swarm) dispatches governed workers, catches overlap, and escalate
   assert.match(result.stdout, /overlaps already-pulled/);
   assert.match(result.stdout, /receipt verified: true/);
 });
+
+test("demo 15 (runtime kernel) composes and replays a fusion graph", () => {
+  const result = demo(["15"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /runtime kernel/i);
+  assert.match(result.stdout, /replay/i);
+});
