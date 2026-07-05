@@ -499,27 +499,41 @@ rejected for v1 on cost and CPA^D-interaction grounds).
 
 ## 15. Requirements
 
-### 15.1 Server compute (FHE evaluator)
+### 15.1 Server compute (FHE evaluator) — minimum-first
 
-| Phase | Hardware | Rationale |
+First-principles floors (no SLA assumed). FHE execution is streaming: only
+one operation's working set must be resident (~key-switch: ciphertext
+15–30MB + one key digit set 50–100MB + temporaries), so **capacity floors
+are small and bandwidth is not a requirement — it only divides latency**
+(§10b). Resident set for an 8B decode block under topology A: eval keys
+1–3GB (leveled-only + Grafting, no bootstrap keys) + activations <1GB +
+workspace 2–4GB + encrypted KV 5–20GB for a few-hundred-to-~1k-token
+private suffix (MLA + level-trimmed) ≈ **10–30GB VRAM**.
+
+| Floor | Hardware | What it gives |
 |---|---|---|
-| M0–M1 (harness, GPT-2 repro) | 1× A100 40/80GB or RTX 4090-class, CUDA 12+ | Matches published baselines (EncryptedLLM used A100 80GB; Phantom tested on A100/3090/4090); cheapest iteration loop |
-| M2–M4 (ternary blocks → decode pipeline) | 1× RTX PRO 6000 (96GB) or B200 (192GB) | §10b cost model assumes ~5TB/s-class HBM; 96GB+ holds eval keys + activations + KV for 4–8k private context |
-| M5 (serving MVP) | 1× B200-class per tenant; optional scale-out pool for long-prefill SLAs (§6.7) | Single-GPU serving unit (~$2–8/hr); multi-GPU only on demand |
-| Host | 32+ cores, 512GB–1TB RAM, 4TB+ NVMe | Host-side ciphertext KV paging tier (§6.5); NVMe for cold KV blocks and key bundles |
+| Functional (no GPU) | 64GB-RAM CPU box, OpenFHE | Full correctness: logic dev, unit tests, precision tooling, CI oracle (ENSI ran its results CPU-only) |
+| **Practical minimum (M0–M5 single-tenant)** | **One workstation: 24–32GB consumer GPU (~1–1.8TB/s: used 3090 / 4090 / 5090-class), 128–256GB RAM, 2–4TB NVMe** (~$3–5k owned or ~$0.3–1/hr rented) | Entire program: ~0.75–5s/effective token (8B), ~0.3–2s (2–4B); host RAM/NVMe as KV paging tiers |
+| Bandwidth-class serving (optional tier) | RTX PRO 6000 (96GB, ~1.8TB/s) → B200 (192GB, ~8TB/s) | Latency ÷ bandwidth ratio; B200 justified only by multi-thousand-token private-context KV capacity or a latency floor — it is a product tier, not an architectural need |
 
-The KPI when selecting parts is **memory bandwidth**, not FLOPs (§10b: the
-machine is a key-streaming engine). GPU generational bandwidth gains accrue
-almost directly to us.
+Selection KPI: **memory bandwidth per dollar** (the machine is a
+key-streaming engine; consumer cards often win, cf. Sylph's RTX PRO 6000
+results beating Cerium's H100s). Batch-1-per-key does NOT imply a dedicated
+GPU per tenant: pooling with session swap (keys/KV cached host-side, ~0.1s
+reload over PCIe 5), concurrent multi-tenant streams (legal — ciphertexts
+don't interact; fixed-shape execution covers timing side channels), and MIG
+slicing all apply. Dedicated whole-card is a compliance/latency product
+tier only.
 
-### 15.2 Training compute (model side)
+### 15.2 Training compute (model side) — minimum-first
 
-| Task | Hardware | Notes |
+| Task | Minimum hardware | Notes |
 |---|---|---|
-| FHE-friendly fine-tune/distill of 1–2B draft + 4–8B target (QAT, polynomial activations, sigmoid attention) | 1× 8-GPU H100/B200 node, days-scale runs | BF16 master weights (BitNet `-bf16` variant) required; not a cluster job |
-| Outlier calibration + polynomial-range discovery | Same node, hours-scale | Re-run per model release; outputs are versioned artifacts (§9) |
-| Eval harness (accuracy gates, Gate-0 comparison vs local open-weights) | Same node or API spend | lm-evaluation-harness suites per §1 workloads |
-| M6 pretrain (MLA/sliding-window ternary, SSM backbone) | Cluster-scale (out of v1 budget) | Only if the research tracks are activated |
+| M2–M4 target model: fine-tune **open BitNet 2B4T** (already ternary; MIT BF16 master weights) with polynomial activations + sigmoid attention | The same consumer-GPU workstation (optimizer CPU-offload), or one rented 80GB GPU, days-scale | No training rental strictly required before M5 |
+| 1–2B draft distillate | Same | |
+| M5 target: 4–8B QAT distillation | Burst-rent 2×H100-class or 4×48GB w/ ZeRO offload (~100GB optimizer state is the binding number), days-scale (~$2–5k/cycle) | Not owned hardware; only after M3 precision gate passes |
+| Outlier calibration + polynomial-range discovery | Hours on the dev card | Versioned artifacts, re-run per release (§9) |
+| M6 pretrain (MLA/sliding-window ternary, SSM backbone) | Cluster-scale (out of v1 budget) | Only if research tracks activate |
 
 ### 15.3 Network
 
@@ -533,10 +547,10 @@ almost directly to us.
 
 | Component | Requirement |
 |---|---|
-| Key agent VM (topology A) | 4–8 vCPU, 16–32GB RAM, customer's tenancy, same region as server; OpenFHE CPU build; sustains decrypt+flood+re-encrypt at line rate (ms-scale per ciphertext) |
+| Key agent VM (topology A) | Minimum: any 4-vCPU/16GB machine with low RTT to the server (a LAN box suffices in dev; customer-tenancy VM in prod); OpenFHE CPU build; sustains decrypt+flood+re-encrypt at line rate (ms-scale per ciphertext) |
 | Confidential variant (A+) | SEV-SNP / TDX / Nitro Enclaves; attestation service; key sealed to enclave; measured boot |
 | Key custody | Customer KMS/HSM roots the key; agent holds session keys only; rotation invalidates server-cached bundles |
-| End-user device (topology B) | Apple Silicon, 16GB+ unified memory (1–2B ternary draft via MLX at 25–80 tok/s); OpenFHE CPU for crypto ops |
+| End-user device (topology B) | Any Apple Silicon Mac, ≥8GB unified memory (a 1.7B ternary draft is ~0.4GB; MLX at 25–80 tok/s); OpenFHE CPU for crypto ops |
 
 ### 15.5 Software stack
 
@@ -576,16 +590,18 @@ almost directly to us.
   use (§6); model-weight licenses (BitNet MIT, Bonsai Apache 2.0) are
   fine-tune-compatible.
 
-### 15.8 Budget envelope (steady-state dev, pre-M5)
+### 15.8 Budget envelope (minimum path)
 
-- Dev GPU: 1× A100/PRO-6000-class, ~$1.5–8/hr on-demand (~$1–6k/mo at
-  ~50% duty cycle).
-- Training node bursts: 8-GPU node, days-scale runs, ~$2–5k per distillation
-  cycle.
-- CI GPU runner: ~$0.5–1k/mo.
+- Capex option: one consumer-GPU workstation (~$3–5k) + one Apple Silicon
+  Mac — runs M0 through M5 single-tenant, doubles as CI runner.
+- Rental option: ~$0.3–1/hr consumer GPU (~$0.2–1k/mo at 50% duty cycle).
+- Training bursts: $0 before M5 (open BitNet 2B4T on the dev card);
+  ~$2–5k per 4–8B distillation cycle at M5.
 - Cloud storage/egress: <$0.5k/mo until M5.
 - Published-result reproduction budget (M1): negligible beyond GPU time —
   all answer-key artifacts are open source (§15.5).
+- Bandwidth-class serving hardware (RTX PRO 6000 / B200) enters only as a
+  latency/capacity product tier decision at M5, priced per §15.1.
 
 ## 16. References
 
