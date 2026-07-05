@@ -239,12 +239,11 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
           likely_errors: []
         },
         metrics: {
-          candidate_ranks: [
-            { candidate_id: "cand_opus", rank: 1, score: 0.92 },
-            { candidate_id: "cand_gpt", rank: 2, score: 0.88 }
-          ]
+          best_trajectory: "cand_opus",
+          recommended_final_structure: ["operator fix", "regression test"]
         },
-        input_ids: ["cand_gpt", "cand_opus"]
+        input_ids: ["cand_gpt", "cand_opus"],
+        usage: { total_tokens: 540 }
       }
     }),
     ev({
