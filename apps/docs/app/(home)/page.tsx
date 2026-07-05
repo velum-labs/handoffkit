@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import DemoSection from "@/components/demo/demo-section";
+
 const features = [
   {
     title: "Real model fusion",
@@ -54,6 +56,8 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
+
+      <DemoSection />
 
       <section className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 px-4 pb-12 sm:grid-cols-3">
         {features.map((feature) => (

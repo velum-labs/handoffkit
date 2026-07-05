@@ -15,10 +15,17 @@
     "start": "next start -p 4318",
     "postinstall": "fumadocs-mdx",
     "generate:openapi": "node --import tsx scripts/generate-openapi.ts",
+    "demo:provision": "node --import tsx scripts/provision-demo-template.ts",
     "lint": "next lint"
   },
-  "portless": { "name": "docs.fusion", "script": "dev:app" },
+  "portless": {
+    "name": "docs.fusion",
+    "script": "dev:app"
+  },
   "dependencies": {
+    "@vercel/sandbox": "^2.4.0",
+    "@wterm/dom": "^0.3.0",
+    "@wterm/react": "^0.3.0",
     "fumadocs-core": "15.8.5",
     "fumadocs-mdx": "11.10.1",
     "fumadocs-openapi": "8.1.12",
@@ -27,7 +34,8 @@
     "next": "^15.5.0",
     "next-themes": "^0.4.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
