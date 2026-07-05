@@ -2,6 +2,7 @@ import { Command } from "commander";
 
 import "./tools.js";
 import { FUSIONKIT_PYPI_VERSION } from "./fusion-quickstart.js";
+import { registerComplete } from "./commands/complete.js";
 import { registerCompletion } from "./commands/completion.js";
 import { registerConfig } from "./commands/config.js";
 import { registerDoctor } from "./commands/doctor.js";
@@ -49,6 +50,7 @@ export function buildProgram(): Command {
   registerEnsemble(program);
   registerLocal(program);
   registerCompletion(program);
+  registerComplete(program);
   registerRuntime(program);
   registerVersion(program);
 

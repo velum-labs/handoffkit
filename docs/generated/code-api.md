@@ -30,10 +30,14 @@ interactive TTYs, ordered plain-text lines everywhere else (CI, pipes,
 `FUSIONKIT_NO_TUI=1`). All UI goes to stderr; stdout stays reserved for
 machine payloads and the launched tool's output.
 
-- `export { PlainPresenter, renderKeyValueLines, renderTableLines } from "./plain.js";`
+- `export { PlainPresenter, renderErrorPanelLines, renderKeyValueLines, renderTableLines } from "./plain.js";`
 - `export { InkPresenter, mountInk, settleInk } from "./ink/presenter.js";`
-- `export { select, multiselect, confirm, text, done, note } from "./prompt.js";`
-- `export type { SelectOption } from "./prompt.js";`
+- `export { select, multiselect, confirm, text, fuzzySelect, autocompleteText, BACK, done, note } from "./prompt.js";`
+- `export type { SelectOption, Back } from "./prompt.js";`
+- `export { fuzzyFilter, fuzzyMatch } from "./fuzzy.js";`
+- `export type { FuzzyMatch, FuzzyResult } from "./fuzzy.js";`
+- `export { runWizard } from "./wizard.js";`
+- `export type { WizardStep } from "./wizard.js";`
 - `export function createPresenter(options: ...`
   The presenter for this invocation: Ink when attached to an interactive TTY, plain line logs otherwise. `forceNonInteractive()` (the `--json` / `--no-input` flags) flips this to plain for the rest of the process.
 

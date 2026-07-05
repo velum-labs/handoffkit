@@ -312,9 +312,57 @@ test("completion bash includes top-level commands from the Commander tree", () =
   const result = warrant(["completion", "bash"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /complete -F _fusionkit_completion fusionkit/);
+  assert.match(result.stdout, /fusionkit __complete/);
   for (const command of ["codex", "claude", "cursor", "serve", "fusion", "doctor", "ensemble", "local"]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
+});
+
+test("__complete lists top-level commands for an empty word and hides internals", () => {
+  const result = warrant(["__complete", "--", ""]);
+  assert.equal(result.status, 0, result.stderr);
+  const candidates = result.stdout.split("\n").filter((line) => line !== "");
+  for (const command of ["codex", "claude", "config", "sessions", "doctor"]) {
+    assert.ok(candidates.includes(command), `expected ${command} in ${candidates.join(",")}`);
+  }
+  assert.ok(!candidates.includes("__complete"));
+  assert.ok(!candidates.includes("help"));
+});
+
+test("__complete filters by the typed prefix", () => {
+  const result = warrant(["__complete", "--", "se"]);
+  assert.equal(result.status, 0, result.stderr);
+  const candidates = result.stdout.split("\n").filter((line) => line !== "");
+  assert.deepEqual(candidates, ["serve", "sessions", "setup"]);
+});
+
+test("__complete descends into subcommands and dynamic argument values", () => {
+  const config = warrant(["__complete", "--", "config", ""]);
+  assert.equal(config.status, 0, config.stderr);
+  for (const sub of ["get", "set", "unset", "path"]) {
+    assert.ok(config.stdout.split("\n").includes(sub), `expected ${sub} in config completions`);
+  }
+
+  const prompts = warrant(["__complete", "--", "prompts", "edit", ""]);
+  assert.equal(prompts.status, 0, prompts.stderr);
+  const promptIds = prompts.stdout.split("\n").filter((line) => line !== "");
+  assert.ok(promptIds.includes("judge"));
+  assert.ok(promptIds.includes("synthesizer"));
+
+  const shells = warrant(["__complete", "--", "completion", ""]);
+  assert.equal(shells.status, 0, shells.stderr);
+  assert.deepEqual(
+    shells.stdout.split("\n").filter((line) => line !== ""),
+    ["bash", "fish", "zsh"]
+  );
+});
+
+test("__complete offers long flags when the current word starts with a dash", () => {
+  const result = warrant(["__complete", "--", "doctor", "--"]);
+  assert.equal(result.status, 0, result.stderr);
+  const flags = result.stdout.split("\n").filter((line) => line !== "");
+  assert.ok(flags.includes("--json"), `expected --json in ${flags.join(",")}`);
+  assert.ok(flags.every((flag) => flag.startsWith("--")));
 });
 
 test("doctor exits nonzero when no provider credentials and no local path are available", () => {
