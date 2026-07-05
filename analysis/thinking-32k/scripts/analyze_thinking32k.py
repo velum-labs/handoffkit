@@ -11,9 +11,13 @@ ROOT = Path(__file__).resolve().parents[3]
 ROUND = ROOT / "analysis" / "thinking-32k"
 PHASE0 = ROOT / "analysis" / "phase0"
 OUTCOMES_32K = ROUND / "outcomes_32k.csv"
+OUTCOMES_64K = ROUND / "outcomes_64k_kimi.csv"
 RERUN_OUTCOMES = [
     ROUND / "cache" / "outcomes_32k_failed_rerun.csv",
     ROUND / "cache" / "outcomes_32k_sonnet_arc192e_retry.csv",
+]
+RERUN_OUTCOMES_64K = [
+    ROUND / "cache" / "outcomes_64k_failed_rerun.csv",
 ]
 LEDGER = ROUND / "spend_ledger.jsonl"
 REPORT = ROUND / "report.md"
@@ -80,15 +84,15 @@ def wilson(successes: int, n: int) -> tuple[float, float, float]:
     return (phat, max(0.0, center - margin), min(1.0, center + margin))
 
 
-def merge_reruns() -> list[dict[str, Any]]:
-    rows = read_csv(OUTCOMES_32K)
+def merge_reruns(outcomes_path: Path = OUTCOMES_32K, rerun_paths: list[Path] = RERUN_OUTCOMES) -> list[dict[str, Any]]:
+    rows = read_csv(outcomes_path)
     failed_keys = {
         (row["task_id"], row["endpoint_id"])
         for row in rows
         if row["call_status"] != "succeeded"
     }
     replacements: dict[tuple[str, str], dict[str, str]] = {}
-    for path in RERUN_OUTCOMES:
+    for path in rerun_paths:
         if not path.exists():
             continue
         for row in read_csv(path):
@@ -186,6 +190,16 @@ def main() -> int:
     rows_16k = read_csv(OUTCOMES_16K)
     metrics_16k = model_metrics(rows_16k, max_tokens=16384)
     metrics_32k = model_metrics(rows_32k, max_tokens=32768)
+    metrics_64k: dict[str, dict[str, Any]] = {}
+    if OUTCOMES_64K.exists():
+        rows_64k = merge_reruns(OUTCOMES_64K, RERUN_OUTCOMES_64K)
+        write_csv(OUTCOMES_64K, rows_64k)
+        ids = manifest_ids()
+        kimi_64k_ids = [row["task_id"] for row in rows_64k if row["endpoint_id"] == "kimi"]
+        if kimi_64k_ids != ids:
+            raise AssertionError("64k kimi task ids do not match manifest")
+        validation_messages.append("kimi 64k escalation: 60 rows and exact manifest order")
+        metrics_64k = model_metrics(rows_64k, max_tokens=65536)
     ledger_rows = read_ledger(LEDGER)
     spend_by_endpoint = ledger_spend(ledger_rows)
     total_spend = sum(spend_by_endpoint.values())
@@ -221,6 +235,14 @@ def main() -> int:
             f"{m32['mean_completion_tokens']:.0f} | {m32['provider_failures']} | "
             f"{fmt_money(spend_by_endpoint.get(model, 0.0))} |"
         )
+        if model in metrics_64k:
+            m64 = metrics_64k[model]
+            lines.append(
+                f"| {model} | 64k | {m64['passed']}/60 ({pct(m64['pass_rate'])}) | "
+                f"{ci_text(m64)} | {m64['truncated']}/60 | "
+                f"{m64['mean_completion_tokens']:.0f} | {m64['provider_failures']} | "
+                f"{fmt_money(m64['outcome_spend'])} |"
+            )
     lines.extend(
         [
             "",
@@ -236,13 +258,18 @@ def main() -> int:
         ]
     )
     for model in context_models:
-        metrics = metrics_32k[model] if model in {"kimi", "sonnet"} else metrics_16k[model]
-        source = "32k" if model in {"kimi", "sonnet"} else "16k"
+        if model in metrics_64k:
+            metrics, source = metrics_64k[model], "64k"
+        elif model in {"kimi", "sonnet"}:
+            metrics, source = metrics_32k[model], "32k"
+        else:
+            metrics, source = metrics_16k[model], "16k"
         lines.append(
             f"| {model} | {source} | {metrics['passed']}/60 ({pct(metrics['pass_rate'])}) | "
             f"{ci_text(metrics)} | {metrics['truncated']}/60 |"
         )
-    best_oss = max(metrics_32k["kimi"]["pass_rate"], metrics_32k["sonnet"]["pass_rate"], metrics_16k["qwen3"]["pass_rate"], metrics_16k["deepseek"]["pass_rate"])
+    best_kimi = metrics_64k.get("kimi", metrics_32k["kimi"])["pass_rate"]
+    best_oss = max(best_kimi, metrics_32k["sonnet"]["pass_rate"], metrics_16k["qwen3"]["pass_rate"], metrics_16k["deepseek"]["pass_rate"])
     gpt55 = metrics_16k["gpt55"]["pass_rate"]
     lines.extend(
         [
@@ -259,10 +286,34 @@ def main() -> int:
         lines.append(
             f"- {model}: {m32['truncated']}/60 rows truncated at 32k, so the pass rate is {status} under the <=10% rule."
         )
+    if metrics_32k["kimi"]["truncated"] > 6:
+        if "kimi" in metrics_64k:
+            m64 = metrics_64k["kimi"]
+            status_64 = "VALID" if m64["truncated"] <= 6 else "INVALID"
+            escalation_line = (
+                f"Kimi exceeded the truncation threshold at 32k, so the preregistered 64k "
+                f"escalation was run: {m64['truncated']}/60 rows truncated at 64k, pass rate {status_64} "
+                f"under the <=10% rule."
+            )
+            if status_64 == "INVALID":
+                escalation_line += (
+                    " Per the preregistration, kimi is reported as **not measurable at practical budgets** "
+                    "on this slice."
+                )
+        else:
+            escalation_line = (
+                "Kimi exceeded the truncation threshold at 32k; the preregistered 64k escalation "
+                "is required but its outcomes file is not present yet."
+            )
+    else:
+        escalation_line = (
+            "Kimi did not trigger the preregistered 64k escalation because it stayed within the "
+            "truncation threshold at 32k."
+        )
     lines.extend(
         [
             "",
-            "Kimi did not trigger the preregistered 64k escalation because it stayed within the truncation threshold at 32k.",
+            escalation_line,
             "",
             "## Spend",
             "",
@@ -295,6 +346,7 @@ def main() -> int:
         "total_spend": total_spend,
         "failures": len(failures),
         "metrics_32k": metrics_32k,
+        "metrics_64k": metrics_64k,
     }, sort_keys=True))
     return 0
 
