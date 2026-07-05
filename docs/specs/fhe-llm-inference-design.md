@@ -14,7 +14,7 @@ co-design.
 
 This spec consolidates a literature review (mid-2026 state of the art) and a
 series of design discussions into a single reference. Every performance claim
-is anchored to a published result (see [References](#15-references)).
+is anchored to a published result (see [References](#16-references)).
 
 ---
 
@@ -497,7 +497,97 @@ rejected for v1 on cost and CPA^D-interaction grounds).
   ternary architecture pretrain/distill; structured-pruning circuit
   skipping; fixed-state (SSM) backbone for 100k+ private context (§11.5).
 
-## 15. References
+## 15. Requirements
+
+### 15.1 Server compute (FHE evaluator)
+
+| Phase | Hardware | Rationale |
+|---|---|---|
+| M0–M1 (harness, GPT-2 repro) | 1× A100 40/80GB or RTX 4090-class, CUDA 12+ | Matches published baselines (EncryptedLLM used A100 80GB; Phantom tested on A100/3090/4090); cheapest iteration loop |
+| M2–M4 (ternary blocks → decode pipeline) | 1× RTX PRO 6000 (96GB) or B200 (192GB) | §10b cost model assumes ~5TB/s-class HBM; 96GB+ holds eval keys + activations + KV for 4–8k private context |
+| M5 (serving MVP) | 1× B200-class per tenant; optional scale-out pool for long-prefill SLAs (§6.7) | Single-GPU serving unit (~$2–8/hr); multi-GPU only on demand |
+| Host | 32+ cores, 512GB–1TB RAM, 4TB+ NVMe | Host-side ciphertext KV paging tier (§6.5); NVMe for cold KV blocks and key bundles |
+
+The KPI when selecting parts is **memory bandwidth**, not FLOPs (§10b: the
+machine is a key-streaming engine). GPU generational bandwidth gains accrue
+almost directly to us.
+
+### 15.2 Training compute (model side)
+
+| Task | Hardware | Notes |
+|---|---|---|
+| FHE-friendly fine-tune/distill of 1–2B draft + 4–8B target (QAT, polynomial activations, sigmoid attention) | 1× 8-GPU H100/B200 node, days-scale runs | BF16 master weights (BitNet `-bf16` variant) required; not a cluster job |
+| Outlier calibration + polynomial-range discovery | Same node, hours-scale | Re-run per model release; outputs are versioned artifacts (§9) |
+| Eval harness (accuracy gates, Gate-0 comparison vs local open-weights) | Same node or API spend | lm-evaluation-harness suites per §1 workloads |
+| M6 pretrain (MLA/sliding-window ternary, SSM backbone) | Cluster-scale (out of v1 budget) | Only if the research tracks are activated |
+
+### 15.3 Network
+
+| Path | Requirement | Why |
+|---|---|---|
+| Key agent ↔ server (topology A) | Same region, VPC-peered/private link; **<1ms RTT, ≥10Gbps** | Refresh points are sequential: ~20–30 × ~8MB round trips per block (§10b); WAN kills topology A |
+| End-user ↔ server (topology B) | Ordinary WAN; ~10–100MB per speculative block each way | Seed compression + level-drop before transmission (§9 of optimization map); tolerate 50–200ms RTT per *block*, not per token |
+| Egress budget | Plan for GB-scale per long session (topology A refresh traffic stays intra-region — near-free) | Cloud egress pricing shapes topology A vs B economics |
+
+### 15.4 Key-side environment
+
+| Component | Requirement |
+|---|---|
+| Key agent VM (topology A) | 4–8 vCPU, 16–32GB RAM, customer's tenancy, same region as server; OpenFHE CPU build; sustains decrypt+flood+re-encrypt at line rate (ms-scale per ciphertext) |
+| Confidential variant (A+) | SEV-SNP / TDX / Nitro Enclaves; attestation service; key sealed to enclave; measured boot |
+| Key custody | Customer KMS/HSM roots the key; agent holds session keys only; rotation invalidates server-cached bundles |
+| End-user device (topology B) | Apple Silicon, 16GB+ unified memory (1–2B ternary draft via MLX at 25–80 tok/s); OpenFHE CPU for crypto ops |
+
+### 15.5 Software stack
+
+- **Server**: Ubuntu 22.04/24.04, CUDA 12–13, GCC ≥11, CMake ≥3.25,
+  FIDESlib + its patched OpenFHE (`FIDESLIB_INSTALL_OPENFHE=ON` first
+  build), NCCL optional (scale-out only). Cheddar (CUDA ≥11.8, CMake ≥3.24)
+  as evaluation backend. CUDA Graphs–capable driver.
+- **Model tooling**: PyTorch + HF transformers (BitNet fork noted on the
+  model card), lm-evaluation-harness, our shadow-execution simulator
+  (plaintext replay with quantization/approximation, §9).
+- **Client**: OpenFHE (CPU) cross-compiled for macOS/arm64; MLX for the
+  draft model; Swift/CLI wrapper.
+- **CI**: GPU runner (same class as dev GPU) for kernel diffs vs the
+  OpenFHE CPU oracle; CPU-only runners for oracle/unit tests; nightly
+  long-generation precision soak (§9) with golden prompts; noise-budget
+  regression gates.
+
+### 15.6 Storage
+
+| Artifact | Size class | Where |
+|---|---|---|
+| Eval-key bundle per (tenant, model release) | GBs (topology B incl. bootstrap keys); ~40–60% less under topology A + Grafting | Server NVMe, content-addressed cache |
+| Ciphertext KV working set | ~0.3TB per 4k private tokens (§11) | GPU HBM → host RAM → NVMe tiers |
+| Model artifacts (ternary weights, calibration ranges, polynomial coefficient sets) | ~2–4GB per release | Versioned registry; calibration artifacts are release-gating |
+| Telemetry (noise budgets, per-layer error norms) | GB/day-scale in debug; sampled in prod | Feeds §9 CI gates |
+
+### 15.7 People & process
+
+- Minimum team: 1 CUDA/systems engineer, 1 ML engineer (QAT/distillation),
+  1 crypto-aware protocol engineer; plus a consulting **cryptographer
+  sign-off** on parameter selection, per-refresh flooding, and the CPA^D
+  protocol review (M2 gate) — non-negotiable.
+- Security process: external review of the key agent before any customer
+  deployment; side-channel review (traffic shapes) before GA; incident
+  runbook for key rotation.
+- Legal/compliance: license verification for FIDESlib before commercial
+  use (§6); model-weight licenses (BitNet MIT, Bonsai Apache 2.0) are
+  fine-tune-compatible.
+
+### 15.8 Budget envelope (steady-state dev, pre-M5)
+
+- Dev GPU: 1× A100/PRO-6000-class, ~$1.5–8/hr on-demand (~$1–6k/mo at
+  ~50% duty cycle).
+- Training node bursts: 8-GPU node, days-scale runs, ~$2–5k per distillation
+  cycle.
+- CI GPU runner: ~$0.5–1k/mo.
+- Cloud storage/egress: <$0.5k/mo until M5.
+- Published-result reproduction budget (M1): negligible beyond GPU time —
+  all answer-key artifacts are open source (§15.5).
+
+## 16. References
 
 Pure-FHE transformer systems: NEXUS (NDSS '25, eprint 2024/136) · THOR (CCS
 '25, eprint 2024/1881) · MOAI (ICLR '26, eprint 2025/991) · Powerformer (ACL
