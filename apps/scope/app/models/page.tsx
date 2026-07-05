@@ -1,17 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cpu } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
 
 import { EmptyState } from "@/components/scope/empty-state";
 import { ErrorBanner } from "@/components/scope/error-banner";
+import { StatStripSkeleton, TableSkeleton } from "@/components/scope/loading";
 import { LiveDot, PageHeader } from "@/components/scope/page-header";
 import { Section } from "@/components/scope/section";
 import { StatStrip } from "@/components/scope/stat-strip";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -51,7 +52,7 @@ function ModelChart({
           <XAxis dataKey="name" tick={axisTick} stroke="var(--border)" />
           <YAxis allowDecimals={false} tick={axisTick} stroke="var(--border)" />
           <ChartTooltip cursor={{ fill: "var(--accent)", opacity: 0.3 }} contentStyle={chartTooltipStyle} />
-          <Bar dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
+          <Bar dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} maxBarSize={56} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -93,7 +94,10 @@ export default function ModelsPage() {
         <ErrorBanner error={error} />
 
         {loading ? (
-          <Skeleton className="h-80 w-full" />
+          <div className="space-y-4">
+            <StatStripSkeleton />
+            <TableSkeleton rows={4} />
+          </div>
         ) : models.length === 0 ? (
           <EmptyState
             icon={<Cpu className="size-8" />}
@@ -166,7 +170,15 @@ export default function ModelsPage() {
                         onClick={() => router.push(`/?q=${encodeURIComponent(model.modelId)}`)}
                         title={`Show sessions using ${model.modelId}`}
                       >
-                        <TableCell className="mono text-sm">{model.modelId}</TableCell>
+                        <TableCell className="mono text-sm">
+                          <Link
+                            href={`/?q=${encodeURIComponent(model.modelId)}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="hover:underline"
+                          >
+                            {model.modelId}
+                          </Link>
+                        </TableCell>
                         <TableCell>
                           {model.provider ? (
                             <Badge variant="secondary" className="font-normal">
@@ -180,8 +192,8 @@ export default function ModelsPage() {
                         <TableCell className="mono text-muted-foreground text-right">
                           {model.running > 0 ? model.running : "—"}
                         </TableCell>
-                        <TableCell className="mono text-right text-emerald-500">{model.succeeded}</TableCell>
-                        <TableCell className="mono text-right text-red-500">{model.failed}</TableCell>
+                        <TableCell className="mono text-(--status-success) text-right">{model.succeeded}</TableCell>
+                        <TableCell className="mono text-(--status-danger) text-right">{model.failed}</TableCell>
                         <TableCell className="mono text-right">
                           {successRate !== undefined ? `${successRate.toFixed(0)}%` : "—"}
                         </TableCell>

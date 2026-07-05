@@ -12,6 +12,7 @@ import { EnvironmentDetail } from "@/components/scope/environment-detail";
 import { ErrorBanner } from "@/components/scope/error-banner";
 import { EventInspector } from "@/components/scope/event-inspector";
 import { EventTable } from "@/components/scope/event-table";
+import { StatStripSkeleton } from "@/components/scope/loading";
 import { LiveDot, PageHeader } from "@/components/scope/page-header";
 import { RunFlow } from "@/components/scope/run-flow";
 import { Section } from "@/components/scope/section";
@@ -23,14 +24,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSessionDetail } from "@/lib/api";
 import type { SessionSummary } from "@/lib/api";
-import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative } from "@/lib/format";
+import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative, shortTraceId } from "@/lib/format";
 import { tokensOf } from "@/lib/rollups";
 import type { SessionDetail } from "@/lib/sessions";
 import type { StoredEvent } from "@/lib/types";
-
-function shortId(traceId: string): string {
-  return traceId.replace(/^trace_/, "").slice(0, 12);
-}
 
 /** One-shot fetch of the session list to compute prev/next neighbors. */
 function useNeighbors(traceId: string): { prev?: string; next?: string } {
@@ -126,7 +123,7 @@ export default function SessionDetailPage() {
       <PageHeader
         title={
           <span className="flex items-center gap-2">
-            <span className="mono">{shortId(traceId)}</span>
+            <span className="mono">{shortTraceId(traceId)}</span>
             <CopyButton value={traceId} label="Copy trace id" />
             {session ? <StatusBadge status={session.status} /> : null}
           </span>
@@ -146,7 +143,8 @@ export default function SessionDetailPage() {
       <div className="px-8 py-6">
         {loading && session === undefined ? (
           <div className="space-y-6">
-            <Skeleton className="h-16 w-full" />
+            <StatStripSkeleton stats={6} />
+            <Skeleton className="h-24 w-full" />
             <Skeleton className="h-64 w-full" />
             <Skeleton className="h-80 w-full" />
           </div>

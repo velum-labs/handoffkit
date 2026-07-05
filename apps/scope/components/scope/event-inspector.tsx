@@ -36,10 +36,10 @@ export function EventInspector({
     >
       <Dialog.Portal>
         <Dialog.Overlay className="data-[state=open]:animate-in data-[state=open]:fade-in-0 fixed inset-0 z-40 bg-black/50" />
-        <Dialog.Content
-          className="bg-background data-[state=open]:animate-in data-[state=open]:slide-in-from-right fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l shadow-lg outline-none"
-          aria-describedby={undefined}
-        >
+        <Dialog.Content className="bg-background data-[state=open]:animate-in data-[state=open]:slide-in-from-right fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l shadow-lg outline-none">
+          <Dialog.Description className="sr-only">
+            Metadata and raw payload for the selected trace events.
+          </Dialog.Description>
           {first !== undefined && events !== undefined ? (
             <>
               <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
