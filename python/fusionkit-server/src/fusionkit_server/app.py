@@ -11,7 +11,7 @@ from importlib.metadata import version as distribution_version
 from pathlib import Path
 from typing import Any, assert_never, cast, get_args
 
-from fastapi import FastAPI, Header, Query
+from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import (
@@ -56,7 +56,9 @@ from fusionkit_core.run import (
 from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER, new_span_id
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+
+from fusionkit_server.cursor_endpoint import translate_cursor_request
 
 logger = logging.getLogger(__name__)
 
@@ -166,8 +168,7 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/v1/models")
-    async def models() -> dict[str, Any]:
+    def _models_payload() -> dict[str, Any]:
         data: list[dict[str, Any]] = [
             {"id": alias, "object": "model"} for alias in FUSION_MODEL_ALIASES
         ]
@@ -176,6 +177,16 @@ def create_app(
             for endpoint in config.endpoints
         )
         return {"object": "list", "data": data}
+
+    @app.get("/v1/models")
+    async def models() -> dict[str, Any]:
+        return _models_payload()
+
+    @app.get("/v1/cursor/models")
+    async def cursor_models() -> dict[str, Any]:
+        # Cursor may probe the models list relative to its BYOK base URL
+        # (`.../v1/cursor`); mirror /v1/models there.
+        return _models_payload()
 
     @app.post("/v1/fusion/runs")
     async def create_fusion_run(
@@ -238,8 +249,7 @@ def create_app(
             return _native_error_response(result, status_code=409)
         return _json_response(result.model_dump(mode="json"))
 
-    @app.post("/v1/chat/completions", response_model=None)
-    async def chat_completions(
+    async def _handle_chat_completions(
         request: FusionRequest,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         # Per-model passthrough: when `model` names a configured endpoint, call
@@ -277,6 +287,48 @@ def create_app(
             return resolved
         final_output, metadata = resolved
         return _openai_chat_response(request.model, final_output, metadata)
+
+    @app.post("/v1/chat/completions", response_model=None)
+    async def chat_completions(
+        request: FusionRequest,
+    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
+        return await _handle_chat_completions(request)
+
+    @app.post("/v1/cursor/chat/completions", response_model=None)
+    async def cursor_chat_completions(
+        raw_request: Request,
+    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
+        # Cursor's BYOK base-URL override POSTs a Responses-API-shaped body to
+        # `{base_url}/chat/completions` while expecting Chat Completions back
+        # (a known Cursor hybrid). The body is parsed raw — FastAPI validating
+        # it as a FusionRequest would 422 on the hybrid shape — translated via
+        # `translate_cursor_request`, then delegated to the exact code path
+        # the plain /v1/chat/completions route uses. Plain Chat Completions
+        # bodies (Cursor Ask mode) pass through untranslated.
+        try:
+            body = await raw_request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return _openai_error_response(
+                "invalid_json", "request body must be a JSON object", status_code=400
+            )
+        if not isinstance(body, dict) or ("messages" not in body and "input" not in body):
+            return _openai_error_response(
+                "invalid_request",
+                "request body must include either 'messages' or 'input'",
+                status_code=400,
+            )
+        try:
+            request = FusionRequest.model_validate(translate_cursor_request(body))
+        except ValidationError:
+            # The pydantic error detail can echo request fragments; keep the
+            # response body generic and log the specifics server-side.
+            logger.warning("cursor request failed validation", exc_info=True)
+            return _openai_error_response(
+                "invalid_request",
+                "request body could not be validated as a chat completion request",
+                status_code=400,
+            )
+        return await _handle_chat_completions(request)
 
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
     async def fuse_trajectories(
