@@ -81,7 +81,7 @@ const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[];
 export function registerRuntime(program: Command): void {
   const runtime = program
     .command("runtime")
-    .description("inspect FusionKit runtime-kernel workflows and composition primitives");
+    .description("advanced/maintainer: inspect runtime-kernel workflows and composition primitives");
 
   runtime
     .command("list")

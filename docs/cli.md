@@ -27,9 +27,9 @@ Task-focused walkthroughs: [inference endpoint](quickstart-inference.md),
 
 ```sh
 fusionkit setup                      # pre-provision (warm) the fusion engine into the uvx cache
-fusionkit doctor                     # check prerequisites (uv, agents, keys, git, platform capability)
-fusionkit init                       # scaffold a committed .fusionkit/ for this repo (interactive wizard)
 fusionkit codex                      # run the ensemble behind Codex (or: claude | cursor | serve)
+fusionkit init                       # scaffold a committed .fusionkit/ for this repo (interactive wizard)
+fusionkit doctor                     # check prerequisites (uv, agents, keys, git, platform capability)
 fusionkit serve                      # run the raw OpenAI/Anthropic-compatible ensemble endpoint
 fusionkit config show                # the effective config + where each value came from
 fusionkit config set budgetUsd 5     # edit any setting from the CLI (validated before writing)
@@ -63,14 +63,17 @@ are honored, and piped answers still drive prompts
 | `codex` \| `claude` \| `cursor` \| `serve` | Run the model ensemble behind a coding harness (or `serve` to print raw-endpoint setup). The headline product path. | `packages/cli/src/commands/fusion.ts` |
 | `fusion [tool]` | The generic launcher behind the per-tool shortcuts; omit the tool on a TTY to pick interactively. `fusion stop` reaps portless singleton services. | `packages/cli/src/commands/fusion.ts` |
 | `init` | Scaffold a committed `.fusionkit/` folder (panel, judge, tool, prompts, extras, named ensembles) for a repo. | `packages/cli/src/commands/fusion.ts` |
+| `setup` | Pre-provision (warm) the pinned `fusionkit` engine into the `uvx` cache; `--force` re-warms, `--fusionkit-dir` targets a local checkout. | `packages/cli/src/commands/setup.ts` |
+| `doctor`, `status` | Preflight the environment (prerequisites, per-platform capability, engine-cached state) and preview the effective fusion config + run plan. `doctor --provision` also warms the engine. | `packages/cli/src/commands/doctor.ts` |
 | `config` | Inspect **and edit** the one config source of truth: `config show` / `path` / `get` / `set` / `unset` / `edit` / `export-yaml`. | `packages/cli/src/commands/config.ts` |
 | `prompts` | Manage the judge/synthesizer prompt overrides: `prompts list` / `prompts edit <id>` (opens `$EDITOR`, seeded from the engine default) / `prompts reset <id>`, with `--ensemble` for per-ensemble overrides. | `packages/cli/src/commands/prompts.ts` |
 | `sessions` | List, inspect, and remove durable gateway sessions: `sessions [list]` / `sessions show <id>` / `sessions rm <id>`. | `packages/cli/src/commands/sessions.ts` |
 | `models` | Manage the local MLX model cache: `models list` / `models download` / `models rm`. | `packages/cli/src/commands/models.ts` |
-| `local <tool>` | Back a vendor agent (claude / codex / opencode / cursor) with a single local model and no fusion. | `packages/cli/src/commands/local.ts` |
-| `ensemble` | Manage named ensembles (`list` / `add` / `edit` / `remove` / `rename` / `use`) plus the lower-level harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts`, `ensemble-config.ts` |
-| `setup` | Pre-provision (warm) the pinned `fusionkit` engine into the `uvx` cache; `--force` re-warms, `--fusionkit-dir` targets a local checkout. | `packages/cli/src/commands/setup.ts` |
-| `doctor`, `status` | Preflight the environment (prerequisites, per-platform capability, engine-cached state) and preview the effective fusion config + run plan. `doctor --provision` also warms the engine. | `packages/cli/src/commands/doctor.ts` |
+| `ensemble` | Manage named ensembles (`list` / `add` / `edit` / `remove` / `rename` / `use`) plus advanced maintainer harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts`, `ensemble-config.ts` |
+| `local <tool>` | Back a vendor agent (claude / codex / opencode / cursor) with a single local MLX model and no fusion; for a fused local panel use `fusionkit codex --local`. | `packages/cli/src/commands/local.ts` |
+| `completion <shell>` | Print a static shell completion script for bash, zsh, or fish (advanced). | `packages/cli/src/commands/completion.ts` |
+| `runtime` | Advanced maintainer inspection of runtime-kernel workflows and composition primitives. | `packages/cli/src/commands/runtime.ts` |
+| `version` | Print the npm CLI and pinned Python synthesizer version matrix. | `packages/cli/src/commands/version.ts` |
 
 ## The ensemble launchers (`codex` / `claude` / `cursor` / `serve`)
 
@@ -96,7 +99,7 @@ Shared flags (full list in `applyFusionOptions`):
 | `--key-env ID=ENV` | Env var holding a model's API key. | core |
 | `--ensemble NAME` | The session-default ensemble from `.fusionkit/fusion.json` (all defined ensembles still register as their own `fusion-<name>` models). | core |
 | `--judge-model MODEL` | Model used for judge synthesis (applies to the selected ensemble). | core |
-| `--local` / `--no-local` | Use the local MLX trio instead of the cloud panel. | core |
+| `--local` / `--no-local` | Run the panel on local MLX models (Apple Silicon only) instead of cloud providers. | core |
 | `--observe` / `--no-observe` | Boot the local scope dashboard and stream trace events. | core |
 | `--repo DIR` | The coding workspace the panel fuses over. | core |
 | `--synthesis-url URL` / `--fusionkit-dir DIR` | Reuse a running `fusionkit serve`, or run a local FusionKit checkout (dev override). | core |
@@ -164,3 +167,18 @@ fusionkit ensemble remove quick
 ```
 
 The full model is documented in [Configuration](configuration.md).
+
+## Environment variables
+
+| Variable | Meaning |
+| --- | --- |
+| `FUSIONKIT_DIR` | Local FusionKit checkout for the Python engine (`uv run --package fusionkit ...`). |
+| `FUSIONKIT_NO_TUI` | Force plain output instead of the TUI. |
+| `FUSIONKIT_SESSIONS_DIR` | Durable session store (default: `~/.fusionkit/sessions`). |
+| `FUSIONKIT_CONSENT_PATH` | Cloud-panel cost consent file override (mostly tests/CI). |
+| `FUSIONKIT_SKIP_KEY_VALIDATION` | Skip live provider-key validation when set to `1`. |
+| `PORTLESS` | Set to `0` to disable portless routing by default. |
+| `PORTLESS_STATE_DIR`, `PORTLESS_TLD` | Portless proxy state directory and local domain. |
+
+Deprecated `WARRANT_*` aliases for canonical `FUSIONKIT_*` names are still
+honored for compatibility; prefer `FUSIONKIT_*` in new scripts and docs.

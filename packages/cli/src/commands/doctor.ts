@@ -3,7 +3,8 @@
  * `fusionkit status` — the effective config + a dry-run preview. Both render
  * through the presenter and support `--json` for scripting/CI.
  */
-import { join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { delimiter, join, resolve } from "node:path";
 
 import type { Command } from "commander";
 
@@ -32,6 +33,8 @@ import type { CommandContext } from "../shared/context.js";
 import { toolRegistry } from "../tools.js";
 
 type Check = { label: string; ok: boolean; detail?: string; hint?: string };
+type CredentialCheck = { env: string; present: boolean; members: string[] };
+type FusionkitPathEntry = { path: string; realpath: string };
 
 /** One machine-readable doctor entry. */
 type DoctorEntry = {
@@ -45,6 +48,114 @@ type DoctorEntry = {
 function keyPresent(name: string): boolean {
   const value = process.env[name];
   return value !== undefined && value.length > 0;
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
+}
+
+function keyEnvFor(spec: PanelModelSpec): string | undefined {
+  const provider = spec.provider ?? "mlx";
+  return spec.keyEnv ?? defaultKeyEnv(provider);
+}
+
+function credentialChecks(panel: readonly PanelModelSpec[]): CredentialCheck[] {
+  const byEnv = new Map<string, string[]>();
+  for (const spec of panel) {
+    if (spec.auth !== undefined) continue;
+    const env = keyEnvFor(spec);
+    if (env === undefined) continue;
+    byEnv.set(env, [...(byEnv.get(env) ?? []), spec.id]);
+  }
+  return [...byEnv.entries()]
+    .map(([env, members]) => ({ env, present: keyPresent(env), members }))
+    .sort((left, right) => left.env.localeCompare(right.env));
+}
+
+function configuredPanels(config: FusionConfig | undefined): PanelModelSpec[] {
+  const panels: PanelModelSpec[] = [];
+  for (const ensemble of Object.values(config?.ensembles ?? {})) {
+    panels.push(...(ensemble.panel ?? []));
+  }
+  return panels;
+}
+
+function acceptedCredentialEnvs(config: FusionConfig | undefined): string[] {
+  const defaultEnvs = DEFAULT_CLOUD_PANEL.map((spec) => keyEnvFor(spec)).filter((env): env is string => env !== undefined);
+  const configuredEnvs = configuredPanels(config)
+    .map((spec) => keyEnvFor(spec))
+    .filter((env): env is string => env !== undefined);
+  return unique([...defaultEnvs, "OPENROUTER_API_KEY", ...configuredEnvs]);
+}
+
+function scanFusionkitPath(pathValue: string | undefined = process.env.PATH): FusionkitPathEntry[] {
+  const entries: FusionkitPathEntry[] = [];
+  for (const dir of pathValue?.split(delimiter) ?? []) {
+    if (dir.length === 0) continue;
+    const candidate = join(dir, "fusionkit");
+    if (!existsSync(candidate)) continue;
+    let realpath = candidate;
+    try {
+      realpath = realpathSync(candidate);
+    } catch {
+      // best-effort: a broken entry is still useful to show in doctor output.
+    }
+    entries.push({ path: candidate, realpath });
+  }
+  return entries;
+}
+
+function currentCliRealpath(): string {
+  const current = resolve(process.argv[1] ?? "");
+  try {
+    return realpathSync(current);
+  } catch {
+    return current;
+  }
+}
+
+function reportFusionkitBinary(presenter: Presenter, report: DoctorEntry[]): void {
+  const entries = scanFusionkitPath();
+  const current = currentCliRealpath();
+  presenter.blank();
+  presenter.heading("fusionkit binary on PATH");
+  if (entries.length === 0) {
+    presenter.status("pending", "fusionkit", "not found on PATH (running this CLI by path)");
+    report.push({ section: "binaries", label: "fusionkit on PATH", ok: true, detail: "not found on PATH" });
+    return;
+  }
+
+  const first = entries[0];
+  if (first === undefined) {
+    presenter.status("pending", "fusionkit", "not found on PATH (running this CLI by path)");
+    report.push({ section: "binaries", label: "fusionkit on PATH", ok: true, detail: "not found on PATH" });
+    return;
+  }
+  const firstIsCurrent = first?.realpath === current;
+  const other = entries.find((entry) => entry.realpath !== current);
+  if (firstIsCurrent && other === undefined) {
+    presenter.status("ok", "fusionkit", first.path, "@fusionkit/cli npm front door");
+    report.push({ section: "binaries", label: "fusionkit on PATH", ok: true, detail: first.path });
+    return;
+  }
+
+  const detail =
+    firstIsCurrent && other !== undefined
+      ? `${other.path} is later on PATH (shadowed by this npm CLI)`
+      : `${first?.path ?? "fusionkit"} resolves before this npm CLI`;
+  presenter.status(
+    "warn",
+    "fusionkit",
+    detail,
+    "npm @fusionkit/cli is the front door; PyPI fusionkit is the Python engine and also installs `fusionkit`"
+  );
+  report.push({
+    section: "binaries",
+    label: "fusionkit on PATH",
+    ok: false,
+    detail,
+    hint: "ensure your shell resolves the npm @fusionkit/cli binary first"
+  });
 }
 
 function statusFor(check: Check): StatusKind {
@@ -119,6 +230,7 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   presenter.line(`  ${dim(`full matrix: ${bold("fusionkit version")}`)}`);
   report.push({ section: "versions", label: "@fusionkit/cli", ok: true, detail: cliVersion });
   report.push({ section: "versions", label: "synthesizer (pinned)", ok: true, detail: FUSIONKIT_PYPI_VERSION });
+  reportFusionkitBinary(presenter, report);
 
   const runner = hasBinary("uvx") || hasBinary("uv");
   const checks: Check[] = [];
@@ -130,6 +242,16 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   checks.push({ label: "git (repo detection)", ok: hasBinary("git"), hint: "install git" });
 
   const repoRoot = gitToplevel(process.cwd());
+  let config: FusionConfig | undefined;
+  let configError: string | undefined;
+  const configNotes: string[] = [];
+  if (repoRoot !== undefined) {
+    try {
+      config = loadFusionConfig(repoRoot, (message) => configNotes.push(message));
+    } catch (error) {
+      configError = error instanceof FusionConfigError ? error.message : String(error);
+    }
+  }
   checks.push({
     label: "inside a git repository",
     ok: repoRoot !== undefined,
@@ -163,40 +285,40 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
 
   presenter.blank();
   presenter.heading("provider keys (needed by the cloud panel)");
-  // The default cloud panel's providers, resolved through the provider secret
-  // registry — stays in sync when the default panel composition changes.
-  const panelKeyEnvs = [
-    ...new Set(
-      DEFAULT_CLOUD_PANEL.flatMap((spec) => {
-        const keyEnv = spec.provider !== undefined ? defaultKeyEnv(spec.provider) : undefined;
-        return keyEnv !== undefined ? [keyEnv] : [];
-      })
-    )
-  ];
-  for (const name of panelKeyEnvs) {
+  const defaultCredentialChecks = credentialChecks(DEFAULT_CLOUD_PANEL);
+  const acceptedKeyEnvs = acceptedCredentialEnvs(config);
+  for (const name of acceptedKeyEnvs) {
     const ok = keyPresent(name);
+    const defaultMembers = defaultCredentialChecks.find((check) => check.env === name)?.members ?? [];
+    const memberDetail = defaultMembers.length > 0 ? ` (${defaultMembers.join(", ")})` : "";
     presenter.status(
       ok ? "ok" : "fail",
       name,
-      ok ? "set" : "not set",
+      `${ok ? "set" : "not set"}${memberDetail}`,
       ok ? undefined : `export ${name}=... (or add it to .env)`
     );
     report.push({ section: "keys", label: name, ok, detail: ok ? "set" : "not set" });
   }
+  const anyCredentials = acceptedKeyEnvs.some((name) => keyPresent(name));
+  const missingDefaultKeys = defaultCredentialChecks.filter((check) => !check.present);
+  const presentDefaultKeys = defaultCredentialChecks.filter((check) => check.present);
 
   // Per-platform capability: cloud everywhere; local MLX on Apple Silicon only.
   presenter.blank();
   presenter.heading("platform capability");
+  const host = detectHost();
   for (const cap of platformCapabilities()) {
     presenter.status(cap.ok ? "ok" : "pending", cap.label, `— ${cap.detail}`);
     report.push({ section: "platform", label: cap.label, ok: cap.ok, detail: cap.detail });
   }
+  const localCapable = host.appleSilicon;
 
   // Is the pinned Python engine already provisioned (warmed into the uv cache)?
   // Probing it offline is fast either way and tells the user whether the first
   // real run will pay a cold start.
   presenter.blank();
   presenter.heading("fusion engine (Python synthesizer)");
+  let engineWarm = false;
   if (!runner) {
     presenter.status(
       "pending",
@@ -204,6 +326,7 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
     );
     report.push({ section: "engine", label: `fusionkit@${FUSIONKIT_PYPI_VERSION}`, ok: false, detail: "no runner" });
   } else if (await engineCached()) {
+    engineWarm = true;
     presenter.status(
       "ok",
       `fusionkit@${FUSIONKIT_PYPI_VERSION} provisioned`,
@@ -238,8 +361,11 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   if (repoRoot !== undefined) {
     presenter.blank();
     presenter.heading("repo config");
-    try {
-      const config = loadFusionConfig(repoRoot, (message) => presenter.note(dim(message)));
+    for (const message of configNotes) presenter.note(dim(message));
+    if (configError !== undefined) {
+      presenter.status("fail", configError);
+      report.push({ section: "config", label: "fusion.json", ok: false, detail: configError });
+    } else {
       if (config === undefined) {
         const trio = DEFAULT_CLOUD_PANEL.map((spec) => spec.id).join(", ");
         presenter.status("pending", `no ${cyan(".fusionkit/")} yet — using built-in defaults (cloud trio: ${trio})`);
@@ -262,24 +388,59 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
         presenter.line(`    ${dim(`edit it from the CLI with ${bold("fusionkit config set")} / ${bold("fusionkit config edit")}`)}`);
         report.push({ section: "config", label: fusionConfigPath(repoRoot), ok: true, detail: panelSummary });
       }
-    } catch (error) {
-      const message = error instanceof FusionConfigError ? error.message : String(error);
-      presenter.status("fail", message);
-      report.push({ section: "config", label: "fusion.json", ok: false, detail: message });
     }
   }
 
-  const ready = runner;
+  const ready = runner && (anyCredentials || localCapable);
   if (ctx.json) {
-    ctx.emit({ ready, checks: report });
+    ctx.emit({
+      ready,
+      credentials: {
+        any: anyCredentials,
+        acceptedKeyEnvs,
+        defaultPanel: {
+          present: presentDefaultKeys.map((check) => check.env),
+          missing: missingDefaultKeys.map((check) => check.env)
+        },
+        localCapable
+      },
+      checks: report
+    });
     return ready ? 0 : 1;
   }
   presenter.blank();
   if (!ready) {
-    presenter.line(red("fusionkit needs uv/uvx to run the synthesizer. Install it, then re-run `fusionkit doctor`."));
+    if (!runner) {
+      presenter.line(red("fusionkit needs uv/uvx to run the synthesizer. Install it, then re-run `fusionkit doctor`."));
+      return 1;
+    }
+    const setupHint = engineWarm ? "" : ` Then run ${bold("fusionkit setup")} to pre-warm the engine.`;
+    presenter.line(
+      red("almost ready — no provider credentials found and local MLX is not available on this host.") +
+        ` Export one of ${bold(acceptedKeyEnvs.join(", "))}.${setupHint}`
+    );
     return 1;
   }
-  presenter.line(green("ready. Try: ") + bold("fusionkit codex"));
+  const setupHint = engineWarm ? "" : ` Run ${bold("fusionkit setup")} to pre-warm the engine.`;
+  if (presentDefaultKeys.length > 0 && missingDefaultKeys.length > 0) {
+    const skipped = missingDefaultKeys
+      .flatMap((check) => check.members.map((member) => `${member} (${check.env})`))
+      .join(", ");
+    presenter.line(
+      green("ready with a partial cloud panel.") +
+        `${setupHint} Missing panel members will be skipped: ${skipped}. Try: ${bold("fusionkit codex")}`
+    );
+    return 0;
+  }
+  if (presentDefaultKeys.length === 0 && missingDefaultKeys.length > 0) {
+    const missing = missingDefaultKeys.map((check) => check.env).join(", ");
+    presenter.line(
+      green("ready with alternate credentials or local MLX.") +
+        `${setupHint} Built-in cloud trio keys not set (${missing}); those members will be skipped. Try: ${bold("fusionkit codex")}`
+    );
+    return 0;
+  }
+  presenter.line(green("ready.") + `${setupHint} Try: ${bold("fusionkit codex")}`);
   return 0;
 }
 

@@ -139,6 +139,7 @@ const requiredFiles = [
   "packages/tool-opencode/src/index.ts",
   "packages/testkit/src/index.ts",
   "packages/cli/src/index.ts",
+  "packages/cli/src/commands/completion.ts",
   "packages/cli/src/dashboard.ts",
   "packages/cli/src/fusion-quickstart.ts",
   "packages/cli/src/fusion/env.ts",

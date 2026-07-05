@@ -2,6 +2,7 @@ import { Command } from "commander";
 
 import "./tools.js";
 import { FUSIONKIT_PYPI_VERSION } from "./fusion-quickstart.js";
+import { registerCompletion } from "./commands/completion.js";
 import { registerConfig } from "./commands/config.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerEnsemble } from "./commands/ensemble.js";
@@ -38,17 +39,40 @@ export function buildProgram(): Command {
     .enablePositionalOptions();
   attachGlobalFlags(program);
 
-  registerEnsemble(program);
-  registerLocal(program);
   registerFusion(program);
-  registerModels(program);
-  registerRuntime(program);
-  registerSessions(program);
-  registerConfig(program);
-  registerPrompts(program);
   registerSetup(program);
   registerDoctor(program);
+  registerConfig(program);
+  registerPrompts(program);
+  registerSessions(program);
+  registerModels(program);
+  registerEnsemble(program);
+  registerLocal(program);
+  registerCompletion(program);
+  registerRuntime(program);
   registerVersion(program);
+
+  program.addHelpText(
+    "after",
+    [
+      "",
+      "Quickstart:",
+      "  fusionkit setup                         # one-time: warm the fusion engine",
+      "  cd your-git-repo && fusionkit codex     # fuse a model panel behind Codex",
+      "  fusionkit init                          # commit a .fusionkit/ panel config for the repo",
+      "Docs: https://fusionkit.velum-labs.com",
+      "",
+      "Environment variables:",
+      "  FUSIONKIT_DIR                  local FusionKit checkout for the Python engine",
+      "  FUSIONKIT_NO_TUI               force plain output instead of the TUI",
+      "  FUSIONKIT_SESSIONS_DIR         durable session store (default: ~/.fusionkit/sessions)",
+      "  FUSIONKIT_CONSENT_PATH         cloud-panel cost consent file override",
+      "  FUSIONKIT_SKIP_KEY_VALIDATION  skip live provider-key validation when set to 1",
+      "  PORTLESS                       set to 0 to disable portless routing by default",
+      "  PORTLESS_STATE_DIR/TLD         portless proxy state directory and local domain",
+      "  WARRANT_*                      deprecated aliases for FUSIONKIT_* are still honored"
+    ].join("\n")
+  );
 
   return program;
 }

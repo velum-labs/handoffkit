@@ -283,14 +283,14 @@ async function runEnsembleE2E(task: string[], opts: EnsembleE2EOpts): Promise<vo
 
 export function registerEnsemble(program: Command): void {
   const ensemble = new Command("ensemble").description(
-    "manage named ensembles + local ensemble/harness tooling"
+    "manage named ensembles; advanced subcommands are harness-dev tools"
   );
 
   registerEnsembleConfig(ensemble);
 
   ensemble
     .command("run")
-    .description("run local ensemble smoke")
+    .description("advanced/maintainer: run a local ensemble smoke")
     .argument("[task...]", "task prompt")
     .option("--harness <h>", "harness to run: mock | command", "mock")
     .option("--command <cmd>", "shell command for command harness")
@@ -306,7 +306,7 @@ export function registerEnsemble(program: Command): void {
 
   ensemble
     .command("handoff")
-    .description("FusionKit stdin/stdout handoff executor")
+    .description("advanced/maintainer: FusionKit stdin/stdout handoff executor")
     .argument("[extra...]", "(handoff reads its task from stdin)")
     .option("--harness <h>", "mock | command | claude-code | codex", "mock")
     .option("--command <cmd>", "shell command for command harness")
@@ -321,7 +321,7 @@ export function registerEnsemble(program: Command): void {
 
   ensemble
     .command("dashboard")
-    .description("generate harness smoke dashboard")
+    .description("advanced/maintainer: generate a harness smoke dashboard")
     .argument("[extra...]", "(dashboard takes no positional arguments)")
     .option("--repo <dir>", "workspace repository", ".")
     .option("--out <dir>", "output directory")
@@ -331,7 +331,7 @@ export function registerEnsemble(program: Command): void {
 
   ensemble
     .command("e2e")
-    .description("unified FusionKit-backed harness matrix")
+    .description("advanced/maintainer: run the unified FusionKit-backed harness matrix")
     .argument("[task...]", "task prompt")
     .option("--fusion-backend <url>", "FusionKit/OpenAI-compatible backend URL")
     .option("--harness <target>", "mock | command | codex | claude-code | cursor-acp | cursor-desktop (repeatable)", collect)
