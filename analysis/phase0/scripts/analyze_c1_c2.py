@@ -16,7 +16,6 @@ import duckdb
 import numpy as np
 import yaml
 
-
 ROOT = Path("/workspace")
 OUT = ROOT / "analysis" / "phase0"
 CACHE = OUT / "cache"
@@ -191,7 +190,9 @@ def read_yaml(path: Path) -> dict[str, Any]:
 
 
 def official_swe_tasks(split: str) -> dict[str, str]:
-    dataset = "princeton-nlp%2FSWE-bench_Verified" if split == "verified" else "princeton-nlp%2FSWE-bench"
+    dataset = (
+        "princeton-nlp%2FSWE-bench_Verified" if split == "verified" else "princeton-nlp%2FSWE-bench"
+    )
     files = http_json(f"https://datasets-server.huggingface.co/parquet?dataset={dataset}")
     urls = [f["url"] for f in files["parquet_files"] if f.get("split") == "test"]
     con = duckdb.connect()
@@ -199,7 +200,10 @@ def official_swe_tasks(split: str) -> dict[str, str]:
         "select instance_id, repo from read_parquet(?)",
         params=[urls],
     ).fetchall()
-    return {str(instance_id): str(repo).split("/")[1] if "/" in str(repo) else str(repo) for instance_id, repo in rows}
+    return {
+        str(instance_id): str(repo).split("/")[1] if "/" in str(repo) else str(repo)
+        for instance_id, repo in rows
+    }
 
 
 def load_swebench(split: str) -> MatrixData:
@@ -224,7 +228,9 @@ def load_swebench(split: str) -> MatrixData:
             models = [models]
         model_key = "; ".join(str(m) for m in models)
         engines = sorted({base_engine(str(m)) for m in models if str(m).strip()})
-        engine = "+".join(engines) if engines else f"system/{family_from_name(display or submission)}"
+        engine = (
+            "+".join(engines) if engines else f"system/{family_from_name(display or submission)}"
+        )
         system_id = submission
         systems[system_id] = SystemInfo(
             system_id=system_id,
@@ -348,7 +354,9 @@ def load_llmrouterbench_dataset(dataset: str) -> MatrixData:
         f"Kept model files with >=80% coverage over {len(all_tasks)} tasks; excluded OpenRouter router baseline.",
         note,
     ]
-    return MatrixData(f"llmrouterbench_{dataset.replace('-', '')}", title, "A", y, clusters, systems, notes)
+    return MatrixData(
+        f"llmrouterbench_{dataset.replace('-', '')}", title, "A", y, clusters, systems, notes
+    )
 
 
 def common_tasks(y: dict[str, dict[str, float]], subset: tuple[str, ...] | list[str]) -> list[str]:
@@ -366,11 +374,19 @@ def pass_rate(y: dict[str, dict[str, float]], system: str) -> float:
     return float(np.mean(list(row.values()))) if row else float("nan")
 
 
-def oracle_on_tasks(y: dict[str, dict[str, float]], subset: tuple[str, ...] | list[str], tasks: list[str]) -> float:
-    return float(np.mean([max(y[system][task] for system in subset) for task in tasks])) if tasks else float("nan")
+def oracle_on_tasks(
+    y: dict[str, dict[str, float]], subset: tuple[str, ...] | list[str], tasks: list[str]
+) -> float:
+    return (
+        float(np.mean([max(y[system][task] for system in subset) for task in tasks]))
+        if tasks
+        else float("nan")
+    )
 
 
-def headroom_on_tasks(y: dict[str, dict[str, float]], subset: tuple[str, ...] | list[str], tasks: list[str]) -> float:
+def headroom_on_tasks(
+    y: dict[str, dict[str, float]], subset: tuple[str, ...] | list[str], tasks: list[str]
+) -> float:
     if not tasks:
         return float("nan")
     best = max(mean_on_tasks(y, system, tasks) for system in subset)
@@ -454,7 +470,9 @@ def all_panels(
             dep = []
             floors_met = True
             for a, b in itertools.combinations(combo, 2):
-                phi, stats = pairwise_failure_dependence(data.y, a, b, allow_fractional=allow_fractional)
+                phi, stats = pairwise_failure_dependence(
+                    data.y, a, b, allow_fractional=allow_fractional
+                )
                 floors_met = floors_met and bool(stats["floors_met"])
                 dep.append(
                     {
@@ -512,7 +530,9 @@ def clustered_ci(
 def best_panel_headroom_ci(data: MatrixData, panel: dict[str, Any]) -> tuple[float, float]:
     systems = panel["systems"]
     tasks = common_tasks(data.y, systems)
-    return clustered_ci(tasks, data.clusters, lambda sampled: headroom_on_tasks(data.y, systems, sampled))
+    return clustered_ci(
+        tasks, data.clusters, lambda sampled: headroom_on_tasks(data.y, systems, sampled)
+    )
 
 
 def split_clusters(data: MatrixData, tasks: list[str]) -> tuple[set[str], set[str]]:
@@ -529,7 +549,9 @@ def tasks_for_clusters(data: MatrixData, clusters: set[str]) -> list[str]:
     return sorted(task for task, cluster in data.clusters.items() if cluster in clusters)
 
 
-def exhaustive_select(data: MatrixData, candidates: list[str], k: int, tasks: list[str]) -> tuple[list[str], float]:
+def exhaustive_select(
+    data: MatrixData, candidates: list[str], k: int, tasks: list[str]
+) -> tuple[list[str], float]:
     best_combo: tuple[str, ...] | None = None
     best_score = -1.0
     for combo in itertools.combinations(candidates, k):
@@ -545,7 +567,9 @@ def exhaustive_select(data: MatrixData, candidates: list[str], k: int, tasks: li
     return list(best_combo or []), best_score
 
 
-def greedy_select(data: MatrixData, candidates: list[str], k: int, tasks: list[str]) -> tuple[list[str], float]:
+def greedy_select(
+    data: MatrixData, candidates: list[str], k: int, tasks: list[str]
+) -> tuple[list[str], float]:
     selected: list[str] = []
     remaining = list(candidates)
     while len(selected) < k:
@@ -567,7 +591,9 @@ def greedy_select(data: MatrixData, candidates: list[str], k: int, tasks: list[s
         selected.append(best_system)
         remaining.remove(best_system)
     selected_tasks = [task for task in tasks if all(task in data.y[s] for s in selected)]
-    return selected, oracle_on_tasks(data.y, selected, selected_tasks) if selected_tasks else float("nan")
+    return selected, oracle_on_tasks(data.y, selected, selected_tasks) if selected_tasks else float(
+        "nan"
+    )
 
 
 def topk_by_average(data: MatrixData, candidates: list[str], k: int, tasks: list[str]) -> list[str]:
@@ -608,7 +634,11 @@ def c2_for_data(data: MatrixData) -> list[dict[str, Any]]:
         greedy_panel, greedy_oracle = greedy_select(data, candidates, k, train_tasks)
         if len(comp_panel) != k or len(base_panel) != k:
             continue
-        heldout_common = [task for task in heldout_tasks if all(task in data.y[s] for s in set(comp_panel + base_panel))]
+        heldout_common = [
+            task
+            for task in heldout_tasks
+            if all(task in data.y[s] for s in set(comp_panel + base_panel))
+        ]
         comp_oracle = oracle_on_tasks(data.y, comp_panel, heldout_common)
         base_oracle = oracle_on_tasks(data.y, base_panel, heldout_common)
         comp_headroom = headroom_on_tasks(data.y, comp_panel, heldout_common)
@@ -618,8 +648,9 @@ def c2_for_data(data: MatrixData) -> list[dict[str, Any]]:
         ci = clustered_ci(
             heldout_common,
             data.clusters,
-            lambda sampled, c=comp_panel, b=base_panel: oracle_on_tasks(data.y, c, sampled)
-            - oracle_on_tasks(data.y, b, sampled),
+            lambda sampled, c=comp_panel, b=base_panel: (
+                oracle_on_tasks(data.y, c, sampled) - oracle_on_tasks(data.y, b, sampled)
+            ),
         )
         pass_status = "pass" if ci[0] > 0 else "fail" if ci[1] < 0 else "inconclusive"
         rows.append(
@@ -742,7 +773,9 @@ def write_preregistration(data_sets: list[MatrixData], overwrite: bool = False) 
     for data in data_sets:
         systems = sorted(data.systems.values(), key=lambda s: s.display_name)
         duplicate_bases = [
-            base for base, count in Counter(system.base_engine for system in systems).items() if count > 1
+            base
+            for base, count in Counter(system.base_engine for system in systems).items()
+            if count > 1
         ]
         if data.source_id.startswith("swe_"):
             universe_rule = "all SWE-bench experiment submissions in this split with submission id dated 2025-01-01 or later; full split attempted by policy; unresolved is failure"
@@ -801,9 +834,28 @@ def analyze_swe_family(data: MatrixData) -> dict[str, Any] | None:
     if not candidates:
         return None
     family, systems = candidates[0]
-    panels = all_panels(data, top_systems_by_rate(MatrixData(data.source_id, data.title, data.tier_label, {s: data.y[s] for s in systems}, data.clusters, {s: data.systems[s] for s in systems}, data.notes), min(10, len(systems))), (2, 3))
+    panels = all_panels(
+        data,
+        top_systems_by_rate(
+            MatrixData(
+                data.source_id,
+                data.title,
+                data.tier_label,
+                {s: data.y[s] for s in systems},
+                data.clusters,
+                {s: data.systems[s] for s in systems},
+                data.notes,
+            ),
+            min(10, len(systems)),
+        ),
+        (2, 3),
+    )
     if not panels:
-        return {"family": family, "n_systems": len(systems), "note": "No feasible unique-base panel."}
+        return {
+            "family": family,
+            "n_systems": len(systems),
+            "note": "No feasible unique-base panel.",
+        }
     best = panels[0]
     ci = best_panel_headroom_ci(data, best)
     return {
@@ -848,13 +900,21 @@ def run_analysis(data_sets: list[MatrixData]) -> None:
                 "best": best,
                 "headroom_ci": ci,
                 "top5": top5,
-                "swe_family": analyze_swe_family(data) if data.source_id.startswith("swe_") else None,
+                "swe_family": analyze_swe_family(data)
+                if data.source_id.startswith("swe_")
+                else None,
             }
         c2_rows.extend(c2_for_data(data))
     write_csv(OUT / "c1_top_panels.csv", c1_rows)
     write_csv(OUT / "c2_results.csv", flatten_c2_rows(c2_rows))
     write_csv(OUT / "source_system_universe.csv", system_rows)
-    write_csv(OUT / "data_summary.csv", [{k: round(v, 6) if isinstance(v, float) else v for k, v in row.items()} for row in summaries])
+    write_csv(
+        OUT / "data_summary.csv",
+        [
+            {k: round(v, 6) if isinstance(v, float) else v for k, v in row.items()}
+            for row in summaries
+        ],
+    )
     write_report(data_sets, summaries, c1_detail, c2_rows)
 
 
@@ -895,9 +955,14 @@ def write_report(
             continue
         best = detail["best"]
         ci_low, ci_high = detail["headroom_ci"]
-        if best["headroom"] >= 0.05 and best["phi_floors_met"] and best["n_common"] >= PHI_MIN_COMMON:
+        if (
+            best["headroom"] >= 0.05
+            and best["phi_floors_met"]
+            and best["n_common"] >= PHI_MIN_COMMON
+        ):
             c1_pass_sources.append(data.source_id)
     c2_pass = [row for row in c2_rows if row["status"] == "pass"]
+    c2_pass_labels = [f"{row['source_id']} K={row['k']}" for row in c2_pass]
     c2_fail_all = c2_rows and all(row["status"] == "fail" for row in c2_rows)
     overall_c1 = "PASS" if c1_pass_sources else "INCONCLUSIVE"
     overall_c2 = "PASS" if c2_pass else "FAIL" if c2_fail_all else "INCONCLUSIVE"
@@ -915,7 +980,7 @@ def write_report(
         ),
         f"- C2 selection-value verdict: **{overall_c2}**. "
         + (
-            f"Registered pass found for {', '.join(f'{r['source_id']} K={r['k']}' for r in c2_pass)}."
+            f"Registered pass found for {', '.join(c2_pass_labels)}."
             if c2_pass
             else "No held-out Delta_oracle CI lower bound is > 0."
         ),

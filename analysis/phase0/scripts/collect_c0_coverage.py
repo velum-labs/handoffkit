@@ -7,13 +7,12 @@ import time
 import urllib.request
 import zipfile
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import duckdb
 import yaml
-
 
 ROOT = Path("/workspace")
 OUT = ROOT / "analysis" / "phase0"
@@ -56,7 +55,6 @@ def normalize(s: str) -> str:
 
 
 def base_group(model: str) -> str | None:
-    raw = model.lower()
     n = normalize(model)
     if "gpt-4-1" in n:
         return "openai/gpt-4.1 family"
@@ -293,7 +291,7 @@ def collect_livebench() -> tuple[dict[str, Any], list[dict[str, Any]], list[dict
                 "base_group": base_group(model) or "",
                 "total_rows": int(total_rows),
                 "coding_rows": int(coding_rows or 0),
-                "latest_utc": datetime.fromtimestamp(float(latest), tz=timezone.utc).date().isoformat()
+                "latest_utc": datetime.fromtimestamp(float(latest), tz=UTC).date().isoformat()
                 if latest
                 else "",
             }
@@ -601,15 +599,6 @@ def write_report(
     term_summary: dict[str, Any],
     systems: list[dict[str, Any]],
 ) -> None:
-    tier_groups = [
-        row
-        for row in groups
-        if row["swebench_rows"]
-        or row["llmrouterbench_rows"]
-        or row["livebench_coding_rows"]
-        or row["bigcodebench_rows"]
-        or row["terminalbench_rows"]
-    ]
     dense_deployable = [
         row
         for row in groups
@@ -653,7 +642,7 @@ def write_report(
     eval_asset_count = sum(1 for f in big_archive_files if f["path"].endswith("_eval_results.json"))
     content = f"""# C0 deployable-model public coverage
 
-Generated: {datetime.now(timezone.utc).isoformat(timespec="seconds")}
+Generated: {datetime.now(UTC).isoformat(timespec="seconds")}
 
 ## C0 verdict
 
@@ -730,7 +719,7 @@ def main() -> None:
     (OUT / "c0_raw_summary.json").write_text(
         json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "elapsed_seconds": round(time.time() - start, 2),
                 "livebench": live_summary,
                 "livebench_categories": live_categories,
