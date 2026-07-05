@@ -304,7 +304,14 @@ tested, telemetered property:
   calibration pass (§4) is re-run per model release, and its ranges are
   versioned artifacts.
 
-## 10. Performance model (napkin math, anchored)
+## 10. Performance model (two independent methods)
+
+Two estimates that fail differently: (a) **anchored** — scale published
+system measurements through our optimization stack; (b) **first
+principles** — count operations and bytes from hardware limits. Their
+agreement window is the design target.
+
+### 10a. Anchored (top-down)
 
 Anchors: Sylph Llama-3-8B decode 12s/token (4×B200), prefill 20–26s for 128
 encrypted tokens; Cerium bootstrap 7.5ms (B200); MOAI bootstrap share ~80%
@@ -323,32 +330,75 @@ actually touches:
 | **Subtotal (per sequential step)** | | **~3.4s/token** |
 | Speculative decoding (client draft) | 2–4× on sequential step count | **~1–2s/token effective** |
 
-Estimates for the 8B target:
+Single GPU: topology B ~1.5–3s/effective token (decode loses the modest
+multi-GPU scaling; Sylph decode scales only 31s → 18s from 1 → 8 GPUs);
+topology A ~1–2s (bootstrap term removed, refresh RTTs added, 2–4× from
+smaller parameters). Caveats: Sylph/Cerium gains overlap; ENSI's 8× was CPU
+at 3B; ct-ct attention grows with private context.
 
-- 4×B200 node (reference): realistic **1–2s per effective token**; prefill
-  6–8s (128 encrypted tokens); 4k public + 128 private context ~20–25s.
-  Optimistic (full composition + sigmoid-attention depth savings):
-  **0.5–1s**.
-- **Single GPU, topology B** (GPU bootstrapping): decode loses the modest
-  multi-GPU scaling → **~1.5–3s per effective token**; prefill ~30–60s for
-  128 encrypted tokens (prefill is what parallelizes, so it takes the hit).
-- **Single GPU, topology A** (leveled-only + LAN-class refresh agent):
-  removes the bootstrap term, adds ~0.5–2s/token of refresh round trips,
-  and shrinks all remaining ops 2–4× via smaller parameters → **~1–2s per
-  effective token on one GPU**, competitive with the 4-GPU topology-B
-  estimate. Contingent on the flooding-per-refresh analysis (§3.1).
-- Speed-of-light floor (refresh-only, ~2/layer × 32 layers × 7.5ms GPU
-  bootstrap): **~0.5s/token** per sequential step.
-- 4B model: roughly 2–3× cheaper → **2–5 effective tok/s** plausible.
+### 10b. First principles (bottom-up)
 
-Cost: single-GPU unit ~$2–8/hr → **sub-cent to ~$0.01 per token**; 4×B200
-reference node ~$25–40/hr → $0.005–0.04. Overhead vs plaintext:
-~10^3–10^4×.
+**The atom.** GPU FHE is memory-bandwidth-bound; the unit of account is the
+**key-switch** (every rotation and relinearization). At N=2^16, avg level
+ℓ≈15 limbs (topology A leveled-only): limb-poly = 0.5MB, ciphertext ≈ 15MB;
+one hybrid key-switch (dnum=3) streams ~85–130MB (ciphertext + key
+material) → **~25–60µs at ~5TB/s effective** (B200-class). Ciphertext
+additions (all a ternary linear layer is) move ~30MB with no keys: ~5–10µs,
+and fuse — rounding error.
 
-Known non-composabilities (why the realistic band is wide): Sylph and Cerium
-optimizations overlap; ENSI's 8× was measured at 3B on CPU without real
-bootstrapping; ct-ct attention grows with *private* context; deeper models
-may need higher-precision (slower) bootstraps.
+**Counts per layer, per speculative block of k=8 positions** (8×4096 =
+32,768 values = full slot occupancy of one ciphertext — blocks are a
+*slot-filling* mechanism, not just a step-count trick):
+
+| Component | Key-switches | Notes |
+|---|---|---|
+| QKV+O+FFN matmuls | ~30–60 | ternary column-packed = additions; only log-tree reductions rotate |
+| Attention ct-ct (GQA, few hundred cached tokens) | ~50–100 | BSGS CC-MM; grows with private context |
+| Sigmoid attn + 2 norms (deg-8 polys, Goldschmidt) | ~25–40 | Paterson–Stockmeyer |
+| **Per layer** | **~120–200** | |
+
+Forward pass: 32 layers × ~150 + LM head (128k vocab, ternary) ≈ **~5,500
+key-switches per block** → 0.15–0.35s compute. Topology-A refreshes: depth
+~10–14 levels/layer (nonlinearities only) → ~20–30 sequential refresh
+points × ~2–3ms (one ~4MB low-level ciphertext each way, intra-region) →
+~0.05–0.1s. Block yields ~5–6 effective tokens (70% acceptance) →
+**~40–90ms per effective token** if everything composes perfectly.
+
+**Physics floor**: mandatory key-material streaming, a few thousand
+key-switches × ~100MB ≈ hundreds of GB per block → **~5–10ms per effective
+token** on current memory systems. (Plaintext 8B decode moves ~2GB/token ≈
+0.4ms — the residual FHE tax is key material: ~50–100× more bytes per
+useful op.)
+
+### 10c. Reconciliation and target
+
+| Method | Per effective token (8B, 1 GPU) |
+|---|---|
+| Anchored (10a) | ~1–2s |
+| First principles (10b), perfect composition | ~0.04–0.09s |
+| Physics floor | ~0.005–0.01s |
+
+Real systems land 3–10× above their first-principles model (engineering
+tax: slot under-occupancy, fusion gaps, scheduling bubbles — cf. plaintext
+megakernels reaching 78% of bandwidth as a headline result). **Converged
+design target: ~0.15–1s per effective token (8B, single GPU); 4B ~2–3×
+cheaper.** Cost: single-GPU unit ~$2–8/hr → sub-cent to ~$0.01 per token.
+Overhead vs plaintext: ~10^2–10^4× depending on execution quality.
+
+### 10d. Design lessons from the bottom-up model
+
+1. **Slot occupancy is the master variable.** Fill slots (speculative
+   blocks, multi-token heads, same-key session batching) for near-linear
+   gains; batch-1 decode wastes 7/8 of every op at k=1.
+2. **Ternary's real gift is level-freedom, not multiplication-freedom.**
+   Deleted levels shrink every key-switch (cost scales with limb count) and
+   halve refresh counts — a compounding, quasi-quadratic effect.
+3. **Topology-A refresh round trips are noise** (~0.1s/block intra-region);
+   the leveled-only bet is safer than the anchored estimate suggested.
+4. **Key-material bandwidth is the endgame.** At the floor the machine is a
+   key-streaming engine — which is why Grafting (−62% keys), LCR/AKS
+   (−12–15% rotation keys), and eventually PIM/near-memory hardware are on
+   the optimization map (see `fhe-llm-optimization-map.md`).
 
 ## 11. Context scaling
 
