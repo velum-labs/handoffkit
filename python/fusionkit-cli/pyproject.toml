@@ -29,7 +29,7 @@ dependencies = [
   "fusionkit-evals==0.8.0",
   "fusionkit-mlx==0.8.0",
   "fusionkit-server==0.8.0",
-  "typer>=0.20.0",
+  "typer>=0.26.8",
 ]
 
 [project.urls]
