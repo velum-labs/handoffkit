@@ -47,7 +47,7 @@
     "figlet": "1.11.0"
   },
   "optionalDependencies": {
-    "portless": "0.14.0"
+    "portless": "0.15.1"
   },
   "devDependencies": {
     "@types/figlet": "1.7.0"

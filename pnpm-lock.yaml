@@ -561,8 +561,8 @@ importers:
         version: 1.7.0
     optionalDependencies:
       portless:
-        specifier: 0.14.0
-        version: 0.14.0
+        specifier: 0.15.1
+        version: 0.15.1
 
   packages/cli-ui:
     dependencies:
@@ -1490,8 +1490,8 @@ packages:
     resolution: {integrity: sha512-emEcLuomt2j03vxD54giVB4SxTjnsqkU692xZOZXHDVoYyypEm+b3jpiTcc+Cf+myooc+/Ly0z01jqeNHVgJGw==}
     engines: {node: '>=16.0.0'}
 
-  portless@0.14.0:
-    resolution: {integrity: sha512-kKxmxB1DQ9gI8t+V13VhuwTXu31io5nbFubvZAE82AxzXBsvcJV7qQJbmomrQUpbVxo2UVHqs14iX4YK0BClmQ==}
+  portless@0.15.1:
+    resolution: {integrity: sha512-MQTt405HrcIa3m9OSKpH6WjJDbfNP4oFMNg0VzAoUO4B19l1eFJBFcSWfQY8KYMhzZVfa+Gea2OUrlDm8+/M4A==}
     engines: {node: '>=24'}
     os: [darwin, linux, win32]
     hasBin: true
@@ -2557,7 +2557,7 @@ snapshots:
       pvutils: 1.1.5
       tslib: 2.8.1
 
-  portless@0.14.0:
+  portless@0.15.1:
     optional: true
 
   prebuild-install@7.1.3:
