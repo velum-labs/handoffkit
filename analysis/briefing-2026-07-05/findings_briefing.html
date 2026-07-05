@@ -85,6 +85,14 @@
   .interpret{border-left:4px solid var(--blue);background:var(--blue-soft);border-radius:8px;padding:12px 16px;font-size:13.5px;margin:12px 0 0}
   .interpret h4{margin:0 0 6px;font-size:13px;color:var(--blue);text-transform:uppercase;letter-spacing:.3px}
   .interpret p{margin:0 0 8px}.interpret p:last-child{margin:0}
+  .plain{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:18px 22px;margin-bottom:14px}
+  .plain h3{margin:0 0 10px;font-size:17px;color:#166534}
+  .plain ul{margin:8px 0 0 18px;padding:0;font-size:14px}
+  .plain li{margin:6px 0}
+  .example{background:#fafafa;border:1px dashed var(--line);border-radius:8px;padding:12px 14px;margin:10px 0 0;font-size:13px;color:var(--muted)}
+  .example b{color:var(--ink)}
+  .kpi-detail{font-size:12.5px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+  .decode{font-size:13px;color:var(--muted);margin:8px 0 0;line-height:1.5}
   .intro{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px}
   .intro h3{margin:0 0 8px;font-size:17px}
   .intro p,.intro li{font-size:14px}
@@ -114,22 +122,38 @@
     <div class="chip">Pre-registered tests <b>5</b></div>
     <div class="chip">Binding decisions <b>D1–D11</b></div>
   </div>
+  <p style="margin:16px 0 0;font-size:14px;color:#e0e7ff;max-width:820px"><b>One sentence:</b> We are building a tool that runs several cheap open-source AI coding models at once and merges their answers into one — and we spent ~$34 running controlled experiments to learn <em>where</em> that idea can work, <em>where</em> it cannot, and <em>what to do next</em> before we launch.</p>
 </header>
+
+<!-- PLAIN ENGLISH SUMMARY -->
+<div class="plain" id="summary">
+  <h3>Plain English — the whole story in five bullets</h3>
+  <ul>
+    <li><b>What we're building:</b> FusionKit (part of the HandoffKit repo) — a developer CLI. You send one coding question; behind the scenes 2–4 models answer in parallel; a "judge" merges them; you get one reply. Think "committee of models" instead of one expensive model.</li>
+    <li><b>Why it might work:</b> Different models fail on different tasks. If Model A passes tasks 1–3 and Model B passes 3–5, a smart merger could pass more tasks than either alone. We measured this "extra room" (headroom) on public benchmarks — it is real (+8–12pp).</li>
+    <li><b>What we learned that surprised us:</b> You cannot pick <em>which</em> models to put on the committee by reading public leaderboard scores. That strategy lost in every rigorous test (0 wins out of 14). You have to run your own small experiments (~$6–17 each) to choose panel members.</li>
+    <li><b>Where we would launch:</b> On open-source model fields where no single model dominates ("peer-shaped"). Repo bugfix (fixing real GitHub bugs) looks best: big headroom (+17pp), real user demand, but we need engineering work before we can grade it ourselves.</li>
+    <li><b>The open bet:</b> Our merge step ("synthesis") once scored <em>above</em> the theoretical best-of-committee ceiling — suggesting merging can create new correct answers, not just pick one. That happened once, with caveats. A ~$15 pilot will test whether it replicates.</li>
+  </ul>
+</div>
 
 <!-- TLDR -->
 <div class="grid c3">
-  <div class="card kpi"><div class="v">+11 to +23pp</div><div class="l">Oracle headroom of best OSS-only panels across all 5 covered domains — the fusion opportunity is real and everywhere we looked</div></div>
-  <div class="card kpi" style="border-color:var(--red)"><div class="v">0 / 14</div><div class="l">Pre-registered cases where picking panels from public data beat "top-K by average score" out of sample — public data shortlists, it does not rank</div></div>
-  <div class="card kpi" style="border-color:var(--violet)"><div class="v">150%</div><div class="l">Capture in the one synthesis replay (fused 38.6% vs oracle ceiling 35.1%) — the wildcard that says fusion value may live in synthesis, not selection. Unreplicated; caveats apply</div></div>
+  <div class="card kpi"><div class="v">+11 to +23pp</div><div class="l">Oracle headroom of best OSS-only panels across all 5 covered domains — the fusion opportunity is real and everywhere we looked</div><div class="kpi-detail"><b>Plain English:</b> On five types of coding benchmarks, if you had a perfect referee who always picked the best answer from a 2–3 model panel, you'd solve 11–23 more tasks per 100 than the best single model alone. That gap is the "prize" fusion could win — if our merge pipeline works.</div></div>
+  <div class="card kpi" style="border-color:var(--red)"><div class="v">0 / 14</div><div class="l">Pre-registered cases where picking panels from public data beat "top-K by average score" out of sample — public data shortlists, it does not rank</div><div class="kpi-detail"><b>Plain English:</b> We tried 14 different ways to use public benchmark data to choose which models go on the committee. Smart selection never beat the dumb rule "just pick the K highest-scoring models" on held-out tasks. Leaderboards are useful for ruling models out, not for final picks.</div></div>
+  <div class="card kpi" style="border-color:var(--violet)"><div class="v">150%</div><div class="l">Capture in the one synthesis replay (fused 38.6% vs oracle ceiling 35.1%) — the wildcard that says fusion value may live in synthesis, not selection. Unreplicated; caveats apply</div><div class="kpi-detail"><b>Plain English:</b> On 60 algorithmic tasks, our merged answer passed 38.6% — higher than the theoretical "always pick the best committee member" ceiling of 35.1%. That should be impossible unless merging creates new correct answers. We saw it once; we have not proven it cleanly yet.</div></div>
 </div>
-<p class="sub" style="margin-top:-6px"><b>Reading the KPIs:</b> green story = fusion has raw material everywhere OSS models compete; red story = we cannot pick which models to fuse from public leaderboards; purple story = our synthesis engine may add value beyond "pick the best answer" — but that last one needs a clean replication (Step 3).</p>
+<p class="sub" style="margin-top:-6px"><b>Reading the KPIs:</b> Card 1 (blue) = the opportunity exists. Card 2 (red) = we cannot shortcut panel selection with public data. Card 3 (purple) = our product mechanic might be better than "pick the best" — but needs replication. All three together: worth building, but not ready to launch a score claim without more calibration.</p>
 
 <!-- START HERE -->
 <div class="intro" id="start">
   <h3>Start here — how to use this briefing</h3>
   <p>This page is a <b>decision workshop deck</b>, not a technical spec. It summarizes what we measured, what we believe, and what we could do next. Every number links back to raw CSV/JSON files in the repo; nothing here is hand-waved.</p>
+  <p><b>Who is this for?</b> Anyone joining the meeting — product, engineering, leadership — including people who have never read the capability-index docs. If a term is unfamiliar, check the <a href="#glossary">glossary</a> first; each section also has a blue "How to interpret" box.</p>
+  <p><b>What you do <em>not</em> need to know beforehand:</b> how LLM APIs work, what SWE-bench is, or our codebase. We explain benchmarks as "graded coding homework sets," panels as "committees of models," and pass rate as "fraction of homework that got an A from the auto-grader."</p>
   <p><b>Suggested reading order for a 30–45 minute meeting:</b></p>
   <ol style="margin:8px 0 0 18px;font-size:14px">
+    <li>Read the <a href="#summary">plain English summary</a> (2 min) — the whole arc without jargon.</li>
     <li>Skim <a href="#context">product context</a> and <a href="#glossary">glossary</a> if anyone is new (5 min).</li>
     <li>Read the three KPI cards above — they are the headline story.</li>
     <li>Walk sections <a href="#funnel">1</a> (where we are) → <a href="#c1">2</a>–<a href="#wildcard">7</a> (findings) — each has a blue <em>How to interpret</em> box.</li>
@@ -137,6 +161,7 @@
     <li>Use <a href="#beliefs">11</a> (belief ledger) to challenge anything that feels too strong or too weak.</li>
   </ol>
   <ul class="toc">
+    <li><a href="#summary">Summary</a></li>
     <li><a href="#context">Context</a></li>
     <li><a href="#glossary">Glossary</a></li>
     <li><a href="#charts">Chart guide</a></li>
@@ -156,48 +181,72 @@
 
 <div class="intro" id="context">
   <h3>Product context — what we are trying to build</h3>
-  <p><b>The product:</b> a CLI where developers run coding tasks through <b>ensembles</b> of models — several cheap OSS models fan out in parallel, their answers are merged ("fused") into one response, and the user sees a <b>single model</b>. Users can also build their own ensembles or use our predefined ones, each with a documented strength (e.g. "best at repo bugfix").</p>
-  <p><b>The business claim we want to make:</b> not "we beat every leaderboard" — frontier labs will always out-saturate benchmarks — but a <b>Pareto claim</b>: comparable or better coding performance at a <b>fraction of the cost</b> (score <em>and</em> dollars per solved task). Our panels are <b>OSS-first</b> (decision D8): closed models like gpt-5.5 are <em>price anchors and baselines</em>, not panel members.</p>
-  <p><b>The open engineering question:</b> which OSS models to combine, for which kind of coding work, and whether our fusion pipeline actually converts theoretical headroom into real pass-rate gains. This briefing reports progress on that question after ~$34 of measured experiments.</p>
-  <p><b>What this briefing is <em>not</em>:</b> a final launch claim, a benchmark submission, or a promise that fusion always wins. Several findings are deliberately negative ("don't fuse here", "public data can't rank panels") — those are product features, not failures.</p>
+  <p><b>The product (FusionKit):</b> a command-line tool (CLI) where a developer types a coding task — "fix this bug," "write this function" — and the tool sends that task to several AI models at once. Those models are mostly <b>open-source (OSS)</b>: publicly available weights/APIs from vendors like DeepSeek, Qwen, and Moonshot, typically much cheaper per token than closed frontier models (OpenAI GPT, Anthropic Claude). Each model returns a candidate answer. A separate <b>judge model</b> reads all candidates and produces one merged answer. The developer sees a single response, as if one model answered.</p>
+  <p><b>Why "ensemble" instead of one big model?</b> Frontier models (gpt-5.5, claude-opus) score highest on benchmarks but cost more per solved task. Our bet: a committee of cheaper OSS models, merged well, might get <em>close enough</em> on score while costing much less — a win on both axes (quality and price), which economists call a <b>Pareto improvement</b>.</p>
+  <p><b>The business claim we want to make:</b> not "we beat every leaderboard" — frontier labs will always out-saturate benchmarks — but: <em>"For repo bugfix [or another domain], our fused OSS panel solves X% of tasks at $Y per solve, vs frontier model Z at $W per solve."</em> Score <em>and</em> dollars per solved task, side by side. Our panels are <b>OSS-first</b> (decision D8): closed models like gpt-5.5 are <em>price anchors and baselines we compare against</em>, not members of the committee we sell.</p>
+  <p><b>What is a "benchmark" in this doc?</b> A fixed set of coding tasks with an automatic grader (tests that pass/fail). Example: SWE-bench Verified = real GitHub issues where success means your patch makes the project's test suite pass. We measure <b>pass rate</b> = tasks passed ÷ tasks attempted. On 60 tasks, 27 passes = 45.0%.</p>
+  <p><b>The open engineering question:</b> (1) Which OSS models to combine? (2) For which kind of coding work (domain)? (3) Does our merge pipeline actually convert theoretical headroom into real pass-rate gains? This briefing reports progress on those three questions after ~$34 of measured experiments.</p>
+  <p><b>What this briefing is <em>not</em>:</b> a final launch claim, a benchmark submission, or a promise that fusion always wins. Several findings are deliberately negative ("don't fuse here", "public data can't rank panels") — those protect us from launching the wrong thing. Negative results are product features, not failures.</p>
 </div>
 
 <div class="intro" id="glossary">
   <h3>Glossary — terms used throughout</h3>
+  <p style="font-size:14px;margin:0 0 10px">Every acronym and metric is defined here. In the findings sections, look for blue <em>How to interpret</em> boxes and gray <em>worked examples</em>.</p>
   <dl class="gloss">
-    <dt>Ensemble / panel</dt><dd>A set of K models (usually 2–4) that all attempt the same task. "Panel" = the members; "ensemble" = members plus the merging machinery.</dd>
-    <dt>Fusion / synthesis</dt><dd>How K candidate answers become one answer. <b>Selection</b> = a judge picks the best candidate. <b>Synthesis</b> = a judge reads all candidates and writes a new answer that can combine parts of several — our product does synthesis.</dd>
-    <dt>Pass rate / pass@1</dt><dd>Fraction of tasks where the model (or fused output) passes the benchmark's grader. On 60 tasks, 27 passes = 45.0%.</dd>
-    <dt>pp (percentage points)</dt><dd>Absolute difference between two rates. 45% vs 30% = +15pp, not "+50% relative". We always use pp for comparisons.</dd>
-    <dt>Oracle / panel ceiling</dt><dd>The score if, on every task, a perfect referee always chose a passing member whenever any member passed. Measures <em>potential</em> — nobody achieves the oracle in practice.</dd>
-    <dt>Headroom</dt><dd>Oracle minus the best single member's pass rate. If the best member alone gets 60% and the oracle is 72%, headroom is +12pp — the room fusion could add if errors were perfectly complementary.</dd>
-    <dt>Capture rate</dt><dd>How much headroom the actual fused pipeline realizes: (fused − best member) ÷ (oracle − best member). 50% capture on +12pp headroom ≈ +6pp over the best member. Can exceed 100% if synthesis combines partial answers into new passes the oracle didn't count.</dd>
-    <dt>Peer field vs lopsided</dt><dd><b>Peer</b> = several models score close together → ensembles can help. <b>Lopsided</b> = one model dominates by 15–20+pp → honest answer is "use the single winner, don't fuse."</dd>
-    <dt>Layer-1 / public prior</dt><dd>Evidence mined from public benchmark dumps (SWE-bench submissions, LLMRouterBench, Terminal-Bench). Good for shortlisting and vetoing; <b>not</b> authoritative for final panel picks (see §3).</dd>
-    <dt>Calibration / Layer-CAL</dt><dd>Runs we execute ourselves: same tasks, our harness, our spend ledger. This is where launch-grade numbers come from.</dd>
-    <dt>Truncation</dt><dd>Model hit the completion token cap before finishing. Truncated answers often fail grading for reasons unrelated to ability. We refuse pass-rate claims when &gt;10% of rows truncate.</dd>
-    <dt>Wilson CI / 95% CI</dt><dd>Confidence interval on a pass rate — the range we'd expect if we repeated the experiment. Narrow interval = more certainty; interval crossing zero = inconclusive difference.</dd>
-    <dt>Pre-registration</dt><dd>We wrote the test plan (models, metrics, pass/fail rules) <em>before</em> looking at results — prevents post-hoc rationalization.</dd>
-    <dt>Frontier / price anchor</dt><dd>A closed, expensive model (gpt-5.5, claude-opus) used to compare score and $/solve — not a panel member in our OSS-first strategy.</dd>
+    <dt>Ensemble / panel</dt><dd>A set of K models (usually 2–4) that all attempt the same task. "Panel" = the members who answer. "Ensemble" = members plus the judge/merger. Example panel: DeepSeek-R1 + Qwen3 + DeepSeek-V3.</dd>
+    <dt>Fusion / synthesis</dt><dd>How K candidate answers become one answer. <b>Selection</b> = a judge picks the best candidate verbatim ("I'll take Model B's answer"). <b>Synthesis</b> = a judge reads all candidates and writes a new answer that can combine parts of several ("take A's imports and B's loop logic"). Our product does synthesis — that is the potential moat.</dd>
+    <dt>Judge</dt><dd>A model (often separate from panel members) that reads all panel outputs and produces the final merged answer. Must not be a panel member when measuring capture fairly — otherwise it could favor its own style.</dd>
+    <dt>Pass rate / pass@1</dt><dd>Fraction of tasks where the model (or fused output) passes the benchmark's grader. On 60 tasks, 27 passes = 45.0%. Higher is better. This is our main quality metric.</dd>
+    <dt>pp (percentage points)</dt><dd>Absolute difference between two pass rates. 45% vs 30% = +15pp — <em>not</em> "+50% relative improvement." We always use pp so comparisons are unambiguous.</dd>
+    <dt>Task / item / row</dt><dd>One problem in a benchmark (one bug to fix, one function to write). We often run n=60 tasks per experiment for statistical power.</dd>
+    <dt>Harness</dt><dd>Our software that sends tasks to models, collects answers, runs graders, and logs results. "Our harness" = we control prompts, token limits, and grading — not a third-party leaderboard.</dd>
+    <dt>Grader</dt><dd>Automatic test that decides pass/fail (unit tests, diff against golden patch, etc.). No human reads each answer in these experiments.</dd>
+    <dt>Oracle / panel ceiling</dt><dd>Hypothetical perfect referee: on every task, if <em>any</em> panel member passed, count it as passed. Example: Model A passes tasks 1–20, Model B passes 15–35 → oracle passes 35/60 = 58.3% even if A alone = 33% and B alone = 33%. Measures <em>potential</em> — no real fusion system achieves the oracle unless capture ≥ 100%.</dd>
+    <dt>Headroom</dt><dd>Oracle minus best single member's pass rate. Example: best member 45%, oracle 62% → headroom = +17pp. That is the maximum uplift fusion could add if errors were perfectly complementary and merging worked perfectly.</dd>
+    <dt>Capture rate</dt><dd>How much headroom the actual fused pipeline realizes: (fused − best member) ÷ (oracle − best member). Example: best=45%, oracle=62%, fused=53% → capture = (53−45)/(62−45) = 8/17 ≈ 47%. 100% = matched oracle. &gt;100% = beat oracle (only possible with synthesis, not selection).</dd>
+    <dt>Complementary errors</dt><dd>When models fail on <em>different</em> tasks — A fails where B passes and vice versa. Required for headroom. If all models fail the same tasks, fusion cannot help.</dd>
+    <dt>Peer field vs lopsided</dt><dd><b>Peer</b> = several models score close together (e.g. 30% vs 28%) → ensembles can help. <b>Lopsided</b> = one model dominates by 15–20+pp (e.g. 80% vs 45%) → honest answer is "use the single winner; don't pay for a committee."</dd>
+    <dt>Layer-1 / public prior</dt><dd>Evidence mined from public benchmark dumps others published (SWE-bench submissions, LLMRouterBench, Terminal-Bench). Costs $0. Good for shortlisting ("these models are plausible") and vetoing redundant pairs; <b>not</b> authoritative for final panel picks (see §3).</dd>
+    <dt>Calibration / Layer-CAL</dt><dd>Runs we execute ourselves: we pick tasks, call APIs, pay the bill, run our harness. This is where launch-grade, defensible numbers come from. Typical cost ~$6–17 per small round, ~$30–50 per flagship pilot.</dd>
+    <dt>Checkpoint (C0, C1, C2…)</dt><dd>Named experiment in Phase 0. C1 = "is headroom real?" C2 = "can public data pick panels?" C3 = transfer to our harness. C2V = replicate C2 with different objective. Numbers like "C3-R16K" = C3 rerun with 16k token budget.</dd>
+    <dt>Pre-registration / prereg</dt><dd>We wrote the test plan (which models, how many tasks, pass/fail rules, spend cap) <em>before</em> looking at results and committed it to the repo. Prevents cherry-picking or moving goalposts after seeing data.</dd>
+    <dt>Held-out / train-test split</dt><dd>Split tasks in half: use first half to <em>choose</em> a panel, second half to <em>score</em> it. The scorer never saw the second half during selection — mimics "will this work on new tasks?"</dd>
+    <dt>Top-K baseline</dt><dd>The dumb competitor: pick the K models with highest average pass rate on training tasks. C2 asks: can smarter selection beat this simple rule? Answer: no, reliably.</dd>
+    <dt>Truncation</dt><dd>Model hit the maximum output token limit before finishing its answer (answer cut off mid-code). Truncated answers usually fail grading for mechanical reasons, not because the model "didn't know." We refuse pass-rate claims when &gt;10% of rows truncate.</dd>
+    <dt>Token budget</dt><dd>Maximum tokens the model may generate in one response. "32k budget" = up to ~32,000 tokens of output. Thinking models use tokens on internal reasoning before the visible answer — they need larger budgets.</dd>
+    <dt>Wilson CI / 95% CI</dt><dd>Confidence interval on a pass rate — the range we'd expect if we repeated the experiment. Written as [low, high], e.g. [33.1, 57.5]. Narrow = more certainty. For <em>differences</em>, if the interval crosses zero, the result is inconclusive.</dd>
+    <dt>Frontier / price anchor</dt><dd>A closed, expensive model (gpt-5.5, claude-opus) used to compare score and $/solve on the launch card — not a panel member in our OSS-first strategy.</dd>
+    <dt>OSS</dt><dd>Open-source or open-weights models (DeepSeek, Qwen, Kimi via API, etc.) — typically cheaper; our product panels use these.</dd>
+    <dt>$/solve</dt><dd>Total API cost ÷ number of tasks passed. If you spend $30 and pass 15/60 tasks, $/solve = $2.00. Used for Pareto claims alongside pass rate.</dd>
+    <dt>Evidence card</dt><dd>Public-facing summary table: domain, panel, pass rates, $/solve, validity notes (truncation audit), frozen config hash — what we'd put on a marketing/docs page.</dd>
+    <dt>Decision D1–D11</dt><dd>Binding conclusions recorded in <code>capability-index-program.md</code> after each experiment (e.g. D2 = public data can't rank panels; D8 = OSS-first; D10 = repo bugfix flagship; D11 = kimi-thinking excluded).</dd>
+    <dt>SWE-bench / SWE-V</dt><dd>Software engineering benchmark: fix real GitHub repo bugs; grader runs project tests. "Verified" = curated subset. Repo bugfix domain in our scan.</dd>
+    <dt>LiveCodeBench (LCB)</dt><dd>Competitive programming / algorithmic coding benchmark — "write a function that passes hidden tests." Our algorithmic slice.</dd>
+    <dt>Terminal-Bench</dt><dd>Agentic tasks in a terminal environment (shell commands, file edits). Terminal/agentic domain.</dd>
+    <dt>Lineage veto</dt><dd>Rule in OSS scan: don't put two models on a panel if one is a fine-tune of the other (they make correlated errors → less headroom).</dd>
+    <dt>System vs model-level</dt><dd><b>Model-level</b> = single model API call. <b>System-level</b> = full agent scaffold (tools, retries, multi-step) as submitted to SWE-bench. Both appear in repo bugfix scan rows.</dd>
   </dl>
+  <div class="example"><b>Worked example — headroom and capture:</b> Panel of 3 models on 60 tasks. Best member alone: 27/60 = 45%. Oracle (any member passes): 38/60 = 63.3%. Headroom = 18.3pp. If fusion passes 32/60 = 53.3%, capture = (53.3−45)/(63.3−45) ≈ 45% — we captured less than half the theoretical room.</div>
 </div>
 
 <div class="intro" id="charts">
   <h3>How to read the charts &amp; confidence tags</h3>
+  <p style="font-size:14px;margin:0 0 12px">Every chart uses the same bar layout: <b>label (left)</b> → <b>colored bar (middle, width = magnitude)</b> → <b>number or CI (right)</b>. Bar width is scaled to a max shown in each section's footnote — bars are for comparison within a chart, not absolute pixel = absolute percent.</p>
   <div class="legend">
-    <div><span class="swatch" style="background:var(--blue)"></span><span><b>Blue bars</b> — opportunity or oracle/headroom numbers (potential, not achieved fused score).</span></div>
-    <div><span class="swatch" style="background:var(--green)"></span><span><b>Green</b> — valid measurement or peer-shaped field (fusion is plausible).</span></div>
-    <div><span class="swatch" style="background:#94a3b8"></span><span><b>Gray</b> — closed frontier models or baselines we compare against.</span></div>
-    <div><span class="swatch" style="background:var(--red)"></span><span><b>Red / hatched</b> — invalid measurement, clear loss, or "don't fuse" signal.</span></div>
-    <div><span class="swatch" style="background:var(--violet)"></span><span><b>Purple</b> — synthesis/fused output (the product deliverable).</span></div>
-    <div><span class="swatch" style="background:var(--gray-bar)"></span><span><b>Gray CI bands (§3)</b> — 95% confidence interval; vertical line = zero difference. Win = entire band right of zero.</span></div>
+    <div><span class="swatch" style="background:var(--blue)"></span><span><b>Blue bars</b> — opportunity numbers: oracle, headroom, or spend. These are <em>potential</em> or cost, not "our product already achieved this score."</span></div>
+    <div><span class="swatch" style="background:var(--green)"></span><span><b>Green</b> — valid measurement (truncation OK) or peer-shaped field where fusion is worth trying.</span></div>
+    <div><span class="swatch" style="background:#94a3b8"></span><span><b>Gray</b> — closed frontier models or baselines we compare against; not panel members we sell.</span></div>
+    <div><span class="swatch" style="background:var(--red)"></span><span><b>Red / hatched</b> — invalid measurement (truncation), clear loss, or explicit "don't fuse" signal.</span></div>
+    <div><span class="swatch" style="background:var(--violet)"></span><span><b>Purple</b> — actual fused/synthesized output — the product deliverable we are trying to optimize.</span></div>
+    <div><span class="swatch" style="background:var(--gray-bar)"></span><span><b>Gray CI bands (§3)</b> — 95% confidence interval on a <em>difference</em>. Vertical line = zero (no difference). Entire band right of zero = statistically solid win.</span></div>
   </div>
-  <p style="margin:14px 0 8px;font-size:14px"><b>Stacked bars in §5:</b> dashed vertical line = best single member alone; full bar width = panel oracle ceiling. The gap between them is headroom.</p>
+  <p style="margin:14px 0 8px;font-size:14px"><b>Stacked bars in §5:</b> The bar shows the panel oracle pass rate (full width). The <b>dashed vertical line</b> marks where the best single member alone would sit — everything to the right of the line is headroom. Example: bar to 45.6%, dashed line at 28.6% → headroom +17.0pp.</p>
+  <p style="margin:0 0 8px;font-size:14px"><b>Numbers in brackets [a, b]:</b> 95% confidence interval. We are 95% confident the true value lies in that range. Wider interval = fewer tasks or noisier measurement.</p>
   <p style="margin:0 0 8px;font-size:14px"><b>Confidence tags in §11:</b></p>
-  <p style="margin:0;font-size:13.5px"><span class="tag pass">High</span> = pre-registered or independently recomputed; we'd stake a product decision on it. &nbsp;
-  <span class="tag info">Medium-high</span> = strong but Layer-1 public data or one domain only. &nbsp;
-  <span class="tag warn">Medium</span> = real signal, open caveat (e.g. contamination check pending). &nbsp;
-  <span class="tag dir">Directional</span> = interesting, not yet replicated under clean protocol.</p>
+  <p style="margin:0;font-size:13.5px"><span class="tag pass">High</span> = pre-registered or independently recomputed from raw files; we'd stake a product decision on it. &nbsp;
+  <span class="tag info">Medium-high</span> = strong but from public data we didn't run ourselves, or only one domain tested so far. &nbsp;
+  <span class="tag warn">Medium</span> = real signal, but an open caveat remains (e.g. contamination check not done yet). &nbsp;
+  <span class="tag dir">Directional</span> = interesting one-off result; not yet replicated under the clean protocol we'd use for launch.</p>
 </div>
 
 <!-- FUNNEL -->
@@ -205,17 +254,19 @@
 <p class="sub">Strategy adopted 2026-07-05: a staged filter where bad combinations die cheaply. Nine-tenths of planned spend sits behind two more gates.</p>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p>Each column is a <b>gate</b> in the launch plan. <span class="tag pass">Done</span> = hypothesis tested, decision recorded (D1–D11). <span class="tag warn">Partial</span> = prereg frozen but experiment incomplete. <span class="tag info">Gate / Later</span> = not started. Read left-to-right: we spent ~$34 to kill bad strategies cheaply; the expensive launch-grade work (Steps 4–6) only runs if earlier gates pass.</p>
-  <p><b>Phase 0 answer:</b> fusion is worth pursuing (complementary errors are real), but public data <em>cannot</em> pick panels — that is why Steps 1–3 are calibration runs in our own harness, not leaderboard mining.</p>
+  <p>Think of this as a <b>filter funnel</b>, like drug trials: cheap early tests eliminate bad ideas before expensive late tests. Each column is one stage. Read left to right — we are between Step 3 (partial) and Step 4 (not started).</p>
+  <p><span class="tag pass">Done</span> = we ran the experiment, recorded a binding decision (D1–D11 in the program doc). <span class="tag warn">Partial</span> = preregistration frozen and some API calls made, but stop criteria not reached. <span class="tag info">Gate / Later</span> = blocked on a prior step or not yet funded.</p>
+  <p><b>Phase 0 ($16.64)</b> answered two questions: (1) Is there headroom for fusion at all? <b>Yes.</b> (2) Can we pick panel members from public leaderboard data? <b>No</b> — settled twice. That is why Steps 1–3 exist: cheap scans and calibration runs in our own harness instead of trusting public rankings.</p>
+  <p><b>Why Step 4 matters:</b> "Repo bugfix" is our best launch domain, but grading it requires applying a patch to a real repo and running tests — we have the code paths in HandoffKit but have not wired them into the calibration machinery yet. Until Step 4, we cannot produce a launch-grade repo bugfix number.</p>
 </div>
 <div class="card">
   <div class="funnel">
-    <div class="fstep"><span class="st done">Done</span><h4>Phase-0 validation</h4><p>Is fusion real? Can public data pick panels? $16.64. Verdicts settled.</p></div>
-    <div class="fstep"><span class="st done">Done</span><h4>Step 1 · OSS field scan</h4><p>$0. All 5 covered domains peer-shaped for OSS. Shortlists + lineage vetoes produced.</p></div>
-    <div class="fstep"><span class="st done">Done</span><h4>Step 2 · Budget ladder</h4><p>$16.51. Sonnet validly measured (45%). Kimi-thinking ruled unmeasurable single-shot.</p></div>
-    <div class="fstep"><span class="st part">Partial</span><h4>Step 3 · Capture pilot</h4><p>$0.51 so far. Prereg frozen (LCB fallback). 29/60 kimi-instruct rows done. Paused.</p></div>
-    <div class="fstep"><span class="st next">Gate</span><h4>Step 4 · Repo harness</h4><p>Engineering, $0 API. Unlocks the launch-grade domain. The bottleneck.</p></div>
-    <div class="fstep"><span class="st later">Later</span><h4>Steps 5–6 · Benchmark → Launch</h4><p>$100–500, survivors only. Frozen config, official grading, evidence card.</p></div>
+    <div class="fstep"><span class="st done">Done</span><h4>Phase-0 validation</h4><p>Is fusion real? Can public data pick panels? $16.64. Verdicts settled.</p><p class="decode">6 checkpoints on public + our data. Output: headroom yes, ranking no.</p></div>
+    <div class="fstep"><span class="st done">Done</span><h4>Step 1 · OSS field scan</h4><p>$0. All 5 covered domains peer-shaped for OSS. Shortlists + lineage vetoes produced.</p><p class="decode">Mined others' benchmark dumps. No API spend. Picked candidate domains + seed panels.</p></div>
+    <div class="fstep"><span class="st done">Done</span><h4>Step 2 · Budget ladder</h4><p>$16.51. Sonnet validly measured (45%). Kimi-thinking ruled unmeasurable single-shot.</p><p class="decode">Same 60 tasks, varying output token caps. Proved measurement validity rules.</p></div>
+    <div class="fstep"><span class="st part">Partial</span><h4>Step 3 · Capture pilot</h4><p>$0.51 so far. Prereg frozen (LCB fallback). 29/60 kimi-instruct rows done. Paused.</p><p class="decode">Tests if fusion beats best member. Mechanics test, not launch claim.</p></div>
+    <div class="fstep"><span class="st next">Gate</span><h4>Step 4 · Repo harness</h4><p>Engineering, $0 API. Unlocks the launch-grade domain. The bottleneck.</p><p class="decode">Build grading pipeline for SWE-style patches. No model calls until it works.</p></div>
+    <div class="fstep"><span class="st later">Later</span><h4>Steps 5–6 · Benchmark → Launch</h4><p>$100–500, survivors only. Frozen config, official grading, evidence card.</p><p class="decode">Public reproducible claim + marketing table. Only if A–C pass gates.</p></div>
   </div>
 </div>
 
@@ -224,8 +275,10 @@
 <p class="sub">Checkpoint C1 (public per-task data, three independent sources): the best 2–3 system panels beat their own best member's ceiling by a wide, statistically solid margin. <em>Oracle headroom = extra tasks solvable if a perfect referee always picked a passing member.</em></p>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p>Each bar is <b>oracle headroom</b> on a public benchmark: how many extra tasks a perfect panel referee could solve vs the best single system in that panel. All three bars are positive and statistically solid (CIs exclude zero). This does <em>not</em> mean our product already achieves those gains — it means the <b>raw material for fusion exists</b> when models make different mistakes on different tasks.</p>
-  <p><b>So what:</b> if headroom were near zero everywhere, fusion would be a dead end. It is not. The open question is whether our synthesis pipeline captures that headroom (see §7).</p>
+  <p><b>What we measured:</b> On three public benchmarks, we took the best 2–3 <em>systems</em> (full agent setups, not just raw models) and computed oracle headroom — how many extra tasks a perfect referee could solve vs the best single member.</p>
+  <p><b>What the bars mean:</b> +9.0pp on SWE-bench Verified means: on that benchmark, the best panel's oracle score is 9 percentage points higher than its best member alone. The CI [+6.5, +12.5] means we're confident the true headroom is in that range — it is not noise.</p>
+  <p><b>What this does NOT mean:</b> Our FusionKit product does not yet achieve +9pp on SWE-bench. We have not run fused output on these benchmarks at launch scale. This only proves the <b>raw material exists</b> — different strong systems fail on different tasks.</p>
+  <p><b>So what:</b> If headroom were ~0 everywhere, fusion would be pointless (every model would fail the same tasks). It is not ~0. The remaining question is capture (§7): can our merge pipeline actually realize this headroom?</p>
 </div>
 <div class="card">
   <div class="barrow"><div class="lab">SWE-bench Verified (72 systems)</div><div class="track"><div class="fill blue" style="width:36%">+9.0pp</div></div><div class="val">CI [+6.5, +12.5]</div></div>
@@ -239,9 +292,11 @@
 <p class="sub">Checkpoints C2 + C2V: choose a panel on half the tasks, score it on the held-out half, against the dumb baseline "take the top-K models by average score." Complementarity-smart selection never reliably won — and lost outright on SWE-bench Verified. Tested with two selection objectives across 7 datasets.</p>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p>Each row compares two panel-selection strategies on <b>held-out tasks</b> the selector never saw. The colored band is the 95% CI on the difference vs "just pick the top-K models by average score." The dark tick is the point estimate; the vertical line is zero (no difference).</p>
-  <p><b>Win</b> = entire band sits to the right of zero (smart selection beats dumb baseline). That never happened in 14 pre-registered cases. <span class="tag fail">loses</span> = smart selection is <em>worse</em> out of sample. <span class="tag warn">inconclusive</span> = CI crosses zero — we cannot claim a win or loss.</p>
-  <p><b>So what:</b> public per-task data is useful for <em>shortlisting</em> ("these models are plausible") and <em>vetoing</em> redundant pairs — not for final panel membership. Calibration runs (~$6–17 each) are mandatory (decision D2).</p>
+  <p><b>The experiment (C2 + C2V):</b> Split each benchmark's tasks in half. On the first half ("train"), pick a panel using public per-task data. On the second half ("held-out"), score that panel. Compare against the baseline: "just pick the K models with the highest average score on train."</p>
+  <p><b>Reading the CI plots:</b> Each row shows the <em>difference</em> (smart selection minus dumb baseline) on held-out tasks. The gray/red band is the 95% CI; the black tick is the best estimate; the vertical line is zero. If the entire band is to the <b>right</b> of zero, smart selection wins. If entirely to the <b>left</b>, it loses. If the band crosses zero, we call it inconclusive — not enough evidence either way.</p>
+  <p><b>SWE-V · K=2 loses (−3.0pp):</b> On SWE-bench Verified with 2-model panels, complementarity-smart selection was <em>3 points worse</em> than "pick the top-2 by average score" on tasks it had never seen. That is the opposite of what we hoped.</p>
+  <p><b>0 / 14 wins:</b> Across 14 dataset × panel-size × objective combinations, smart selection never achieved a statistically solid win. Hence decision D2: public data may shortlist and veto, but final panel picks require our own calibration runs (~$6–17 each — cheap compared to a wrong launch).</p>
+  <div class="example"><b>Analogy:</b> Public data tells you which job candidates interviewed well on past problems — useful for building a shortlist. It does not tell you which team of 3 will outperform on <em>new</em> problems. We tried; the "smart team picker" lost to "hire the 3 highest GPA" on held-out work.</div>
 </div>
 <div class="card">
   <table>
@@ -261,8 +316,10 @@
 <p class="sub">Fusion only pays when several models are comparably strong ("peer field"). Against closed frontier models, our algorithmic slice is hopelessly lopsided. Exclude closed models — the OSS-first product decision (D8) — and every covered domain becomes peer-shaped.</p>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p><b>Left panel (lopsided):</b> pass rates on our 60-task algorithmic harness. gpt-5.5 leads by +35pp — fusion cannot beat "just use gpt-5.5" on score here. The honest product answer is <b>price</b>, not score. Hatched bar = invalid measurement (truncation), not a real pass rate.</p>
-  <p><b>Right panel (peer-shaped):</b> gap between the #1 and #2 OSS model per domain from public data. Rule of thumb: &gt;15–20pp gap = lopsided, don't fuse. No OSS domain crosses that line. <b>Peer-shaped</b> = multiple models win different tasks; ensembles have room to help.</p>
+  <p><b>Core idea:</b> Fusion only makes sense when multiple models are <em>similarly strong</em>. If one model beats everyone else by a huge margin, the honest product recommendation is "use that one model" — running a committee adds cost without score benefit.</p>
+  <p><b>Left panel — lopsided (don't fuse for score):</b> Our own 60-task algorithmic benchmark. gpt-5.5 (closed frontier) passes 48/60 = 80%. Best OSS model passes ~18/60 = 30%. Gap = +35pp → lopsided. Even a perfect OSS fusion cannot beat gpt-5.5 on this slice. Our OSS product claim here is <b>cost</b> ("similar-ish quality, much cheaper"), not "higher pass rate."</p>
+  <p><b>Right panel — peer-shaped (fusion plausible):</b> When we look only at OSS models on five domain types (from public data), the gap between #1 and #2 is small (+1.7pp to +9.2pp). None exceed our 15–20pp "lopsided" threshold. Multiple OSS models win different tasks → headroom exists.</p>
+  <p><b>Why two panels side by side:</b> Same data can look lopsided or peer-shaped depending on who is in the comparison set. Decision D8 (OSS-first) means we compare OSS panels against OSS peers for fusion design, and against frontier models only for price anchoring.</p>
 </div>
 <div class="grid c2">
   <div class="card">
@@ -290,8 +347,11 @@
 <p class="sub">Best OSS-only panel per domain (lineage-vetoed, public data): best member alone vs the panel's oracle ceiling. The gap is what a fusion pipeline gets to capture.</p>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p>Each stacked bar shows two numbers: <b>dashed line</b> = best single panel member alone; <b>full bar width</b> = panel oracle ceiling. The gap between them is <b>headroom</b> — the maximum uplift fusion could deliver if errors were perfectly complementary.</p>
-  <p>These are <b>Layer-1 priors</b> from public benchmark dumps (not our harness). They rank domains for where to invest calibration spend — not launch-grade fused scores. Repo bugfix wins on headroom (+17pp) <em>and</em> user demand → recommended flagship (D10).</p>
+  <p><b>What each row is:</b> One "type" of coding work (domain). For each domain we picked the best OSS-only 2–3 model panel (respecting lineage veto — no parent/child pairs). We then compare: (a) best single member's pass rate, (b) panel oracle ceiling, (c) the gap = headroom.</p>
+  <p><b>Reading the stacked bars:</b> The blue bar width = oracle pass rate (e.g. 45.6% on repo bugfix model-level). The dashed line = best member alone (e.g. 28.6%). The label on the right (+17.0pp) is headroom. Wider gap = more room for fusion to help — if capture is good.</p>
+  <p><b>Why repo bugfix is the flagship (D10):</b> Not just highest headroom — also real user demand (developers fix repo bugs daily) and a clean OSS peer field. MBPP/HumanEval has even larger headroom (+22.7pp) but is a saturated toy benchmark with less product relevance.</p>
+  <p><b>Important caveat:</b> These numbers come from <b>public benchmark dumps</b> (Layer-1), not from our fused pipeline running in our harness. They tell us <em>where to invest calibration dollars</em>, not what our launch score will be.</p>
+  <div class="example"><b>Concrete read — repo bugfix (model-level):</b> Best single OSS model solves ~28.6% of tasks in the public dump. If a perfect referee always picked a passing panel member, ~45.6% would pass. Fusion could theoretically add +17.0pp. Our job is to capture a fraction of that via synthesis — target ≥50% capture for a viable product.</div>
 </div>
 <div class="card">
   <div class="barrow"><div class="lab">Repo bugfix (model-level)</div><div class="track stack"><div class="fill blue" style="width:45.6%">45.6%</div><div class="over" style="width:28.6%"></div></div><div class="val"><b>+17.0pp</b> [+14.3, +20.5]</div></div>
@@ -307,8 +367,11 @@
 <p class="sub">Our single most repeated lesson: thinking-style models produce garbage numbers unless completion budgets are huge — and published benchmark scores rarely disclose this. We enforce: &gt;10% truncated rows ⇒ pass rate refused.</p>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p><b>Truncation</b> = the model hit the completion token cap before finishing its answer. Truncated outputs often fail grading for mechanical reasons, not ability. We refuse pass-rate claims when &gt;10% of rows truncate (decision D11).</p>
-  <p><b>Left:</b> kimi-k2-thinking never becomes valid even at 64k — excluded from single-shot panels. <b>Right:</b> claude-sonnet-4-6 becomes valid at 32k (0/60 truncated) → first trustworthy 45.0% measurement. This is also a product differentiator: our evidence cards can show validity where leaderboards cannot.</p>
+  <p><b>Why this section exists:</b> Some models — especially "thinking" models — use most of their output token budget on internal reasoning before writing the visible answer. If the budget runs out, the answer is cut off mid-sentence/mid-code → fails grading → looks like the model is bad when it was actually incomplete.</p>
+  <p><b>Our rule (D11):</b> If more than 10% of tasks truncate (10+ out of 60), we refuse to publish a pass rate for that model at that budget. The score is unmeasurable, not "low."</p>
+  <p><b>Left — kimi-k2-thinking:</b> Pass rate <em>appears</em> to rise as budget increases (11.7% → 28.3%), but truncation stays high (52/60, 42/60, 31/60). You are measuring "how much answer fit in the box," not ability. Excluded from single-shot panels.</p>
+  <p><b>Right — claude-sonnet-4-6:</b> At 16k budget, 14/60 truncate → invalid. At 32k budget, 0/60 truncate → valid 45.0%. First trustworthy number for this model on our slice.</p>
+  <p><b>Product angle:</b> Most leaderboard entries do not report truncation rates. We can — that is a credibility differentiator on evidence cards ("valid @ 32k, 0% truncated").</p>
 </div>
 <div class="grid c2">
   <div class="card">
@@ -331,8 +394,13 @@
 <p class="sub">In the original C3 replay, the fused answer stream scored above the frozen bank's oracle — impossible for any pick-the-best-candidate scheme, possible only if synthesis combines partial answers into new passing ones.</p>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p><b>Best single member</b> = highest pass rate any one panel model achieved alone. <b>Oracle ceiling</b> = theoretical max if a perfect judge always picked a passing member — no selection scheme can beat this. <b>Fused output</b> = what our synthesis engine actually produced.</p>
-  <p><b>Capture rate</b> = (fused − best member) ÷ (oracle − best member). 150% means synthesis beat the oracle — only possible if the judge <em>combines</em> partial answers into new passes. Tagged <span class="tag dir">directional</span> because the replay used a fallback judge and same frozen panel outputs; capture-pilot-1 will test this cleanly on fresh items.</p>
+  <p><b>Setup:</b> On 60 algorithmic tasks, we already had frozen panel member outputs from Phase 0 (no new member API cost). We re-ran only the judge/merger on those same outputs and graded the fused answers — a "replay."</p>
+  <p><b>Three bars explained:</b></p>
+  <p>① <b>Best single member (28.1%)</b> — the highest pass rate any one panel model got alone.<br>
+  ② <b>Oracle ceiling (35.1%)</b> — if a perfect judge always picked a passing member's answer verbatim, 35.1% would pass. No "pick the best" scheme can exceed this.<br>
+  ③ <b>Fused output (38.6%)</b> — what our synthesis judge actually produced. It beat the oracle → <b>150% capture</b>.</p>
+  <p><b>Capture math:</b> (38.6 − 28.1) ÷ (35.1 − 28.1) = 10.5 ÷ 7.0 = 150%. We gained 10.5pp over the best member; the oracle gap was only 7.0pp — so we captured more than 100% of theoretical headroom. That implies synthesis <em>created</em> new passing answers by combining partial solutions, not just picking one.</p>
+  <p><b>Why "directional" not "proven":</b> Fallback judge used; same tasks as Phase 0 (not fresh hold-out); not yet replicated under capture-pilot-1 prereg. If it replicates cleanly, the product story upgrades from "cheaper committee" to "committee that can beat any single member."</p>
 </div>
 <div class="card">
   <div class="barrow"><div class="lab">Best single member</div><div class="track"><div class="fill gray" style="width:28.1%">28.1%</div></div><div class="val"></div></div>
@@ -345,8 +413,12 @@
 <h2 id="spend"><span class="num">8</span>What the evidence cost</h2>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p>Every billed row has a frozen preregistration (hypothesis, sample size, stop rules) locked <em>before</em> API calls — prevents moving goalposts. Bar width is proportional to spend, not importance. Step 1 cost $0 because it mined public data only.</p>
-  <p>Two Phase-0 headline results were <b>reversed</b> by independent recomputation (truncation artifact; spend double-count) — the verification process is working. Total ~$34 bought settled negative results (C2) plus positive priors (C1, OSS scan) — cheap compared to a wrong launch.</p>
+  <p><b>What you're looking at:</b> A cost ledger — how much we spent on API calls for each experiment phase. Bar width scales to ~$17 max (Phase 0 and Step 2 are the big ones). This is intentionally small spend for decision-grade evidence.</p>
+  <p><b>Phase 0 ($16.64):</b> Six named experiments (C0 through C3-R16K) that settled the core strategic questions: headroom yes, public ranking no, truncation matters, synthesis wildcard spotted.</p>
+  <p><b>Step 1 ($0):</b> Reanalysis of public CSV dumps — no model API calls. Produced domain rankings and seed panel recommendations.</p>
+  <p><b>Step 2 ($16.51):</b> Ran the same 60 tasks at 16k/32k/64k token budgets to validate measurement rules. Expensive because thinking models burn tokens.</p>
+  <p><b>Step 3 ($0.51 of ~$15 budget):</b> Capture pilot started then paused after 29/60 member rows — not enough to conclude anything yet.</p>
+  <p><b>Verification note:</b> Two early Phase-0 headlines were wrong until we recomputed from raw files (truncation made gpt-5.5 look worse than it was; spend was double-counted once). We now recompute every number from CSV/JSON before adopting — that discipline is part of the process.</p>
 </div>
 <div class="card">
   <div class="barrow"><div class="lab">Phase-0 (C0–C3, C2V, C3-R16K)</div><div class="track"><div class="fill blue" style="width:83%">$16.64</div></div><div class="val">6 experiments</div></div>
@@ -361,7 +433,9 @@
 <p class="sub">Each path states what it buys, what it costs, and what would kill it. They are mostly compatible; the real discussion is sequencing and where the launch claim comes from.</p>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p>Each card is a concrete next move with <b>Buys</b> (what evidence or capability you get), cost, and <b>Kill/branch</b> (what result would change strategy). Blue-bordered cards are the recommended immediate sequence: <b>A</b> (finish mechanics pilot, ~$10–15) in parallel with <b>B</b> (repo harness, $0 API). <b>C</b> is the first launch-grade benchmark — only after B. <b>D</b> is a strategic alternative (ship routing now, fusion later). <b>F</b> lists agreed non-goals.</p>
+  <p>Six options for what to do next — not mutually exclusive. Each card follows the same template: <b>Buys</b> = what decision or capability you get; meta tags = cost and dependencies; <b>Kill/branch</b> = what result would make us stop or pivot.</p>
+  <p><b>Recommended sequence:</b> Run <b>A</b> (finish capture pilot, ~$10–15) and <b>B</b> (repo harness, engineering) in parallel. A answers "does fusion mechanics work?" B unlocks "can we measure repo bugfix?" <b>C</b> (flagship pilot, ~$30–50) only after B. <b>D</b> is a strategic fork: ship routing advice now, fusion later. <b>E</b> is the public launch benchmark ($100–500). <b>F</b> is what we explicitly agreed not to do yet.</p>
+  <p><b>How to use in the meeting:</b> Pick launch shape (Q1 in §10) first — that determines whether A is mandatory or optional. If v1 = fused ensembles, you need A → B → C → E. If v1 = honest routing (path D), you can ship sooner but with weaker differentiation.</p>
 </div>
 
 <div class="grid c2">
@@ -426,7 +500,10 @@
 <h2 id="questions"><span class="num">10</span>Discussion questions for this meeting</h2>
 <div class="interpret">
   <h4>How to use this section</h4>
-  <p>These are <b>decision points</b>, not rhetorical prompts. Each maps to a fork in the launch plan with a default recommendation — but may need exec alignment on budget, timeline, or risk tolerance. Aim to leave with answers on launch shape (Q1), capture bet (Q2), and spend authority (Q6) at minimum.</p>
+  <p>Six decisions we need from this meeting (or follow-up). Each question maps to a path in §9. You do not need to answer all six today — but leaving without answers on Q1 (launch shape), Q2 (capture bet), and Q6 (spend authority) means the next ~$65 of work lacks a mandate.</p>
+  <p><b>Q1 (launch shape):</b> Do we wait for fused ensemble evidence before calling it v1, or ship routing + DIY ensembles now?<br>
+  <b>Q2 (capture bet):</b> If 150% replicates, is synthesis R&amp;D a top priority?<br>
+  <b>Q6 (spend authority):</b> Approve ~$65 now (paths A+C) or gate each step on prior results?</p>
 </div>
 <div class="card">
   <ol class="qs">
@@ -443,18 +520,20 @@
 <h2 id="beliefs"><span class="num">11</span>Belief ledger (what we'd defend, and how hard)</h2>
 <div class="interpret">
   <h4>How to interpret</h4>
-  <p>Living working beliefs from <code>capability-index-status.md</code> — updated after each experiment. <span class="tag pass">High</span> = multiple independent confirmations; stake product decisions on these. <span class="tag info">Medium-high</span> = one solid experiment or Layer-1 public data only. <span class="tag dir">Directional</span> = interesting but not yet replicated under clean protocol. Beliefs can be overturned; challenge anything that feels too strong or too weak.</p>
+  <p>A <b>belief ledger</b> = statements we'd defend in a meeting, each with a confidence tag and a link to the raw report that supports it. These live in <code>capability-index-status.md</code> and update after each experiment — they are not permanent truths.</p>
+  <p><b>How to challenge a row:</b> Ask "what would falsify this?" High-confidence rows have pre-registered tests or multiple sources. Directional rows (capture 150%) have a specific next experiment (pilot-1) designed to confirm or kill them.</p>
+  <p><b>Record column:</b> file path in the repo where the full tables, methods, and raw data live — anyone can recompute from there.</p>
 </div>
 <div class="card">
   <table>
-    <tr><th>Belief</th><th>Confidence</th><th>Record</th></tr>
-    <tr><td>Strong peer systems make complementary errors (+8–12pp headroom)</td><td><span class="tag pass">High</span></td><td><code>phase0/c1_c2_report.md</code></td></tr>
-    <tr><td>Public per-task data cannot rank panels (either objective)</td><td><span class="tag pass">High — settled</span></td><td><code>c1_c2_report.md</code>, <code>c2v_report.md</code></td></tr>
-    <tr><td>All covered domains are peer-shaped for OSS-only fields; repo bugfix has the largest clean headroom (+17pp)</td><td><span class="tag info">Medium-high (Layer-1 priors)</span></td><td><code>oss-scan/report.md</code></td></tr>
-    <tr><td>Failure-dependence <em>signs</em> transfer from public data to our harness (10/10)</td><td><span class="tag info">Medium-high (one domain)</span></td><td><code>c3_transfer_report.md</code></td></tr>
-    <tr><td>Single-shot algorithmic vs frontier: lopsided, don't fuse for score</td><td><span class="tag info">Medium (contamination check pending)</span></td><td><code>c3r16k_report.md</code></td></tr>
-    <tr><td>kimi-k2-thinking unmeasurable single-shot at practical budgets; sonnet valid at 45% @32k</td><td><span class="tag pass">High</span></td><td><code>thinking-32k/report.md</code></td></tr>
-    <tr><td>Synthesis fusion can exceed the selection oracle (capture 150%)</td><td><span class="tag dir">Directional — pilot-1 tests it</span></td><td><code>c3_transfer_report.md</code></td></tr>
+    <tr><th>Belief</th><th>Confidence</th><th>What it means in plain English</th><th>Record</th></tr>
+    <tr><td>Strong peer systems make complementary errors (+8–12pp headroom)</td><td><span class="tag pass">High</span></td><td>Different top systems fail on different tasks; perfect panel referee would gain ~8–12 points on three public benchmarks.</td><td><code>phase0/c1_c2_report.md</code></td></tr>
+    <tr><td>Public per-task data cannot rank panels (either objective)</td><td><span class="tag pass">High — settled</span></td><td>Smart panel picking from public data never beat "pick top-K by score" on new tasks — tested 14 ways, twice.</td><td><code>c1_c2_report.md</code>, <code>c2v_report.md</code></td></tr>
+    <tr><td>All covered domains peer-shaped for OSS; repo bugfix largest headroom (+17pp)</td><td><span class="tag info">Medium-high (Layer-1 priors)</span></td><td>On public data, OSS models are close in every domain we scanned; repo bugfix has the most fusion room.</td><td><code>oss-scan/report.md</code></td></tr>
+    <tr><td>Failure-dependence signs transfer public → our harness (10/10)</td><td><span class="tag info">Medium-high (one domain)</span></td><td>Models that fail together on public data also fail together on our 60 tasks — shortlist signals carry over.</td><td><code>c3_transfer_report.md</code></td></tr>
+    <tr><td>Algorithmic slice vs frontier: lopsided, don't fuse for score</td><td><span class="tag info">Medium (contamination check pending)</span></td><td>gpt-5.5 beats OSS by ~35pp on our slice; committee won't win on score — only on price.</td><td><code>c3r16k_report.md</code></td></tr>
+    <tr><td>kimi-k2-thinking unmeasurable single-shot; sonnet valid 45% @32k</td><td><span class="tag pass">High</span></td><td>Kimi-thinking truncates too much to trust; Sonnet needs 32k output budget for a valid score.</td><td><code>thinking-32k/report.md</code></td></tr>
+    <tr><td>Synthesis fusion can exceed selection oracle (capture 150%)</td><td><span class="tag dir">Directional — pilot-1 tests it</span></td><td>One replay showed merged answers beating the theoretical best-of-panel ceiling — not yet replicated cleanly.</td><td><code>c3_transfer_report.md</code></td></tr>
   </table>
 </div>
 
@@ -462,6 +541,19 @@
   Generated 2026-07-05 from committed artifacts on branch <code>cursor/capability-index-report-c275</code> (PR #54).
   Living status: <code>docs/fusion/capability-index-status.md</code> · Plan: <code>docs/fusion/oss-ensemble-launch-plan.md</code> · History &amp; decisions D1–D11: <code>docs/fusion/capability-index-program.md</code>.
   All pass rates recomputed from raw outcome CSVs; spend from JSONL ledgers.
+  <br><br>
+  <b>Quick reference — if you remember one thing from each section:</b>
+  §1 We're between Step 3 (paused) and Step 4 (engineering bottleneck). ·
+  §2 Headroom exists on public benchmarks. ·
+  §3 Public data can't pick panels — run your own small calibrations. ·
+  §4 Fusion only pays in peer fields; OSS fields qualify, frontier-vs-OSS doesn't. ·
+  §5 Repo bugfix is the best launch domain candidate. ·
+  §6 Truncation invalidates scores — we audit this, leaderboards often don't. ·
+  §7 Synthesis once beat oracle — needs replication. ·
+  §8 ~$34 spent so far, all preregistered. ·
+  §9 Next: finish pilot A + repo harness B in parallel. ·
+  §10 Decide launch shape and spend authority. ·
+  §11 Belief ledger — challenge confidence tags.
 </footer>
 
 </div>
