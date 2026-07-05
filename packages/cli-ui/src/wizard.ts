@@ -7,7 +7,7 @@
  */
 import { BACK } from "./prompt.js";
 import type { Back } from "./prompt.js";
-import { uiStream } from "./runtime.js";
+import { isInteractive, uiStream } from "./runtime.js";
 import { dim } from "./theme.js";
 
 export type WizardStep<S> = {
@@ -39,8 +39,8 @@ export async function runWizard<S>(input: {
     }
     const active = input.steps.filter((candidate) => candidate.skip === undefined || !candidate.skip(state));
     const position = active.indexOf(step);
-    if (position >= 0 && active.length > 1) {
-      out.write(`${dim(`step ${position + 1}/${active.length} · ${step.title}`)}\n`);
+    if (position >= 0 && active.length > 1 && isInteractive()) {
+      out.write(`${dim(`step ${position + 1}/${active.length} · ${step.title} ${position > 0 ? "(esc goes back)" : ""}`.trimEnd())}\n`);
     }
     snapshots[index] = state;
     const result = await step.run(state);

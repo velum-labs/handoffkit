@@ -27,9 +27,11 @@ import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway"
 
 import {
   bold,
+  box,
   brandBanner,
   canPromptInteractively,
   confirm,
+  cyan,
   dim,
   glyph,
   gray,
@@ -206,6 +208,30 @@ export function sessionReceiptLines(
   return lines;
 }
 
+/**
+ * Style the plain `key: value` preamble lines for the framed launch card: dim
+ * aligned labels, and one bullet line per panel member so long model ids never
+ * run into each other.
+ */
+export function styledPreambleLines(lines: readonly string[]): string[] {
+  type Row = { label: string; value: string };
+  const rows: Row[] = lines.map((line) => {
+    const split = line.indexOf(": ");
+    return split === -1 ? { label: "", value: line } : { label: line.slice(0, split), value: line.slice(split + 2) };
+  });
+  const width = Math.max(0, ...rows.map((row) => row.label.length));
+  const out: string[] = [];
+  for (const row of rows) {
+    if (row.label === "panel" || row.label.startsWith("ensemble ")) {
+      out.push(`${dim(row.label.padEnd(width))}`);
+      for (const member of row.value.split(", ")) out.push(`  ${gray(glyph.bullet())} ${member}`);
+      continue;
+    }
+    out.push(row.label.length === 0 ? row.value : `${dim(row.label.padEnd(width))}  ${row.value}`);
+  }
+  return out;
+}
+
 export async function runFusion(
   tool: FusionTool,
   toolArgs: string[],
@@ -359,7 +385,15 @@ export async function runFusion(
   if (spawnsRouter) {
     void provisionFusionEngine({
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
-    }).catch(() => {});
+    })
+      .then((outcome) => {
+        // Name the one-time cold start when it actually happened, so a slow
+        // first boot explains itself (and promises speed next time).
+        if (outcome.kind === "provisioned") {
+          log("fusion: fusion engine provisioned (one-time cold start — future runs boot fast)");
+        }
+      })
+      .catch(() => {});
   }
 
   // Validate provider keys concurrently with the prompt/boot preamble: a bad
@@ -432,8 +466,10 @@ export async function runFusion(
   // plain line-log path so their output is deterministic).
   const useBootView = options.log === undefined && isInteractive();
   if (useBootView) {
-    uiStream().write(`\n${brandBanner()}\n`);
-    uiStream().write(`${preambleLines.join("\n")}\n`);
+    // The launch card: the one "you're about to spend money" screen — panel,
+    // judge, budget, and session wiring in a single framed block.
+    uiStream().write(`\n${brandBanner()}\n\n`);
+    uiStream().write(`${box(`fusion · ${tool}`, styledPreambleLines(preambleLines))}\n`);
     for (const note of panelNotes) uiStream().write(`${yellow(glyph.warn())} ${note}\n`);
     uiStream().write("\n");
   } else {
@@ -655,6 +691,35 @@ export async function runFusion(
   // chatter (it would corrupt a full-screen agent TUI; trace events still flow
   // to --observe), move turn status to the terminal title, and make sure the
   // cursor is restored.
+  // Running spend for the terminal-title ticker and the budget early warning:
+  // the only live cost signal the user gets while the agent owns the screen.
+  const spendSoFar = (): { usd: number; turns: number } => {
+    try {
+      const sessions = sessionStore
+        .list()
+        .filter((session) => session.updatedAt >= bootStartedAt && (session.repo === undefined || session.repo === repo));
+      return {
+        usd: sessions.reduce(
+          (sum, session) => sum + (session.cost?.providerUsd ?? session.cost?.totalUsd ?? 0),
+          0
+        ),
+        turns: sessions.reduce((sum, session) => sum + session.turnCount, 0)
+      };
+    } catch {
+      return { usd: 0, turns: 0 };
+    }
+  };
+  let budgetWarned = false;
+  const maybeWarnBudget = (usd: number): void => {
+    if (budgetWarned || options.budgetUsd === undefined || options.budgetUsd <= 0) return;
+    if (usd >= 0.8 * options.budgetUsd) {
+      budgetWarned = true;
+      notify(
+        `session spend ${formatUsd(usd)} has reached 80% of the $${options.budgetUsd} budget — the session stops at the cap`
+      );
+    }
+  };
+
   const prepareForPassthrough = (): void => {
     passthroughActive = true;
     setGatewayChatter(false);
@@ -668,9 +733,16 @@ export async function runFusion(
             `fusionkit · judging ${status.candidates} candidate${status.candidates === 1 ? "" : "s"} (turn ${status.turn})`
           );
           break;
-        case "idle":
-          setTerminalTitle(undefined);
+        case "idle": {
+          const spend = spendSoFar();
+          setTerminalTitle(
+            spend.turns > 0
+              ? `fusionkit · ${spend.turns} turn${spend.turns === 1 ? "" : "s"} · ${formatUsd(spend.usd)} spent`
+              : undefined
+          );
+          maybeWarnBudget(spend.usd);
           break;
+        }
         default: {
           const exhaustive: never = status;
           throw new Error(`unknown gateway status: ${String(exhaustive)}`);
@@ -768,8 +840,15 @@ export async function runFusion(
       });
       if (receipt.length > 0) {
         if (useBootView) {
-          uiStream().write(`\n${green(glyph.tick())} ${bold(receipt[0] ?? "")}\n`);
-          for (const line of receipt.slice(1)) uiStream().write(`  ${dim(line)}\n`);
+          // The receipt is the screen users judge the run by: frame it, and
+          // always end on the copy-pasteable resume command.
+          const body = receipt.map((line, index) => {
+            if (index === 0) return `${green(glyph.tick())} ${bold(line)}`;
+            const resume = line.match(/^resume this session: (.+)$/);
+            if (resume !== null) return `${dim("resume:")} ${cyan(resume[1] ?? "")}`;
+            return dim(line);
+          });
+          uiStream().write(`\n${box("fusion receipt", body)}\n`);
         } else {
           for (const line of receipt) log(`fusion: ${line}`);
         }

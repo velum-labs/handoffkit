@@ -23,6 +23,7 @@ import type {
 
 import { startFusionStepGateway } from "../gateway.js";
 import type { GatewayEnsembleConfig, GatewayRunnerConfig } from "../gateway.js";
+import { CliError } from "../shared/errors.js";
 import { createPortlessSession } from "../shared/portless.js";
 import type { PortlessSession } from "../shared/portless.js";
 import { freePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
@@ -523,9 +524,23 @@ export async function startRouter(options: {
     } catch (error) {
       terminate(proc.child);
       // A provider-side rejection (bad key / model) will not be fixed by a
-      // retry, so surface the distilled cause with guidance.
-      const hint = looksPermanentFailure(proc.log()) ? " (check model names and provider API keys)" : "";
-      throw new Error(`${error instanceof Error ? error.message : String(error)}${hint}`);
+      // retry, so surface the distilled cause as evidence with guidance. The
+      // top-level handler renders CliError as a framed panel; programmatic
+      // callers still get an Error with everything in the message.
+      const raw = error instanceof Error ? error.message : String(error);
+      const [first, ...rest] = raw.split("\n");
+      const permanent = looksPermanentFailure(proc.log());
+      throw new CliError({
+        code: "router-startup",
+        message: first ?? raw,
+        ...(rest.filter((line) => line.trim().length > 0).length > 0
+          ? { details: rest.filter((line) => line.trim().length > 0) }
+          : {}),
+        hint: permanent
+          ? "a provider rejected the request (bad API key or model name) — a retry cannot fix this; check the panel's model names and provider API keys"
+          : "the engine did not come up in time — check the log tail above (network, provider outage, or a cold uv cache)",
+        tryCommand: "fusionkit doctor"
+      });
     } finally {
       if (progress !== undefined) clearInterval(progress);
     }

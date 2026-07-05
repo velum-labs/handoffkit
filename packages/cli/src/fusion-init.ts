@@ -12,6 +12,7 @@
 import { existsSync } from "node:fs";
 
 import {
+  BACK,
   bold,
   canPromptInteractively,
   confirm,
@@ -23,12 +24,13 @@ import {
   green,
   note,
   red,
+  runWizard,
   select,
   text,
   uiStream,
   yellow
 } from "@fusionkit/cli-ui";
-import type { Presenter } from "@fusionkit/cli-ui";
+import type { Presenter, WizardStep } from "@fusionkit/cli-ui";
 
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 
@@ -349,32 +351,77 @@ export async function runFusionInit(input: {
 
   const host = detectHost();
 
-  const tool = await select<FusionTool>({
-    message: "Default coding agent",
-    options: [
-      { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
-      { value: "claude", label: "claude", hint: "Claude Code" },
-      { value: "cursor", label: "cursor", hint: "cursor-agent (logged-in CLI)" },
-      { value: "serve", label: "serve", hint: "just run the gateway and print setup" }
-    ],
-    defaultIndex: 0
-  });
-
-  const panel = (await buildPanel(host)).map((spec) => withKeyEnv(spec));
-
-  // The judge must be one of the panel models (the runtime matches by model and
-  // falls back to the first member otherwise), so pick from the members.
-  const judgeChoices = judgeOptions(panel);
-  const judgeModel =
-    judgeChoices.length <= 1
-      ? (panel[0]?.model ?? "")
-      : await select<string>({
-          message: "Judge model (synthesizes the panel)",
-          options: judgeChoices,
+  // The linear wizard: tool → panel → judge → observe, with Esc going back one
+  // step (and step counters framing the journey). The panel builder keeps its
+  // own member-by-member loop inside the panel step.
+  type InitWizardState = {
+    tool: FusionTool;
+    panel: PanelModelSpec[];
+    judgeModel: string;
+    observe: boolean;
+  };
+  const steps: Array<WizardStep<InitWizardState>> = [
+    {
+      id: "tool",
+      title: "coding agent",
+      run: async (state) => {
+        const tool = await select<FusionTool>({
+          message: "Default coding agent",
+          options: [
+            { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
+            { value: "claude", label: "claude", hint: "Claude Code" },
+            { value: "cursor", label: "cursor", hint: "cursor-agent (logged-in CLI)" },
+            { value: "serve", label: "serve", hint: "just run the gateway and print setup" }
+          ],
           defaultIndex: 0
         });
-
-  const observe = await confirm({ message: "Enable the observability dashboard by default?", defaultValue: false });
+        return { ...state, tool };
+      }
+    },
+    {
+      id: "panel",
+      title: "model panel",
+      run: async (state) => {
+        const panel = (await buildPanel(host)).map((spec) => withKeyEnv(spec));
+        return { ...state, panel, judgeModel: panel[0]?.model ?? "" };
+      }
+    },
+    {
+      id: "judge",
+      title: "judge",
+      // The judge must be one of the panel models (the runtime matches by
+      // model and falls back to the first member otherwise).
+      skip: (state) => judgeOptions(state.panel).length <= 1,
+      run: async (state) => {
+        const choices = judgeOptions(state.panel);
+        const judgeModel = await select<string>({
+          message: "Judge model (synthesizes the panel)",
+          options: choices,
+          defaultIndex: 0,
+          allowBack: true
+        });
+        if (judgeModel === BACK) return BACK;
+        return { ...state, judgeModel };
+      }
+    },
+    {
+      id: "observe",
+      title: "observability",
+      run: async (state) => {
+        const observe = await confirm({
+          message: "Enable the observability dashboard by default?",
+          defaultValue: false,
+          allowBack: true
+        });
+        if (observe === BACK) return BACK;
+        return { ...state, observe };
+      }
+    }
+  ];
+  const { tool, panel, judgeModel, observe } = await runWizard<InitWizardState>({
+    steps,
+    initial: { tool: "codex", panel: [], judgeModel: "", observe: false }
+  });
 
   const namedEnsembles = await promptNamedEnsembles(host);
 

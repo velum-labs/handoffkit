@@ -10,10 +10,12 @@ import type { LocalModelInfo } from "@fusionkit/adapter-ai-sdk";
 import { defaultKeyEnv as registryDefaultKeyEnv, providerDiscovery } from "@fusionkit/registry";
 
 import {
+  autocompleteText,
   canPromptInteractively,
   confirm,
   dim,
   formatBytes,
+  fuzzySelect,
   note,
   select,
   text,
@@ -86,29 +88,47 @@ async function pickModel(
   choice: AuthChoice,
   cache: Map<AuthChoice, ModelListResult>
 ): Promise<string> {
-  let result = cache.get(choice);
-  if (result === undefined) {
-    out.write(dim("  fetching available models...\n"));
-    result = await listModelsForAuth(choice, { env: process.env });
-    cache.set(choice, result);
-  }
   const keyEnv = liveKeyEnvFor(choice);
-  const sourceNote =
-    result.source === "live"
-      ? `${choice} live`
-      : keyEnv !== undefined
-        ? `curated — set ${keyEnv} for the live list`
-        : "curated";
-  const chosen = await select<string>({
-    message: `Model (${sourceNote})`,
-    options: [
-      ...result.models.map((model) => ({ value: model, label: model })),
-      { value: CUSTOM_MODEL, label: "other (type a model name)" }
-    ],
-    defaultIndex: 0
+  const toOptions = (result: ModelListResult): Array<{ value: string; label: string; hint?: string }> => [
+    ...result.models.map((model) => ({ value: model, label: model })),
+    { value: CUSTOM_MODEL, label: "other (type a model name)" }
+  ];
+  const fetchList = async (): Promise<ModelListResult> => {
+    let result = cache.get(choice);
+    if (result === undefined) {
+      result = await listModelsForAuth(choice, { env: process.env });
+      cache.set(choice, result);
+    }
+    return result;
+  };
+
+  // The picker opens instantly on the cached list (when a member already
+  // fetched it) and otherwise live-loads the provider catalog while the user
+  // can already type — stale-while-revalidate instead of a blocking fetch.
+  const cached = cache.get(choice);
+  const sourceNote = (result: ModelListResult | undefined): string => {
+    if (result?.source === "live") return `${choice} live`;
+    return keyEnv !== undefined ? `curated — set ${keyEnv} for the live list` : "curated";
+  };
+  const chosen = await fuzzySelect<string>({
+    message: `Model (${sourceNote(cached ?? undefined)})`,
+    placeholder: "type to filter",
+    options: cached !== undefined ? toOptions(cached) : [],
+    ...(cached === undefined
+      ? {
+          refresh: async () => toOptions(await fetchList()),
+          refreshNote: `fetching ${choice} models…`
+        }
+      : {})
   });
   if (chosen === CUSTOM_MODEL) {
-    return text({ message: "Model name", defaultValue: defaultModelForAuthChoice(choice) });
+    const suggestions = (cache.get(choice)?.models ?? []).slice();
+    const custom = await autocompleteText({
+      message: "Model name",
+      suggestions,
+      defaultValue: defaultModelForAuthChoice(choice)
+    });
+    return String(custom);
   }
   return chosen;
 }
@@ -209,7 +229,7 @@ async function pickLocalModel(scan: LocalScan, remainingGB: number): Promise<str
     };
   });
   options.push({ value: CUSTOM_MODEL, label: "other (type a repo id)", hint: "any mlx-community model" });
-  const chosen = await select<string>({ message: "Local model", options, defaultIndex: 0 });
+  const chosen = await fuzzySelect<string>({ message: "Local model", placeholder: "type to filter", options });
   if (chosen === CUSTOM_MODEL) {
     return text({ message: "Model repo id", defaultValue: defaultModelForAuthChoice("local") });
   }
