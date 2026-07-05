@@ -222,8 +222,8 @@ importers:
   legacy/examples/model-escalation:
     dependencies:
       '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
+        specifier: 4.0.2
+        version: 4.0.2
       '@fusionkit/example-utils':
         specifier: workspace:*
         version: link:../../../packages/example-utils
@@ -334,8 +334,8 @@ importers:
   legacy/packages/handoff:
     dependencies:
       '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
+        specifier: 4.0.2
+        version: 4.0.2
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../../../packages/protocol
@@ -496,8 +496,8 @@ importers:
         specifier: 2.0.48
         version: 2.0.48(zod@4.4.3)
       '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
+        specifier: 4.0.2
+        version: 4.0.2
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -619,8 +619,8 @@ importers:
         specifier: 2.0.48
         version: 2.0.48(zod@4.4.3)
       '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
+        specifier: 4.0.2
+        version: 4.0.2
       '@fusionkit/handoff':
         specifier: workspace:*
         version: link:../../legacy/packages/handoff
@@ -870,6 +870,10 @@ packages:
 
   '@ai-sdk/provider@4.0.0-canary.18':
     resolution: {integrity: sha512-+XBwXEPkN+l/90bb7TaSK15jAq9ScsGrauJ/NLSGip0KX5Mf1pfEfqBWDuJMIYVRYHNdV1dDBy7JCoKUCQe/tA==}
+    engines: {node: '>=22'}
+
+  '@ai-sdk/provider@4.0.2':
+    resolution: {integrity: sha512-pfPoy9J1B1xV7cqJ8MYHOsDYrMv5tR3+EMNfI249OhkD2uRakvav3Fo7XpD2luuN/YNCBY7KfEQc7vEV7KEtyw==}
     engines: {node: '>=22'}
 
   '@ai-sdk/sandbox-just-bash@1.0.0-canary.6':
@@ -1881,6 +1885,10 @@ snapshots:
       json-schema: 0.4.0
 
   '@ai-sdk/provider@4.0.0-canary.18':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@4.0.2':
     dependencies:
       json-schema: 0.4.0
 
