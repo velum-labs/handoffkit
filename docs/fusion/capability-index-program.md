@@ -131,6 +131,37 @@ OSS panel vs best member vs frontier baseline vs oracle on one slice —
 the first direct measurement of synthesis capture under a leak-free judge
 protocol, and the number the launch claim rests on.
 
+### Stage 9 — Launch-plan Steps 1–2 executed (2026-07-05, GPT-5.5 subagents + verification)
+
+**Step 1 — OSS peer-field scan** (`analysis/oss-scan/`, $0, public data):
+six domains scanned with OSS-only universes, lineage annotations, and
+veto flags. Every covered domain is peer-shaped once closed models are
+excluded (#1–#2 gaps +1.7 to +9.2pp); OSS-only oracle headroom is +11.3pp
+(LCB), +17.0pp (repo bugfix model-level, the recommended pilot), +13.0pp
+(SWE system-level), +13.5pp (terminal), +22.7pp (MBPP-class). SWE-bench
+Test had no adequate OSS universe. Recommended capture-pilot seed: repo
+bugfix, deepseek-r1-0528 + deepseek-v3.1-terminus +
+qwen3-235b-a22b-thinking-2507 (kimi-k2-0905 alternate), anchor
+claude-opus-4.1. Key panel numbers were independently recomputed from the
+cached matrices before adoption.
+
+**Step 2 — Thinking-model measurement ladder**
+(`analysis/thinking-32k/`, $16.51 ledger-tracked, pre-registered):
+same 60-task manifest as C3-R16K. sonnet (claude-sonnet-4-6) at 32k:
+**45.0% [33.1, 57.5], 0/60 truncated — first valid measurement** (up from
+a truncation-suspect 41.7% at 16k). kimi-k2-thinking stayed
+truncation-invalid at every rung — 52/60 (16k), 42/60 (32k), 31/60 (64k,
+mean 49k completion tokens) — and is per the pre-registered rule
+**not measurable at practical budgets** on single-shot algorithmic tasks
+(pass rate rose 11.7% → 21.7% → 28.3% with budget, so published Kimi
+scores on such tasks reflect token budgets as much as ability).
+Operational notes: one sonnet task (arc192_e) never returned inside a 3h
+hard timeout and counts as a fail; a handful of OpenRouter provider
+failures (JSON truncation, one "thinking mode not supported" provider
+routing miss) were cured by targeted re-runs.
+
+Decision consequences recorded as D10/D11 below.
+
 ---
 
 ## 2. Results as of Phase-0 close (2026-07-04)
@@ -233,3 +264,5 @@ so there is exactly one place to update as priorities shift.
 | D7 | 2026-07-04 | Document structure: immutable records + living status doc + append-only history/decision log | Sustainability review after three in-place revisions of the Phase-0 report | Status doc "Update protocol" |
 | D8 | 2026-07-05 | **OSS-first panels**: closed frontier models are routing baselines / price anchors, not panel members; product claims are Pareto (score + $/solve) | Product direction (cheaper-to-run ensembles) + C1 headroom concentrating in OSS peer fields + C3 lopsidedness being closed-model-driven | Status doc binding scope; launch plan §1, Step 0 |
 | D9 | 2026-07-05 | Adopt the staged launch funnel (scan → capture pilot → full benchmark → card) as the active plan; rigor staged to money at risk; contamination check demoted to Step-5 hygiene | Strategy re-think (Stage 8); C2/C2V falsifying public-data matching; $5.56 pilot cost proving calibration is the cheap step | `oss-ensemble-launch-plan.md`; status doc next steps |
+| D10 | 2026-07-05 | Capture pilot targets **repo bugfix model-level** with panel seed deepseek-r1-0528 + deepseek-v3.1-terminus + qwen3-235b-a22b-thinking-2507 (kimi-k2-0905 alternate); LCB fallback if patch-and-test grading unavailable | Step-1 scan: largest clean-tier OSS headroom (+17.0pp [+14.3, +20.5]) on the highest-demand domain | `analysis/oss-scan/report.md`; status doc next steps |
+| D11 | 2026-07-05 | **kimi-k2-thinking excluded from single-shot panels** — not measurable at practical budgets (truncation-invalid through 64k); any Kimi use must be agentic/multi-turn where per-turn budgets are smaller | Step-2 escalation ladder, pre-registered rule | `analysis/thinking-32k/report.md`; status doc beliefs |

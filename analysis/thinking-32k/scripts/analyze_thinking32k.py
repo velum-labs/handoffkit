@@ -18,6 +18,7 @@ RERUN_OUTCOMES = [
 ]
 RERUN_OUTCOMES_64K = [
     ROUND / "cache" / "outcomes_64k_failed_rerun.csv",
+    ROUND / "cache" / "outcomes_64k_arc193d_retry.csv",
 ]
 LEDGER = ROUND / "spend_ledger.jsonl"
 REPORT = ROUND / "report.md"
@@ -213,7 +214,7 @@ def main() -> int:
         "",
         *[f"- {message}." for message in validation_messages],
         f"- Ledger rows: {len(ledger_rows)}; summed spend: {fmt_money(total_spend)}.",
-        "- Metrics below were recomputed directly from `outcomes_32k.csv` and `c3r16k_outcomes.csv`.",
+        "- Metrics below were recomputed directly from `outcomes_32k.csv`, `outcomes_64k_kimi.csv`, and `c3r16k_outcomes.csv`.",
         "",
         "## Per-model results",
         "",
@@ -233,7 +234,7 @@ def main() -> int:
             f"| {model} | 32k | {m32['passed']}/60 ({pct(m32['pass_rate'])}) | "
             f"{ci_text(m32)} | {m32['truncated']}/60 | "
             f"{m32['mean_completion_tokens']:.0f} | {m32['provider_failures']} | "
-            f"{fmt_money(spend_by_endpoint.get(model, 0.0))} |"
+            f"{fmt_money(m32['outcome_spend'])} |"
         )
         if model in metrics_64k:
             m64 = metrics_64k[model]
@@ -269,12 +270,15 @@ def main() -> int:
             f"{ci_text(metrics)} | {metrics['truncated']}/60 |"
         )
     best_kimi = metrics_64k.get("kimi", metrics_32k["kimi"])["pass_rate"]
-    best_oss = max(best_kimi, metrics_32k["sonnet"]["pass_rate"], metrics_16k["qwen3"]["pass_rate"], metrics_16k["deepseek"]["pass_rate"])
+    best_oss = max(best_kimi, metrics_16k["qwen3"]["pass_rate"], metrics_16k["deepseek"]["pass_rate"])
+    best_closed_alt = metrics_32k["sonnet"]["pass_rate"]
     gpt55 = metrics_16k["gpt55"]["pass_rate"]
     lines.extend(
         [
             "",
-            f"gpt-5.5 remains lopsided on this slice: {pct(gpt55)} vs the best OSS/open alternative at {pct(best_oss)}.",
+            f"gpt-5.5 remains lopsided on this slice: {pct(gpt55)} vs the best valid OSS alternative at "
+            f"{pct(best_oss)} (qwen3) and the best closed alternative at {pct(best_closed_alt)} (sonnet). "
+            "Note kimi's numbers are truncation-invalid at every budget tried.",
             "",
             "## Truncation-rule compliance",
             "",

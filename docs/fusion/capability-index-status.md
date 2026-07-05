@@ -34,7 +34,9 @@ When an experiment round or build milestone completes:
 | Failure-dependence *signs* transfer from public data to our harness | C3, 10/10 pairs | Medium-high (one domain) | `c3_transfer_report.md` |
 | Single-shot algorithmic (recent LCB): lopsided — gpt-5.5 80% [68, 88], +38pp over next; panel headroom +1.7pp [0, +5] → **don't fuse there** | C3-R16K | Medium — pre-cutoff task window; contamination check pending | `c3r16k_report.md` |
 | Synthesis-style fusion can exceed the candidate-selection oracle | C3 judged replay (38.6% fused vs 35.1% oracle) | Directional — needs a clean protocol | `c3_transfer_report.md` |
-| kimi-k2-thinking (and partially sonnet) are not validly measurable below ~32k completion budgets | C3-R16K truncation counts (52/60 at 16k) | High | `c3r16k_report.md` |
+| Every domain with public data is **peer-shaped for OSS-only fields** (no lopsidedness once closed models are excluded); OSS-only panels show +11 to +23pp oracle headroom, largest on repo bugfix (+17.0pp [+14.3, +20.5]) | Step-1 OSS scan, 6 domains, lineage vetoes recorded | Medium-high (Layer-1 priors; shortlist/veto authority only) | `analysis/oss-scan/report.md` |
+| **kimi-k2-thinking is not measurable at practical budgets** on single-shot algorithmic tasks: truncation-invalid at 16k (52/60), 32k (42/60), and 64k (31/60; mean 49k completion tokens) | Step-2 escalation ladder, pre-registered | High — exclude from single-shot panels; agentic/multi-turn measurement still open | `analysis/thinking-32k/report.md` |
+| sonnet-class (claude-sonnet-4-6) first valid measurement on this slice: 45.0% [33.1, 57.5] at 32k, 0/60 truncated | Step-2 re-measure | High (one slice) | `analysis/thinking-32k/report.md` |
 
 ## Binding scope (what we are building)
 
@@ -63,13 +65,20 @@ binding version).
 Maintained in detail in `oss-ensemble-launch-plan.md` (adopted
 2026-07-05); summary:
 
-1. **Step 1 — OSS peer-field scan** (~$0): per-domain field shape,
-   shortlists of 6–8 OSS models, lineage veto applied.
-2. **Step 2 — Thinking-model re-measure at ≥32k** (~$8): first valid
-   scores for kimi-k2-thinking / sonnet-class members.
+1. ~~**Step 1 — OSS peer-field scan**~~ **DONE 2026-07-05**
+   (`analysis/oss-scan/`): all covered domains peer-shaped for OSS;
+   recommended pilot = repo bugfix model-level, panel seed
+   deepseek-r1-0528 + deepseek-v3.1-terminus + qwen3-235b-a22b-thinking-2507
+   (kimi-k2-0905 alternate), frontier anchor claude-opus-4.1.
+2. ~~**Step 2 — Thinking-model re-measure at ≥32k**~~ **DONE 2026-07-05**
+   (`analysis/thinking-32k/`, $16.51): sonnet valid at 45.0%;
+   kimi-k2-thinking ruled **not measurable at practical budgets** on
+   single-shot tasks (still 31/60 truncated at 64k) — excluded from
+   single-shot panels.
 3. **Step 3 — Flagship capture pilot** (~$30–50/iteration): fused OSS
    panel vs best member vs frontier baseline vs oracle, clean judge
-   protocol; produces the capture-rate belief.
+   protocol; produces the capture-rate belief. Seed panel from Step 1;
+   LCB algorithmic fallback if repo patch-and-test grading is not ready.
 4. **Step 4 — Repo-bugfix harness unlock** (engineering): HandoffKit
    patch-and-test path wired into calibration; may run before Step 3 if
    quick.
@@ -104,6 +113,11 @@ longer drives panel decisions; the check rides along with Step 5 hygiene.
 
 ## Changelog
 
+- **2026-07-05 (later)** — Launch-plan Steps 1–2 executed and closed:
+  OSS scan beliefs added (all domains peer-shaped, repo-bugfix pilot
+  recommended); kimi-k2-thinking ruled not measurable at practical
+  budgets on single-shot slices (16k/32k/64k ladder); first valid
+  sonnet measurement recorded. Round spend $16.51.
 - **2026-07-05** — OSS-first scope adopted (D8); next steps replaced by
   the staged launch funnel in `oss-ensemble-launch-plan.md`; C3
   contamination check demoted to Step-5 hygiene.
