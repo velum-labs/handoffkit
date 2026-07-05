@@ -6,8 +6,10 @@ updated (in place) at the close of every experiment round or scope
 decision; everything else in the program is an immutable record or a design
 reference. If this document and any other document disagree, this one wins.
 
-**Last updated:** 2026-07-05 (OSS-first scope adopted; launch plan
-`oss-ensemble-launch-plan.md` supersedes the previous next-steps list)
+**Last updated:** 2026-07-05 (model-freshness re-think: model-specific
+recommendations stale, refresh pipeline proposed —
+`strategy-rethink-2026-07.md`; OSS-only rechecks and seed-panel audit
+recorded)
 
 ---
 
@@ -37,6 +39,9 @@ When an experiment round or build milestone completes:
 | Every domain with public data is **peer-shaped for OSS-only fields** (no lopsidedness once closed models are excluded); OSS-only panels show +11 to +23pp oracle headroom, largest on repo bugfix (+17.0pp [+14.3, +20.5]) | Step-1 OSS scan, 6 domains, lineage vetoes recorded | Medium-high (Layer-1 priors; shortlist/veto authority only) | `analysis/oss-scan/report.md` |
 | **kimi-k2-thinking is not measurable at practical budgets** on single-shot algorithmic tasks: truncation-invalid at 16k (52/60), 32k (42/60), and 64k (31/60; mean 49k completion tokens) | Step-2 escalation ladder, pre-registered | High — exclude from single-shot panels; agentic/multi-turn measurement still open | `analysis/thinking-32k/report.md` |
 | sonnet-class (claude-sonnet-4-6) first valid measurement on this slice: 45.0% [33.1, 57.5] at 32k, 0/60 truncated | Step-2 re-measure | High (one slice) | `analysis/thinking-32k/report.md` |
+| Public data cannot rank **OSS-only** panels either (0 product-relevant wins in 10 cases per objective; algorithmic K=3 outright loss); OSS sign transfer 3/3 | OSS-only C2/C2V + sign rechecks, preregistered | High — D2 extended (D12) | `analysis/oss-rechecks/report.md` |
+| **All model-specific recommendations are stale**: newest OSS generation (DeepSeek V4, Qwen 3.7, GLM-5.2, Kimi K2.7-code, MiniMax M3, Nemotron 3) absent from every public dump; per-task public data lags the frontier 6–12 months | Live OpenRouter catalog vs evidence-base eras (D13) | High — structural | `strategy-rethink-2026-07.md` |
+| Truncation-invalidity generalizes across the thinking-model class: r1 15/50 and qwen3t 19/57 truncated at 32k (both INVALID); terminus VALID at 32k (0/60, $0.14/60 tasks — bridge candidate) | Seed-panel audit, preregistered; 64k escalation held under D13 | High (one slice) | `analysis/seed-audit-32k/report.md` |
 
 ## Binding scope (what we are building)
 
@@ -75,15 +80,22 @@ Maintained in detail in `oss-ensemble-launch-plan.md` (adopted
    kimi-k2-thinking ruled **not measurable at practical budgets** on
    single-shot tasks (still 31/60 truncated at 64k) — excluded from
    single-shot panels.
-3. **Step 3 — Flagship capture pilot** (~$30–50/iteration): fused OSS
-   panel vs best member vs frontier baseline vs oracle, clean judge
-   protocol; produces the capture-rate belief. Seed panel from Step 1;
-   LCB algorithmic fallback if repo patch-and-test grading is not ready.
-4. **Step 4 — Repo-bugfix harness unlock** (engineering): HandoffKit
-   patch-and-test path wired into calibration; may run before Step 3 if
-   quick.
+3. **[REVISION PENDING — D13]** Steps 3+ are paused by the model-freshness
+   re-think (`strategy-rethink-2026-07.md`): the Step-1 seed panel is
+   generations behind the current OSS frontier. Proposed replacement
+   funnel (awaiting founder approval on shortlist, budget policy, and
+   spend authority):
+   - **Step 0′** — refresh candidate universe from provider catalog ($0);
+   - **Step 1′** — calibrated sweep of the fresh shortlist on the 60-task
+     manifest with truncation audits (~$25–50) → our own per-task matrix;
+   - **Step 2′** — split-validated panel selection + capture pilot
+     (~$10–20), superseding capture-pilot-1 (run abandoned, protocol kept);
+   - **Step 3′** — repo-bugfix flagship after Step 4, with a fresh sweep.
+4. **Step 4 — Repo-bugfix harness unlock** (engineering): unchanged, still
+   the launch bottleneck; runs in parallel with the above.
 5. **Step 5 — Full benchmark confirmation** (~$100–500): survivor only,
-   frozen config, official harness.
+   frozen config, official harness, **dated evidence card** with freshness
+   stamp (refresh cadence ~3–4 months per D13).
 6. **Step 6 — Launch**: predefined ensemble in the CLI + public evidence
    card.
 
@@ -113,6 +125,12 @@ longer drives panel decisions; the check rides along with Step 5 hygiene.
 
 ## Changelog
 
+- **2026-07-05 (latest)** — Model-freshness re-think (D13): model-specific
+  recommendations declared stale; refresh-pipeline funnel proposed, Steps
+  3+ paused pending approval. OSS-only C2/C2V + sign rechecks close (D12:
+  D2 extended to OSS universes). Seed-panel truncation audit closes at the
+  32k rung (D14: terminus valid; r1/qwen3t invalid; escalation held).
+  Round spend $5.00 (audit) + $0 (rechecks).
 - **2026-07-05 (later)** — Launch-plan Steps 1–2 executed and closed:
   OSS scan beliefs added (all domains peer-shaped, repo-bugfix pilot
   recommended); kimi-k2-thinking ruled not measurable at practical

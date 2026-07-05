@@ -162,6 +162,42 @@ routing miss) were cured by targeted re-runs.
 
 Decision consequences recorded as D10/D11 below.
 
+### Stage 10 — OSS-only rechecks, seed-panel audit, and the model-freshness re-think (2026-07-05)
+
+Triggered by a founder review: "have we considered all the new OSS models?"
+A live OpenRouter catalog query showed the answer was no — the newest OSS
+generation (DeepSeek V4, Qwen 3.7, GLM-5.2, Kimi K2.7-code, MiniMax M3,
+Nemotron 3; listed 2026-03 through 2026-06) appears in none of our public
+data, whose newest models are mid-2025. Full analysis and revised plan:
+`docs/fusion/strategy-rethink-2026-07.md`.
+
+Three pieces of work landed the same day, all preregistered:
+
+**OSS-only C2/C2V recheck** (`analysis/oss-rechecks/`, $0): the "public data
+cannot rank panels" verdict re-tested on `is_oss=True` universes only.
+Upheld on every product-relevant domain (algorithmic K=3 an outright loss,
+−1.3pp CI [−2.5, −0.2]); one stray pass (MBPP/HumanEval K=3, 1-in-10 cases)
+recorded, insufficient to change D2. Bonus: on repo bugfix model-level K=2
+both objectives select the same panel — seed pairs robust to objective.
+
+**OSS-only C3 sign recheck** (same round, $0): failure-dependence sign
+transfer holds **3/3** on the OSS endpoint pairs (deepseek/kimi,
+deepseek/qwen3, kimi/qwen3) — veto/shortlist usage of public phi unchanged.
+
+**D10 seed-panel truncation audit** (`analysis/seed-audit-32k/`, $5.00 of a
+$20 cap, 60/60 tasks per model at 32k): terminus **VALID at 32k** (0/60
+truncated, 38.3% context pass rate, $0.14 for 60 tasks); deepseek-r1-0528
+truncation-INVALID at 32k (15/50); qwen3-235b-a22b-thinking-2507
+truncation-INVALID at 32k (19/57, 50.0% context pass rate — best OSS number
+measured on this slice but not valid). The D3/D11 truncation lesson
+generalizes to the whole thinking-model class. The preregistered 64k
+escalations were **held** (recorded deviation) because the panel members are
+generations behind the current OSS frontier; verdicts at 32k are unaffected
+by the hold. Ten r1 rows failed on OpenRouter mid-stream JSON errors —
+harness-robustness backlog item before any larger sweep.
+
+Decision consequences recorded as D12–D14 below.
+
 ---
 
 ## 2. Results as of Phase-0 close (2026-07-04)
@@ -266,3 +302,6 @@ so there is exactly one place to update as priorities shift.
 | D9 | 2026-07-05 | Adopt the staged launch funnel (scan → capture pilot → full benchmark → card) as the active plan; rigor staged to money at risk; contamination check demoted to Step-5 hygiene | Strategy re-think (Stage 8); C2/C2V falsifying public-data matching; $5.56 pilot cost proving calibration is the cheap step | `oss-ensemble-launch-plan.md`; status doc next steps |
 | D10 | 2026-07-05 | Capture pilot targets **repo bugfix model-level** with panel seed deepseek-r1-0528 + deepseek-v3.1-terminus + qwen3-235b-a22b-thinking-2507 (kimi-k2-0905 alternate); LCB fallback if patch-and-test grading unavailable | Step-1 scan: largest clean-tier OSS headroom (+17.0pp [+14.3, +20.5]) on the highest-demand domain | `analysis/oss-scan/report.md`; status doc next steps |
 | D11 | 2026-07-05 | **kimi-k2-thinking excluded from single-shot panels** — not measurable at practical budgets (truncation-invalid through 64k); any Kimi use must be agentic/multi-turn where per-turn budgets are smaller | Step-2 escalation ladder, pre-registered rule | `analysis/thinking-32k/report.md`; status doc beliefs |
+| D12 | 2026-07-05 | D2 extended to OSS-only universes: public data cannot rank OSS panels either (0 product-relevant wins in 10 cases per objective); shortlist/veto authority unchanged | OSS-only C2/C2V recheck + 3/3 OSS sign transfer | `analysis/oss-rechecks/report.md` |
+| D13 | 2026-07-05 | **Model-specific recommendations declared stale** (D10 seed panel, scan rankings): public dumps lag the OSS frontier by 6–12 months and the current generation has no per-task public data; panel selection moves to a calibration-first refresh pipeline (shortlist from provider catalog + aggregates → calibrated sweep → split-validated selection) | Live OpenRouter catalog vs evidence-base model eras; C2/D12 making calibration the only ranking mechanism | `docs/fusion/strategy-rethink-2026-07.md` |
+| D14 | 2026-07-05 | Seed-audit verdicts: terminus VALID at 32k (bridge-model candidate for the fresh sweep); r1 and qwen3t truncation-INVALID at 32k, 64k escalation held under D13 (would only measure a stale panel); reasoning-model sweeps must budget 64k or audit per-model | `analysis/seed-audit-32k/` pre-registered audit | `analysis/seed-audit-32k/report.md`; strategy-rethink §6 |
