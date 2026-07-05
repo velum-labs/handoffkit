@@ -6,7 +6,7 @@ import {
   parseAnthropicModels,
   parseGoogleModels,
   parseOpenAiModels
-} from "../fusion/model-catalog.js";
+} from "../fusion/catalog.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -15,31 +15,35 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function ids(result: { models: Array<{ id: string }> }): string[] {
+  return result.models.map((model) => model.id);
+}
+
 // --- parsers ---------------------------------------------------------------
 
 test("parseOpenAiModels keeps chat models and drops non-chat families", () => {
-  const ids = parseOpenAiModels({
+  const parsed = parseOpenAiModels({
     data: [{ id: "gpt-5.5" }, { id: "o4-mini" }, { id: "whisper-1" }, { id: "text-embedding-3-large" }]
   });
-  assert.ok(ids.includes("gpt-5.5"));
-  assert.ok(ids.includes("o4-mini"));
-  assert.ok(!ids.includes("whisper-1"));
-  assert.ok(!ids.includes("text-embedding-3-large"));
+  assert.ok(parsed.includes("gpt-5.5"));
+  assert.ok(parsed.includes("o4-mini"));
+  assert.ok(!parsed.includes("whisper-1"));
+  assert.ok(!parsed.includes("text-embedding-3-large"));
 });
 
 test("parseAnthropicModels returns all model ids", () => {
-  const ids = parseAnthropicModels({ data: [{ id: "claude-sonnet-4-5" }, { id: "claude-opus-4-8" }] });
-  assert.deepEqual(ids, ["claude-sonnet-4-5", "claude-opus-4-8"]);
+  const parsed = parseAnthropicModels({ data: [{ id: "claude-sonnet-4-5" }, { id: "claude-opus-4-8" }] });
+  assert.deepEqual(parsed, ["claude-sonnet-4-5", "claude-opus-4-8"]);
 });
 
 test("parseGoogleModels strips the models/ prefix and requires generateContent", () => {
-  const ids = parseGoogleModels({
+  const parsed = parseGoogleModels({
     models: [
       { name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] },
       { name: "models/embedding-001", supportedGenerationMethods: ["embedContent"] }
     ]
   });
-  assert.deepEqual(ids, ["gemini-2.5-flash"]);
+  assert.deepEqual(parsed, ["gemini-2.5-flash"]);
 });
 
 test("parsers tolerate malformed payloads", () => {
@@ -71,12 +75,38 @@ test("openrouter can opt into live discovery from provider metadata", async () =
       })
   });
   assert.equal(result.source, "live");
-  assert.deepEqual(result.models, ["anthropic/claude-sonnet-4.5", "openai/gpt-5.5"]);
+  assert.deepEqual(ids(result), ["anthropic/claude-sonnet-4.5", "openai/gpt-5.5"]);
 });
 
-test("api-key provider without a key falls back to curated (no fetch)", async () => {
-  const result = await listModelsForAuth("openai", { env: {}, fetchImpl: () => assert.fail("no fetch") });
+test("api-key provider without a key serves the keyless models.dev catalog", async () => {
+  const result = await listModelsForAuth("openai", {
+    env: {},
+    fetchImpl: async (url) => {
+      assert.match(String(url), /models\.dev/);
+      return jsonResponse({
+        openai: {
+          models: {
+            "gpt-5.5": { id: "gpt-5.5", name: "GPT-5.5", cost: { input: 1.25, output: 10 }, limit: { context: 400000 } }
+          }
+        }
+      });
+    }
+  });
+  assert.equal(result.source, "models.dev");
+  assert.deepEqual(ids(result), ["gpt-5.5"]);
+  assert.equal(result.models[0]?.pricing, "$1.25/M in · $10/M out");
+  assert.equal(result.models[0]?.context, 400000);
+});
+
+test("api-key provider without a key falls back to curated when models.dev fails", async () => {
+  const result = await listModelsForAuth("openai", {
+    env: {},
+    fetchImpl: async () => {
+      throw new Error("network down");
+    }
+  });
   assert.equal(result.source, "curated");
+  assert.ok(result.models.length > 0);
 });
 
 test("api-key provider with a key lists live models", async () => {
@@ -85,8 +115,26 @@ test("api-key provider with a key lists live models", async () => {
     fetchImpl: async () => jsonResponse({ data: [{ id: "gpt-5.5" }, { id: "text-embedding-3-large" }] })
   });
   assert.equal(result.source, "live");
-  assert.ok(result.models.includes("gpt-5.5"));
-  assert.ok(!result.models.includes("text-embedding-3-large"));
+  assert.ok(ids(result).includes("gpt-5.5"));
+  assert.ok(!ids(result).includes("text-embedding-3-large"));
+});
+
+test("live lists are enriched with models.dev pricing metadata", async () => {
+  const result = await listModelsForAuth("openai", {
+    env: { OPENAI_API_KEY: "sk-test" },
+    fetchImpl: async (url) => {
+      if (String(url).includes("models.dev")) {
+        return jsonResponse({
+          openai: {
+            models: { "gpt-5.5": { id: "gpt-5.5", cost: { input: 1.25, output: 10 }, limit: { context: 400000 } } }
+          }
+        });
+      }
+      return jsonResponse({ data: [{ id: "gpt-5.5" }] });
+    }
+  });
+  assert.equal(result.source, "live");
+  assert.equal(result.models[0]?.pricing, "$1.25/M in · $10/M out");
 });
 
 test("api-key provider falls back to curated when discovery fails", async () => {
@@ -105,5 +153,5 @@ test("live list puts the default model first", async () => {
     env: { OPENAI_API_KEY: "sk-test" },
     fetchImpl: async () => jsonResponse({ data: [{ id: "gpt-4.1" }, { id: "gpt-5.5" }] })
   });
-  assert.equal(result.models[0], "gpt-5.5");
+  assert.equal(ids(result)[0], "gpt-5.5");
 });

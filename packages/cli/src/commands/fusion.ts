@@ -10,7 +10,11 @@ import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { configDefaultEnsembleName } from "../fusion/effective-config.js";
 import { runFusionInit } from "../fusion-init.js";
+import { toolRegistry } from "../tools.js";
 import { fail } from "../shared/errors.js";
+import { warnPassthroughTypos } from "../shared/flag-suggest.js";
+
+import { registerPaletteAction } from "./palette.js";
 import {
   collect,
   parseBudget,
@@ -242,6 +246,17 @@ function resolveContext(opts: FusionOpts): { options: RunFusionOptions; configTo
 }
 
 export function registerFusion(program: Command): void {
+  registerPaletteAction(
+    ...toolRegistry.launchableFusion().map((tool) => ({
+      label: `Run ${tool.id} with fusion`,
+      hint: `fusionkit ${tool.id}`,
+      argv: [tool.id]
+    })),
+    { label: "Run the gateway for any tool", hint: "fusionkit serve", argv: ["serve"] },
+    { label: "Set up this repo (.fusionkit/)", hint: "fusionkit init", argv: ["init"] },
+    { label: "Stop background fusion services", hint: "fusionkit fusion stop", argv: ["fusion", "stop"] }
+  );
+
   // Top-level shortcuts: `fusionkit codex`, `fusionkit claude`, etc.
   for (const tool of FUSION_TOOLS) {
     applyFusionOptions(
@@ -256,6 +271,7 @@ export function registerFusion(program: Command): void {
       )
       .action(async (args: string[], _opts: FusionOpts, command: Command) => {
         const opts = command.optsWithGlobals<FusionOpts>();
+        warnPassthroughTypos(command, args, tool);
         const { options } = resolveContext(opts);
         const code = await runFusion(tool, args, options);
         process.exit(code);
@@ -299,6 +315,7 @@ export function registerFusion(program: Command): void {
         }
       }
       const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
+      warnPassthroughTypos(command, toolArgs, resolvedTool);
       const code = await runFusion(resolvedTool, toolArgs, options);
       process.exit(code);
     });

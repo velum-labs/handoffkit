@@ -21,10 +21,13 @@ import type { Command } from "commander";
 
 import { bold, cyan, dim, glyph, gray, green, yellow } from "@fusionkit/cli-ui";
 
+import { autocompleteText, select, text } from "@fusionkit/cli-ui";
+
 import { FusionConfigError, fusionConfigPath, parseFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
-import { defaultKeyEnv } from "../fusion-quickstart.js";
+import { defaultKeyEnv, toolSelectOptions } from "../fusion-quickstart.js";
 import type { PanelModelSpec } from "../fusion-quickstart.js";
+import { cachedCatalog, CATALOG_PROVIDERS } from "../fusion/catalog.js";
 import { loadConfigOrFail, persistedShape, repoRootFor, validateAndWrite } from "../fusion/config-store.js";
 import { resolveEffectiveConfig } from "../fusion/effective-config.js";
 import type { ConfigSource } from "../fusion/effective-config.js";
@@ -32,8 +35,11 @@ import { exportRouterYaml } from "../fusion/stack.js";
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
+import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "../shared/options.js";
+import { argOrPick, canPickInteractively } from "../shared/pickers.js";
 
 import { runConfigEdit } from "./config-edit.js";
+import { registerPaletteAction } from "./palette.js";
 
 type ConfigOpts = { repo?: string; out?: string; json?: boolean };
 
@@ -274,6 +280,144 @@ export function parseConfigValue(raw: string): unknown {
   }
 }
 
+/** Short hints for the path picker (what each settable key controls). */
+const TOP_LEVEL_HINTS: Record<(typeof SETTABLE_TOP_LEVEL)[number], string> = {
+  tool: "default coding agent (codex, claude, cursor)",
+  defaultEnsemble: "session-default ensemble name",
+  local: "run the panel on local MLX models (on/off)",
+  observe: "boot the scope dashboard (on/off)",
+  portless: "stable .localhost URLs (on/off)",
+  port: "fixed gateway port (default: ephemeral)",
+  onRateLimit: "rate-limit handoff: fusion | passthrough | fail",
+  budgetUsd: "per-session USD spend cap",
+  panelTrust: "candidate autonomy: full | guarded",
+  reasoning: "narrate panel/judge in the tool (on/off)",
+  reasoningModel: "model that writes the narration prose"
+};
+
+/** Every settable dot path for the loaded config (top-level + per-ensemble). */
+export function settableConfigPaths(config: FusionConfig | undefined): Array<{ path: string; hint: string }> {
+  const paths: Array<{ path: string; hint: string }> = SETTABLE_TOP_LEVEL.map((key) => ({
+    path: key,
+    hint: TOP_LEVEL_HINTS[key]
+  }));
+  for (const name of Object.keys(config?.ensembles ?? {})) {
+    for (const key of SETTABLE_ENSEMBLE_KEYS) {
+      paths.push({ path: `ensembles.${name}.${key}`, hint: `ensemble "${name}" ${key}` });
+    }
+  }
+  return paths;
+}
+
+/** Resolve the `[path]` argument, offering a fuzzy picker on a TTY. */
+async function pathArgOrPick(
+  given: string | undefined,
+  config: FusionConfig | undefined,
+  verb: string
+): Promise<string> {
+  return argOrPick<string>({
+    given,
+    message: `Which setting to ${verb}?`,
+    placeholder: "type to filter",
+    missing:
+      `missing config path — expected one of ${SETTABLE_TOP_LEVEL.join(", ")}, ` +
+      `or ensembles.<name>.<${SETTABLE_ENSEMBLE_KEYS.join("|")}>`,
+    options: () => settableConfigPaths(config).map((entry) => ({ value: entry.path, label: entry.path, hint: entry.hint }))
+  });
+}
+
+/** All cached model ids across providers (ghost suggestions for model paths). */
+function cachedModelIdSuggestions(): string[] {
+  const ids: string[] = [];
+  for (const provider of CATALOG_PROVIDERS) {
+    for (const model of cachedCatalog(provider)) ids.push(model.id);
+  }
+  return ids;
+}
+
+/**
+ * Prompt for the `[value]` argument with the right input for the path: on/off
+ * for booleans, a picker for enums, ghost-completed text for model names, and
+ * plain text otherwise. Only reached on an interactive TTY.
+ */
+/** on/off toggle options for the boolean config keys. */
+const ON_OFF_OPTIONS = [
+  { value: "on", label: "on" },
+  { value: "off", label: "off" }
+] as const;
+
+async function promptConfigValue(address: ConfigPath): Promise<string> {
+  if (address.kind === "top") {
+    switch (address.key) {
+      case "local":
+      case "observe":
+      case "portless":
+      case "reasoning":
+        return select<string>({
+          message: `${address.key}`,
+          options: ON_OFF_OPTIONS,
+          defaultIndex: 0
+        });
+      case "tool":
+        return select<string>({
+          message: "default tool",
+          options: toolSelectOptions().filter((option) => option.value !== "serve"),
+          defaultIndex: 0
+        });
+      case "onRateLimit":
+        return select<string>({
+          message: "on rate limit",
+          options: ON_RATE_LIMIT_OPTIONS,
+          defaultIndex: 0
+        });
+      case "panelTrust":
+        return select<string>({
+          message: "panel trust",
+          options: PANEL_TRUST_OPTIONS,
+          defaultIndex: 0
+        });
+      case "reasoningModel": {
+        const value = await autocompleteText({
+          message: "reasoning model",
+          suggestions: cachedModelIdSuggestions(),
+          placeholder: "e.g. openai/gpt-5.5-mini"
+        });
+        return String(value);
+      }
+      case "port":
+        return text({ message: "gateway port", placeholder: "e.g. 8787" });
+      case "budgetUsd":
+        return text({ message: "budget (USD)", placeholder: "e.g. 5" });
+      case "defaultEnsemble":
+        return text({ message: "default ensemble name" });
+      default: {
+        const exhaustive: never = address;
+        throw new Error(`unknown top-level config key: ${String(exhaustive)}`);
+      }
+    }
+  }
+  switch (address.key) {
+    case "judgeModel":
+    case "synthesizerModel": {
+      const value = await autocompleteText({
+        message: `${address.name} ${address.key}`,
+        suggestions: cachedModelIdSuggestions(),
+        placeholder: "model name (tab completes from the catalog cache)"
+      });
+      return String(value);
+    }
+    case "panel":
+      return text({
+        message: `${address.name} panel (JSON array of {id, model, provider})`,
+        placeholder: '[{"id":"gpt","provider":"openai","model":"gpt-5.5"}]'
+      });
+    default: {
+      const exhaustive: never = address;
+      throw new Error(`unknown ensemble config key: ${String(exhaustive)}`);
+    }
+  }
+}
+
 function readPath(shape: Record<string, unknown>, address: ConfigPath): unknown {
   if (address.kind === "top") return shape[address.key];
   const ensembles = shape.ensembles as Record<string, Record<string, unknown>> | undefined;
@@ -358,6 +502,7 @@ function runUnset(path: string, opts: ConfigOpts, ctx: CommandContext): number {
 }
 
 export function registerConfig(program: Command): void {
+  registerPaletteAction({ label: "Edit the repo config", hint: "fusionkit config edit", argv: ["config", "edit"] });
   const config = program
     .command("config")
     .description("inspect and edit the one config source of truth (.fusionkit/fusion.json)");
@@ -382,33 +527,49 @@ export function registerConfig(program: Command): void {
 
   config
     .command("get")
-    .argument("<path>", "dot path, e.g. budgetUsd or ensembles.default.judgeModel")
+    .argument("[path]", "dot path, e.g. budgetUsd or ensembles.default.judgeModel; omit on a TTY to pick")
     .description("print one stored config value (exit 1 when unset)")
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON")
-    .action((path: string, opts: ConfigOpts, command: Command) => {
-      process.exit(runGet(path, opts, contextFor(command)));
+    .action(async (path: string | undefined, opts: ConfigOpts, command: Command) => {
+      const ctx = contextFor(command);
+      const { root } = repoRootFor(opts);
+      const resolved = await pathArgOrPick(path, loadConfigOrFail(root, ctx.presenter), "read");
+      process.exit(runGet(resolved, opts, ctx));
     });
 
   config
     .command("set")
-    .argument("<path>", "dot path, e.g. budgetUsd or ensembles.default.judgeModel")
-    .argument("<value>", "the new value (JSON, on/off, or a bare string)")
+    .argument("[path]", "dot path, e.g. budgetUsd or ensembles.default.judgeModel; omit on a TTY to pick")
+    .argument("[value]", "the new value (JSON, on/off, or a bare string); omit on a TTY to be prompted")
     .description("set one config value, validated before writing")
     .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON")
-    .action((path: string, value: string, opts: ConfigOpts, command: Command) => {
-      process.exit(runSet(path, value, opts, contextFor(command)));
+    .action(async (path: string | undefined, value: string | undefined, opts: ConfigOpts, command: Command) => {
+      const ctx = contextFor(command);
+      const { root } = repoRootFor(opts);
+      const resolvedPath = await pathArgOrPick(path, loadConfigOrFail(root, ctx.presenter), "set");
+      let resolvedValue = value;
+      if (resolvedValue === undefined) {
+        if (!canPickInteractively()) {
+          fail(`missing value for ${resolvedPath} — pass it as the second argument`);
+        }
+        resolvedValue = await promptConfigValue(parseConfigPath(resolvedPath));
+      }
+      process.exit(runSet(resolvedPath, resolvedValue, opts, ctx));
     });
 
   config
     .command("unset")
-    .argument("<path>", "dot path, e.g. budgetUsd or ensembles.default.judgeModel")
+    .argument("[path]", "dot path, e.g. budgetUsd or ensembles.default.judgeModel; omit on a TTY to pick")
     .description("remove one config value (the built-in default applies again)")
     .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON")
-    .action((path: string, opts: ConfigOpts, command: Command) => {
-      process.exit(runUnset(path, opts, contextFor(command)));
+    .action(async (path: string | undefined, opts: ConfigOpts, command: Command) => {
+      const ctx = contextFor(command);
+      const { root } = repoRootFor(opts);
+      const resolved = await pathArgOrPick(path, loadConfigOrFail(root, ctx.presenter), "unset");
+      process.exit(runUnset(resolved, opts, ctx));
     });
 
   config

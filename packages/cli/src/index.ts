@@ -8,15 +8,23 @@ import { PolicyDeniedError } from "@fusionkit/protocol";
 import { uiStream } from "@fusionkit/cli-ui";
 
 import { buildProgram } from "./cli.js";
+import { runCommandPalette } from "./commands/palette.js";
+import { CliError, exitWithCliError } from "./shared/errors.js";
 import { emitJson, isJsonMode } from "./shared/context.js";
 import { PreflightError } from "./shared/preflight.js";
 
 async function main(): Promise<void> {
   const program = buildProgram();
-  // Bare invocation prints help on stdout and exits 0 (commander would
-  // otherwise print to stderr and exit non-zero).
+  // Bare invocation: an interactive command palette on a TTY (pick an action,
+  // see the equivalent command); help on stdout otherwise (commander would
+  // print to stderr and exit non-zero by default).
   if (process.argv.slice(2).length === 0) {
-    program.outputHelp();
+    const paletteArgv = await runCommandPalette();
+    if (paletteArgv === undefined) {
+      program.outputHelp();
+      return;
+    }
+    await program.parseAsync([...process.argv.slice(0, 2), ...paletteArgv]);
     return;
   }
   await program.parseAsync(process.argv);
@@ -37,9 +45,19 @@ main().catch((error: unknown) => {
   }
   if (error instanceof PreflightError) {
     if (isJsonMode()) jsonError("preflight", error.message);
-    uiStream().write(`${error.message}\n`);
-    process.exit(1);
+    // "fusionkit preflight failed:" heading + "  - problem" lines: render the
+    // problems as panel evidence with doctor as the next command.
+    const [first, ...rest] = error.message.split("\n");
+    exitWithCliError(
+      new CliError({
+        code: "preflight",
+        message: first ?? error.message,
+        ...(rest.length > 0 ? { details: rest.map((line) => line.replace(/^\s+-\s*/, "")) } : {}),
+        tryCommand: "fusionkit doctor"
+      })
+    );
   }
+  if (error instanceof CliError) exitWithCliError(error);
   const message = error instanceof Error ? error.message : String(error);
   if (isJsonMode()) jsonError("error", message);
   uiStream().write(`error: ${message}\n`);

@@ -32,6 +32,8 @@ import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { toolRegistry } from "../tools.js";
 
+import { registerPaletteAction } from "./palette.js";
+
 type Check = { label: string; ok: boolean; detail?: string; hint?: string };
 type CredentialCheck = { env: string; present: boolean; members: string[] };
 type FusionkitPathEntry = { path: string; realpath: string };
@@ -548,6 +550,10 @@ function runStatus(ctx: CommandContext): number {
 }
 
 export function registerDoctor(program: Command): void {
+  registerPaletteAction(
+    { label: "Check my environment", hint: "fusionkit doctor", argv: ["doctor"] },
+    { label: "Show the effective config", hint: "fusionkit status", argv: ["status"] }
+  );
   program
     .command("doctor")
     .description("check that prerequisites (uv, agents, keys, git) are ready")

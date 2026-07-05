@@ -19,6 +19,8 @@ import { provisionEngineWithProgress } from "../fusion/provision.js";
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 
+import { registerPaletteAction } from "./palette.js";
+
 type SetupOpts = { fusionkitDir?: string; force?: boolean };
 
 function reportCapabilities(presenter: Presenter): void {
@@ -63,6 +65,7 @@ async function runSetup(opts: SetupOpts, ctx: CommandContext): Promise<number> {
 }
 
 export function registerSetup(program: Command): void {
+  registerPaletteAction({ label: "Warm the fusion engine", hint: "fusionkit setup", argv: ["setup"] });
   program
     .command("setup")
     .description("pre-provision the fusion engine (warm the uv cache) so the first run is instant")

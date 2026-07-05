@@ -13,10 +13,14 @@ function isCompletionShell(value: string): value is CompletionShell {
   return (COMPLETION_SHELLS as readonly string[]).includes(value);
 }
 
+function visible(commands: readonly Command[]): Command[] {
+  return commands.filter((command) => command.name() !== "help" && !command.name().startsWith("__"));
+}
+
 function commandNodes(program: Command): CommandNode[] {
-  return program.commands.map((command) => ({
+  return visible(program.commands).map((command) => ({
     name: command.name(),
-    subcommands: command.commands.map((subcommand) => subcommand.name())
+    subcommands: visible(command.commands).map((subcommand) => subcommand.name())
   }));
 }
 
@@ -35,9 +39,17 @@ function bashCompletion(nodes: readonly CommandNode[]): string {
     .join("\n");
   return [
     "# bash completion for fusionkit",
+    "# Dynamic candidates come from `fusionkit __complete` (live session ids,",
+    "# ensemble names, config paths, local models); the static tree below is the",
+    "# fallback when that call fails or returns nothing.",
     "_fusionkit_completion() {",
-    "  local cur",
+    "  local cur dynamic",
     "  cur=\"${COMP_WORDS[COMP_CWORD]}\"",
+    "  dynamic=\"$(fusionkit __complete -- \"${COMP_WORDS[@]:1:COMP_CWORD}\" 2>/dev/null)\"",
+    "  if [[ -n \"${dynamic}\" ]]; then",
+    "    COMPREPLY=( $(compgen -W \"${dynamic}\" -- \"$cur\") )",
+    "    return",
+    "  fi",
     "  if [[ ${COMP_CWORD} -eq 1 ]]; then",
     `    COMPREPLY=( $(compgen -W "${topLevel}" -- "$cur") )`,
     "    return",
@@ -60,7 +72,15 @@ function zshCompletion(nodes: readonly CommandNode[]): string {
   return [
     "#compdef fusionkit",
     "# zsh completion for fusionkit",
+    "# Dynamic candidates come from `fusionkit __complete`; the static tree below",
+    "# is the fallback when that call fails or returns nothing.",
     "_fusionkit() {",
+    "  local -a dynamic",
+    "  dynamic=(${(f)\"$(fusionkit __complete -- ${words[@]:1:$((CURRENT-1))} 2>/dev/null)\"})",
+    "  if (( ${#dynamic} )); then",
+    "    compadd -- \"${dynamic[@]}\"",
+    "    return",
+    "  fi",
     "  if (( CURRENT == 2 )); then",
     `    _values 'fusionkit command' ${topLevel}`,
     "    return",
@@ -77,6 +97,13 @@ function zshCompletion(nodes: readonly CommandNode[]): string {
 function fishCompletion(nodes: readonly CommandNode[]): string {
   const lines = [
     "# fish completion for fusionkit",
+    "# Dynamic candidates come from `fusionkit __complete`; fish deduplicates",
+    "# them against the static tree below, which stays as the fallback.",
+    "function __fusionkit_complete",
+    "    set -l tokens (commandline -opc) (commandline -ct)",
+    "    fusionkit __complete -- $tokens[2..-1] 2>/dev/null",
+    "end",
+    'complete -c fusionkit -f -a "(__fusionkit_complete)"',
     `complete -c fusionkit -f -n "__fish_use_subcommand" -a "${words(nodes.map((node) => node.name))}"`
   ];
   for (const node of nodes) {

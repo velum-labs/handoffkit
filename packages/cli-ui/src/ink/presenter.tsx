@@ -9,6 +9,7 @@
  */
 import { render } from "ink";
 import type { Instance } from "ink";
+import { createElement, Fragment } from "react";
 import type { ReactElement } from "react";
 
 import { formatBytes } from "../format.js";
@@ -39,9 +40,19 @@ export function mountInk(node: ReactElement): Instance {
   });
 }
 
-/** Clear the live Ink region and unmount, leaving the terminal clean. */
+/**
+ * Clear the live Ink region and unmount, leaving the terminal clean for the
+ * caller to write the settled plain lines.
+ *
+ * Ink throttles renders (~30fps) with a trailing call, so `instance.clear()`
+ * followed by `unmount()` is racy: unmount flushes the pending trailing
+ * render *after* the clear, repainting the live frame — which the caller's
+ * raw write then duplicates on screen. Rerendering an empty node first makes
+ * that flushed render paint emptiness (erasing the region), so nothing stale
+ * survives the unmount.
+ */
 export function settleInk(instance: Instance): void {
-  instance.clear();
+  instance.rerender(createElement(Fragment));
   instance.unmount();
   instance.cleanup();
 }

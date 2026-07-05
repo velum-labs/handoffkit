@@ -12,6 +12,7 @@
 import { existsSync } from "node:fs";
 
 import {
+  BACK,
   bold,
   canPromptInteractively,
   confirm,
@@ -23,17 +24,19 @@ import {
   green,
   note,
   red,
+  runWizard,
   select,
   text,
   uiStream,
   yellow
 } from "@fusionkit/cli-ui";
-import type { Presenter } from "@fusionkit/cli-ui";
+import type { Presenter, WizardStep } from "@fusionkit/cli-ui";
 
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 
 import { formatBytes, glyph } from "@fusionkit/cli-ui";
 
+import { toolSelectOptions } from "./fusion-quickstart.js";
 import type { FusionTool, PanelModelSpec } from "./fusion-quickstart.js";
 import {
   DEFAULT_ENSEMBLE_NAME,
@@ -51,7 +54,7 @@ import type { HostInfo } from "./fusion/local-catalog.js";
 import { ownedMlxEnv } from "./fusion/mlx.js";
 import { buildPanel, isAllLocal, judgeOptions, withKeyEnv } from "./fusion/panel-builder.js";
 import { fetchDefaultPrompts } from "./fusion/prompts.js";
-import { ON_RATE_LIMIT_POLICIES, PANEL_TRUST_LEVELS } from "./shared/options.js";
+import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "./shared/options.js";
 
 export { defaultMemberId, judgeOptions } from "./fusion/panel-builder.js";
 
@@ -246,20 +249,13 @@ async function promptExtras(config: FusionConfig): Promise<void> {
 
   config.onRateLimit = await select({
     message: "When a vendor passthrough model hits a rate limit / credit wall",
-    options: [
-      { value: ON_RATE_LIMIT_POLICIES[0], label: "fusion", hint: "continue on the ensemble (default)" },
-      { value: ON_RATE_LIMIT_POLICIES[1], label: "passthrough", hint: "surface the vendor error to the tool" },
-      { value: ON_RATE_LIMIT_POLICIES[2], label: "fail", hint: "stop the session" }
-    ] as Array<{ value: (typeof ON_RATE_LIMIT_POLICIES)[number]; label: string; hint: string }>,
+    options: ON_RATE_LIMIT_OPTIONS,
     defaultIndex: 0
   });
 
   const trust = await select({
     message: "Panel candidate autonomy",
-    options: [
-      { value: PANEL_TRUST_LEVELS[0], label: "full", hint: "maximum autonomy (default)" },
-      { value: PANEL_TRUST_LEVELS[1], label: "guarded", hint: "harness-fenced to the worktree" }
-    ] as Array<{ value: (typeof PANEL_TRUST_LEVELS)[number]; label: string; hint: string }>,
+    options: PANEL_TRUST_OPTIONS,
     defaultIndex: 0
   });
   if (trust !== undefined) config.panelTrust = trust;
@@ -349,32 +345,74 @@ export async function runFusionInit(input: {
 
   const host = detectHost();
 
-  const tool = await select<FusionTool>({
-    message: "Default coding agent",
-    options: [
-      { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
-      { value: "claude", label: "claude", hint: "Claude Code" },
-      { value: "cursor", label: "cursor", hint: "cursor-agent (logged-in CLI)" },
-      { value: "serve", label: "serve", hint: "just run the gateway and print setup" }
-    ],
-    defaultIndex: 0
-  });
-
-  const panel = (await buildPanel(host)).map((spec) => withKeyEnv(spec));
-
-  // The judge must be one of the panel models (the runtime matches by model and
-  // falls back to the first member otherwise), so pick from the members.
-  const judgeChoices = judgeOptions(panel);
-  const judgeModel =
-    judgeChoices.length <= 1
-      ? (panel[0]?.model ?? "")
-      : await select<string>({
-          message: "Judge model (synthesizes the panel)",
-          options: judgeChoices,
+  // The linear wizard: tool → panel → judge → observe, with Esc going back one
+  // step (and step counters framing the journey). The panel builder keeps its
+  // own member-by-member loop inside the panel step.
+  type InitWizardState = {
+    tool: FusionTool;
+    panel: PanelModelSpec[];
+    judgeModel: string;
+    observe: boolean;
+  };
+  const steps: Array<WizardStep<InitWizardState>> = [
+    {
+      id: "tool",
+      title: "coding agent",
+      run: async (state) => {
+        const tool = await select<FusionTool>({
+          message: "Default coding agent",
+          options: toolSelectOptions(),
           defaultIndex: 0
         });
-
-  const observe = await confirm({ message: "Enable the observability dashboard by default?", defaultValue: false });
+        return { ...state, tool };
+      }
+    },
+    {
+      id: "panel",
+      title: "model panel",
+      run: async (state) => {
+        const built = await buildPanel(host, { allowBack: true });
+        if (built === BACK) return BACK;
+        const panel = built.map((spec) => withKeyEnv(spec));
+        return { ...state, panel, judgeModel: panel[0]?.model ?? "" };
+      }
+    },
+    {
+      id: "judge",
+      title: "judge",
+      // The judge must be one of the panel models (the runtime matches by
+      // model and falls back to the first member otherwise).
+      skip: (state) => judgeOptions(state.panel).length <= 1,
+      run: async (state) => {
+        const choices = judgeOptions(state.panel);
+        const judgeModel = await select<string>({
+          message: "Judge model (synthesizes the panel)",
+          options: choices,
+          defaultIndex: 0,
+          allowBack: true
+        });
+        if (judgeModel === BACK) return BACK;
+        return { ...state, judgeModel };
+      }
+    },
+    {
+      id: "observe",
+      title: "observability",
+      run: async (state) => {
+        const observe = await confirm({
+          message: "Enable the observability dashboard by default?",
+          defaultValue: false,
+          allowBack: true
+        });
+        if (observe === BACK) return BACK;
+        return { ...state, observe };
+      }
+    }
+  ];
+  const { tool, panel, judgeModel, observe } = await runWizard<InitWizardState>({
+    steps,
+    initial: { tool: "codex", panel: [], judgeModel: "", observe: false }
+  });
 
   const namedEnsembles = await promptNamedEnsembles(host);
 

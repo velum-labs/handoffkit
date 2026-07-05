@@ -6,6 +6,8 @@ import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { collectVersionMatrix } from "../shared/package-version.js";
 
+import { registerPaletteAction } from "./palette.js";
+
 async function runVersion(ctx: CommandContext): Promise<number> {
   const matrix = await collectVersionMatrix();
 
@@ -55,6 +57,7 @@ async function runVersion(ctx: CommandContext): Promise<number> {
 }
 
 export function registerVersion(program: Command): void {
+  registerPaletteAction({ label: "Show versions", hint: "fusionkit version", argv: ["version"] });
   program
     .command("version")
     .description("show versions for fusionkit, the synthesizer, runners, agents, and tool packages")
