@@ -762,7 +762,7 @@ export async function runFusion(
       log("");
       log(gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>"));
       log("");
-      log("Gateway is running. Point any tool at it, or Ctrl+C to stop.");
+      log(`${green(glyph.tick())} ${bold("gateway is running")} ${dim("— point any tool at it, or Ctrl+C to stop")}`);
       await new Promise<void>(() => {
         /* run until interrupted */
       });

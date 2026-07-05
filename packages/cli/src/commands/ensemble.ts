@@ -14,7 +14,7 @@ import type { EnsembleDescriptor } from "@fusionkit/ensemble";
 import { assertHarnessRunRequestV1, assertHarnessRunResultV1 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
 
-import { uiStream } from "@fusionkit/cli-ui";
+import { bold, dim, glyph, green, red, uiStream } from "@fusionkit/cli-ui";
 
 import { runHarnessSmokeDashboard } from "../dashboard.js";
 import { fail } from "../shared/errors.js";
@@ -271,13 +271,14 @@ async function runEnsembleE2E(task: string[], opts: EnsembleE2EOpts): Promise<vo
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([status, count]) => `${status}:${count}`)
     .join(", ");
-  uiStream().write(`unified e2e [${countText}]\n`);
-  uiStream().write(`results: ${result.results.length}\n`);
-  uiStream().write(`report: ${result.reportPath}\n`);
+  const anyFailed = result.results.some((row) => row.status === "failed");
+  uiStream().write(`${bold(`unified e2e [${countText}]`)}\n`);
+  uiStream().write(`${dim(`results: ${result.results.length} · report: ${result.reportPath}`)}\n`);
   for (const row of result.results) {
-    uiStream().write(`  ${row.harness}: ${row.status} (${row.message})\n`);
+    const mark = row.status === "failed" ? red(glyph.cross()) : green(glyph.tick());
+    uiStream().write(`  ${mark} ${row.harness}: ${row.status} ${dim(`(${row.message})`)}\n`);
   }
-  if (result.results.some((row) => row.status === "failed")) {
+  if (anyFailed) {
     process.exitCode = 1;
   }
 }

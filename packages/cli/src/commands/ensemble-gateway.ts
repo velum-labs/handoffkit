@@ -2,7 +2,7 @@ import { join, resolve } from "node:path";
 
 import { Command } from "commander";
 
-import { uiStream } from "@fusionkit/cli-ui";
+import { bold, cyan, dim, glyph, gray, green, red, uiStream } from "@fusionkit/cli-ui";
 
 import {
   codexConfigSnippet,
@@ -89,7 +89,9 @@ export function buildGatewayCommand(): Command {
         port,
         ...(opts.authToken !== undefined ? { authToken: opts.authToken } : {})
       });
-      uiStream().write(`fusion harness gateway listening on ${instance.url()}\n\n`);
+      uiStream().write(
+        `${green(glyph.tick())} ${bold("fusion harness gateway")} ${cyan(instance.url())}\n\n`
+      );
       uiStream().write(gatewaySetupSnippets(instance.url(), "http://127.0.0.1:<cursorkit-port>") + "\n");
     });
   gateway.addCommand(serve, { isDefault: true });
@@ -117,8 +119,8 @@ export function buildGatewayCommand(): Command {
         agentIds,
         installDir: resolve(opts.installDir)
       });
-      uiStream().write(`installed ${installed.length} ACP registry adapter(s):\n`);
-      for (const line of installed) uiStream().write(`  ${line}\n`);
+      uiStream().write(`${green(glyph.tick())} installed ${installed.length} ACP registry adapter(s)\n`);
+      for (const line of installed) uiStream().write(`  ${gray(glyph.bullet())} ${line}\n`);
     });
   gateway.addCommand(acpRegistry);
 
@@ -142,7 +144,11 @@ export function buildGatewayCommand(): Command {
           host: opts.host ?? "127.0.0.1",
           outPath
         });
-        uiStream().write(`front-door acceptance report: ${reportPath}\n`);
+        uiStream().write(
+          failed
+            ? `${red(glyph.cross())} front-door acceptance failed ${dim(`— report: ${reportPath}`)}\n`
+            : `${green(glyph.tick())} front-door acceptance passed ${dim(`— report: ${reportPath}`)}\n`
+        );
         if (failed) process.exitCode = 1;
       })
   );

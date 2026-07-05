@@ -1,4 +1,4 @@
-import { uiStream } from "@fusionkit/cli-ui";
+import { bold, cyan, dim, glyph, green, uiStream } from "@fusionkit/cli-ui";
 import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
 import type { BackendConfig } from "@fusionkit/model-gateway";
 import { KernelBackend } from "@fusionkit/ensemble";
@@ -79,15 +79,15 @@ export async function runLocal(
   const model = backendModel(config);
   const publicUrl = options.publicUrl ?? readEnv(process.env, "FUSIONKIT_PUBLIC_URL");
   const gateway = await startLocalGateway(config, options.authToken);
-  log(`fusionkit local: gateway on ${gateway.url} (model: ${model})`);
+  log(`${green(glyph.tick())} ${bold("local gateway")} ${cyan(gateway.url)} ${dim(`(model: ${model})`)}`);
 
   const disposers: Array<() => Promise<void> | void> = [];
   try {
     if (tool === "serve") {
-      log(`OpenAI:    ${gateway.url}/v1`);
-      log(`Anthropic: ${gateway.url}/v1/messages`);
-      log(`Responses: ${gateway.url}/v1/responses`);
-      log("Press Ctrl+C to stop.");
+      log(`  ${dim("OpenAI:")}    ${cyan(`${gateway.url}/v1`)}`);
+      log(`  ${dim("Anthropic:")} ${cyan(`${gateway.url}/v1/messages`)}`);
+      log(`  ${dim("Responses:")} ${cyan(`${gateway.url}/v1/responses`)}`);
+      log(dim("Press Ctrl+C to stop."));
       await new Promise<void>(() => {
         /* run until interrupted */
       });

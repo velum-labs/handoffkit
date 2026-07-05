@@ -1133,7 +1133,7 @@ test("ensemble gateway test runs the unified front-door acceptance suite", async
       "FUSION_OK"
     ]);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stderr, /front-door acceptance report/);
+    assert.match(result.stderr, /front-door acceptance passed — report:/);
     assert.ok(existsSync(reportPath));
     const report = JSON.parse(readFileSync(reportPath, "utf8")) as {
       front_doors: Array<{ id: string; status: string; reason?: string }>;
