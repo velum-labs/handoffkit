@@ -26,3 +26,6 @@ __pycache__/
 /.fusionkit/runs/
 /.fusionkit/fusion-bench/
 /.fusionkit/hillclimb/
+
+# analysis round caches (regenerable banks/logs; see capability-index-program.md)
+analysis/*/cache/
