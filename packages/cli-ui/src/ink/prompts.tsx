@@ -389,7 +389,11 @@ export function FuzzySelectPrompt<T>({
   const [answer, setAnswer] = useState<string | undefined>(undefined);
   const frame = useSpinnerFrame();
 
-  const results = fuzzyFilter(query, state.options, (option) => option.label);
+  // Match against the label plus the hint (e.g. the equivalent command), but
+  // only highlight positions that fall inside the label itself.
+  const results = fuzzyFilter(query, state.options, (option) =>
+    option.hint !== undefined ? `${option.label} ${option.hint}` : option.label
+  );
 
   useInput((input, key) => {
     if (answer !== undefined) return;
@@ -460,7 +464,11 @@ export function FuzzySelectPrompt<T>({
         return (
           <Text key={`${index}-${result.item.label}`}>
             <Text color="cyan">{active ? glyph.pointer() : " "}</Text>{" "}
-            <HighlightedLabel label={result.item.label} positions={result.match.positions} active={active} />
+            <HighlightedLabel
+              label={result.item.label}
+              positions={result.match.positions.filter((position) => position < result.item.label.length)}
+              active={active}
+            />
             {result.item.hint !== undefined ? <Text dimColor> — {result.item.hint}</Text> : null}
           </Text>
         );

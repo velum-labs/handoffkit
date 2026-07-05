@@ -382,7 +382,9 @@ export async function runFusionInit(input: {
       id: "panel",
       title: "model panel",
       run: async (state) => {
-        const panel = (await buildPanel(host)).map((spec) => withKeyEnv(spec));
+        const built = await buildPanel(host, { allowBack: true });
+        if (built === BACK) return BACK;
+        const panel = built.map((spec) => withKeyEnv(spec));
         return { ...state, panel, judgeModel: panel[0]?.model ?? "" };
       }
     },

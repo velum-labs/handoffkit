@@ -11,6 +11,7 @@ import { defaultKeyEnv as registryDefaultKeyEnv, providerDiscovery } from "@fusi
 
 import {
   autocompleteText,
+  BACK,
   canPromptInteractively,
   confirm,
   dim,
@@ -21,6 +22,7 @@ import {
   text,
   uiStream
 } from "@fusionkit/cli-ui";
+import type { Back } from "@fusionkit/cli-ui";
 
 import { DEFAULT_CLOUD_PANEL, defaultKeyEnv } from "./env.js";
 import type { PanelModelSpec } from "./env.js";
@@ -108,7 +110,10 @@ async function pickModel(
   const cached = cache.get(choice);
   const sourceNote = (result: ModelListResult | undefined): string => {
     if (result?.source === "live") return `${choice} live`;
-    return keyEnv !== undefined ? `curated — set ${keyEnv} for the live list` : "curated";
+    if (keyEnv !== undefined && process.env[keyEnv] === undefined) {
+      return `curated — set ${keyEnv} for the live list`;
+    }
+    return `${choice} models`;
   };
   const chosen = await fuzzySelect<string>({
     message: `Model (${sourceNote(cached ?? undefined)})`,
@@ -242,11 +247,21 @@ async function pickLocalModel(scan: LocalScan, remainingGB: number): Promise<str
  * non-interactive stdin we fall back to the default cloud panel so callers
  * still produce a sensible config in CI. `existing` seeds the taken-id set and
  * the shared local memory budget (for `ensemble edit`'s add-member flow).
+ * With `allowBack`, Esc on the very first prompt returns {@link BACK} so a
+ * wizard can step back instead of trapping the user in the builder.
  */
 export async function buildPanel(
   host: HostInfo,
-  options: { existing?: readonly PanelModelSpec[]; maxMembers?: number } = {}
-): Promise<PanelModelSpec[]> {
+  options: { existing?: readonly PanelModelSpec[]; maxMembers?: number; allowBack: true }
+): Promise<PanelModelSpec[] | Back>;
+export async function buildPanel(
+  host: HostInfo,
+  options?: { existing?: readonly PanelModelSpec[]; maxMembers?: number }
+): Promise<PanelModelSpec[]>;
+export async function buildPanel(
+  host: HostInfo,
+  options: { existing?: readonly PanelModelSpec[]; maxMembers?: number; allowBack?: boolean } = {}
+): Promise<PanelModelSpec[] | Back> {
   if (!canPromptInteractively()) {
     return DEFAULT_CLOUD_PANEL.map((spec) => withKeyEnv(spec));
   }
@@ -270,11 +285,14 @@ export async function buildPanel(
   }
   const max = options.maxMembers ?? 16;
   for (let index = 0; index < max; index++) {
-    const choice = await select<AuthChoice>({
-      message: `Model ${taken.size + 1}: authenticate with`,
-      options: authOptions,
-      defaultIndex: 0
-    });
+    const message = `Model ${taken.size + 1}: authenticate with`;
+    // Only the very first prompt can back out of the builder: once a member
+    // exists, Esc would silently discard picks, so it stays inert instead.
+    const choice =
+      options.allowBack === true && specs.length === 0
+        ? await select<AuthChoice>({ message, options: authOptions, defaultIndex: 0, allowBack: true })
+        : await select<AuthChoice>({ message, options: authOptions, defaultIndex: 0 });
+    if (choice === BACK) return BACK;
     let model: string;
     if (choice === "local") {
       const picked = await pickLocalModel(localScan, localBudgetGB - localUsedGB);
