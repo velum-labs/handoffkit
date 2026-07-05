@@ -17,6 +17,8 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.48",
     "@ai-sdk/provider": "3.0.10",
+    "@fusionkit/handoff": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
     "ai": "6.0.200"
   }

@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/adapter-ai-sdk"
   },
-  "description": "AI SDK adapter for app-owned loops: tool calls execute in governed runner sessions and return with receipts. No durability claim attaches to the caller's loop.",
+  "description": "AI SDK adapters and managed local-model helpers for FusionKit model routing, MLX-backed local panels, and provider-compatible model bridges.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -28,14 +28,18 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.48",
     "@ai-sdk/provider": "3.0.10",
-    "@fusionkit/handoff": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runtime-utils": "workspace:*",
-    "@fusionkit/sdk": "workspace:*",
-    "ai": "6.0.200",
-    "zod": "4.4.3"
+    "ai": "6.0.200"
   },
-  "devDependencies": {
-    "@fusionkit/testkit": "workspace:*"
-  }
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "ai-sdk",
+    "mlx",
+    "local-model"
+  ]
 }

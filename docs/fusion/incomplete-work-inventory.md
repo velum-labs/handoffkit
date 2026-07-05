@@ -1,17 +1,21 @@
 # Incomplete work inventory
 
+> **Internal - not product documentation:** Design archive for maintainers; do not treat this as current user-facing product guidance.
+
+
 Consolidated list of work that is **not yet implemented**, **partially integrated**,
 **stubbed**, **deferred**, or **planned** across the handoffkit monorepo. Use this
 alongside:
 
 - `docs/fusion/kernel-migration.md` — kernel cutover phases and parity checklist
 - `docs/fusion/MOA_IMPLEMENTATION_STATUS.md` — what the runtime kernel already ships
-- `ENSEMBLE_PRODUCT_PLAN.md` — product gap-closing workstreams
+- `docs/planning/ensemble-product-plan.md` — product gap-closing workstreams
 - `docs/fusion/FUSION_VALUE_RUBRIC.md` — production gates and measurement criteria
 - `docs/scope.md` — product vs governance package boundaries
 
 **Last reviewed:** 2026-07-02. Some source documents (especially
-`PRODUCTION_READINESS_AUDIT.md` and `ENSEMBLE_PRODUCT_PLAN.md`, dated 2026-06) are
+`legacy/docs/production-readiness-audit-2026-06.md` and
+`docs/planning/ensemble-product-plan.md`, dated 2026-06) are
 partially stale where kernel migration, durable sessions, pre-stream failover, and
 kernel-native streaming have landed since they were written.
 
@@ -54,7 +58,7 @@ From `docs/fusion/MOA_IMPLEMENTATION_STATUS.md`:
 
 ---
 
-## 3. Product gaps (`ENSEMBLE_PRODUCT_PLAN.md`)
+## 3. Product gaps (`docs/planning/ensemble-product-plan.md`)
 
 Many items remain accurate; some have progressed (sessions, pre-stream failover,
 kernel streaming, `openai-compatible` panel provider).
@@ -118,8 +122,8 @@ these stubs.
 | **MF-02** | HandoffKit protocol validators for harness / tool / receipt records |
 | **MF-03** | CursorKit fixture validation + `cursor-run-result` → `harness-run-result` mapping |
 | **MF-04** | MLX provider-only validation without runtime imports |
-| **MF-50** | Dirty-dozen benchmark manifest (seed exists under `python/fusionkit-evals/benchmarks/dirty-dozen/`) |
-| **MF-60–MF-62** | Governance / isolation fixtures: redacted transcripts, secret denial, disclosure, retention, container isolation, MicroVM hardening (`spec/2026-06-16-eng-596-microvm-design-spike.md`, `spec/2026-06-16-eng-597-secret-disclosure-receipts.md`) |
+| **MF-50** | Dirty-dozen benchmark manifest (seed exists under `python/fusionkit-evals/src/fusionkit_evals/data/benchmarks/dirty-dozen/`) |
+| **MF-60–MF-62** | Governance / isolation fixtures: redacted transcripts, secret denial, disclosure, retention, container isolation, MicroVM hardening (`legacy/specs/2026-06-16-eng-596-microvm-design-spike.md`, `legacy/specs/2026-06-16-eng-597-secret-disclosure-receipts.md`) |
 
 **Reserved:** Protobuf / Buf for internal streaming / gRPC — not required for v1
 (`spec/model-fusion-contract/README.md`).
@@ -149,12 +153,12 @@ default `fusionkit codex` path:
 | Item | Location | Status |
 | --- | --- | --- |
 | Codex `shell_command: "degraded"` | `packages/tool-codex/src/harness.ts` | `TODO(@000alen): why degraded? Codex adapter capability metadata should be the source of truth, with ToolDashboardMetadata documenting the shell_command limitation.` |
-| `panelIdentity` / `harnessPromptPassthrough` CLI flags | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` §12 | Wired internally; **not exposed** on `fusionkit codex` CLI or `.fusionkit` config |
-| Phase 3 optional: custom-instruction delta extraction | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` | Not done |
-| Harness prompt open questions Q1–Q4 | `HARNESS_PROMPT_PASSTHROUGH_SPEC.md` | Unresolved |
-| **pi agent** | `packages/runner` | Non-spawnable placeholder argv (harness-only hashing) |
+| `panelIdentity` / `harnessPromptPassthrough` CLI flags | `docs/specs/harness-prompt-passthrough.md` §12 | Wired internally; **not exposed** on `fusionkit codex` CLI or `.fusionkit` config |
+| Phase 3 optional: custom-instruction delta extraction | `docs/specs/harness-prompt-passthrough.md` | Not done |
+| Harness prompt open questions Q1–Q4 | `docs/specs/harness-prompt-passthrough.md` | Unresolved |
+| **pi agent** | `legacy/packages/runner` | Non-spawnable placeholder argv (harness-only hashing) |
 | **Cursor ACP live probe** | `packages/tool-cursor/src/acp.ts` | Opt-in via `FUSIONKIT_GATEWAY_LIVE_CURSOR=1`; otherwise `blocked` |
-| **Cursorkit tool loop** | `PRODUCTION_READINESS_AUDIT.md` | 9 / 31 agent tools wired; full OpenAI `tool_calls` → Cursor message loop incomplete |
+| **Cursorkit tool loop** | `legacy/docs/production-readiness-audit-2026-06.md` | 9 / 31 agent tools wired; full OpenAI `tool_calls` → Cursor message loop incomplete |
 | **opencode** | `packages/tool-opencode` | Local model only; no fusion panel |
 
 ---
@@ -197,11 +201,11 @@ default `fusionkit codex` path:
 | `.cursor/plans/phase-2-providers-508e.md` | Claude Router backends: OpenRouter, DeepSeek, Groq, Gemini; DeepSeek `reasoning_content` risk; Gemini `webSearch` needs `extra_body` extension |
 | `.cursor/plans/fusion_observability_spine_83471272.plan.md` | scopekit dashboard completion + verification |
 | `.cursor/plans/comprehensive-documentation-rubric-508e.md` | Documentation quality bar (meta) |
-| `spec/2026-06-11-local-first-handoff-platform-spec.md` | Full handoff platform Phases 0–5 — implementation blocked until design agreed |
-| `spec/2026-06-11-governed-agent-execution-plane-spec.md` | Warrant plane v1 — microVM snapshots out of scope |
+| `legacy/specs/2026-06-11-local-first-handoff-platform-spec.md` | Full handoff platform Phases 0–5 — implementation blocked until design agreed |
+| `legacy/specs/2026-06-11-governed-agent-execution-plane-spec.md` | Warrant plane v1 — microVM snapshots out of scope |
 | `spec/2026-06-13-local-model-harness-bridge-spec.md` | Cursor IDE tunnel requirements |
-| `spec/2026-06-16-eng-596-microvm-design-spike.md` | MF-61 MicroVM path |
-| `spec/2026-06-16-eng-597-secret-disclosure-receipts.md` | MF-62 secret disclosure |
+| `legacy/specs/2026-06-16-eng-596-microvm-design-spike.md` | MF-61 MicroVM path |
+| `legacy/specs/2026-06-16-eng-597-secret-disclosure-receipts.md` | MF-62 secret disclosure |
 | `.cursor/skills/fusion-production-audit/SKILL.md` | Phased spend / benchmark audit playbook (operational, not code) |
 
 ---
@@ -215,7 +219,7 @@ Per `docs/scope.md` and `AGENTS.md`:
 - Still **compiled into product dependency closure** (`tool-claude` → `runner` /
   `session-harness`, `adapter-ai-sdk` → `handoff` / `sdk`).
 - **`fusionkit deployment` commands** (`ui`, `runs`, `plane start`, `runner start`) —
-  wired in `packages/cli/src/commands/deployment.ts` but not documented in
+  removed from the product CLI and quarantined under `legacy/`, formerly documented in
   `docs/cli.md`; hidden governance surface.
 - **Docker compose** — Warrant plane only; needs Docker workarounds in cloud sandbox.
 - **Container / microVM isolation in ensemble** — fake drivers in tests; real
@@ -231,7 +235,7 @@ install and remove compile-time imports from product packages (`tool-claude`,
 
 ## 11. Packaging, GTM, and ecosystem
 
-From `PRODUCTION_READINESS_AUDIT.md` (verify which items remain open):
+From `legacy/docs/production-readiness-audit-2026-06.md` (verify which items remain open):
 
 - No commercial license on 42+ packages
 - GTM validation gate (15–20 interviews) not done

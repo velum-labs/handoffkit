@@ -29,6 +29,7 @@ const SMOKE_ENV_KEYS = [
   "WARRANT_CURSOR_SMOKE",
   "WARRANT_ENSEMBLE_LIVE_SMOKE"
 ] as const;
+const PROVIDER_ENV_KEYS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"] as const;
 
 async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -154,10 +155,11 @@ async function startSentinelBackend(
 
 function warrant(
   args: string[],
-  options: { input?: string; env?: Record<string, string | undefined> } = {}
+  options: { input?: string; env?: Record<string, string | undefined>; cwd?: string } = {}
 ): { status: number; stdout: string; stderr: string } {
   const env = { ...process.env };
   for (const key of SMOKE_ENV_KEYS) delete env[key];
+  for (const key of PROVIDER_ENV_KEYS) delete env[key];
   for (const [key, value] of Object.entries(options.env ?? {})) {
     if (value === undefined) delete env[key];
     else env[key] = value;
@@ -165,7 +167,8 @@ function warrant(
   const result = spawnSync(process.execPath, [CLI, ...args], {
     encoding: "utf8",
     env,
-    input: options.input
+    input: options.input,
+    ...(options.cwd !== undefined ? { cwd: options.cwd } : {})
   });
   return {
     status: result.status ?? 1,
@@ -176,10 +179,11 @@ function warrant(
 
 async function warrantAsync(
   args: string[],
-  options: { input?: string; env?: Record<string, string | undefined> } = {}
+  options: { input?: string; env?: Record<string, string | undefined>; cwd?: string } = {}
 ): Promise<{ status: number; stdout: string; stderr: string }> {
   const env = { ...process.env };
   for (const key of SMOKE_ENV_KEYS) delete env[key];
+  for (const key of PROVIDER_ENV_KEYS) delete env[key];
   for (const [key, value] of Object.entries(options.env ?? {})) {
     if (value === undefined) delete env[key];
     else env[key] = value;
@@ -187,6 +191,7 @@ async function warrantAsync(
   return await new Promise((resolve) => {
     const child = spawn(process.execPath, [CLI, ...args], {
       env,
+      ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
       stdio: ["pipe", "pipe", "pipe"]
     });
     let stdout = "";
@@ -208,13 +213,77 @@ async function warrantAsync(
   });
 }
 
+function fakeDoctorPath(options: { engineCached?: boolean; fusionkitShim?: boolean } = {}): {
+  dir: string;
+  cleanup: () => void;
+} {
+  const dir = mkdtempSync(join(tmpdir(), "fusionkit-doctor-path-"));
+  const engineExit = options.engineCached === false ? "exit 1" : "exit 0";
+  for (const bin of ["uv", "uvx"]) {
+    writeFileSync(join(dir, bin), `#!/bin/sh\n${engineExit}\n`, { mode: 0o755 });
+  }
+  if (options.fusionkitShim === true) {
+    writeFileSync(join(dir, "fusionkit"), "#!/bin/sh\necho 'python fusionkit shim'\n", { mode: 0o755 });
+  }
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+function doctorEnv(pathDir: string, extra: Record<string, string | undefined> = {}): Record<string, string | undefined> {
+  return {
+    ...extra,
+    NO_COLOR: "1",
+    FUSIONKIT_NO_TUI: "1",
+    PATH: `${pathDir}${process.env.PATH !== undefined ? `:${process.env.PATH}` : ""}`
+  };
+}
+
+function commandLineIndex(help: string, command: string): number {
+  const match = new RegExp(`^  ${command}\\b`, "m").exec(help);
+  assert.ok(match, `expected ${command} in help`);
+  return match.index;
+}
+
+function assertCommandOrder(help: string, commands: readonly string[]): void {
+  let previous = -1;
+  for (const command of commands) {
+    const current = commandLineIndex(help, command);
+    assert.ok(current > previous, `expected ${command} after prior command`);
+    previous = current;
+  }
+}
+
 test("help prints usage and lists the top-level commands", () => {
   const result = warrant(["help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /real model fusion behind your coding agent/);
-  for (const command of ["init", "ensemble", "local", "fusion", "codex", "claude", "cursor", "serve"]) {
+  for (const command of ["codex", "claude", "cursor", "serve", "fusion", "init", "ensemble", "local"]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
+  assertCommandOrder(result.stdout, [
+    "codex",
+    "claude",
+    "cursor",
+    "serve",
+    "fusion",
+    "init",
+    "setup",
+    "doctor",
+    "status",
+    "config",
+    "prompts",
+    "sessions",
+    "models",
+    "ensemble",
+    "local",
+    "completion",
+    "runtime",
+    "version"
+  ]);
+  assert.match(result.stdout, /Quickstart:/);
+  assert.match(result.stdout, /fusionkit setup/);
+  assert.match(result.stdout, /Environment variables:/);
+  assert.match(result.stdout, /FUSIONKIT_SKIP_KEY_VALIDATION/);
+  assert.match(result.stdout, /WARRANT_\*/);
 });
 
 test("ensemble help lists its subcommands", () => {
@@ -239,6 +308,135 @@ test("gateway help lists the front-door subcommands", () => {
   }
 });
 
+test("completion bash includes top-level commands from the Commander tree", () => {
+  const result = warrant(["completion", "bash"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /complete -F _fusionkit_completion fusionkit/);
+  for (const command of ["codex", "claude", "cursor", "serve", "fusion", "doctor", "ensemble", "local"]) {
+    assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
+  }
+});
+
+test("doctor exits nonzero when no provider credentials and no local path are available", () => {
+  const fixture = makeRepo();
+  const fakePath = fakeDoctorPath({ engineCached: false });
+  try {
+    const result = warrant(["doctor"], {
+      cwd: fixture.repo,
+      env: doctorEnv(fakePath.dir)
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /almost ready/);
+    assert.match(result.stderr, /OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY/);
+    assert.match(result.stderr, /fusionkit setup/);
+  } finally {
+    fakePath.cleanup();
+    fixture.cleanup();
+  }
+});
+
+test("doctor exits zero with partial default credentials and names skipped members", () => {
+  const fixture = makeRepo();
+  const fakePath = fakeDoctorPath({ engineCached: false });
+  try {
+    const result = warrant(["doctor"], {
+      cwd: fixture.repo,
+      env: doctorEnv(fakePath.dir, { OPENAI_API_KEY: "sk-test" })
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /ready with a partial cloud panel/);
+    assert.match(result.stderr, /sonnet \(ANTHROPIC_API_KEY\)/);
+    assert.match(result.stderr, /gemini \(GEMINI_API_KEY\)/);
+    assert.match(result.stderr, /fusionkit setup/);
+  } finally {
+    fakePath.cleanup();
+    fixture.cleanup();
+  }
+});
+
+test("doctor --json includes a stable ready boolean", () => {
+  const fixture = makeRepo();
+  const fakePath = fakeDoctorPath();
+  try {
+    const result = warrant(["doctor", "--json"], {
+      cwd: fixture.repo,
+      env: doctorEnv(fakePath.dir, {
+        OPENAI_API_KEY: "sk-test",
+        ANTHROPIC_API_KEY: "sk-test",
+        GEMINI_API_KEY: "sk-test"
+      })
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout) as {
+      ready?: boolean;
+      credentials?: { defaultPanel?: { missing?: string[] } };
+    };
+    assert.equal(payload.ready, true);
+    assert.deepEqual(payload.credentials?.defaultPanel?.missing, []);
+  } finally {
+    fakePath.cleanup();
+    fixture.cleanup();
+  }
+});
+
+test("doctor accepts key envs from the repo fusion config", () => {
+  const fixture = makeRepo();
+  const fakePath = fakeDoctorPath();
+  try {
+    mkdirSync(join(fixture.repo, ".fusionkit"));
+    writeFileSync(
+      join(fixture.repo, ".fusionkit", "fusion.json"),
+      JSON.stringify(
+        {
+          version: "fusionkit.fusion.v3",
+          ensembles: {
+            default: {
+              panel: [{ id: "custom", model: "vendor/custom-model", provider: "openrouter", keyEnv: "CUSTOM_PANEL_KEY" }]
+            }
+          }
+        },
+        null,
+        2
+      )
+    );
+    const result = warrant(["doctor", "--json"], {
+      cwd: fixture.repo,
+      env: doctorEnv(fakePath.dir, { CUSTOM_PANEL_KEY: "sk-test" })
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout) as {
+      ready?: boolean;
+      credentials?: { acceptedKeyEnvs?: string[] };
+    };
+    assert.equal(payload.ready, true);
+    assert.ok(payload.credentials?.acceptedKeyEnvs?.includes("CUSTOM_PANEL_KEY"));
+  } finally {
+    fakePath.cleanup();
+    fixture.cleanup();
+  }
+});
+
+test("doctor warns when another fusionkit binary is first on PATH", () => {
+  const fixture = makeRepo();
+  const fakePath = fakeDoctorPath({ fusionkitShim: true });
+  try {
+    const result = warrant(["doctor", "--json"], {
+      cwd: fixture.repo,
+      env: doctorEnv(fakePath.dir, { OPENAI_API_KEY: "sk-test" })
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout) as {
+      checks: Array<{ section: string; label: string; ok: boolean; detail?: string }>;
+    };
+    const binary = payload.checks.find((check) => check.section === "binaries" && check.label === "fusionkit on PATH");
+    assert.equal(binary?.ok, false);
+    assert.match(binary?.detail ?? "", /resolves before this npm CLI/);
+  } finally {
+    fakePath.cleanup();
+    fixture.cleanup();
+  }
+});
+
 test("gateway acp-registry rejects an unknown action", () => {
   const result = warrant(["ensemble", "gateway", "acp-registry", "bogus"]);
   assert.notEqual(result.status, 0);
@@ -260,12 +458,23 @@ test("local help documents the flags-before-tool contract", () => {
   const result = warrant(["local", "--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /must precede the tool name/);
+  assert.match(result.stdout, /single local MLX model \(no fusion\)/);
+  assert.match(result.stdout, /fusionkit codex --local/);
 });
 
 test("fusion help documents the flags-before-tool contract", () => {
   const result = warrant(["fusion", "--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /must precede the tool name/);
+  assert.match(result.stdout, /run the panel on local MLX models \(Apple Silicon\s+only\) instead of cloud providers/);
+});
+
+test("init help does not expose removed governance plane flags", () => {
+  const result = warrant(["init", "--help"]);
+  assert.equal(result.status, 0);
+  assert.doesNotMatch(result.stdout, /--dir\b/);
+  assert.doesNotMatch(result.stdout, /--host\b/);
+  assert.doesNotMatch(result.stdout, /--plane-url\b/);
 });
 
 test("init scaffolds a .fusionkit/fusion.json and refuses to clobber without --force", () => {

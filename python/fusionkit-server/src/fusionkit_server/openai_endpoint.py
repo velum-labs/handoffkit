@@ -240,9 +240,12 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                     ):
                         self.wfile.write(sse.encode("utf-8"))
                         self.wfile.flush()
-                except Exception as exc:  # noqa: BLE001 - surface mid-stream as an SSE error
+                except Exception:  # noqa: BLE001 - surface mid-stream as an SSE error
                     traceback.print_exc()
-                    error = {"message": str(exc), "type": exc.__class__.__name__}
+                    error = {
+                        "message": "internal error during streaming; see the server logs",
+                        "type": "internal_error",
+                    }
                     self.wfile.write(f"data: {json.dumps({'error': error})}\n\n".encode())
                     self.wfile.write(b"data: [DONE]\n\n")
                     self.wfile.flush()
@@ -411,9 +414,16 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                         "error_type": exc.__class__.__name__,
                     },
                 )
+                # The trace payload keeps the real error server-side; the HTTP
+                # body stays generic so internals never leak to clients.
                 self._send_json(
                     500,
-                    {"error": {"message": str(exc), "type": exc.__class__.__name__}},
+                    {
+                        "error": {
+                            "message": "internal error; see the server logs for details",
+                            "type": "internal_error",
+                        }
+                    },
                 )
 
     return Handler

@@ -8,8 +8,9 @@ from typing import Literal
 from pydantic import BaseModel
 
 from fusionkit_evals.fusion_bench import FusionBenchTask, load_benchmark_tasks
+from fusionkit_evals.resources import packaged_data_path
 
-PUBLIC_SMOKE_FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "fixtures" / "public-smoke"
+PUBLIC_SMOKE_FIXTURE_ROOT = packaged_data_path("fixtures", "public-smoke")
 PUBLIC_SMOKE_DISCLAIMER = (
     "public benchmark smoke adapters only; these fixtures are synthetic and do not "
     "support public benchmark claims"

@@ -1,0 +1,30 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../packages/protocol"
+    },
+    {
+      "path": "../runner"
+    },
+    {
+      "path": "../plane"
+    },
+    {
+      "path": "../sdk"
+    },
+    {
+      "path": "../../../packages/testkit"
+    },
+    {
+      "path": "../../../packages/workspace"
+    }
+  ]
+}

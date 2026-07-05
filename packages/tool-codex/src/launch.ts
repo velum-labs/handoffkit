@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { LOCAL_MODEL_LABEL, spawnTool } from "@fusionkit/tools";
+import {
+  deriveFusedSubagents,
+  fusedSubagentDescription,
+  fusedSubagentDeveloperInstructions,
+  LOCAL_MODEL_LABEL,
+  spawnTool
+} from "@fusionkit/tools";
 import type { FusedEnsembleInfo, ToolLaunchContext } from "@fusionkit/tools";
 
 const CATALOG_FILE = "model-catalog.json";
@@ -45,12 +51,14 @@ function modelList(
  */
 export type CodexModelPreset = Record<string, unknown>;
 
-// TODO(@000alen): why is the Codex model catalog cache path hardcoded here? share Codex CLI state paths with subscription credential/config metadata.
 /**
  * Read a real `ModelPreset` from the installed Codex's `~/.codex/models_cache.json`
  * (the catalog it fetched for the current version). Returns `undefined` when the
  * cache is absent/unreadable, in which case the launcher skips the catalog and
  * falls back to profiles.
+ *
+ * The path is Codex-owned state, not FusionKit config; keep it localized here
+ * until Codex exposes subscription/config metadata as a stable API.
  */
 export function readCodexCatalogTemplate(home: string = homedir()): CodexModelPreset | undefined {
   try {
@@ -117,18 +125,12 @@ export type CodexAgentRole = {
 
 /** Human/model-facing role description for one ensemble. */
 export function codexRoleDescription(ensemble: FusedEnsembleInfo, isDefault: boolean): string {
-  const members = ensemble.memberIds.join(", ");
-  return isDefault
-    ? `Fused answer from the default "${ensemble.name}" ensemble (${members}).`
-    : `Fused answer from the "${ensemble.name}" ensemble (${members}).`;
+  return fusedSubagentDescription(ensemble, isDefault, "fused-answer");
 }
 
 /** Developer instructions for a Codex role config file. */
 export function codexRoleDeveloperInstructions(ensemble: FusedEnsembleInfo): string {
-  return (
-    `You run on the fused "${ensemble.name}" ensemble. Every reply is already a ` +
-    "panel-and-judge fusion. Answer the delegated task directly and completely."
-  );
+  return fusedSubagentDeveloperInstructions(ensemble);
 }
 
 /** Build the per-ensemble sub-agent roles for an ephemeral CODEX_HOME. */
@@ -137,12 +139,12 @@ export function codexAgentRoles(
   ensembles: readonly FusedEnsembleInfo[],
   defaultModelId: string
 ): CodexAgentRole[] {
-  return ensembles.map((ensemble) => ({
-    name: ensemble.modelId,
-    modelId: ensemble.modelId,
-    description: codexRoleDescription(ensemble, ensemble.modelId === defaultModelId),
-    developerInstructions: codexRoleDeveloperInstructions(ensemble),
-    configPath: join(home, AGENT_ROLES_DIR, `${ensemble.modelId}.toml`)
+  return deriveFusedSubagents(ensembles, defaultModelId, "fused-answer").map((subagent) => ({
+    name: subagent.name,
+    modelId: subagent.modelId,
+    description: subagent.description,
+    developerInstructions: subagent.developerInstructions,
+    configPath: join(home, AGENT_ROLES_DIR, `${subagent.modelId}.toml`)
   }));
 }
 
@@ -161,11 +163,13 @@ export function codexAgentRoleToml(name: string, modelId: string, developerInstr
   ].join("\n");
 }
 
-// TODO(@000alen): why does Codex launch config duplicate harness provider config generation? share CodexProvider/Codex TOML metadata across launcher and harness.
 /**
  * Codex config.toml fragment defining the gateway as a Responses provider.
  * Written into an ephemeral CODEX_HOME so the user's own config is untouched.
  * (This is the launcher shim; the harness has its own richer config builder.)
+ * The two TOML builders intentionally stay separate because launch config is a
+ * temporary user-facing Codex home, while harness config is per-candidate
+ * execution policy.
  *
  * The session-default fused model is the default. Every other fused ensemble
  * model and the native models are surfaced two ways so they are selectable from

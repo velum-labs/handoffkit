@@ -1,223 +1,123 @@
 # FusionKit
 
-**Run ensembles of local and cloud models** for normal inference *and* behind
-your coding agent.
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![npm: @fusionkit/cli](https://img.shields.io/npm/v/@fusionkit/cli.svg)](https://www.npmjs.com/package/@fusionkit/cli)
+[![PyPI: fusionkit](https://img.shields.io/pypi/v/fusionkit.svg)](https://pypi.org/project/fusionkit/)
 
-FusionKit fans a single request out across a panel of models (local MLX, plus
-OpenAI / Anthropic / Google / any OpenAI-compatible endpoint), runs each one,
-and synthesizes the results into one answer. You can use it two ways:
+FusionKit fuses a panel of models - including open-weight models at a fraction of frontier prices - behind your unmodified coding agent. A single turn fans out to the panel, captures candidate trajectories, runs judge + synthesis, and returns one native Codex / Claude Code / Cursor response; the harness never knows fusion happened.
 
-- as a **raw inference endpoint** (`fusionkit serve`) that any OpenAI- or
-  Anthropic-compatible client can point at, and
-- as the **backend for an unmodified coding harness**: `fusionkit codex`,
-  `fusionkit claude`, `fusionkit cursor` wire Codex, Claude Code, and Cursor to
-  the ensemble over their own native wire protocols, so the tool never learns
-  fusion happened.
+> **Canonical docs:** user-facing docs live at [fusionkit.velum-labs.com/docs](https://fusionkit.velum-labs.com/docs). Maintainer docs live in [`docs/`](docs), and the docs site source is [`apps/docs`](apps/docs).
 
-The Node **`@fusionkit/cli`** is the single front door; the Python
-**`fusionkit serve`** (PyPI `fusionkit`) is the documented raw endpoint it drives
-under the hood.
-
-> **Documentation:** the full user-facing docs live in the Fumadocs site under
-> [`apps/docs`](apps/docs), published at `fusionkit.velum-labs.com`. This README
-> is the product narrative and quick tour; the maintainer docs are in
-> [`docs/`](docs).
-
-## Install: one install story
+## Install + quickstart
 
 ```bash
-pnpm add -g @fusionkit/cli           # or: npm i -g @fusionkit/cli  (installs the `fusionkit` command)
-fusionkit setup                      # pre-provision the Python engine so the first run is instant
+npm install -g @fusionkit/cli
+fusionkit setup                      # one-time: warm the Python fusion engine
+cd your-git-repo                     # FusionKit runs over the current git repo
+fusionkit doctor                     # verifies uv, agent CLIs, keys, PATH, and platform
+fusionkit codex                      # or: fusionkit claude | fusionkit cursor | fusionkit serve
 ```
 
-**Prerequisites:** [`uv`](https://docs.astral.sh/uv/) (ships `uvx`), `git`, and,
-for the coding-harness path, the agent CLI you want (`codex` / `claude` /
-`cursor-agent`). No separate Python install: the `fusionkit serve` synthesizer is
-fetched from PyPI via `uvx` and **auto-provisioned**. `fusionkit setup` (or
-`fusionkit doctor --provision`) warms that `uvx` environment up front so the
-first real run doesn't pay a cold-start; without it, the engine provisions
-on first use. Prefer not to install globally? Use `npx @fusionkit/cli <command>`.
+For the built-in cloud trio, export any subset of `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`; missing members are skipped with a clear note. This repo's committed `.fusionkit/fusion.json` is different: it routes the panel through OpenRouter (`moonshotai/kimi-k2-thinking` + `qwen/qwen3-coder`), so set `OPENROUTER_API_KEY` here or run `fusionkit init` in your own repo to choose your panel.
 
-## Quickstart: one command
+Start here:
 
-Back a coding agent with a model ensemble:
+- [Installation](https://fusionkit.velum-labs.com/docs/getting-started/installation)
+- [Quickstart](https://fusionkit.velum-labs.com/docs/getting-started/quickstart)
+- [Configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration)
+- [CLI reference](https://fusionkit.velum-labs.com/docs/cli/commands)
+- [Privacy and data handling](https://fusionkit.velum-labs.com/docs/privacy)
 
-```bash
-export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  GEMINI_API_KEY=...
-cd your-git-repo
-fusionkit codex                      # or: claude | cursor | serve   (add --local for an Apple-Silicon MLX panel)
-```
+## Why fusion
 
-Any subset of the three keys works: a default-panel member whose key is missing
-is skipped with an explicit note, and the survivors are still fused.
-
-`fusionkit codex` spawns everything for you: the model panel, a single
-`fusionkit serve` router that fronts each model and performs synthesis, the
-harness gateway, and Codex pre-wired to it. One `Ctrl+C` tears the whole stack
-down. See the
-[Fusion Harness Gateway](docs/fusion-harness-gateway.md#quickstart-one-command).
-
-Run `fusionkit doctor` first to check prerequisites (uv, agents, provider keys,
-git, and per-platform capability), and `fusionkit init` to scaffold a committed
-`.fusionkit/` config for a repo.
-
-### Quickstarts
-
-- [Inference endpoint](docs/quickstart-inference.md): `fusionkit serve` as an
-  OpenAI-compatible ensemble endpoint, with curl streaming + tool-calling.
-- [Coding harness](docs/quickstart-harness.md): `fusionkit codex` / `claude` /
-  `cursor` (+ `--ide`), the auto-wiring, and fused vs. passthrough models.
-- [Rate-limit handoff](docs/quickstart-handoff.md): how `--on-rate-limit` works,
-  what failover looks like, and one-tap resume.
-- [Model catalog](docs/model-catalog.md): choosing/configuring panel models
-  (cloud, open-weight, local MLX), pricing/`--budget`, decorrelated-trio guidance.
-
-> **Cross-platform.** Cloud ensembles run on Linux, Windows, and macOS. Local MLX
-> panels (`--local`) are Apple-Silicon-only; off Apple Silicon, `--local` fails
-> early with a pointer at the cloud path. `fusionkit doctor` reports capability
-> per platform.
+The thesis is economic as much as architectural: several cheaper or open-weight models can explore a repo in parallel, disagree, and let a stronger judge/synthesizer turn their work into one answer. FusionKit gives you the mechanism - panel fanout, per-model worktrees, judge synthesis, cost metering, and budgets - without forcing a new harness or provider. We are not publishing benchmark numbers yet; reproduce the methodology yourself with [`docs/benchmarking-runbook.md`](docs/benchmarking-runbook.md) and [`docs/public-benchmark-comparison.md`](docs/public-benchmark-comparison.md).
 
 ## What's implemented
 
-The ensemble loop is real end-to-end today, with these headline features:
-
 | Feature | What it gives you | Docs |
 | --- | --- | --- |
-| **Streaming + tool calling through the ensemble** | Real SSE streaming and function/tool calls flow through the panel + judge, in each harness's native dialect (OpenAI Responses / Anthropic Messages / OpenAI Chat). | [gateway](docs/fusion-harness-gateway.md) |
-| **Rate-limit / credit handoff** | When a vendor passthrough model hits a 429 / quota / billing error, the turn is transparently rerouted to the ensemble. `--on-rate-limit fusion\|passthrough\|fail`. | [cli](docs/cli.md), [config](docs/configuration.md) |
-| **Durable, resumable sessions** | Sessions persist under `~/.fusionkit/sessions/`; resume with `--resume <id>` / `--continue`, inspect with `fusionkit sessions`. | [cli](docs/cli.md#durable-sessions---resume----continue) |
-| **Cost metering + budgets** | Per-turn token + USD accounting, a running session total, and an optional `--budget <usd>` cap. | [cli](docs/cli.md#cost-metering-and-budgets---budget) |
-| **Turnkey Cursor IDE** | `fusionkit cursor --ide` wires the Cursor IDE to the gateway through a local desktop proxy with no manual public tunnel. | [cli](docs/cli.md) |
-| **One config source of truth** | A committed `.fusionkit/fusion.json` (+ `prompts/*.md`); the Python router YAML is *derived* from it via `fusionkit config export-yaml`. | [config](docs/configuration.md) |
+| Fused coding harnesses | `fusionkit codex`, `claude`, and `cursor` launch normal agents against a local fusion gateway. | [quickstart](https://fusionkit.velum-labs.com/docs/getting-started/quickstart) |
+| Raw inference endpoint | `fusionkit serve` exposes OpenAI-compatible chat completions backed by the same panel + synthesis engine. | [endpoint](https://fusionkit.velum-labs.com/docs/getting-started/inference-endpoint) |
+| Streaming + tool calling | OpenAI Responses, Anthropic Messages, and OpenAI Chat dialects stay native at the harness edge. | [model fusion](https://fusionkit.velum-labs.com/docs/concepts/model-fusion) |
+| Named ensembles | `.fusionkit/fusion.json` can define multiple panels; each becomes its own `fusion-<name>` model id. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
+| Rate-limit handoff | Default `onRateLimit: fusion` re-runs a failed passthrough turn on the panel instead of returning a raw 429. | [handoff](https://fusionkit.velum-labs.com/docs/getting-started/rate-limit-handoff) |
+| Durable sessions | Full turns, metadata, and costs persist locally for `sessions`, `--resume`, and `--continue`. | [privacy](https://fusionkit.velum-labs.com/docs/privacy) |
+| Cost controls | Per-turn token/USD estimates, receipts, and `--budget <usd>` keep spend visible. | [costs](https://fusionkit.velum-labs.com/docs/cli/cost-and-models) |
+| Local MLX path | `--local` runs an Apple-Silicon MLX panel with no provider API spend. | [models](https://fusionkit.velum-labs.com/docs/cli/models-and-panels) |
 
-## The CLI surface
+## CLI surface
 
-| Command | What it does |
+| Command | Purpose |
 | --- | --- |
-| `codex` \| `claude` \| `cursor` \| `serve` | Run the model ensemble behind a coding harness (or `serve` for the raw endpoint setup). |
-| `fusion [tool]` | The generic launcher behind the shortcuts; `fusion stop` reaps portless services. |
-| `init` | Scaffold a committed `.fusionkit/` for this repo. |
-| `config` | `config show` / `config path` / `config export-yaml`. |
-| `sessions` | `sessions [list]` / `sessions show <id>` / `sessions rm <id>`. |
-| `models` | `models list` / `models download` / `models rm` (local MLX cache). |
-| `local <tool>` | Back a vendor agent with a single local model (no fusion). |
-| `ensemble` | Lower-level ensemble + gateway tooling (`run` / `handoff` / `dashboard` / `e2e` / `gateway`). |
-| `setup` | Pre-provision (warm) the fusion engine into the `uvx` cache so the first run is instant. |
-| `doctor`, `status` | Preflight the environment (incl. per-platform capability); preview the effective config and run plan. |
-
-Full reference: [docs/cli.md](docs/cli.md).
+| `codex` / `claude` / `cursor` / `serve` | Main journey: run a fused panel behind a coding harness, or run just the gateway. |
+| `fusion [tool]` | Generic launcher behind the shortcuts; `fusion stop` reaps portless singleton services. |
+| `setup` | Pre-provision the pinned PyPI `fusionkit` engine into the `uvx` cache. |
+| `doctor`, `status` | Preflight readiness and preview the effective run plan; `doctor` exits nonzero when no credentials are present. |
+| `init` | Scaffold `.fusionkit/fusion.json` and editable prompt files for a repo. |
+| `config` | `show`, `path`, `get`, `set`, `unset`, `edit`, and `export-yaml`. |
+| `prompts` | `list`, `edit`, and `reset` judge/synthesizer prompt overrides. |
+| `ensemble` | `list`, `add`, `edit`, `remove`, `rename`, `use`, plus advanced harness tooling. |
+| `sessions`, `models`, `local` | Manage durable sessions, local MLX model cache, and single-local-model runs. |
+| `completion <shell>`, `runtime`, `version` | Shell completions, advanced runtime-kernel inspection, and version reporting. |
 
 ## Architecture
 
-Two cooperating processes:
+Two processes cooperate:
 
-1. **`fusionkit serve`** (Python, PyPI `fusionkit`): the model **router + fusion
-   engine**: fronts every panel model by id (passthrough) and performs
-   judge + synthesis (`/v1/fusion/trajectories:fuse`, `/v1/chat/completions`).
-   This is the inference brain, and the documented raw endpoint.
-2. **`@fusionkit/cli`** (Node): the **harness gateway + UX**: auto-wires
-   Codex / Claude / Cursor, manages per-model git worktrees, spawns the Python
-   router via `uvx`, and owns onboarding, config, sessions, and model management.
+1. **Node `@fusionkit/cli`** owns the user journey: config, preflight, harness launchers, the local gateway, sessions, cost controls, and local model management.
+2. **Python `fusionkit`** owns the router and fusion engine: `/v1/chat/completions`, panel calls, judge synthesis, native run records, and benchmark tooling.
 
-Each panel model runs the launched harness in its own lightweight git worktree
-(parallel harnesses editing one repo, not VM isolation), producing a full
-native **trajectory**; the synthesizer fuses those trajectories into one answer
-in the request's natural shape. See
-[Fusion Harness Gateway](docs/fusion-harness-gateway.md) and
-[Fusion Judge Trajectory](docs/fusion-judge-trajectory.md).
+Panel members run in lightweight git worktrees so parallel candidates can inspect or edit the same repo without trampling each other. The gateway reshapes the fused result back into the dialect your harness already expects. Maintainer architecture details live in [`docs/fusion-harness-gateway.md`](docs/fusion-harness-gateway.md) and [`docs/fusion-judge-trajectory.md`](docs/fusion-judge-trajectory.md).
 
-## Repository layout (product packages)
+## Repository layout
 
-| Package | What it is |
+| Area | What it is |
 | --- | --- |
-| [`@fusionkit/cli`](packages/cli) | The `fusionkit` CLI, the single front door and primary product surface. |
-| [`@fusionkit/ensemble`](packages/ensemble) | The ensemble run engine: per-model worktrees, harness execution, judge synthesis, trajectory fusion. |
-| [`@fusionkit/model-gateway`](packages/model-gateway) | The harness gateway: dialect translation (OpenAI Responses / Anthropic Messages / OpenAI Chat), streaming, durable session store, cost metering, rate-limit handoff. |
-| [`@fusionkit/tools`](packages/tools) + [`tool-codex`](packages/tool-codex) / [`tool-claude`](packages/tool-claude) / [`tool-cursor`](packages/tool-cursor) / [`tool-opencode`](packages/tool-opencode) | The per-harness adapters that drive each vendor CLI. |
-| [`@fusionkit/protocol`](packages/protocol) | The model-fusion data contracts (harness run request/result, trajectories) and generated SDK bindings. |
-| [`@fusionkit/workspace`](packages/workspace) | Git workspace capture, worktree materialization, and divergence-safe pull. |
-| [`@fusionkit/adapter-ai-sdk`](packages/adapter-ai-sdk) | The managed local-model stack (`mlxServer`) + AI SDK model adapters used by `fusionkit models`/`--local`. |
-
-Several **governance / VM-isolation packages remain in the tree** but are
-**not part of the ensemble product** (`plane`, `runner`, `sdk`, `handoff`,
-`adapter-compute`, `session-hermetic`, `session-vercel-sandbox`,
-`session-harness`). See **[docs/scope.md](docs/scope.md)** for the exact product
-vs. out-of-scope mapping and the planned separation steps.
-
-## Python workspace
-
-Alongside the pnpm workspace, the repository is a [uv](https://docs.astral.sh/uv/)
-monorepo for its Python side (the root `pyproject.toml` declares a virtual
-workspace under `python/*`):
-
-```sh
-uv sync --all-packages                 # one .venv for every Python package
-uv run pytest python/uniroute/tests    # test a member
-```
+| [`packages/cli`](packages/cli) | The npm `@fusionkit/cli` front door. |
+| [`packages/model-gateway`](packages/model-gateway) | Dialect translation, fused/passthrough routing, streaming, sessions, and cost metering. |
+| [`packages/ensemble`](packages/ensemble) | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
+| [`packages/tool-*`](packages) + [`packages/tools`](packages/tools) | Per-harness launchers and the shared tool integration registry. |
+| [`packages/protocol`](packages/protocol) | Model-fusion contracts, schemas, traces, and generated bindings. |
+| [`packages/adapter-ai-sdk`](packages/adapter-ai-sdk) | Managed MLX server and AI SDK model adapters used by local-model paths. |
+| [`python/fusionkit-*`](python) | Python router, core fusion engine, CLI, MLX helpers, and eval tooling. |
+| [`apps/docs`](apps/docs) | Canonical Fumadocs user site. |
+| [`legacy/`](legacy) | Quarantined Warrant governance / VM-isolation stack; see [`legacy/README.md`](legacy/README.md) and [`docs/scope.md`](docs/scope.md). |
 
 ## Development
 
-Prerequisites: Node >= 22 and git. The pnpm version is pinned via `packageManager`:
+Prerequisites: Node >= 22, pnpm, git, and uv. The repo pins pnpm in `packageManager`.
 
-```sh
-corepack enable          # one-time; activates the pinned pnpm
-pnpm install             # links all workspace packages from the frozen lockfile
-pnpm build               # tsc -b builds every package in dependency order
-pnpm verify              # repo checks + build + the full test suite
-```
-
-To run this checkout's CLI globally while developing, link the dev command:
-
-```sh
+```bash
 corepack enable
 pnpm install --frozen-lockfile
-pnpm dev:link-cli
-fusionkit-dev --version
+pnpm check
+pnpm build
+pnpm test
 ```
 
-`fusionkit-dev` points at your local checkout, rebuilds the local CLI before each
-run, and preserves the directory you launch it from. It does not replace the
-published `fusionkit` command, so you can use it from any target repo:
+Python workspace commands:
 
-```sh
+```bash
+uv sync --all-packages
+uv run ruff check .
+uv run pyright
+uv run pytest tests -q
+uv run pytest python -q
+```
+
+Link the local dev CLI without replacing the published `fusionkit` binary:
+
+```bash
+pnpm dev:link-cli
 cd any-git-repo
 fusionkit-dev doctor
 fusionkit-dev codex
 ```
 
-For faster repeated local checks after a build, set
-`FUSIONKIT_DEV_SKIP_BUILD=1`.
-
-```sh
-pnpm check               # repo invariants (required files, dependency pins, ...)
-pnpm test                # the full unit + integration + example suite
-pnpm demo all            # run every non-interactive example
-```
-
 ## Dependency policy
 
-Third-party dependencies are allowed in any package, but only trusted,
-exact-pinned versions on the explicit allowlist in
-[`scripts/check-repo.mjs`](scripts/check-repo.mjs). Trust comes from pinning
-reviewed versions plus the `.npmrc` supply-chain controls (`save-exact`,
-`ignore-scripts`, `verify-store-integrity`, frozen-lockfile installs, and a
-24-hour `minimum-release-age`), not from the absence of dependencies. Bumping a
-dependency means updating the allowlist pin, the review checkpoint.
+Third-party dependencies are allowed, but trusted versions are exact-pinned against the allowlist in [`scripts/check-repo.mjs`](scripts/check-repo.mjs). The `.npmrc` supply-chain controls (`engine-strict`, `ignore-scripts`, store verification, frozen installs, exact saves, and minimum release age) are part of the security posture.
 
-## Out of product scope
+## Legacy
 
-These remain in the repository (and are still published from it for now) but are
-**not part of the FusionKit ensemble product**:
-
-- **Governance plane**: `@fusionkit/plane`, `@fusionkit/runner`,
-  `@fusionkit/sdk`, `@fusionkit/handoff` (contracts, receipts, policy,
-  approvals, signed provenance).
-- **VM / sandbox isolation**: `@fusionkit/session-hermetic`,
-  `@fusionkit/session-vercel-sandbox`, `@fusionkit/session-harness`,
-  `@fusionkit/adapter-compute`.
-
-The shipped `fusionkit` command tree does not invoke them at runtime. They are
-retained because other packages and a cross-repo release coordinator still
-reference them; separating them cleanly is tracked in
-**[docs/scope.md](docs/scope.md)**. The governed-execution design itself is
-preserved in [`spec/`](spec).
+The legacy Warrant governance plane, runner, SDK, handoff SDK, Docker stack, and VM/session packages are preserved under [`legacy/`](legacy). They are not invoked by the shipped `fusionkit` command tree and are documented separately in [`legacy/docs/`](legacy/docs).

@@ -1,4 +1,4 @@
-import { LOCAL_MODEL_LABEL, spawnTool } from "@fusionkit/tools";
+import { deriveFusedSubagents, LOCAL_MODEL_LABEL, spawnTool } from "@fusionkit/tools";
 import type { FusedEnsembleInfo, ToolLaunchContext } from "@fusionkit/tools";
 
 /**
@@ -42,17 +42,11 @@ export function claudeAgentsJson(
   defaultModelId: string
 ): string {
   const agents: Record<string, { description: string; prompt: string; model: string }> = {};
-  for (const ensemble of ensembles) {
-    const members = ensemble.memberIds.join(", ");
-    const flavor = ensemble.modelId === defaultModelId ? "default " : "";
-    agents[ensemble.modelId] = {
-      description:
-        `Delegate a task to the ${flavor}"${ensemble.name}" fusion ensemble ` +
-        `(${members} fused by a judge). Use when the user asks for the ${ensemble.name} ensemble.`,
-      prompt:
-        `You run on the fused "${ensemble.name}" ensemble; every reply is already a ` +
-        "panel-and-judge fusion. Answer the delegated task directly and completely.",
-      model: claudeAliasedModelId(ensemble.modelId)
+  for (const subagent of deriveFusedSubagents(ensembles, defaultModelId, "delegate-task")) {
+    agents[subagent.modelId] = {
+      description: subagent.description,
+      prompt: subagent.developerInstructions,
+      model: claudeAliasedModelId(subagent.modelId)
     };
   }
   return JSON.stringify(agents);

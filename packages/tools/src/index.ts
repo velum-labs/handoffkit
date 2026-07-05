@@ -27,7 +27,8 @@ export {
   CANDIDATE_ISOLATION_DEFAULTS,
   escapeMarkdownCell,
   markdownTable,
-  RUNTIME_TIMEOUT_MS
+  RUNTIME_TIMEOUT_MS,
+  trimTrailingSlashes
 } from "@fusionkit/runtime-utils";
 export type {
   FusedEnsembleInfo,
@@ -64,3 +65,13 @@ export {
 } from "./env.js";
 export type { BuildChildEnvInput } from "./env.js";
 export { buildSkippedCandidate } from "./candidate.js";
+export {
+  deriveFusedSubagents,
+  fusedSubagentDescription,
+  fusedSubagentDeveloperInstructions,
+  fusedSubagentMembers
+} from "./fused-subagents.js";
+export type {
+  FusedSubagentDefinition,
+  FusedSubagentDescriptionStyle
+} from "./fused-subagents.js";

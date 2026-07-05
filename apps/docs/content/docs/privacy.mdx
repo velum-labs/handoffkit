@@ -1,0 +1,43 @@
+---
+title: Privacy and data handling
+description: Local storage, provider egress, retention, and telemetry behavior.
+---
+
+FusionKit runs locally, but fused work can include code, prompts, diffs, and tool results. This page explains what is stored and which providers see your code.
+
+## What is stored locally
+
+Durable sessions live in `~/.fusionkit/sessions/` unless `FUSIONKIT_SESSIONS_DIR` overrides it. Each session directory can include:
+
+- `turns.jsonl`: full message arrays for each turn, including code and tool results.
+- `meta.json`: session metadata such as tool, repo, model ids, timestamps, and panel state.
+- `costs.jsonl`: per-turn token and USD estimates when pricing data is available.
+
+Cloud-panel cost consent is stored in `~/.fusionkit/consent.json` unless `FUSIONKIT_CONSENT_PATH` overrides it.
+
+## Retention
+
+FusionKit keeps local session files until you delete them:
+
+```bash
+fusionkit sessions
+fusionkit sessions rm <id>
+```
+
+## No telemetry
+
+FusionKit does not include product telemetry, phone-home analytics, or a hosted control plane. The CLI and gateway do not report usage back to Velum Labs.
+
+## Where code travels
+
+A fused turn is sent to the providers in your effective panel config. Inspect the panel before a run:
+
+```bash
+fusionkit config show
+```
+
+The FusionKit repository's committed `.fusionkit/fusion.json` routes through OpenRouter and requires `OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests from this checkout go to OpenRouter and then to the selected upstream models. In your own repo, run `fusionkit init` to choose a different panel.
+
+## Rate-limit failover
+
+The default policy is `onRateLimit: fusion`. If a passthrough vendor returns a rate-limit, quota, or billing error, FusionKit re-sends the failed turn to your configured panel providers so the session can continue. Use `--on-rate-limit passthrough` or `--on-rate-limit fail` when you do not want that provider expansion.

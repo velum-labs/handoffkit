@@ -1,4 +1,6 @@
 {
-  "title": "SDKs & Packages",
-  "pages": ["handoff-sdk", "sdk", "adapters", "packages"]
+  "title": "Packages",
+  "pages": [
+    "packages"
+  ]
 }

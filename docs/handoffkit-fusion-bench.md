@@ -48,7 +48,7 @@ Known local verification from the implementation pass:
 
 A live HandoffKit Codex responses smoke succeeded during integration work:
 
-- Artifact dir: `/Users/alen/.openclaw/workspace/artifacts/handoffkit-codex-live-responses-20260617T032450Z`
+- Artifact dir: `~/fusionkit-artifacts/handoffkit-codex-live-responses-20260617T032450Z`
 - `harness-run-result`: `succeeded`
 - candidate: `succeeded`
 - provider kind: `responses`

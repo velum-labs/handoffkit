@@ -312,7 +312,7 @@ Example:
 
 ```bash
 uv run --package fusionkit fusionkit init --global
-uv run --package fusionkit fusionkit prompts dump --output .fusionkit/prompts
+uv run --package fusionkit fusionkit prompts dump --dir .fusionkit/prompts
 uv run --package fusionkit fusionkit serve --config .fusionkit/fusion.yaml --port 8000
 uv run --package fusionkit fusionkit auth status
 ```
@@ -325,7 +325,7 @@ uv run --package fusionkit fusionkit auth status
 
 `checkers.py`, `scorers.py`, `code_extract.py`, `sandbox.py`, `exec_select.py`, and `bench_verify.py` evaluate correctness and execution results. `bench_stats.py`, `bench_history.py`, `bench_runtime.py`, `fusion_reports.py`, `public_bench.py`, `public_bench_report.py`, and `public_smoke.py` produce reports and public comparison artifacts.
 
-`prompt_tuning.py`, `pareto.py`, `polyglot.py`, `livecodebench_data.py`, and `gateway_target.py` support optimization, suite selection, and external benchmark integration. Adapters under `python/fusionkit-evals/adapters/` connect to LiveCodeBench, Aider-style polyglot tasks, and selection experiments.
+`prompt_tuning.py`, `pareto.py`, `polyglot.py`, `livecodebench_data.py`, and `gateway_target.py` support optimization, suite selection, and external benchmark integration. Adapters under `python/fusionkit-evals/src/fusionkit_evals/adapters/` connect to LiveCodeBench, Aider-style polyglot tasks, and selection experiments.
 
 Example:
 

@@ -3,23 +3,25 @@ title: Quickstart
 description: From install to a fused coding session.
 ---
 
-## 1. Check your environment
+## 1. Install, provision, and check your environment
 
 ```bash
+npm install -g @fusionkit/cli
+fusionkit setup
 fusionkit doctor
 ```
 
 Fix anything marked as missing. For the default cloud panel, the provider keys
-are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`. Run
-`fusionkit doctor --provision` if you also want to warm the Python engine before
-the first session.
+are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`. `fusionkit setup`
+warms the Python engine before the first session.
 
 ## 2. Launch a coding agent
 
 From inside your git repo:
 
 ```bash
-fusionkit codex      # or: fusionkit claude
+cd your-git-repo
+fusionkit codex      # or: fusionkit claude | fusionkit cursor
 ```
 
 On a TTY you will see a live boot checklist as the panel, synthesizer, and

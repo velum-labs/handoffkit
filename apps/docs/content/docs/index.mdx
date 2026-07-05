@@ -18,6 +18,7 @@ You run one command and your agent is transparently backed by the panel:
 
 ```bash
 npm install -g @fusionkit/cli
+fusionkit setup
 cd your-project        # a git repo
 fusionkit doctor       # verify prerequisites
 fusionkit codex        # launch Codex backed by the panel
@@ -49,10 +50,10 @@ OpenAI-compatible endpoint for inference clients.
 
 ## What is in the repository?
 
-The repository still contains older Warrant governance, handoff, SDK, Docker,
-and VM-isolation packages. They are real code and remain documented for
-contributors, but they are not the normal FusionKit product path and the shipped
-`fusionkit` CLI does not ask you to run the legacy plane or runner.
+The repository still contains the older Warrant governance, handoff, SDK, Docker,
+and VM-isolation stack under `legacy/`. It is real code retained for contributors,
+but it is not the normal FusionKit product path and the shipped `fusionkit` CLI
+does not ask you to run a legacy plane or runner.
 
 <Callout type="info">
   Two packages share the name "fusionkit": the npm CLI (`@fusionkit/cli`) and
@@ -66,10 +67,8 @@ contributors, but they are not the normal FusionKit product path and the shipped
   the prerequisites, and run your first fused session.
 - **[fusionkit CLI](/docs/cli/commands)**: the full command and flag reference,
   cost control, observability, and troubleshooting.
-- **[Concepts](/docs/concepts/overview)**: model fusion, architecture, runtime
-  kernel, and product boundaries.
-- **[SDKs & Packages](/docs/sdks/packages)**: package map and retained SDK
-  surfaces for contributors and platform builders.
-- **[Operations](/docs/operations/release-publishing)**: release and publishing
-  notes for maintainers.
+- **[Concepts](/docs/concepts/overview)**: panels, judges, synthesizers, model
+  ids, runtime kernel, and product boundaries.
+- **[Packages](/docs/sdks/packages)**: product package map and legacy archive pointer.
+- **[Privacy](/docs/privacy)**: local storage, provider egress, retention, and telemetry behavior.
 - **[API Reference](/docs/api)**: the model-fusion HTTP contract.

@@ -6,13 +6,11 @@ import { uiStream } from "@fusionkit/cli-ui";
 
 import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
-import { initHome } from "../config.js";
 import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { configDefaultEnsembleName } from "../fusion/effective-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { fail } from "../shared/errors.js";
-import { resolveDir } from "../shared/plane.js";
 import {
   collect,
   parseBudget,
@@ -52,9 +50,6 @@ type FusionOpts = {
   panelTrust?: string;
   resume?: string;
   continue?: boolean;
-  dir?: string;
-  host?: string;
-  planeUrl?: string;
 };
 
 /** Attach the panel/gateway flags shared by `fusion` and the per-tool launchers. */
@@ -72,7 +67,7 @@ function applyFusionOptions(command: Command): Command {
     .option("--synthesis-url <url>", "pre-running fusionkit serve for synthesis")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for the uvx synthesizer)")
     .option("--repo <dir>", "coding workspace the panel fuses over")
-    .option("--local", "use the local MLX panel trio instead of the default cloud panel")
+    .option("--local", "run the panel on local MLX models (Apple Silicon only) instead of cloud providers")
     .option("--no-local", "override a .fusionkit default of local=true")
     .option("--observe", "boot the local scope dashboard and stream live trace events")
     .option("--no-observe", "override a .fusionkit default of observe=true")
@@ -175,7 +170,7 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   return options;
 }
 
-/** Fill any option the user did not set explicitly from `fusionkit.json`. */
+/** Fill any option the user did not set explicitly from `.fusionkit/fusion.json`. */
 function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   // Named ensembles: every defined ensemble flows through (each registers as
   // its own gateway model); `--ensemble` (or the config's defaultEnsemble)
@@ -247,35 +242,25 @@ function resolveContext(opts: FusionOpts): { options: RunFusionOptions; configTo
 }
 
 export function registerFusion(program: Command): void {
-  // Top-level `init` — scaffold a committed .fusionkit/ folder for this repo.
-  program
-    .command("init")
-    .description("scaffold a committed .fusionkit/ folder for this repo")
-    .option("--repo <dir>", "coding workspace the panel fuses over")
-    .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
-    .option("--force", "overwrite an existing .fusionkit/ config and prompts without prompting")
-    .option("--dir <dir>", "legacy plane home directory")
-    .option("--host <host>", "legacy plane bind address")
-    .option("--plane-url <url>", "legacy public plane URL")
-    .option("--port <n>", "legacy plane port")
-    .action(async (opts: FusionOpts) => {
-      if (opts.host !== undefined || opts.planeUrl !== undefined || opts.dir !== undefined) {
-        initHome(resolveDir(opts.dir), {
-          ...(opts.host !== undefined ? { host: opts.host } : {}),
-          ...(opts.planeUrl !== undefined ? { planeUrl: opts.planeUrl } : {}),
-          ...(opts.port !== undefined ? { port: parsePort(opts.port, 7172) } : {})
-        });
-        return;
-      }
-      const options = resolveOptions(opts);
-      const repoRoot = configRepoRoot(options);
-      const code = await runFusionInit({
-        repoRoot,
-        force: opts.force === true,
-        ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
+  // Top-level shortcuts: `fusionkit codex`, `fusionkit claude`, etc.
+  for (const tool of FUSION_TOOLS) {
+    applyFusionOptions(
+      program
+        .command(tool)
+        .description(`real model fusion backs ${tool === "serve" ? "any tool (prints setup snippets)" : tool}`)
+        .argument("[args...]", `arguments forwarded to ${tool}`)
+    )
+      .addHelpText(
+        "after",
+        `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
+      )
+      .action(async (args: string[], _opts: FusionOpts, command: Command) => {
+        const opts = command.optsWithGlobals<FusionOpts>();
+        const { options } = resolveContext(opts);
+        const code = await runFusion(tool, args, options);
+        process.exit(code);
       });
-      process.exit(code);
-    });
+  }
 
   // Generic `fusion [tool]` — keeps the original surface and interactive pick.
   applyFusionOptions(
@@ -318,23 +303,21 @@ export function registerFusion(program: Command): void {
       process.exit(code);
     });
 
-  // Top-level shortcuts: `fusionkit codex`, `fusionkit claude`, etc.
-  for (const tool of FUSION_TOOLS) {
-    applyFusionOptions(
-      program
-        .command(tool)
-        .description(`real model fusion backs ${tool === "serve" ? "any tool (prints setup snippets)" : tool}`)
-        .argument("[args...]", `arguments forwarded to ${tool}`)
-    )
-      .addHelpText(
-        "after",
-        `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
-      )
-      .action(async (args: string[], _opts: FusionOpts, command: Command) => {
-        const opts = command.optsWithGlobals<FusionOpts>();
-        const { options } = resolveContext(opts);
-        const code = await runFusion(tool, args, options);
-        process.exit(code);
+  // Top-level `init` — scaffold a committed .fusionkit/ folder for this repo.
+  program
+    .command("init")
+    .description("scaffold a committed .fusionkit/ folder for this repo")
+    .option("--repo <dir>", "coding workspace the panel fuses over")
+    .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
+    .option("--force", "overwrite an existing .fusionkit/ config and prompts without prompting")
+    .action(async (opts: FusionOpts) => {
+      const options = resolveOptions(opts);
+      const repoRoot = configRepoRoot(options);
+      const code = await runFusionInit({
+        repoRoot,
+        force: opts.force === true,
+        ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
       });
-  }
+      process.exit(code);
+    });
 }

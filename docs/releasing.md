@@ -35,7 +35,8 @@ visible in plans for version awareness, never published by this tool.
 - `release/workspace.release.json`: static topology (repos, ecosystems, tags,
   publish workflows, version sources, dependency edges, tracked surfaces).
 - `release/desired.json`: target version per unit (the thing you edit).
-- `release/state.json`: last-applied cache, reconciled by `refresh`.
+- `release/state.json`: local, gitignored last-applied cache. It is reconcilable
+  and regenerated from registries + git tags with `node scripts/release.mjs refresh`.
 - `release/.plans/*.plan.json`: generated plan artifacts (gitignored).
 
 ## Workflow

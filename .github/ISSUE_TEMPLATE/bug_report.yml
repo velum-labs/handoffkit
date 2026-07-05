@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible FusionKit problem
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please redact API keys, secrets, and private code from logs or configs.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Tell us what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Run ...
+        2. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: fusionkit doctor output
+      description: Paste the output of `fusionkit doctor --json`.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / platform
+      placeholder: macOS 15.2 arm64, Ubuntu 24.04 x64, Windows 11 x64
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      placeholder: node --version
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: python --version
+    validations:
+      required: true
+  - type: dropdown
+    id: harness
+    attributes:
+      label: Harness
+      options:
+        - codex
+        - claude
+        - cursor
+        - serve / raw endpoint
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: panel
+    attributes:
+      label: Panel config shape
+      description: Paste the shape of `.fusionkit/fusion.json` or exported YAML with keys redacted.
+      render: json
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Include only logs that are safe to share publicly.
+      render: shell

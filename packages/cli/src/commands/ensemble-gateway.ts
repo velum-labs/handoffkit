@@ -70,7 +70,9 @@ function gatewayConfig(opts: GatewayOpts): GatewayRunnerConfig {
 }
 
 export function buildGatewayCommand(): Command {
-  const gateway = new Command("gateway").description("front door: tools drive the fusion ensemble");
+  const gateway = new Command("gateway").description(
+    "advanced/maintainer: harness gateway development tools"
+  );
 
   const serve = addCommonGatewayOptions(new Command("serve"))
     .description("serve the fusion harness gateway over the provider wire protocols")

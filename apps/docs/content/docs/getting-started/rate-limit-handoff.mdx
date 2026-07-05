@@ -37,7 +37,7 @@ You can also set the default in `.fusionkit/fusion.json`:
 
 ```json
 {
-  "version": "fusionkit.fusion.v2",
+  "version": "fusionkit.fusion.v3",
   "onRateLimit": "fusion"
 }
 ```
@@ -79,3 +79,8 @@ This gives you two recovery layers: automatic mid-turn failover when the failure
 ## When to change the default
 
 Keep `fusion` for normal work. Use `passthrough` when you are debugging a provider integration and need the raw upstream error. Use `fail` when a CI or evaluation run should stop immediately instead of substituting ensemble behavior.
+
+
+## Privacy note
+
+With the default `fusion` policy, a failed passthrough turn is re-sent to the configured panel providers. Use `passthrough` or `fail` when you do not want that provider expansion. See [Privacy and data handling](/docs/privacy).

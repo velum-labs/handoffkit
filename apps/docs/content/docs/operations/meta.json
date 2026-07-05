@@ -1,4 +1,6 @@
 {
-  "title": "Self-Hosting",
-  "pages": ["self-hosting", "release-publishing"]
+  "title": "Maintainer operations",
+  "pages": [
+    "release-publishing"
+  ]
 }

@@ -13,6 +13,8 @@
 
 import { PassThrough } from "node:stream";
 
+import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
+
 import { runAcpAgent } from "./acp-agent.js";
 import type { AcpRunner } from "./acp-agent.js";
 import { FUSION_EVIDENCE_HEADER, FUSION_RUN_ID_HEADER } from "./fusion-gateway.js";
@@ -50,7 +52,7 @@ export type FrontDoorAcceptanceOptions = {
 };
 
 function normalizeGatewayUrl(value: string): string {
-  return value.replace(/\/+$/, "");
+  return trimTrailingSlashes(value);
 }
 
 function v1Url(gatewayUrl: string, path: string): string {

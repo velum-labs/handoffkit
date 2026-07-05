@@ -8,49 +8,18 @@ The generated reference intentionally covers package entry points and Python pub
 
 ### `packages/adapter-ai-sdk/src/index.ts`
 
-@fusionkit/adapter-ai-sdk is the AI SDK side of FusionKit for app-owned loops.
+@fusionkit/adapter-ai-sdk is the AI SDK side of FusionKit local-model flows.
 
-The application keeps its own generateText or streamText loop and its own
-model; FusionKit governs the execution boundary. remoteTools returns AI
-SDK-compatible tools whose calls run as signed contracts in governed runner
-sessions and return with offline-verifiable receipts. The model surfaces
-withModel, routedModel, and mlxServer route the caller's own loop across
-local and cloud models with every decision recorded.
+This product package contains managed MLX local-model helpers and worktree
+agent utilities. Governed remote tools, swarm tools, and handoff-aware model
+routing live in the legacy `@fusionkit/handoff` package.
 
-- `export { remoteTools } from "./remote-tools.js";`
-- `export type { RemoteToolCallRecord, RemoteTools, RemoteToolsConfig, RemoteToolsContextConfig } from "./remote-tools.js";`
-- `export { swarmTools } from "./swarm-tools.js";`
-- `export type { DispatchInput, DispatchOutput, EscalateInput, EscalateOutput, PullInput, PullOutput, StatusInput, StatusOutput, SwarmPlane, SwarmRunRecord, SwarmTools, SwarmToolsConfig, SwarmToolsContextConfig, SwarmToolSet, WorkerTaskInput } from "./swarm-tools.js";`
-- `export { handoffModel, withModel } from "./model.js";`
-- `export type { EscalationReason, HandoffModelConfig } from "./model.js";`
-- `export { loadRouterCard, routedModel, withRoutedModel } from "./routed-model.js";`
-- `export type { RouteDecision, RoutedModelConfig, RouterCard } from "./routed-model.js";`
 - `export { runWorktreeAgent, worktreeDiff } from "./worktree-agent.js";`
 - `export type { TrajectoryStep, TrajectoryStepType, WorktreeAgentInput, WorktreeAgentResult } from "./worktree-agent.js";`
 - `export { defaultMlxDir, MlxCapabilityError, MlxEnv } from "./mlx-env.js";`
 - `export type { DownloadProgress, LocalModelInfo, ProvisionEvent } from "./mlx-env.js";`
 - `export { managedModelServer, mlxServer } from "./managed-server.js";`
 - `export type { ManagedModelServerOptions, ManagedServerEvent, MlxServerOptions } from "./managed-server.js";`
-
-### `packages/adapter-compute/src/index.ts`
-
-@fusionkit/adapter-compute is a ComputeSDK-shaped compute surface over
-governed runner sessions.
-
-The shape matches what ComputeSDK users already write: compute.sandbox.create,
-sandbox.runCommand, and sandbox.filesystem.writeFile. The substrate is
-FusionKit governance: every command is a signed run contract executed in a
-governed session with an offline-verifiable receipt.
-
-Each command runs in a fresh session materialized from the current workspace
-state. Continuity flows through the workspace's git history, not through a
-long-lived remote process. The adapter stages inputs as commits and pulls
-outputs back after each command, so sequential commands compose. A
-filesystem.writeFile call stages input files locally for the next command; it
-is not a remote mutation because nothing exists remotely between commands.
-
-- `export { governedCompute, GovernedSandbox, withCompute } from "./sandbox.js";`
-- `export type { CommandResult, GovernedCompute, GovernedComputeConfig, SandboxRunRecord } from "./sandbox.js";`
 
 ### `packages/cli-ui/src/index.ts`
 
@@ -142,37 +111,6 @@ Example utilities entry point. It exposes demo manifest parsing, mock model help
 
 No exports found.
 
-### `packages/handoff/src/index.ts`
-
-@fusionkit/handoff is the continuation-first SDK.
-
-Start work wherever it naturally begins, continue it on a governed runner
-when conditions change, preserve state across the boundary, and prove what
-moved, why it moved, who approved it, and how to resume.
-
-Everything here composes FusionKit governance primitives. A continuation is a
-signed run contract, the moved state is a content-addressed envelope pinned
-by that contract, and the result is an offline-verifiable receipt.
-
-- `export { defineHandoffConfig, Handoff, handoff } from "./handoff.js";`
-- `export type { ContinueOptions, HandoffConfig, HandoffInit, HandoffStreamEvent, HandoffSummary, HandoffTraceEvent, ModelDecision, ParallelOptions } from "./handoff.js";`
-- `export { HandoffRun } from "./run.js";`
-- `export type { WaitOptions, WaitOutcome } from "./run.js";`
-- `export { createCommandContext, executeGovernedCommand, toGovernedRunRecord } from "./run-executor.js";`
-- `export type { CommandHarnessConfig, GovernedCommandOptions, GovernedCommandResult, GovernedRunRecord } from "./run-executor.js";`
-- `export { targets } from "./targets.js";`
-- `export type { RuntimeTarget } from "./targets.js";`
-- `export { agents } from "./agents.js";`
-- `export { localFirst } from "./policy.js";`
-- `export type { ContinuationPolicy, LocalFirstOptions } from "./policy.js";`
-- `export { triggers } from "./triggers.js";`
-- `export type { FiredTrigger, Trigger } from "./triggers.js";`
-- `export { branch } from "./isolation.js";`
-- `export type { IsolationStrategy } from "./isolation.js";`
-- `export { reviewStrategies, scorecardFor } from "./review.js";`
-- `export type { ReviewedRun, ReviewResult, ReviewStrategy, Scorecard } from "./review.js";`
-- `export type { ToolCallObservation, ToolLike } from "./tools.js";`
-
 ### `packages/harness-core/src/index.ts`
 
 @fusionkit/harness-core is the single coding-agent harness contract:
@@ -197,6 +135,8 @@ implement this contract; the panel fanout and launchers consume it.
 - `export { AsyncChannel } from "./channel.js";`
 - `export { EventLog } from "./logging.js";`
 - `export type { EventLogOptions } from "./logging.js";`
+- `export { asArray, asObject, asString, createStreamJsonStepEmitter, parseStreamJsonLine, parseStreamJsonTrajectory, streamJsonResultContentText, stringifyStreamJsonValue, STREAM_JSON_MAX_TEXT, STREAM_JSON_MAX_TOOL_INPUT, truncateStreamJsonText } from "./stream-json.js";`
+- `export type { ParsedStreamJson, ParseStreamJsonOptions, StreamJsonEmitterOptions, StreamJsonStepText } from "./stream-json.js";`
 - `export { DEFAULT_TMP_MANIFEST, createTrackedTmpDir, releaseTrackedTmpDir, sweepTrackedTmpDirs } from "./tmp-sweep.js";`
 - `export { buildChildEnv, freePort, runCliCapture, spawnLogged, terminate, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./process.js";`
 - `export type { BuildChildEnvInput, CliCaptureOptions, CliCaptureResult, LoggedChild, LoggedSpawnOptions } from "./process.js";`
@@ -266,47 +206,6 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export type { GatewayDialect, ModelCallRecord, ModelGatewayCallContext, ModelGatewayCallResult, ProvenanceSink } from "./provenance.js";`
 - `export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";`
 - `export type { CapturedStep, CapturedTrajectory, TrajectoryCapture } from "./trajectory-capture.js";`
-
-### `packages/plane/src/index.ts`
-
-@fusionkit/plane is the governance control plane.
-
-It owns contracts, policy evaluation, approvals, receipt countersignature,
-secret brokering, audit export, durable SQLite storage, identity, auth, rate
-limiting, retention, metrics, and the control panel UI. Product-facing fusion
-flows do not need to import every primitive here, but retained governance and
-VM packages rely on this stable surface.
-
-- `export { Plane } from "./plane.js";`
-- `export type { PlaneConfig, IssuedPrincipal } from "./plane.js";`
-- `export { startPlaneServer } from "./server.js";`
-- `export type { PlaneServerOptions } from "./server.js";`
-- `export { defaultPolicy, evaluatePolicy } from "./policy.js";`
-- `export type { PolicyDecision, PolicyRequest } from "./policy.js";`
-- `export { badRequest, capabilityMismatch, conflict, forbidden, isPlaneDomainError, notFound, PlaneDomainError, unauthorized } from "./domain-errors.js";`
-- `export type { PlaneErrorCode } from "./domain-errors.js";`
-- `export { ClaimTokenService } from "./claim-token-service.js";`
-- `export type { ClaimTokenPayload, ClaimTokenServiceOptions, VerifiedClaimToken } from "./claim-token-service.js";`
-- `export { ContractService } from "./contract-service.js";`
-- `export type { ContractServiceOptions } from "./contract-service.js";`
-- `export { ReceiptService } from "./receipt-service.js";`
-- `export type { ReceiptServiceConfig } from "./receipt-service.js";`
-- `export { SqliteStore } from "./sqlite-store.js";`
-- `export type { EnrollTokenRecord, PlaneStore, PrincipalRecord, PrincipalRole, RunRecord, RunRequest, RunnerRecord } from "./store.js";`
-- `export { SecretStore } from "./secrets.js";`
-- `export { FileKeyProvider, generateMasterKeyHex, masterKeyFromMaterial, open, openFromFile, resolveMasterKey, seal, sealToFile } from "./keys.js";`
-- `export type { KeyProvider, MasterKey, OrgKeyPair, SealedBlob } from "./keys.js";`
-- `export { hashToken, principalCan, toPrincipal } from "./auth.js";`
-- `export type { Capability, Principal } from "./auth.js";`
-- `export { IdpVerifier } from "./idp.js";`
-- `export type { IdpConfig, VerifiedApproval } from "./idp.js";`
-- `export { DEFAULT_RATE_LIMIT, RateLimiter } from "./ratelimit.js";`
-- `export type { RateLimitConfig } from "./ratelimit.js";`
-- `export { createLogger, Metrics } from "./logging.js";`
-- `export type { Logger } from "./logging.js";`
-- `export { collectReferencedBlobs, RetentionSweeper } from "./retention.js";`
-- `export type { RetentionResult } from "./retention.js";`
-- `export { approveBodySchema, cancelBodySchema, claimBodySchema, completeBodySchema, createRunBodySchema, enrollBodySchema, eventsBodySchema, issuePrincipalBodySchema, parseBody, runRequestSchema, ValidationError } from "./validation.js";`
 
 ### `packages/protocol/src/index.ts`
 
@@ -441,22 +340,6 @@ it without cycles.
 - `export const LOCAL_PROBE_MODEL: string ...`
   Throwaway model id used to construct model-agnostic MLX envs.
 
-### `packages/runner/src/index.ts`
-
-@fusionkit/runner is the outbound-only governed runner entry point.
-
-The runner claims signed contracts, materializes workspaces, runs vendor agent
-harnesses inside governed sessions, and signs receipts. The public surface is
-deliberately small: Runner, the SessionBackend seam implemented by isolation
-tiers, session capability errors, and the execution helpers those backends
-share. Everything else is runner-internal.
-
-- `export { Runner } from "./runner.js";`
-- `export { CapabilityMismatchError } from "./session.js";`
-- `export type { SessionBackend, SessionBackendResult, SessionExecution } from "./backend.js";`
-- `export { executionHash, executionSpecFor, prepareExecution, requireShellExecution, resolveSessionEnv } from "./execution.js";`
-- `export type { BackendExecutionKind } from "./execution.js";`
-
 ### `packages/runtime-utils/src/index.ts`
 
 No module JSDoc was found.
@@ -472,6 +355,8 @@ No module JSDoc was found.
 - `export function captureWorktreeDiff(cwd: string): string | undefined ...`
   The `git diff` of a working tree, or undefined when clean or not a repo.
 - `export function definedEnv(env: EnvInput): Record<string, string> ...`
+- `export function trimTrailingSlashes(value: string): string ...`
+  Strip trailing "/" characters in linear time (a `/\/+$/` regex backtracks polynomially on adversarial input, which code scanning rightly flags).
 - `export function normalizeApiBaseUrl(baseUrl: string): string ...`
 - `export type BuildChildEnvInput ...`
 - `export function buildChildEnv(input: BuildChildEnvInput ...`
@@ -491,93 +376,6 @@ No module JSDoc was found.
 - `export function terminate(child: ChildProcess, graceMs ...`
 - `export function escapeMarkdownCell(value: string): string ...`
 - `export function markdownTable(headers: readonly string[], rows: readonly (readonly string[])[]): string[] ...`
-
-### `packages/sdk/src/index.ts`
-
-@fusionkit/sdk is a thin client over the governance plane API.
-
-Protocol primitives such as verification, hashing, and wire types live in
-@fusionkit/protocol. Consumers import them from the protocol package rather
-than through this SDK.
-
-- `export { PlaneClient, PlaneClientError } from "./client.js";`
-
-### `packages/session-harness/src/index.ts`
-
-@fusionkit/session-harness drives vendor agent harnesses through the AI SDK
-harness abstraction inside a sandbox.
-
-It runs under the same governed-session contract as every other backend:
-workspace staged in, structured evidence in the receipt, and secrets supplied
-through the broker. The generic backend is binding-driven. Shipped bindings
-cover Claude Code in a Vercel Sandbox microVM and Pi on a local just-bash
-sandbox for a cheap local swarm worker.
-
-- `export { AiSdkHarnessBackend, harnessBackend, isAgentRunFor, runHarnessSession } from "./backend.js";`
-- `export type { CreateHarnessInput, CreateSandboxProviderInput, HarnessAdapter, HarnessBinding, HarnessSandboxProvider, HarnessSessionRun } from "./backend.js";`
-- `export { aiSdkHarnessBackend, claudeCodeBinding, isClaudeCodeAgentRun } from "./claude-code.js";`
-- `export type { AiSdkHarnessBackendOptions, ClaudeCodeBindingOptions } from "./claude-code.js";`
-- `export { isPiAgentRun, piBinding, piHarnessBackend } from "./pi.js";`
-- `export type { PiBindingOptions, PiHarnessBackendOptions } from "./pi.js";`
-- `export { claudeCodeAuthFromEnv, piAuthFromEnv } from "./auth.js";`
-- `export { VERCEL_SANDBOX_CREDENTIAL_ENVS } from "@fusionkit/session-vercel-sandbox";`
-- `export { TranscriptRecorder } from "./transcript.js";`
-- `export type { TranscriptLine } from "./transcript.js";`
-
-### `packages/session-hermetic/src/index.ts`
-
-@fusionkit/session-hermetic is a hermetic session backend built on just-bash.
-
-just-bash provides a simulated bash interpreter with a virtual filesystem and
-interpreter-enforced network allowlists. There are no real processes or
-sockets inside the session, so there is nothing to escape with. Egress is
-enforced by the interpreter rather than by environment variables a binary
-could ignore. The trade-off is explicit: only command harnesses run here
-because there is no real OS for vendor CLIs or the node-based mock.
-
-- `export function toJustBashNetwork(policy: NetworkPolicy): NetworkConfig ...`
-  Map a Warrant network policy to just-bash's allowlist model.
-- `export class HermeticSessionBackend implements SessionBackend ...`
-- `export function hermeticBackend(): HermeticSessionBackend ...`
-  Create a hermetic session backend for a Warrant runner.
-
-### `packages/session-vercel-sandbox/src/index.ts`
-
-@fusionkit/session-vercel-sandbox runs governed sessions inside Vercel
-Sandbox Firecracker microVMs.
-
-This is the strongest isolation tier in the repository: VM-level separation
-with domain-based egress policy applied at the VM boundary. It compiles
-against the real @vercel/sandbox types, but live execution requires Vercel
-credentials. Without credentials, vercelSandboxBackend still constructs and
-execute throws a clear capability error.
-
-This module also owns sandbox-shaped helpers for file listing, shell quoting,
-mirror-back writes, credential resolution, and network policy mapping.
-
-- `export type VercelSandboxSource ...`
-- `export type VercelSandboxResources ...`
-- `export type VercelSandboxCreateInput ...`
-- `export type VercelSandboxInstance ...`
-- `export type VercelSandboxFactory ...`
-- `export type VercelSandboxOptions ...`
-- `export const SANDBOX_IGNORED_DIRS: ReadonlySet<string> ...`
-  Directory names never staged into a sandbox and never mirrored back: VCS metadata stays local (output is collected as a git diff on the runner side) and dependency trees are reinstalled inside the VM when the task needs them. Backends with runtime-specific state directories extend this set at the call site.
-- `export function shellQuote(value: string): string ...`
-  Quote a value for POSIX sh: single quotes, with embedded single quotes rendered as '\''. Unlike double quotes, nothing inside single quotes is expanded, so secret values containing $, backticks, or quotes are inert.
-- `export function listWorkspaceFiles(`
-  List a workspace's files as relative paths, skipping the shared ignored directories plus any backend-specific extras. The one walker used to stage workspaces into sandboxes.
-- `export function writeMirroredFile(`
-  Write one mirrored-back sandbox file into the local checkout, with the path validated against escape before anything touches the filesystem. Shared by every sandbox-shaped backend so mirror-back path safety lives in exactly one place.
-- `export const VERCEL_SANDBOX_CREDENTIAL_ENVS ...`
-  The env vars carrying Vercel Sandbox credentials, in token/team/project order. The single definition every sandbox-credential consumer (backend, harness credential gates) reads from.
-- `export function vercelCredentialsFromEnv(`
-  Resolve Vercel credentials from explicit options or the ambient environment, failing closed (capability error) when no token exists.
-- `export function toVercelNetwork(`
-  Map a Warrant network policy to a Vercel Sandbox network policy.
-- `export class VercelSandboxBackend implements SessionBackend ...`
-- `export function vercelSandboxBackend(`
-  Create a Vercel Sandbox session backend for a Warrant runner.
 
 ### `packages/testkit/src/index.ts`
 
@@ -651,7 +449,7 @@ Tool integration entry point. It exposes the launcher and harness integration co
 
 - `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, runCliCapture, sleep, spawnLogged, spawnTool, terminate, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
 - `export type { CliCaptureOptions, CliCaptureResult, LoggedChild, LoggedSpawnOptions } from "./proc.js";`
-- `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";`
+- `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS, trimTrailingSlashes } from "@fusionkit/runtime-utils";`
 - `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
@@ -660,6 +458,8 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export { buildChildEnv, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
 - `export type { BuildChildEnvInput } from "./env.js";`
 - `export { buildSkippedCandidate } from "./candidate.js";`
+- `export { deriveFusedSubagents, fusedSubagentDescription, fusedSubagentDeveloperInstructions, fusedSubagentMembers } from "./fused-subagents.js";`
+- `export type { FusedSubagentDefinition, FusedSubagentDescriptionStyle } from "./fused-subagents.js";`
 
 ### `packages/workspace/src/index.ts`
 

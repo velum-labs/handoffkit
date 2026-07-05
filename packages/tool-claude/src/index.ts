@@ -2,7 +2,7 @@
  * Claude Code tool integration entry point. It exposes launcher environment helpers and the Claude Code ensemble harness adapter.
  */
 import { smokeModelForTool } from "@fusionkit/registry";
-import { harnessDriversEnabled } from "@fusionkit/tools";
+import { harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
 import type { ToolIntegration } from "@fusionkit/tools";
 import { createDriverHarness } from "@fusionkit/ensemble";
 import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";
@@ -33,7 +33,7 @@ export const claudeTool: ToolIntegration = {
   setupSnippet: ({ gatewayUrl }) =>
     [
       "Claude Code (Anthropic Messages); Claude appends /v1/messages, so use the gateway root:",
-      `  ANTHROPIC_BASE_URL=${gatewayUrl.replace(/\/+$/, "")}`,
+      `  ANTHROPIC_BASE_URL=${trimTrailingSlashes(gatewayUrl)}`,
       "  ANTHROPIC_AUTH_TOKEN=local"
     ].join("\n"),
   acpAdapterId: "claude-agent",
@@ -43,7 +43,6 @@ export const claudeTool: ToolIntegration = {
   launch: launchClaude,
   createHarness: (_kind, options) =>
     harnessDriversEnabled() ? claudeDriverHarness(options) : createClaudeCodeHarness({
-      execution: "local",
       fusionBackendUrl: options.fusionBackendUrl,
       ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),

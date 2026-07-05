@@ -21,21 +21,6 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
-  examples/ai-sdk-loop:
-    dependencies:
-      '@fusionkit/adapter-ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/adapter-ai-sdk
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      ai:
-        specifier: 6.0.200
-        version: 6.0.200(zod@4.4.3)
-
   examples/bench:
     dependencies:
       '@fusionkit/protocol':
@@ -47,156 +32,6 @@ importers:
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../../packages/workspace
-
-  examples/compute-sandbox:
-    dependencies:
-      '@fusionkit/adapter-compute':
-        specifier: workspace:*
-        version: link:../../packages/adapter-compute
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/consent-secrets:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/control-panel:
-    dependencies:
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/seed-example':
-        specifier: workspace:*
-        version: link:../seed
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/dry-run:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
-
-  examples/egress-policy:
-    dependencies:
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/golden-interface:
-    dependencies:
-      '@fusionkit/adapter-compute':
-        specifier: workspace:*
-        version: link:../../packages/adapter-compute
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      ai:
-        specifier: 6.0.200
-        version: 6.0.200(zod@4.4.3)
-
-  examples/governed-run:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/handoff:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/hermetic-session:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/session-hermetic':
-        specifier: workspace:*
-        version: link:../../packages/session-hermetic
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/microvm-isolation-bench:
-    dependencies:
-      '@fusionkit/adapter-compute':
-        specifier: workspace:*
-        version: link:../../packages/adapter-compute
-      '@fusionkit/ensemble':
-        specifier: workspace:*
-        version: link:../../packages/ensemble
-      '@fusionkit/session-vercel-sandbox':
-        specifier: workspace:*
-        version: link:../../packages/session-vercel-sandbox
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
-      '@vercel/sandbox':
-        specifier: 2.2.0
-        version: 2.2.0
 
   examples/mlx:
     dependencies:
@@ -210,51 +45,6 @@ importers:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
 
-  examples/model-escalation:
-    dependencies:
-      '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
-      '@fusionkit/adapter-ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/adapter-ai-sdk
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      ai:
-        specifier: 6.0.200
-        version: 6.0.200(zod@4.4.3)
-
-  examples/offline-verify:
-    dependencies:
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/parallel-fanout:
-    dependencies:
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
   examples/runtime-kernel:
     dependencies:
       '@fusionkit/ensemble':
@@ -264,25 +54,232 @@ importers:
         specifier: workspace:*
         version: link:../../packages/example-utils
 
-  examples/seed:
+  legacy/examples/ai-sdk-loop:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  legacy/examples/compute-sandbox:
+    dependencies:
+      '@fusionkit/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/consent-secrets:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/control-panel:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/seed-example':
+        specifier: workspace:*
+        version: link:../seed
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/dry-run:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+
+  legacy/examples/egress-policy:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/golden-interface:
+    dependencies:
+      '@fusionkit/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  legacy/examples/governed-run:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/handoff:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/hermetic-session:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/session-hermetic':
+        specifier: workspace:*
+        version: link:../../packages/session-hermetic
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/microvm-isolation-bench:
+    dependencies:
+      '@fusionkit/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@fusionkit/ensemble':
+        specifier: workspace:*
+        version: link:../../../packages/ensemble
+      '@fusionkit/session-vercel-sandbox':
+        specifier: workspace:*
+        version: link:../../packages/session-vercel-sandbox
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+      '@vercel/sandbox':
+        specifier: 2.2.0
+        version: 2.2.0
+
+  legacy/examples/model-escalation:
+    dependencies:
+      '@ai-sdk/provider':
+        specifier: 3.0.10
+        version: 3.0.10
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  legacy/examples/offline-verify:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/parallel-fanout:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/seed:
     dependencies:
       '@fusionkit/handoff':
         specifier: workspace:*
         version: link:../../packages/handoff
       '@fusionkit/protocol':
         specifier: workspace:*
-        version: link:../../packages/protocol
+        version: link:../../../packages/protocol
       '@fusionkit/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       '@fusionkit/testkit':
         specifier: workspace:*
-        version: link:../../packages/testkit
+        version: link:../../../packages/testkit
       '@fusionkit/workspace':
         specifier: workspace:*
-        version: link:../../packages/workspace
+        version: link:../../../packages/workspace
 
-  examples/swarm:
+  legacy/examples/swarm:
     dependencies:
       '@ai-sdk/harness':
         specifier: 1.0.0-canary.6
@@ -296,12 +293,9 @@ importers:
       '@ai-sdk/tui':
         specifier: 1.0.0-canary.6
         version: 1.0.0-canary.6(zod@4.4.3)
-      '@fusionkit/adapter-ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/adapter-ai-sdk
       '@fusionkit/example-utils':
         specifier: workspace:*
-        version: link:../../packages/example-utils
+        version: link:../../../packages/example-utils
       '@fusionkit/handoff':
         specifier: workspace:*
         version: link:../../packages/handoff
@@ -310,31 +304,50 @@ importers:
         version: link:../../packages/session-harness
       '@fusionkit/testkit':
         specifier: workspace:*
-        version: link:../../packages/testkit
+        version: link:../../../packages/testkit
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
 
-  packages/adapter-ai-sdk:
+  legacy/packages/adapter-compute:
     dependencies:
-      '@ai-sdk/openai-compatible':
-        specifier: 2.0.48
-        version: 2.0.48(zod@4.4.3)
-      '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
       '@fusionkit/handoff':
         specifier: workspace:*
         version: link:../handoff
       '@fusionkit/protocol':
         specifier: workspace:*
-        version: link:../protocol
+        version: link:../../../packages/protocol
       '@fusionkit/runtime-utils':
         specifier: workspace:*
-        version: link:../runtime-utils
+        version: link:../../../packages/runtime-utils
       '@fusionkit/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+    devDependencies:
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/packages/handoff:
+    dependencies:
+      '@ai-sdk/provider':
+        specifier: 3.0.10
+        version: 3.0.10
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-utils
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -344,29 +357,156 @@ importers:
     devDependencies:
       '@fusionkit/testkit':
         specifier: workspace:*
-        version: link:../testkit
+        version: link:../../../packages/testkit
 
-  packages/adapter-compute:
+  legacy/packages/plane:
     dependencies:
-      '@fusionkit/handoff':
+      '@fusionkit/protocol':
         specifier: workspace:*
-        version: link:../handoff
+        version: link:../../../packages/protocol
+      jose:
+        specifier: 6.2.3
+        version: 6.2.3
+      pino:
+        specifier: 10.3.1
+        version: 10.3.1
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  legacy/packages/runner:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-utils
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+
+  legacy/packages/sdk:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+
+  legacy/packages/session-harness:
+    dependencies:
+      '@ai-sdk/harness':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
+      '@ai-sdk/harness-claude-code':
+        specifier: 1.0.0-canary.2
+        version: 1.0.0-canary.2(@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3))
+      '@ai-sdk/harness-pi':
+        specifier: 1.0.0-canary.2
+        version: 1.0.0-canary.2(ws@8.21.0)
+      '@ai-sdk/sandbox-just-bash':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(just-bash@3.0.1)(ws@8.21.0)(zod@4.4.3)
+      '@ai-sdk/sandbox-vercel':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../../../packages/registry
+      '@fusionkit/runner':
+        specifier: workspace:*
+        version: link:../runner
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-utils
+      '@fusionkit/session-hermetic':
+        specifier: workspace:*
+        version: link:../session-hermetic
+      '@fusionkit/session-vercel-sandbox':
+        specifier: workspace:*
+        version: link:../session-vercel-sandbox
+      ws:
+        specifier: 8.21.0
+        version: 8.21.0
+    devDependencies:
+      '@fusionkit/plane':
+        specifier: workspace:*
+        version: link:../plane
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+
+  legacy/packages/session-hermetic:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/runner':
+        specifier: workspace:*
+        version: link:../runner
+      just-bash:
+        specifier: 3.0.1
+        version: 3.0.1
+    devDependencies:
+      '@fusionkit/plane':
+        specifier: workspace:*
+        version: link:../plane
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+
+  legacy/packages/session-vercel-sandbox:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/runner':
+        specifier: workspace:*
+        version: link:../runner
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+      '@vercel/sandbox':
+        specifier: 2.2.0
+        version: 2.2.0
+      ms:
+        specifier: 2.1.3
+        version: 2.1.3
+
+  packages/adapter-ai-sdk:
+    dependencies:
+      '@ai-sdk/openai-compatible':
+        specifier: 2.0.48
+        version: 2.0.48(zod@4.4.3)
+      '@ai-sdk/provider':
+        specifier: 3.0.10
+        version: 3.0.10
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-    devDependencies:
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
 
   packages/cli:
     dependencies:
@@ -379,30 +519,18 @@ importers:
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../handoff
       '@fusionkit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
       '@fusionkit/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@fusionkit/plane':
-        specifier: workspace:*
-        version: link:../plane
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@fusionkit/tool-claude':
         specifier: workspace:*
         version: link:../tool-claude
@@ -428,9 +556,6 @@ importers:
         specifier: 1.11.0
         version: 1.11.0
     devDependencies:
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../testkit
       '@types/figlet':
         specifier: 1.7.0
         version: 1.7.0
@@ -478,15 +603,9 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@fusionkit/session-harness':
-        specifier: workspace:*
-        version: link:../session-harness
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
@@ -502,24 +621,18 @@ importers:
       '@ai-sdk/provider':
         specifier: 3.0.10
         version: 3.0.10
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../legacy/packages/handoff
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
-
-  packages/handoff:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
 
   packages/harness-core:
     dependencies:
@@ -553,157 +666,26 @@ importers:
         specifier: workspace:*
         version: link:../runtime-utils
 
-  packages/plane:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      jose:
-        specifier: 6.2.3
-        version: 6.2.3
-      pino:
-        specifier: 10.3.1
-        version: 10.3.1
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
   packages/protocol: {}
 
   packages/registry: {}
 
-  packages/runner:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-
   packages/runtime-utils: {}
-
-  packages/sdk:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-
-  packages/session-harness:
-    dependencies:
-      '@ai-sdk/harness':
-        specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
-      '@ai-sdk/harness-claude-code':
-        specifier: 1.0.0-canary.2
-        version: 1.0.0-canary.2(@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3))
-      '@ai-sdk/harness-pi':
-        specifier: 1.0.0-canary.2
-        version: 1.0.0-canary.2(ws@8.21.0)
-      '@ai-sdk/sandbox-just-bash':
-        specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(just-bash@3.0.1)(ws@8.21.0)(zod@4.4.3)
-      '@ai-sdk/sandbox-vercel':
-        specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@fusionkit/session-hermetic':
-        specifier: workspace:*
-        version: link:../session-hermetic
-      '@fusionkit/session-vercel-sandbox':
-        specifier: workspace:*
-        version: link:../session-vercel-sandbox
-      ws:
-        specifier: 8.21.0
-        version: 8.21.0
-    devDependencies:
-      '@fusionkit/plane':
-        specifier: workspace:*
-        version: link:../plane
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../testkit
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-
-  packages/session-hermetic:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      just-bash:
-        specifier: 3.0.1
-        version: 3.0.1
-    devDependencies:
-      '@fusionkit/plane':
-        specifier: workspace:*
-        version: link:../plane
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../testkit
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-
-  packages/session-vercel-sandbox:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-      '@vercel/sandbox':
-        specifier: 2.2.0
-        version: 2.2.0
-      ms:
-        specifier: 2.1.3
-        version: 2.1.3
 
   packages/testkit:
     dependencies:
       '@fusionkit/plane':
         specifier: workspace:*
-        version: link:../plane
+        version: link:../../legacy/packages/plane
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@fusionkit/runner':
         specifier: workspace:*
-        version: link:../runner
+        version: link:../../legacy/packages/runner
       '@fusionkit/sdk':
         specifier: workspace:*
-        version: link:../sdk
+        version: link:../../legacy/packages/sdk
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
@@ -728,12 +710,6 @@ importers:
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      '@fusionkit/session-harness':
-        specifier: workspace:*
-        version: link:../session-harness
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools

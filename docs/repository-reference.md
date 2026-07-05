@@ -80,7 +80,7 @@ sequenceDiagram
 
 `@fusionkit/cli` is the primary product surface and publishes the `fusionkit` binary. Its entry script is `packages/cli/src/index.ts`, which builds the Commander program and handles top-level process errors. The command tree is built by `buildProgram()` in `packages/cli/src/cli.ts`.
 
-The package owns launcher commands such as `codex`, `claude`, `cursor`, and `serve`; the generic `fusion` command group; `local`; `models`; `runtime`; `sessions`; `config`; `setup`; `doctor`; `status`; and lower-level ensemble and deployment helpers. The product path depends heavily on `registerFusion`, `registerEnsemble`, `registerLocal`, `registerModels`, `registerSessions`, `registerConfig`, `registerSetup`, `registerDoctor`, and `registerDeployment`.
+The package owns launcher commands such as `codex`, `claude`, `cursor`, and `serve`; the generic `fusion` command group; `local`; `models`; `runtime`; `sessions`; `config`; `setup`; `doctor`; `status`; and lower-level ensemble helpers. The product path depends heavily on `registerFusion`, `registerEnsemble`, `registerLocal`, `registerModels`, `registerSessions`, `registerConfig`, `registerSetup`, and `registerDoctor`.
 
 Important behavior includes preflight validation through `PreflightError`, version reporting that names both the npm CLI and pinned PyPI synthesizer, bare invocation help, and fail-closed policy error reporting for governed execution paths.
 
@@ -387,7 +387,7 @@ Example:
 ```bash
 uv run --package fusionkit fusionkit init --global
 uv run --package fusionkit fusionkit serve --config .fusionkit/fusion.yaml --port 8000
-uv run --package fusionkit fusionkit prompts dump --output .fusionkit/prompts
+uv run --package fusionkit fusionkit prompts dump --dir .fusionkit/prompts
 ```
 
 ### `fusionkit-evals`
@@ -396,7 +396,7 @@ uv run --package fusionkit fusionkit prompts dump --output .fusionkit/prompts
 
 Important modules include `fusion_bench`, `fusion_hillclimb`, `fusion_compound`, `benchmark`, `benchmark_panel`, `dirty_dozen`, `public_bench`, `public_bench_report`, `prompt_tuning`, `pareto`, `exec_select`, `candidate_bank`, `bench_verify`, `bench_stats`, and `gateway_target`.
 
-Key symbols include `FusionBenchRunner`, `BenchmarkRunner`, `run_climb`, `check_target`, scorer functions, code extraction helpers, and report writers. Adapters under `python/fusionkit-evals/adapters/` connect the evaluation system to LiveCodeBench, Aider-style polyglot tasks, and selection experiments.
+Key symbols include `FusionBenchRunner`, `BenchmarkRunner`, `run_climb`, `check_target`, scorer functions, code extraction helpers, and report writers. Adapters under `python/fusionkit-evals/src/fusionkit_evals/adapters/` connect the evaluation system to LiveCodeBench, Aider-style polyglot tasks, and selection experiments.
 
 Example:
 

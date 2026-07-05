@@ -1,0 +1,45 @@
+{
+  "name": "@fusionkit/plane",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "legacy/packages/plane"
+  },
+  "description": "Legacy governance stack (not part of the FusionKit product): Warrant control plane: contracts, policy, approvals, receipt countersignature, secret broker, audit export, and the control panel UI.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "ui",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@fusionkit/protocol": "workspace:*",
+    "jose": "6.2.3",
+    "pino": "10.3.1",
+    "zod": "4.4.3"
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "legacy",
+    "governance",
+    "policy"
+  ]
+}

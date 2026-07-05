@@ -1,7 +1,7 @@
 # opencode reference sources (tracked via trackcn)
 
 Read-only reference copies of [sst/opencode](https://github.com/sst/opencode) source, tracked with
-[trackcn](https://github.com/jacobparis/trackcn) (see `trackcn.json` at the repo root). Not part of
+[trackcn](https://github.com/jacobparis/trackcn) (see `references/trackcn.json`). Not part of
 any build, workspace, or lint scope — study material for how a production coding agent handles
 panel-style model quirks, agentic loops, and failure modes.
 

@@ -23,9 +23,8 @@ import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
  * idle period with no in-flight calls scales it to zero; the next call
  * transparently restarts it.
  *
- * Composes as the `local` leg of handoffModel: a provisioning failure,
- * cold-start timeout, or crash surfaces as a failed local call, which the
- * routing layer escalates to cloud.
+ * Composes as the local leg of any caller-owned fallback model: a provisioning
+ * failure, cold-start timeout, or crash surfaces as a failed local call.
  *
  * This is the app-process, local-first path. Runner/plane-side model-server
  * pools (governed, receipt-producing model serving) are a separate feature.
@@ -79,7 +78,8 @@ function defaultCreateModel(
   modelId: string,
   supportsStructuredOutputs: boolean
 ): LanguageModelV3 {
-  // TODO(@000alen): why are OpenAI-compatible provider name, /v1 suffix, and local dummy apiKey hardcoded here? Reuse the shared OpenAI-compatible endpoint helper used by OpenAiBackend/ManagedModelServer callers.
+  // ManagedModelServer owns this local OpenAI-compatible endpoint shape; keep
+  // the provider name, /v1 prefix, and dummy key co-located with the server.
   return createOpenAICompatible({
     name: "warrant-managed-server",
     // The provider appends route paths (e.g. /chat/completions) directly,

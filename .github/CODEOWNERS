@@ -1,4 +1,1 @@
-# GitHub CODEOWNERS requires a concrete user or team slug.
-# No Velum Labs team slug was discoverable via the GitHub API from this environment.
-# Before enabling required code-owner review, replace the placeholder below with a real team:
-# * @velum-labs/<team-slug>
+* @000alen @benjamzc

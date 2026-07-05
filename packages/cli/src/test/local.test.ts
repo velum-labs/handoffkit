@@ -10,7 +10,7 @@ import {
 } from "../local.js";
 
 /**
- * M4 coverage: the pure shim builders for `warrant local`. The spawn/exec path
+ * M4 coverage: the pure shim builders for `fusionkit local`. The spawn/exec path
  * needs the real vendor binaries and is exercised manually, not in CI.
  */
 

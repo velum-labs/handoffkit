@@ -3,9 +3,7 @@ title: Documentation taxonomy
 description: How the FusionKit documentation is organized and why each section exists.
 ---
 
-FusionKit documentation is organized by reader intent. Each page should answer one kind of question: what to read first, how to complete a task, how the system works, what a reference surface contains, how to operate the project, or how to call an API.
-
-Use this page when you are deciding where to go next or where a new documentation entry should belong.
+FusionKit documentation is organized by reader intent. User-facing product docs live in this site; maintainer, benchmark, protocol, release, and legacy archive docs live in the repository Markdown tree.
 
 ## The taxonomy
 
@@ -13,22 +11,22 @@ Use this page when you are deciding where to go next or where a new documentatio
 | --- | --- | --- |
 | Orientation | Where am I, and what should I read next? | Explain scope and route readers to the right section. |
 | Task guides | How do I complete this workflow? | Provide commands, expected output, and the next troubleshooting step. |
-| Concepts | How does the system fit together? | Explain mental models, boundaries, and architecture. |
+| Concepts | How does the product fit together? | Explain mental models, boundaries, and architecture. |
 | Reference | What exactly does this surface contain? | Document commands, fields, packages, routes, examples, and stable interfaces. |
-| Operations | How do I run, publish, or maintain this system? | Name workflows, scripts, credentials, verification, and recovery paths. |
+| Privacy | What is stored, and where does code go? | Explain local retention, provider egress, failover expansion, and telemetry behavior. |
 | APIs | How do clients call FusionKit? | Describe runtime routes and generated contracts. |
 
 ## Section map
 
 | Section | Category | Why it exists |
 | --- | --- | --- |
-| [Introduction](/docs) | Orientation | Introduces FusionKit and routes readers to setup, CLI, concepts, SDKs, operations, and APIs. |
+| [Introduction](/docs) | Orientation | Introduces FusionKit and routes readers to setup, CLI, concepts, packages, privacy, examples, and APIs. |
 | [Get Started](/docs/getting-started/installation) | Task guides | Covers installation, first session, repo configuration, raw endpoint usage, and rate-limit handoff. |
-| [fusionkit CLI](/docs/cli/commands) | Reference and task guides | Documents commands, flags, model panels, cost, observability, and troubleshooting for the main product surface. |
-| [Concepts](/docs/concepts/overview) | Concepts | Explains product scope, architecture, model fusion, and runtime-kernel behavior. |
-| [SDKs and Packages](/docs/sdks/handoff-sdk) | Reference | Documents SDKs, adapters, and package ownership for builders. |
-| [Self-Hosting](/docs/operations/self-hosting) | Operations | Explains operating the plane and runners plus release publishing. |
-| [Examples](/docs/examples) | Task guides | Maps runnable examples to the behavior each one demonstrates. |
+| [fusionkit CLI](/docs/cli/commands) | Reference and task guides | Documents commands, flags, model panels, cost, observability, and troubleshooting. |
+| [Concepts](/docs/concepts/overview) | Concepts | Explains panels, judges, synthesizers, model ids, product scope, model fusion, and runtime-kernel behavior. |
+| [Packages](/docs/sdks/packages) | Reference | Maps product packages and points legacy material to the archive. |
+| [Privacy](/docs/privacy) | Privacy | Documents local storage, retention, provider egress, rate-limit failover, and no telemetry. |
+| [Examples](/docs/examples) | Task guides | Maps product examples and points legacy demos to the archive. |
 | [API Reference](/docs/api) | APIs and reference | Explains runtime gateway routes and the generated harness-executor contract. |
 
 ## Public page inventory
@@ -36,40 +34,27 @@ Use this page when you are deciding where to go next or where a new documentatio
 | Page | Category | Justification |
 | --- | --- | --- |
 | [Introduction](/docs) | Orientation | Explains what FusionKit is and routes readers to the correct section. |
-| [Documentation taxonomy](/docs/taxonomy) | Orientation | Defines the site structure and the reason every public entry exists. |
+| [Documentation taxonomy](/docs/taxonomy) | Orientation | Defines the site structure and why public entries exist. |
 | [Installation](/docs/getting-started/installation) | Task guide | Gets a new user from no install to a verified CLI and prerequisites. |
 | [Quickstart](/docs/getting-started/quickstart) | Task guide | Provides the shortest path to a fused coding session. |
-| [Configuration](/docs/getting-started/configuration) | Reference | Documents committed `.fusionkit/` settings, precedence, prompts, and export behavior. |
+| [Configuration](/docs/getting-started/configuration) | Reference | Documents v3 `.fusionkit/` settings, precedence, prompts, and export behavior. |
 | [Inference endpoint](/docs/getting-started/inference-endpoint) | Task guide | Shows how to run FusionKit as an OpenAI-compatible endpoint without a coding harness. |
-| [Rate-limit handoff](/docs/getting-started/rate-limit-handoff) | Task guide | Explains recovery behavior when a passthrough vendor is throttled or out of credit. |
-| [Command Reference](/docs/cli/commands) | Reference | Documents the main CLI commands, shared flags, sessions, config, and model cache commands. |
+| [Rate-limit handoff](/docs/getting-started/rate-limit-handoff) | Task guide | Explains recovery behavior and provider expansion when a passthrough vendor is throttled. |
+| [Command Reference](/docs/cli/commands) | Reference | Documents the main CLI commands, shared flags, sessions, config, prompts, ensembles, and model cache commands. |
 | [Cost and Models](/docs/cli/cost-and-models) | Task guide | Helps users control spend before and during a fused session. |
-| [Models and panels](/docs/cli/models-and-panels) | Reference | Documents providers, default panels, local MLX, mixed panels, judges, and budgets. |
+| [Models and panels](/docs/cli/models-and-panels) | Reference | Documents providers, panels, local MLX, mixed panels, judges, and budgets. |
 | [Observability](/docs/cli/observability) | Task guide | Explains how to watch sessions, traces, candidates, and judge events. |
 | [Troubleshooting](/docs/cli/troubleshooting) | Task guide | Starts from common failures and gives the smallest diagnostic path. |
-| [Core Concepts](/docs/concepts/overview) | Concepts | Explains contracts, receipts, planes, runners, sessions, checkpoints, and handoffs. |
-| [Product scope](/docs/concepts/product-scope) | Orientation | Clarifies which packages power the daily CLI path and which are retained platform depth. |
-| [Architecture](/docs/concepts/architecture) | Concepts | Shows how the CLI fusion stack and governed platform layers fit together. |
+| [Core Concepts](/docs/concepts/overview) | Concepts | Defines the product vocabulary and dual model ids. |
+| [Product scope](/docs/concepts/product-scope) | Orientation | Clarifies product packages versus retained legacy packages. |
 | [Model fusion](/docs/concepts/model-fusion) | Concepts | Explains trajectory-level fusion, candidate generation, and synthesis behavior. |
 | [Runtime Kernel](/docs/concepts/runtime-kernel) | Concepts | Explains the typed operator graph substrate and when to use it. |
-| [Handoff SDK](/docs/sdks/handoff-sdk) | Reference | Documents the continuation-first SDK for checkpoint, handoff, review, and pull workflows. |
-| [Plane SDK](/docs/sdks/sdk) | Reference | Documents the plane client and offline receipt verification flow. |
-| [Adapters](/docs/sdks/adapters) | Reference | Documents AI SDK, compute, model, routing, and local worker integration surfaces. |
-| [Package Map](/docs/sdks/packages) | Reference | Maps workspace packages to ownership and first files to read. |
-| [Self-hosting](/docs/operations/self-hosting) | Operations | Explains operating the plane and runners outside the simple CLI path. |
-| [Release Publishing](/docs/operations/release-publishing) | Operations | Documents npm publishing, trusted publishing, repository naming, and release validation. |
-| [Examples](/docs/examples) | Task guide | Maps runnable examples to the behavior they prove. |
-| [API Reference](/docs/api) | APIs and reference | Explains runtime gateway routes and the generated contract section. |
+| [Package Map](/docs/sdks/packages) | Reference | Maps product workspace packages to ownership and first files to read. |
+| [Privacy](/docs/privacy) | Privacy | Documents local files, retention, provider egress, rate-limit failover, and no telemetry. |
+| [Examples](/docs/examples) | Task guide | Maps product examples and names the legacy archive location. |
+| [API Reference](/docs/api) | APIs and reference | Explains runtime gateway routes and generated contract docs. |
 | [Execute a model-fusion harness task](/docs/api/v1/harness-executions) | APIs and reference | Generated operation reference for the harness-executor seam. |
 
 ## Entry justification
 
-Every public documentation entry should have a reason to exist. A page belongs in the site when it helps a user install FusionKit, run a session, configure a repo, understand product behavior, integrate an SDK, operate a supported surface, run an example, or call an API.
-
-If a page is mostly about implementation ownership, generated code, release internals, benchmark maintenance, or historical design, it belongs in the repository maintainer docs rather than the public site. If a page is a temporary plan, it belongs outside visible docs.
-
-## How to choose a page
-
-Start with [Installation](/docs/getting-started/installation) if you have not run FusionKit before. Use [Quickstart](/docs/getting-started/quickstart) when you want the shortest path to a fused coding session. Use [Inference endpoint](/docs/getting-started/inference-endpoint) when you want curl or SDK access without a coding harness. Use [Models and panels](/docs/cli/models-and-panels) when choosing providers, local MLX, mixed panels, or budgets.
-
-Use [Product scope](/docs/concepts/product-scope) when package names or retained platform packages are confusing. Use [Architecture](/docs/concepts/architecture) when debugging a full session. Use [API Reference](/docs/api) when writing a client. Use [Troubleshooting](/docs/cli/troubleshooting) when a command fails.
+A page belongs in the public site when it helps a user install FusionKit, run a session, configure a repo, understand product behavior, integrate an endpoint, control cost, reason about privacy, run a product example, or call an API. Implementation ownership, generated code internals, release process, benchmark maintenance, and legacy governance material belong in repository maintainer docs.
