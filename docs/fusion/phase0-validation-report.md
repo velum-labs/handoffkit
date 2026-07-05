@@ -1,5 +1,11 @@
 # Phase 0 Validation Study — Results and Decision
 
+> **Record status: CLOSED (2026-07-04).** This document is the immutable
+> record of the Phase-0 study and will not be updated further. Current
+> beliefs, binding scope, and next steps live in
+> `capability-index-status.md`; subsequent history is appended to
+> `capability-index-program.md`.
+
 **Executes:** §19 Phase 0 of `docs/fusion/capability-index-spec.md`
 **Analysis artifacts:** `analysis/phase0/` (this document is the decision
 record; the per-checkpoint reports hold the full tables and methods)

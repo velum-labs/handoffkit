@@ -1,19 +1,22 @@
 # Coding Capability Index — Implementation Specification
 
-**Status:** Phase 0 executed 2026-07-04 — **build the reduced scope only**
-(see the addendum below and `phase0-validation-report.md`)
+**Status:** design reference. **Current binding scope lives in
+`capability-index-status.md`** — always check it before implementing; parts
+of this spec are descoped (see addendum).
 **Audience:** an engineer with no prior context on this project
 **Deliverable:** a Python workspace package (`capability-index`) plus
 integration glue into the existing `fusionkit-evals` benchmark stack
 
 ---
 
-## ⚠ Post-validation addendum (read before implementing)
+## ⚠ Post-validation addendum (as of Phase-0 close, 2026-07-04)
 
 The §19 Phase-0 validation study was executed (all four checkpoints, plus
 two follow-up experiments; full results in
-`docs/fusion/phase0-validation-report.md`, program history in
-`docs/fusion/capability-index-program.md`). The verdicts bind this spec:
+`docs/fusion/phase0-validation-report.md`, history in
+`docs/fusion/capability-index-program.md`). **Scope authority is
+`capability-index-status.md`, which supersedes this addendum as results
+accumulate**; the addendum records the state at Phase-0 close:
 
 | Checkpoint | Result | Consequence for this spec |
 |---|---|---|
@@ -40,8 +43,15 @@ Binding scope changes:
    routing question is answered: lopsided → don't fuse).
 
 The remainder of the document is preserved as written (including the parts
-now descoped) as the reference design; implementers follow the addendum
-where they conflict.
+now descoped) as the reference design; implementers follow
+`capability-index-status.md` where they conflict.
+
+## Spec changelog
+
+- **2026-07-04** — Initial spec; red-team amendments (connector manifests,
+  statistics repairs, C0–C3 chronology, license rights, verified
+  integration fixes); post-validation addendum after Phase-0 close
+  (reduced scope, ranking cancelled, truncation requirement).
 
 ---
 

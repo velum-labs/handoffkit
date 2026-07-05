@@ -1,14 +1,16 @@
-# Capability Index Program — Complete Record
+# Capability Index Program — History and Decision Log
 
-**Period:** 2026-07-04 (single working session, spec → red-team → execution
-→ verification → follow-ups)
+> **Document role: append-only.** New stages and decisions are appended;
+> existing entries are never rewritten (corrections are new entries). The
+> *current* state of the program — beliefs, binding scope, next steps —
+> lives in `capability-index-status.md`, which supersedes anything here on
+> conflict.
+
+**Started:** 2026-07-04
 **Branch/PRs:** `cursor/capability-index-report-c275` — PR #53 (analysis,
 merged), PR #54 (spec + Phase 0 execution)
-**Total billed spend:** ~$17.5, ledger-tracked (`analysis/phase0/c3_spend_ledger.jsonl`)
-
-This document is the program-level record: what was produced, in what
-order, what the experiments found, how the findings revise the plan, and
-what happens next. Each stage links to its full artifact.
+**Billed spend to date:** ~$17.5, ledger-tracked
+(`analysis/phase0/c3_spend_ledger.jsonl`)
 
 ---
 
@@ -104,7 +106,7 @@ and analyzed. Future long runs: concurrency 3–4 + periodic checkpointing.
 
 ---
 
-## 2. Final results
+## 2. Results as of Phase-0 close (2026-07-04)
 
 | Question | Answer | Confidence |
 |---|---|---|
@@ -115,7 +117,7 @@ and analyzed. Future long runs: concurrency 3–4 + periodic checkpointing.
 | Where does fusion still have a case? | Peer panels on agentic/repo domains (where C1 headroom lives) and **synthesis-style fusion** — the original replay *exceeded* the candidate-selection oracle (38.6% fused vs 35.1% oracle), and lopsidedness caps selection, not synthesis | Directional (needs a dedicated round) |
 | Is the committed default panel (`kimi-k2-thinking` + `qwen3-coder`) right? | **Not for this workload shape** (panel oracle 31.7% vs gpt-5.5 alone 80.0%) — but kimi remains unmeasurable below ≥32k budgets, so the member-level judgment is provisional | Medium |
 
-## 3. Interpretation
+## 3. Interpretation at Phase-0 close
 
 1. **The fusion thesis survives, but narrower and sharper than assumed.**
    Complementarity is real among *peers*. When one model dominates a
@@ -170,32 +172,10 @@ analysis/phase0/
   cache/                              (gitignored) cloned sources, banks, logs
 ```
 
-## 5. Next steps (priority order)
+## 5. Next steps
 
-1. **Post-cutoff contamination check** (~$10): re-run the 5-model slice on
-   the newest LCB window to confirm gpt-5.5's dominance isn't training-set
-   leakage. Until then the "don't fuse on algorithmic" routing answer is
-   provisional.
-2. **Thinking-model measurement fix** (~$8): kimi-k2-thinking (+ sonnet)
-   at ≥32k budget or provider reasoning caps → first valid member-level
-   verdict on the committed default panel.
-3. **Synthesis-focused calibration round**: clean judge protocol
-   (anonymized, order-randomized, no hidden labels), synthesis vs
-   selection ablation, on a slice where headroom exists — this chases the
-   one result that beat the oracle. Uses existing `fusion_hillclimb` /
-   `fusion_bench` machinery.
-4. **Repo-bugfix harness unlock**: harden the HandoffKit patch-and-test
-   path so agentic/repo calibration is runnable — that is where C1 says
-   peer-panel headroom lives, and it is the product's core workload.
-   ($1–10/task; the first slice should be small.)
-5. **M1 reduced warehouse**: schemas + connectors for the three sources
-   that produced evidence (SWE-bench experiments, LLMRouterBench,
-   Terminal-Bench), porting the Phase-0 scripts as reference
-   implementations; cards as evidence reports; shortlist-and-veto
-   analytics only (per the spec addendum).
-6. **Rule router v0**: two rules are already evidence-backed — lopsided
-   slice → single model; peer slice → panel — pending items 1–4 to fill in
-   the per-domain table.
+Maintained in `capability-index-status.md` (living document) — not here,
+so there is exactly one place to update as priorities shift.
 
 ## 6. Program-level lessons
 
@@ -212,3 +192,15 @@ analysis/phase0/
   and had to be recovered from tmux.
 - **Negative results are product features.** "Don't fuse here, route to X"
   is as monetizable as a panel recommendation, and cheaper to compute.
+
+## 7. Decision log (append-only)
+
+| # | Date | Decision | Basis | Where reflected |
+|---|---|---|---|---|
+| D1 | 2026-07-04 | Adopt validation-study-first chronology with C0–C3 gates before any package build | Red-team convergence (3 reviewers) | Spec §19 |
+| D2 | 2026-07-04 | Build the **reduced** index: shortlist + veto + calibration-first; cancel public-prior panel ranking | C2 FAIL, settled by C2V under both objectives | Status doc; spec addendum |
+| D3 | 2026-07-04 | Truncation accounting is a hard calibration requirement (refuse pass-rate claims >~10% truncation; ≥16k budgets for thinking models) | C3-R16K: original headroom PASS was a truncation artifact | Status doc; spec addendum |
+| D4 | 2026-07-04 | Single-shot algorithmic routing: single model, don't fuse (provisional on contamination check) | C3-R16K lopsidedness (+38pp, headroom +1.7pp [0, +5]) | Status doc |
+| D5 | 2026-07-04 | Next calibration round targets agentic/repo + synthesis-style fusion, not more single-shot slices | C1 headroom location + synthesis-beats-oracle observation | Status doc next steps |
+| D6 | 2026-07-04 | Layer-3 scoped to cost/latency/drift only (no production ground-truth signal exists yet); router regret measurable only on calibration slices | Phase-0 pre-work assessment | Phase-0 report; status doc |
+| D7 | 2026-07-04 | Document structure: immutable records + living status doc + append-only history/decision log | Sustainability review after three in-place revisions of the Phase-0 report | Status doc "Update protocol" |
