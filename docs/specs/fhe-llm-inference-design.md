@@ -140,11 +140,14 @@ draft model** (1–2B, same tokenizer) shipped to clients for local drafting.
 
 ## 6. Server runtime
 
-Base library: **FIDESlib** (open source, full GPU CKKS incl. bootstrapping,
-OpenFHE-interoperable client side, multi-GPU via NCCL). **Cheddar** (MIT,
-32-bit RNS) is the tracked alternative — its 32-bit design is also the
-natural basis for a future Metal port. **OpenFHE (CPU)** is the permanent
-correctness oracle; every GPU kernel diffs against it in CI.
+Base library: **FIDESlib** (public repo, full GPU CKKS incl. bootstrapping,
+OpenFHE-interoperable client side, multi-GPU via NCCL as of v2.1.2; verify
+license terms before commercial use). **Cheddar** (MIT, 32-bit RNS) is the
+tracked alternative — its 32-bit design is also the natural basis for a
+future Metal port (confirm bootstrap is in the open release). **DESILO FHE**
+(proprietary but freely pip-installable, GPU CKKS with bootstrapping) is a
+fallback evaluation option. **OpenFHE (CPU)** is the permanent correctness
+oracle; every GPU kernel diffs against it in CI.
 
 Runtime techniques, in adoption order:
 
@@ -305,8 +308,10 @@ rejected for v1 on cost and CPA^D-interaction grounds).
   (open-source OpenFHE-GPU fork + modified HF GPT-2) on our stack; flush out
   packing/bootstrap/precision infrastructure against a published answer key.
 - **M2 — Ternary block**: ENSI-style mult-free PCMM + sigmoid attention +
-  RMSNorm-embedded bootstrap for one transformer block on FIDESlib (with
-  real bootstrapping — beyond ENSI's published setup); microbenchmarks vs M1.
+  RMSNorm-embedded bootstrap for one transformer block on FIDESlib. ENSI's
+  public code (`sugarhh/ENSI`) uses OpenFHE (CPU) plus a bootstrapping-capable
+  Phantom fork for GPU matmuls; the gap we close is end-to-end GPU execution
+  with bootstrapping. Microbenchmarks vs M1.
 - **M3 — Small ternary model end-to-end**: 1–2B ternary distillate encrypted
   end-to-end; §9 long-generation precision soak; first honest tok/s number.
 - **M4 — Decode pipeline**: client draft (MLX) + padded speculative
@@ -323,9 +328,14 @@ Pure-FHE transformer systems: NEXUS (NDSS '25, eprint 2024/136) · THOR (CCS
 '25) · EncryptedLLM (ICML '25; code: `leodec/openfhe-gpu-public`) · Cerium
 (arXiv 2512.11269) · Sylph (arXiv 2601.18511).
 
-Model co-design: Power-Softmax (arXiv 2410.09457) · ENSI (arXiv 2509.09424)
-· BitNet b1.58 (arXiv 2504.12285) · Ternary Bonsai (PrismML, 2026) ·
-FHE-DiNN (CRYPTO '18) · TAPAS (ICML '18) · REDsec (NDSS '23).
+Model co-design: Power-Softmax (arXiv 2410.09457) · ENSI (SRDS '25, arXiv
+2509.09424; code: `sugarhh/ENSI`) · BitNet b1.58 (arXiv 2504.12285; MIT
+weights incl. BF16 master weights on HuggingFace) · Ternary Bonsai (PrismML,
+2026; Apache 2.0 weights, benchmarks vendor-reported) · FHE-DiNN (CRYPTO
+'18) · TAPAS (ICML '18) · REDsec (NDSS '23). Note: MOAI's 2.36 min/input GPU
+figure is amortized over 256 same-key batched inputs (code:
+`dtc2025ag/MOAI`, `dtc2025ag/MOAI_GPU`; NEXUS code: `zju-abclab/NEXUS`,
+microbenchmark-level).
 
 Libraries/compilers: FIDESlib (`CAPS-UMU/FIDESlib`, ISPASS '25) · Cheddar
 (`scale-snu/cheddar-fhe`, ASPLOS '26) · Phantom · OpenFHE · Orion
