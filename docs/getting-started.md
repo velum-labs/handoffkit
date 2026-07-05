@@ -127,8 +127,7 @@ normal FusionKit development.
 
 ```sh
 docker compose -f legacy/docker/docker-compose.yml up --build
-docker compose -f legacy/docker/docker-compose.yml exec plane warrant ui
-docker compose -f legacy/docker/docker-compose.yml exec plane warrant runs
+# Inside the legacy Docker image, use the archived entrypoint for UI/runs commands.
 ```
 
 Open the control panel at `http://localhost:7172/ui/`.

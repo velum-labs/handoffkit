@@ -1,6 +1,6 @@
 # FusionKit Handoff Executor
 
-`warrant ensemble handoff` is the HandoffKit side of the FusionKit coding-harness seam.
+`fusionkit ensemble handoff` is an advanced maintainer executor for FusionKit benchmark and harness-development workflows.
 
 It lets FusionKit send a `benchmark-task-record.v1` payload on stdin, run one or more governed harness candidates, and receive a pure JSON record envelope on stdout.
 
@@ -8,7 +8,7 @@ It lets FusionKit send a `benchmark-task-record.v1` payload on stdin, run one or
 
 ```bash
 printf '%s' "$BENCHMARK_TASK_JSON" | \
-  warrant ensemble handoff \
+  fusionkit ensemble handoff \
     --harness codex \
     --repo /path/to/repo \
     --out /tmp/handoff-artifacts \
@@ -76,11 +76,10 @@ Known local verification from the implementation pass:
 # skipped 3
 ```
 
-Warnings about `${PACKAGES_READ_TOKEN}` in `.npmrc` are expected in local environments that do not have the private package read token exported. They do not invalidate the local check/build/test gate when the command exits `0`.
-
 ## Boundaries
 
-- HandoffKit owns governed harness execution, transcript capture, artifacts, and verification metadata.
+- FusionKit owns the stdin/stdout executor contract, transcript capture, artifacts, and verification metadata for this maintainer workflow.
 - FusionKit owns benchmark aggregation, record joins, report semantics, and product run inspection.
+- This page is maintainer-facing; it is not a user quickstart.
 - Credential-gated live harnesses should remain opt-in and should produce structured `skipped` records when credentials are unavailable.
 - Do not write secrets, API keys, or raw customer data into records, fixtures, transcripts, or docs.

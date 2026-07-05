@@ -1,5 +1,8 @@
 # Fusion Stabilization — Living Document
 
+> **Internal - not product documentation:** Design archive for maintainers; do not treat this as current user-facing product guidance.
+
+
 > **Status: living.** This document tracks the stabilization of the current fusion
 > implementation *before* the full refactor toward `FUSION_ARCHITECTURE_V2.md`.
 > Update it as facts change; every substantive edit should touch the change log

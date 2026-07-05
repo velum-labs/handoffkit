@@ -5,16 +5,14 @@ description: The committed .fusionkit/ per-repo config reference.
 
 ## The `.fusionkit/` folder
 
-Fusion settings live in a committed `.fusionkit/` folder at your repo root. It is
-**safe to commit**. It stores only the env-var *names* that hold API keys
-(`keyEnv`), never the secret values.
+Fusion settings live in a committed `.fusionkit/` folder at your repo root. It is **safe to commit**. It stores only the env-var *names* that hold API keys (`keyEnv`), never the secret values.
 
 ```
 .fusionkit/
-  fusion.json        # all settings (panel, judge, default tool, run defaults)
+  fusion.json
   prompts/
-    judge.md                    # judge analysis system prompt
-    synthesizer.md              # synthesizer system prompt (the fused output)
+    judge.md
+    synthesizer.md
 ```
 
 Scaffold it interactively:
@@ -23,44 +21,39 @@ Scaffold it interactively:
 fusionkit init
 ```
 
-`init` writes `.fusionkit/fusion.json` and ejects the synthesizer's built-in
-prompts into `.fusionkit/prompts/*.md` so you can edit them. Inspect the
-effective configuration and a dry-run preview any time:
+Inspect the effective configuration and a dry-run preview any time:
 
 ```bash
 fusionkit status
+fusionkit config show
 ```
-
-<Callout type="info">
-  A legacy `fusionkit.json` at the repo root is **auto-migrated** into
-  `.fusionkit/fusion.json` on first run. The canonical committed config is
-  `.fusionkit/fusion.json`; legacy root configs are local-only and gitignored.
-</Callout>
 
 ## Precedence
 
-Settings resolve in this order (highest wins):
-
 ```
-explicit CLI flags  >  .fusionkit  >  built-in defaults
+explicit CLI flags  >  .fusionkit/fusion.json  >  built-in defaults
 ```
 
-So the folder is a default layer, not a lock. Any flag overrides it for a
-single run. Use `--no-local` / `--no-observe` to override a `true` default from
-the file.
+The file is a default layer, not a lock. Any flag overrides it for one run.
 
 ## Settings (`fusion.json`)
 
 ```json
 {
-  "version": "fusionkit.fusion.v2",
+  "version": "fusionkit.fusion.v3",
   "tool": "codex",
-  "panel": [
-    { "id": "gpt", "model": "gpt-5.5", "provider": "openai", "keyEnv": "OPENAI_API_KEY" },
-    { "id": "sonnet", "model": "claude-sonnet-4-6", "provider": "anthropic", "keyEnv": "ANTHROPIC_API_KEY" },
-    { "id": "gemini", "model": "gemini-2.5-pro", "provider": "google", "keyEnv": "GEMINI_API_KEY" }
-  ],
-  "judgeModel": "gpt-5.5",
+  "defaultEnsemble": "default",
+  "ensembles": {
+    "default": {
+      "panel": [
+        { "id": "gpt", "model": "gpt-5.5", "provider": "openai", "keyEnv": "OPENAI_API_KEY" },
+        { "id": "sonnet", "model": "claude-sonnet-4-6", "provider": "anthropic", "keyEnv": "ANTHROPIC_API_KEY" },
+        { "id": "gemini", "model": "gemini-2.5-pro", "provider": "google", "keyEnv": "GEMINI_API_KEY" }
+      ],
+      "judgeModel": "gpt-5.5",
+      "synthesizerModel": "gpt-5.5"
+    }
+  },
   "local": false,
   "observe": false,
   "onRateLimit": "fusion",
@@ -74,16 +67,24 @@ the file.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `version` | string | Must be `"fusionkit.fusion.v2"`. A `"fusionkit.fusion.v1"` file is still accepted and upgraded. |
+| `version` | string | Must be `"fusionkit.fusion.v3"`. v1/v2 files are accepted and upgraded in memory. |
 | `tool` | `codex` \| `claude` \| `cursor` \| `serve` | Default agent when none is passed. |
-| `panel` | array | Panel models (see below). |
-| `judgeModel` | string | Model used for judge synthesis. Defaults to the first panel model. |
+| `ensembles` | object | Named panels. The `default` ensemble advertises `fusion-panel`; other names advertise `fusion-<name>`. |
+| `defaultEnsemble` | string | Which ensemble new sessions use by default. |
 | `local` | boolean | Use the local MLX trio by default. |
 | `observe` | boolean | Boot the observability dashboard by default. |
-| `onRateLimit` | `fusion` \| `passthrough` \| `fail` | What to do when a passthrough vendor hits a rate limit, quota error, or billing error. Defaults to `fusion`. |
+| `onRateLimit` | `fusion` \| `passthrough` \| `fail` | Vendor rate-limit behavior. Defaults to `fusion`. |
 | `budgetUsd` | number | Optional session spend cap in gateway-observed USD. |
 | `portless` | boolean | Use stable portless URLs when available. Defaults to `true`. |
-| `port` | number \| null | Fixed gateway port (otherwise ephemeral). |
+| `port` | number \| null | Fixed gateway port, otherwise ephemeral. |
+
+### Ensemble fields
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `panel` | array | Panel members. Omit it on `default` to use the built-in panel. |
+| `judgeModel` | string | Model used for judge synthesis. Defaults to the first panel model. |
+| `synthesizerModel` | string | Optional final-output model. Defaults to the judge on the Python side. |
 
 ### Panel entries
 
@@ -92,33 +93,30 @@ the file.
 | `id` | string | Stable identifier for the panel member. |
 | `model` | string | The model name. |
 | `provider` | `mlx` \| `openai` \| `anthropic` \| `google` \| `openrouter` \| `openai-compatible` | Defaults to `mlx`. |
-| `keyEnv` | string | Env var holding this model's API key (cloud only). |
+| `keyEnv` | string | Env var holding this model's API key. |
 | `baseUrl` | string | Optional custom base URL. |
 
-An `openrouter` member uses OpenRouter's `vendor/model` id and defaults to
-`OPENROUTER_API_KEY`:
+An `openrouter` member uses OpenRouter's `vendor/model` id and defaults to `OPENROUTER_API_KEY`:
 
 ```json
-{ "id": "kimi", "model": "moonshotai/kimi-k2", "provider": "openrouter" }
+{ "id": "kimi", "model": "moonshotai/kimi-k2-thinking", "provider": "openrouter", "keyEnv": "OPENROUTER_API_KEY" }
 ```
 
-When `panel` is omitted, the default cloud panel is the three-vendor trio shown
-above. Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY` for the
-strongest default behavior. If one member is missing a key or fails during a run,
-the surviving members can still be fused.
-
-## Inspect and export the effective config
-
-Use `config show` when a run does not behave the way you expect. It prints the
-merged config and where each value came from.
+## Edit from the CLI
 
 ```bash
-fusionkit config show
-fusionkit config path
+fusionkit config get budgetUsd
+fusionkit config set budgetUsd 5
+fusionkit config unset budgetUsd
+fusionkit config edit
+fusionkit ensemble list
+fusionkit ensemble add fast --model kimi=openrouter:moonshotai/kimi-k2-thinking
+fusionkit ensemble use fast
 ```
 
-The Node CLI derives the Python router YAML from `.fusionkit/fusion.json`.
-Generate that YAML only when you want to run the raw Python server directly.
+## Export router YAML
+
+The Node CLI derives the Python router YAML from `.fusionkit/fusion.json`:
 
 ```bash
 fusionkit config export-yaml
@@ -128,23 +126,16 @@ fusionkit serve --config router.yaml
 
 ## Prompt overrides (`prompts/`)
 
-Each `.fusionkit/prompts/<id>.md` file overrides one built-in system prompt used
-by the synthesizer. A file that exists and is **non-empty** replaces the
-default; an empty or missing file falls back to the built-in.
-
-| File | Overrides |
-| --- | --- |
-| `judge.md` | The judge analysis prompt (compares candidate trajectories). |
-| `synthesizer.md` | The synthesizer prompt that produces the fused output (a final answer, or the next agentic step when tools are present). |
-
-To regenerate the built-in defaults at any time (e.g. after upgrading), dump
-them from the synthesizer package:
+Each `.fusionkit/prompts/<id>.md` file overrides one built-in system prompt used by the synthesizer. A file that exists and is non-empty replaces the default; an empty or missing file falls back to the built-in.
 
 ```bash
 uvx fusionkit prompts dump --dir .fusionkit/prompts
+fusionkit prompts list
+fusionkit prompts edit synthesizer
+fusionkit prompts reset synthesizer
 ```
 
 <Callout type="warn">
   Never put API key values in `.fusionkit/`. Store only the env-var name in
-  `keyEnv` and export the secret (or put it in `.env`).
+  `keyEnv` and export the secret or put it in `.env`.
 </Callout>

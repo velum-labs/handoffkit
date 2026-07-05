@@ -1,5 +1,8 @@
 # Concepts
 
+> **Legacy:** Historical legacy documentation. This page describes the archived Warrant governance product, not the FusionKit model-fusion user journey.
+
+
 Warrant is built around a small set of signed, content-addressed objects and the
 services that exchange them.
 
@@ -11,9 +14,9 @@ services that exchange them.
 | Receipt | A signed record of what actually happened: status, events, evidence, workspace changes, runtime details, secrets released, and verification material. | `packages/protocol/src/receipt.ts` |
 | Event chain | Hash-chained run events used for timeline integrity and replayable audit stories. | `packages/protocol/src/chain.ts` |
 | Manifest | Content-addressed description of captured workspace inputs and outputs. | `packages/protocol/src/types.ts`, `packages/workspace/src/index.ts` |
-| Policy | Deny-by-default rules over identity, agent kind, runner pool, network egress, secrets, approvals, and capabilities. | `packages/plane/src/policy.ts` |
-| Checkpoint | Portable continuation state: workspace snapshot plus semantic state such as tool journals and model routing decisions. | `packages/protocol/src/checkpoint.ts`, `packages/handoff/src/checkpoint-manager.ts` |
-| Handoff envelope | A portable description of continuation intent and the checkpoint to move across a runtime boundary. | `packages/protocol/src/handoff.ts`, `packages/handoff/src/handoff.ts` |
+| Policy | Deny-by-default rules over identity, agent kind, runner pool, network egress, secrets, approvals, and capabilities. | `legacy/packages/plane/src/policy.ts` |
+| Checkpoint | Portable continuation state: workspace snapshot plus semantic state such as tool journals and model routing decisions. | `packages/protocol/src/checkpoint.ts`, `legacy/packages/handoff/src/checkpoint-manager.ts` |
+| Handoff envelope | A portable description of continuation intent and the checkpoint to move across a runtime boundary. | `packages/protocol/src/handoff.ts`, `legacy/packages/handoff/src/handoff.ts` |
 
 ## Runtime actors
 

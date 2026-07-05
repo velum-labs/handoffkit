@@ -1,5 +1,8 @@
 # Quickstart: inference endpoint
 
+Canonical user docs live at https://fusionkit.velum-labs.com/docs/getting-started/inference-endpoint; this file is the in-repo mirror.
+
+
 Run an ensemble as a plain **OpenAI-compatible HTTP endpoint** that any client
 (curl, the OpenAI SDK, your app) can point at with no coding harness involved. Every
 request fans out across the panel and is synthesized into one answer.

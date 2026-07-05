@@ -1,5 +1,6 @@
 {
   "version": "fusionkit.fusion.v3",
+  "_comment": "This repository panel routes through OpenRouter and requires OPENROUTER_API_KEY; run fusionkit init in your own repo to choose a different panel.",
   "tool": "codex",
   "defaultEnsemble": "default",
   "ensembles": {

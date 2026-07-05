@@ -18,7 +18,7 @@ The end-to-end loop is real today, verified across the codebase:
 - **Cloud auth**: env-var API keys + read-only OAuth reuse of Claude Code / Codex CLI logins (`SubscriptionAuthMode = api_key|claude-code|codex`).
 - **Ensemble fault-tolerance**: a failed model becomes a `status="failed"` trajectory; survivors are still fused (`producers.py`); only zero survivors raises.
 - **Native passthrough**: the gateway also exposes each panel model as a direct (non-fused) pick — the substrate for "use the vendor, fall back to fusion."
-- **Config**: `.fusionkit/fusion.json` (`fusionkit.fusion.v2`) + `.fusionkit/prompts/*.md`, precedence CLI > `.fusionkit` > defaults.
+- **Config**: `.fusionkit/fusion.json` (`fusionkit.fusion.v3`) + `.fusionkit/prompts/*.md`, precedence CLI > `.fusionkit` > defaults.
 
 So this is a **gap-closing** effort, not greenfield. The gaps cluster into 8 workstreams below.
 
@@ -55,7 +55,7 @@ Git worktrees stay (lightweight, and essential for multiple harnesses editing on
 
 ## Workstream 0 — Scope cut, license, de-drift (P0, unblocks publish)
 
-- [ ] **Carve the product surface.** Ship only `ensemble`/`fusion`/`local`/`models`/`doctor`/`init` + the `codex|claude|cursor|serve` shortcuts. Move `plane`/`runner`/`handoff`(governed)/`session-*` packages out of the default install (separate optional package or repo). Remove governance commands from README/`docs/cli.md` (the docs currently describe `warrant run/plane/verify` and reference a non-existent `commands/plane.ts`).
+- [ ] **Carve the product surface.** Ship only `ensemble`/`fusion`/`local`/`models`/`doctor`/`init` + the `codex|claude|cursor|serve` shortcuts. Move `plane`/`runner`/`handoff`(governed)/`session-*` packages out of the default install (separate optional package or repo). Remove governance commands from README/`docs/cli.md` (the historical docs described removed governance commands and referenced a non-existent `commands/plane.ts`).
 - [ ] **License decision** (BSL / Apache-2 / dual). 42+ packages are currently UNLICENSED — blocks any public publish. cursorkit additionally carries a "no hosted deployment" disclaimer; decide its license/path (see WS6).
 - [ ] **Fix version + doc drift**: `FUSIONKIT_PYPI_VERSION` 0.7.0 → 0.7.1; remove the stale "cloud requires `--fusionkit-dir`" claim; single clean "run an ensemble" README + per-harness quickstarts.
 - [ ] **Naming**: pick one brand for the product (fusionkit), align env vars (`FUSIONKIT_*`), config dir (`~/.fusionkit`, `.fusionkit/`), and command help text.

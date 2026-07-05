@@ -312,7 +312,7 @@ Example:
 
 ```bash
 uv run --package fusionkit fusionkit init --global
-uv run --package fusionkit fusionkit prompts dump --output .fusionkit/prompts
+uv run --package fusionkit fusionkit prompts dump --dir .fusionkit/prompts
 uv run --package fusionkit fusionkit serve --config .fusionkit/fusion.yaml --port 8000
 uv run --package fusionkit fusionkit auth status
 ```

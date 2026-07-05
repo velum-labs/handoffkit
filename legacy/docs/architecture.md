@@ -1,5 +1,8 @@
 # Architecture
 
+> **Legacy:** Historical legacy documentation. This page describes the archived Warrant control-plane architecture, not the FusionKit model-fusion architecture.
+
+
 Warrant has a protocol kernel, an online control plane, outbound runners, and
 developer-facing adapters layered above them.
 
@@ -74,9 +77,9 @@ CLI / SDK / handoff / adapters
 ## Extension seams
 
 - Add a session backend by implementing the runner backend interface in
-  `packages/runner/src/backend.ts`.
+  `legacy/packages/runner/src/backend.ts`.
 - Add a client workflow by using `@fusionkit/sdk` or composing the handoff SDK.
-- Add new policy checks in `packages/plane/src/policy.ts` and keep receipts able
+- Add new policy checks in `legacy/packages/plane/src/policy.ts` and keep receipts able
   to explain the decision.
 - Add protocol records in `@fusionkit/protocol` first, then consume them from
   packages rather than duplicating shapes.

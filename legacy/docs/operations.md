@@ -1,5 +1,8 @@
 # Operations
 
+> **Legacy:** Historical legacy documentation. The shipped `fusionkit` CLI no longer includes plane or runner commands; the Docker-only legacy entrypoint is preserved under `legacy/docker/` for archive/smoke-test use.
+
+
 This legacy page summarizes how the quarantined Warrant control plane and runner
 are meant to be operated locally or in a small deployment.
 
@@ -26,9 +29,9 @@ The plane owns online authority:
 - Receipt countersignature, audit export, metrics, structured logs, and the
   dependency-free control panel at `/ui/`.
 
-Primary source files are `legacy/packages/plane/src/plane.ts`,
-`legacy/packages/plane/src/server.ts`, `legacy/packages/plane/src/sqlite-store.ts`,
-`legacy/packages/plane/src/policy.ts`, and `legacy/packages/plane/src/secrets.ts`.
+Primary source files are `legacy/legacy/packages/plane/src/plane.ts`,
+`legacy/legacy/packages/plane/src/server.ts`, `legacy/legacy/packages/plane/src/sqlite-store.ts`,
+`legacy/legacy/packages/plane/src/policy.ts`, and `legacy/legacy/packages/plane/src/secrets.ts`.
 
 ## Runner responsibilities
 
@@ -41,16 +44,16 @@ Runners own execution, not authorization:
 - Record event evidence, collect outputs, sign runner receipts, and return them
   to the plane for countersignature.
 
-Primary source files are `legacy/packages/runner/src/runner.ts`,
-`legacy/packages/runner/src/backend.ts`, and the `legacy/packages/session-*`
+Primary source files are `legacy/legacy/packages/runner/src/runner.ts`,
+`legacy/legacy/packages/runner/src/backend.ts`, and the `legacy/legacy/packages/session-*`
 backends.
 
 ## Storage and retention
 
-The current durable store is SQLite through `legacy/packages/plane/src/sqlite-store.ts`.
+The current durable store is SQLite through `legacy/legacy/packages/plane/src/sqlite-store.ts`.
 The `PlaneStore` interface is the seam for replacing SQLite with a multi-node
 store such as Postgres. Retention and garbage collection live in
-`legacy/packages/plane/src/retention.ts`.
+`legacy/legacy/packages/plane/src/retention.ts`.
 
 ## Security posture
 
@@ -72,4 +75,4 @@ pnpm test
 pnpm verify
 ```
 
-Release-package workflow details live in [Release publishing](release-publishing.md).
+Release-package workflow details live in [Release publishing](../../docs/release-publishing.md).

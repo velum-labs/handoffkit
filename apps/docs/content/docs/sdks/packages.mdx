@@ -1,70 +1,44 @@
 ---
 title: Package Map
-description: What each workspace package owns and where to start reading.
+description: What each product workspace package owns and where to start reading.
 ---
 
-The platform is a pnpm + TypeScript monorepo. Every package publishes under the
-`@fusionkit/*` scope; the CLI publishes as `@fusionkit/cli` with the `fusionkit`
-binary.
+FusionKit is a pnpm + TypeScript workspace plus a uv + Python workspace. The packages below are the product surface used by the shipped `fusionkit` journey. Legacy governance packages live under `legacy/` and are outside the public user path.
 
-## Core packages
-
-| Package | Responsibility |
-| --- | --- |
-| `@fusionkit/protocol` | Contract, receipt, event, manifest, checkpoint, handoff, signing, hashing, and model-fusion protocol primitives. Dependency-light. |
-| `@fusionkit/workspace` | Git capture, secret-pattern denial, session materialization, output collection, and divergence-safe pull. |
-| `@fusionkit/plane` | Control plane, policy, approvals, principals, secrets, receipt countersignature, SQLite store, metrics, audit export, and the control panel UI. |
-| `@fusionkit/runner` | Outbound claim loop, governed session execution, harness dispatch, egress enforcement, and runner receipts. |
-| `@fusionkit/sdk` | Thin client for the plane API plus offline receipt verification helpers. |
-
-## Developer surfaces
+## Product TypeScript packages
 
 | Package | Responsibility |
 | --- | --- |
 | `@fusionkit/cli` | The `fusionkit` command line and primary product surface. |
-| `@fusionkit/handoff` | Continuation SDK: checkpoints, `continueIn`, parallel fan-out, review, pull, tools, and trace logs. |
-| `@fusionkit/adapter-ai-sdk` | Governed remote tools, swarm tools, local/cloud model handoff, routed models, and managed MLX. |
-| `@fusionkit/adapter-compute` | ComputeSDK-shaped sandbox surface backed by governed runner sessions. |
-| `@fusionkit/model-gateway` | Fusion Harness Gateway: dialect translation, streaming, sessions, cost metering, rate-limit handoff, passthrough models, and fused frontdoor routing. |
+| `@fusionkit/model-gateway` | Dialect translation, streaming, sessions, cost metering, rate-limit handoff, passthrough models, and fused front-door routing. |
+| `@fusionkit/ensemble` | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
+| `@fusionkit/tools` | Tool integration contract and registry. |
+| `@fusionkit/tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-tool launcher shims and ensemble harness adapters. |
+| `@fusionkit/protocol` | Model-fusion contracts, schemas, OpenAPI bindings, trace records, and generated SDK bindings. |
+| `@fusionkit/workspace` | Git capture, worktree materialization, output collection, and divergence-safe pull helpers. |
+| `@fusionkit/adapter-ai-sdk` | Managed MLX server and AI SDK model adapters used by local-model paths. |
+| `@fusionkit/kernel` | Runtime-kernel graph, scheduling, budget, streaming, and outcome primitives. |
 
-## Session & fusion packages
-
-| Package | Responsibility |
-| --- | --- |
-| `@fusionkit/session-hermetic` | just-bash virtual-filesystem backend with interpreter-enforced egress. |
-| `@fusionkit/session-vercel-sandbox` | Firecracker microVM backend through Vercel Sandbox with domain egress policy. |
-| `@fusionkit/session-harness` | AI SDK harness bindings for vendor coding agents in governed sessions. |
-| `@fusionkit/ensemble` | FusionKit runtime kernel, typed operator graphs, scheduler families, workflow recipes, harness-agnostic ensemble runner, worktrees, judge synthesis, and protocol records. |
-
-## Tool integrations
+## Python packages
 
 | Package | Responsibility |
 | --- | --- |
-| `@fusionkit/tools` | The tool integration contract (launcher + harness adapter) and the registry the CLI wires per-tool packages into. |
-| `@fusionkit/tool-codex` / `tool-claude` / `tool-cursor` / `tool-opencode` | Per-tool launcher shims and (where applicable) ensemble harness adapters. |
+| `fusionkit` | PyPI CLI entrypoint for the raw router, setup, auth, prompts, and maintainer benchmark commands. |
+| `fusionkit-core` | Core fusion engine, provider clients, judge, config, run manager, artifacts, and metrics. |
+| `fusionkit-server` | FastAPI app and OpenAI-compatible HTTP routes. |
+| `fusionkit-mlx` | Optional MLX launcher utilities. |
+| `fusionkit-evals` | Benchmarks, public reports, prompt tuning, Pareto analysis, and hill climbing. |
 
-## Support & Python
+## Legacy archive
 
-| Package | Responsibility |
-| --- | --- |
-| `@fusionkit/testkit` | In-process plane + runner stacks and git fixtures for tests and demos. |
-| `@fusionkit/example-utils` | Shared demo manifest parsing, narration, and live-model helpers. |
-| `uniroute` (PyPI/uv) | NumPy implementation of dynamic-pool UniRoute model routing. |
-| `uniroute-mlx` (PyPI/uv) | OpenAI-compatible / MLX bridge for evaluating and serving routed local models. |
+The Warrant plane, runner, SDK, handoff SDK, compute adapter, and session backends are preserved under `legacy/`. They are not part of the normal `fusionkit codex` / `fusionkit serve` product path.
 
 ## Adding a new tool
 
-Each coding tool is its own workspace package implementing a single
-`ToolIntegration`, so supporting a new tool is additive:
+Each coding tool is its own workspace package implementing a `ToolIntegration`:
 
-1. Create `packages/tool-<name>/` (copy `packages/tool-codex` as a template). It
-   depends on `@fusionkit/tools` for the `ToolIntegration` contract, and on
-   `@fusionkit/ensemble` if it also ships a harness adapter.
-2. Export a `const <name>Tool: ToolIntegration` with a `launch(ctx)` that boots
-   the tool against `ctx.gatewayUrl`, its supported `modes`, and an optional
-   `createHarness` + `harnessKinds`.
-3. Register it in the CLI's tool registry.
+1. Create `packages/tool-<name>/` from an adjacent tool package.
+2. Export a `ToolIntegration` with a `launch(ctx)` implementation.
+3. Register it in the CLI tool registry.
 
-That single registry entry wires the tool into the launcher, the local-model
-path, the interactive picker, preflight, and (when it has a harness) the ensemble
-gateway.
+That registry entry wires the tool into launchers, local-model mode, preflight, and ensemble gateway support.

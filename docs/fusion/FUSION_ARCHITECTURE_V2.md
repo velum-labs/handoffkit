@@ -1,5 +1,8 @@
 # FusionKit Architecture v2 — Step-Level Trajectory Fusion Behind the Harness Boundary
 
+> **Internal - not product documentation:** Design archive for maintainers; do not treat this as current user-facing product guidance.
+
+
 Status: design proposal. Supersedes the always-on panel/judge/synth pipeline as
 the default architecture. The design rests on two ideas: the **harness sovereignty
 principle** (§3) — FusionKit never duplicates the harness's loop — and **R3, the fused

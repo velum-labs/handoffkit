@@ -1,5 +1,8 @@
 # Handoff SDK
 
+> **Legacy:** Historical legacy documentation. This page describes the governance handoff SDK, unrelated to the product rate-limit failover guide in `docs/quickstart-handoff.md`.
+
+
 `@fusionkit/handoff` is the continuation-first developer surface. It packages
 local state into Warrant checkpoints, requests governed runs through the plane,
 and pulls results back with receipts.
@@ -40,13 +43,13 @@ console.log(await h.summary());
 
 | API | Purpose | Source |
 | --- | --- | --- |
-| `handoff(...)` | Create a continuation context with task, agent, target, workspace, and policy intent. | `packages/handoff/src/handoff.ts` |
-| `h.checkpoint(...)` | Capture workspace and semantic state before a boundary crossing. | `packages/handoff/src/checkpoint-manager.ts` |
-| `h.continueIn(...)` | Submit a governed run to another target pool. | `packages/handoff/src/run.ts` |
-| `h.parallel(...)` | Fork a checkpoint into isolated attempts. | `packages/handoff/src/run.ts` |
-| `h.review(...)` | Select or summarize attempts using deterministic evidence. | `packages/handoff/src/review.ts` |
-| `h.pull(...)` | Bring remote results back with divergence protection. | `packages/handoff/src/run-executor.ts` |
-| `h.tools(...)` | Wrap local AI SDK-shaped tools and journal semantic state. | `packages/handoff/src/tools.ts` |
+| `handoff(...)` | Create a continuation context with task, agent, target, workspace, and policy intent. | `legacy/packages/handoff/src/handoff.ts` |
+| `h.checkpoint(...)` | Capture workspace and semantic state before a boundary crossing. | `legacy/packages/handoff/src/checkpoint-manager.ts` |
+| `h.continueIn(...)` | Submit a governed run to another target pool. | `legacy/packages/handoff/src/run.ts` |
+| `h.parallel(...)` | Fork a checkpoint into isolated attempts. | `legacy/packages/handoff/src/run.ts` |
+| `h.review(...)` | Select or summarize attempts using deterministic evidence. | `legacy/packages/handoff/src/review.ts` |
+| `h.pull(...)` | Bring remote results back with divergence protection. | `legacy/packages/handoff/src/run-executor.ts` |
+| `h.tools(...)` | Wrap local AI SDK-shaped tools and journal semantic state. | `legacy/packages/handoff/src/tools.ts` |
 
 ## Design rules
 

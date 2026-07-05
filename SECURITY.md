@@ -31,6 +31,8 @@ FusionKit stores durable harness sessions locally under `~/.fusionkit/sessions` 
 
 FusionKit does not include product telemetry or phone-home analytics. Provider credentials are read from environment variables or local `.env` files at runtime and are not persisted by the session store; committed config stores only environment variable names for keys.
 
+See [Privacy and data handling](docs/privacy.md) for local retention, provider egress, OpenRouter disclosure, and rate-limit failover behavior.
+
 ## Supply-chain posture
 
 - npm and GitHub Actions dependencies are exact-pinned against the allowlist enforced by `scripts/check-repo.mjs`.

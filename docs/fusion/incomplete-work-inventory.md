@@ -1,5 +1,8 @@
 # Incomplete work inventory
 
+> **Internal - not product documentation:** Design archive for maintainers; do not treat this as current user-facing product guidance.
+
+
 Consolidated list of work that is **not yet implemented**, **partially integrated**,
 **stubbed**, **deferred**, or **planned** across the handoffkit monorepo. Use this
 alongside:
