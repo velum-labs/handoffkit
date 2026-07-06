@@ -10,33 +10,43 @@ system that serves two consumers with very different trust models:
    Velum Labs, which must never carry prompts, code, repo paths, or model
    outputs.
 
-The design principle: **one instrumentation spine, many sinks, redaction at the
-sink boundary**. Components emit rich `fusion-trace-event` records exactly once;
-what a sink is allowed to see is a property of the sink, not the emit site.
+Two principles drive the design:
+
+- **One instrumentation spine, many sinks, redaction at the sink boundary.**
+  Components emit rich domain events exactly once; what a sink is allowed to
+  see is a property of the sink, not the emit site.
+- **Buy, don't build.** We adopt the OpenTelemetry SDKs as the tracing engine
+  (ids, context propagation, batching, flush, sampling, export) and
+  `posthog-node` as the product-telemetry engine (queueing, batching,
+  anonymous events, shutdown flush). What stays ours is the thin domain layer:
+  the fusion event taxonomy, the emit-site facade, the scope UI, and the
+  consent/allow-list policy.
 
 ## Goals
 
-- A single, versioned, machine-checked trace contract that all emitters
-  (TypeScript and Python) and all consumers (scope, telemetry, future OTLP)
-  provably conform to.
-- W3C-trace-context-compatible ids and propagation, so traces can interop with
-  standard tooling without adopting heavyweight SDKs.
-- Hardened emitters: batching, flush-on-exit, bounded queues, and a sampling
-  hook, in both languages.
-- Product telemetry that is **off by default**, consent-gated, allow-listed,
-  and documented — honoring the existing promise in `docs/privacy.md`.
+- OpenTelemetry-based tracing in both languages with W3C `traceparent`
+  propagation, standard `OTEL_*` configuration, and OTLP export to any
+  backend (Jaeger, Tempo, vendors) for free.
+- A single, versioned, machine-checked registry of fusion event names and
+  attributes (semantic conventions) that all emitters and consumers provably
+  conform to — replacing today's four hand-maintained contract copies.
 - Scope keeps working unchanged from the user's perspective (`--observe`),
-  but stops silently dropping fields and mis-ordering events.
+  but ingests standard OTLP and stops silently dropping fields.
+- Product telemetry via PostHog that is **off by default**, consent-gated,
+  allow-listed, and documented — honoring the existing promise in
+  `docs/privacy.md`.
+- Minimal churn at emit sites: the `emitTrace(...)` / payload-builder facade
+  and the in-process listener API (which the reasoning narrator depends on)
+  keep their shape; only the engine underneath changes.
 
 ## Non-goals
 
-- Adopting the OpenTelemetry SDKs. Both emitters are intentionally
-  dependency-free (`packages/protocol` is a zero-dependency leaf;
-  `fusionkit_core.trace` is stdlib-only) and must stay that way. We adopt OTel
-  *compatibility* (id format, `traceparent`, optional OTLP/HTTP JSON export),
-  not its runtime.
-- A hosted control plane or server-side telemetry pipeline (endpoint contract
-  only; the service itself is out of scope for this repo).
+- Hand-rolling any transport machinery: no custom batching queues, retry
+  loops, flush lifecycles, OTLP serializers, or analytics uploaders. If the
+  SDK provides it, we configure it.
+- A hosted control plane or server-side telemetry pipeline (PostHog cloud or
+  a self-hosted PostHog instance covers the backend; standing one up is out
+  of scope for this repo).
 - Telemetry of any prompt, code, diff, file path, repo name, or model output —
   ever, under any setting.
 - Changes to the legacy `warrant` stack or the kernel's internal in-memory
@@ -46,221 +56,224 @@ what a sink is allowed to see is a property of the sink, not the emit site.
 ## Where we are today
 
 The spine exists and works end-to-end (`fusionkit codex --observe` streams live
-events into scope), but the contract has drifted from the implementations:
+events into scope), but it is entirely hand-rolled and has drifted:
 
 | # | Drift / gap | Evidence |
 | --- | --- | --- |
-| 1 | Schema enum is stale: `judge.request`, `judge.scored`, `judge.synthesis` are emitted by both languages but missing from `spec/fusion-trace/schema/fusion-trace-event.v1.schema.json`, which sets `additionalProperties: false`. Real events fail strict validation. | Schema enum vs `packages/protocol/src/trace.ts` (`FUSION_TRACE_EVENT_TYPES`) and `python/fusionkit-core/tests/test_judge.py` |
-| 2 | `candidate_id` (TS) vs `trajectory_id` (Python): the schema allows `trajectory_id` only; TS emits `candidate_id`, which the schema rejects; scope stores `candidate_id` only, so Python-emitted `trajectory_id` correlation is silently dropped at ingest. | `packages/protocol/src/trace.ts`, `python/fusionkit-core/src/fusionkit_core/trace.py`, `apps/scope/lib/db.ts` |
-| 3 | The canonical spec binding `spec/fusion-trace/ts/fusion-trace-event.ts` is stale (missing three judge event types, has `TRACE_TRAJECTORY_HEADER` where the live code uses `TRACE_CANDIDATE_HEADER`). Three more hand-maintained copies exist (`packages/protocol/src/trace.ts`, `fusionkit_core/trace.py`, `apps/scope/lib/types.ts`). | File diffs across the four copies |
-| 4 | No conformance tests: nothing validates emitter output or the fixtures against the JSON schema, in either language, so drift is invisible until a consumer breaks. | No schema validation in `scripts/check-repo.mjs`, `tests/`, or either test suite |
-| 5 | Emitter lifecycle is soft: the TS emitter fire-and-forgets HTTP posts (`void this.post`) with no flush on exit and posts one event per request; Python has `close()` but nothing calls it on interpreter exit. Tail events of a session can be lost. | `packages/protocol/src/trace.ts`, `python/fusionkit-core/src/fusionkit_core/trace.py` |
+| 1 | Hand-rolled emitters in both languages reimplement what OTel provides: id minting, queueing, HTTP posting, JSONL fallback, sampling hooks — with gaps (TS fire-and-forgets posts with no flush-on-exit; one event per HTTP request; Python's `close()` is never called on exit). | `packages/protocol/src/trace.ts`, `python/fusionkit-core/src/fusionkit_core/trace.py` |
+| 2 | Schema enum is stale: `judge.request`, `judge.scored`, `judge.synthesis` are emitted by both languages but missing from `spec/fusion-trace/schema/fusion-trace-event.v1.schema.json`, which sets `additionalProperties: false`. Real events fail strict validation. | Schema enum vs `FUSION_TRACE_EVENT_TYPES` in `packages/protocol/src/trace.ts` |
+| 3 | `candidate_id` (TS) vs `trajectory_id` (Python): the schema allows `trajectory_id` only; scope stores `candidate_id` only, so Python-emitted correlation ids are silently dropped at ingest. | `apps/scope/lib/db.ts`, both emitters |
+| 4 | Four hand-maintained contract copies (`spec/fusion-trace/ts`, `packages/protocol/src/trace.ts`, `fusionkit_core/trace.py`, `apps/scope/lib/types.ts`), no conformance tests, and the spec binding is stale. | File diffs across the copies |
+| 5 | Ids are not W3C-compatible (12-hex span ids, prefixed trace ids) and there is no `traceparent` interop; custom `x-fusion-*` headers only. | `newSpanId()` in both emitters |
 | 6 | Ordering is per-process: `seq` restarts at 0 in every process, so cross-process ordering falls back to wall-clock `ts` with collector-ingest tiebreak. | Emitter seq counters; `apps/scope/lib/db.ts` ordering |
-| 7 | Ids are not W3C-compatible: `span_` ids are 12 hex chars (W3C needs 16); there is no `traceparent` interop. | `newSpanId()` in both emitters |
-| 8 | No product telemetry exists at all, and `docs/privacy.md` promises none. Any telemetry work must be opt-in and re-document that promise honestly. | `docs/privacy.md` "Telemetry" section |
+| 7 | No product telemetry exists at all, and `docs/privacy.md` promises none. Any telemetry work must be opt-in and re-document that promise honestly. | `docs/privacy.md` "Telemetry" section |
 
 ## Target architecture
 
 ```mermaid
 flowchart LR
-  subgraph emitters["Instrumented components (unchanged emit sites)"]
-    gw["Node gateway / ensemble / CLI<br/>@fusionkit/protocol TraceEmitter"]
-    py["Python router / judge / panel servers<br/>fusionkit_core.trace TraceEmitter"]
+  subgraph emitters["Instrumented components (facade unchanged at call sites)"]
+    gw["Node gateway / ensemble / CLI<br/>@fusionkit/tracing facade over<br/>@opentelemetry/sdk-trace-node"]
+    py["Python router / judge / panel servers<br/>fusionkit_core.trace facade over<br/>opentelemetry-sdk"]
   end
 
-  gw --> sinks
-  py --> sinks
+  gw -- "OTLP/HTTP (BatchSpanProcessor)" --> sinks
+  py -- "OTLP/HTTP (BatchSpanProcessor)" --> sinks
 
-  subgraph sinks["Sinks (per-sink policy)"]
-    jsonl["JSONL dir sink<br/>FUSION_TRACE_DIR<br/>full fidelity, local"]
-    http["Collector sink<br/>FUSION_TRACE_URL<br/>full fidelity, loopback"]
-    otlp["OTLP/HTTP JSON sink (opt)<br/>FUSION_TRACE_OTLP_URL<br/>spans derived from events"]
-    tele["Telemetry sink (opt-in)<br/>in-process listener in the CLI<br/>allow-listed aggregates only"]
+  subgraph sinks["Sinks"]
+    scopecol["scope collector<br/>POST /api/ingest (OTLP JSON)<br/>full fidelity, loopback"]
+    vendor["Any OTel backend<br/>OTEL_EXPORTER_OTLP_ENDPOINT<br/>(Jaeger / Tempo / vendor)"]
   end
 
-  http --> scope["apps/scope<br/>SQLite + SSE dashboard"]
-  jsonl -. replay .-> scope
-  otlp --> vendor["Any OTel collector<br/>(Jaeger / Tempo / vendor)"]
-  tele --> ep["FUSIONKIT_TELEMETRY_URL<br/>batched, flush-on-exit"]
+  scopecol --> scope["apps/scope<br/>SQLite + SSE dashboard"]
+
+  subgraph telemetry["Product telemetry (opt-in, separate pipeline)"]
+    listener["SpanProcessor listener in the CLI<br/>allow-listed aggregates only"]
+    ph["posthog-node<br/>anonymous events, batched,<br/>flush on shutdown"]
+  end
+
+  gw -. in-process spans .-> listener
+  listener --> ph
 ```
 
 Key decisions:
 
-- **Keep the custom spine.** The domain events (`judge.thinking`,
-  `trajectory.step`, per-candidate correlation) are the product's actual
-  observability value; generic span models cannot express them without lossy
-  attribute stuffing. Scope keeps consuming them natively.
-- **Telemetry is a sink, not a second instrumentation system.** The CLI already
-  has an in-process listener mechanism (`addTraceListener`, used by the
-  narrator) that works even when `FUSION_TRACE_URL`/`DIR` are unset, and the
-  gateway always mints a trace id. The telemetry module subscribes there,
-  derives allow-listed per-session aggregates, and never sees a network hop.
-  Since the Node gateway observes the whole product loop (session, panel
-  outcomes, judge decision, cost), Python-side emitters need no telemetry
-  changes.
-- **Redaction is structural, not best-effort.** The telemetry sink builds its
-  records from an explicit allow-list of enumerated fields; it never forwards
-  `payload` objects. A snapshot test locks the allow-list.
+- **OTel is the engine; the fusion taxonomy is the payload.** Fusion domain
+  events (`judge.thinking`, `trajectory.step`, `harness.candidate.*`) map onto
+  OTel primitives: sessions, candidates, judge turns, and model calls become
+  **spans**; point-in-time domain events become **span events** carrying
+  `fusion.*` attributes. `spec/fusion-trace/` stops being a wire format and
+  becomes a **semantic-conventions registry** (span names, event names,
+  attribute keys, and which attributes are sensitive), which is what we
+  actually own.
+- **The facade survives; the engine is swapped.** `emitTrace()`, the typed
+  payload builders, and `addTraceListener` keep their signatures, implemented
+  over the OTel tracer and a custom `SpanProcessor`. Emit sites across the
+  gateway, ensemble, and Python core barely change; the narrator keeps
+  working untouched.
+- **Scope becomes an OTLP receiver.** Its collector route parses standard
+  OTLP/HTTP JSON (types from `@opentelemetry/otlp-transformer`) and flattens
+  span events back into its stored rows. Scope's UI and derivations stay;
+  only ingestion changes. Anything that can speak OTLP can now feed scope,
+  and scope's data can be teed to any vendor backend simultaneously via
+  standard env vars.
+- **Telemetry is a sink, not a second instrumentation system.** A CLI-side
+  `SpanProcessor` folds finished session spans into allow-listed aggregates
+  and hands them to `posthog-node`. Redaction is structural: the processor
+  copies only enumerated attribute keys, never whole attribute bags.
+
+## Dependencies to add
+
+| Where | Packages | Purpose |
+| --- | --- | --- |
+| New `packages/tracing` (`@fusionkit/tracing`) | `@opentelemetry/api`, `@opentelemetry/sdk-trace-node`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/resources`, `@opentelemetry/semantic-conventions` | Tracer provider setup, facade, listener SpanProcessor. Lives in a new package so `@fusionkit/protocol` stays a dependency-free leaf (it keeps only the generated types/constants). |
+| `apps/scope` | `@opentelemetry/otlp-transformer` (types/parsing) | Parse OTLP JSON at `/api/ingest`. |
+| `python/fusionkit-core` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http` | Same swap for the Python router, judge, and panel servers (the panel-server scripts already import `fusionkit_core`). |
+| `packages/cli` | `posthog-node` | Product telemetry capture, batching, shutdown flush. |
+
+Version floors are compatible: OTel JS requires Node `^18.19.0 || >=20.6.0`
+and `posthog-node` requires Node 20+; this repo already enforces Node >=22.
 
 ## Workstreams
 
-### WS1 — Contract repair and single source of truth
+### WS1 — Semantic conventions registry (replaces the wire-format contract)
 
-Make `spec/fusion-trace/` the generated-from source, mirroring how
-`pnpm check` already regenerates protocol bindings.
+- Rewrite `spec/fusion-trace/` as the fusion semantic conventions: a single
+  machine-readable registry (YAML or JSON) of span names
+  (`fusion.session`, `fusion.candidate`, `fusion.judge`, `fusion.model_call`),
+  span-event names (today's `event_type` values, with the three missing judge
+  types included), attribute keys (`fusion.candidate_id`,
+  `fusion.trajectory_id` — both, with documented semantics), and a
+  **sensitivity class per attribute** (`local-only` vs `exportable`).
+- Codegen TS and Python constant modules from the registry (extending the
+  `pnpm check` regeneration pattern the repo already uses for protocol
+  bindings); `apps/scope/lib/types.ts` is generated from the same source.
+  Drift fails CI.
+- Keep the repaired `fusion-trace-event.v1` JSON Schema only as the **legacy
+  replay format** (old JSONL dirs must remain readable in scope), marked
+  frozen.
+- Conformance tests: each language emits one span/event of every kind through
+  the real SDK and asserts the OTLP output against the registry (names,
+  required attributes, sensitivity tags present).
 
-- Repair `fusion-trace-event.v1.schema.json` to describe reality (this is a bug
-  fix, not a version bump): add `judge.request` / `judge.scored` /
-  `judge.synthesis` to the `event_type` enum; add `candidate_id`; keep
-  `trajectory_id`; keep `additionalProperties: false` now that all real fields
-  are listed. Document the semantics: `candidate_id` names a panel candidate,
-  `trajectory_id` names a wire trajectory (a candidate may carry both).
-- Add a codegen step (extend `scripts/check-repo.mjs` or a sibling script) that
-  regenerates the enum/type/constant portions of the four bindings from the
-  schema: `spec/fusion-trace/ts/fusion-trace-event.ts`,
-  `packages/protocol/src/trace.ts` (types + runtime enum arrays only; emitter
-  logic stays hand-written), `python/fusionkit_core/trace.py` constants, and
-  `apps/scope/lib/types.ts`. `pnpm check` fails when they drift.
-- Conformance tests in both languages: validate the committed fixtures and one
-  synthetically emitted event of every `event_type` against the JSON schema
-  (Python via the existing `jsonschema` dev dependency; TS via
-  `assertFusionTraceEvent` plus a fixture-vs-schema test).
-- Extend the fixtures under `spec/fusion-trace/fixture/` to cover every event
-  type, and regenerate `apps/scope/test/fixture.ts` from them so scope tests
-  exercise the same wire shapes.
+### WS2 — Adopt the OTel SDK behind the facade (both languages)
 
-### WS2 — Emitter hardening (both languages)
+- **TS:** new `@fusionkit/tracing` package configures a `NodeTracerProvider`
+  with a `BatchSpanProcessor` + `OTLPTraceExporter` (scope's ingest URL when
+  `--observe` is on; any `OTEL_EXPORTER_OTLP_ENDPOINT` otherwise/additionally)
+  and re-exports the existing facade: `emitTrace`, payload builders,
+  `addTraceListener` (implemented as a `SpanProcessor` that fans out span
+  events synchronously, preserving narrator behavior), and the span-shaped
+  helpers the gateway needs (`startSessionSpan`, `startCandidateSpan`, …).
+  `packages/protocol` keeps only generated types/constants; emit sites move
+  their import from `@fusionkit/protocol` to `@fusionkit/tracing` (mechanical,
+  ~15 files across `model-gateway`, `ensemble`, `adapter-ai-sdk`, `cli`).
+- **Python:** `fusionkit_core/trace.py` becomes a facade over
+  `opentelemetry-sdk` with the same mapping; the FastAPI app and the panel
+  servers keep their `trace_emit(...)` call sites. Batch processor + OTLP
+  HTTP exporter replace the hand-rolled thread/queue/urllib code, which is
+  deleted.
+- **Propagation:** W3C `traceparent` via OTel propagators becomes the
+  canonical context carrier between the gateway, panel servers, and the
+  Python fuse endpoint. The `x-fusion-trace-id` header remains accepted
+  inbound and emitted outbound during a deprecation window; the
+  domain-correlation headers (`x-fusion-candidate-id`,
+  `x-fusion-trajectory-id`) stay — they carry fusion semantics, not trace
+  context.
+- **Lifecycle and sampling for free:** flush-on-exit is
+  `provider.shutdown()` in the CLI's existing disposer chain; sampling is the
+  standard `OTEL_TRACES_SAMPLER` / `ParentBased(TraceIdRatioBased)`
+  configuration; batching/retry/backoff are SDK config, not code.
+- Delete: both hand-rolled emitters' queue/post/JSONL machinery. The JSONL
+  fallback for replay is retired in favor of scope's SQLite persistence (the
+  collector is always running when `--observe` is on); `POST /api/replay`
+  keeps reading legacy dirs.
 
-- **TS (`packages/protocol/src/trace.ts`):** replace per-event
-  `void this.post(...)` with a bounded async queue that batches (flush at 32
-  events or 250 ms), retries once, and exposes `flush(timeoutMs)`. Register a
-  `beforeExit` flush in the CLI (not in the leaf package) so library consumers
-  keep full control. Keep the synchronous listener path exactly as is — the
-  narrator depends on it.
-- **Python (`fusionkit_core/trace.py`):** batch posts the same way and register
-  `atexit` flush for the default emitter. `close()` already drains; wire it up.
-- **W3C-compatible ids:** widen `newSpanId()`/`new_span_id()` to 16 hex chars
-  (trace ids are already 32 hex after the `trace_` prefix). Add
-  `toTraceparent(traceId, spanId)` / `fromTraceparent(header)` helpers in both
-  languages; the gateway front door (`traceIdFor` in
-  `packages/model-gateway/src/fusion-gateway.ts`) accepts an incoming
-  `traceparent` when `x-fusion-trace-id` is absent, and outbound panel/fuse
-  calls send both headers. Consumers must accept old 12-hex span ids (read
-  side is tolerant; only generation changes).
-- **Sampling hook:** a per-trace head-sampling decision on the emitter
-  (`FUSION_TRACE_SAMPLE`, default 1.0). Local scope runs stay at 100%; this
-  exists so the OTLP sink and heavy CI runs can down-sample without touching
-  emit sites.
-- **Ordering:** stamp events with a per-process `process_id` (pid + random
-  suffix) so consumers can reconstruct per-producer order (`process_id`,
-  `seq`) instead of relying on wall clocks. Additive schema field.
+### WS3 — Scope ingests OTLP
 
-### WS3 — Scope app alignment
+- `/api/ingest` accepts OTLP/HTTP JSON (`ExportTraceServiceRequest`), flattens
+  spans + span events into the existing `events` rows (span start/end become
+  the `*.started` / `*.finished` rows the UI already understands), and keeps
+  the legacy fusion-trace JSON path for replay of old JSONL dirs.
+- Store `trajectory_id` alongside `candidate_id` (same `ALTER TABLE`
+  migration pattern as `prompt_preview`), fixing the silent drop of Python
+  correlation ids; include both in the ingest dedupe hash.
+- Ordering comes from OTLP span/event timestamps plus span relationships
+  (parent ids), which is strictly better than today's per-process `seq`;
+  keep ingest id as the final tiebreak.
+- The `--observe` boot path (`packages/cli/src/fusion/observability.ts`) sets
+  the children's `OTEL_EXPORTER_OTLP_ENDPOINT` (and service-name resources)
+  instead of `FUSION_TRACE_URL`/`FUSION_TRACE_DIR`; old env vars keep working
+  for one release with a deprecation note.
+- No UI redesign: sessions, judge flow, models, and environments views keep
+  their derivations over the same stored rows.
 
-- Ingest with the shared validator; store `trajectory_id` (new column plus the
-  same `ALTER TABLE` migration pattern used for `prompt_preview` in
-  `apps/scope/lib/db.ts`), fixing the silent drop of Python correlation ids.
-- Include `candidate_id`/`model_id`/`trajectory_id` in the ingest content hash
-  so distinct events cannot collide.
-- Order timelines by (`process_id`, `seq`) within a producer and `ts` across
-  producers; keep ingest id as the final tiebreak.
-- `POST /api/ingest` gains an optional `?strict=1` mode returning per-event
-  rejection reasons (used by tests and the e2e scripts; default stays
-  tolerant so old JSONL replays keep working).
-- No UI redesign in this plan; the session/judge/models views already consume
-  everything above.
+### WS4 — Product telemetry via PostHog (opt-in, allow-listed)
 
-### WS4 — Optional OTLP export bridge (experimental)
-
-- A new sink in the TS emitter, enabled by `FUSION_TRACE_OTLP_URL`: derive
-  spans from the event stream (session span from `session.started/finished`,
-  candidate spans from `harness.candidate.*`, judge span from
-  `judge.request`→`judge.final`, model-call spans from `model.call.*`) and post
-  OTLP/HTTP JSON (`/v1/traces`). Hand-rolled, ~200 lines, zero dependencies;
-  events that do not bound a span become OTLP span events. Payloads are
-  attribute-mapped through the same field classifier as telemetry (safe fields
-  only, since OTLP targets may be remote).
-- Node-side only at first (the gateway sees the whole session); the Python
-  router keeps posting to the spine, and its events reach OTLP via the
-  gateway's spans in v1. Mirror in Python later only if demand exists.
-- Documented as experimental in `docs/specs-and-apis.md`.
-
-### WS5 — Product telemetry (opt-in, allow-listed)
-
-- **Contract first:** a standalone `spec/telemetry/telemetry-event.v1` JSON
-  Schema (same standalone posture as `spec/fusion-trace/`, outside the frozen
-  model-fusion bundle). Two record kinds:
+- **Engine:** `posthog-node` in `packages/cli/src/telemetry/`. Anonymous
+  events only: `$process_person_profile: false` and `$ip: null` on every
+  capture; `distinctId` is a random install UUID persisted in
+  `~/.fusionkit/telemetry.json`; `disableGeoip` stays on. Batching, queueing,
+  and `shutdown()` flush (2 s cap in the CLI's disposer chain) are the SDK's.
+- **Events (two kinds, versioned in a short `docs/telemetry.md` field
+  table):**
   - `cli.command` — command name, CLI version, os/arch, node major, duration
-    bucket, exit kind (`ok` / `error-kind`), flags used (boolean presence only,
-    e.g. `observe`, `local`).
-  - `fusion.session` — panel size, provider names (e.g. `openai`,
-    `openrouter`, `mlx`), harness kind, judge decision
-    (`synthesize`/`select_trajectory`), turn count, latency buckets, token
-    totals, error kinds, and whether observe/budget were on. No costs in v1
-    (revisit; USD totals can fingerprint accounts).
-  - Every record carries an anonymous `install_id` (random UUID persisted in
-    `~/.fusionkit/telemetry.json`), schema version, and nothing else. No repo
-    names, paths, prompts, model outputs, hostnames, or IP-derived fields.
-- **Consent and kill switches** (module `packages/cli/src/telemetry/`):
-  - Default **off**. Enabled only by an explicit `fusionkit telemetry on`, the
-    `fusionkit init` wizard step (a new step beside the existing `observe`
-    step in `packages/cli/src/fusion-init.ts`, default "no"), or
-    `FUSIONKIT_TELEMETRY=1`.
-  - Hard kills that override any stored consent: `FUSIONKIT_TELEMETRY=0`,
-    `DO_NOT_TRACK=1`, and CI detection (`CI=true` → off unless the env var
-    explicitly opts in).
-  - `fusionkit telemetry status` prints the effective state, the install id,
-    and the exact field list; `fusionkit telemetry off` deletes the install id.
-  - Consent state lives in `~/.fusionkit/telemetry.json`
-    (`{enabled, installId, decidedAt}`), following the `consent.ts` pattern.
-- **Collection:** the module registers an `addTraceListener` on the default
-  emitter (works without `--observe`, since listeners bypass the URL/DIR gate
-  and the gateway always mints trace ids) and folds events into one
-  `fusion.session` record per trace id; `cli.command` records are emitted
-  directly by the command entry points. Records are built exclusively from an
-  enumerated allow-list — the listener never copies `payload` objects.
-- **Transport:** batched POST to `FUSIONKIT_TELEMETRY_URL` (default the Velum
-  endpoint), flush on exit capped at 2 s, drop on any failure, never retry
-  across runs, never block or fail a command.
+    bucket, exit kind (`ok` / error kind), boolean flag presence (`observe`,
+    `local`), `is_ci`.
+  - `fusion.session` — panel size, provider names (`openai`, `openrouter`,
+    `mlx`, …), harness kind, judge decision (`synthesize` /
+    `select_trajectory`), turn count, latency buckets, token totals, error
+    kinds. Built by a CLI-side `SpanProcessor` from finished session spans,
+    copying **only attributes tagged `exportable` in the WS1 registry** —
+    never whole attribute bags, never span-event payloads. No costs in v1
+    (USD totals can fingerprint accounts).
+- **Consent and kill switches**, precedence order:
+  `DO_NOT_TRACK=1` (forced off) > `FUSIONKIT_TELEMETRY=0|1` >
+  `~/.fusionkit/telemetry.json` > default **off**. CI environments default
+  off unless the env var explicitly opts in.
+- **Commands:** `fusionkit telemetry status` (effective state, which layer
+  decided it, install id, full field list), `on` (confirm prompt showing the
+  exact field list), `off` (also deletes the install id), and `inspect`
+  (debug mode: print would-be payloads to stderr, send nothing). Plus an
+  opt-in step in the `fusionkit init` wizard beside the existing `observe`
+  step, defaulting to "no".
 - **Docs:** rewrite the Telemetry section of `docs/privacy.md` — off by
-  default, exact field list, how to enable/disable, where consent is stored —
+  default, exact field list, all disable methods, where consent is stored —
   and add a CHANGELOG entry. The current "does not include product telemetry"
   promise becomes "includes no telemetry unless you explicitly turn it on,
   and here is the complete list of what it sends".
-- **Tests:**
-  - Consent gating: no HTTP attempt when disabled (fake endpoint asserts zero
-    requests across a full simulated session).
-  - Allow-list snapshot: a test that serializes both record kinds from a rich
-    synthetic session and asserts the exact key set, so any new field is a
-    deliberate, reviewed diff.
-  - Schema conformance against `telemetry-event.v1`.
-  - Kill-switch precedence (`DO_NOT_TRACK` beats stored consent, etc.).
+- **Tests:** consent gating (a fake PostHog endpoint asserts zero requests
+  across a full simulated session when disabled); allow-list snapshot (exact
+  key set of both event kinds, so any new field is a deliberate, reviewed
+  diff); kill-switch precedence; no-install-id-until-opt-in.
 
-### WS6 — Verification and rollout
+### WS5 — Verification and rollout
 
 - Unit/integration: `pnpm verify` (check + build + test), `apps/scope`
   `pnpm test` + `pnpm build`, `uv run pytest tests -q`, `uv run pyright`,
   `uv run ruff check .`.
-- E2E: extend `scripts/fusion-step-e2e.mjs` (and the codex/claude variants) to
-  assert strict-mode ingest accepts every emitted event, `trajectory_id`
-  round-trips into scope, and telemetry makes zero requests by default; one
-  live `--observe` run to confirm the dashboard renders sessions with the new
-  fields.
-- Versioning: `@fusionkit/protocol` minor bump (additive types + emitter
-  behavior); schema stays `fusion-trace-event.v1` with `schema_version`
-  `1.1.0` for the additive fields (`process_id`); telemetry ships behind its
-  own `telemetry-event.v1`.
-- Sequencing: WS1 → WS2 → WS3 land together (they are one coherent
-  contract-repair change set, reviewable as 2–3 PRs); WS5 is independent after
-  WS1 and can proceed in parallel with WS4; WS4 is optional and last.
+- E2E: extend `scripts/fusion-step-e2e.mjs` (and the codex/claude variants)
+  to run against the OTLP pipeline — assert every span/event kind lands in
+  scope, `trajectory_id` round-trips, `traceparent` propagates gateway →
+  panel server → fuse endpoint, and telemetry makes zero requests by
+  default. One live `--observe` run to confirm the dashboard renders
+  sessions end-to-end. Optionally point `OTEL_EXPORTER_OTLP_ENDPOINT` at a
+  local Jaeger to demonstrate vendor interop.
+- Versioning: `@fusionkit/tracing` ships new; `@fusionkit/protocol` gets a
+  minor bump (types move, emitter code removed with re-export shims for one
+  release); the legacy `fusion-trace-event.v1` schema is frozen; the
+  semantic-conventions registry starts at `1.0.0`.
+- Sequencing: WS1 → WS2 → WS3 land together as the engine swap (2–3 PRs:
+  registry + TS swap, Python swap, scope ingest); WS4 is independent after
+  WS1 (it needs the sensitivity tags) and can proceed in parallel with WS3.
 
 ## Risks and mitigations
 
 | Risk | Mitigation |
 | --- | --- |
-| Telemetry erodes the privacy promise and user trust | Default off, hard kill switches, structural allow-list with snapshot tests, complete field list published in `docs/privacy.md`, consent file the user can inspect and delete |
-| Tightened schema rejects historical JSONL trace dirs on replay | Scope ingest stays tolerant by default; strict mode is opt-in for tests/CI |
-| Span-id widening breaks mixed-version fleets mid-upgrade | Only generation changes; all readers accept both 12- and 16-hex span ids |
-| Hand-rolled OTLP drifts from the OTLP spec | Keep the span model minimal (5 span kinds), mark experimental, cover with a golden-file test against a pinned OTLP JSON example |
-| Codegen for four bindings adds build friction | Reuse the existing `pnpm check` regeneration pattern the repo already relies on for protocol bindings; drift fails fast in CI |
-| Telemetry flush-on-exit delays CLI exit | 2 s hard cap, fire-and-forget within it, drop everything on timeout |
+| Telemetry erodes the privacy promise and user trust | Default off, `DO_NOT_TRACK` honored, anonymous-only PostHog events, structural allow-list from the registry's sensitivity tags with snapshot tests, complete field list published in `docs/privacy.md`, `fusionkit telemetry inspect` shows exact payloads |
+| OTel JS SDK churn (exporters are 0.x) | Pin exact versions (repo already pins exact deps via the trusted-pin check); confine OTel imports to `@fusionkit/tracing` and the Python facade so an upgrade touches one module per language |
+| Engine swap breaks scope mid-migration | Scope accepts both OTLP and legacy fusion-trace JSON for one release; legacy JSONL replay stays; old `FUSION_TRACE_*` env vars alias to the OTLP endpoint with a deprecation warning |
+| The narrator regresses (it depends on synchronous in-process listeners) | The listener API is preserved as a custom `SpanProcessor` with synchronous fan-out; `packages/model-gateway/src/test/reasoning-narration.test.ts` guards it |
+| Dependency footprint grows in the published CLI | OTel trace packages + posthog-node are small and tree-shakeable; `@fusionkit/protocol` stays dependency-free for contract-only consumers |
+| PostHog outage or blocked egress slows the CLI | posthog-node is async/batched with a request timeout; `shutdown()` capped at 2 s; failures drop events, never block or fail a command |
