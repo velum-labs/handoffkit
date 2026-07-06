@@ -21,6 +21,7 @@ import { hasSpanListeners, listenerSpanProcessor } from "./listener.js";
 
 let provider: NodeTracerProvider | undefined;
 let providerServiceName: string | undefined;
+let extraProcessorsInstalled = false;
 
 /** True when spans will actually be exported over OTLP. */
 export function isTraceExportConfigured(): boolean {
@@ -42,6 +43,7 @@ export type InitFusionTracingOptions = {
  */
 export function initFusionTracing(options: InitFusionTracingOptions): void {
   if (provider !== undefined) return;
+  extraProcessorsInstalled = (options.spanProcessors?.length ?? 0) > 0;
   const processors: SpanProcessor[] = [listenerSpanProcessor(), ...(options.spanProcessors ?? [])];
   if (isTraceExportConfigured()) {
     processors.push(
@@ -74,7 +76,10 @@ export function fusionTracingServiceName(): string | undefined {
  * (cloning responses, JSON-parsing bodies) — emission itself is always safe.
  */
 export function isFusionTracingActive(): boolean {
-  return provider !== undefined && (isTraceExportConfigured() || hasSpanListeners());
+  return (
+    provider !== undefined &&
+    (isTraceExportConfigured() || hasSpanListeners() || extraProcessorsInstalled)
+  );
 }
 
 /** Flush all pending spans (bounded by the exporter's own timeout). */
