@@ -76,6 +76,19 @@ def trajectory_from_response(
     items: list[TrajectoryItem] = []
     if response.reasoning:
         items.append(_reasoning_item(response.reasoning, 0))
+    # A member's tool calls are a *proposal* (never auto-run here): keep them as
+    # ``function_call`` items so the judge/synthesizer can adopt one candidate's
+    # batch verbatim, mirroring the Node k=1 proposer's candidate encoding.
+    for call in response.tool_calls:
+        items.append(
+            TrajectoryItem(
+                index=len(items),
+                type="function_call",
+                call_id=call.id,
+                name=call.name,
+                arguments=call.arguments or "{}",
+            )
+        )
     return Trajectory(
         id=f"{model_id}:{ordinal}",
         model_id=model_id,

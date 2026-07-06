@@ -312,6 +312,8 @@ export type FusionPanelOptions = {
   subagents?: boolean;
   /** Fused sub-agent access for panel members (see FusedSubagentAccess). */
   fusedSubagents?: FusedSubagentAccess;
+  /** Finite step-boundary budget per member (see UnifiedHarnessE2EOptions.k). */
+  k?: number;
   /** Native-session resume cursors keyed by model id (see UnifiedHarnessE2EOptions). */
   resumeCursors?: Map<string, ResumeCursor>;
 };
@@ -353,6 +355,7 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
     ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
     ...(options.fusedSubagents !== undefined ? { fusedSubagents: options.fusedSubagents } : {}),
+    ...(options.k !== undefined ? { k: options.k } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {})
   };
   const descriptor = descriptorFor(harness, e2eOptions);

@@ -190,6 +190,14 @@ export type UnifiedHarnessE2EOptions = {
   /** Fused sub-agent access for panel members (see FusedSubagentAccess). */
   fusedSubagents?: FusedSubagentAccess;
   /**
+   * Finite step-boundary budget per member (receding-horizon lookahead): the
+   * member's harness executes tool-call batches 1..k-1 in its worktree and
+   * captures the k-th unexecuted as its terminal proposal. Only the generic
+   * `agent` harness supports it (fusionkit owns that loop); configuring it
+   * with a CLI harness is a validation error. Unset = unbounded (today).
+   */
+  k?: number;
+  /**
    * Native-session resume cursors keyed by ensemble model id, owned by the
    * caller across turns of one conversation. Only the harness-core driver
    * harnesses honor it; legacy harnesses ignore it.

@@ -6,7 +6,7 @@ from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
 from fusionkit_core.config import FusionConfig, FusionMode, PromptOverrides, SamplingConfig
 from fusionkit_core.contracts import FusionRunRequestV1
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import FuseResult, JudgeSynthesizer
+from fusionkit_core.judge import FuseResult, JudgeSynthesizer, judge_synthesizer_for
 from fusionkit_core.run import CreateRunResult, FusionRunManager, NativeRunError
 from fusionkit_core.run_models import (
     RunEventPage,
@@ -14,7 +14,7 @@ from fusionkit_core.run_models import (
     RunStateSummary,
     ToolResultSubmission,
 )
-from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, Trajectory
+from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, Trajectory
 
 
 class FusionKernel:
@@ -152,29 +152,27 @@ class FusionKernel:
             messages, sampling, tools=tools, tool_choice=tool_choice
         )
 
-    def _judge_synthesizer_for(self, prompts: PromptOverrides | None) -> JudgeSynthesizer:
-        """The engine's judge/synthesizer, or a per-request variant.
+    def _judge_synthesizer_for(
+        self,
+        prompts: PromptOverrides | None,
+        panel_mode: PanelMode = "trajectory",
+    ) -> JudgeSynthesizer:
+        """The engine's cached judge/synthesizer, or a per-request variant.
 
-        Per-request ``prompts`` (a named ensemble's committed overrides) win per
-        field; unset fields fall back to the config-level overrides, then the
-        built-in prompts. The transient :class:`JudgeSynthesizer` is cheap - it
-        holds only prompt strings and policy flags.
+        The transient variant (per-request prompt overrides, or step mode) is
+        built by :func:`judge_synthesizer_for` — the one construction point —
+        and is cheap: it holds only prompt strings and policy flags.
         """
-        if prompts is None or (
+        no_overrides = prompts is None or (
             prompts.judge_system is None and prompts.synthesizer_system is None
-        ):
-            return self._engine.judge_synthesizer
-        config = self._engine.config
-        merged = PromptOverrides(
-            judge_system=prompts.judge_system or config.prompts.judge_system,
-            synthesizer_system=prompts.synthesizer_system or config.prompts.synthesizer_system,
         )
-        return JudgeSynthesizer(
-            merged,
-            harness_passthrough=config.harness_prompt_passthrough,
-            select_best=config.synthesis_select_best,
-            context_policy=config.context,
-        )
+        if no_overrides:
+            return (
+                self._engine.judge_synthesizer
+                if panel_mode != "step"
+                else self._engine.step_judge_synthesizer
+            )
+        return judge_synthesizer_for(self._engine.config, prompts=prompts, panel_mode=panel_mode)
 
     async def fuse_trajectories(
         self,
@@ -187,10 +185,11 @@ class FusionKernel:
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         prompts: PromptOverrides | None = None,
+        panel_mode: PanelMode = "trajectory",
         trace_id: str | None = None,
         span_id: str | None = None,
     ) -> FuseResult:
-        return await self._judge_synthesizer_for(prompts).fuse(
+        return await self._judge_synthesizer_for(prompts, panel_mode).fuse(
             messages,
             trajectories,
             judge_client=self.client(judge_model),
@@ -213,10 +212,11 @@ class FusionKernel:
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         prompts: PromptOverrides | None = None,
+        panel_mode: PanelMode = "trajectory",
         trace_id: str | None = None,
         span_id: str | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
-        return self._judge_synthesizer_for(prompts).fuse_stream(
+        return self._judge_synthesizer_for(prompts, panel_mode).fuse_stream(
             messages,
             trajectories,
             judge_client=self.client(judge_model),

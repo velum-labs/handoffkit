@@ -20,6 +20,7 @@ import {
   parseBudget,
   parseFusionTool,
   parseIdValue,
+  parseK,
   parseOnRateLimit,
   parsePanelModelSpec,
   parsePanelTrust,
@@ -53,6 +54,7 @@ type FusionOpts = {
   onRateLimit?: string;
   budget?: string;
   panelTrust?: string;
+  k?: string;
   resume?: string;
   continue?: boolean;
 };
@@ -104,6 +106,11 @@ function applyFusionOptions(command: Command): Command {
       "--panel-trust <level>",
       "panel candidate autonomy: full (max, default) | guarded (harness-fenced to the worktree)"
     )
+    .option(
+      "--k <n>",
+      "step boundaries per panel member before aggregation: 1 = single-completion proposers " +
+        "(caller executes the adopted step), n > 1 = bounded managed rollout, unset = full rollout (default)"
+    )
     .option("--resume <id>", "resume a stored session by id (or unique prefix); see `fusionkit sessions`")
     .option("--continue", "resume the most recently active stored session")
     .allowUnknownOption()
@@ -146,6 +153,8 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (budgetUsd !== undefined) options.budgetUsd = budgetUsd;
   const panelTrust = parsePanelTrust(opts.panelTrust);
   if (panelTrust !== undefined) options.panelTrust = panelTrust;
+  const k = parseK(opts.k);
+  if (k !== undefined) options.k = k;
   if (opts.authToken !== undefined) options.authToken = opts.authToken;
   if (opts.port !== undefined) options.port = parsePort(opts.port, 0);
   if (opts.resume !== undefined) options.resume = opts.resume;
@@ -192,13 +201,18 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
     config.ensembles !== undefined &&
     Object.keys(config.ensembles).length > 0
   ) {
-    options.ensembles = Object.entries(config.ensembles).map(([name, ensemble]) => ({
-      name,
-      models: (ensemble.panel ?? []).map((spec) => ({ ...spec })),
-      ...(ensemble.judgeModel !== undefined ? { judgeModel: ensemble.judgeModel } : {}),
-      ...(ensemble.synthesizerModel !== undefined ? { synthesizerModel: ensemble.synthesizerModel } : {}),
-      ...(ensemble.prompts !== undefined ? { prompts: ensemble.prompts } : {})
-    }));
+    options.ensembles = Object.entries(config.ensembles).map(([name, ensemble]) => {
+      // Per-ensemble k falls back to the config's top-level default.
+      const k = ensemble.k ?? config.k;
+      return {
+        name,
+        models: (ensemble.panel ?? []).map((spec) => ({ ...spec })),
+        ...(ensemble.judgeModel !== undefined ? { judgeModel: ensemble.judgeModel } : {}),
+        ...(ensemble.synthesizerModel !== undefined ? { synthesizerModel: ensemble.synthesizerModel } : {}),
+        ...(k !== undefined ? { k } : {}),
+        ...(ensemble.prompts !== undefined ? { prompts: ensemble.prompts } : {})
+      };
+    });
     if (options.ensemble === undefined) {
       const configured = configDefaultEnsembleName(config);
       if (configured !== undefined) options.ensemble = configured;
@@ -221,6 +235,7 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   if (options.panelTrust === undefined && config.panelTrust !== undefined) {
     options.panelTrust = config.panelTrust;
   }
+  if (options.k === undefined && config.k !== undefined) options.k = config.k;
   if (options.subagents === undefined && config.subagents !== undefined) {
     options.subagents = config.subagents;
   }

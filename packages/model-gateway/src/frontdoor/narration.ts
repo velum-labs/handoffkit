@@ -24,7 +24,7 @@
  * fail a turn.
  */
 
-import { addTraceListener, emitTrace, removeTraceListener } from "@fusionkit/protocol";
+import { addTraceListener, emitTrace, isProposalK, removeTraceListener } from "@fusionkit/protocol";
 import type { FusionTraceEvent } from "@fusionkit/protocol";
 import type { RuntimeEvent } from "@fusionkit/kernel";
 
@@ -41,13 +41,20 @@ export type ReasoningDeltaEvent = { type: "reasoning.delta"; text: string };
 export type NarrationWriter = {
   /** One factual sentence about a finished candidate; undefined -> template. */
   candidateGist(
-    input: { id: string; finalOutput: string },
+    input: { id: string; finalOutput: string; proposal?: string },
     signal: AbortSignal
   ): Promise<string | undefined>;
   /** One sentence comparing the candidates at judge time; undefined -> template. */
   compareCandidates(
     input: {
-      candidates: Array<{ id: string; finalOutput?: string; diff?: string; verificationStatus?: string }>;
+      candidates: Array<{
+        id: string;
+        finalOutput?: string;
+        diff?: string;
+        verificationStatus?: string;
+        /** Rendered terminal proposal, when the candidate ends in one. */
+        proposal?: string;
+      }>;
     },
     signal: AbortSignal
   ): Promise<string | undefined>;
@@ -160,6 +167,86 @@ export function changedFiles(diff: string | undefined): string[] {
   return [...paths].sort();
 }
 
+// ---- candidate structure (the k-general narration substrate) ---------------
+//
+// Narration renders the candidate *wire*, not a mode: a candidate may carry
+// executed evidence (tool calls with observations, a diff) and may end in a
+// terminal proposal (a trailing `function_call` batch with no observation
+// after it) or a final answer. Every k produces some mix — k=1 proposals
+// only, finite k>1 lookahead evidence plus a proposal, k=∞ evidence plus an
+// answer — and these helpers read the structure so the beats never branch on
+// mode.
+
+/** One proposed (unexecuted) call from a candidate's terminal batch. */
+export type ProposedCall = { name?: string; arguments?: string };
+
+type WireItemLike = { type?: unknown; name?: unknown; arguments?: unknown; text?: unknown };
+
+function wireItems(wire: { items?: unknown }): WireItemLike[] {
+  return Array.isArray(wire.items)
+    ? wire.items.filter((item): item is WireItemLike => item !== null && typeof item === "object")
+    : [];
+}
+
+/**
+ * The candidate's terminal proposal: the trailing `function_call` batch with
+ * nothing executed after it. Trailing empty `message` items (a bounded rollout
+ * ends with an empty output marker) are skipped; any observation or non-empty
+ * message after a call means the calls were executed, not proposed.
+ */
+export function terminalProposal(wire: { items?: unknown }): ProposedCall[] {
+  const items = wireItems(wire);
+  const batch: ProposedCall[] = [];
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index] as WireItemLike;
+    if (item.type === "message" && batch.length === 0) {
+      const text = typeof item.text === "string" ? item.text.trim() : "";
+      if (text.length === 0) continue; // trailing empty output marker
+      break;
+    }
+    if (item.type === "function_call") {
+      batch.unshift({
+        ...(typeof item.name === "string" ? { name: item.name } : {}),
+        ...(typeof item.arguments === "string" ? { arguments: item.arguments } : {})
+      });
+      continue;
+    }
+    break;
+  }
+  return batch;
+}
+
+/** Executed evidence: how many observations (executed tool results) the candidate carries. */
+export function executedEvidence(wire: { items?: unknown }): { observations: number } {
+  const observations = wireItems(wire).filter((item) => item.type === "function_call_output").length;
+  return { observations };
+}
+
+/** Compact human rendering of a proposed batch: `get_weather({"city":"Paris"}) + run(...)`. */
+export function renderProposal(calls: readonly ProposedCall[], maxLength = 90): string {
+  const rendered = calls
+    .map((call) => `${call.name ?? "tool"}(${(call.arguments ?? "").replace(/\s+/g, " ")})`)
+    .join(" + ");
+  return rendered.length > maxLength ? `${rendered.slice(0, maxLength - 1)}…` : rendered;
+}
+
+/** Whether two proposed batches are the same step (JSON-normalized arguments). */
+export function proposalsAgree(a: readonly ProposedCall[], b: readonly ProposedCall[]): boolean {
+  if (a.length !== b.length || a.length === 0) return false;
+  const normalize = (call: ProposedCall): string => {
+    let args = call.arguments ?? "";
+    try {
+      args = JSON.stringify(JSON.parse(args === "" ? "{}" : args));
+    } catch {
+      args = args.replace(/\s+/g, "");
+    }
+    return `${call.name ?? ""}\u0000${args}`;
+  };
+  const left = a.map(normalize).sort();
+  const right = b.map(normalize).sort();
+  return left.every((entry, index) => entry === right[index]);
+}
+
 function joinNames(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
@@ -181,6 +268,8 @@ export type CandidateFinish = {
   elapsedMs?: number;
   steps?: number;
   gist?: string;
+  /** The candidate's terminal proposal, when it ended in one. */
+  proposal?: ProposedCall[];
 };
 
 /** One judge-time candidate fact sheet (mined from the judge.request payload). */
@@ -190,6 +279,8 @@ export type JudgeCandidate = {
   diff?: string;
   verificationStatus?: string;
   finalOutput?: string;
+  /** The candidate's terminal proposal, when it ended in one. */
+  proposal?: ProposedCall[];
 };
 
 export type NarrationTrigger =
@@ -201,8 +292,17 @@ export type NarrationTrigger =
 export type NarratorState = {
   turn: number;
   judgeModel?: string;
-  /** The model the judge picked last turn (opener color). */
+  /** The candidate the judge adopted on the previous fuse (opener color). */
   lastPick?: string;
+  /** Rendered step the whole panel proposed last fuse (tie: no single pick). */
+  lastAgreed?: string;
+  /**
+   * The route's k. The fan-out/quiet beats are the only k consumers — they
+   * must speak before candidates exist, so structure cannot inform them.
+   */
+  k?: number;
+  /** 1-based fuse round within the turn; headlines prefix "Step N —" when > 1. */
+  round?: number;
   roster: Array<{ id: string; model?: string }>;
   finishes: CandidateFinish[];
   phase: "panel" | "judging";
@@ -217,11 +317,17 @@ export function createNarratorState(input: {
   turn: number;
   judgeModel?: string;
   lastPick?: string;
+  lastAgreed?: string;
+  k?: number;
+  round?: number;
 }): NarratorState {
   return {
     turn: input.turn,
     ...(input.judgeModel !== undefined ? { judgeModel: input.judgeModel } : {}),
     ...(input.lastPick !== undefined ? { lastPick: input.lastPick } : {}),
+    ...(input.lastAgreed !== undefined ? { lastAgreed: input.lastAgreed } : {}),
+    ...(input.k !== undefined ? { k: input.k } : {}),
+    ...(input.round !== undefined ? { round: input.round } : {}),
     roster: [],
     finishes: [],
     phase: "panel",
@@ -246,16 +352,25 @@ function renderFanout(state: NarratorState): NarratorBeat {
   const count = state.roster.length;
   const headline =
     state.lastPick !== undefined
-      ? `Last turn the judge picked ${state.lastPick} — fanning out again`
-      : count > 0
-        ? `Fanning out to ${plural(count, "model")}`
-        : "Fanning out to the panel";
+      ? `Last round the judge picked ${state.lastPick} — fanning out again`
+      : state.lastAgreed !== undefined
+        ? `Last round the panel agreed on ${state.lastAgreed} — fanning out again`
+        : count > 0
+          ? `Fanning out to ${plural(count, "model")}`
+          : "Fanning out to the panel";
   const names = state.roster.map((member) => member.model ?? member.id);
+  // The one k-informed copy: candidates don't exist yet, so structure cannot
+  // tell us whether members will execute (worktrees) or only propose (k=1).
+  const proposing = isProposalK(state.k);
   const prose =
     names.length > 1
-      ? `${joinNames(names)} are each taking a shot in isolated worktrees.`
+      ? proposing
+        ? `${joinNames(names)} are each proposing one step.`
+        : `${joinNames(names)} are each taking a shot in isolated worktrees.`
       : names.length === 1
-        ? `${names[0]} is taking a shot in an isolated worktree.`
+        ? proposing
+          ? `${names[0]} is proposing one step.`
+          : `${names[0]} is taking a shot in an isolated worktree.`
         : undefined;
   return { headline, ...(prose !== undefined ? { prose } : {}) };
 }
@@ -282,9 +397,16 @@ function renderFinish(state: NarratorState, finish: CandidateFinish): NarratorBe
     return { headline };
   }
 
+  // Structural gist: a terminal proposal renders as the concrete step; a
+  // final answer renders as its text preview. Executed-evidence facts (steps,
+  // elapsed) append whenever present — one rule for every k.
+  const gist =
+    finish.proposal !== undefined && finish.proposal.length > 0
+      ? renderProposal(finish.proposal)
+      : finish.gist;
   const gistProse = (subject: string | undefined): string | undefined =>
-    finish.gist !== undefined
-      ? `${subject !== undefined ? `${subject} proposes` : "Proposes"}: ${finish.gist}${finishFacts(finish)}`
+    gist !== undefined
+      ? `${subject !== undefined ? `${subject} proposes` : "Proposes"}: ${gist}${finishFacts(finish)}`
       : undefined;
 
   if (ordinal === 1) {
@@ -317,12 +439,43 @@ function renderJudging(state: NarratorState, candidates: JudgeCandidate[]): Narr
   }
   const usable = candidates.filter((candidate) => candidate.ok);
   const hadFailures = state.finishes.some((finish) => !finish.ok) || usable.length < candidates.length;
+  // Structural headline: when every usable candidate ends in a proposal, the
+  // judge is selecting a next step; otherwise it compares candidates/survivors.
+  const proposers = usable.filter(
+    (candidate) => candidate.proposal !== undefined && candidate.proposal.length > 0
+  );
+  const noun = usable.length > 0 && proposers.length === usable.length ? "proposal" : "candidate";
   const what = hadFailures
     ? `the ${usable.length === 1 ? "1 survivor" : `${usable.length} survivors`}`
-    : plural(usable.length, "candidate");
+    : plural(usable.length, noun);
   const headline = `Judging ${what}${withJudge}`;
 
   const sentences: string[] = [];
+  // Proposal agreement: equality over terminal batches — defined whenever
+  // candidates propose, whatever k produced them.
+  if (proposers.length >= 2) {
+    const [first, ...rest] = proposers;
+    const unanimous = rest.every((candidate) =>
+      proposalsAgree(first?.proposal ?? [], candidate.proposal ?? [])
+    );
+    if (unanimous) {
+      sentences.push(
+        `${joinNames(proposers.map((candidate) => candidate.id))} propose the same step: ` +
+          `${renderProposal(first?.proposal ?? [])}.`
+      );
+    } else {
+      for (const candidate of proposers.slice(0, 3)) {
+        sentences.push(`${candidate.id} proposes ${renderProposal(candidate.proposal ?? [], 70)}.`);
+      }
+    }
+  } else if (proposers.length === 1 && usable.length > 1) {
+    const proposer = proposers[0];
+    const texters = usable.filter((candidate) => candidate !== proposer).map((candidate) => candidate.id);
+    sentences.push(
+      `${proposer?.id} proposes ${renderProposal(proposer?.proposal ?? [], 70)}; ` +
+        `${joinNames(texters)} answer${texters.length === 1 ? "s" : ""} in text.`
+    );
+  }
   for (const candidate of usable.slice(0, 3)) {
     const stat = diffStat(candidate.diff);
     const verify = verificationLabel(candidate.verificationStatus);
@@ -356,7 +509,8 @@ function renderQuiet(state: NarratorState, at: number): NarratorBeat | null {
   const waiting = outstandingIds(state);
   if (state.roster.length > 0 && waiting.length === 0) return null;
   const who = waiting.length > 0 ? ` — waiting on ${joinNames(waiting)}` : "";
-  return { headline: `Still working${who}${elapsed}` };
+  const verb = isProposalK(state.k) ? "Still proposing" : "Still working";
+  return { headline: `${verb}${who}${elapsed}` };
 }
 
 /**
@@ -366,31 +520,39 @@ function renderQuiet(state: NarratorState, at: number): NarratorBeat | null {
  */
 export function narrationBeat(state: NarratorState, trigger: NarrationTrigger): NarratorBeat | null {
   state.startedAt ??= trigger.at;
-  switch (trigger.kind) {
-    case "fanout": {
-      if (state.sawPanel) return null;
-      state.sawPanel = true;
-      state.roster = trigger.roster;
-      return renderFanout(state);
+  const beat = ((): NarratorBeat | null => {
+    switch (trigger.kind) {
+      case "fanout": {
+        if (state.sawPanel) return null;
+        state.sawPanel = true;
+        state.roster = trigger.roster;
+        return renderFanout(state);
+      }
+      case "finish": {
+        state.sawPanel = true;
+        if (state.finishes.some((finish) => finish.id === trigger.finish.id)) return null;
+        state.finishes.push(trigger.finish);
+        return renderFinish(state, trigger.finish);
+      }
+      case "judging": {
+        const rendered = renderJudging(state, trigger.candidates);
+        state.phase = "judging";
+        return rendered;
+      }
+      case "quiet":
+        return renderQuiet(state, trigger.at);
+      default: {
+        const exhaustive: never = trigger;
+        throw new Error(`unknown narration trigger: ${String(exhaustive)}`);
+      }
     }
-    case "finish": {
-      state.sawPanel = true;
-      if (state.finishes.some((finish) => finish.id === trigger.finish.id)) return null;
-      state.finishes.push(trigger.finish);
-      return renderFinish(state, trigger.finish);
-    }
-    case "judging": {
-      const beat = renderJudging(state, trigger.candidates);
-      state.phase = "judging";
-      return beat;
-    }
-    case "quiet":
-      return renderQuiet(state, trigger.at);
-    default: {
-      const exhaustive: never = trigger;
-      throw new Error(`unknown narration trigger: ${String(exhaustive)}`);
-    }
+  })();
+  // Round ordinal: rounds exist for every k (k = ∞ trivially has one per
+  // turn), so the prefix self-suppresses exactly where rounds don't repeat.
+  if (beat !== null && state.round !== undefined && state.round > 1) {
+    beat.headline = `Step ${state.round} — ${beat.headline}`;
   }
+  return beat;
 }
 
 // ---- the live narrator ------------------------------------------------------
@@ -402,8 +564,14 @@ export type TurnNarratorInput = {
   turn: number;
   /** The configured judge model name, for the judging headline. */
   judgeModel?: string;
-  /** The model the judge picked last turn (opener color). */
+  /** The candidate the judge adopted on the previous fuse (opener color). */
   lastPick?: string;
+  /** Rendered step the whole panel proposed last fuse (tie opener). */
+  lastAgreed?: string;
+  /** The route's k — consumed only by the fan-out/quiet phase copy. */
+  k?: number;
+  /** 1-based fuse round within the turn (headlines prefix "Step N —" when > 1). */
+  round?: number;
   /** Quiet-beat escalation delays; injectable for tests. */
   quietDelaysMs?: readonly number[];
   /** Optional prose writer (e.g. a small local model); advisory only. */
@@ -447,14 +615,27 @@ function judgeCandidatesOf(payload: Record<string, unknown>): JudgeCandidate[] {
             ? wire.trajectory_id
             : "candidate";
       const verification = wire.verification as { status?: unknown } | undefined;
+      const proposal = terminalProposal(wire);
       return {
         id,
         ok: wire.status !== "failed",
         ...(typeof wire.diff === "string" ? { diff: wire.diff } : {}),
         ...(typeof verification?.status === "string" ? { verificationStatus: verification.status } : {}),
-        ...(typeof wire.final_output === "string" ? { finalOutput: wire.final_output } : {})
+        ...(typeof wire.final_output === "string" ? { finalOutput: wire.final_output } : {}),
+        ...(proposal.length > 0 ? { proposal } : {})
       };
     });
+}
+
+/** Mine a finished-event `proposed_calls` payload into proposed calls. */
+function proposedCallsOf(payload: Record<string, unknown>): ProposedCall[] {
+  if (!Array.isArray(payload.proposed_calls)) return [];
+  return payload.proposed_calls
+    .filter((entry): entry is Record<string, unknown> => entry !== null && typeof entry === "object")
+    .map((entry) => ({
+      ...(typeof entry.name === "string" ? { name: entry.name } : {}),
+      ...(typeof entry.arguments_preview === "string" ? { arguments: entry.arguments_preview } : {})
+    }));
 }
 
 /**
@@ -473,7 +654,10 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
   const state = createNarratorState({
     turn: input.turn,
     ...(input.judgeModel !== undefined ? { judgeModel: input.judgeModel } : {}),
-    ...(input.lastPick !== undefined ? { lastPick: input.lastPick } : {})
+    ...(input.lastPick !== undefined ? { lastPick: input.lastPick } : {}),
+    ...(input.lastAgreed !== undefined ? { lastAgreed: input.lastAgreed } : {}),
+    ...(input.k !== undefined ? { k: input.k } : {}),
+    ...(input.round !== undefined ? { round: input.round } : {})
   });
   const quietDelays = input.quietDelaysMs ?? DEFAULT_QUIET_DELAYS_MS;
   const writer = input.writer;
@@ -563,13 +747,23 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
         if (id === undefined) return;
         const began = event.candidate_id !== undefined ? candidateStartedAt.get(event.candidate_id) : undefined;
         const preview = typeof payload.final_output_preview === "string" ? payload.final_output_preview : undefined;
+        const proposal = proposedCallsOf(payload);
         const ok = payload.status === "succeeded";
         enqueue(async () => {
           // The writer sees the raw preview; its sentence (and the fallback)
           // both pass through the sanitize gate before entering the channel.
           let gist = preview !== undefined ? sanitizeGist(preview) : undefined;
-          if (writer !== undefined && ok && preview !== undefined) {
-            const written = await withBudget((signal) => writer.candidateGist({ id, finalOutput: preview }, signal));
+          if (writer !== undefined && ok && (preview !== undefined || proposal.length > 0)) {
+            const written = await withBudget((signal) =>
+              writer.candidateGist(
+                {
+                  id,
+                  finalOutput: preview ?? "",
+                  ...(proposal.length > 0 ? { proposal: renderProposal(proposal, 200) } : {})
+                },
+                signal
+              )
+            );
             const sanitized = written !== undefined ? sanitizeGist(written) : undefined;
             if (sanitized !== undefined) gist = sanitized;
           }
@@ -579,7 +773,8 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
             ...(typeof payload.finish_reason === "string" ? { finishReason: payload.finish_reason } : {}),
             ...(began !== undefined ? { elapsedMs: event.ts - began } : {}),
             ...(typeof payload.step_count === "number" ? { steps: payload.step_count } : {}),
-            ...(gist !== undefined ? { gist } : {})
+            ...(gist !== undefined ? { gist } : {}),
+            ...(proposal.length > 0 ? { proposal } : {})
           };
           emitBeat(narrationBeat(state, { kind: "finish", finish, at: event.ts }), event.ts, false);
         });
@@ -590,7 +785,22 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
         enqueue(async () => {
           const beat = narrationBeat(state, { kind: "judging", candidates, at: event.ts });
           if (beat !== null && writer !== undefined && candidates.length > 0) {
-            const written = await withBudget((signal) => writer.compareCandidates({ candidates }, signal));
+            const written = await withBudget((signal) =>
+              writer.compareCandidates(
+                {
+                  candidates: candidates.map(({ id, finalOutput, diff, verificationStatus, proposal }) => ({
+                    id,
+                    ...(finalOutput !== undefined ? { finalOutput } : {}),
+                    ...(diff !== undefined ? { diff } : {}),
+                    ...(verificationStatus !== undefined ? { verificationStatus } : {}),
+                    ...(proposal !== undefined && proposal.length > 0
+                      ? { proposal: renderProposal(proposal, 200) }
+                      : {})
+                  }))
+                },
+                signal
+              )
+            );
             const sanitized = written !== undefined ? sanitizeGist(written, COMPARISON_MAX_LENGTH) : undefined;
             if (sanitized !== undefined) beat.prose = sanitized;
           }
@@ -630,9 +840,42 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
 }
 
 /**
+ * Whether a fuse-stream SSE chunk carries real judge output (content, reasoning,
+ * tool calls, a finish, or an error). The Python step endpoint yields an empty
+ * role-announce chunk the instant the POST connects — closing narration on that
+ * handshake would drop any beat still in flight (most visibly the "judging"
+ * beat, rendered milliseconds earlier), so the merge only closes on payload.
+ */
+export function sseChunkHasPayload(data: string): boolean {
+  for (const line of data.split("\n")) {
+    const trimmed = line.trimEnd();
+    if (trimmed.length === 0 || trimmed.startsWith(":")) continue; // blank / keepalive comment
+    if (!trimmed.startsWith("data: ")) return true; // anything unrecognized counts as payload
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed.slice(6));
+    } catch {
+      // [DONE] or non-JSON data — assume payload; never risk splitting output.
+      return true;
+    }
+    if (parsed === null || typeof parsed !== "object") return true;
+    const frame = parsed as { error?: unknown; choices?: Array<Record<string, unknown>> };
+    if (frame.error !== undefined) return true;
+    for (const choice of frame.choices ?? []) {
+      if (choice.finish_reason !== null && choice.finish_reason !== undefined) return true;
+      const delta = choice.delta;
+      if (delta === null || typeof delta !== "object") return true;
+      if (Object.keys(delta).some((key) => key !== "role")) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Interleave a turn's runtime events with its narration deltas. Narration flows
- * only until the first `sse.chunk` (the judge's first bytes) — from then on the
- * judge stream is exclusive, so narration can never split or delay real output.
+ * only until the first `sse.chunk` with payload (the judge's first real bytes;
+ * the empty role-announce handshake doesn't count) — from then on the judge
+ * stream is exclusive, so narration can never split or delay real output.
  * The narration channel is always closed on exit.
  */
 export async function* mergeEventsWithNarration(
@@ -666,7 +909,7 @@ export async function* mergeEventsWithNarration(
         const result = winner.result as IteratorResult<RuntimeEvent>;
         if (result.done === true) return;
         mainNext = mainIt.next();
-        if (result.value.type === "sse.chunk") {
+        if (result.value.type === "sse.chunk" && sseChunkHasPayload(result.value.data)) {
           // Judge tokens have started: narration ends here, permanently.
           narration.close();
           sideNext = undefined;

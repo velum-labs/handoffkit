@@ -98,6 +98,12 @@ export type EnsembleRunSpec = {
   models: PanelModelSpec[];
   judgeModel?: string;
   synthesizerModel?: string;
+  /**
+   * Step boundaries per panel member before aggregation: 1 = single-completion
+   * proposers over the caller's messages+tools; finite > 1 = bounded managed
+   * rollout (lookahead); unset = unbounded (today's behavior).
+   */
+  k?: number;
   prompts?: PromptOverrides;
 };
 
@@ -125,6 +131,11 @@ export type RunFusionOptions = {
    * gateway bearer token — auto-generated when `authToken` is unset.
    */
   expose?: boolean;
+  /**
+   * Step boundaries per panel member (`--k`); applies to the session-default
+   * ensemble, like `--judge-model`. See {@link EnsembleRunSpec.k}.
+   */
+  k?: number;
   /** Use the local MLX panel trio (Apple Silicon) instead of the cloud panel. */
   local?: boolean;
   /** Boot the local scope dashboard and stream trace events into it. */

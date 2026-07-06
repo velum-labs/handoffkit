@@ -1,4 +1,4 @@
-import { newSpanId, newTraceId } from "@fusionkit/protocol";
+import { isFiniteK, newSpanId, newTraceId } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 import { withTimeout } from "@fusionkit/runtime-utils";
@@ -46,6 +46,20 @@ export type {
   WireTrajectory
 } from "./fusion-types.js";
 
+/**
+ * The fused panel as a model — the SDK's central contract.
+ *
+ * `FusionBackend` implements the exact same {@link Backend} interface as a
+ * single-model backend (`OpenAiBackend`, `MlxBackend`): the closure property
+ * of fusion. Anything that drives a `Backend` — the gateway server, dialect
+ * adapters, capture gateways, tests — drives a fused ensemble unchanged and
+ * cannot tell the difference. Panel fanout, judging, synthesis, sessions,
+ * budgets, and rate-limit failover all happen behind one `chat()` call.
+ *
+ * Per-request behavior is selected by the requested model id (fused routes vs
+ * native passthrough) and each fused route's `k` (see `@fusionkit/protocol`
+ * panel-k for the k algebra).
+ */
 export class FusionBackend implements Backend {
   readonly defaultModel: string | undefined;
 
@@ -208,18 +222,31 @@ export class FusionBackend implements Backend {
 
   async #resolvePanelCandidates(req: FrontdoorRequestValue): Promise<readonly WireTrajectory[]> {
     const session = this.#sessions.ensureSession(req.sessionKey);
+    const route = this.#routeFor(req);
     const turnCandidates = this.#sessions.ensureTurnCandidates({
       session,
       sessionKey: req.sessionKey,
       turn: req.turn,
       messages: req.chat.messages ?? [],
-      ensembleModelId: this.#routeFor(req)?.modelId,
+      ensembleModelId: route?.modelId,
       excludeModelIds: req.excludeModelIds,
-      panelDepth: req.panelDepth
+      panelDepth: req.panelDepth,
+      // Lossless projection: the panel input always describes the full
+      // situation (tools, tool_choice, k). What consumes what is the panel
+      // runner's single decision (k=1 members propose against the caller's
+      // toolset, B7; rollout members never see it, B20) — enforced in
+      // `runPanelRound`, not re-encoded here.
+      ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
+      ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
+      ...(isFiniteK(route?.k) ? { k: route.k } : {})
     });
     const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel", (error) =>
       session.turnAborts.get(req.turn)?.abort(error)
     );
+    // Finite-k rounds run a fresh panel per request, so each round's candidate
+    // cost is new; drop the per-turn metering latch that exists to avoid
+    // double-metering a cached panel.
+    if (isFiniteK(route?.k)) session.meteredPanelTurns.delete(req.turn);
     this.#cost.meterPanelCandidates({
       sessionId: session.id,
       turn: req.turn,

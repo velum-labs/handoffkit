@@ -88,7 +88,7 @@ if TYPE_CHECKING:
         subscription_status,
     )
     from fusionkit_core.fusion import FusionEngine
-    from fusionkit_core.judge import FuseResult, JudgeSynthesizer
+    from fusionkit_core.judge import FuseResult, JudgeSynthesizer, judge_synthesizer_for
     from fusionkit_core.kernel import FusionKernel
     from fusionkit_core.producers import (
         AgentTrajectoryProducer,
@@ -142,6 +142,7 @@ if TYPE_CHECKING:
     from fusionkit_core.types import (
         ChatMessage,
         ModelResponse,
+        PanelMode,
         StreamChunk,
         ToolCall,
         Trajectory,
@@ -220,7 +221,7 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
         "subscription_status",
     ),
     "fusion": ("FusionEngine",),
-    "judge": ("FuseResult", "JudgeSynthesizer"),
+    "judge": ("FuseResult", "JudgeSynthesizer", "judge_synthesizer_for"),
     "kernel": ("FusionKernel",),
     "producers": (
         "AgentTrajectoryProducer",
@@ -274,6 +275,7 @@ _EXPORTS_BY_MODULE: dict[str, tuple[str, ...]] = {
     "types": (
         "ChatMessage",
         "ModelResponse",
+        "PanelMode",
         "StreamChunk",
         "ToolCall",
         "Trajectory",
@@ -334,6 +336,7 @@ __all__ = [
     "NativeRunError",
     "OpenAICompatibleClient",
     "PackReport",
+    "PanelMode",
     "ProviderCallError",
     "ProviderErrorCategory",
     "ProviderKind",
@@ -378,6 +381,7 @@ __all__ = [
     "hash_bytes",
     "hash_json",
     "hash_text",
+    "judge_synthesizer_for",
     "load_claude_code_credentials",
     "load_codex_credentials",
     "make_id",

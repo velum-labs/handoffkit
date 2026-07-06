@@ -93,6 +93,13 @@ export type EnsembleConfig = {
   /** Synthesizer model; defaults to the judge on the Python side. */
   synthesizerModel?: string;
   /**
+   * Step boundaries per panel member before aggregation. `1` runs members as
+   * single-completion proposers over the caller's exact messages+tools; a
+   * finite value > 1 bounds the managed-harness rollout (lookahead); unset
+   * means unbounded (today's behavior: aggregate at final answers).
+   */
+  k?: number;
+  /**
    * Per-ensemble system-prompt overrides, hydrated from
    * `.fusionkit/prompts/<ensemble>/*.md` with the flat `.fusionkit/prompts/*.md`
    * files as the per-id fallback. Not stored inline in `fusion.json`.
@@ -117,6 +124,8 @@ export type FusionConfig = {
   budgetUsd?: number;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
   panelTrust?: PanelTrust;
+  /** Default step boundaries per panel member (per-ensemble `k` overrides). */
+  k?: number;
   /** Reasoning traces: narrate panel/judge progress in the tool's thinking UI. */
   reasoning?: boolean;
   /**
@@ -182,6 +191,15 @@ function optionalNonNegativeNumber(value: unknown, path: string): number | undef
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     throw new FusionConfigError(`${path} must be a non-negative number`);
+  }
+  return value;
+}
+
+/** Validate a `k` value: a positive integer (step boundaries per member). */
+function optionalK(value: unknown, path: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new FusionConfigError(`${path} must be a positive integer (step boundaries per panel member)`);
   }
   return value;
 }
@@ -308,6 +326,8 @@ function validateEnsembleEntry(
     }
     ensemble.synthesizerModel = raw.synthesizerModel;
   }
+  const k = optionalK(raw.k, `${source}: ${path}.k`);
+  if (k !== undefined) ensemble.k = k;
   return ensemble;
 }
 
@@ -424,6 +444,8 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
     }
     config.panelTrust = raw.panelTrust as PanelTrust;
   }
+  const topLevelK = optionalK(raw.k, `${source}: k`);
+  if (topLevelK !== undefined) config.k = topLevelK;
   if (raw.reasoning !== undefined) {
     if (typeof raw.reasoning !== "boolean") {
       throw new FusionConfigError(`${source}: reasoning must be a boolean`);

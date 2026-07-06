@@ -24,12 +24,17 @@ export {
 export {
   buildPanelPrompt,
   createFusionKitJudgeSynthesizer,
+  harnessSupportsFiniteK,
   panelCandidateContract,
   runFusionPanelWorkflow,
   runFusionPanels,
   runUnifiedHarnessE2E,
   setToolHarnessProvider
 } from "./unified.js";
+export { runPanelRound } from "./panel-round.js";
+export type { PanelRoundOptions } from "./panel-round.js";
+export { runProposalPanels } from "./panel-propose.js";
+export type { ProposalPanelOptions } from "./panel-propose.js";
 export type {
   CursorHarnessRunnerInput,
   CursorHarnessRunnerResult,

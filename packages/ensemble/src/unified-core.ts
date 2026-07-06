@@ -9,4 +9,4 @@ export {
   runFusionPanels
 } from "./panel-orchestration.js";
 export type { FusionPanelOptions } from "./panel-orchestration.js";
-export { runUnifiedHarnessE2E } from "./harness-factories.js";
+export { harnessSupportsFiniteK, runUnifiedHarnessE2E } from "./harness-factories.js";

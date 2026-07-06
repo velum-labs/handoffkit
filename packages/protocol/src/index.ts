@@ -62,6 +62,8 @@ export {
   normalizeWireTrajectories
 } from "./fusion-wire.js";
 export type { WireTrajectory } from "./fusion-wire.js";
+export { isFiniteK, isLookaheadK, isProposalK, panelModeForK } from "./panel-k.js";
+export type { PanelMode } from "./panel-k.js";
 export {
   artifactHash,
   hashCanonical,

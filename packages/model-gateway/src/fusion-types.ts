@@ -24,6 +24,12 @@ export type FusedModelRoute = {
   judgeEndpointId?: string;
   judgeModelName?: string;
   synthesizerEndpointId?: string;
+  /**
+   * Step boundaries per panel member before aggregation: 1 = single-completion
+   * proposers over the caller's messages+tools; finite > 1 = bounded managed
+   * rollout (lookahead); unset = unbounded rollout (today's behavior).
+   */
+  k?: number;
   prompts?: Readonly<Record<string, string>>;
 };
 
@@ -53,6 +59,17 @@ export type PanelRunInput = {
   ensembleModelId?: string;
   excludeModelIds?: readonly string[];
   panelDepth?: number;
+  /**
+   * The caller's tool definitions / tool_choice, verbatim — always present
+   * when the caller sent them (lossless projection). Which panels consume
+   * them is the panel runner's decision: k=1 members propose against the
+   * caller's real toolset (B7); rollout members act through their managed
+   * harness's own tools and never see them (B20).
+   */
+  tools?: unknown;
+  toolChoice?: unknown;
+  /** Step boundaries per member (see {@link FusedModelRoute.k}). */
+  k?: number;
   signal?: AbortSignal;
 };
 
@@ -130,6 +147,8 @@ export type FusionBackendKernelSessionState = {
   meteredPanelTurns: Set<number>;
   createdAt: number;
   lastJudgePick?: string;
+  /** Rendered step the whole panel proposed and the fuse committed (no single pick). */
+  lastAgreedStep?: string;
 };
 
 export type FusionBackendKernelStateStore = {

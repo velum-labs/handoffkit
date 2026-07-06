@@ -450,3 +450,36 @@ test("loadFusionConfig migrates a legacy v1 file and upgrades the version", () =
   const migrated = JSON.parse(readFileSync(fusionConfigPath(dir), "utf8")) as { version: string };
   assert.equal(migrated.version, FUSION_CONFIG_VERSION);
 });
+
+test("k parses per ensemble and at the top level", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      k: 4,
+      ensembles: {
+        step: { panel: [{ id: "gpt", model: "gpt-5.5" }], k: 1 },
+        deep: { panel: [{ id: "gpt", model: "gpt-5.5" }] }
+      }
+    },
+    "test"
+  );
+  assert.equal(config.k, 4);
+  assert.equal(config.ensembles?.step?.k, 1);
+  assert.equal(config.ensembles?.deep?.k, undefined);
+});
+
+test("k rejects non-positive and non-integer values", () => {
+  for (const bad of [0, -1, 1.5, "2"]) {
+    assert.throws(
+      () =>
+        parseFusionConfig(
+          {
+            version: FUSION_CONFIG_VERSION,
+            ensembles: { step: { panel: [{ id: "gpt", model: "gpt-5.5" }], k: bad } }
+          },
+          "test"
+        ),
+      /k must be a positive integer/
+    );
+  }
+});

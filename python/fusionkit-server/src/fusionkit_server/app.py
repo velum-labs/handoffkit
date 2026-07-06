@@ -55,7 +55,7 @@ from fusionkit_core.run import (
 )
 from fusionkit_core.run_store import FileSystemRunStore
 from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER, new_span_id
-from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall
+from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, ToolCall
 from pydantic import BaseModel, Field, ValidationError
 
 from fusionkit_server.cursor_endpoint import translate_cursor_request
@@ -142,6 +142,11 @@ class FuseTrajectoriesRequest(BaseModel):
     # Per-request system-prompt overrides (a named ensemble's committed
     # prompts). Fields win per key; unset falls back to the config overrides.
     prompts: PromptOverrides | None = None
+    # "step" = candidates are receding-horizon next-step proposals (finite-k
+    # panels): the judge selects and the synthesizer adopts one candidate's
+    # tool-call batch verbatim or answers in text. Absent = "trajectory"
+    # (today's behavior), so older gateways keep working unchanged.
+    panel_mode: PanelMode = "trajectory"
     stream: bool = False
 
 
@@ -376,6 +381,7 @@ def create_app(
                 tools=tools,
                 tool_choice=tool_choice,
                 prompts=request.prompts,
+                panel_mode=request.panel_mode,
                 trace_id=trace_id,
                 span_id=resolved_span,
             )
@@ -393,6 +399,7 @@ def create_app(
                 tools=tools,
                 tool_choice=tool_choice,
                 prompts=request.prompts,
+                panel_mode=request.panel_mode,
                 trace_id=trace_id,
                 span_id=resolved_span,
             )
@@ -969,13 +976,19 @@ def _usage_dict(response: ModelResponse) -> dict[str, Any]:
 
 
 def _fusion_extension(result: FuseResult) -> dict[str, Any] | None:
-    """The ``fusion`` extension carried on a terminal fuse response.
+    """The ``fusion`` extension carried on a fuse response.
 
     On the terminal step the fused output is a trajectory whose ``synthesis``
-    holds the fusion result (decision/selected/rationale/metrics). It rides on the
-    chat completion so the gateway can surface it without a separate record."""
+    holds the fusion result (decision/selected/rationale/metrics). A
+    non-terminal step (the synthesizer committed a tool-call batch the caller
+    will execute) carries the judge's ``best_trajectory`` instead, so the
+    gateway can attribute the adopted proposal between rounds (narration's
+    "last round the judge picked X" opener)."""
     trajectory = result.trajectory
     if not result.terminal or trajectory is None:
+        best = result.analysis.best_trajectory if result.analysis is not None else None
+        if best:
+            return {"analysis": {"best_trajectory": best}}
         return None
     return {
         "trajectory": {

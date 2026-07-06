@@ -27,7 +27,13 @@ export type AgentHarnessOptions = {
   /** Used when a model has no per-model endpoint. */
   fallbackBaseUrl?: string;
   apiKey?: string;
-  maxSteps?: number;
+  /**
+   * Finite step-boundary budget (receding-horizon lookahead): tool-call
+   * batches 1..k-1 execute in the worktree; the k-th generation's batch is
+   * captured unexecuted as the candidate's terminal proposal. Unset =
+   * unbounded rollout (the agent's internal safety cap applies).
+   */
+  k?: number;
   /** Per-`run` shell-command timeout (ms). */
   timeoutMs?: number;
   /** Overall wall-clock budget for one model's agent run (ms). */
@@ -41,6 +47,36 @@ export type AgentHarnessOptions = {
   /** When true, prepend a per-member identity line to the prompt (see harness.ts). */
   panelIdentity?: boolean;
 };
+
+/**
+ * The trajectory's terminal proposal: the trailing `tool_call` steps a bounded
+ * rollout (finite k) captured **unexecuted** at its k-th boundary. Trailing
+ * empty `output` markers are skipped; an observation or non-empty output after
+ * a call means the calls were executed, not proposed. Mirrors the wire-side
+ * `terminalProposal` the narrator applies to judge-request candidates, in the
+ * pre-wire `TrajectoryStep` shape.
+ */
+export function terminalProposalFromSteps(
+  steps: readonly TrajectoryStep[]
+): Array<{ name?: string; arguments_preview: string }> {
+  const batch: Array<{ name?: string; arguments_preview: string }> = [];
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index] as TrajectoryStep;
+    if (step.type === "output" && batch.length === 0) {
+      if ((step.text ?? "").trim().length === 0) continue; // trailing empty marker
+      break;
+    }
+    if (step.type === "tool_call") {
+      batch.unshift({
+        ...(step.tool_name !== undefined ? { name: step.tool_name } : {}),
+        arguments_preview: (step.tool_input ?? "").slice(0, 160)
+      });
+      continue;
+    }
+    break;
+  }
+  return batch;
+}
 
 export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter {
   const id = options.id ?? "agent";
@@ -110,7 +146,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
             : AbortSignal.timeout(modelTimeoutMs),
         ...(options.turn !== undefined ? { turn: options.turn } : {}),
         ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
-        ...(options.maxSteps !== undefined ? { maxSteps: options.maxSteps } : {}),
+        ...(options.k !== undefined ? { k: options.k } : {}),
         ...(options.timeoutMs !== undefined ? { commandTimeoutMs: options.timeoutMs } : {}),
         ...(traceId !== undefined ? { traceId, candidateId, parentSpanId: candidateSpan } : {})
       });
@@ -144,7 +180,10 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
             tool_call_count: result.toolCallCount,
             finish_reason: result.finishReason,
             step_count: steps.length,
-            final_output_preview: result.finalOutput.slice(0, 400)
+            final_output_preview: result.finalOutput.slice(0, 400),
+            // A bounded rollout's captured k-th batch (empty for completed
+            // rollouts): what the narrator renders as the candidate's proposal.
+            proposed_calls: terminalProposalFromSteps(steps)
           }
         });
         emitTrace({

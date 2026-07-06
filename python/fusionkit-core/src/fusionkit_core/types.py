@@ -8,6 +8,11 @@ from fusionkit_core.contracts import Status, SynthesisDecision, TrajectoryItem
 
 ChatRole = Literal["system", "user", "assistant", "tool"]
 
+# How candidate trajectories are judged: "step" = receding-horizon next-step
+# proposals (finite-k panels; adopt one candidate's tool-call batch verbatim or
+# answer in text), "trajectory" = completed rollouts (the default).
+PanelMode = Literal["step", "trajectory"]
+
 
 class ToolCall(BaseModel):
     id: str
