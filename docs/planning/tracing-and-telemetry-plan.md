@@ -82,7 +82,7 @@ flowchart LR
 
   subgraph sinks["Sinks"]
     scopecol["scope collector<br/>POST /api/ingest (OTLP JSON)<br/>full fidelity, loopback"]
-    vendor["Any OTel backend<br/>OTEL_EXPORTER_OTLP_ENDPOINT<br/>(Jaeger / Tempo / vendor)"]
+    vendor["Any OTel backend<br/>OTEL_EXPORTER_OTLP_TRACES_ENDPOINT<br/>(PostHog / Jaeger / Tempo / vendor)"]
   end
 
   scopecol --> scope["apps/scope<br/>SQLite + SSE dashboard"]
@@ -122,6 +122,48 @@ Key decisions:
   and hands them to `posthog-node`. Redaction is structural: the processor
   copies only enumerated attribute keys, never whole attribute bags.
 
+## PostHog compatibility
+
+PostHog compatibility is a hard requirement, and this architecture satisfies
+it on all three of PostHog's integration surfaces (verified against PostHog
+docs, July 2026):
+
+1. **Product analytics** — the WS4 telemetry pipeline *is* PostHog: it uses
+   the official `posthog-node` SDK, so `cli.command` and `fusion.session`
+   land as ordinary PostHog events with the SDK's batching, queueing, and
+   shutdown flush.
+2. **Distributed tracing (PostHog alpha)** — PostHog now runs a generic OTLP
+   receiver: standard OTel SDKs, no PostHog packages, project token in the
+   `Authorization: Bearer` header. Because WS2 standardizes on the OTel SDK
+   with OTLP/HTTP export, sending fusion traces to PostHog is pure
+   configuration:
+   `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://us.i.posthog.com/i/v1/traces`
+   plus the auth header. Note the gotcha: PostHog needs the traces-specific
+   env var with the full path, not the base `OTEL_EXPORTER_OTLP_ENDPOINT`
+   (which appends its own `/v1/traces`).
+3. **LLM analytics (AI Observability)** — PostHog has a dedicated OTLP
+   endpoint (`/i/v0/ai/otel`) that ingests only generative-AI spans (names /
+   attribute keys starting `gen_ai.`, `llm.`, `ai.`) and drops the rest
+   server-side. WS1 therefore names model-call span attributes per the
+   **OTel GenAI semantic conventions** (`gen_ai.provider.name`,
+   `gen_ai.request.model`, `gen_ai.usage.input_tokens`,
+   `gen_ai.usage.output_tokens`, …) instead of inventing `fusion.*`
+   equivalents. That single choice makes fusion's panel/judge/synthesizer
+   model calls show up natively in PostHog's LLM analytics (models, tokens,
+   latency, cost dashboards) — and in any other GenAI-semconv-aware backend.
+   Since the endpoint safely drops non-AI spans, the same mixed span stream
+   can be sent without filtering. Only `exportable`-tagged attributes are
+   sent (prompts/outputs are `local-only` and never leave the machine unless
+   a user explicitly opts into PostHog's `$ai_input`-style capture later).
+
+Practical constraints folded into the design: PostHog's OTLP ingestion is
+HTTP-only (we chose OTLP/HTTP, not gRPC), request bodies are capped at 4 MB
+(the `BatchSpanProcessor` export batch size stays comfortably under it), and
+distributed tracing is alpha (endpoints may change — they live in env/config,
+not code). Product-analytics events and traces land in the same PostHog
+project, so telemetry sessions and traces can be correlated by trace id when
+a user has both enabled.
+
 ## Dependencies to add
 
 | Where | Packages | Purpose |
@@ -145,6 +187,14 @@ and `posthog-node` requires Node 20+; this repo already enforces Node >=22.
   types included), attribute keys (`fusion.candidate_id`,
   `fusion.trajectory_id` — both, with documented semantics), and a
   **sensitivity class per attribute** (`local-only` vs `exportable`).
+- Where the OTel **GenAI semantic conventions** already define an attribute,
+  use it instead of a `fusion.*` invention: model-call spans carry
+  `gen_ai.provider.name`, `gen_ai.request.model`,
+  `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens`, and a
+  `gen_ai.`-prefixed span name. This is what makes the trace stream natively
+  consumable by PostHog LLM analytics (and any GenAI-aware backend) — see
+  "PostHog compatibility". `fusion.*` attributes are reserved for concepts
+  GenAI semconv has no word for (candidates, judge decisions, trajectories).
 - Codegen TS and Python constant modules from the registry (extending the
   `pnpm check` regeneration pattern the repo already uses for protocol
   bindings); `apps/scope/lib/types.ts` is generated from the same source.
@@ -257,8 +307,11 @@ and `posthog-node` requires Node 20+; this repo already enforces Node >=22.
   scope, `trajectory_id` round-trips, `traceparent` propagates gateway →
   panel server → fuse endpoint, and telemetry makes zero requests by
   default. One live `--observe` run to confirm the dashboard renders
-  sessions end-to-end. Optionally point `OTEL_EXPORTER_OTLP_ENDPOINT` at a
-  local Jaeger to demonstrate vendor interop.
+  sessions end-to-end. Vendor interop check: point
+  `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` at a PostHog project (and/or a local
+  Jaeger) and confirm the session trace renders in PostHog distributed
+  tracing and the model calls appear in PostHog LLM analytics via
+  `/i/v0/ai/otel`.
 - Versioning: `@fusionkit/tracing` ships new; `@fusionkit/protocol` gets a
   minor bump (types move, emitter code removed with re-export shims for one
   release); the legacy `fusion-trace-event.v1` schema is frozen; the
