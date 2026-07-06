@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
-import { newSpanId, sessionCarrier } from "@fusionkit/tracing";
+import { isFiniteK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import { newSpanId, sessionCarrier } from "@fusionkit/tracing";
 
 import type { SessionCost } from "./cost.js";
 import type { FusionGatewayLogger } from "./logger.js";
@@ -98,6 +99,12 @@ export class FusionSessionManager {
   readonly #defaultModel: string | undefined;
   readonly #logger: FusionGatewayLogger;
   #resumeId: string | undefined;
+  /**
+   * Fuse rounds per `${sessionKey}#${turn}` — narration bookkeeping only
+   * (headlines prefix "Step N —" when a turn fuses more than once). Rounds
+   * exist for every k: unbounded turns simply stay at 1. Pruned with sessions.
+   */
+  readonly #narrationRounds = new Map<string, number>();
 
   constructor(options: FusionSessionManagerOptions) {
     this.#ttlMs = options.ttlMs;
@@ -186,6 +193,14 @@ export class FusionSessionManager {
     return session;
   }
 
+  /** Increment and return the 1-based fuse round of this turn (narration only). */
+  nextNarrationRound(sessionKey: string, turn: number): number {
+    const key = `${sessionKey}#${turn}`;
+    const round = (this.#narrationRounds.get(key) ?? 0) + 1;
+    this.#narrationRounds.set(key, round);
+    return round;
+  }
+
   evictTurn(session: FusionBackendKernelSessionState, turn: number): void {
     session.turns.delete(turn);
   }
@@ -203,9 +218,20 @@ export class FusionSessionManager {
     ensembleModelId?: string;
     excludeModelIds?: readonly string[];
     panelDepth?: number;
+    tools?: unknown;
+    toolChoice?: unknown;
+    k?: number;
   }): Promise<WireTrajectory[]> {
-    const existing = input.session.turns.get(input.turn);
-    if (existing !== undefined) return existing;
+    // Rounds are memoryless for finite k: every request (including tool-result
+    // continuations of the same user turn) re-runs the panel over the updated
+    // messages, so candidates are per-round, never cached. Only unbounded
+    // rollouts (k = ∞ / unset) keep the per-user-turn cache — those members
+    // already rolled out to completion, so a re-fuse reuses their work.
+    const cacheable = !isFiniteK(input.k);
+    if (cacheable) {
+      const existing = input.session.turns.get(input.turn);
+      if (existing !== undefined) return existing;
+    }
 
     const abort = new AbortController();
     input.session.turnAborts.set(input.turn, abort);
@@ -220,7 +246,10 @@ export class FusionSessionManager {
       ...(input.excludeModelIds !== undefined && input.excludeModelIds.length > 0
         ? { excludeModelIds: input.excludeModelIds }
         : {}),
-      ...(input.panelDepth !== undefined && input.panelDepth > 0 ? { panelDepth: input.panelDepth } : {})
+      ...(input.panelDepth !== undefined && input.panelDepth > 0 ? { panelDepth: input.panelDepth } : {}),
+      ...(input.tools !== undefined ? { tools: input.tools } : {}),
+      ...(input.toolChoice !== undefined ? { toolChoice: input.toolChoice } : {}),
+      ...(input.k !== undefined ? { k: input.k } : {})
     });
     input.session.turns.set(input.turn, candidates);
     void candidates.then(
@@ -241,7 +270,11 @@ export class FusionSessionManager {
 
   #sweepExpired(now: number): void {
     for (const [key, session] of this.#kernelStateStore.entries()) {
-      if (now - session.createdAt >= this.#ttlMs) this.#kernelStateStore.delete(key);
+      if (now - session.createdAt < this.#ttlMs) continue;
+      this.#kernelStateStore.delete(key);
+      for (const roundKey of this.#narrationRounds.keys()) {
+        if (roundKey.startsWith(`${key}#`)) this.#narrationRounds.delete(roundKey);
+      }
     }
   }
 

@@ -22,6 +22,8 @@ import { join } from "node:path";
 
 import { DEFAULT_ENSEMBLE_NAME, formatDurationMs, FUSION_PANEL_MODEL, fusionModelId } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
+import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
+import { isLookaheadK } from "@fusionkit/protocol";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
 import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
 import { cursorInstructions } from "@fusionkit/tool-cursor";
@@ -294,6 +296,7 @@ export async function runFusion(
         name: DEFAULT_ENSEMBLE_NAME,
         models: (options.models ?? fallbackPanel()).map((spec) => ({ ...spec })),
         ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
+        ...(options.k !== undefined ? { k: options.k } : {}),
         ...(options.prompts !== undefined ? { prompts: options.prompts } : {})
       }
     ];
@@ -314,6 +317,7 @@ export async function runFusion(
       defaultedPanels.delete(selected.name);
     }
     if (options.judgeModel !== undefined) selected.judgeModel = options.judgeModel;
+    if (options.k !== undefined) selected.k = options.k;
   }
   const modelLabel = fusionModelId(selected.name);
 
@@ -641,6 +645,17 @@ export async function runFusion(
     disposers.push(() => shutdownFusionTracing());
 
     const panelHarness = toolRegistry.panelHarnessKindFor(tool);
+    // B17: finite k>1 (stop at the k-th step boundary) needs a member loop
+    // fusionkit owns. k=1 never reaches a harness, and k=∞ (unset) is every
+    // harness's native behavior.
+    const lookahead = ensembles.find((ensemble) => isLookaheadK(ensemble.k));
+    if (lookahead !== undefined && panelHarness !== undefined && !harnessSupportsFiniteK(panelHarness)) {
+      throw new PreflightError(
+        `fusionkit preflight failed:\nensemble "${lookahead.name}" configures k=${lookahead.k}, but the ` +
+          `"${panelHarness}" panel harness cannot stop at a step boundary (its loop is harness-owned). ` +
+          `Use k=1, unset k, or run a tool whose panel uses the generic agent harness (e.g. serve).`
+      );
+    }
     const stackPrompts = selected.prompts ?? options.prompts;
     const stackJudgeModel = selected.judgeModel ?? options.judgeModel;
     stack = await startFusionStack({

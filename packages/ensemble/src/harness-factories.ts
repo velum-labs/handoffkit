@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { isFiniteK } from "@fusionkit/protocol";
 import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
 import { runCliCapture } from "@fusionkit/runtime-utils";
 import { envOf } from "@fusionkit/tracing";
@@ -36,7 +37,24 @@ export function sideEffectsForHarness(kind: UnifiedHarnessKind): EnsembleDescrip
   }
 }
 
+/**
+ * Whether a harness kind can honor a finite k (stop at the k-th step boundary
+ * and capture the proposal). Only loops fusionkit owns qualify: the generic
+ * agent harness (and the fixture-replaying mock, which has no loop to bound).
+ * CLI/command harnesses cannot pause at a tool-call boundary. This is the one
+ * source of that fact — preflight validation and the adapter guard both read it.
+ */
+export function harnessSupportsFiniteK(kind: UnifiedHarnessKind): boolean {
+  return kind === "agent" || kind === "mock";
+}
+
 function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOptions): HarnessAdapter {
+  if (isFiniteK(options.k) && !harnessSupportsFiniteK(kind)) {
+    throw new Error(
+      `finite k (k=${options.k}) is not supported by the "${kind}" harness: only the generic ` +
+        `"agent" harness can stop at a step boundary. Use k=1 (harness-independent) or unset k.`
+    );
+  }
   switch (kind) {
     case "mock":
       return createMockHarness();
@@ -48,7 +66,8 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
         ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.trace !== undefined ? { trace: options.trace } : {}),
         ...(options.turn !== undefined ? { turn: options.turn } : {}),
-        ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {})
+        ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+        ...(options.k !== undefined ? { k: options.k } : {})
       });
     case "command": {
       if (!options.command) {

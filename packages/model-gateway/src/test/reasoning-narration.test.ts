@@ -20,7 +20,8 @@ import {
   diffStat,
   mergeEventsWithNarration,
   narrationBeat,
-  sanitizeGist
+  sanitizeGist,
+  sseChunkHasPayload
 } from "../frontdoor/narration.js";
 import type { NarrationWriter, ReasoningDeltaEvent } from "../frontdoor/narration.js";
 import { createChatNarrationWriter } from "../frontdoor/narration-writer.js";
@@ -354,7 +355,7 @@ test("narrationBeat: cached-candidate continuation and last-pick opener", () => 
 
   const opener = createNarratorState({ turn: 2, lastPick: "sonnet" });
   const fanout = narrationBeat(opener, { kind: "fanout", roster: [{ id: "gpt" }], at: 0 });
-  assert.equal(fanout?.headline, "Last turn the judge picked sonnet — fanning out again");
+  assert.equal(fanout?.headline, "Last round the judge picked sonnet — fanning out again");
 });
 
 test("narrationBeat: quiet beats name the stragglers and the judging phase", () => {
@@ -636,6 +637,44 @@ test("mergeEventsWithNarration drains narration before judge chunks, never after
     else if (event.type === "reasoning.delta") seen.push(`reasoning:${(event as ReasoningDeltaEvent).text.trim()}`);
   }
   assert.deepEqual(seen, ["reasoning:**gpt is back first**", "chunk:judge-bytes-1", "chunk:judge-bytes-2"]);
+});
+
+test("mergeEventsWithNarration survives the role-announce handshake chunk", async () => {
+  // The Python step endpoint emits an empty `{"delta":{"role":"assistant"}}`
+  // chunk the instant the POST connects — beats racing that handshake (the
+  // judging beat, typically) must still flow until real judge bytes arrive.
+  const session = newSessionCarrier();
+  const narrator = createTurnNarrator({ traceId: session.traceId, turn: 1 });
+  const handshake =
+    'data: {"id":"c","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n';
+  const judgeBytes =
+    'data: {"id":"c","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"reasoning_content":"thinking"},"finish_reason":null}]}\n\n';
+  async function* main(): AsyncGenerator<{ type: "sse.chunk"; data: string }> {
+    yield { type: "sse.chunk", data: handshake };
+    // The beat lands after the handshake but before any judge output.
+    emitCandidateFinished(session, { modelId: "gpt" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    yield { type: "sse.chunk", data: judgeBytes };
+  }
+  const seen: string[] = [];
+  for await (const event of mergeEventsWithNarration(main(), narrator)) {
+    if (event.type === "sse.chunk") seen.push("chunk");
+    else if (event.type === "reasoning.delta") seen.push(`reasoning:${(event as ReasoningDeltaEvent).text.trim()}`);
+  }
+  assert.deepEqual(seen, ["chunk", "reasoning:**gpt is back first**", "chunk"]);
+});
+
+test("sseChunkHasPayload separates handshake and keepalive from judge output", () => {
+  const frame = (body: string): string => `data: ${body}\n\n`;
+  assert.equal(sseChunkHasPayload(frame('{"choices":[{"delta":{"role":"assistant"},"finish_reason":null}]}')), false);
+  assert.equal(sseChunkHasPayload(": keepalive\n\n"), false);
+  assert.equal(sseChunkHasPayload(""), false);
+  assert.equal(sseChunkHasPayload(frame('{"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}')), true);
+  assert.equal(sseChunkHasPayload(frame('{"choices":[{"delta":{"reasoning_content":"x"},"finish_reason":null}]}')), true);
+  assert.equal(sseChunkHasPayload(frame('{"choices":[{"delta":{},"finish_reason":"stop"}]}')), true);
+  assert.equal(sseChunkHasPayload(frame('{"error":{"message":"boom"}}')), true);
+  assert.equal(sseChunkHasPayload("data: [DONE]\n\n"), true);
+  assert.equal(sseChunkHasPayload("raw-judge-bytes"), true);
 });
 
 // ---- End to end: FusionBackend streaming turn narrates on both doors ----

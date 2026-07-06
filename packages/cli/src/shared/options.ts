@@ -86,6 +86,16 @@ export function parseBudget(value: string | undefined): number | undefined {
   return budget;
 }
 
+/** Parse `--k <n>`: a positive integer (step boundaries per panel member). */
+export function parseK(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const k = Number(value);
+  if (!Number.isInteger(k) || k < 1) {
+    fail("--k must be a positive integer (step boundaries per panel member before aggregation)");
+  }
+  return k;
+}
+
 export function isolationFlag(value: string | undefined): SessionIsolation | undefined {
   if (value === undefined) return undefined;
   if (!SESSION_ISOLATIONS.includes(value as SessionIsolation)) {

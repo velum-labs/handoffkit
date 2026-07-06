@@ -1,4 +1,4 @@
-import { ATTR } from "@fusionkit/protocol";
+import { ATTR, isFiniteK, panelModeForK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { headersOf, isFusionTracingActive, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionSpan } from "@fusionkit/tracing";
@@ -6,8 +6,8 @@ import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 import { withDeadline } from "@fusionkit/runtime-utils";
 
 import { parseUsage, parseUsageFromSse } from "./cost.js";
-import { createTurnNarrator } from "./frontdoor/narration.js";
-import type { NarrationWriter, TurnNarration } from "./frontdoor/narration.js";
+import { createTurnNarrator, proposalsAgree, renderProposal, terminalProposal } from "./frontdoor/narration.js";
+import type { NarrationWriter, ProposedCall, TurnNarration } from "./frontdoor/narration.js";
 import type { FrontdoorRequestValue } from "./frontdoor/types.js";
 import type { FusionGatewayLogger } from "./logger.js";
 import { FusionCostMeter, providerCostFromPayload, providerCostFromSse, usageWithProviderCost } from "./fusion-cost-meter.js";
@@ -69,6 +69,20 @@ function assembleSseContent(buffer: string): AssembledStep {
     ...(finishReason !== undefined ? { finishReason } : {}),
     ...(fusion !== undefined ? { fusion } : {})
   };
+}
+
+/** The committed step's OpenAI tool calls as a proposal batch (for pick matching). */
+function committedCallsAsProposal(toolCalls: readonly unknown[] | undefined): ProposedCall[] {
+  if (!Array.isArray(toolCalls)) return [];
+  return toolCalls
+    .filter((call): call is Record<string, unknown> => call !== null && typeof call === "object")
+    .map((call) => {
+      const fn = (call.function ?? {}) as { name?: unknown; arguments?: unknown };
+      return {
+        ...(typeof fn.name === "string" ? { name: fn.name } : {}),
+        ...(typeof fn.arguments === "string" ? { arguments: fn.arguments } : {})
+      };
+    });
 }
 
 function synthesisOf(fusion: unknown): unknown {
@@ -151,12 +165,16 @@ export class FusionTurnAssembler {
     if (!this.#reasoningTraces) return undefined;
     const session = this.#sessions.ensureSession(req.sessionKey);
     const judgeModel = this.#judgeModelNameFor(req);
+    const k = this.#routeFor(req)?.k;
     return createTurnNarrator({
       traceId: session.traceId,
       trace: session.trace,
       turn: req.turn,
+      round: this.#sessions.nextNarrationRound(req.sessionKey, req.turn),
       ...(judgeModel !== undefined ? { judgeModel } : {}),
       ...(session.lastJudgePick !== undefined ? { lastPick: session.lastJudgePick } : {}),
+      ...(session.lastAgreedStep !== undefined ? { lastAgreed: session.lastAgreedStep } : {}),
+      ...(k !== undefined ? { k } : {}),
       ...(this.#narrationWriter !== undefined ? { writer: this.#narrationWriter } : {})
     });
   }
@@ -262,7 +280,7 @@ export class FusionTurnAssembler {
       session.trace
     );
     const assembled = assembleSseContent(sseBuffer);
-    this.#stashJudgePick(session, req.turn, synthesisOf(assembled.fusion));
+    this.#stashJudgePick(session, req.turn, assembled.fusion, assembled.toolCalls);
     if (!isFusionTracingActive()) return;
     if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
       const synthesis = synthesisOf(assembled.fusion);
@@ -299,6 +317,10 @@ export class FusionTurnAssembler {
     if (req.chat.tools !== undefined) stepBody.tools = req.chat.tools;
     if (req.chat.tool_choice !== undefined) stepBody.tool_choice = req.chat.tool_choice;
     const route = this.#routeFor(req);
+    // Finite k fuses receding-horizon step proposals (candidates end in a
+    // proposed tool-call batch); the router selects step-mode judge/synth
+    // prompts. Absent field = trajectory mode (back-compat).
+    if (isFiniteK(route?.k)) stepBody.panel_mode = panelModeForK(route.k);
     const judgeModel = route?.judgeEndpointId ?? this.#judgeModel;
     if (judgeModel !== undefined) stepBody.judge_model = judgeModel;
     if (route?.synthesizerEndpointId !== undefined) stepBody.synthesizer_model = route.synthesizerEndpointId;
@@ -439,6 +461,10 @@ export class FusionTurnAssembler {
         const message = choice?.message;
         const content = typeof message?.content === "string" ? message.content : undefined;
         const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+        // Remember the adopted candidate for the next round's narration opener
+        // (the streaming path stashes from its assembled SSE; buffered turns
+        // stash here so mixed sessions never lose the pick).
+        this.#stashJudgePick(session, req.turn, judged.fusion, toolCalls);
         if (isTerminalJudgeStep(toolCalls, choice?.finish_reason)) {
           const synthesis = synthesisOf(judged.fusion);
           this.#emitJudgeFinal(req, session, {
@@ -460,15 +486,51 @@ export class FusionTurnAssembler {
     })();
   }
 
-  #stashJudgePick(session: FusionBackendKernelSessionState, turn: number, synthesis: unknown): void {
-    if (synthesis === null || typeof synthesis !== "object") return;
-    const selected = (synthesis as { selected_trajectory_id?: unknown }).selected_trajectory_id;
-    if (typeof selected !== "string" || selected.length === 0) return;
+  /**
+   * Remember which candidate the fuse adopted, for the next round's narration
+   * opener. Terminal responses carry it as the synthesis's selected
+   * trajectory; non-terminal step responses carry the judge's
+   * `analysis.best_trajectory` (the adopted proposal's candidate). When the
+   * judge named no candidate (a tie: several proposed the same step), the
+   * committed batch itself identifies the adopted proposal — fall back to
+   * matching it against the candidates' terminal proposals. A unique match is
+   * a pick; several matches mean the panel agreed on the step, which is its
+   * own honest opener (`lastAgreedStep`) rather than an arbitrary attribution.
+   */
+  #stashJudgePick(
+    session: FusionBackendKernelSessionState,
+    turn: number,
+    fusion: unknown,
+    committedToolCalls?: readonly unknown[]
+  ): void {
+    const extension = (fusion !== null && typeof fusion === "object" ? fusion : {}) as {
+      trajectory?: { synthesis?: { selected_trajectory_id?: unknown } | null };
+      analysis?: { best_trajectory?: unknown };
+    };
+    const selected =
+      extension.trajectory?.synthesis?.selected_trajectory_id ?? extension.analysis?.best_trajectory;
+    const selectedId = typeof selected === "string" && selected.length > 0 ? selected : undefined;
+    const committed = committedCallsAsProposal(committedToolCalls);
+    if (selectedId === undefined && committed.length === 0) return;
     const candidates = session.turns.get(turn);
     if (candidates === undefined) return;
     void candidates.then(
       (resolved) => {
-        const match = resolved.find((candidate) => candidate.trajectory_id === selected);
+        session.lastJudgePick = undefined;
+        session.lastAgreedStep = undefined;
+        let match = selectedId !== undefined
+          ? resolved.find((candidate) => candidate.trajectory_id === selectedId)
+          : undefined;
+        if (match === undefined && committed.length > 0) {
+          const proposers = resolved.filter((candidate) =>
+            proposalsAgree(terminalProposal(candidate), committed)
+          );
+          if (proposers.length === 1) match = proposers[0];
+          else if (proposers.length > 1) {
+            session.lastAgreedStep = renderProposal(committed);
+            return;
+          }
+        }
         if (match !== undefined && typeof match.model_id === "string" && match.model_id.length > 0) {
           session.lastJudgePick = match.model_id;
         }

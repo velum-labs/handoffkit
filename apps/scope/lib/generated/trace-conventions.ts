@@ -71,6 +71,7 @@ export const ATTR = {
   FUSION_BRANCH_NAME: "fusion.branch_name",
   FUSION_WORKTREE_PATH: "fusion.worktree_path",
   FUSION_STEP_COUNT: "fusion.step_count",
+  FUSION_PROPOSED_CALLS: "fusion.proposed_calls",
   FUSION_TOOL_CALL_COUNT: "fusion.tool_call_count",
   FUSION_FINISH_REASON: "fusion.finish_reason",
   FUSION_VERIFICATION_STATUS: "fusion.verification_status",

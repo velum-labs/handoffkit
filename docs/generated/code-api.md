@@ -60,7 +60,11 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { createMockJudgeSynthesizer } from "./judge.js";`
 - `export type { JudgeCandidateEvidence, JudgeInput, JudgePatch, JudgeSynthesizer, JudgeSynthesisOutput, MockJudgeSynthesizerOptions, SynthesisFailureSummary } from "./judge.js";`
 - `export { ensemble, runEnsemble } from "./run.js";`
-- `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, panelCandidateContract, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolHarnessProvider } from "./unified.js";`
+- `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, harnessSupportsFiniteK, panelCandidateContract, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolHarnessProvider } from "./unified.js";`
+- `export { runPanelRound } from "./panel-round.js";`
+- `export type { PanelRoundOptions } from "./panel-round.js";`
+- `export { runProposalPanels } from "./panel-propose.js";`
+- `export type { ProposalPanelOptions } from "./panel-propose.js";`
 - `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusedSubagentAccess, FusedSubagentEnsemble, FusionPanelOptions, PanelTrust, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
 - `export type { FusionTraceCarrier } from "@fusionkit/tracing";`
 - `export { runJudgeSynthesis } from "./synthesis.js";`
@@ -233,6 +237,8 @@ interfaces instead of recreating local string lists or proof logic.
 - `export type { JsonValue } from "./jcs.js";`
 - `export { assertWireTrajectory, isWireTrajectory, normalizeWireTrajectories } from "./fusion-wire.js";`
 - `export type { WireTrajectory } from "./fusion-wire.js";`
+- `export { isFiniteK, isLookaheadK, isProposalK, panelModeForK } from "./panel-k.js";`
+- `export type { PanelMode } from "./panel-k.js";`
 - `export { artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, SHA256_PREFIX, sha256Hex, sha256PrefixedHex } from "./hash.js";`
 - `export { MODEL_FUSION_SCHEMA_BUNDLE_HASH, assertArtifactRefV1, assertBenchmarkTaskRecordV1, assertEnsembleReceiptV1, assertHarnessCandidateRecordV1, assertHarnessRunRequestV1, assertHarnessRunResultV1, assertJudgeSynthesisRecordV1, assertModelCallRecordV1, assertModelFusionRecord, assertToolCallPlanV1, assertToolExecutionRecordV1 } from "./model-fusion.js";`
 - `export { executeHarnessTask, MODEL_FUSION_HARNESS_EXECUTOR_PATH, MODEL_FUSION_OPENAPI_SOURCE_HASH } from "./generated/model-fusion-openapi.js";`
@@ -568,6 +574,7 @@ Public exports:
 - `NativeRunError`
 - `OpenAICompatibleClient`
 - `PackReport`
+- `PanelMode`
 - `ProviderCallError`
 - `ProviderErrorCategory`
 - `ProviderKind`
@@ -613,6 +620,7 @@ Public exports:
 - `hash_json`
 - `hash_text`
 - `json_attr`
+- `judge_synthesizer_for`
 - `load_claude_code_credentials`
 - `load_codex_credentials`
 - `make_id`

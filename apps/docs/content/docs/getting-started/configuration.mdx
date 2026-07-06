@@ -75,6 +75,7 @@ The file is a default layer, not a lock. Any flag overrides it for one run.
 | `observe` | boolean | Boot the observability dashboard by default. |
 | `onRateLimit` | `fusion` \| `passthrough` \| `fail` | Vendor rate-limit behavior. Defaults to `fusion`. |
 | `budgetUsd` | number | Optional session spend cap in gateway-observed USD. |
+| `k` | integer | Default step boundaries per panel member before aggregation (per-ensemble `k` overrides). See the ensemble field below. |
 | `portless` | boolean | Use stable portless URLs when available. Defaults to `true`. |
 | `port` | number \| null | Fixed gateway port, otherwise ephemeral. |
 
@@ -85,6 +86,7 @@ The file is a default layer, not a lock. Any flag overrides it for one run.
 | `panel` | array | Panel members. Omit it on `default` to use the built-in panel. |
 | `judgeModel` | string | Model used for judge synthesis. Defaults to the first panel model. |
 | `synthesizerModel` | string | Optional final-output model. Defaults to the judge on the Python side. |
+| `k` | integer | Step boundaries per member before aggregation. `1`: members are single completions over the caller's exact messages and tools, and their tool calls are proposals the judge adopts or rejects (the caller's harness executes the committed step). `n > 1`: members run bounded lookahead in managed worktree harnesses (agent-harness panels only). Unset: full rollouts, aggregated at final answers (the default). |
 
 ### Panel entries
 

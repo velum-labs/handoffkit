@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 
 import {
   createKernelFuseStepRunner,
-  runFusionPanels,
+  runPanelRound,
   runUnifiedHarnessE2E
 } from "@fusionkit/ensemble";
 import type {
@@ -72,6 +72,12 @@ export type GatewayEnsembleConfig = {
   /** The judge's provider model name (cost attribution + narration). */
   judgeModelName: string;
   synthesizerEndpointId?: string;
+  /**
+   * Step boundaries per panel member before aggregation: 1 = single-completion
+   * proposers over the caller's messages+tools (no managed harness); finite
+   * > 1 = bounded managed rollout (lookahead); unset = unbounded (today).
+   */
+  k?: number;
   prompts?: PromptOverrides;
 };
 
@@ -464,6 +470,9 @@ export async function startFusionStepGateway(input: {
     ensembleModelId,
     excludeModelIds,
     panelDepth,
+    tools,
+    toolChoice,
+    k,
     signal
   }) => {
     // The resolved ensemble's members fan out (the union is only the router
@@ -512,18 +521,25 @@ export async function startFusionStepGateway(input: {
     }
     emitGatewayStatus({ phase: "panel", models: panelModels.map((m) => m.id), turn });
     try {
+      // One entry point for every k: the ensemble owns the execution mechanism
+      // (k=1 proposal completions vs managed-harness rollouts); the gateway
+      // only assembles the option bag.
       const harnessSystem =
         config.panelIdentity === true ? harnessSystemFromMessages(messages) : undefined;
-      const wire = await runFusionPanels({
+      const wire = await runPanelRound({
         id: `panels_${sessionKey}_t${turn}`,
         repo: config.repo,
         outputRoot: join(config.outputRoot, sessionKey, `t${turn}`),
         prompt: task,
+        messages,
         models: panelModels,
         harness: config.harnesses[0] ?? "agent",
         fusionBackendUrl: config.fusionBackendUrl,
         trace,
         turn,
+        ...(tools !== undefined ? { tools } : {}),
+        ...(toolChoice !== undefined ? { toolChoice } : {}),
+        ...(k !== undefined ? { k } : {}),
         ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
@@ -583,6 +599,7 @@ export async function startFusionStepGateway(input: {
     ...(ensemble.synthesizerEndpointId !== undefined
       ? { synthesizerEndpointId: ensemble.synthesizerEndpointId }
       : {}),
+    ...(ensemble.k !== undefined ? { k: ensemble.k } : {}),
     ...(ensemble.prompts !== undefined
       ? {
           prompts: Object.fromEntries(

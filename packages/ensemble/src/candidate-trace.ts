@@ -47,6 +47,8 @@ export type CandidateOutcome = {
   finalOutput?: string;
   toolCallCount?: number;
   finishReason?: string;
+  /** A bounded rollout's terminal proposal (the captured k-th batch), if any. */
+  proposedCalls?: ReadonlyArray<{ name?: string; arguments_preview: string }>;
 };
 
 export type CandidateTracer = {
@@ -118,6 +120,10 @@ export function traceCandidate(ctx: CandidateTraceContext, input: CandidateTrace
           [ATTR.FUSION_FINAL_OUTPUT_PREVIEW]:
             outcome.finalOutput !== undefined && outcome.finalOutput.length > 0
               ? outcome.finalOutput.slice(0, 400)
+              : undefined,
+          [ATTR.FUSION_PROPOSED_CALLS]:
+            outcome.proposedCalls !== undefined && outcome.proposedCalls.length > 0
+              ? jsonAttr(outcome.proposedCalls)
               : undefined
         }
       });

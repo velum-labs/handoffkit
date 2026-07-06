@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from fusionkit_core.clients import ChatClient, ProviderCallError
-from fusionkit_core.config import ContextPolicy, PromptOverrides, SamplingConfig
+from fusionkit_core.config import ContextPolicy, FusionConfig, PromptOverrides, SamplingConfig
 from fusionkit_core.context import (
     ContextBudget,
     estimate_messages_tokens,
@@ -19,7 +19,9 @@ from fusionkit_core.context import (
     pack_trajectories,
 )
 from fusionkit_core.prompts import (
+    JUDGE_STEP_SYSTEM_PROMPT,
     JUDGE_SYSTEM_PROMPT,
+    SYNTHESIZER_STEP_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
     FusionIdentity,
     build_fuse_system,
@@ -41,6 +43,7 @@ from fusionkit_core.types import (
     ChatMessage,
     FusionAnalysis,
     ModelResponse,
+    PanelMode,
     StreamChunk,
     ToolCall,
     Trajectory,
@@ -145,6 +148,35 @@ class _PreparedTurn:
     diagnostics: _TurnDiagnostics = field(default_factory=_TurnDiagnostics)
 
 
+def judge_synthesizer_for(
+    config: FusionConfig,
+    *,
+    prompts: PromptOverrides | None = None,
+    panel_mode: PanelMode = "trajectory",
+) -> JudgeSynthesizer:
+    """The single construction point for a configured :class:`JudgeSynthesizer`.
+
+    Per-request ``prompts`` (a named ensemble's committed overrides) win per
+    field over the config-level overrides, which win over the built-in prompts
+    (the step-mode variants when ``panel_mode == "step"``). Every path that
+    needs a synthesizer — the engine's cached pair, the kernel's per-request
+    variants — goes through here, so prompt precedence and policy wiring exist
+    in exactly one place.
+    """
+    merged = PromptOverrides(
+        judge_system=(prompts.judge_system if prompts else None) or config.prompts.judge_system,
+        synthesizer_system=(prompts.synthesizer_system if prompts else None)
+        or config.prompts.synthesizer_system,
+    )
+    return JudgeSynthesizer(
+        merged,
+        harness_passthrough=config.harness_prompt_passthrough,
+        select_best=config.synthesis_select_best,
+        context_policy=config.context,
+        panel_mode=panel_mode,
+    )
+
+
 class JudgeSynthesizer:
     def __init__(
         self,
@@ -153,10 +185,20 @@ class JudgeSynthesizer:
         harness_passthrough: bool = True,
         select_best: bool = False,
         context_policy: ContextPolicy | None = None,
+        panel_mode: PanelMode = "trajectory",
     ) -> None:
         overrides = prompts or PromptOverrides()
-        self._judge_system = overrides.judge_system or JUDGE_SYSTEM_PROMPT
-        self._synthesizer_system = overrides.synthesizer_system or SYNTHESIZER_SYSTEM_PROMPT
+        # Step mode (finite-k panels): candidates are receding-horizon step
+        # proposals; the judge frames selection over proposed next steps and
+        # the synthesizer adopts exactly one candidate's tool-call batch
+        # verbatim (or answers in text). Committed prompt overrides still win.
+        step = panel_mode == "step"
+        self._judge_system = overrides.judge_system or (
+            JUDGE_STEP_SYSTEM_PROMPT if step else JUDGE_SYSTEM_PROMPT
+        )
+        self._synthesizer_system = overrides.synthesizer_system or (
+            SYNTHESIZER_STEP_SYSTEM_PROMPT if step else SYNTHESIZER_SYSTEM_PROMPT
+        )
         self._synthesizer_overridden = overrides.synthesizer_system is not None
         # When on, a coding-harness system prompt arriving in the conversation is
         # treated as the primary base for the judge/synthesizer (fusion framing

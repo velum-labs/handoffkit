@@ -139,6 +139,7 @@ export function gatewayEnsembleConfigs(ensembles: readonly EnsembleRunSpec[]): G
       judgeEndpointId: judgeSpec.id,
       judgeModelName: judgeSpec.model,
       ...(synthSpec !== undefined ? { synthesizerEndpointId: synthSpec.id } : {}),
+      ...(ensemble.k !== undefined ? { k: ensemble.k } : {}),
       ...(ensemble.prompts !== undefined && Object.keys(ensemble.prompts).length > 0
         ? { prompts: ensemble.prompts }
         : {})

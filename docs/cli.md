@@ -109,6 +109,7 @@ Shared flags (full list in `applyFusionOptions`):
 | `--subagents` / `--no-subagents` | Auto-provision one native sub-agent per ensemble in the launched tool (default on): Codex roles, Claude `--agents`, `.cursor/agents/` scaffolds, opencode agents. | core |
 | `--ide` | Cursor only: wire the Cursor IDE to the gateway via a local desktop proxy (no public tunnel). | WS6 |
 | `--expose` | `serve` only: publish the gateway on a public HTTPS Quick Tunnel with a required (auto-generated) bearer token — for clients that cannot reach loopback, e.g. Cursor BYOK. | core |
+| `--k N` | Step boundaries per panel member before aggregation (selected ensemble): 1 = single-completion proposers over the caller's exact messages+tools (tool calls become judged proposals), N > 1 = bounded managed lookahead (agent harness only), unset = full rollouts. | core |
 | `--on-rate-limit fusion\|passthrough\|fail` | Vendor rate-limit / credit handoff policy (default `fusion`). | WS5 |
 | `--budget USD` | Stop the session once it has spent this much (gateway-observed USD). | WS7 |
 | `--resume ID` | Resume a stored session by id or unique prefix. | WS4 |

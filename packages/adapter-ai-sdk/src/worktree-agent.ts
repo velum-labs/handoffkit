@@ -48,8 +48,15 @@ export type WorktreeAgentInput = {
   /** Model name to request from the endpoint. */
   model: string;
   apiKey?: string;
-  /** Max agent steps (tool round-trips) before stopping. Defaults to 12. */
-  maxSteps?: number;
+  /**
+   * Finite step-boundary budget (receding-horizon lookahead). A step boundary
+   * is one generation that emitted tool calls; a generation's parallel batch
+   * counts once and executes atomically. Batches 1..k-1 execute in the
+   * worktree; the k-th generation's batch is captured **unexecuted** as the
+   * candidate's terminal proposal. Unset = unbounded rollout (aggregate at
+   * the final answer, bounded only by the internal safety cap).
+   */
+  k?: number;
   /** Per-`run` command timeout in ms. Defaults to 120000. */
   commandTimeoutMs?: number;
   abortSignal?: AbortSignal;
@@ -223,6 +230,49 @@ function stringifyOutput(value: unknown): string {
   }
 }
 
+/**
+ * Sentinel returned instead of executing a tool call at the k-th step
+ * boundary: the call is the candidate's terminal *proposal* (judged, maybe
+ * adopted by the caller), never executed here. Sentinel observations are
+ * stripped from the captured trajectory so candidates end at their proposed
+ * `function_call` items.
+ */
+const PROPOSAL_SENTINEL = "[proposal boundary: call captured for judging, not executed]";
+
+/**
+ * Internal safety cap on an unbounded (k = ∞) rollout so a looping model
+ * cannot run forever. Not a tuning knob: bounded rollouts are expressed with
+ * `k`, never by adjusting this.
+ */
+const UNBOUNDED_ROLLOUT_CAP = 12;
+
+type AnyTool = { execute?: (args: never, options: never) => unknown };
+
+/**
+ * Wrap a toolset so calls at or past the k-th step boundary are captured as
+ * proposals instead of executing. `currentGeneration` reads the live 1-based
+ * generation ordinal (a generation's whole parallel batch shares one ordinal,
+ * so a batch is proposed atomically).
+ */
+function withProposalBoundary<T extends Record<string, AnyTool>>(
+  tools: T,
+  k: number,
+  currentGeneration: () => number
+): T {
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, entry]) => [
+      name,
+      {
+        ...entry,
+        execute: async (args: never, options: never): Promise<unknown> => {
+          if (currentGeneration() >= k) return PROPOSAL_SENTINEL;
+          return await entry.execute?.(args, options);
+        }
+      }
+    ])
+  ) as T;
+}
+
 /** Run one panel model as a real agent over the worktree and capture its trajectory. */
 export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<WorktreeAgentResult> {
   const identity = {
@@ -262,7 +312,16 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
     input.onStep?.(step);
   };
 
-  const tools = worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000);
+  // Finite k: 1-based generation ordinal; the batch of the k-th generation is
+  // captured unexecuted (the candidate's terminal proposal) and the loop stops
+  // at that boundary. Observations count nothing extra — every tool call
+  // conservatively marks a step boundary, per-generation, batch-atomic.
+  let generation = 1;
+  const rawTools = worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000);
+  const tools =
+    input.k !== undefined
+      ? withProposalBoundary(rawTools, input.k, () => generation)
+      : rawTools;
   callSpan?.marker("panel-model", "fusion.model_call.started", {
     ...identity,
     [ATTR.FUSION_SYSTEM_PROMPT]: AGENT_SYSTEM_PROMPT,
@@ -277,11 +336,15 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
       system: AGENT_SYSTEM_PROMPT,
       prompt: input.prompt,
       tools,
-      stopWhen: stepCountIs(input.maxSteps ?? 12),
+      stopWhen: stepCountIs(input.k ?? UNBOUNDED_ROLLOUT_CAP),
       onStepFinish: (step) => {
         for (const normalized of extractSteps(step.content as AgentContentPart[])) {
+          // Sentinel observations are bookkeeping, not evidence: the captured
+          // trajectory must end at the proposed function_call items.
+          if (normalized.type === "observation" && normalized.text === PROPOSAL_SENTINEL) continue;
           emitStep(push(normalized));
         }
+        generation += 1;
       },
       ...(input.abortSignal !== undefined ? { abortSignal: input.abortSignal } : {})
     });

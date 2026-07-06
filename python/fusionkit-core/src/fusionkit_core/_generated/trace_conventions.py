@@ -27,6 +27,7 @@ class ATTR:
     FUSION_BRANCH_NAME: Final[str] = "fusion.branch_name"
     FUSION_WORKTREE_PATH: Final[str] = "fusion.worktree_path"
     FUSION_STEP_COUNT: Final[str] = "fusion.step_count"
+    FUSION_PROPOSED_CALLS: Final[str] = "fusion.proposed_calls"
     FUSION_TOOL_CALL_COUNT: Final[str] = "fusion.tool_call_count"
     FUSION_FINISH_REASON: Final[str] = "fusion.finish_reason"
     FUSION_VERIFICATION_STATUS: Final[str] = "fusion.verification_status"

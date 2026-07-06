@@ -28,6 +28,7 @@
     "fusion.branch_name": { "type": "string", "sensitivity": "local", "description": "Git branch the candidate worked on." },
     "fusion.worktree_path": { "type": "string", "sensitivity": "local", "description": "Worktree directory the candidate worked in." },
     "fusion.step_count": { "type": "int", "sensitivity": "exportable", "description": "Number of trajectory steps the candidate produced." },
+    "fusion.proposed_calls": { "type": "string", "sensitivity": "local", "description": "JSON array of the candidate's terminal proposal (a bounded rollout's captured k-th batch): [{name, arguments_preview}]." },
     "fusion.tool_call_count": { "type": "int", "sensitivity": "exportable", "description": "Number of tool calls in the unit." },
     "fusion.finish_reason": { "type": "string", "sensitivity": "exportable", "description": "Model/harness finish reason." },
     "fusion.verification_status": { "type": "string", "sensitivity": "exportable", "description": "Candidate verification outcome: passed, failed, skipped." },
@@ -103,7 +104,7 @@
       "kind": "span",
       "component": "panel-model",
       "description": "One panel member's harness run for one turn.",
-      "attributes": ["fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "gen_ai.request.model", "fusion.turn", "fusion.branch_name", "fusion.worktree_path", "fusion.status", "fusion.step_count", "fusion.tool_call_count", "fusion.finish_reason", "fusion.verification_status", "fusion.final_output_preview"]
+      "attributes": ["fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "gen_ai.request.model", "fusion.turn", "fusion.branch_name", "fusion.worktree_path", "fusion.status", "fusion.step_count", "fusion.tool_call_count", "fusion.finish_reason", "fusion.verification_status", "fusion.final_output_preview", "fusion.proposed_calls"]
     },
     "fusion.judge": {
       "kind": "span",
