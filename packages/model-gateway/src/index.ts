@@ -123,6 +123,8 @@ export type {
   TokenUsage,
   TurnCost
 } from "./cost.js";
+export { defaultFusionGatewayLogger } from "./logger.js";
+export type { FusionGatewayLogger } from "./logger.js";
 export { MlxBackend } from "./mlx-backend.js";
 export type { MlxBackendOptions } from "./mlx-backend.js";
 export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";

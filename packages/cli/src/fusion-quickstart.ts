@@ -34,6 +34,7 @@ import {
   brandBanner,
   canPromptInteractively,
   confirm,
+  createPresenter,
   cyan,
   dim,
   glyph,
@@ -47,6 +48,7 @@ import {
 
 import { resolveSessionId } from "./commands/sessions.js";
 import { gatewaySetupSnippets, setGatewayChatter, setGatewayStatusSink } from "./gateway.js";
+import { requestLogGatewayLogger } from "./fusion/gateway-log.js";
 import { toolRegistry } from "./tools.js";
 import { createPortlessSession } from "./shared/portless.js";
 import { PreflightError, runPreflight } from "./shared/preflight.js";
@@ -452,11 +454,22 @@ export async function runFusion(
     ...(sessionJudgeModel !== undefined ? { judgeModel: sessionJudgeModel } : {})
   };
 
+  // The live boot checklist only renders on an interactive TTY when the caller
+  // did not supply its own log sink (tests/programmatic callers stay on the
+  // plain line-log path so their output is deterministic).
+  const useBootView = options.log === undefined && isInteractive();
+  // Environment asides ("portless not installed", ...) render dim on the rich
+  // TTY surface instead of as raw prefixed lines.
+  const aside = (line: string): void => {
+    if (useBootView) uiStream().write(`${dim(line.replace(/^fusion:\s*/, ""))}\n`);
+    else log(line);
+  };
+
   // Bring up the portless session (programmatic RouteStore). Portless is a
   // polish layer, never a hard requirement: when it is off, unavailable (Node <
   // 24), or its proxy isn't running, the session degrades to loopback URLs and
   // logs a one-line hint, so a fresh install always runs out of the box.
-  const portless = await createPortlessSession({ enabled: portlessEnabled(options), log });
+  const portless = await createPortlessSession({ enabled: portlessEnabled(options), log: aside });
 
   const judgeLabel = selected.judgeModel ?? options.judgeModel ?? models[0]?.model ?? "(first panel model)";
   const preambleLines = fusionPreambleLines({
@@ -472,10 +485,6 @@ export async function runFusion(
     ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
     ...(resumeId !== undefined ? { resumeId } : {})
   });
-  // The live boot checklist only renders on an interactive TTY when the caller
-  // did not supply its own log sink (tests/programmatic callers stay on the
-  // plain line-log path so their output is deterministic).
-  const useBootView = options.log === undefined && isInteractive();
   if (useBootView) {
     // The launch card: the one "you're about to spend money" screen — panel,
     // judge, budget, and session wiring in a single framed block.
@@ -505,10 +514,19 @@ export async function runFusion(
       }
     }
   };
+  // A last-words hook for long-running modes (`serve`): settle any live UI and
+  // print the session receipt before teardown starts. Must be synchronous-ish
+  // and never throw.
+  let onShutdown: (() => void) | undefined;
   let signalled = false;
   const onSignal = (): void => {
     if (signalled) return;
     signalled = true;
+    try {
+      onShutdown?.();
+    } catch {
+      // shutdown niceties must never block teardown
+    }
     // Never wedge on shutdown: if cleanup stalls (a child ignoring SIGTERM),
     // force-exit after a grace period.
     const forced = setTimeout(() => process.exit(1), 10_000);
@@ -542,6 +560,7 @@ export async function runFusion(
     }
     noticeCounts.set(line, (noticeCounts.get(line) ?? 0) + 1);
     if (passthroughActive) setTerminalTitle(`fusionkit · ${line}`);
+    else if (useBootView) requestLogGatewayLogger.warn(line);
     else log(`fusion: warning: ${line}`);
   };
 
@@ -749,6 +768,62 @@ export async function runFusion(
     }
   };
 
+  // Queued incident notices, printed once the screen is ours again (after the
+  // tool exits, or when `serve` shuts down). Best-effort by contract.
+  const printQueuedNotices = (): void => {
+    try {
+      if (noticeCounts.size === 0) return;
+      const noticeLines = [...noticeCounts.entries()].map(
+        ([line, count]) => (count > 1 ? `${line} (x${count})` : line)
+      );
+      if (useBootView) {
+        uiStream().write("\n");
+        for (const line of noticeLines) uiStream().write(`${yellow(glyph.warn())} ${line}\n`);
+        uiStream().write(`${dim(`incident log: ${join(logsDir, "incidents.log")}`)}\n`);
+      } else {
+        for (const line of noticeLines) log(`fusion: warning: ${line}`);
+      }
+    } catch {
+      // never let notices mask the exit
+    }
+  };
+
+  // The end-of-run receipt: what the fusion engine actually did (fused turns,
+  // spend, how to resume). Framed on the rich surface, plain lines otherwise.
+  // Best-effort by contract: a receipt failure must never change the exit code.
+  const printReceipt = (launchedAt: number): void => {
+    try {
+      const receiptSessions = sessionStore
+        .list()
+        .filter(
+          (session) =>
+            session.updatedAt >= launchedAt &&
+            (session.repo === undefined || session.repo === repo) &&
+            (session.tool === undefined || session.tool === tool)
+        );
+      const receipt = sessionReceiptLines(receiptSessions, {
+        elapsedMs: Date.now() - launchedAt,
+        tool
+      });
+      if (receipt.length === 0) return;
+      if (useBootView) {
+        // The receipt is the screen users judge the run by: frame it, and
+        // always end on the copy-pasteable resume command.
+        const body = receipt.map((line, index) => {
+          if (index === 0) return `${green(glyph.tick())} ${bold(line)}`;
+          const resume = line.match(/^resume this session: (.+)$/);
+          if (resume !== null) return `${dim("resume:")} ${cyan(resume[1] ?? "")}`;
+          return dim(line);
+        });
+        uiStream().write(`\n${box("fusion receipt", body)}\n`);
+      } else {
+        for (const line of receipt) log(`fusion: ${line}`);
+      }
+    } catch {
+      // never let the receipt mask the exit
+    }
+  };
+
   const prepareForPassthrough = (): void => {
     passthroughActive = true;
     setGatewayChatter(false);
@@ -788,30 +863,95 @@ export async function runFusion(
 
   try {
     if (tool === "serve") {
-      log("");
-      log(gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>"));
+      // Publish the gateway for clients that cannot reach loopback (Cursor
+      // BYOK goes through Cursor's backend, which blocks private networks).
+      // Tunnel the raw loopback port: a portless HTTPS name is not dialable
+      // by cloudflared. Started before the summary so its URL appears in it.
+      let tunnelUrl: string | undefined;
       if (options.expose === true) {
-        // Publish the gateway for clients that cannot reach loopback (Cursor
-        // BYOK goes through Cursor's backend, which blocks private networks).
-        // Tunnel the raw loopback port: a portless HTTPS name is not dialable
-        // by cloudflared.
         const tunnel = await startPublicTunnel({
           gatewayUrl: `http://127.0.0.1:${stack.gatewayPort}`,
-          log
+          log: aside
         });
         disposers.push(() => tunnel.close());
-        log("");
-        log(cursorInstructions(
-          tunnel.url,
-          modelLabel,
-          ensembles.map((ensemble) => fusionModelId(ensemble.name)),
-          authToken
-        ));
-        log("");
-        log(`Public gateway (bearer token required): ${tunnel.url}/v1`);
+        tunnelUrl = tunnel.url;
       }
-      log("");
-      log(`${green(glyph.tick())} ${bold("gateway is running")} ${dim("— point any tool at it, or Ctrl+C to stop")}`);
+
+      // The gateway summary: everything a client needs on one framed screen.
+      const fusedIds = ensembles.map((ensemble) => fusionModelId(ensemble.name));
+      const labelWidth = Math.max("anthropic".length, tunnelUrl !== undefined ? "public".length : 0);
+      const row = (label: string, value: string): string => `${dim(label.padEnd(labelWidth))}  ${value}`;
+      const gatewayRows = [
+        row("openai", `${cyan(`${stack.fusionUrl}/v1`)} ${dim("(chat + Responses)")}`),
+        row("anthropic", `${cyan(stack.fusionUrl)} ${dim("(Claude appends /v1/messages)")}`),
+        ...(tunnelUrl !== undefined
+          ? [row("public", `${cyan(`${tunnelUrl}/v1`)} ${dim("(bearer token required)")}`)]
+          : []),
+        row("models", fusedIds.join(dim(" · "))),
+        row("logs", dim(logsDir))
+      ];
+      if (useBootView) {
+        uiStream().write(`\n${box("fusion gateway", gatewayRows)}\n\n`);
+        uiStream().write(`${gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>")}\n`);
+        if (tunnelUrl !== undefined) {
+          uiStream().write(`\n${cursorInstructions(tunnelUrl, modelLabel, fusedIds, authToken)}\n`);
+        }
+        uiStream().write("\n");
+
+        // The serve cockpit runs like a dev server: the timestamped request
+        // log (fusion/gateway-log.ts) narrates every fused turn inline, the
+        // terminal title carries the phase + running spend, and Ctrl+C prints
+        // queued incidents plus the session receipt before exiting.
+        const servedAt = Date.now();
+        setGatewayStatusSink((gatewayStatus) => {
+          switch (gatewayStatus.phase) {
+            case "panel":
+              setTerminalTitle(
+                `fusionkit serve · fusing ${gatewayStatus.models.join(" + ")} (turn ${gatewayStatus.turn})`
+              );
+              break;
+            case "judging":
+              setTerminalTitle(`fusionkit serve · judging (turn ${gatewayStatus.turn})`);
+              break;
+            case "idle": {
+              const spend = spendSoFar();
+              setTerminalTitle(
+                spend.turns > 0
+                  ? `fusionkit serve · ${spend.turns} turn${spend.turns === 1 ? "" : "s"} · ${formatUsd(spend.usd)} spent`
+                  : "fusionkit serve"
+              );
+              maybeWarnBudget(spend.usd);
+              break;
+            }
+            default: {
+              const exhaustive: never = gatewayStatus;
+              throw new Error(`unknown gateway status: ${String(exhaustive)}`);
+            }
+          }
+        });
+        setTerminalTitle("fusionkit serve");
+        uiStream().write(
+          `${dim(new Date().toTimeString().slice(0, 8))} ${cyan(glyph.arrow())} ${bold("serving")} ${dim("— request log below · Ctrl+C to stop")}\n`
+        );
+        onShutdown = () => {
+          printQueuedNotices();
+          printReceipt(servedAt);
+          uiStream().write(`${green(glyph.tick())} ${bold("gateway stopped")}\n`);
+        };
+      } else {
+        log("");
+        for (const line of gatewayRows) log(line);
+        log("");
+        log(gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>"));
+        if (tunnelUrl !== undefined) {
+          log("");
+          log(cursorInstructions(tunnelUrl, modelLabel, fusedIds, authToken));
+          log("");
+          log(`Public gateway (bearer token required): ${tunnelUrl}/v1`);
+        }
+        log("");
+        log(`${green(glyph.tick())} ${bold("gateway is running")} ${dim("— point any tool at it, or Ctrl+C to stop")}`);
+      }
       await new Promise<void>(() => {
         /* run until interrupted */
       });
@@ -854,57 +994,10 @@ export async function runFusion(
     // Incidents that happened while the agent owned the terminal (an OOM-killed
     // panel server, a dead router): the tool could only show a bare stream
     // error, so explain what actually happened now that we have the screen back.
-    // Best-effort: a notice failure must never change the exit code.
-    try {
-      if (noticeCounts.size > 0) {
-        const noticeLines = [...noticeCounts.entries()].map(
-          ([line, count]) => (count > 1 ? `${line} (x${count})` : line)
-        );
-        if (useBootView) {
-          uiStream().write("\n");
-          for (const line of noticeLines) uiStream().write(`${yellow(glyph.warn())} ${line}\n`);
-          uiStream().write(`${dim(`incident log: ${join(logsDir, "incidents.log")}`)}\n`);
-        } else {
-          for (const line of noticeLines) log(`fusion: warning: ${line}`);
-        }
-      }
-    } catch {
-      // never let notices mask the tool's exit
-    }
+    printQueuedNotices();
     // The end-of-run receipt: the engine worked invisibly while the agent owned
     // the terminal — this is the one place we say what it actually did.
-    // Best-effort: a receipt failure must never change the exit code.
-    try {
-      const receiptSessions = sessionStore
-        .list()
-        .filter(
-          (session) =>
-            session.updatedAt >= launchedAt &&
-            (session.repo === undefined || session.repo === repo) &&
-            (session.tool === undefined || session.tool === tool)
-        );
-      const receipt = sessionReceiptLines(receiptSessions, {
-        elapsedMs: Date.now() - launchedAt,
-        tool
-      });
-      if (receipt.length > 0) {
-        if (useBootView) {
-          // The receipt is the screen users judge the run by: frame it, and
-          // always end on the copy-pasteable resume command.
-          const body = receipt.map((line, index) => {
-            if (index === 0) return `${green(glyph.tick())} ${bold(line)}`;
-            const resume = line.match(/^resume this session: (.+)$/);
-            if (resume !== null) return `${dim("resume:")} ${cyan(resume[1] ?? "")}`;
-            return dim(line);
-          });
-          uiStream().write(`\n${box("fusion receipt", body)}\n`);
-        } else {
-          for (const line of receipt) log(`fusion: ${line}`);
-        }
-      }
-    } catch {
-      // never let the receipt mask the tool's exit
-    }
+    printReceipt(launchedAt);
     return code;
   } finally {
     await cleanup();

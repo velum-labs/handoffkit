@@ -54,6 +54,12 @@ import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "
 import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
 import type { PromptOverrides } from "./fusion-config.js";
+import {
+  logTurnCandidates,
+  logTurnFailed,
+  logTurnStart,
+  requestLogGatewayLogger
+} from "./fusion/gateway-log.js";
 import { toolRegistry } from "./tools.js";
 
 /**
@@ -194,15 +200,10 @@ function messageText(content: unknown): string {
   return "";
 }
 
-// Once an interactive coding agent owns the terminal, the per-turn panel chatter
-// would corrupt its full-screen TUI. The launcher flips this off before handing
-// over; trace events (for --observe) keep flowing regardless.
-let gatewayChatter = true;
-
-/** Enable/disable the gateway's per-turn stderr chatter (default on). */
-export function setGatewayChatter(enabled: boolean): void {
-  gatewayChatter = enabled;
-}
+// The per-turn request log lives in fusion/gateway-log.ts (dev-server-style
+// timestamped lines shared by the CLI and the engine's injected logger). It is
+// re-exported here so launchers keep flipping chatter through this module.
+export { setGatewayChatter } from "./fusion/gateway-log.js";
 
 /**
  * A phase of a fused turn, for out-of-band status (e.g. the terminal title)
@@ -513,15 +514,14 @@ export async function startFusionStepGateway(input: {
         ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
       })
     });
-    if (gatewayChatter) {
-      const excluded =
-        excludeModelIds !== undefined && excludeModelIds.length > 0
-          ? ` (excluding ${excludeModelIds.join(", ")} after a vendor rate-limit)`
-          : "";
-      uiStream().write(
-        `fusion: running panel (${panelModels.map((m) => m.id).join(", ")}) for session ${sessionKey}${excluded}...\n`
-      );
-    }
+    logTurnStart({
+      models: panelModels.map((m) => m.id),
+      sessionKey,
+      turn,
+      ...(excludeModelIds !== undefined && excludeModelIds.length > 0
+        ? { excluded: excludeModelIds }
+        : {})
+    });
     emitGatewayStatus({ phase: "panel", models: panelModels.map((m) => m.id), turn });
     try {
       // One entry point for every k: the ensemble owns the execution mechanism
@@ -559,16 +559,14 @@ export async function startFusionStepGateway(input: {
         ...(driversEnabled ? { resumeCursors: resumeCursorsFor(sessionKey) } : {})
       });
       const trajectories = normalizeWireTrajectories(wire);
-      if (gatewayChatter) {
-        uiStream().write(
-          `fusion: panel produced ${trajectories.length} candidate trajectories ` +
-            `(${trajectories.map((t) => `${t.model_id}:${t.status}`).join(", ")})\n`
-        );
-      }
+      logTurnCandidates({
+        turn,
+        candidates: trajectories.map((t) => ({ modelId: t.model_id, status: t.status }))
+      });
       emitGatewayStatus({ phase: "judging", candidates: trajectories.length, turn });
       return trajectories;
     } catch (error) {
-      uiStream().write(`fusion: panel run failed: ${error instanceof Error ? error.message : String(error)}\n`);
+      logTurnFailed({ turn, message: error instanceof Error ? error.message : String(error) });
       emitGatewayStatus({ phase: "idle" });
       throw error;
     }
@@ -642,7 +640,10 @@ export async function startFusionStepGateway(input: {
     ...(config.judgeModel !== undefined ? { costModel: config.judgeModel } : {}),
     ...(config.sessionStore !== undefined ? { store: config.sessionStore } : {}),
     ...(config.resumeId !== undefined ? { resumeId: config.resumeId } : {}),
-    ...(config.sessionMeta !== undefined ? { sessionMeta: config.sessionMeta } : {})
+    ...(config.sessionMeta !== undefined ? { sessionMeta: config.sessionMeta } : {}),
+    // Engine log lines (cost meter, budget stops, stream failures) land on the
+    // CLI's timestamped request log instead of the engine's flat stderr default.
+    logger: requestLogGatewayLogger
     // judge_model is intentionally NOT forwarded here: `config.judgeModel` is the
     // provider model name, but the router (and trajectories:fuse) route by endpoint
     // id. The Python fuse path already resolves the configured judge endpoint via
