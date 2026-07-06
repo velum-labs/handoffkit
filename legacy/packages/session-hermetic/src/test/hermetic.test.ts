@@ -18,7 +18,10 @@ let repoDir: string;
 before(async () => {
   stack = await startStack({
     pool: POOL,
-    startRunner: true,
+    // Every run in this file is claimed manually via stack.runOnce(); a
+    // background polling runner would race it for the claim and make
+    // runOnce() return undefined (flaky under CI load).
+    startRunner: false,
     backends: [hermeticBackend()],
     policy: (policy) => {
       policy.agents.allow = ["command"];

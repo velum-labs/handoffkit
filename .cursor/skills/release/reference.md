@@ -50,12 +50,21 @@ CHANGELOG, propagated pins) — never `git add -A`. To add more: set
 
 ## Action types
 
-`propagate-pin` -> `bump` -> `changelog` (handoffkit only) -> `commit` -> `push`
--> (`gh-release` | `tag` + `push-tag`) -> `wait-workflow`.
+`propagate-pin` -> `bump` -> `changelog` (units with a `changelog` file in the
+topology) -> `preflight` (units with a `preflight` command) -> `commit` ->
+`push` -> (`gh-release` | `tag` + `push-tag`) -> `wait-workflow`.
 
+- `changelog` promotes the `## Unreleased` section of the unit's changelog to
+  `## <version> - <date>` (fresh empty Unreleased left on top; fallback stub +
+  warning when nothing accumulated) and regenerates the docs changelog page
+  (`apps/docs/content/docs/changelog.mdx`) in the same commit.
+- `preflight` runs the unit's declared command (e.g. `pnpm check`,
+  `uv build --all-packages`) after the bump and before the commit; a failure
+  aborts the unit with nothing pushed.
 - `gh-release` is used for units whose publish workflow is gated on
   `release: published` (handoffkit, cursorkit, fusionkit-pypi, mlx-lm). The
-  release is created already-published, which triggers the workflow.
+  release is created already-published, which triggers the workflow. Its body
+  is the promoted changelog section when the unit has one.
 - `tag` + `push-tag` is used for `fusionkit-protocol`, whose workflow triggers
   on a `model-fusion-protocol-v*` tag push.
 - `wait-workflow` polls `gh run list`/`gh run watch` and blocks dependents until
@@ -84,6 +93,11 @@ updates that consumer's pin before committing:
   `scripts/check-repo.mjs`.
 - cursorkit: `package.json` dependencies/devDependencies and the
   `modelFusionProtocol.version` field.
+
+When the pin changes in a repo with a `pnpm-lock.yaml`, the lockfile is
+refreshed with `pnpm install --lockfile-only` (retrying while the new protocol
+version propagates to npm) so the publish workflow's `--frozen-lockfile`
+install cannot fail on a stale lockfile.
 
 A consumer that is not being released shows as `pin-lag` in the plan; bump it in
 the same run to ship the new contract.

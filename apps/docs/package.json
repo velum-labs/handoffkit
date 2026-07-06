@@ -10,8 +10,8 @@
   },
   "scripts": {
     "dev": "portless",
-    "dev:app": "fumadocs-mdx && next dev -p 4318",
-    "build": "fumadocs-mdx && next build",
+    "dev:app": "node ../../scripts/sync-docs-changelog.mjs && fumadocs-mdx && next dev -p 4318",
+    "build": "node ../../scripts/sync-docs-changelog.mjs && fumadocs-mdx && next build",
     "start": "next start -p 4318",
     "postinstall": "fumadocs-mdx",
     "generate:openapi": "node --import tsx scripts/generate-openapi.ts",
