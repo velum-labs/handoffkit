@@ -85,18 +85,18 @@ test("translate maps the full agent-mode payload", () => {
     },
     { role: "tool", tool_call_id: "call_1", content: "print('hi')" }
   ]);
-  // Responses-only fields must never survive translation.
+  // Responses-only fields must never survive translation (stream_options is re-added for metering).
   for (const stripped of [
     "input",
     "store",
     "include",
     "reasoning",
     "text",
-    "stream_options",
     "max_output_tokens"
   ]) {
     assert.equal(stripped in translated, false, `${stripped} must be stripped`);
   }
+  assert.deepEqual(translated.stream_options, { include_usage: true });
 });
 
 test("translate nests flat function tools and synthesizes custom tool schemas", () => {
@@ -207,15 +207,17 @@ test("translate turns a string input into a user message", () => {
   assert.deepEqual(translated.messages, [{ role: "user", content: "just text" }]);
 });
 
-test("translate passes a messages body through unchanged", () => {
+test("translate passes a messages body through and ensures streamed usage metering", () => {
   const body = {
     model: "m",
     messages: [{ role: "user", content: "hi" }],
-    stream: false,
-    stream_options: { include_usage: true }
+    stream: true
   };
 
-  assert.deepEqual(translateCursorRequest(body), body);
+  assert.deepEqual(translateCursorRequest(body), {
+    ...body,
+    stream_options: { include_usage: true }
+  });
 });
 
 test("translate yields empty messages when both messages and input are absent", () => {

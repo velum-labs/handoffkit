@@ -19,7 +19,8 @@
  * estimates. Provider-reported spend (for example OpenRouter generation
  * metadata) wins; configured/static pricing is treated as an estimate fallback.
  */
-import { DEFAULT_MODEL_PRICING as REGISTRY_MODEL_PRICING } from "@fusionkit/registry";
+import { DEFAULT_MODEL_PRICING as REGISTRY_MODEL_PRICING, PRICING_ALIASES } from "@fusionkit/registry";
+import { randomId } from "@fusionkit/runtime-utils";
 
 /** USD price for a model, per 1,000,000 tokens. */
 export type ModelPricing = {
@@ -85,6 +86,8 @@ export type TurnCost = {
   localComputeCostUsd?: number;
   unknownUsage: boolean;
   unknownCost: boolean;
+  /** True when only prompt or completion tokens were available for pricing. */
+  partialUsage?: boolean;
   currency: string;
 };
 
@@ -125,14 +128,21 @@ export type SessionCost = {
  * Built-in approximate list prices (USD / 1M tokens) for the default panel and
  * common judges, from the pricing registry (spec/registry/pricing.json,
  * refreshed by scripts/generate-pricing.mjs). Used when the gateway is not
- * given explicit pricing. Matched by longest-prefix so a dated model id
- * (`gpt-5.5-2026-01`) still resolves. These are coarse defaults; thread real
- * pricing through the config to override.
+ * given explicit pricing. Resolved by exact id, then {@link PRICING_ALIASES};
+ * unknown ids are flagged `unknownCost`. Thread real pricing through config to override.
  */
 export const DEFAULT_MODEL_PRICING: Readonly<Record<string, ModelPricing>> =
   REGISTRY_MODEL_PRICING;
 
 const DEFAULT_CURRENCY = "USD";
+const loggedUnknownPricing = new Set<string>();
+
+function logUnknownPricing(model: string): void {
+  const key = model.toLowerCase();
+  if (loggedUnknownPricing.has(key)) return;
+  loggedUnknownPricing.add(key);
+  process.stderr.write(`no price for ${model}; spend shown as unknown\n`);
+}
 
 function numberAt(record: Record<string, unknown>, key: string): number | undefined {
   const value = record[key];
@@ -187,34 +197,45 @@ export function parseUsageFromSse(text: string): TokenUsage | undefined {
 }
 
 /**
- * Resolve pricing for a model: exact match first, then the longest matching
- * prefix key (so `gpt-5.5-2026-01` resolves via `gpt-5.5`). `overrides` win over
- * the built-in table.
+ * Resolve pricing for a model: exact match, then alias table. `overrides` win over
+ * the built-in table. Unknown ids return `undefined` (never prefix-matched).
  */
 export function lookupPricing(
   model: string,
   overrides: Readonly<Record<string, ModelPricing>> = {}
 ): ModelPricing | undefined {
   const table = { ...DEFAULT_MODEL_PRICING, ...overrides };
-  return lookupPricingIn(model, table);
+  return lookupPricingIn(model, table, PRICING_ALIASES);
+}
+
+function resolveAlias(
+  model: string,
+  aliases: Readonly<Record<string, string>>
+): string | undefined {
+  const key = model.toLowerCase();
+  for (const [alias, canonical] of Object.entries(aliases)) {
+    if (alias.toLowerCase() === key) return canonical;
+  }
+  return undefined;
 }
 
 function lookupPricingIn(
   model: string,
-  table: Readonly<Record<string, ModelPricing>>
+  table: Readonly<Record<string, ModelPricing>>,
+  aliases: Readonly<Record<string, string>> = PRICING_ALIASES
 ): ModelPricing | undefined {
   const key = model.toLowerCase();
   for (const [candidate, pricing] of Object.entries(table)) {
     if (candidate.toLowerCase() === key) return pricing;
   }
-  let best: { length: number; pricing: ModelPricing } | undefined;
-  for (const [candidate, pricing] of Object.entries(table)) {
-    const normalized = candidate.toLowerCase();
-    if (key.startsWith(normalized) && (best === undefined || normalized.length > best.length)) {
-      best = { length: normalized.length, pricing };
+  const canonical = resolveAlias(model, aliases);
+  if (canonical !== undefined) {
+    for (const [candidate, pricing] of Object.entries(table)) {
+      if (candidate.toLowerCase() === canonical.toLowerCase()) return pricing;
     }
   }
-  return best?.pricing;
+  logUnknownPricing(model);
+  return undefined;
 }
 
 function meterTurnWithPricing(
@@ -224,24 +245,36 @@ function meterTurnWithPricing(
 ): TurnCost {
   const resolved = usage ?? {};
   const unknownUsage = usage === undefined;
-  const providerCostUsd = unknownUsage ? undefined : estimateCost(resolved, pricing);
+  const estimate = unknownUsage ? undefined : estimateCost(resolved, pricing);
+  const providerCostUsd = estimate?.costUsd;
   return {
     model,
     usage: resolved,
     ...(providerCostUsd !== undefined ? { costUsd: providerCostUsd, providerCostUsd } : {}),
     unknownUsage,
     unknownCost: providerCostUsd === undefined,
+    ...(estimate?.partialUsage === true ? { partialUsage: true } : {}),
     currency: pricing?.currency ?? DEFAULT_CURRENCY
   };
 }
 
 /** Compute the USD cost of `usage` under `pricing`, or `undefined` if not derivable. */
-export function estimateCost(usage: TokenUsage, pricing: ModelPricing | undefined): number | undefined {
+export function estimateCost(
+  usage: TokenUsage,
+  pricing: ModelPricing | undefined
+): { costUsd: number; partialUsage: boolean } | undefined {
   if (pricing === undefined) return undefined;
-  if (usage.promptTokens === undefined || usage.completionTokens === undefined) return undefined;
-  const input = (usage.promptTokens * pricing.inputPer1mTokens) / 1_000_000;
-  const output = (usage.completionTokens * pricing.outputPer1mTokens) / 1_000_000;
-  return input + output;
+  const hasPrompt = usage.promptTokens !== undefined;
+  const hasCompletion = usage.completionTokens !== undefined;
+  if (!hasPrompt && !hasCompletion) return undefined;
+  const promptTokens = usage.promptTokens ?? 0;
+  const completionTokens = usage.completionTokens ?? 0;
+  const input = (promptTokens * pricing.inputPer1mTokens) / 1_000_000;
+  const output = (completionTokens * pricing.outputPer1mTokens) / 1_000_000;
+  return {
+    costUsd: input + output,
+    partialUsage: !hasPrompt || !hasCompletion
+  };
 }
 
 export function estimateLocalComputeCost(input: LocalComputeUsage | undefined): number | undefined {
@@ -302,7 +335,7 @@ export function meterCall(input: {
     input.providerCost.costUsd === undefined &&
     input.providerCost.lookupStatus !== undefined;
   const pricing = providerLookupFailed
-    ? lookupPricingIn(input.model, input.pricing ?? {})
+    ? lookupPricingIn(input.model, input.pricing ?? {}, PRICING_ALIASES)
     : lookupPricing(input.model, input.pricing ?? {});
   const tokenCost = meterTurnWithPricing(input.model, input.usage, pricing);
   const exactProviderCostUsd =
@@ -310,10 +343,7 @@ export function meterCall(input: {
   const providerCostUsd = exactProviderCostUsd ?? tokenCost.providerCostUsd;
   const localComputeCostUsd =
     input.localCompute?.estimatedCostUsd ?? estimateLocalComputeCost(input.localCompute);
-  const costUsd =
-    providerCostUsd !== undefined || localComputeCostUsd !== undefined
-      ? (providerCostUsd ?? 0) + (localComputeCostUsd ?? 0)
-      : undefined;
+  const costUsd = providerCostUsd;
   const providerCost =
     input.providerCost !== undefined
       ? providerLookupFailed && providerCostUsd !== undefined
@@ -333,7 +363,7 @@ export function meterCall(input: {
         : undefined;
   return {
     ...tokenCost,
-    entryId: `${input.stage}_${input.turn ?? "na"}_${Math.random().toString(36).slice(2, 10)}`,
+    entryId: randomId(8, `${input.stage}_${input.turn ?? "na"}_`),
     stage: input.stage,
     recordedAt: input.recordedAt ?? Date.now(),
     ...(input.turn !== undefined ? { turn: input.turn } : {}),
@@ -345,7 +375,7 @@ export function meterCall(input: {
     ...(costUsd !== undefined ? { costUsd } : {}),
     ...(providerCostUsd !== undefined ? { providerCostUsd } : {}),
     ...(localComputeCostUsd !== undefined ? { localComputeCostUsd } : {}),
-    unknownCost: costUsd === undefined,
+    unknownCost: providerCostUsd === undefined,
     currency: tokenCost.currency
   };
 }
@@ -373,9 +403,10 @@ export function addTurnCost(total: SessionCost, turn: TurnCost): SessionCost {
   const totalTokens =
     turn.usage.totalTokens ??
     (turn.usage.promptTokens ?? 0) + (turn.usage.completionTokens ?? 0);
+  const providerUsd = turn.providerCostUsd ?? turn.costUsd ?? 0;
   return {
-    totalUsd: total.totalUsd + (turn.costUsd ?? 0),
-    providerUsd: (total.providerUsd ?? total.totalUsd) + (turn.providerCostUsd ?? turn.costUsd ?? 0),
+    totalUsd: total.totalUsd + providerUsd,
+    providerUsd: (total.providerUsd ?? 0) + providerUsd,
     localComputeUsd: total.localComputeUsd ?? 0,
     localActiveMs: total.localActiveMs ?? 0,
     promptTokens: total.promptTokens + (turn.usage.promptTokens ?? 0),
@@ -396,8 +427,8 @@ export function addLedgerEntry(total: SessionCost, entry: CostLedgerEntry): Sess
   const providerUsd = entry.providerCostUsd ?? 0;
   const localUsd = entry.localComputeCostUsd ?? 0;
   return {
-    totalUsd: total.totalUsd + (entry.costUsd ?? 0),
-    providerUsd: (total.providerUsd ?? total.totalUsd) + providerUsd,
+    totalUsd: total.totalUsd + providerUsd,
+    providerUsd: (total.providerUsd ?? 0) + providerUsd,
     localComputeUsd: (total.localComputeUsd ?? 0) + localUsd,
     localActiveMs:
       (total.localActiveMs ?? 0) + (entry.localCompute?.activeInferenceMs ?? 0),

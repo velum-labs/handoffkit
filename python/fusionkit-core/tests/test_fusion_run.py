@@ -144,8 +144,17 @@ async def test_tracked_panel_run_completes_with_failed_model_call(tmp_path) -> N
         for event in store.list_events(result.run_id)
         if event.event_type == "model_call_recorded"
     ]
-    statuses = {record.model: record.status for record in records}
-    assert statuses == {"fast": "succeeded", "broken": "failed"}
+    # Every model call is a ledger entry, tagged with its role: the two panel
+    # members plus the judge and synthesizer turns (both served by "judge").
+    by_role_and_model = {
+        ((record.metadata or {}).get("role"), record.model): record.status for record in records
+    }
+    assert by_role_and_model == {
+        ("panel", "fast"): "succeeded",
+        ("panel", "broken"): "failed",
+        ("judge", "judge"): "succeeded",
+        ("synthesizer", "judge"): "succeeded",
+    }
     broken_record = next(record for record in records if record.model == "broken")
     assert broken_record.error is not None
     assert broken_record.error.kind == "provider_error"

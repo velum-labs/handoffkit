@@ -240,8 +240,16 @@ export function chatTemplateKwargsForModel(
 export type RegistryModelPricing = { inputPer1mTokens: number; outputPer1mTokens: number };
 
 /**
+ * Explicit dated/variant model id → canonical priced id. Lookup is exact → alias →
+ * unknown; prefix matching is never used.
+ */
+export const PRICING_ALIASES: Readonly<Record<string, string>> = (
+  REGISTRY.pricing.aliases ?? {}
+) as Record<string, string>;
+
+/**
  * Default per-model list prices (USD / 1M tokens), manual overrides merged over
- * the generated table. Matched by longest prefix by consumers.
+ * the generated table. Consumers resolve via exact id, then {@link PRICING_ALIASES}.
  */
 export const DEFAULT_MODEL_PRICING: Readonly<Record<string, RegistryModelPricing>> = {
   ...(REGISTRY.pricing.models as Record<string, RegistryModelPricing>),

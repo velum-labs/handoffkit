@@ -47,6 +47,55 @@ def test_chat_completions_single_mode(tmp_path) -> None:
     assert run_response.json()["state"] == "completed"
 
 
+def test_chat_completions_fused_response_sums_usage_across_all_roles(tmp_path) -> None:
+    # Acceptance (WS4): the plain non-streaming fused response must carry real
+    # usage — the sum of every ledgered model call (panel + judge + synthesizer)
+    # — instead of a fabricated null block. FakeModelClient reports
+    # completion_tokens = word count and prompt_tokens = 0.
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="m1", model="fake-m1", base_url="http://localhost:8101"),
+            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8201"),
+        ],
+        default_model="m1",
+        judge_model="judge",
+        synthesizer_model="judge",
+        default_mode="panel",
+        panel_models=["m1"],
+    )
+    app = create_app(
+        config,
+        clients={
+            "m1": FakeModelClient("m1", ["candidate answer text"]),  # 3 tokens
+            "judge": FakeModelClient(
+                "judge",
+                [
+                    # Judge analysis: a single unbroken JSON token (1 token).
+                    '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
+                    '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
+                    "fused final answer",  # synthesizer turn: 3 tokens
+                ],
+            ),
+        },
+        run_store_path=tmp_path / "runs",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "compare"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["choices"][0]["message"]["content"] == "fused final answer"
+    assert body["usage"]["prompt_tokens"] == 0
+    assert body["usage"]["completion_tokens"] == 3 + 1 + 3
+
+
 def test_models_endpoint_remains_openai_compatible(tmp_path) -> None:
     app = create_app(_config(), run_store_path=tmp_path / "runs")
     client = TestClient(app)

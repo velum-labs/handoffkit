@@ -137,10 +137,16 @@ async def test_fuse_carries_provider_cost_from_verbatim_judge_selection() -> Non
     )
 
     assert result.response.content == "OK"
-    assert result.response.provider_cost is not None
-    assert result.response.provider_cost.cost_usd == 0.0042
-    assert result.response.provider_cost.generation_id == "gen_judge"
-    assert result.response.usage.total_tokens == 15
+    # The fabricated verbatim response spends nothing itself; the step's cost
+    # is the judge's, surfaced via the turn-level aggregates and the exposed
+    # judge_response (never folded into the synthesizer's response).
+    assert result.synthesizer_called is False
+    assert result.judge_response is not None
+    turn_cost = result.turn_provider_cost()
+    assert turn_cost is not None
+    assert turn_cost.cost_usd == 0.0042
+    assert turn_cost.generation_id == "gen_judge"
+    assert result.turn_usage().total_tokens == 15
 
 
 @pytest.mark.asyncio

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -33,6 +34,22 @@ export const CANDIDATE_ISOLATION_DEFAULTS = {
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Generate a compact random id (hex, no dashes) with an optional prefix. */
+export function randomId(length = 10, prefix?: string): string {
+  const id = randomUUID().replace(/-/g, "").slice(0, length);
+  return prefix !== undefined ? `${prefix}${id}` : id;
+}
+
+/**
+ * Rough token estimate from text (and optional tool/JSON payload strings):
+ * minimum 1 token, ceil(chars / 4).
+ */
+export function estimateTokens(...texts: string[]): number {
+  let chars = 0;
+  for (const text of texts) chars += text.length;
+  return Math.max(1, Math.ceil(chars / 4));
 }
 
 export function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {

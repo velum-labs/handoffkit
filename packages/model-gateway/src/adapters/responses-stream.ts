@@ -1,3 +1,4 @@
+import { randomId } from "@fusionkit/runtime-utils";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 
 const ENCODER = new TextEncoder();
@@ -6,10 +7,6 @@ type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
 type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; provider_cost?: unknown };
 type ResponsesToolKind = "function" | "custom" | "typed";
 type ResponsesToolRegistry = ReadonlyMap<string, { kind: ResponsesToolKind; namespace?: string }>;
-
-function randomId(): string {
-  return Math.random().toString(36).slice(2, 12);
-}
 
 function typedToolArguments(args: string): unknown {
   if (args.trim().length === 0) return {};

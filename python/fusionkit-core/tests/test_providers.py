@@ -351,6 +351,37 @@ async def test_native_run_cost_budget_violation_fails_run(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_cost_budget_aborts_mid_turn_after_judge_before_synthesizer(tmp_path) -> None:
+    # Acceptance (WS4): the max_cost budget is re-checked at the judge ->
+    # synthesizer phase boundary, aborting before the synthesizer spends more.
+    # With $1/token output pricing: panel = $3 (3 words), judge = $1 (one JSON
+    # token) — a $3.50 budget passes the after-panel check and trips after the
+    # judge, so the synthesizer never runs.
+    manager = _manager(
+        tmp_path,
+        budget=RunBudget(max_cost=3.5),
+        pricing=CostMetadata(input_per_1m_tokens=1_000_000, output_per_1m_tokens=1_000_000),
+    )
+
+    result = await manager.create_and_run(_request("budget_mid_turn", mode="panel"))
+
+    assert isinstance(result, RunInspection)
+    assert result.state == "failed"
+    assert result.terminal_error is not None
+    assert result.terminal_error.terminal_reason == "budget_exceeded:max_cost"
+    # spend-so-far rides on the structured error.
+    assert result.terminal_error.message is not None
+    assert "4" in result.terminal_error.message
+    store = FileSystemRunStore(tmp_path / "runs")
+    roles = [
+        event.payload["model_call_record"]["metadata"].get("role")
+        for event in store.list_events(result.run_id)
+        if event.event_type == "model_call_recorded"
+    ]
+    assert roles == ["panel", "judge"]
+
+
+@pytest.mark.asyncio
 async def test_native_run_wall_clock_budget_violation_fails_run(tmp_path) -> None:
     manager = _manager(tmp_path, budget=RunBudget(wall_clock_s=0))
 

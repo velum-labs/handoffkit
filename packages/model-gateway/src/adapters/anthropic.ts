@@ -10,6 +10,7 @@
 
 import type { Backend } from "../backend.js";
 import { defaultFusionGatewayLogger } from "../logger.js";
+import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 
 const ENCODER = new TextEncoder();
@@ -71,10 +72,6 @@ type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage };
 type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsage };
 
 // ---- request translation ----
-
-function randomId(): string {
-  return Math.random().toString(36).slice(2, 12);
-}
 
 function systemText(system: AnthropicRequest["system"]): string {
   if (system === undefined) return "";
@@ -353,7 +350,8 @@ export function openAiSseToAnthropic(
           model,
           content: [],
           stop_reason: null,
-          stop_sequence: null
+          stop_sequence: null,
+          ...(state.inputTokens !== undefined ? { usage: { input_tokens: state.inputTokens } } : {})
         }
       })
     );
@@ -415,7 +413,14 @@ export function openAiSseToAnthropic(
       sse("message_delta", {
         type: "message_delta",
         delta: { stop_reason: stopReason, stop_sequence: null },
-        ...(state.outputTokens !== undefined ? { usage: { output_tokens: state.outputTokens } } : {})
+        ...(state.inputTokens !== undefined || state.outputTokens !== undefined
+          ? {
+              usage: {
+                ...(state.inputTokens !== undefined ? { input_tokens: state.inputTokens } : {}),
+                ...(state.outputTokens !== undefined ? { output_tokens: state.outputTokens } : {})
+              }
+            }
+          : {})
       })
     );
     controller.enqueue(sse("message_stop", { type: "message_stop" }));
@@ -571,10 +576,9 @@ export function openAiSseToAnthropic(
 // ---- token counting + discovery ----
 
 export function countTokensEstimate(body: AnthropicRequest): number {
-  let chars = systemText(body.system).length;
-  for (const message of body.messages) chars += blockText(message.content).length;
-  // A rough chars/4 heuristic; Claude Code uses this only for budgeting.
-  return Math.max(1, Math.ceil(chars / 4));
+  const parts: string[] = [systemText(body.system)];
+  for (const message of body.messages) parts.push(blockText(message.content));
+  return estimateTokens(...parts);
 }
 
 // ---- handlers (return a Response the server pipes) ----

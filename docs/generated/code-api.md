@@ -337,8 +337,10 @@ it without cycles.
 - `export function chatTemplateKwargsForModel(`
   Chat-template kwargs the local MLX gateway should default for a model family (e.g. Qwen `enable_thinking`), or undefined when no family matches.
 - `export type RegistryModelPricing ...`
+- `export const PRICING_ALIASES: Readonly<Record<string, string>> ...`
+  Explicit dated/variant model id → canonical priced id. Lookup is exact → alias → unknown; prefix matching is never used.
 - `export const DEFAULT_MODEL_PRICING: Readonly<Record<string, RegistryModelPricing>> ...`
-  Default per-model list prices (USD / 1M tokens), manual overrides merged over the generated table. Matched by longest prefix by consumers.
+  Default per-model list prices (USD / 1M tokens), manual overrides merged over the generated table. Consumers resolve via exact id, then {@link PRICING_ALIASES}.
 - `export type LocalModelRole ...`
 - `export type LocalCatalogModel ...`
 - `export const LOCAL_CATALOG_ENTRIES: readonly LocalCatalogModel[] ...`
@@ -359,6 +361,10 @@ No module JSDoc was found.
 - `export const MANAGED_SERVER_DEFAULTS ...`
 - `export const CANDIDATE_ISOLATION_DEFAULTS ...`
 - `export function sleep(ms: number): Promise<void> ...`
+- `export function randomId(length ...`
+  Generate a compact random id (hex, no dashes) with an optional prefix.
+- `export function estimateTokens(...texts: string[]): number ...`
+  Rough token estimate from text (and optional tool/JSON payload strings): minimum 1 token, ceil(chars / 4).
 - `export function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal ...`
 - `export function formatDurationMs(ms: number): string ...`
 - `export function commandOnPath(`

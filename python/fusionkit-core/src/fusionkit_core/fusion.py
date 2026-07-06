@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
 from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
@@ -319,6 +319,8 @@ class FusionEngine:
         self,
         messages: Sequence[ChatMessage],
         trajectories: Sequence[Trajectory],
+        *,
+        after_judge: Callable[[ModelResponse | None], None] | None = None,
     ) -> FuseResult:
         judge = self._client(self.config.resolved_judge_model)
         synthesizer = self._client(self.config.resolved_synthesizer_model)
@@ -332,6 +334,7 @@ class FusionEngine:
             synthesizer_client=synthesizer,
             sampling=self.config.sampling,
             tools=None,
+            after_judge=after_judge,
         )
 
     def _client(self, model_id: str) -> ChatClient:

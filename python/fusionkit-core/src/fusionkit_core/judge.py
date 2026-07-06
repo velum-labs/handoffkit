@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -44,6 +44,7 @@ from fusionkit_core.types import (
     FusionAnalysis,
     ModelResponse,
     PanelMode,
+    ProviderCost,
     StreamChunk,
     ToolCall,
     Trajectory,
@@ -96,6 +97,32 @@ class FuseResult(BaseModel):
     #: True when the synthesizer returned empty content and the final output
     #: fell back to the best candidate's own answer (see _build_fuse_result).
     synthesis_empty: bool = False
+    #: The judge's own model turn (usage/cost/latency), when a judge call ran
+    #: this step. Exposed so run accounting can ledger the judge's spend
+    #: alongside the panel and synthesizer calls.
+    judge_response: ModelResponse | None = None
+    #: False when ``response`` was fabricated without a synthesizer model call
+    #: (verbatim best-of-N selection, or the context-overflow fallback to a
+    #: candidate answer) — run accounting must not ledger a call that never
+    #: spent anything.
+    synthesizer_called: bool = True
+
+    def turn_usage(self) -> Usage:
+        """Combined token usage of this fuse step (judge + synthesizer)."""
+        responses = [self.response] + (
+            [self.judge_response] if self.judge_response is not None else []
+        )
+        return sum_usages([response.usage for response in responses])
+
+    def turn_provider_cost(self) -> ProviderCost | None:
+        """Provider-reported cost for the step: the synthesizer's, else the judge's.
+
+        A verbatim-select step has no synthesizer call, so the judge's cost is
+        the whole step's provider spend.
+        """
+        if self.response.provider_cost is not None:
+            return self.response.provider_cost
+        return self.judge_response.provider_cost if self.judge_response is not None else None
 
 
 # Rough token cost of the fixed prompt scaffolding (section headers, labels)
@@ -255,6 +282,7 @@ class JudgeSynthesizer:
         tool_choice: str | Mapping[str, Any] | None = None,
         analysis: FusionAnalysis | None = None,
         trace: TraceContext | None = None,
+        after_judge: Callable[[ModelResponse | None], None] | None = None,
     ) -> FuseResult:
         """One fusion step: produce the next step, or the final answer.
 
@@ -269,6 +297,12 @@ class JudgeSynthesizer:
         On a terminal step the consolidated output :class:`Trajectory` is built and
         its ``synthesis`` is populated (decision/selected/rationale/metrics) - the
         fusion result lives on the trajectory, not in a separate record.
+
+        ``after_judge`` runs at the judge/synthesizer phase boundary with the
+        judge's raw model turn (or ``None`` when no judge call ran). Run
+        accounting uses it to ledger the judge's spend and enforce budgets
+        *before* the synthesizer spends more money; any exception it raises
+        aborts the step and propagates to the caller.
         """
         synth_client = synthesizer_client or judge_client
         with fusion_span(
@@ -294,6 +328,8 @@ class JudgeSynthesizer:
                 trace=step_ctx,
             )
             resolved_analysis = prepared.analysis
+            if after_judge is not None:
+                after_judge(prepared.diagnostics.analysis_response)
             # Best-of-N selection (no tools): return the judge-picked candidate
             # verbatim instead of an LLM rewrite, skipping the synthesizer call.
             selected = (
@@ -301,6 +337,7 @@ class JudgeSynthesizer:
                 if tools is None
                 else None
             )
+            synthesizer_called = False
             if selected is not None:
                 response = selected
             else:
@@ -311,6 +348,7 @@ class JudgeSynthesizer:
                         tools=tools,
                         tool_choice=tool_choice,
                     )
+                    synthesizer_called = True
                 except ProviderCallError as exc:
                     if exc.category != "context_overflow":
                         raise
@@ -324,6 +362,7 @@ class JudgeSynthesizer:
                             tools=tools,
                             tool_choice=tool_choice,
                         )
+                        synthesizer_called = True
                         prepared.diagnostics.synth_fallback = "reduced_evidence_retry"
                     except ProviderCallError as retry_exc:
                         if retry_exc.category != "context_overflow":
@@ -335,10 +374,11 @@ class JudgeSynthesizer:
                             trajectories, resolved_analysis, synth_client, prepared.diagnostics
                         )
             result = self._build_fuse_result(
-                response, trajectories, resolved_analysis, prepared.diagnostics
-            )
-            result.response = _with_analysis_provider_cost(
-                result.response, prepared.diagnostics.analysis_response
+                response,
+                trajectories,
+                resolved_analysis,
+                prepared.diagnostics,
+                synthesizer_called=synthesizer_called,
             )
             if result.terminal:
                 # Parity with fuse_stream's Act III: surface the judge's
@@ -412,10 +452,11 @@ class JudgeSynthesizer:
         if selected is not None:
             yield StreamChunk(delta=selected.content)
             result = self._build_fuse_result(
-                selected, trajectories, resolved_analysis, prepared.diagnostics
-            )
-            result.response = _with_analysis_provider_cost(
-                result.response, prepared.diagnostics.analysis_response
+                selected,
+                trajectories,
+                resolved_analysis,
+                prepared.diagnostics,
+                synthesizer_called=False,
             )
             self._emit_step(step_ctx, fuse_span_handle, result, trajectories)
             _end_fuse_span(fuse_span_handle)
@@ -448,16 +489,18 @@ class JudgeSynthesizer:
                 if exc.category != "context_overflow" or accumulator.yielded:
                     _end_fuse_span(fuse_span_handle, error=str(exc))
                     raise
+        synthesizer_called = response is not None
         if response is None:
             response = self._overflow_fallback_response(
                 trajectories, resolved_analysis, synth_client, prepared.diagnostics
             )
             yield StreamChunk(delta=response.content)
         result = self._build_fuse_result(
-            response, trajectories, resolved_analysis, prepared.diagnostics
-        )
-        result.response = _with_analysis_provider_cost(
-            result.response, prepared.diagnostics.analysis_response
+            response,
+            trajectories,
+            resolved_analysis,
+            prepared.diagnostics,
+            synthesizer_called=synthesizer_called,
         )
         self._emit_step(step_ctx, fuse_span_handle, result, trajectories)
         _end_fuse_span(fuse_span_handle)
@@ -646,6 +689,8 @@ class JudgeSynthesizer:
         trajectories: Sequence[Trajectory],
         resolved_analysis: FusionAnalysis,
         diagnostics: _TurnDiagnostics | None = None,
+        *,
+        synthesizer_called: bool = True,
     ) -> FuseResult:
         terminal = not response.tool_calls
         output_trajectory: Trajectory | None = None
@@ -668,6 +713,8 @@ class JudgeSynthesizer:
             analysis=resolved_analysis,
             trajectory=output_trajectory,
             synthesis_empty=synthesis_empty,
+            judge_response=diagnostics.analysis_response if diagnostics is not None else None,
+            synthesizer_called=synthesizer_called,
         )
 
     async def analyze(
@@ -1247,24 +1294,25 @@ def _usage_payload(response: Any) -> dict[str, Any]:
     return out
 
 
-def _usage_is_empty(usage: Usage) -> bool:
-    return (
-        usage.prompt_tokens is None
-        and usage.completion_tokens is None
-        and usage.total_tokens is None
+def sum_usages(usages: Sequence[Usage]) -> Usage:
+    """Sum token usage across model turns, preserving unknowns.
+
+    A field is the sum of the known values, or ``None`` when no turn reported
+    it — so a wholly-unmetered turn stays visibly unknown instead of becoming
+    a confident zero.
+    """
+
+    def total(field: str) -> int | None:
+        known = [
+            value for usage in usages if (value := getattr(usage, field)) is not None
+        ]
+        return sum(known) if known else None
+
+    return Usage(
+        prompt_tokens=total("prompt_tokens"),
+        completion_tokens=total("completion_tokens"),
+        total_tokens=total("total_tokens"),
     )
-
-
-def _with_analysis_provider_cost(
-    response: ModelResponse,
-    analysis_response: ModelResponse | None,
-) -> ModelResponse:
-    if response.provider_cost is not None or analysis_response is None:
-        return response
-    update: dict[str, Any] = {"provider_cost": analysis_response.provider_cost}
-    if _usage_is_empty(response.usage):
-        update["usage"] = analysis_response.usage
-    return response.model_copy(update=update)
 
 
 __all__ = [
@@ -1272,5 +1320,6 @@ __all__ = [
     "JudgeSynthesizer",
     "accumulate_tool_call",
     "parse_analysis",
+    "sum_usages",
     "warn_malformed_tool_calls",
 ]

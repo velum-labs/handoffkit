@@ -4,7 +4,7 @@ import json
 import time
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel
@@ -46,7 +46,7 @@ from fusionkit_core.run_models import (
     ToolResultSubmission,
     TrajectoryInspection,
 )
-from fusionkit_core.types import ChatMessage, FusionAnalysis, Trajectory
+from fusionkit_core.types import ChatMessage, FusionAnalysis, ModelResponse, Trajectory
 
 __all__ = [
     "ArtifactWriter",
@@ -70,6 +70,14 @@ __all__ = [
     "hash_json",
     "make_id",
 ]
+
+class _BudgetExceededSignal(Exception):
+    """Raised by the mid-turn budget guard to abort a run between phases."""
+
+    def __init__(self, error: NativeRunError) -> None:
+        super().__init__(error.terminal_reason)
+        self.error = error
+
 
 class FusionRunManager:
     def __init__(
@@ -206,7 +214,11 @@ class FusionRunManager:
                 request,
                 trajectories,
             )
-            budget_error = self._check_cost_budget(run_id)
+            # Phase boundary: panel settled, judge not yet called. Both budgets
+            # are re-checked before any more money or time is spent.
+            budget_error = self._check_cost_budget(run_id) or self._check_wall_clock_budget(
+                started
+            )
             if budget_error is not None:
                 return self._fail_run(summary, budget_error)
 
@@ -228,11 +240,47 @@ class FusionRunManager:
                         trajectory_infos, first_succeeded.id
                     )
                 self._append_state(summary, "judging")
+
+                def after_judge(judge_response: ModelResponse | None) -> None:
+                    # Phase boundary: judge done, synthesizer not yet called.
+                    # Ledger the judge's spend first so the budget check sees it.
+                    if judge_response is not None:
+                        model_call_ids.append(
+                            self._record_response_call(
+                                run_id,
+                                summary.trace_id,
+                                request,
+                                judge_response,
+                                role="judge",
+                                state="judging",
+                            )
+                        )
+                    error = self._check_cost_budget(run_id) or self._check_wall_clock_budget(
+                        started
+                    )
+                    if error is not None:
+                        raise _BudgetExceededSignal(error)
+
                 self._append_state(summary, "synthesizing")
-                fused = await self.engine._judge_synthesize(
-                    _runtime_messages(request.messages),
-                    trajectories,
-                )
+                try:
+                    fused = await self.engine._judge_synthesize(
+                        _runtime_messages(request.messages),
+                        trajectories,
+                        after_judge=after_judge,
+                    )
+                except _BudgetExceededSignal as signal:
+                    return self._fail_run(summary, signal.error)
+                if fused.synthesizer_called:
+                    model_call_ids.append(
+                        self._record_response_call(
+                            run_id,
+                            summary.trace_id,
+                            request,
+                            fused.response,
+                            role="synthesizer",
+                            state="synthesizing",
+                        )
+                    )
                 answer = fused.response.content
                 analysis = fused.analysis
                 fused_synthesis = (
@@ -738,6 +786,39 @@ class FusionRunManager:
             model_call_ids.append(model_call_id)
         return trajectory_infos, model_call_ids, artifacts
 
+    def _record_response_call(
+        self,
+        run_id: str,
+        trace_id: str,
+        request: FusionRunRequestV1,
+        response: ModelResponse,
+        *,
+        role: str,
+        state: FusionRunState,
+    ) -> str:
+        """Ledger a judge/synthesizer model turn as a ``model_call_recorded`` event."""
+        model_call_id = make_id("model_call")
+        record = _response_call_record(
+            self.engine.config,
+            request=request,
+            response=response,
+            model_call_id=model_call_id,
+            role=role,
+        )
+        self.store.append_event(
+            FusionRunEvent(
+                event_seq=1,
+                run_id=run_id,
+                trace_id=trace_id,
+                state=state,
+                status=status_for_run_state(state),
+                event_type="model_call_recorded",
+                model_call_id=model_call_id,
+                payload={"model_call_record": record.model_dump(mode="json")},
+            )
+        )
+        return model_call_id
+
     def _append_state(self, summary: RunStateSummary, state: FusionRunState) -> FusionRunEvent:
         event = self.store.append_event(
             FusionRunEvent(
@@ -894,6 +975,20 @@ def _sampling_from_request(request: FusionRunRequestV1) -> SamplingConfig:
     return SamplingConfig().model_copy(update=updates)
 
 
+def _call_window(latency_ms: float | None) -> tuple[datetime, datetime]:
+    """Start/finish timestamps for a call recorded just after it returned.
+
+    The record is written moments after the client call finishes, so "now" is
+    the finish time and the start is recovered from the measured latency —
+    instead of fabricating two identical timestamps.
+    """
+    finished_at = datetime.now(UTC)
+    started_at = (
+        finished_at - timedelta(milliseconds=latency_ms) if latency_ms is not None else finished_at
+    )
+    return started_at, finished_at
+
+
 def _model_call_record(
     config,
     *,
@@ -913,6 +1008,7 @@ def _model_call_record(
             provider_cost if isinstance(provider_cost, dict) else None,
         ),
         "finish_reason": trajectory.metadata.get("finish_reason"),
+        "role": "panel",
     }
     failed = trajectory.status == "failed"
     error = None
@@ -922,6 +1018,7 @@ def _model_call_record(
             message=trajectory.metadata.get("error_message"),
             retryable=True,
         )
+    started_at, finished_at = _call_window(latency_ms)
     return ModelCallRecordV1.model_validate(
         {
             **contract_metadata("model-call-record.v1"),
@@ -939,12 +1036,62 @@ def _model_call_record(
             "status": "failed" if failed else "succeeded",
             "messages": [message.model_dump(mode="json") for message in request.messages],
             "side_effects": "none",
-            "started_at": datetime.now(UTC),
-            "finished_at": datetime.now(UTC),
+            "started_at": started_at,
+            "finished_at": finished_at,
             "latency_ms": latency_ms,
             "usage": usage if isinstance(usage, dict) else None,
             "output_text": trajectory.content,
             "error": error.model_dump(mode="json") if error is not None else None,
+            "metadata": metadata,
+        }
+    )
+
+
+def _response_call_record(
+    config,
+    *,
+    request: FusionRunRequestV1,
+    response: ModelResponse,
+    model_call_id: str,
+    role: str,
+) -> ModelCallRecordV1:
+    """A ``model-call-record.v1`` for a judge/synthesizer model turn."""
+    latency_ms = response.latency_s * 1000 if response.latency_s > 0 else None
+    endpoint = _endpoint_for_trajectory(config, response.model_id)
+    metadata = {
+        **provider_metadata(
+            endpoint,
+            response.usage,
+            response.provider_cost,
+        ),
+        "finish_reason": response.finish_reason,
+        "role": role,
+    }
+    started_at, finished_at = _call_window(latency_ms)
+    return ModelCallRecordV1.model_validate(
+        {
+            **contract_metadata("model-call-record.v1"),
+            "call_id": model_call_id,
+            "endpoint_id": response.model_id,
+            "model": response.model_id,
+            "request_hash": hash_json(
+                {
+                    "request_id": request.request_id,
+                    "model_id": response.model_id,
+                    "role": role,
+                    "messages": [message.model_dump(mode="json") for message in request.messages],
+                }
+            ),
+            "response_hash": hash_text(response.content),
+            "status": "succeeded",
+            "messages": [message.model_dump(mode="json") for message in request.messages],
+            "side_effects": "none",
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "latency_ms": latency_ms,
+            "usage": response.usage.model_dump(),
+            "output_text": response.content,
+            "error": None,
             "metadata": metadata,
         }
     )

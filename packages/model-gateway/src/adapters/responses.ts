@@ -14,6 +14,7 @@
  */
 
 import type { Backend } from "../backend.js";
+import { randomId } from "@fusionkit/runtime-utils";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { openAiSseToResponses } from "./responses-stream.js";
 export { openAiSseToResponses } from "./responses-stream.js";
@@ -67,10 +68,6 @@ type OpenAiResponse = {
   usage?: OpenAiUsage;
   provider_cost?: unknown;
 };
-
-function randomId(): string {
-  return Math.random().toString(36).slice(2, 12);
-}
 
 function partText(part: ResponsesContentPart): string {
   if (typeof part.text === "string" && (part.type === "input_text" || part.type === "output_text" || part.type === "text")) {

@@ -55,7 +55,13 @@ export function isCursorChatBody(body: unknown): body is JsonObject {
  * is translated. A body with neither yields an empty `messages` list.
  */
 export function translateCursorRequest(body: JsonObject): JsonObject {
-  if ("messages" in body) return { ...body };
+  if ("messages" in body) {
+    const passthrough = { ...body };
+    if (passthrough.stream === true) {
+      passthrough.stream_options = { include_usage: true };
+    }
+    return passthrough;
+  }
   const translated: JsonObject = {};
   for (const key of PASSTHROUGH_FIELDS) {
     if (key in body && body[key] !== null && body[key] !== undefined) {
@@ -66,6 +72,9 @@ export function translateCursorRequest(body: JsonObject): JsonObject {
   const tools = translateTools(body.tools);
   if (tools !== undefined) translated.tools = tools;
   translateSampling(body, translated);
+  if (translated.stream === true) {
+    translated.stream_options = { include_usage: true };
+  }
   return translated;
 }
 
