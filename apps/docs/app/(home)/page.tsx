@@ -18,9 +18,9 @@ const features = [
 const sections = [
   { title: "Get started", href: "/docs/getting-started/installation", body: "Install the CLI and run your first fused session." },
   { title: "Tools", href: "/docs/tools", body: "Per-tool guides for Codex, Claude Code, and Cursor." },
-  { title: "CLI reference", href: "/docs/cli/commands", body: "Every command, flag, and cost control." },
-  { title: "Concepts", href: "/docs/concepts/overview", body: "Panels, judges, synthesizers, fused models, and passthrough models." },
-  { title: "Privacy", href: "/docs/privacy", body: "Local storage, provider egress, and opt-in telemetry." },
+  { title: "Guides", href: "/docs/guides/inference-endpoint", body: "Endpoint usage, rate-limit handoff, cost control, observability, and troubleshooting." },
+  { title: "Concepts", href: "/docs/concepts/overview", body: "Panels, judges, model fusion, product scope, and privacy." },
+  { title: "Reference", href: "/docs/reference/commands", body: "Every command, flag, configuration field, and package." },
   { title: "API reference", href: "/docs/api", body: "Gateway routes and the generated harness-executor contract." }
 ];
 

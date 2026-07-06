@@ -47,7 +47,7 @@ fusionkit init
 ```
 
 This writes a committed `.fusionkit/` folder (settings plus editable prompts).
-See [Configuration](/docs/getting-started/configuration).
+See [Configuration](/docs/reference/configuration).
 
 ## Per-tool quickstarts
 
@@ -92,7 +92,7 @@ client:
 fusionkit serve
 ```
 
-See [Inference endpoint](/docs/getting-started/inference-endpoint) for streaming
+See [Inference endpoint](/docs/guides/inference-endpoint) for streaming
 and tool-calling examples.
   </Tab>
 </Tabs>
@@ -112,7 +112,7 @@ fusionkit's own flags must come before anything you forward to the tool.
 `fusionkit codex --local` sets a fusionkit flag; everything after the first
 forwarded argument (or after `--`) goes to the tool itself, as in
 `fusionkit codex --yes -- "fix the build"`. See the full
-[command reference](/docs/cli/commands).
+[command reference](/docs/reference/commands).
 
 For non-interactive environments, combine `--yes` with a fixed port or disabled
 portless registration:
@@ -137,7 +137,7 @@ The gateway exposes `fusion-panel` as the fused model. It also exposes panel
 member ids such as `gpt`, `sonnet`, and `gemini` as passthrough models. Choose
 `fusion-panel` when you want synthesis. Choose a member id when you want to
 compare the ensemble against one provider or use
-[rate-limit handoff](/docs/getting-started/rate-limit-handoff) as a fallback.
+[rate-limit handoff](/docs/guides/rate-limit-handoff) as a fallback.
 
 Run `fusionkit models list` to inspect local MLX models, and use
 `fusionkit config show` to see the effective cloud panel that will be launched

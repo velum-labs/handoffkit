@@ -4,12 +4,9 @@
     "index",
     "getting-started",
     "tools",
-    "cli",
+    "guides",
     "concepts",
-    "sdks",
-    "privacy",
-    "examples",
-    "api",
-    "taxonomy"
+    "reference",
+    "api"
   ]
 }

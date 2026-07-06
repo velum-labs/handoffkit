@@ -44,9 +44,9 @@ The behavior below works the same way in all three tools:
 | --- | --- |
 | Fused model | The agent sees `fusion-panel` as a normal model. |
 | Passthrough models | Panel member ids (`gpt`, `sonnet`, `gemini`) route directly to one provider. |
-| Rate-limit handoff | A throttled passthrough turn reruns on the panel by default. See [Rate-limit handoff](/docs/getting-started/rate-limit-handoff). |
+| Rate-limit handoff | A throttled passthrough turn reruns on the panel by default. See [Rate-limit handoff](/docs/guides/rate-limit-handoff). |
 | Durable sessions | `--continue` and `--resume <id>` restore a prior session. |
-| Cost controls | `--budget <usd>` caps gateway-observed spend. See [Cost and models](/docs/cli/cost-and-models). |
+| Cost controls | `--budget <usd>` caps gateway-observed spend. See [Cost and models](/docs/guides/cost-and-models). |
 | Observability | `--observe` boots the local trace dashboard. |
 | Sub-agents | Each named ensemble becomes a delegable sub-agent unless you pass `--no-subagents`. |
 | Local panel | `--local` swaps the cloud panel for on-device MLX models on Apple Silicon. |
@@ -59,7 +59,7 @@ tool-specific caveats.
 
 Anything that speaks the OpenAI Chat Completions API can use fusion without a
 launcher. Run `fusionkit serve` and point the client at the printed URL with
-model `fusion-panel`. See [Inference endpoint](/docs/getting-started/inference-endpoint).
+model `fusion-panel`. See [Inference endpoint](/docs/guides/inference-endpoint).
 
 To add a launcher for a new tool, see
-[Adding a new tool](/docs/sdks/packages#adding-a-new-tool).
+[Adding a new tool](/docs/reference/packages#adding-a-new-tool).

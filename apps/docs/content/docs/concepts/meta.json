@@ -1,9 +1,4 @@
 {
   "title": "Concepts",
-  "pages": [
-    "overview",
-    "product-scope",
-    "model-fusion",
-    "runtime-kernel"
-  ]
+  "pages": ["overview", "model-fusion", "runtime-kernel", "product-scope", "privacy"]
 }

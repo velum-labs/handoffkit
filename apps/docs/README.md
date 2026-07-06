@@ -32,18 +32,20 @@ pnpm start
 Docs live in `content/docs/**/*.mdx`, grouped into folder-based sidebar sections,
 each ordered by its own `meta.json` (and the root `content/docs/meta.json`):
 
-- **Get started**: task guides for installation, quickstart, configuration,
-  inference endpoint usage, and rate-limit handoff.
+The sidebar is organized by reader intent:
+
+- **Get started**: installation and the quickstart.
 - **Tools**: one page per supported coding agent (Codex, Claude Code, Cursor).
-- **fusionkit CLI**: reference and task guidance for commands, cost, panels,
-  observability, and troubleshooting.
-- **Concepts**: mental models for product scope, architecture, model fusion, and
-  the runtime kernel.
-- **Packages**: reference material for the product workspace packages.
-- **Privacy** and **Examples**: data-handling behavior and runnable examples.
+- **Guides**: workflow guides for the inference endpoint, rate-limit handoff,
+  cost control, observability, troubleshooting, and examples.
+- **Concepts**: mental models for model fusion, the runtime kernel, product
+  scope, and privacy.
+- **Reference**: the command reference, `.fusionkit/` configuration, models and
+  panels, and the package map.
 - **API reference**: runtime route overview plus generated contract reference.
-- **Documentation taxonomy**: the reader-intent model for the site and the
-  reason each section exists.
+
+When a page moves between sections, add a permanent redirect in
+`next.config.mjs` so deployed URLs keep working.
 
 Mermaid code blocks render as diagrams (via `remarkMdxMermaid` plus the
 client-side `components/mermaid.tsx`).

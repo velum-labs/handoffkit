@@ -1,0 +1,11 @@
+{
+  "title": "Guides",
+  "pages": [
+    "inference-endpoint",
+    "rate-limit-handoff",
+    "cost-and-models",
+    "observability",
+    "troubleshooting",
+    "examples"
+  ]
+}

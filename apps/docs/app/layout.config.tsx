@@ -17,13 +17,18 @@ export const baseOptions: BaseLayoutProps = {
       active: "nested-url"
     },
     {
-      text: "CLI",
-      url: "/docs/cli/commands",
+      text: "Guides",
+      url: "/docs/guides/inference-endpoint",
       active: "nested-url"
     },
     {
       text: "Concepts",
       url: "/docs/concepts/overview",
+      active: "nested-url"
+    },
+    {
+      text: "Reference",
+      url: "/docs/reference/commands",
       active: "nested-url"
     },
     {
