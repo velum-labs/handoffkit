@@ -45,6 +45,7 @@
     "@fusionkit/workspace": "workspace:*",
     "commander": "14.0.3",
     "figlet": "1.11.0",
+    "posthog-node": "5.39.4",
     "untun": "0.1.3"
   },
   "optionalDependencies": {

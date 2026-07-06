@@ -47,6 +47,14 @@ const requiredFiles = [
   "scripts/generate-pricing.mjs",
   "scripts/generate-local-catalog.mjs",
   "scripts/generate-registry.mjs",
+  // fusion trace semantic conventions (spec/fusion-trace is the source of
+  // truth; TS/Python/scope bindings are generated)
+  "spec/fusion-trace/registry.json",
+  "scripts/generate-trace-conventions.mjs",
+  "packages/tracing/src/index.ts",
+  "packages/protocol/src/generated/trace-conventions.ts",
+  "python/fusionkit-core/src/fusionkit_core/_generated/trace_conventions.py",
+  "apps/scope/lib/generated/trace-conventions.ts",
   "packages/registry/src/index.ts",
   "packages/registry/src/generated/data.ts",
   "python/fusionkit-core/src/fusionkit_core/registry.py",
@@ -267,6 +275,21 @@ for (const file of requiredFiles) {
   if (!existsSync(file)) fail(`missing ${file}`);
 }
 
+const traceConventionsCheck = spawnSync(
+  process.execPath,
+  ["scripts/generate-trace-conventions.mjs", "--check"],
+  { encoding: "utf8" }
+);
+if (traceConventionsCheck.stdout.trim()) {
+  console.log(traceConventionsCheck.stdout.trim());
+}
+if (traceConventionsCheck.stderr.trim()) {
+  console.error(traceConventionsCheck.stderr.trim());
+}
+if (traceConventionsCheck.status !== 0) {
+  fail("trace conventions check failed");
+}
+
 const registryCheck = spawnSync(
   process.execPath,
   ["scripts/generate-registry.mjs", "--check"],
@@ -451,6 +474,15 @@ const TRUSTED_THIRD_PARTY = new Map([
   // runtime (no install scripts).
   ["untun", "0.1.3"],
   ["@openai/codex-sdk", "0.142.5"],
+  // OpenTelemetry: the tracing engine behind @fusionkit/tracing (spans, W3C
+  // propagation, batching, OTLP export). The exporter line is 0.x upstream;
+  // both lines are pinned exactly and bumped only as reviewed allowlist
+  // changes.
+  ["@opentelemetry/api", "1.9.1"],
+  ["@opentelemetry/exporter-trace-otlp-http", "0.220.0"],
+  ["@opentelemetry/resources", "2.9.0"],
+  ["@opentelemetry/sdk-trace-base", "2.9.0"],
+  ["@opentelemetry/sdk-trace-node", "2.9.0"],
   ["@opencode-ai/sdk", "1.17.13"],
   ["@zed-industries/agent-client-protocol", "0.4.5"],
   ["@types/figlet", "1.7.0"],
@@ -472,6 +504,9 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["minimatch", "10.2.5"],
   ["ms", "2.1.3"],
   ["pino", "10.3.1"],
+  // Product telemetry engine: official PostHog server SDK (batched, async,
+  // shutdown flush). Only the CLI's opt-in telemetry module uses it.
+  ["posthog-node", "5.39.4"],
   ["typescript", "5.9.3"],
   ["ws", "8.21.0"],
   ["zod", "4.4.3"]

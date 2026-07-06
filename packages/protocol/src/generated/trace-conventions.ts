@@ -1,0 +1,196 @@
+// GENERATED FILE - DO NOT EDIT. Source of truth: spec/fusion-trace/registry.json. Regenerate with `node scripts/generate-trace-conventions.mjs`.
+
+/** Every span name a fusion component may emit. */
+export const FUSION_SPAN_NAMES = [
+  "fusion.run",
+  "fusion.turn",
+  "fusion.candidate",
+  "fusion.judge",
+  "fusion.fuse",
+  "chat",
+  "fusion.passthrough",
+  "fusion.turn.info",
+  "fusion.candidate.started",
+  "fusion.candidate.step",
+  "fusion.model_call.started",
+  "fusion.judge.request",
+  "fusion.judge.thinking",
+  "fusion.judge.scored",
+  "fusion.judge.synthesis",
+  "fusion.cost",
+  "fusion.narration",
+  "fusion.tool.execution",
+  "fusion.cursor.route"
+] as const;
+
+export type FusionSpanName = (typeof FUSION_SPAN_NAMES)[number];
+
+/** Zero-duration marker spans: live point-in-time signals. */
+export const FUSION_MARKER_NAMES = [
+  "fusion.turn.info",
+  "fusion.candidate.started",
+  "fusion.candidate.step",
+  "fusion.model_call.started",
+  "fusion.judge.request",
+  "fusion.judge.thinking",
+  "fusion.judge.scored",
+  "fusion.judge.synthesis",
+  "fusion.cost",
+  "fusion.narration",
+  "fusion.tool.execution",
+  "fusion.cursor.route"
+] as const;
+
+export type FusionMarkerName = (typeof FUSION_MARKER_NAMES)[number];
+
+/** Real spans: units of work with duration. */
+export const FUSION_UNIT_SPAN_NAMES = [
+  "fusion.run",
+  "fusion.turn",
+  "fusion.candidate",
+  "fusion.judge",
+  "fusion.fuse",
+  "chat",
+  "fusion.passthrough"
+] as const;
+
+/** Attribute keys, one constant per registry attribute. */
+export const ATTR = {
+  FUSION_TURN: "fusion.turn",
+  FUSION_DIALECT: "fusion.dialect",
+  FUSION_STATUS: "fusion.status",
+  FUSION_REPO: "fusion.repo",
+  FUSION_PROMPT_PREVIEW: "fusion.prompt_preview",
+  FUSION_ENVIRONMENT: "fusion.environment",
+  FUSION_EVIDENCE: "fusion.evidence",
+  FUSION_RUN_ID: "fusion.run_id",
+  FUSION_SESSION_ID: "fusion.session_id",
+  FUSION_CANDIDATE_ID: "fusion.candidate.id",
+  FUSION_TRAJECTORY_ID: "fusion.trajectory.id",
+  FUSION_MODEL_ID: "fusion.model.id",
+  FUSION_BRANCH_NAME: "fusion.branch_name",
+  FUSION_WORKTREE_PATH: "fusion.worktree_path",
+  FUSION_STEP_COUNT: "fusion.step_count",
+  FUSION_TOOL_CALL_COUNT: "fusion.tool_call_count",
+  FUSION_FINISH_REASON: "fusion.finish_reason",
+  FUSION_VERIFICATION_STATUS: "fusion.verification_status",
+  FUSION_FINAL_OUTPUT_PREVIEW: "fusion.final_output_preview",
+  FUSION_FINAL_OUTPUT: "fusion.final_output",
+  FUSION_CONTENT: "fusion.content",
+  FUSION_STEP: "fusion.step",
+  FUSION_STEP_INDEX: "fusion.step.index",
+  FUSION_STEP_TYPE: "fusion.step.type",
+  FUSION_PROMPT: "fusion.prompt",
+  FUSION_SYSTEM_PROMPT: "fusion.system_prompt",
+  FUSION_MESSAGE_COUNT: "fusion.message_count",
+  FUSION_TOOL_COUNT: "fusion.tool_count",
+  FUSION_JUDGE_MODEL: "fusion.judge.model",
+  FUSION_SYNTHESIZER_MODEL: "fusion.synthesizer.model",
+  FUSION_MESSAGES: "fusion.messages",
+  FUSION_TRAJECTORIES: "fusion.trajectories",
+  FUSION_TOOLS: "fusion.tools",
+  FUSION_TRAJECTORY_IDS: "fusion.trajectory_ids",
+  FUSION_RAW_ANALYSIS: "fusion.raw_analysis",
+  FUSION_TOOL_CALLS: "fusion.tool_calls",
+  FUSION_ANALYSIS: "fusion.analysis",
+  FUSION_METRICS: "fusion.metrics",
+  FUSION_INPUT_IDS: "fusion.input_ids",
+  FUSION_RAW_OUTPUT: "fusion.raw_output",
+  FUSION_SYNTHESIS_EMPTY: "fusion.synthesis_empty",
+  FUSION_SYNTHESIS: "fusion.synthesis",
+  FUSION_DECISION: "fusion.decision",
+  FUSION_SELECTED_TRAJECTORY_ID: "fusion.selected.trajectory_id",
+  FUSION_RATIONALE: "fusion.rationale",
+  FUSION_JUDGE_DEGRADED: "fusion.judge.degraded",
+  FUSION_TERMINAL: "fusion.terminal",
+  FUSION_FUSION_UNIT: "fusion.fusion_unit",
+  FUSION_ENDPOINT_ID: "fusion.endpoint_id",
+  FUSION_USAGE: "fusion.usage",
+  FUSION_COST_STAGE: "fusion.cost.stage",
+  FUSION_COST_MODEL: "fusion.cost.model",
+  FUSION_COST_TURN_USD: "fusion.cost.turn_usd",
+  FUSION_COST_PROVIDER_USD: "fusion.cost.provider_usd",
+  FUSION_COST_LOCAL_COMPUTE_USD: "fusion.cost.local_compute_usd",
+  FUSION_COST_SESSION_TOTAL_USD: "fusion.cost.session_total_usd",
+  FUSION_COST_UNKNOWN: "fusion.cost.unknown",
+  FUSION_COST_UNKNOWN_USAGE: "fusion.cost.unknown_usage",
+  FUSION_HEADLINE: "fusion.headline",
+  FUSION_PROSE: "fusion.prose",
+  FUSION_EXECUTION_ID: "fusion.execution_id",
+  FUSION_PLAN_ID: "fusion.plan_id",
+  FUSION_OUTPUT_HASH: "fusion.output_hash",
+  FUSION_ERROR: "fusion.error",
+  ERROR_TYPE: "error.type",
+  HTTP_RESPONSE_STATUS_CODE: "http.response.status_code",
+  GEN_AI_OPERATION_NAME: "gen_ai.operation.name",
+  GEN_AI_PROVIDER_NAME: "gen_ai.provider.name",
+  GEN_AI_REQUEST_MODEL: "gen_ai.request.model",
+  GEN_AI_RESPONSE_FINISH_REASONS: "gen_ai.response.finish_reasons",
+  GEN_AI_USAGE_INPUT_TOKENS: "gen_ai.usage.input_tokens",
+  GEN_AI_USAGE_OUTPUT_TOKENS: "gen_ai.usage.output_tokens",
+} as const;
+
+export type FusionAttributeKey = (typeof ATTR)[keyof typeof ATTR];
+
+/** Attributes safe to leave the machine (product telemetry / remote OTLP). */
+export const EXPORTABLE_ATTRIBUTES: ReadonlySet<string> = new Set([
+  "fusion.turn",
+  "fusion.dialect",
+  "fusion.status",
+  "fusion.run_id",
+  "fusion.session_id",
+  "fusion.candidate.id",
+  "fusion.trajectory.id",
+  "fusion.model.id",
+  "fusion.step_count",
+  "fusion.tool_call_count",
+  "fusion.finish_reason",
+  "fusion.verification_status",
+  "fusion.step.index",
+  "fusion.step.type",
+  "fusion.message_count",
+  "fusion.tool_count",
+  "fusion.judge.model",
+  "fusion.synthesizer.model",
+  "fusion.trajectory_ids",
+  "fusion.input_ids",
+  "fusion.synthesis_empty",
+  "fusion.decision",
+  "fusion.selected.trajectory_id",
+  "fusion.judge.degraded",
+  "fusion.terminal",
+  "fusion.fusion_unit",
+  "fusion.endpoint_id",
+  "fusion.cost.stage",
+  "fusion.cost.model",
+  "fusion.cost.turn_usd",
+  "fusion.cost.provider_usd",
+  "fusion.cost.local_compute_usd",
+  "fusion.cost.session_total_usd",
+  "fusion.cost.unknown",
+  "fusion.cost.unknown_usage",
+  "fusion.execution_id",
+  "fusion.plan_id",
+  "fusion.output_hash",
+  "error.type",
+  "http.response.status_code",
+  "gen_ai.operation.name",
+  "gen_ai.provider.name",
+  "gen_ai.request.model",
+  "gen_ai.response.finish_reasons",
+  "gen_ai.usage.input_tokens",
+  "gen_ai.usage.output_tokens"
+]);
+
+/** component name -> OTel instrumentation scope name */
+export const FUSION_SCOPES = {
+  "gateway": "fusionkit.gateway",
+  "ensemble": "fusionkit.ensemble",
+  "panel-model": "fusionkit.panel-model",
+  "judge": "fusionkit.judge",
+  "synthesis": "fusionkit.synthesis",
+  "cli": "fusionkit.cli",
+  "cursor-bridge": "fusionkit.cursor-bridge"
+} as const;
+
+export const FUSION_CONVENTIONS_VERSION = "1.0.0";

@@ -22,6 +22,10 @@
       "name": "@fusionkit/protocol"
     },
     {
+      "path": "packages/tracing",
+      "name": "@fusionkit/tracing"
+    },
+    {
       "path": "packages/kernel",
       "name": "@fusionkit/kernel"
     },
