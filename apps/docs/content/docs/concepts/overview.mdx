@@ -1,5 +1,5 @@
 ---
-title: Core Concepts
+title: Core concepts
 description: Panels, judges, synthesizers, fused models, passthrough models, sessions, and rate-limit handoff.
 ---
 
@@ -17,7 +17,7 @@ FusionKit's product concepts start with model fusion: a single request is routed
 | Passthrough model | A direct model id for one panel member, such as `gpt`, `sonnet`, or `kimi`; it skips synthesis unless rate-limit handoff fires. |
 | `fusion-panel` | The gateway model id exposed to Codex, Claude Code, Cursor, and OpenAI-compatible clients through the Node gateway. |
 | `fusionkit/panel` | The Python router model id for `/v1/chat/completions` when calling `fusionkit serve` directly. |
-| Handoff | In product docs, rate-limit failover from a failed passthrough turn to the fused panel. The legacy governance handoff SDK is archived under `legacy/docs/`. |
+| Handoff | Rate-limit failover from a failed passthrough turn to the fused panel. See [Rate-limit handoff](/docs/getting-started/rate-limit-handoff). |
 
 ## Product concepts
 
@@ -31,4 +31,4 @@ FusionKit's product concepts start with model fusion: a single request is routed
 | Durable session | Gateway state that can be resumed with `--resume <id>` or `--continue`. | [Command reference](/docs/cli/commands) |
 | Rate-limit handoff | Fallback from a throttled vendor passthrough model to the fused panel. | [Rate-limit handoff](/docs/getting-started/rate-limit-handoff) |
 
-The repository still preserves legacy governance code under `legacy/`, but the public FusionKit journey does not require a plane, runner, governance SDK, Docker compose, or VM isolation stack. Use [Product scope](/docs/concepts/product-scope) for the boundary.
+The repository also preserves older platform code under `legacy/`. None of it is needed to run FusionKit; [Product scope](/docs/concepts/product-scope) explains the boundary.

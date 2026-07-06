@@ -26,7 +26,7 @@ fusionkit sessions rm <id>
 
 ## Telemetry is opt-in
 
-FusionKit sends no telemetry unless you explicitly turn it on with `fusionkit telemetry on`, and has no hosted control plane. When enabled, two anonymous event kinds are sent (via PostHog) from a fixed allow-list — command usage and fused-session aggregates such as panel size, provider names, judge decision, and token totals. Never prompts, code, diffs, file paths, repo names, or model outputs.
+FusionKit sends no telemetry unless you explicitly turn it on with `fusionkit telemetry on`, and has no hosted control plane. When enabled, two anonymous event kinds are sent (via PostHog) from a fixed allow-list: command usage, and fused-session aggregates such as panel size, provider names, judge decision, and token totals. It never sends prompts, code, diffs, file paths, repo names, or model outputs.
 
 `fusionkit telemetry status` prints the effective state and the complete field list; `DO_NOT_TRACK=1` or `FUSIONKIT_TELEMETRY=0` force it off above any stored consent. The only identifier is a random install UUID, deleted by `fusionkit telemetry off`.
 

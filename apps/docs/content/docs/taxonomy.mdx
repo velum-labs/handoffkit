@@ -3,7 +3,9 @@ title: Documentation taxonomy
 description: How the FusionKit documentation is organized and why each section exists.
 ---
 
-FusionKit documentation is organized by reader intent. User-facing product docs live in this site; maintainer, benchmark, protocol, release, and legacy archive docs live in the repository Markdown tree.
+FusionKit documentation is organized by reader intent. User-facing product docs
+live in this site. Maintainer, benchmark, protocol, release, and legacy archive
+docs live in the repository Markdown tree.
 
 ## The taxonomy
 
@@ -20,14 +22,15 @@ FusionKit documentation is organized by reader intent. User-facing product docs 
 
 | Section | Category | Why it exists |
 | --- | --- | --- |
-| [Introduction](/docs) | Orientation | Introduces FusionKit and routes readers to setup, CLI, concepts, packages, privacy, examples, and APIs. |
-| [Get Started](/docs/getting-started/installation) | Task guides | Covers installation, first session, repo configuration, raw endpoint usage, and rate-limit handoff. |
+| [Introduction](/docs) | Orientation | Introduces FusionKit and routes readers to setup, tools, CLI, concepts, packages, privacy, examples, and APIs. |
+| [Get started](/docs/getting-started/installation) | Task guides | Covers installation, first session, repo configuration, raw endpoint usage, and rate-limit handoff. |
+| [Tools](/docs/tools) | Task guides and reference | One page per supported coding agent: Codex, Claude Code, and Cursor wiring, model pickers, sub-agents, and caveats. |
 | [fusionkit CLI](/docs/cli/commands) | Reference and task guides | Documents commands, flags, model panels, cost, observability, and troubleshooting. |
 | [Concepts](/docs/concepts/overview) | Concepts | Explains panels, judges, synthesizers, model ids, product scope, model fusion, and runtime-kernel behavior. |
 | [Packages](/docs/sdks/packages) | Reference | Maps product packages and points legacy material to the archive. |
-| [Privacy](/docs/privacy) | Privacy | Documents local storage, retention, provider egress, rate-limit failover, and no telemetry. |
+| [Privacy](/docs/privacy) | Privacy | Documents local storage, retention, provider egress, rate-limit failover, and opt-in telemetry. |
 | [Examples](/docs/examples) | Task guides | Maps product examples and points legacy demos to the archive. |
-| [API Reference](/docs/api) | APIs and reference | Explains runtime gateway routes and the generated harness-executor contract. |
+| [API reference](/docs/api) | APIs and reference | Explains runtime gateway routes and the generated harness-executor contract. |
 
 ## Public page inventory
 
@@ -40,21 +43,30 @@ FusionKit documentation is organized by reader intent. User-facing product docs 
 | [Configuration](/docs/getting-started/configuration) | Reference | Documents v3 `.fusionkit/` settings, precedence, prompts, and export behavior. |
 | [Inference endpoint](/docs/getting-started/inference-endpoint) | Task guide | Shows how to run FusionKit as an OpenAI-compatible endpoint without a coding harness. |
 | [Rate-limit handoff](/docs/getting-started/rate-limit-handoff) | Task guide | Explains recovery behavior and provider expansion when a passthrough vendor is throttled. |
-| [Command Reference](/docs/cli/commands) | Reference | Documents the main CLI commands, shared flags, sessions, config, prompts, ensembles, and model cache commands. |
-| [Cost and Models](/docs/cli/cost-and-models) | Task guide | Helps users control spend before and during a fused session. |
+| [Supported tools](/docs/tools) | Orientation | Lists the supported coding agents and the launch behavior they share. |
+| [Codex](/docs/tools/codex) | Task guide and reference | Documents Codex wiring, the model picker, sub-agent roles, and Codex-specific caveats. |
+| [Claude Code](/docs/tools/claude-code) | Task guide and reference | Documents Claude Code wiring, model aliasing, sub-agents, and caveats. |
+| [Cursor](/docs/tools/cursor) | Task guide and reference | Documents the Cursor CLI and IDE paths, BYOK limits, and sub-agent scaffolding. |
+| [Command reference](/docs/cli/commands) | Reference | Documents the main CLI commands, shared flags, sessions, config, prompts, ensembles, and model cache commands. |
+| [Cost and models](/docs/cli/cost-and-models) | Task guide | Helps users control spend before and during a fused session. |
 | [Models and panels](/docs/cli/models-and-panels) | Reference | Documents providers, panels, local MLX, mixed panels, judges, and budgets. |
 | [Observability](/docs/cli/observability) | Task guide | Explains how to watch sessions, traces, candidates, and judge events. |
 | [Troubleshooting](/docs/cli/troubleshooting) | Task guide | Starts from common failures and gives the smallest diagnostic path. |
-| [Core Concepts](/docs/concepts/overview) | Concepts | Defines the product vocabulary and dual model ids. |
+| [Core concepts](/docs/concepts/overview) | Concepts | Defines the product vocabulary and dual model ids. |
 | [Product scope](/docs/concepts/product-scope) | Orientation | Clarifies product packages versus retained legacy packages. |
 | [Model fusion](/docs/concepts/model-fusion) | Concepts | Explains trajectory-level fusion, candidate generation, and synthesis behavior. |
-| [Runtime Kernel](/docs/concepts/runtime-kernel) | Concepts | Explains the typed operator graph substrate and when to use it. |
-| [Package Map](/docs/sdks/packages) | Reference | Maps product workspace packages to ownership and first files to read. |
-| [Privacy](/docs/privacy) | Privacy | Documents local files, retention, provider egress, rate-limit failover, and no telemetry. |
+| [Runtime kernel](/docs/concepts/runtime-kernel) | Concepts | Explains the typed operator graph substrate and when to use it. |
+| [Package map](/docs/sdks/packages) | Reference | Maps product workspace packages to ownership and first files to read. |
+| [Privacy](/docs/privacy) | Privacy | Documents local files, retention, provider egress, rate-limit failover, and opt-in telemetry. |
 | [Examples](/docs/examples) | Task guide | Maps product examples and names the legacy archive location. |
-| [API Reference](/docs/api) | APIs and reference | Explains runtime gateway routes and generated contract docs. |
+| [API reference](/docs/api) | APIs and reference | Explains runtime gateway routes and generated contract docs. |
 | [Execute a model-fusion harness task](/docs/api/v1/harness-executions) | APIs and reference | Generated operation reference for the harness-executor seam. |
 
 ## Entry justification
 
-A page belongs in the public site when it helps a user install FusionKit, run a session, configure a repo, understand product behavior, integrate an endpoint, control cost, reason about privacy, run a product example, or call an API. Implementation ownership, generated code internals, release process, benchmark maintenance, and legacy governance material belong in repository maintainer docs.
+A page belongs in the public site when it helps a user install FusionKit, run a
+session, configure a repo, understand product behavior, integrate an endpoint,
+control cost, reason about privacy, run a product example, or call an API.
+Implementation ownership, generated code internals, release process, benchmark
+maintenance, and legacy governance material belong in repository maintainer
+docs.

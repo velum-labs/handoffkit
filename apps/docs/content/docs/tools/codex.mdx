@@ -1,0 +1,94 @@
+---
+title: Codex
+description: Run the OpenAI Codex CLI backed by a fused model panel.
+---
+
+`fusionkit codex` launches the [OpenAI Codex CLI](https://github.com/openai/codex)
+with the fused panel as its model backend. Codex speaks the OpenAI Responses
+dialect to the local gateway and treats `fusion-panel` as a normal model.
+
+```bash
+cd your-git-repo
+fusionkit codex
+```
+
+Anything after the tool name is forwarded to Codex, so your usual Codex
+arguments still work:
+
+```bash
+fusionkit codex --yes -- "fix the failing parser test"
+```
+
+## Prerequisites
+
+- The `codex` binary on your PATH. Install it from
+  [github.com/openai/codex](https://github.com/openai/codex).
+- Provider keys for the panel you use: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+  and `GEMINI_API_KEY` for the default cloud trio, or none with `--local` on
+  Apple Silicon.
+
+`fusionkit doctor` verifies both before you launch.
+
+## How the wiring works
+
+The launcher never touches your own Codex configuration. It creates a temporary
+`CODEX_HOME` for the session and writes a `config.toml` that registers the
+gateway as a Responses provider:
+
+```toml
+model = "fusion-panel"
+model_provider = "fusionkit-local"
+
+[model_providers.fusionkit-local]
+name = "FusionKit local"
+base_url = "http://127.0.0.1:<port>/v1"
+wire_api = "responses"
+requires_openai_auth = false
+```
+
+Codex is then spawned with `CODEX_HOME` pointing at that directory, and the
+directory is deleted when the session ends. Your `~/.codex/config.toml` stays
+as it was.
+
+If you prefer to wire Codex by hand against a running `fusionkit serve`, the
+same snippet is printed at boot; paste it into your own `~/.codex/config.toml`
+or a temporary `CODEX_HOME`.
+
+## The model picker
+
+Codex's `/model` picker lists the fused model first, then every other named
+ensemble (`fusion-<name>`), then each native panel member proxied through the
+gateway. Switching models mid-session works: pick a member id such as `gpt` for
+direct passthrough, or a `fusion-*` id for synthesis.
+
+Each model also gets a `[profiles.*]` entry, so you can start Codex on a
+different ensemble directly:
+
+```bash
+fusionkit codex -- --profile fusion-deep
+```
+
+## Sub-agents
+
+By default the launcher defines one Codex agent role per named ensemble, so
+`spawn_agent` can delegate a task to any ensemble out of the box. Delegation
+depth is capped at one level, because a fused sub-agent is itself a whole panel
+run. Pass `--no-subagents` (or set `"subagents": false` in
+`.fusionkit/fusion.json`) to skip this.
+
+## Caveats
+
+- Codex validates its model catalog and agent-role config at startup, and the
+  catalog schema changes between Codex releases. If Codex exits within the
+  first two seconds, FusionKit retries automatically: first without the model
+  catalog, then without the sub-agent roles. Fusion keeps working in both
+  fallbacks; you lose only picker niceties.
+- `fusionkit local codex` backs Codex with a single local MLX model and no
+  fusion. `fusionkit codex --local` runs the fused local panel. Both need
+  Apple Silicon.
+
+## Related pages
+
+- [Quickstart](/docs/getting-started/quickstart) for the first session.
+- [Command reference](/docs/cli/commands) for every launch flag.
+- [Rate-limit handoff](/docs/getting-started/rate-limit-handoff) for passthrough failover.

@@ -1,0 +1,93 @@
+---
+title: Cursor
+description: Run the Cursor CLI or the Cursor IDE backed by a fused model panel.
+---
+
+`fusionkit cursor` launches the [Cursor CLI](https://cursor.com/cli)
+(`cursor-agent`) with the fused panel as its model backend. Cursor connects
+through a bundled Cursorkit bridge that translates its protocol to the
+gateway's OpenAI Chat surface.
+
+```bash
+cd your-git-repo
+fusionkit cursor
+```
+
+Anything after the tool name is forwarded to `cursor-agent`.
+
+## Prerequisites
+
+- A logged-in `cursor-agent` CLI on your PATH. Install it from
+  [cursor.com/cli](https://cursor.com/cli). Cursorkit ships inside the npm
+  package, so there is nothing else to check out.
+- Provider keys for the panel you use: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+  and `GEMINI_API_KEY` for the default cloud trio, or none with `--local` on
+  Apple Silicon.
+
+`fusionkit doctor` verifies both before you launch.
+
+## How the wiring works
+
+The launcher starts the bundled Cursorkit bridge with its model backend pointed
+at the fusion gateway, then runs:
+
+```bash
+cursor-agent --endpoint http://127.0.0.1:<bridge-port> --model fusion-panel
+```
+
+The bridge exposes the fused model, every other named ensemble, and each
+native panel member, so all of them are selectable in the agent's model picker.
+
+## The Cursor IDE (`--ide`)
+
+To use fusion from the Cursor desktop app instead of the CLI:
+
+```bash
+fusionkit cursor --ide
+```
+
+This drives Cursorkit's desktop launcher, which starts a local TLS proxy and
+opens an isolated Cursor window on your repo, pre-wired to the gateway. Pick
+the fused model in the Agent model picker. Your normal Cursor profile, its
+settings, and its built-in models are untouched; the isolated window adds the
+fusion models additively. No public tunnel and no Settings changes are needed.
+Leave the `fusionkit` process running while you use the window.
+
+## BYOK and the loopback restriction
+
+Cursor's "Override OpenAI Base URL" setting (BYOK) proxies requests through
+Cursor's backend, which blocks loopback and private addresses with an
+`ssrf_blocked` error. A `http://127.0.0.1:...` base URL can never work there.
+
+If you want the BYOK route anyway, publish the gateway on a public HTTPS
+tunnel:
+
+```bash
+fusionkit serve --expose
+```
+
+This starts a Cloudflare Quick Tunnel with a required bearer token and prints
+the exact values to paste into Cursor's settings. You can also bring your own
+tunnel and pass `--public-url <url>` or set `FUSIONKIT_PUBLIC_URL`. For most
+setups, `fusionkit cursor --ide` is simpler because it needs no tunnel at all.
+
+## Sub-agents
+
+Cursor reads agent definitions from the repo's `.cursor/agents/` directory, so
+the launcher scaffolds one Markdown file per named ensemble there. These are
+real, commit-worthy files; existing files are never overwritten, so your edits
+win. Pass `--no-subagents` to skip the scaffolding.
+
+## Caveats
+
+- Only the agent chat/plan panel uses the fused model. Composer, inline edit,
+  apply, and autocomplete stay on Cursor's own backend.
+- `fusionkit local cursor` backs Cursor with a single local model and no
+  fusion; because of the loopback restriction it needs `--public-url` or
+  `--ide`.
+
+## Related pages
+
+- [Troubleshooting](/docs/cli/troubleshooting) for the `ssrf_blocked` and login errors.
+- [Command reference](/docs/cli/commands) for every launch flag.
+- [Quickstart](/docs/getting-started/quickstart) for the first session.

@@ -2,13 +2,14 @@
   "title": "Documentation",
   "pages": [
     "index",
-    "taxonomy",
     "getting-started",
+    "tools",
     "cli",
     "concepts",
     "sdks",
     "privacy",
     "examples",
-    "api"
+    "api",
+    "taxonomy"
   ]
 }

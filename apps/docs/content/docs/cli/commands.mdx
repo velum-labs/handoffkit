@@ -1,5 +1,5 @@
 ---
-title: Command Reference
+title: Command reference
 description: Every fusionkit command and the flags that shape a fused run.
 ---
 
@@ -9,13 +9,13 @@ The `fusionkit` CLI boots the panel, synthesizer, and gateway, then launches you
 
 | Command | What it does |
 | --- | --- |
-| `fusionkit codex [args...]` | Launch OpenAI Codex backed by the panel. |
-| `fusionkit claude [args...]` | Launch Claude Code backed by the panel. |
-| `fusionkit cursor [args...]` | Launch Cursor backed by the panel; add `--ide` for the desktop proxy. |
+| `fusionkit codex [args...]` | Launch OpenAI Codex backed by the panel. See [Codex](/docs/tools/codex). |
+| `fusionkit claude [args...]` | Launch Claude Code backed by the panel. See [Claude Code](/docs/tools/claude-code). |
+| `fusionkit cursor [args...]` | Launch Cursor backed by the panel; add `--ide` for the desktop proxy. See [Cursor](/docs/tools/cursor). |
 | `fusionkit serve [args...]` | Run only the gateway and print setup snippets for OpenAI-compatible tools. |
 | `fusionkit fusion [tool] [args...]` | Generic launcher; omit `tool` on a TTY to pick interactively. |
 
-FusionKit flags must come before the tool name; arguments after the tool are forwarded to the agent.
+FusionKit's own flags come before anything forwarded to the tool; with the generic `fusionkit fusion [tool]` form they must also come before the tool name.
 
 ```bash
 fusionkit codex --local
@@ -32,9 +32,9 @@ fusionkit codex --yes -- "fix the build"
 | `fusionkit status` | Show the effective config and a dry-run preview of what a run will do. |
 | `fusionkit init` | Scaffold a committed `.fusionkit/` folder for this repo. |
 | `fusionkit fusion stop` | Reap persistent portless singleton services left by prior runs. |
-| `fusionkit telemetry status\|on\|off\|inspect` | Inspect and control anonymous, opt-in product telemetry (off by default). `inspect` prints exactly what a session event would contain. |
+| `fusionkit telemetry <status\|on\|off\|inspect>` | Inspect and control anonymous, opt-in product telemetry (off by default). `inspect` prints exactly what a session event would contain. |
 | `fusionkit version` | Print the npm CLI and pinned PyPI synthesizer versions. |
-| `fusionkit completion bash|zsh|fish` | Print a static shell completion script. |
+| `fusionkit completion <bash\|zsh\|fish>` | Print a static shell completion script. |
 
 ## Configuration commands
 
@@ -42,9 +42,9 @@ fusionkit codex --yes -- "fix the build"
 | --- | --- |
 | `fusionkit config show` | Print the effective config and where each value came from. |
 | `fusionkit config path` | Print the `.fusionkit/fusion.json` path. |
-| `fusionkit config get &lt;path&gt;` | Read one stored config value. |
-| `fusionkit config set &lt;path&gt; &lt;value&gt;` | Set one value, validated before writing. |
-| `fusionkit config unset &lt;path&gt;` | Remove one value so it falls back to defaults. |
+| `fusionkit config get <path>` | Read one stored config value. |
+| `fusionkit config set <path> <value>` | Set one value, validated before writing. |
+| `fusionkit config unset <path>` | Remove one value so it falls back to defaults. |
 | `fusionkit config edit` | Open an interactive editor over supported settings. |
 | `fusionkit config export-yaml [-o file]` | Emit the derived Python router YAML. |
 
@@ -53,21 +53,21 @@ fusionkit codex --yes -- "fix the build"
 | Command | What it does |
 | --- | --- |
 | `fusionkit prompts list` | List judge and synthesizer prompt overrides. |
-| `fusionkit prompts edit &lt;judge|synthesizer&gt;` | Open `$EDITOR`, seeded from the built-in default when needed. |
-| `fusionkit prompts reset &lt;judge|synthesizer&gt;` | Remove an override and return to the built-in prompt. |
+| `fusionkit prompts edit <judge\|synthesizer>` | Open `$EDITOR`, seeded from the built-in default when needed. |
+| `fusionkit prompts reset <judge\|synthesizer>` | Remove an override and return to the built-in prompt. |
 
-Add `--ensemble &lt;name&gt;` to target per-ensemble prompt overrides.
+Add `--ensemble <name>` to target per-ensemble prompt overrides.
 
 ## Ensemble commands
 
 | Command | What it does |
 | --- | --- |
-| `fusionkit ensemble list` | Show named ensembles and their `fusion-&lt;name&gt;` model ids. |
-| `fusionkit ensemble add &lt;name&gt;` | Add an ensemble interactively or with `--model` flags. |
-| `fusionkit ensemble edit &lt;name&gt;` | Add/remove members or change judge/synthesizer. |
-| `fusionkit ensemble remove &lt;name&gt;` | Delete an ensemble. |
-| `fusionkit ensemble rename &lt;old&gt; &lt;new&gt;` | Rename an ensemble and its prompt directory. |
-| `fusionkit ensemble use &lt;name&gt;` | Make an ensemble the session default. |
+| `fusionkit ensemble list` | Show named ensembles and their `fusion-<name>` model ids. |
+| `fusionkit ensemble add <name>` | Add an ensemble interactively or with `--model` flags. |
+| `fusionkit ensemble edit <name>` | Add or remove members, or change the judge and synthesizer. |
+| `fusionkit ensemble remove <name>` | Delete an ensemble. |
+| `fusionkit ensemble rename <old> <new>` | Rename an ensemble and its prompt directory. |
+| `fusionkit ensemble use <name>` | Make an ensemble the session default. |
 
 Advanced maintainer subcommands also live under `ensemble`: `run`, `handoff`, `dashboard`, `e2e`, and `gateway`.
 
@@ -78,8 +78,8 @@ Sessions are persisted under `~/.fusionkit/sessions/` unless `FUSIONKIT_SESSIONS
 | Command | What it does |
 | --- | --- |
 | `fusionkit sessions` / `fusionkit sessions list` | List sessions, including id, tool, panel, turn count, last activity, and cost. |
-| `fusionkit sessions show &lt;id&gt;` | Show metadata and recent turns. Unique id prefixes are accepted. |
-| `fusionkit sessions rm &lt;id&gt;` | Delete a stored session. |
+| `fusionkit sessions show <id>` | Show metadata and recent turns. Unique id prefixes are accepted. |
+| `fusionkit sessions rm <id>` | Delete a stored session. |
 
 ```bash
 fusionkit codex --continue
@@ -91,9 +91,9 @@ fusionkit codex --resume 1a2b3c
 | Command | What it does |
 | --- | --- |
 | `fusionkit models list` | Show the curated MLX catalog, downloaded state, sizes, and RAM fit. |
-| `fusionkit models download &lt;model&gt;` | Download a local model. |
-| `fusionkit models rm &lt;model&gt;` | Remove a downloaded local model. |
-| `fusionkit local codex|claude|cursor|serve` | Back a vendor agent with one local OpenAI-compatible model and no fusion. Use `--local` on launch commands for a fused local panel. |
+| `fusionkit models download <model>` | Download a local model. |
+| `fusionkit models rm <model>` | Remove a downloaded local model. |
+| `fusionkit local <codex\|claude\|cursor\|opencode\|serve>` | Back a vendor agent with one local OpenAI-compatible model and no fusion. Use `--local` on launch commands for a fused local panel. |
 
 ## Advanced runtime command
 
@@ -106,23 +106,24 @@ fusionkit codex --resume 1a2b3c
 | `--local` / `--no-local` | Use the on-device MLX panel, or override a `local: true` config default. |
 | `--model ID=PROVIDER:MODEL` | Define a panel member. Repeat for multiple members. |
 | `--model-endpoint ID=URL` | Use a pre-running OpenAI-compatible endpoint as a panel member. |
-| `--ensemble &lt;name&gt;` | Use a named ensemble from `.fusionkit/fusion.json`. |
-| `--judge-model &lt;model&gt;` | Model used for judge synthesis. |
+| `--ensemble <name>` | Use a named ensemble from `.fusionkit/fusion.json`. |
+| `--judge-model <model>` | Model used for judge synthesis. |
 | `--key-env ID=ENV` | Env var holding a panel member's API key. |
 | `--synthesis-url <url>` | Reuse an already-running `fusionkit serve` for synthesis. |
-| `--repo &lt;dir&gt;` | Coding workspace to fuse over. Defaults to the current git repo. |
+| `--repo <dir>` | Coding workspace to fuse over. Defaults to the current git repo. |
 | `--observe` / `--no-observe` | Boot or skip the local trace dashboard. |
-| `--reasoning` / `--no-reasoning` | Narrate panel/judge progress in the tool's thinking UI. |
+| `--reasoning` / `--no-reasoning` | Narrate panel and judge progress in the tool's thinking UI. |
+| `--subagents` / `--no-subagents` | Auto-provision one native sub-agent per ensemble in the launched tool (default on). |
 | `--yes` | Skip the interactive cloud-panel cost confirmation. |
-| `--port &lt;n&gt;` | Fixed gateway port. |
+| `--port <n>` | Fixed gateway port. |
 | `--portless` / `--no-portless` | Route services through stable portless URLs or raw loopback ports. |
-| `--auth-token &lt;token&gt;` | Require a bearer token on the gateway. |
-| `--budget &lt;usd&gt;` | Stop when gateway-observed spend crosses this cap. |
-| `--on-rate-limit fusion|passthrough|fail` | Choose behavior when a passthrough vendor hits rate limits, quota, or billing errors. |
-| `--resume &lt;id&gt;` | Resume a stored session by id or unique prefix. |
+| `--auth-token <token>` | Require a bearer token on the gateway. |
+| `--budget <usd>` | Stop when gateway-observed spend crosses this cap. |
+| `--on-rate-limit <fusion\|passthrough\|fail>` | Choose behavior when a passthrough vendor hits rate limits, quota, or billing errors. |
+| `--resume <id>` | Resume a stored session by id or unique prefix. |
 | `--continue` | Resume the most recently active stored session. |
 | `--ide` | Cursor only: wire the Cursor IDE through the local desktop proxy. |
-| `--expose` | `serve` only: publish the gateway on a public HTTPS Quick Tunnel with a required bearer token (e.g. for Cursor BYOK). |
+| `--expose` | `serve` only: publish the gateway on a public HTTPS Quick Tunnel with a required bearer token (for example, for Cursor BYOK). |
 | `--k <n>` | Step boundaries per panel member before aggregation for the selected ensemble: `1` = single-completion proposers (the caller's harness executes the adopted step), `n > 1` = bounded managed lookahead, unset = full rollouts (default). |
 
 ## Fused and passthrough model ids

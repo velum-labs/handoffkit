@@ -1,0 +1,76 @@
+---
+title: Claude Code
+description: Run Claude Code backed by a fused model panel.
+---
+
+`fusionkit claude` launches [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)
+with the fused panel as its model backend. Claude Code speaks the Anthropic
+Messages dialect to the local gateway and treats `fusion-panel` as a normal
+model.
+
+```bash
+cd your-git-repo
+fusionkit claude
+```
+
+Anything after the tool name is forwarded to Claude Code:
+
+```bash
+fusionkit claude --budget 5 -- --permission-mode plan
+```
+
+## Prerequisites
+
+- The `claude` binary on your PATH. Install it from the
+  [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code/overview).
+- Provider keys for the panel you use: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+  and `GEMINI_API_KEY` for the default cloud trio, or none with `--local` on
+  Apple Silicon.
+
+`fusionkit doctor` verifies both before you launch.
+
+## How the wiring works
+
+The launcher does not write any Claude Code configuration. It sets three
+environment variables on the spawned process:
+
+```bash
+ANTHROPIC_BASE_URL=<gateway-url>       # Claude appends /v1/messages
+ANTHROPIC_AUTH_TOKEN=fusionkit-local   # or the gateway token when one is set
+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+```
+
+Your own Claude Code login and settings are untouched. The same variables are
+printed by `fusionkit serve` if you want to wire Claude Code to a running
+gateway by hand.
+
+## The model picker
+
+With gateway model discovery on, Claude Code's `/model` picker is populated
+from the gateway's model list: the fused model, every other named ensemble,
+and each native panel member. Claude Code only accepts model ids that start
+with `claude` or `anthropic`, so other ids appear with a `claude-` prefix (for
+example `claude-gpt` for the `gpt` member). The gateway strips the prefix when
+routing, so the aliased entry behaves exactly like the underlying model.
+
+## Sub-agents
+
+By default the launcher passes a session-scoped `--agents` payload that defines
+one Claude sub-agent per named ensemble, so the Task tool can delegate to any
+ensemble out of the box. Nothing is written into your `.claude/` directory. If
+you pass your own `--agents`, your definition wins. Pass `--no-subagents` to
+skip auto-provisioning entirely.
+
+## Caveats
+
+- `fusionkit claude` accepts `claude-code` as an alias, so
+  `fusionkit fusion claude-code` also works.
+- `fusionkit local claude` backs Claude Code with a single local MLX model and
+  no fusion. `fusionkit claude --local` runs the fused local panel. Both need
+  Apple Silicon.
+
+## Related pages
+
+- [Quickstart](/docs/getting-started/quickstart) for the first session.
+- [Command reference](/docs/cli/commands) for every launch flag.
+- [Rate-limit handoff](/docs/getting-started/rate-limit-handoff) for passthrough failover.
