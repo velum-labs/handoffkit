@@ -32,6 +32,7 @@ fusionkit codex --yes -- "fix the build"
 | `fusionkit status` | Show the effective config and a dry-run preview of what a run will do. |
 | `fusionkit init` | Scaffold a committed `.fusionkit/` folder for this repo. |
 | `fusionkit fusion stop` | Reap persistent portless singleton services left by prior runs. |
+| `fusionkit telemetry status\|on\|off\|inspect` | Inspect and control anonymous, opt-in product telemetry (off by default). `inspect` prints exactly what a session event would contain. |
 | `fusionkit version` | Print the npm CLI and pinned PyPI synthesizer versions. |
 | `fusionkit completion bash|zsh|fish` | Print a static shell completion script. |
 
@@ -137,6 +138,9 @@ The Node gateway exposes `fusion-panel` for synthesized ensemble answers. It als
 | `FUSIONKIT_SESSIONS_DIR` | Durable session store. |
 | `FUSIONKIT_CONSENT_PATH` | Cloud-panel cost consent file override. |
 | `FUSIONKIT_SKIP_KEY_VALIDATION` | Skip live provider-key validation when set to `1`. |
+| `FUSIONKIT_TELEMETRY` | `1`/`0` overrides the stored product-telemetry consent for one invocation. |
+| `DO_NOT_TRACK` | Any non-empty value force-disables product telemetry, beating every other setting. |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Export fusion trace spans to your own OTLP/HTTP collector; `--observe` fills it with the local scope dashboard when unset. |
 | `PORTLESS` | Set to `0` to disable portless routing by default. |
 | `PORTLESS_STATE_DIR`, `PORTLESS_TLD` | Portless proxy state directory and local domain. |
 

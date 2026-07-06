@@ -22,10 +22,10 @@ Read [Documentation taxonomy](documentation-taxonomy.md) before adding, moving, 
 | [Configuration](configuration.md) | Reference | `.fusionkit/` config, precedence, prompts, and YAML export. |
 | [Privacy](privacy.md) | Policy | Local storage, provider egress, rate-limit failover, and no-telemetry disclosure. |
 | [Fusion Harness Gateway](fusion-harness-gateway.md) | Architecture | Dialect translation, streaming, and per-harness wiring. |
-| [Fusion Judge Trajectory](fusion-judge-trajectory.md) | Architecture | Trajectory production, judge synthesis, trace events, and e2e drivers. |
+| [Fusion Judge Trajectory](fusion-judge-trajectory.md) | Architecture | Trajectory production, judge synthesis, OTel trace spans, and e2e drivers. |
 | [TypeScript reference](typescript-reference.md) | Reference | TypeScript package ownership and public symbols. |
 | [Python reference](python-reference.md) | Reference | Python package ownership, modules, public classes/functions, CLI commands, and examples. |
-| [Specs and APIs](specs-and-apis.md) | Reference | Protocol schemas, generated bindings, HTTP APIs, trace events, and contract workflow. |
+| [Specs and APIs](specs-and-apis.md) | Reference | Protocol schemas, generated bindings, HTTP APIs, trace conventions, and contract workflow. |
 | [Apps and examples](apps-and-examples.md) | Reference | Apps, examples, demo commands, and expected behavior. |
 | [Operations and scripts](operations-and-scripts.md) | Operations | Root scripts, release files, CI workflows, dependency policy, and verification commands. |
 
