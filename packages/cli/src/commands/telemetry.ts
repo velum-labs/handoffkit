@@ -160,6 +160,7 @@ export function registerTelemetry(program: Command): void {
   telemetry
     .command("status", { isDefault: true })
     .description("effective state, deciding layer, install id, and the field list")
+    .option("--json", "emit machine-readable JSON")
     .action(async function (this: Command) {
       const ctx = contextFor(this);
       process.exitCode = runStatus(ctx);
@@ -168,6 +169,7 @@ export function registerTelemetry(program: Command): void {
   telemetry
     .command("on")
     .description("opt in to anonymous telemetry (mints a random install id)")
+    .option("--json", "emit machine-readable JSON")
     .action(async function (this: Command) {
       const ctx = contextFor(this);
       process.exitCode = runOn(ctx);
@@ -176,6 +178,7 @@ export function registerTelemetry(program: Command): void {
   telemetry
     .command("off")
     .description("opt out and delete the install id")
+    .option("--json", "emit machine-readable JSON")
     .action(async function (this: Command) {
       const ctx = contextFor(this);
       process.exitCode = runOff(ctx);
@@ -184,6 +187,7 @@ export function registerTelemetry(program: Command): void {
   telemetry
     .command("inspect")
     .description("print the events this process would send, sending nothing")
+    .option("--json", "emit machine-readable JSON")
     .action(async function (this: Command) {
       const ctx = contextFor(this);
       process.exitCode = runInspect(ctx);
