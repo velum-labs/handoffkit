@@ -28,6 +28,9 @@
       "path": "../protocol"
     },
     {
+      "path": "../runtime-utils"
+    },
+    {
       "path": "../registry"
     },
     {

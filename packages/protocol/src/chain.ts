@@ -25,7 +25,7 @@ export function appendEvent(
   const prev = last ? last.hash : genesisPrev;
   const ts = now();
   const chained: ChainedEvent = {
-    version: "warrant.event.v1",
+    version: "fusionkit.event.v1",
     seq,
     ts,
     prev,

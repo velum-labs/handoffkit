@@ -23,11 +23,7 @@ const SMOKE_ENV_KEYS = [
   "FUSIONKIT_CLAUDE_SMOKE",
   "FUSIONKIT_CODEX_SMOKE",
   "FUSIONKIT_CURSOR_SMOKE",
-  "FUSIONKIT_ENSEMBLE_LIVE_SMOKE",
-  "WARRANT_CLAUDE_SMOKE",
-  "WARRANT_CODEX_SMOKE",
-  "WARRANT_CURSOR_SMOKE",
-  "WARRANT_ENSEMBLE_LIVE_SMOKE"
+  "FUSIONKIT_ENSEMBLE_LIVE_SMOKE"
 ] as const;
 const PROVIDER_ENV_KEYS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"] as const;
 
@@ -153,7 +149,7 @@ async function startSentinelBackend(
   };
 }
 
-function warrant(
+function fusionkit(
   args: string[],
   options: { input?: string; env?: Record<string, string | undefined>; cwd?: string } = {}
 ): { status: number; stdout: string; stderr: string } {
@@ -177,7 +173,7 @@ function warrant(
   };
 }
 
-async function warrantAsync(
+async function fusionkitAsync(
   args: string[],
   options: { input?: string; env?: Record<string, string | undefined>; cwd?: string } = {}
 ): Promise<{ status: number; stdout: string; stderr: string }> {
@@ -253,7 +249,7 @@ function assertCommandOrder(help: string, commands: readonly string[]): void {
 }
 
 test("help prints usage and lists the top-level commands", () => {
-  const result = warrant(["help"]);
+  const result = fusionkit(["help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /real model fusion behind your coding agent/);
   for (const command of ["codex", "claude", "cursor", "serve", "fusion", "init", "ensemble", "local"]) {
@@ -283,11 +279,11 @@ test("help prints usage and lists the top-level commands", () => {
   assert.match(result.stdout, /fusionkit setup/);
   assert.match(result.stdout, /Environment variables:/);
   assert.match(result.stdout, /FUSIONKIT_SKIP_KEY_VALIDATION/);
-  assert.match(result.stdout, /WARRANT_\*/);
+  assert.match(result.stdout, /FUSIONKIT_\*/);
 });
 
 test("ensemble help lists its subcommands", () => {
-  const result = warrant(["ensemble", "--help"]);
+  const result = fusionkit(["ensemble", "--help"]);
   assert.equal(result.status, 0);
   for (const sub of ["run", "handoff", "dashboard", "e2e", "gateway"]) {
     assert.match(result.stdout, new RegExp(`\\b${sub}\\b`));
@@ -295,13 +291,13 @@ test("ensemble help lists its subcommands", () => {
 });
 
 test("ensemble dashboard help documents the live-smoke flag", () => {
-  const result = warrant(["ensemble", "dashboard", "--help"]);
+  const result = fusionkit(["ensemble", "dashboard", "--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /--live-smoke/);
 });
 
 test("gateway help lists the front-door subcommands", () => {
-  const result = warrant(["ensemble", "gateway", "--help"]);
+  const result = fusionkit(["ensemble", "gateway", "--help"]);
   assert.equal(result.status, 0);
   for (const sub of ["serve", "acp", "acp-registry", "test", "codex-config"]) {
     assert.match(result.stdout, new RegExp(`\\b${sub}\\b`));
@@ -309,7 +305,7 @@ test("gateway help lists the front-door subcommands", () => {
 });
 
 test("completion bash includes top-level commands from the Commander tree", () => {
-  const result = warrant(["completion", "bash"]);
+  const result = fusionkit(["completion", "bash"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /complete -F _fusionkit_completion fusionkit/);
   assert.match(result.stdout, /fusionkit __complete/);
@@ -319,7 +315,7 @@ test("completion bash includes top-level commands from the Commander tree", () =
 });
 
 test("__complete lists top-level commands for an empty word and hides internals", () => {
-  const result = warrant(["__complete", "--", ""]);
+  const result = fusionkit(["__complete", "--", ""]);
   assert.equal(result.status, 0, result.stderr);
   const candidates = result.stdout.split("\n").filter((line) => line !== "");
   for (const command of ["codex", "claude", "config", "sessions", "doctor"]) {
@@ -330,26 +326,26 @@ test("__complete lists top-level commands for an empty word and hides internals"
 });
 
 test("__complete filters by the typed prefix", () => {
-  const result = warrant(["__complete", "--", "se"]);
+  const result = fusionkit(["__complete", "--", "se"]);
   assert.equal(result.status, 0, result.stderr);
   const candidates = result.stdout.split("\n").filter((line) => line !== "");
   assert.deepEqual(candidates, ["serve", "sessions", "setup"]);
 });
 
 test("__complete descends into subcommands and dynamic argument values", () => {
-  const config = warrant(["__complete", "--", "config", ""]);
+  const config = fusionkit(["__complete", "--", "config", ""]);
   assert.equal(config.status, 0, config.stderr);
   for (const sub of ["get", "set", "unset", "path"]) {
     assert.ok(config.stdout.split("\n").includes(sub), `expected ${sub} in config completions`);
   }
 
-  const prompts = warrant(["__complete", "--", "prompts", "edit", ""]);
+  const prompts = fusionkit(["__complete", "--", "prompts", "edit", ""]);
   assert.equal(prompts.status, 0, prompts.stderr);
   const promptIds = prompts.stdout.split("\n").filter((line) => line !== "");
   assert.ok(promptIds.includes("judge"));
   assert.ok(promptIds.includes("synthesizer"));
 
-  const shells = warrant(["__complete", "--", "completion", ""]);
+  const shells = fusionkit(["__complete", "--", "completion", ""]);
   assert.equal(shells.status, 0, shells.stderr);
   assert.deepEqual(
     shells.stdout.split("\n").filter((line) => line !== ""),
@@ -358,7 +354,7 @@ test("__complete descends into subcommands and dynamic argument values", () => {
 });
 
 test("__complete offers long flags when the current word starts with a dash", () => {
-  const result = warrant(["__complete", "--", "doctor", "--"]);
+  const result = fusionkit(["__complete", "--", "doctor", "--"]);
   assert.equal(result.status, 0, result.stderr);
   const flags = result.stdout.split("\n").filter((line) => line !== "");
   assert.ok(flags.includes("--json"), `expected --json in ${flags.join(",")}`);
@@ -369,7 +365,7 @@ test("doctor exits nonzero when no provider credentials and no local path are av
   const fixture = makeRepo();
   const fakePath = fakeDoctorPath({ engineCached: false });
   try {
-    const result = warrant(["doctor"], {
+    const result = fusionkit(["doctor"], {
       cwd: fixture.repo,
       env: doctorEnv(fakePath.dir)
     });
@@ -387,7 +383,7 @@ test("doctor exits zero with partial default credentials and names skipped membe
   const fixture = makeRepo();
   const fakePath = fakeDoctorPath({ engineCached: false });
   try {
-    const result = warrant(["doctor"], {
+    const result = fusionkit(["doctor"], {
       cwd: fixture.repo,
       env: doctorEnv(fakePath.dir, { OPENAI_API_KEY: "sk-test" })
     });
@@ -406,7 +402,7 @@ test("doctor --json includes a stable ready boolean", () => {
   const fixture = makeRepo();
   const fakePath = fakeDoctorPath();
   try {
-    const result = warrant(["doctor", "--json"], {
+    const result = fusionkit(["doctor", "--json"], {
       cwd: fixture.repo,
       env: doctorEnv(fakePath.dir, {
         OPENAI_API_KEY: "sk-test",
@@ -447,7 +443,7 @@ test("doctor accepts key envs from the repo fusion config", () => {
         2
       )
     );
-    const result = warrant(["doctor", "--json"], {
+    const result = fusionkit(["doctor", "--json"], {
       cwd: fixture.repo,
       env: doctorEnv(fakePath.dir, { CUSTOM_PANEL_KEY: "sk-test" })
     });
@@ -468,7 +464,7 @@ test("doctor warns when another fusionkit binary is first on PATH", () => {
   const fixture = makeRepo();
   const fakePath = fakeDoctorPath({ fusionkitShim: true });
   try {
-    const result = warrant(["doctor", "--json"], {
+    const result = fusionkit(["doctor", "--json"], {
       cwd: fixture.repo,
       env: doctorEnv(fakePath.dir, { OPENAI_API_KEY: "sk-test" })
     });
@@ -486,24 +482,24 @@ test("doctor warns when another fusionkit binary is first on PATH", () => {
 });
 
 test("gateway acp-registry rejects an unknown action", () => {
-  const result = warrant(["ensemble", "gateway", "acp-registry", "bogus"]);
+  const result = fusionkit(["ensemble", "gateway", "acp-registry", "bogus"]);
   assert.notEqual(result.status, 0);
 });
 
 test("local without a tool prints usage and fails", () => {
-  const result = warrant(["local"]);
+  const result = fusionkit(["local"]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /usage: fusionkit local </);
 });
 
 test("local rejects an unknown tool", () => {
-  const result = warrant(["local", "frobnicate"]);
+  const result = fusionkit(["local", "frobnicate"]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /usage: fusionkit local </);
 });
 
 test("local help documents the flags-before-tool contract", () => {
-  const result = warrant(["local", "--help"]);
+  const result = fusionkit(["local", "--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /must precede the tool name/);
   assert.match(result.stdout, /single local MLX model \(no fusion\)/);
@@ -511,14 +507,14 @@ test("local help documents the flags-before-tool contract", () => {
 });
 
 test("fusion help documents the flags-before-tool contract", () => {
-  const result = warrant(["fusion", "--help"]);
+  const result = fusionkit(["fusion", "--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /must precede the tool name/);
   assert.match(result.stdout, /run the panel on local MLX models \(Apple Silicon\s+only\) instead of cloud providers/);
 });
 
 test("init help does not expose removed governance plane flags", () => {
-  const result = warrant(["init", "--help"]);
+  const result = fusionkit(["init", "--help"]);
   assert.equal(result.status, 0);
   assert.doesNotMatch(result.stdout, /--dir\b/);
   assert.doesNotMatch(result.stdout, /--host\b/);
@@ -528,18 +524,18 @@ test("init help does not expose removed governance plane flags", () => {
 test("init scaffolds a .fusionkit/fusion.json and refuses to clobber without --force", () => {
   const fixture = makeRepo();
   try {
-    const result = warrant(["init", "--repo", fixture.repo]);
+    const result = fusionkit(["init", "--repo", fixture.repo]);
     assert.equal(result.status, 0, result.stderr);
     const configPath = join(fixture.repo, ".fusionkit", "fusion.json");
     assert.ok(existsSync(configPath));
     const config = JSON.parse(readFileSync(configPath, "utf8")) as { version: string };
     assert.equal(config.version, "fusionkit.fusion.v3");
 
-    const again = warrant(["init", "--repo", fixture.repo]);
+    const again = fusionkit(["init", "--repo", fixture.repo]);
     assert.equal(again.status, 1);
     assert.match(again.stderr, /already exists/);
 
-    const forced = warrant(["init", "--repo", fixture.repo, "--force"]);
+    const forced = fusionkit(["init", "--repo", fixture.repo, "--force"]);
     assert.equal(forced.status, 0, forced.stderr);
   } finally {
     fixture.cleanup();
@@ -547,19 +543,19 @@ test("init scaffolds a .fusionkit/fusion.json and refuses to clobber without --f
 });
 
 test("unknown commands fail with guidance", () => {
-  const unknown = warrant(["frobnicate"]);
+  const unknown = fusionkit(["frobnicate"]);
   assert.equal(unknown.status, 1);
   assert.match(unknown.stderr, /unknown command/);
 });
 
 function makeRepo(): { repo: string; cleanup: () => void; output: string } {
-  const root = mkdtempSync(join(tmpdir(), "warrant-ensemble-cli-"));
+  const root = mkdtempSync(join(tmpdir(), "fusionkit-ensemble-cli-"));
   const repo = join(root, "repo");
   const output = join(root, "out");
   mkdirSync(repo);
   spawnSync("git", ["init", "--quiet", "--initial-branch=main"], { cwd: repo });
-  spawnSync("git", ["config", "user.email", "cli@warrant.local"], { cwd: repo });
-  spawnSync("git", ["config", "user.name", "warrant-cli"], { cwd: repo });
+  spawnSync("git", ["config", "user.email", "cli@fusionkit.local"], { cwd: repo });
+  spawnSync("git", ["config", "user.name", "fusionkit-cli"], { cwd: repo });
   writeFileSync(join(repo, "README.md"), "# cli ensemble\n");
   spawnSync("git", ["add", "-A"], { cwd: repo });
   spawnSync("git", ["commit", "--quiet", "-m", "init"], { cwd: repo });
@@ -625,7 +621,7 @@ function addFusionCommandProbe(repo: string): void {
 test("ensemble mock smoke writes records and concise summary", () => {
   const fixture = makeRepo();
   try {
-    const result = warrant([
+    const result = fusionkit([
       "ensemble",
       "run",
       "--harness",
@@ -660,7 +656,7 @@ test("ensemble mock smoke writes records and concise summary", () => {
 test("ensemble command smoke records command output", () => {
   const fixture = makeRepo();
   try {
-    const result = warrant([
+    const result = fusionkit([
       "ensemble",
       "run",
       "--harness",
@@ -692,7 +688,7 @@ test("ensemble command smoke records command output", () => {
 test("ensemble command failure exits nonzero but writes summary", () => {
   const fixture = makeRepo();
   try {
-    const result = warrant([
+    const result = fusionkit([
       "ensemble",
       "run",
       "--harness",
@@ -747,7 +743,7 @@ test("ensemble handoff rejects positional prompts", () => {
     manifest_path: "/tmp/handoff-positional-task.json",
     task: benchmarkTask("handoff_positional", "should come from stdin")
   };
-  const result = warrant(["ensemble", "handoff", "unexpected prompt"], {
+  const result = fusionkit(["ensemble", "handoff", "unexpected prompt"], {
     input: JSON.stringify(payload)
   });
   assert.equal(result.status, 1);
@@ -763,7 +759,7 @@ test("ensemble handoff emits FusionKit-compatible contract records on stdout", (
       manifest_path: "/tmp/handoff-cli-task.json",
       task: benchmarkTask("handoff_cli_task", "summarize the repo for handoff")
     };
-    const result = warrant(
+    const result = fusionkit(
       [
         "ensemble",
         "handoff",
@@ -803,7 +799,7 @@ test("ensemble handoff exits zero with failed command harness records for Fusion
       manifest_path: "/tmp/handoff-command-fail-task.json",
       task: benchmarkTask("handoff_command_fail", "run a failing command harness")
     };
-    const result = warrant(
+    const result = fusionkit(
       [
         "ensemble",
         "handoff",
@@ -849,7 +845,7 @@ test("ensemble handoff command harness records real patch and test evidence", ()
         allowed_tools: ["read_file", "write_file", "run_tests"]
       }
     };
-    const result = warrant(
+    const result = fusionkit(
       [
         "ensemble",
         "handoff",
@@ -903,14 +899,14 @@ test("ensemble handoff command harness records real patch and test evidence", ()
 
 test("ensemble handoff returns structured skip records when codex credentials are absent", () => {
   const fixture = makeRepo();
-  const emptyCodexHome = mkdtempSync(join(tmpdir(), "warrant-codex-empty-home-"));
+  const emptyCodexHome = mkdtempSync(join(tmpdir(), "fusionkit-codex-empty-home-"));
   try {
     const payload = {
       category: "coding",
       manifest_path: "/tmp/handoff-codex-task.json",
       task: benchmarkTask("handoff_codex_skip", "try the codex coding harness")
     };
-    const result = warrant(
+    const result = fusionkit(
       [
         "ensemble",
         "handoff",
@@ -929,9 +925,9 @@ test("ensemble handoff returns structured skip records when codex credentials ar
           CODEX_API_KEY: "",
           OPENAI_API_KEY: "",
           CODEX_HOME: emptyCodexHome,
-          WARRANT_CODEX_RESPONSES_BASE_URL: "",
+          FUSIONKIT_CODEX_RESPONSES_BASE_URL: "",
           CODEX_RESPONSES_BASE_URL: "",
-          WARRANT_CODEX_OPENAI_BASE_URL: "",
+          FUSIONKIT_CODEX_OPENAI_BASE_URL: "",
           OPENAI_BASE_URL: ""
         }
       }
@@ -955,7 +951,7 @@ test("ensemble handoff returns structured skip records when codex credentials ar
 test("ensemble dashboard writes markdown and run-result records", () => {
   const fixture = makeRepo();
   try {
-    const result = warrant([
+    const result = fusionkit([
       "ensemble",
       "dashboard",
       "--repo",
@@ -982,7 +978,7 @@ test("ensemble dashboard writes markdown and run-result records", () => {
 test("ensemble dashboard live-smoke flag remains env-gated by default", () => {
   const fixture = makeRepo();
   try {
-    const result = warrant([
+    const result = fusionkit([
       "ensemble",
       "dashboard",
       "--repo",
@@ -1010,7 +1006,7 @@ test("ensemble dashboard live-smoke flag remains env-gated by default", () => {
 test("ensemble dashboard rejects unknown live-smoke targets", () => {
   const fixture = makeRepo();
   try {
-    const result = warrant([
+    const result = fusionkit([
       "ensemble",
       "dashboard",
       "--repo",
@@ -1032,7 +1028,7 @@ test("ensemble task-file input works without printing prompt contents", () => {
   try {
     const taskFile = join(fixture.repo, "task.txt");
     writeFileSync(taskFile, "secret-ish task text that should not print");
-    const result = warrant([
+    const result = fusionkit([
       "ensemble",
       "run",
       "--harness",
@@ -1060,7 +1056,7 @@ test("ensemble e2e runs a FusionKit-backed command matrix and writes a report", 
   const backend = await startFusionBackend();
   try {
     addFusionCommandProbe(fixture.repo);
-    const result = await warrantAsync([
+    const result = await fusionkitAsync([
       "ensemble",
       "e2e",
       "--fusion-backend",
@@ -1092,7 +1088,7 @@ test("ensemble e2e runs a FusionKit-backed command matrix and writes a report", 
 });
 
 test("ensemble gateway codex-config prints a Responses provider snippet", () => {
-  const result = warrant([
+  const result = fusionkit([
     "ensemble",
     "gateway",
     "codex-config",
@@ -1111,7 +1107,7 @@ test("ensemble gateway test runs the unified front-door acceptance suite", async
   try {
     addFusionCommandProbe(fixture.repo);
     const reportPath = join(fixture.output, "front-door-report.json");
-    const result = await warrantAsync([
+    const result = await fusionkitAsync([
       "ensemble",
       "gateway",
       "test",
@@ -1175,7 +1171,7 @@ test("fusionkit version --json emits the version matrix", async () => {
 test("--expose is rejected for non-serve launch tools", () => {
   const dir = mkdtempSync(join(tmpdir(), "fusionkit-expose-"));
   try {
-    const result = warrant(["codex", "--expose"], { cwd: dir });
+    const result = fusionkit(["codex", "--expose"], { cwd: dir });
     assert.equal(result.status, 1);
     assert.match(result.stdout + result.stderr, /--expose only applies to `fusionkit serve`/);
   } finally {

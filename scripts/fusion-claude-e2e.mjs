@@ -20,7 +20,7 @@ import { startOtlpCapture } from "./otlp-capture.mjs";
 import { startFusionStack } from "../packages/cli/dist/fusion-quickstart.js";
 import { BENCHMARK_PANEL_PRESETS } from "../packages/registry/dist/index.js";
 
-const FK_DIR = process.env.WARRANT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
+const FK_DIR = process.env.FUSIONKIT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
 const log = (line) => process.stderr.write(`${line}\n`);
 const E2E_PANEL = BENCHMARK_PANEL_PRESETS["gpt-opus-smoke"];
 if (E2E_PANEL === undefined) throw new Error("missing gpt-opus-smoke benchmark panel preset");
@@ -86,13 +86,13 @@ async function main() {
     const claudeExit = await new Promise((resolveExit) => {
       const child = spawn(
         "claude",
-        ["-p", "--dangerously-skip-permissions", "--model", "claude-warrant-local", task],
+        ["-p", "--dangerously-skip-permissions", "--model", "claude-fusionkit-local", task],
         {
           cwd: repo,
           env: {
             ...process.env,
             ANTHROPIC_BASE_URL: stack.fusionUrl,
-            ANTHROPIC_AUTH_TOKEN: "warrant-local",
+            ANTHROPIC_AUTH_TOKEN: "fusionkit-local",
             CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1"
           },
           stdio: ["ignore", "pipe", "pipe"]

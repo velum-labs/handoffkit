@@ -109,6 +109,7 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export type { CandidateCommandIsolationInput, CandidateCommandIsolationResult } from "./isolation.js";`
 - `export { cleanupCandidateWorktree, cleanupWorktreePlan, createWorktreePlan, defaultOutputRoot, diffCandidateWorktree, sealCandidateWorktree } from "./worktree.js";`
 - `export type { CandidateWorktree, WorktreePlan } from "./worktree.js";`
+- `export { deriveSourceRepo } from "./source-repo.js";`
 - `export { hardeningToJson, panelMemberPreamble } from "./harness.js";`
 - `export type { EnsembleCandidateSummary, EnsembleDescriptor, EnsembleJudge, EnsembleModel, EnsemblePolicy, EnsembleRunResult, EnsembleRuntime, CandidateContainerDriver, CandidateContainerDriverInput, CandidateContainerDriverResult, CandidateHardeningMetadata, CandidateIsolationConfig, CandidateIsolationKind, CandidateIsolationMountPolicy, CandidateIsolationNetworkPolicy, CandidateIsolationSecretPolicy, HarnessAdapter, HarnessArtifact, HarnessCapabilities, HarnessCandidateOutput, HarnessCollectInput, HarnessPrepareInput, HarnessRunInput, HarnessEndReason, HarnessToolRecord, HarnessTrajectory, TrajectoryStep, TrajectoryStepType, ReviewEvidence, EnsembleRunSummary, VerificationProfile } from "./harness.js";`
 
@@ -364,6 +365,8 @@ No module JSDoc was found.
   True when `command` resolves to an executable: an existing path when it contains a separator, else a match on any `PATH` entry (with Windows `PATHEXT` extensions appended). One implementation shared by every harness and launcher instead of three subtly-different copies.
 - `export function captureWorktreeDiff(cwd: string): string | undefined ...`
   The `git diff` of a working tree, or undefined when clean or not a repo.
+- `export function ensureRunOutputDir(dir: string): string ...`
+  Create a run-output directory. When it lives under a `.fusionkit/` segment (the default output roots inside user repos), drop a self-ignoring `.gitignore` so run artifacts never pollute the user's `git status` — while committed config like `.fusionkit/fusion.json` stays trackable.
 - `export function definedEnv(env: EnvInput): Record<string, string> ...`
 - `export function trimTrailingSlashes(value: string): string ...`
   Strip trailing "/" characters in linear time (a `/\/+$/` regex backtracks polynomially on adversarial input, which code scanning rightly flags).
@@ -445,7 +448,7 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
 - `export { CURSOR_BRIDGE_MODEL_NAME, DEFAULT_ENSEMBLE_NAME, FUSION_PANEL_MODEL, fusionModelId, LOCAL_MODEL_LABEL } from "./constants.js";`
-- `export { envFlagEnabled, HARNESS_DRIVERS_FLAG, harnessDriversEnabled, legacyEnvName, readEnv } from "./env-compat.js";`
+- `export { envFlagEnabled, HARNESS_DRIVERS_FLAG, harnessDriversEnabled, readEnv } from "./env-compat.js";`
 - `export { buildChildEnv, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
 - `export type { BuildChildEnvInput } from "./env.js";`
 - `export { buildSkippedCandidate } from "./candidate.js";`

@@ -155,7 +155,6 @@ REGISTRY: Final[dict[str, Any]] = {
                 ],
                 "responsesApiKey": [
                     "FUSIONKIT_CODEX_API_KEY",
-                    "WARRANT_CODEX_API_KEY",
                     "CODEX_API_KEY",
                     "OPENAI_API_KEY",
                 ],
@@ -165,7 +164,6 @@ REGISTRY: Final[dict[str, Any]] = {
                 ],
                 "openaiCompatibleApiKey": [
                     "FUSIONKIT_CODEX_OPENAI_API_KEY",
-                    "WARRANT_CODEX_OPENAI_API_KEY",
                     "OPENAI_API_KEY",
                 ],
             },

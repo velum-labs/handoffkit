@@ -29,6 +29,7 @@ import type {
   HarnessAdapter,
   HarnessCapabilities
 } from "@fusionkit/ensemble";
+import { ensureRunOutputDir } from "@fusionkit/runtime-utils";
 import { envFlagEnabled, markdownTable, readEnv } from "@fusionkit/tools";
 import type { ToolDashboardMetadata } from "@fusionkit/tools";
 
@@ -42,7 +43,7 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_PROMPT = "Run the CI-safe harness smoke task and report concise evidence.";
 const DEFAULT_COMMAND_SUCCESS = "printf command-ok";
 const DEFAULT_COMMAND_FAILURE = "exit 7";
-const DEFAULT_OUTPUT_DIR = ".warrant/ensemble-dashboard";
+const DEFAULT_OUTPUT_DIR = ".fusionkit/ensemble-dashboard";
 const ALL_LIVE_SMOKE_ENV = "FUSIONKIT_ENSEMBLE_LIVE_SMOKE";
 
 // The generic (non-tool) harness capability profiles are owned by their
@@ -730,7 +731,7 @@ export async function runHarnessSmokeDashboard(
   const commandFailure = options.commandFailure ?? DEFAULT_COMMAND_FAILURE;
   const env = options.env ?? process.env;
   const tools = dashboardTools(options);
-  mkdirSync(outputRoot, { recursive: true });
+  ensureRunOutputDir(outputRoot);
 
   const matrix = createHarnessCapabilityMatrix({
     ...options,

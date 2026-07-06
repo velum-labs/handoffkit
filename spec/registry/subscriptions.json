@@ -30,14 +30,12 @@
         "responsesBaseUrl": ["FUSIONKIT_CODEX_RESPONSES_BASE_URL", "CODEX_RESPONSES_BASE_URL"],
         "responsesApiKey": [
           "FUSIONKIT_CODEX_API_KEY",
-          "WARRANT_CODEX_API_KEY",
           "CODEX_API_KEY",
           "OPENAI_API_KEY"
         ],
         "openaiCompatibleBaseUrl": ["FUSIONKIT_CODEX_OPENAI_BASE_URL", "OPENAI_BASE_URL"],
         "openaiCompatibleApiKey": [
           "FUSIONKIT_CODEX_OPENAI_API_KEY",
-          "WARRANT_CODEX_OPENAI_API_KEY",
           "OPENAI_API_KEY"
         ]
       }

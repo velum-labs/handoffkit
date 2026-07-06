@@ -40,7 +40,7 @@ import { ON_RATE_LIMIT_POLICIES, PANEL_AUTH_MODES, PANEL_PROVIDERS, PANEL_TRUST_
 
 export const FUSION_CONFIG_DIRNAME = ".fusionkit";
 // `fusion.json` (not `config.json`) so the fusion settings never collide with
-// the plane home's `.fusionkit/config.json` (`warrant.config.v2`).
+// the plane home's `.fusionkit/config.json` (`fusionkit.config.v2`).
 export const FUSION_CONFIG_BASENAME = "fusion.json";
 export const FUSION_PROMPTS_DIRNAME = "prompts";
 /** Legacy single-file config at the repo root (pre-`.fusionkit/`). */

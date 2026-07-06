@@ -37,7 +37,7 @@ esac
 
 const tempDirs: string[] = [];
 function tempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "warrant-mlxops-"));
+  const dir = mkdtempSync(join(tmpdir(), "fusionkit-mlxops-"));
   tempDirs.push(dir);
   return dir;
 }
@@ -50,7 +50,7 @@ function fakeEnv(dir: string): MlxEnv {
   const env = new MlxEnv({
     dir,
     packageSpec: "stub==1.0.0",
-    importName: "warrant_stub",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: false
   });
@@ -66,10 +66,10 @@ function writeMatchingManifest(env: MlxEnv): void {
   writeFileSync(
     env.manifestPath,
     JSON.stringify({
-      version: "warrant.mlxenv.v1",
+      version: "fusionkit.mlxenv.v1",
       packageSpec: "stub==1.0.0",
       extraPackageSpecs: [],
-      importName: "warrant_stub",
+      importName: "fusionkit_stub",
       toolchain: "venv+pip via fake",
       interpreterPath: env.venvPython,
       pythonVersion: "3.12.0",

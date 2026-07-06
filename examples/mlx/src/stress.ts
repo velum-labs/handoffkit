@@ -1,16 +1,16 @@
 /**
  * MLX stress test.
  *
- * Provisions a Warrant-owned mlx-lm server, drives concurrent AI SDK calls,
+ * Provisions a FusionKit-owned mlx-lm server, drives concurrent AI SDK calls,
  * and reports latency/throughput/error metrics. Apple Silicon only.
  *
- *   WARRANT_MLX_MODEL              HF repo id
- *   WARRANT_MLX_DIR                owned MLX directory override
- *   WARRANT_MLX_STRESS_REQUESTS    measured requests (default: 64)
- *   WARRANT_MLX_STRESS_CONCURRENCY concurrent in-flight requests (default: 8)
- *   WARRANT_MLX_STRESS_WARMUP      unmeasured warmup requests (default: 2)
- *   WARRANT_MLX_STRESS_MODE        text | object | mixed (default: mixed)
- *   WARRANT_MLX_STRESS_MAX_TOKENS  max output tokens per request (default: 64)
+ *   FUSIONKIT_MLX_MODEL              HF repo id
+ *   FUSIONKIT_MLX_DIR                owned MLX directory override
+ *   FUSIONKIT_MLX_STRESS_REQUESTS    measured requests (default: 64)
+ *   FUSIONKIT_MLX_STRESS_CONCURRENCY concurrent in-flight requests (default: 8)
+ *   FUSIONKIT_MLX_STRESS_WARMUP      unmeasured warmup requests (default: 2)
+ *   FUSIONKIT_MLX_STRESS_MODE        text | object | mixed (default: mixed)
+ *   FUSIONKIT_MLX_STRESS_MAX_TOKENS  max output tokens per request (default: 64)
  */
 import { generateText, jsonSchema, Output } from "ai";
 
@@ -91,7 +91,7 @@ function parsePositiveInteger(
 }
 
 function parseMode(): StressMode {
-  const raw = process.env.WARRANT_MLX_STRESS_MODE ?? "mixed";
+  const raw = process.env.FUSIONKIT_MLX_STRESS_MODE ?? "mixed";
   switch (raw) {
     case "text":
     case "object":
@@ -99,31 +99,31 @@ function parseMode(): StressMode {
       return raw;
     default:
       throw new Error(
-        `WARRANT_MLX_STRESS_MODE must be text, object, or mixed, got "${raw}"`
+        `FUSIONKIT_MLX_STRESS_MODE must be text, object, or mixed, got "${raw}"`
       );
   }
 }
 
 function readConfig(): StressConfig {
   const requests = parsePositiveInteger(
-    "WARRANT_MLX_STRESS_REQUESTS",
+    "FUSIONKIT_MLX_STRESS_REQUESTS",
     DEFAULT_REQUESTS
   );
   const concurrency = parsePositiveInteger(
-    "WARRANT_MLX_STRESS_CONCURRENCY",
+    "FUSIONKIT_MLX_STRESS_CONCURRENCY",
     DEFAULT_CONCURRENCY
   );
   return {
-    model: process.env.WARRANT_MLX_MODEL ?? DEFAULT_MODEL,
-    dir: process.env.WARRANT_MLX_DIR,
+    model: process.env.FUSIONKIT_MLX_MODEL ?? DEFAULT_MODEL,
+    dir: process.env.FUSIONKIT_MLX_DIR,
     requests,
     concurrency: Math.min(concurrency, requests),
-    warmup: parsePositiveInteger("WARRANT_MLX_STRESS_WARMUP", DEFAULT_WARMUP, {
+    warmup: parsePositiveInteger("FUSIONKIT_MLX_STRESS_WARMUP", DEFAULT_WARMUP, {
       allowZero: true
     }),
     mode: parseMode(),
     maxOutputTokens: parsePositiveInteger(
-      "WARRANT_MLX_STRESS_MAX_TOKENS",
+      "FUSIONKIT_MLX_STRESS_MAX_TOKENS",
       DEFAULT_MAX_OUTPUT_TOKENS
     )
   };

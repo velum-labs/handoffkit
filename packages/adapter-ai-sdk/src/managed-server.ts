@@ -81,7 +81,7 @@ function defaultCreateModel(
   // ManagedModelServer owns this local OpenAI-compatible endpoint shape; keep
   // the provider name, /v1 prefix, and dummy key co-located with the server.
   return createOpenAICompatible({
-    name: "warrant-managed-server",
+    name: "fusionkit-managed-server",
     // The provider appends route paths (e.g. /chat/completions) directly,
     // so the OpenAI-compatible API prefix belongs on the base URL.
     baseURL: `${baseURL}/v1`,
@@ -92,7 +92,7 @@ function defaultCreateModel(
 
 export class ManagedModelServer implements LanguageModelV3 {
   readonly specificationVersion = "v3" as const;
-  readonly provider = "warrant-managed-server";
+  readonly provider = "fusionkit-managed-server";
   readonly modelId: string;
 
   private readonly options: ManagedModelServerOptions;
@@ -426,7 +426,7 @@ function structuredEnvOptions(): Pick<
 
 /**
  * The MLX preset: a managed server whose Python environment is owned by
- * Warrant (see MlxEnv) and whose process is spawned from that env's own
+ * FusionKit (see MlxEnv) and whose process is spawned from that env's own
  * interpreter. `handle.env` exposes verify/info/destroy for the footprint.
  */
 export function mlxServer(

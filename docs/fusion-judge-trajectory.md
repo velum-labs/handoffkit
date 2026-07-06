@@ -118,5 +118,5 @@ Real, self-contained drivers live in [scripts/](../scripts):
 - `node scripts/fusion-observe-verify.mjs`: boots the dashboard, runs a codex
   session, and verifies the collector captured the full correlated session.
 
-Each requires `uv`, a FusionKit checkout (`WARRANT_FUSION_FK_DIR` or the default
+Each requires `uv`, a FusionKit checkout (`FUSIONKIT_FUSION_FK_DIR` or the default
 path), and cloud API keys; they make real, billed model calls.

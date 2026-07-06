@@ -46,7 +46,17 @@ async function withTelemetry(run: () => Promise<void>): Promise<void> {
   }
 }
 
+/** Warn once when legacy WARRANT_* env vars are still set in the shell. */
+function warnLegacyWarrantEnv(): void {
+  if (Object.keys(process.env).some((key) => key.startsWith("WARRANT_"))) {
+    process.stderr.write(
+      "warning: WARRANT_* environment variables are no longer read; use FUSIONKIT_*\n"
+    );
+  }
+}
+
 async function main(): Promise<void> {
+  warnLegacyWarrantEnv();
   await withTelemetry(async () => {
     const program = buildProgram();
     // Bare invocation: an interactive command palette on a TTY (pick an action,

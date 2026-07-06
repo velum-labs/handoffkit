@@ -53,7 +53,6 @@ export {
   envFlagEnabled,
   HARNESS_DRIVERS_FLAG,
   harnessDriversEnabled,
-  legacyEnvName,
   readEnv
 } from "./env-compat.js";
 export {

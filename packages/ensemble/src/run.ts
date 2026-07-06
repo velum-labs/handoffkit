@@ -359,7 +359,7 @@ function fallbackCandidateHardening(descriptor: EnsembleDescriptor): CandidateHa
     mount_policy: {
       worktree_writable: mountPolicy?.worktreeWritable ?? true,
       read_only_caches: [...(mountPolicy?.readOnlyCachePaths ?? [])],
-      ignored_dirs: [...(mountPolicy?.ignoredDirs ?? [".git", "node_modules", ".warrant"])]
+      ignored_dirs: [...(mountPolicy?.ignoredDirs ?? [".git", "node_modules", ".warrant", ".fusionkit"])]
     },
     network_policy: {
       default_deny: networkPolicy?.defaultDeny ?? true,

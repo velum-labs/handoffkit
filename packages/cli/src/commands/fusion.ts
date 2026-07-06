@@ -160,7 +160,7 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.resume !== undefined) options.resume = opts.resume;
   if (opts.continue === true) options.continueLatest = true;
 
-  const fusionkitDirEnv = process.env.FUSIONKIT_DIR ?? process.env.WARRANT_FUSIONKIT_DIR;
+  const fusionkitDirEnv = process.env.FUSIONKIT_DIR;
   if (options.fusionkitDir === undefined && fusionkitDirEnv !== undefined) {
     options.fusionkitDir = resolve(fusionkitDirEnv);
   }

@@ -31,7 +31,7 @@ function safeSegment(value: string): string {
 }
 
 export function defaultOutputRoot(descriptor: EnsembleDescriptor): string {
-  const base = descriptor.outputRoot ?? join(descriptor.workspace ?? tmpdir(), ".warrant", "ensemble");
+  const base = descriptor.outputRoot ?? join(descriptor.workspace ?? tmpdir(), ".fusionkit", "ensemble");
   return resolve(base, safeSegment(descriptor.id));
 }
 
@@ -43,7 +43,7 @@ export function createWorktreePlan(descriptor: EnsembleDescriptor): WorktreePlan
   if (!descriptor.workspace) return undefined;
   const workspace = resolve(descriptor.workspace);
   const baseGitSha = descriptor.baseGitSha || gitText(workspace, ["rev-parse", "HEAD"]).trim();
-  const root = mkdtempSync(join(tmpdir(), `warrant-ensemble-${safeSegment(descriptor.id)}-`));
+  const root = mkdtempSync(join(tmpdir(), `fusionkit-ensemble-${safeSegment(descriptor.id)}-`));
   const snapshotHash = hashCanonicalSha256({
     workspace,
     baseGitSha,
@@ -55,7 +55,7 @@ export function createWorktreePlan(descriptor: EnsembleDescriptor): WorktreePlan
     for (const [ordinal, model] of descriptor.models.entries()) {
       const id = candidateId(descriptor, model, ordinal);
       const path = join(root, id);
-      const branchName = `warrant/ensemble/${safeSegment(descriptor.id)}/${safeSegment(model.id)}`;
+      const branchName = `fusionkit/ensemble/${safeSegment(descriptor.id)}/${safeSegment(model.id)}-${ordinal}`;
       gitText(workspace, ["worktree", "add", "--detach", path, baseGitSha]);
       worktrees.push({
         candidateId: id,

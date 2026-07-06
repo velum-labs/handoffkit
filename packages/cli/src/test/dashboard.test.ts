@@ -18,7 +18,7 @@ function makeRepo(): { repo: string; outputRoot: string; cleanup: () => void } {
   const repo = join(root, "repo");
   mkdirSync(repo);
   gitText(repo, ["init", "--quiet", "--initial-branch=main"]);
-  gitText(repo, ["config", "user.email", "dashboard@warrant.local"]);
+  gitText(repo, ["config", "user.email", "dashboard@fusionkit.local"]);
   gitText(repo, ["config", "user.name", "dashboard"]);
   writeFileSync(join(repo, "README.md"), "# dashboard\n");
   gitText(repo, ["add", "-A"]);
@@ -147,7 +147,7 @@ test("explicit live smoke without credentials records a failed preflight", async
       outputRoot: fixture.outputRoot,
       timeoutMs: 1_000,
       createdAt: "2026-06-16T00:00:00.000Z",
-      env: { WARRANT_CLAUDE_SMOKE: "1" },
+      env: { FUSIONKIT_CLAUDE_SMOKE: "1" },
       liveSmoke: ["claude-code"]
     });
     const live = dashboard.records.find((record) => record.taskId === "claude-code-live");
@@ -221,7 +221,7 @@ test("live smoke readiness reports sanitized local evidence refs", async () => {
       timeoutMs: 1_000,
       createdAt: "2026-06-16T00:00:00.000Z",
       env: {
-        WARRANT_ENSEMBLE_LIVE_SMOKE: "1",
+        FUSIONKIT_ENSEMBLE_LIVE_SMOKE: "1",
         VERCEL_TOKEN: "vercel-test",
         ANTHROPIC_API_KEY: "anthropic-test",
         CODEX_API_KEY: "codex-test"

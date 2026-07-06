@@ -307,7 +307,7 @@ test("HTTP server and client enforce auth and validate bad requests", async () =
     assert.equal(health.status, 200);
     assert.deepEqual(await health.json(), {
       ok: true,
-      service: "warrant-tool-executor"
+      service: "fusionkit-tool-executor"
     });
 
     const unauthenticated = await fetch(`${started.url}/v1/fusionkit/tool-executions`, {

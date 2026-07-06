@@ -151,7 +151,6 @@ export const REGISTRY = {
         ],
         "responsesApiKey": [
           "FUSIONKIT_CODEX_API_KEY",
-          "WARRANT_CODEX_API_KEY",
           "CODEX_API_KEY",
           "OPENAI_API_KEY"
         ],
@@ -161,7 +160,6 @@ export const REGISTRY = {
         ],
         "openaiCompatibleApiKey": [
           "FUSIONKIT_CODEX_OPENAI_API_KEY",
-          "WARRANT_CODEX_OPENAI_API_KEY",
           "OPENAI_API_KEY"
         ]
       }

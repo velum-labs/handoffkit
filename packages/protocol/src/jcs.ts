@@ -1,5 +1,5 @@
 /**
- * RFC 8785 (JSON Canonicalization Scheme) subset sufficient for Warrant
+ * RFC 8785 (JSON Canonicalization Scheme) subset sufficient for FusionKit
  * protocol objects: members sorted by UTF-16 code units, ES number
  * serialization (delegated to JSON.stringify, which implements the
  * ECMA-262 algorithm JCS mandates), and no insignificant whitespace.

@@ -59,7 +59,7 @@ function gatewayConfig(opts: GatewayOpts): GatewayRunnerConfig {
   return {
     fusionBackendUrl,
     repo: resolve(opts.repo ?? "."),
-    outputRoot: resolve(opts.out ?? ".warrant/gateway"),
+    outputRoot: resolve(opts.out ?? ".fusionkit/gateway"),
     harnesses: unifiedHarnessKinds(opts.harness),
     models: ensembleModels(opts.model),
     timeoutMs,
@@ -108,7 +108,7 @@ export function buildGatewayCommand(): Command {
   acpRegistry
     .command("install [ids...]")
     .description("install registry-backed ACP adapters")
-    .option("--install-dir <dir>", "adapter metadata dir", ".warrant/acp-registry")
+    .option("--install-dir <dir>", "adapter metadata dir", ".fusionkit/acp-registry")
     .action(async (ids: string[], opts: { installDir: string }) => {
       const defaultAgentIds = toolRegistry
         .list()
@@ -132,7 +132,7 @@ export function buildGatewayCommand(): Command {
       .action(async (opts: GatewayOpts) => {
         const config = gatewayConfig(opts);
         const sentinel = opts.sentinel ?? "FUSION_OK";
-        const outPath = resolve(opts.out ?? ".warrant/front-door-e2e/front-door-report.json");
+        const outPath = resolve(opts.out ?? ".fusionkit/front-door-e2e/front-door-report.json");
         // The report path and the per-run gateway output root must not collide.
         const acceptanceConfig: GatewayRunnerConfig = {
           ...config,

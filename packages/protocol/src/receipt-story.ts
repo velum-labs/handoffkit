@@ -156,6 +156,6 @@ export function buildReceiptStory(bundle: ReceiptBundle): ReceiptStory {
     network: receipt.networkAccessed.map((n) => `${n.host} ${n.decision}`),
     eventCount: receipt.eventCount,
     eventsHead: receipt.eventsHead,
-    verificationCommand: "warrant verify <bundle.json>"
+    verificationCommand: "fusionkit verify <bundle.json>"
   };
 }

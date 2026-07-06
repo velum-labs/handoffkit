@@ -74,7 +74,7 @@ export function buildProgram(): Command {
       "  FUSIONKIT_SKIP_KEY_VALIDATION  skip live provider-key validation when set to 1",
       "  PORTLESS                       set to 0 to disable portless routing by default",
       "  PORTLESS_STATE_DIR/TLD         portless proxy state directory and local domain",
-      "  WARRANT_*                      deprecated aliases for FUSIONKIT_* are still honored"
+      "  FUSIONKIT_*                    canonical environment variable prefix"
     ].join("\n")
   );
 

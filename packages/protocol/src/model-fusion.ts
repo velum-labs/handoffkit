@@ -79,7 +79,7 @@ export type ContractMetadataV1<S extends ModelFusionSchemaName> = {
   schema_bundle_hash: string;
   producer: string;
   producer_version: string;
-  producer_git_sha: string;
+  producer_git_sha?: string;
   created_at: string;
 };
 
@@ -489,7 +489,9 @@ function assertMetadata<S extends ModelFusionSchemaName>(
   assertHash(value.schema_bundle_hash, "schema_bundle_hash");
   assertString(value.producer, "producer");
   assertString(value.producer_version, "producer_version");
-  assertProducerGitSha(value.producer_git_sha, "producer_git_sha");
+  if (value.producer_git_sha !== undefined) {
+    assertProducerGitSha(value.producer_git_sha, "producer_git_sha");
+  }
   assertDateTime(value.created_at, "created_at");
 }
 

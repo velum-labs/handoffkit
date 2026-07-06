@@ -36,7 +36,7 @@ The index is intentionally source-shaped. It does not replace package guides, AP
 - `packages/cli/src/commands/runtime.ts`: registerRuntime (function)
 - `packages/cli/src/commands/sessions.ts`: resolveSessionId (function), registerSessions (function)
 - `packages/cli/src/commands/setup.ts`: registerSetup (function)
-- `packages/cli/src/config.ts`: CliConfig (type), WarrantHome (type), InitOptions (type), initHome (function), loadHome (function), secretStoreFor (function)
+- `packages/cli/src/config.ts`: CliConfig (type), FusionKitHome (type), InitOptions (type), initHome (function), loadHome (function), secretStoreFor (function)
 - `packages/cli/src/cursor-acp.ts`: CursorAcpProducerInput (type), buildCursorAcpProducer (function)
 - `packages/cli/src/dashboard.ts`: HarnessCapabilityTarget (type), HarnessAvailability (type), HarnessLiveSmokeTarget (type), HarnessSmokePurpose (type), HarnessAdapterReadiness (type), HarnessCapabilityMatrixRow (type), HarnessCapabilityMatrix (type), HarnessSmokeOutcome (type), HarnessSmokeRecord (type), HarnessSmokeDashboard (type), HarnessSmokeDashboardOptions (type), createHarnessCapabilityMatrix (function), runHarnessSmokeDashboard (function), harnessDashboard (const)
 - `packages/cli/src/fusion/effective-config.ts`: ConfigSource (type), Provenance (type), DEFAULT_TOOL (const), DEFAULT_LOCAL (const), DEFAULT_OBSERVE (const), DEFAULT_ON_RATE_LIMIT (const), DEFAULT_PORTLESS (const), EffectiveOverrides (type), EffectiveFusionConfig (type), resolveEffectiveConfig (function)

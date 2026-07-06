@@ -1,9 +1,9 @@
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
-import { createWriteStream, existsSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import type { WriteStream } from "node:fs";
 import { createServer } from "node:net";
-import { delimiter, join } from "node:path";
+import { delimiter, join, sep } from "node:path";
 
 type EnvInput = Record<string, string | undefined>;
 
@@ -103,6 +103,22 @@ export function captureWorktreeDiff(cwd: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Create a run-output directory. When it lives under a `.fusionkit/` segment
+ * (the default output roots inside user repos), drop a self-ignoring
+ * `.gitignore` so run artifacts never pollute the user's `git status` —
+ * while committed config like `.fusionkit/fusion.json` stays trackable.
+ */
+export function ensureRunOutputDir(dir: string): string {
+  mkdirSync(dir, { recursive: true });
+  const normalized = dir.split(sep).join("/");
+  if (/(^|\/)\.fusionkit\//.test(`${normalized}/`)) {
+    const ignorePath = join(dir, ".gitignore");
+    if (!existsSync(ignorePath)) writeFileSync(ignorePath, "*\n");
+  }
+  return dir;
 }
 
 export function definedEnv(env: EnvInput): Record<string, string> {

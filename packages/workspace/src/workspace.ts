@@ -21,10 +21,10 @@ import {
 } from "./paths.js";
 
 /** Default branch prefix and committer for divergence-safe pulls. */
-export const PULL_BRANCH_PREFIX = "warrant/";
+export const PULL_BRANCH_PREFIX = "fusionkit/";
 export const DEFAULT_PULL_COMMITTER = {
-  name: "warrant",
-  email: "warrant@localhost"
+  name: "fusionkit",
+  email: "fusionkit@localhost"
 };
 /** Sentinel content hash recorded for files deleted by a run. */
 export const DELETED_FILE_HASH = "0".repeat(64);
@@ -70,7 +70,7 @@ export function captureWorkspace(
   const baseRef = git(repoDir, ["rev-parse", "HEAD"]).trim();
 
   const bundlePath = join(
-    mkdtempSync(join(tmpdir(), "warrant-bundle-")),
+    mkdtempSync(join(tmpdir(), "fusionkit-bundle-")),
     "workspace.bundle"
   );
   git(repoDir, ["bundle", "create", bundlePath, "HEAD"]);
@@ -107,7 +107,7 @@ export function captureWorkspace(
   }
 
   const manifest: WorkspaceManifest = {
-    version: "warrant.manifest.v1",
+    version: "fusionkit.manifest.v1",
     baseRef,
     bundleHash: sha256Hex(bundle),
     ...(dirtyDiff ? { dirtyDiffHash: sha256Hex(dirtyDiff) } : {}),
@@ -188,7 +188,7 @@ export type PullResult =
 export type PullOptions = {
   /** Always land results on a dedicated branch; never touch the checkout. */
   forceBranch?: boolean;
-  /** Branch name prefix for branch-mode pulls. Defaults to "warrant/". */
+  /** Branch name prefix for branch-mode pulls. Defaults to "fusionkit/". */
   branchPrefix?: string;
   /** Committer identity for the branch-mode commit. */
   committer?: { name: string; email: string };
@@ -211,7 +211,7 @@ export function pullRun(
   const head = git(repoDir, ["rev-parse", "HEAD"]).trim();
   const dirty = git(repoDir, ["status", "--porcelain"]).trim().length > 0;
   const diffPath = join(
-    mkdtempSync(join(tmpdir(), "warrant-pull-")),
+    mkdtempSync(join(tmpdir(), "fusionkit-pull-")),
     "out.patch"
   );
   writeFileSync(diffPath, outDiff);
@@ -225,7 +225,7 @@ export function pullRun(
   const shortId = runId.replace(/^run_/, "").slice(0, 12);
   const branch = `${options.branchPrefix ?? PULL_BRANCH_PREFIX}${shortId}`;
   const committer = options.committer ?? DEFAULT_PULL_COMMITTER;
-  const worktree = mkdtempSync(join(tmpdir(), "warrant-worktree-"));
+  const worktree = mkdtempSync(join(tmpdir(), "fusionkit-worktree-"));
   try {
     git(repoDir, ["worktree", "add", "--detach", worktree, baseRef]);
     git(worktree, ["apply", "--binary", "--whitespace=nowarn", diffPath]);
@@ -238,7 +238,7 @@ export function pullRun(
       "commit",
       "--quiet",
       "-m",
-      `warrant run ${runId}`
+      `fusionkit run ${runId}`
     ]);
     const commit = git(worktree, ["rev-parse", "HEAD"]).trim();
     git(repoDir, ["branch", "-f", branch, commit]);

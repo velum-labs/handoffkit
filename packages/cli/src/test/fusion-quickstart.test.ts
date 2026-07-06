@@ -28,8 +28,8 @@ function materializeSampleRepo(root: string): string {
     execFileSync("git", args, { cwd: root });
   };
   git(["init", "--quiet", "--initial-branch=main"]);
-  git(["config", "user.email", "fusion@warrant.local"]);
-  git(["config", "user.name", "warrant-fusion"]);
+  git(["config", "user.email", "fusion@fusionkit.local"]);
+  git(["config", "user.name", "fusionkit-fusion"]);
   writeFileSync(
     join(root, "package.json"),
     JSON.stringify({ name: "fusion-sample", private: true, scripts: { test: "node --test" } }, null, 2) + "\n"

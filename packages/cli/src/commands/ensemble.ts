@@ -7,6 +7,7 @@ import {
   createCommandHarness,
   createMockHarness,
   createMockJudgeSynthesizer,
+  deriveSourceRepo,
   runEnsemble,
   runUnifiedHarnessE2E
 } from "@fusionkit/ensemble";
@@ -133,7 +134,7 @@ async function runEnsembleRun(task: string[], opts: EnsembleRunOpts): Promise<vo
       timeoutMs
     },
     prompt,
-    sourceRepo: "handoffkit",
+    sourceRepo: deriveSourceRepo(repo),
     baseGitSha: gitText(repo, ["rev-parse", "HEAD"]).trim(),
     workspace: repo,
     outputRoot: outDir,
@@ -156,7 +157,7 @@ async function runEnsembleHandoff(extra: string[], opts: EnsembleHandoffOpts): P
   const payload = readStdinJson();
   const task = parseHandoffTask(payload);
   const repo = resolve(opts.repo);
-  const outDir = resolve(opts.out ?? ".warrant/ensemble-handoff");
+  const outDir = resolve(opts.out ?? ".fusionkit/ensemble-handoff");
   const timeoutMs = parseTimeoutMs(opts.timeoutMs, 30000);
   const id = opts.id ?? `handoff_${safeId(task.task_id)}`;
   const harnessId = opts.harness;
@@ -201,7 +202,7 @@ async function runEnsembleHandoff(extra: string[], opts: EnsembleHandoffOpts): P
       timeoutMs
     },
     prompt: task.prompt ?? "",
-    sourceRepo: "handoffkit",
+    sourceRepo: deriveSourceRepo(repo),
     baseGitSha: gitText(repo, ["rev-parse", "HEAD"]).trim(),
     workspace: repo,
     outputRoot: outDir,
@@ -219,7 +220,7 @@ async function runEnsembleHandoff(extra: string[], opts: EnsembleHandoffOpts): P
   };
   const result = await runEnsemble(descriptor);
   writeEnsembleOutput(outDir, result);
-  process.stdout.write(JSON.stringify({ records: recordsForResult(task, result) }) + "\n");
+  process.stdout.write(JSON.stringify({ records: recordsForResult(task, result, repo) }) + "\n");
 }
 
 async function runEnsembleDashboard(extra: string[], opts: EnsembleDashboardOpts): Promise<void> {
@@ -249,7 +250,7 @@ async function runEnsembleE2E(task: string[], opts: EnsembleE2EOpts): Promise<vo
   if (!fusionBackendUrl) fail("--fusion-backend is required");
   const timeoutMs = parseTimeoutMs(opts.timeoutMs, 30000);
   const repo = resolve(opts.repo);
-  const outDir = resolve(opts.out ?? ".warrant/ensemble-e2e");
+  const outDir = resolve(opts.out ?? ".fusionkit/ensemble-e2e");
   const models = ensembleModels(opts.model);
   const result = await runUnifiedHarnessE2E({
     id: opts.id ?? `unified_${Date.now()}`,

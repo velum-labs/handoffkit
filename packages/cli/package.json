@@ -37,6 +37,7 @@
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
+    "@fusionkit/runtime-utils": "workspace:*",
     "@fusionkit/tool-claude": "workspace:*",
     "@fusionkit/tool-codex": "workspace:*",
     "@fusionkit/tool-cursor": "workspace:*",

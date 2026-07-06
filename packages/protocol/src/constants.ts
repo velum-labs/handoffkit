@@ -18,16 +18,16 @@ export {
 } from "./vocabulary.js";
 
 export const PROTOCOL_VERSIONS = {
-  contract: "warrant.contract.v1",
-  receipt: "warrant.receipt.v1",
-  event: "warrant.event.v1",
-  manifest: "warrant.manifest.v1",
-  policy: "warrant.policy.v1",
-  checkpoint: "warrant.checkpoint.v1",
-  envelope: "warrant.envelope.v1",
-  bundle: "warrant.bundle.v1",
-  toolJournal: "warrant.tooljournal.v1",
-  sealed: "warrant.sealed.v1"
+  contract: "fusionkit.contract.v1",
+  receipt: "fusionkit.receipt.v1",
+  event: "fusionkit.event.v1",
+  manifest: "fusionkit.manifest.v1",
+  policy: "fusionkit.policy.v1",
+  checkpoint: "fusionkit.checkpoint.v1",
+  envelope: "fusionkit.envelope.v1",
+  bundle: "fusionkit.bundle.v1",
+  toolJournal: "fusionkit.tooljournal.v1",
+  sealed: "fusionkit.sealed.v1"
 } as const;
 
 export const MODEL_FUSION_SCHEMA_NAMES = [

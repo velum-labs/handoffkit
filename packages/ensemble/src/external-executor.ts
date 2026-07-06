@@ -17,7 +17,7 @@ import type {
 import type { ToolExecutor } from "./tool-executor.js";
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
-const HEALTH_RESPONSE = { ok: true, service: "warrant-tool-executor" } as const;
+const HEALTH_RESPONSE = { ok: true, service: "fusionkit-tool-executor" } as const;
 
 export type FusionKitToolExecutionRequest = {
   candidate_id: string;

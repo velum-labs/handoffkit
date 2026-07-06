@@ -20,7 +20,7 @@ import { startFusionStack } from "../packages/cli/dist/fusion-quickstart.js";
 import { BENCHMARK_PANEL_PRESETS, FUSION_PANEL_MODEL } from "../packages/registry/dist/index.js";
 import { codexLaunchConfigToml } from "../packages/tool-codex/dist/index.js";
 
-const FK_DIR = process.env.WARRANT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
+const FK_DIR = process.env.FUSIONKIT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
 const E2E_PANEL = BENCHMARK_PANEL_PRESETS["gpt-opus-smoke"];
 if (E2E_PANEL === undefined) throw new Error("missing gpt-opus-smoke benchmark panel preset");
 const E2E_JUDGE_MODEL = E2E_PANEL.members.find((member) => member.id === E2E_PANEL.judgeId)?.model;

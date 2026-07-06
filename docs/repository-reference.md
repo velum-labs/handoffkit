@@ -27,7 +27,7 @@ The most important operational fact is the process boundary. The Node CLI owns h
 
 ## Top-level repository layout
 
-The root `package.json` is a private pnpm workspace named `warrant`. It pins Node 22 or newer and pnpm 10.33.4. Its scripts are the standard maintainer commands: `pnpm check` runs repository invariants, `pnpm build` compiles TypeScript project references, `pnpm test` runs compiled Node tests and demo smoke tests, and `pnpm verify` runs all three in order.
+The root `package.json` is a private pnpm workspace named `fusionkit-monorepo`. It pins Node 22 or newer and pnpm 10.33.4. Its scripts are the standard maintainer commands: `pnpm check` runs repository invariants, `pnpm build` compiles TypeScript project references, `pnpm test` runs compiled Node tests and demo smoke tests, and `pnpm verify` runs all three in order.
 
 The root `pyproject.toml` is a virtual uv workspace. It is not a Python package by itself. It binds every package under `python/` into one lockfile and configures shared Ruff, Pyright, pytest, and coverage settings. `uv sync --all-packages` prepares the Python workspace, and `uv run pytest` runs the Python test suite.
 
@@ -149,7 +149,7 @@ await gateway.close();
 
 ### `@fusionkit/protocol`
 
-`@fusionkit/protocol` is the zero-runtime-dependency contract layer. It defines Warrant contracts, receipts, event chains, manifests, policies, checkpoints, handoff envelopes, model-fusion schemas, generated OpenAPI clients, hashing, signing, verification, trace events, and validation helpers.
+`@fusionkit/protocol` is the zero-runtime-dependency contract layer. It defines FusionKit model-fusion contracts, receipts, event chains, manifests, policies, checkpoints, handoff envelopes, model-fusion schemas, generated OpenAPI clients, hashing, signing, verification, trace events, and validation helpers.
 
 Validation and normalization exports include `parseHostAllowlistEntry`, `parsePoolName`, `parseSecretName`, `parseWorkspaceManifestPath`, `assertWireTrajectory`, `isWireTrajectory`, `normalizeWireTrajectories`, and the generated model-fusion assertion functions such as `assertHarnessRunRequestV1`, `assertHarnessRunResultV1`, `assertModelFusionRecord`, `assertEnsembleReceiptV1`, and `assertToolExecutionRecordV1`.
 

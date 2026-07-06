@@ -182,5 +182,4 @@ The full model is documented in [Configuration](configuration.md).
 | `PORTLESS` | Set to `0` to disable portless routing by default. |
 | `PORTLESS_STATE_DIR`, `PORTLESS_TLD` | Portless proxy state directory and local domain. |
 
-Deprecated `WARRANT_*` aliases for canonical `FUSIONKIT_*` names are still
-honored for compatibility; prefer `FUSIONKIT_*` in new scripts and docs.
+Legacy `WARRANT_*` environment variables are no longer read; use `FUSIONKIT_*` in new scripts and docs.

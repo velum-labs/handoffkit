@@ -97,7 +97,7 @@ function makeRepo(): { root: string; repo: string; outputRoot: string; cleanup: 
   const outputRoot = join(root, "out");
   mkdirSync(repo);
   spawnSync("git", ["init", "--quiet", "--initial-branch=main"], { cwd: repo });
-  spawnSync("git", ["config", "user.email", "unified@warrant.local"], { cwd: repo });
+  spawnSync("git", ["config", "user.email", "unified@fusionkit.local"], { cwd: repo });
   spawnSync("git", ["config", "user.name", "unified"], { cwd: repo });
   writeFileSync(join(repo, "README.md"), "# unified fixture\n");
   writeFileSync(

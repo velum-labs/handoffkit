@@ -28,7 +28,7 @@ const DEFAULT_MICROVM_PROVIDER: CandidateMicrovmProvider =
   CANDIDATE_ISOLATION_DEFAULTS.microvmProvider;
 const DEFAULT_MICROVM_RUNTIME = CANDIDATE_ISOLATION_DEFAULTS.microvmRuntime;
 const UNKNOWN_RUNTIME_DIGEST = CANDIDATE_ISOLATION_DEFAULTS.unknownRuntimeDigest;
-const DEFAULT_IGNORED_DIRS = [".git", "node_modules", ".warrant"];
+const DEFAULT_IGNORED_DIRS = [".git", "node_modules", ".warrant", ".fusionkit"];
 const DEFAULT_MAX_SCAN_BYTES = 256 * 1024;
 
 export type CandidateCommandIsolationInput = {

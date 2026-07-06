@@ -47,7 +47,7 @@ test("canonicalize is order-insensitive for equal objects", () => {
 
 test("ed25519 sign/verify roundtrip and tamper detection", () => {
   const keys = generateEd25519KeyPair();
-  const payload = "warrant test payload";
+  const payload = "fusionkit test payload";
   const sig = signData(keys.privateKeyPem, payload);
   assert.equal(verifyData(keys.publicKeyPem, payload, sig), true);
   assert.equal(verifyData(keys.publicKeyPem, payload + "x", sig), false);
@@ -122,7 +122,7 @@ function receiptFixture(
   const plane = generateEd25519KeyPair();
   const runner = generateEd25519KeyPair();
   const workspace = {
-    version: "warrant.manifest.v1" as const,
+    version: "fusionkit.manifest.v1" as const,
     baseRef: "abc123",
     bundleHash: "1".repeat(64),
     untrackedFiles: [],
@@ -131,7 +131,7 @@ function receiptFixture(
   };
   const contract = signContract(
     {
-      version: "warrant.contract.v1",
+      version: "fusionkit.contract.v1",
       runId: "run_test",
       issuedAt: "2026-06-11T00:00:00.000Z",
       issuer: { keyId: keyIdFromPublicPem(plane.publicKeyPem), role: "plane" },
@@ -165,7 +165,7 @@ function receiptFixture(
   assert.ok(last);
   const receipt = signReceipt(
     {
-      version: "warrant.receipt.v1",
+      version: "fusionkit.receipt.v1",
       runId: "run_test",
       contractHash: genesis,
       runner: {
@@ -266,7 +266,7 @@ test("verifyRunnerReceipt checks pre-countersign receipt evidence", () => {
 test("receipt story is the canonical CLI/UI summary model", () => {
   const fixture = receiptFixture();
   const story = buildReceiptStory({
-    version: "warrant.bundle.v1",
+    version: "fusionkit.bundle.v1",
     contract: fixture.contract,
     receipt: fixture.receipt,
     events: fixture.events,
@@ -290,7 +290,7 @@ test("vercel-sandbox receipts verify offline and render through receipt story", 
     "plane"
   );
   const bundle: ReceiptBundle = {
-    version: "warrant.bundle.v1",
+    version: "fusionkit.bundle.v1",
     contract: fixture.contract,
     receipt,
     events: fixture.events,
