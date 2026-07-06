@@ -32,7 +32,7 @@ This map ties every major repository area to the documentation that owns it. Use
 | `apps/scope` | `docs/apps-and-examples.md`, public Observability | Trace dashboard, local install, tests, trace and session correlation, and observability workflow. |
 | `examples/*` | `docs/apps-and-examples.md`, public Examples | Every runnable example, scope, command, expected behavior, and maintenance rules. |
 | `spec/model-fusion-contract` | `docs/specs-and-apis.md`, public API Reference | Schemas, fixtures, OpenAPI, generated bindings, contract records, and code generation workflow. |
-| `spec/fusion-trace` | `docs/specs-and-apis.md`, public Observability | Trace event schema, fixtures, payload shape, and producer expectations. |
+| `spec/fusion-trace` | `docs/specs-and-apis.md`, public Observability | OpenTelemetry semantic-conventions registry (span names, attribute keys, sensitivity classes) and generated bindings. |
 | `spec/*.md` | `docs/documentation-taxonomy.md` | Design archive material that should not be treated as current product truth unless promoted. |
 | `scripts/*` | `docs/operations-and-scripts.md` | Checks, demos, releases, code generation, e2e harnesses, local servers, and monorepo helpers. |
 | `release/*` | `docs/operations-and-scripts.md`, `docs/releasing.md`, `docs/release-publishing.md` | Release state, package lists, dependency graph, desired state, and publish metadata. |

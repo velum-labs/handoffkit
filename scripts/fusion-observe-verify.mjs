@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { initFusionTracing } from "../packages/tracing/dist/index.js";
+
 import { startFusionStack, startObservability } from "../packages/cli/dist/fusion-quickstart.js";
 import { BENCHMARK_PANEL_PRESETS, FUSION_PANEL_MODEL } from "../packages/registry/dist/index.js";
 import { codexLaunchConfigToml } from "../packages/tool-codex/dist/index.js";
@@ -64,8 +66,8 @@ async function main() {
 
   log("building + starting scope dashboard...");
   const obs = await startObservability({ log });
-  process.env.FUSION_TRACE_URL = obs.ingestUrl;
-  process.env.FUSION_TRACE_DIR = obs.traceDir;
+  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = obs.otlpUrl;
+  initFusionTracing({ serviceName: "fusion-observe-verify" });
   log(`dashboard: ${obs.url}`);
 
   log(`starting fusion stack (${E2E_PANEL.panelId}, judge ${E2E_JUDGE_MODEL})...`);
@@ -119,12 +121,12 @@ async function main() {
   log(`sessions: ${sessions.sessions.length}`);
   const session = sessions.sessions[0];
   if (session) {
-    log(`session ${session.traceId}: status=${session.status} repo=${session.repo} events=${session.eventCount}`);
+    log(`session ${session.traceId}: status=${session.status} repo=${session.repo} spans=${session.spanCount}`);
     const detail = (await (await fetch(`${obs.url}/api/sessions/${session.traceId}`)).json()).session;
     log(`  candidates=${detail.candidates.length} modelCalls=${detail.modelCalls.length}`);
     log(`  judge: thinking=${detail.judge.thinking !== undefined} final=${detail.judge.final !== undefined}`);
     log(`  finalOutput=${(detail.finalOutput ?? "").slice(0, 120)}`);
-    log(`  eventCounts=${JSON.stringify(detail.eventCounts)}`);
+    log(`  spanCounts=${JSON.stringify(detail.spanCounts)}`);
   }
 
   log(`\nRESULT: ${test.status === 0 ? "GREEN" : "RED"} — dashboard at ${obs.url} (trace ${session?.traceId ?? "none"})`);

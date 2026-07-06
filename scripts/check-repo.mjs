@@ -459,7 +459,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@ai-sdk/harness-claude-code", "1.0.0-canary.2"],
   ["@ai-sdk/harness-pi", "1.0.0-canary.2"],
   ["@ai-sdk/openai-compatible", "2.0.48"],
-  ["@ai-sdk/provider", "3.0.10"],
+  ["@ai-sdk/provider", "4.0.2"],
   ["@ai-sdk/sandbox-just-bash", "1.0.0-canary.6"],
   ["@ai-sdk/sandbox-vercel", "1.0.0-canary.6"],
   ["@ai-sdk/tui", "1.0.0-canary.6"],
@@ -488,9 +488,9 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@types/figlet", "1.7.0"],
   ["@types/node", "22.19.20"],
   ["@types/react", "19.2.17"],
-  ["@velum-labs/cursorkit", "0.1.2"],
+  ["@velum-labs/cursorkit", "0.2.0"],
   ["@velum-labs/model-fusion-protocol", "0.5.0"],
-  ["@vercel/sandbox", "2.2.0"],
+  ["@vercel/sandbox", "2.4.0"],
   ["ai", "6.0.200"],
   ["commander", "14.0.3"],
   ["figlet", "1.11.0"],
@@ -507,7 +507,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   // Product telemetry engine: official PostHog server SDK (batched, async,
   // shutdown flush). Only the CLI's opt-in telemetry module uses it.
   ["posthog-node", "5.39.4"],
-  ["typescript", "5.9.3"],
+  ["typescript", "6.0.3"],
   ["ws", "8.21.0"],
   ["zod", "4.4.3"]
 ]);
