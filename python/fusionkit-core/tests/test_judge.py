@@ -600,8 +600,7 @@ def _capture_judge_events(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, di
     captured: list[tuple[str, dict[str, Any]]] = []
 
     def capture(
-        trace_id: str | None,
-        span_id: str | None,
+        trace: object,
         event_type: str,
         *,
         payload: dict[str, Any],
@@ -610,6 +609,15 @@ def _capture_judge_events(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, di
 
     monkeypatch.setattr("fusionkit_core.judge._emit_judge", capture)
     return captured
+
+
+def _test_trace_context():
+    """A synthetic W3C context so judge markers/spans have a trace to join."""
+    from fusionkit_core.trace import context_from_headers
+
+    return context_from_headers(
+        {"traceparent": "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"}
+    )
 
 
 @pytest.mark.asyncio
@@ -631,22 +639,25 @@ async def test_fuse_emits_scored_synthesis_and_final_events(
         _trajectory("traj_beta", "beta", "Changed add and added a test."),
     ]
 
-    await JudgeSynthesizer().fuse(
+    result = await JudgeSynthesizer().fuse(
         [ChatMessage(role="user", content="Fix add()")],
         trajectories,
         judge_client=judge,
         synthesizer_client=judge,
         sampling=SamplingConfig(),
         tools=None,
-        trace_id="trace_test",
+        trace=_test_trace_context(),
     )
 
+    # Terminal facts land on the fuse span (not a judge.final marker); the
+    # live markers are thinking -> scored -> synthesis.
     assert [event_type for event_type, _ in captured] == [
         "judge.thinking",
         "judge.scored",
         "judge.synthesis",
-        "judge.final",
     ]
+    assert result.terminal is True
+    assert result.trajectory is not None
     scored = dict(captured)["judge.scored"]
     assert scored["analysis"]["consensus"] == ["both fixed add"]
     assert scored["analysis"]["unique_insights"] == ["beta adds a test"]
@@ -676,18 +687,15 @@ async def test_fuse_select_verbatim_emits_no_synthesis_event(
         judge_client=judge,
         sampling=SamplingConfig(),
         tools=None,
-        trace_id="trace_test",
+        trace=_test_trace_context(),
     )
 
     assert result.trajectory is not None
     assert result.trajectory.synthesis is not None
     assert result.trajectory.synthesis.decision == "select_trajectory"
+    assert result.trajectory.synthesis.selected_trajectory_id == "traj_alpha"
     types = [event_type for event_type, _ in captured]
-    assert "judge.synthesis" not in types
-    assert types[-1] == "judge.final"
-    final = captured[-1][1]
-    assert final["decision"] == "select_trajectory"
-    assert final["selected_trajectory_id"] == "traj_alpha"
+    assert "judge.synthesis" not in types, "select-verbatim skips the synthesizer marker"
 
 
 @pytest.mark.asyncio
@@ -712,7 +720,7 @@ async def test_fuse_empty_synthesis_emits_empty_synthesis_event(
         synthesizer_client=judge,
         sampling=SamplingConfig(),
         tools=None,
-        trace_id="trace_test",
+        trace=_test_trace_context(),
     )
 
     assert result.synthesis_empty is True

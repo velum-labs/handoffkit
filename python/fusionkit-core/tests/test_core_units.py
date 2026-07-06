@@ -6,8 +6,16 @@ from pathlib import Path
 from fusionkit_core.artifacts import LocalArtifactStore, hash_bytes, hash_text
 from fusionkit_core.metrics import JsonlRunLogger, RunRecord
 from fusionkit_core.router import HeuristicRouter
-from fusionkit_core.trace import TraceEmitter, new_span_id, new_trace_id
+from fusionkit_core.trace import (
+    context_from_headers,
+    context_of_span,
+    emit_marker,
+    fusion_span,
+    setup_fusion_tracing,
+    start_fusion_span,
+)
 from fusionkit_core.types import ChatMessage
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 
 def _user(content: str) -> list[ChatMessage]:
@@ -75,39 +83,77 @@ def test_metrics_logger_appends_jsonl_records(tmp_path) -> None:
     assert first["latency_s"] == 1.5
 
 
-def test_trace_emitter_disabled_is_a_noop() -> None:
-    emitter = TraceEmitter(url=None, directory=None)
-    assert emitter.enabled is False
-    # Must not raise even though there is no sink configured.
-    emitter.emit(component="test", event_type="noop", trace_id=new_trace_id())
+_EXPORTER = InMemorySpanExporter()
 
 
-def test_trace_emitter_writes_jsonl_to_directory(tmp_path) -> None:
-    trace_dir = tmp_path / "traces"
-    emitter = TraceEmitter(directory=str(trace_dir))
-    assert emitter.enabled is True
-    trace_id = new_trace_id()
-    emitter.emit(
-        component="panel-model",
-        event_type="model.call.started",
-        trace_id=trace_id,
-        span_id=new_span_id(),
-        payload={"model": "m1"},
+def _setup_tracing() -> InMemorySpanExporter:
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+    setup_fusion_tracing("core-units-test", extra_processors=[SimpleSpanProcessor(_EXPORTER)])
+    return _EXPORTER
+
+
+_TRACEPARENT = "00-11111111111111111111111111111111-2222222222222222-01"
+
+
+def test_fusion_span_continues_an_incoming_w3c_trace() -> None:
+    exporter = _setup_tracing()
+    exporter.clear()
+    ctx = context_from_headers({"traceparent": _TRACEPARENT})
+    assert ctx is not None
+    with fusion_span("synthesis", "fusion.fuse", ctx, {"fusion.fusion_unit": "trajectory"}):
+        pass
+    (span,) = exporter.get_finished_spans()
+    assert span.name == "fusion.fuse"
+    assert span.context is not None
+    assert format(span.context.trace_id, "032x") == "11111111111111111111111111111111"
+    assert span.attributes is not None
+    assert span.attributes["fusion.fusion_unit"] == "trajectory"
+    assert span.attributes.get("fusion.status") != "failed"
+
+
+def test_fusion_span_marks_failures_and_reraises() -> None:
+    exporter = _setup_tracing()
+    exporter.clear()
+    ctx = context_from_headers({"traceparent": _TRACEPARENT})
+    try:
+        with fusion_span("synthesis", "fusion.fuse", ctx):
+            raise ValueError("synth exploded")
+    except ValueError:
+        pass
+    (span,) = exporter.get_finished_spans()
+    assert span.attributes is not None
+    assert span.attributes["fusion.status"] == "failed"
+    assert "synth exploded" in str(span.attributes["fusion.error"])
+
+
+def test_markers_nest_under_their_span_and_drop_without_context() -> None:
+    exporter = _setup_tracing()
+    exporter.clear()
+    # No ambient context: a signal with no trace identity has no consumer.
+    emit_marker("judge", "fusion.judge.thinking", None, {"fusion.raw_analysis": "hmm"})
+    assert exporter.get_finished_spans() == ()
+
+    ctx = context_from_headers({"traceparent": _TRACEPARENT})
+    span = start_fusion_span("judge", "fusion.judge", ctx)
+    assert span is not None
+    emit_marker(
+        "judge",
+        "fusion.judge.thinking",
+        context_of_span(span, ctx),
+        {"fusion.raw_analysis": "hmm"},
     )
-    emitter.close(timeout=2.0)
-    path = trace_dir / f"{trace_id}.jsonl"
-    assert path.exists()
-    event = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
-    assert event["trace_id"] == trace_id
-    assert event["event_type"] == "model.call.started"
-    assert event["component"] == "panel-model"
-    assert event["schema"] == "fusion-trace-event.v1"
+    span.end()
+    finished = exporter.get_finished_spans()
+    marker = next(item for item in finished if item.name == "fusion.judge.thinking")
+    judge = next(item for item in finished if item.name == "fusion.judge")
+    assert marker.parent is not None
+    assert judge.context is not None
+    assert marker.parent.span_id == judge.context.span_id
+    assert marker.start_time == marker.end_time or marker.end_time is not None
 
 
-def test_trace_emitter_skips_when_no_trace_id(tmp_path, monkeypatch) -> None:
-    monkeypatch.delenv("FUSION_TRACE_ID", raising=False)
-    trace_dir = tmp_path / "traces"
-    emitter = TraceEmitter(directory=str(trace_dir))
-    emitter.emit(component="test", event_type="no.trace")
-    emitter.close(timeout=2.0)
-    assert list(trace_dir.glob("*.jsonl")) == []
+def test_context_from_headers_requires_a_traceparent() -> None:
+    assert context_from_headers(None) is None
+    assert context_from_headers({}) is None
+    assert context_from_headers({"baggage": "a=b"}) is None

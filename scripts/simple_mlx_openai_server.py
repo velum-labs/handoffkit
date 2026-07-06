@@ -8,30 +8,19 @@ import time
 import traceback
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import mlx.core as mx  # type: ignore[import-not-found]
 from mlx_lm import generate, load  # type: ignore[import-not-found]
 from mlx_lm.sample_utils import make_sampler  # type: ignore[import-not-found]
 
-try:  # Trace emission is optional: this server may run in an MLX-only venv.
-    from fusionkit_core.trace import (
-        TRACE_ID_HEADER,
-        TRACE_SPAN_HEADER,
-        TRACE_TRAJECTORY_HEADER,
-        new_span_id,
-    )
-    from fusionkit_core.trace import emit as trace_emit  # type: ignore[assignment]
-except Exception:  # noqa: BLE001 - degrade gracefully without fusionkit_core
-    TRACE_TRAJECTORY_HEADER = "x-fusion-trajectory-id"
-    TRACE_ID_HEADER = "x-fusion-trace-id"
-    TRACE_SPAN_HEADER = "x-fusion-span-id"
-
-    def trace_emit(**_kwargs: Any) -> None:
-        return None
-
-    def new_span_id() -> str:
-        return f"span_{uuid.uuid4().hex[:12]}"
+if TYPE_CHECKING:
+    from fusionkit_core import trace as fusion_trace
+else:  # Tracing is optional: this server may run in an MLX-only venv.
+    try:
+        from fusionkit_core import trace as fusion_trace
+    except Exception:  # noqa: BLE001 - degrade gracefully without fusionkit_core
+        fusion_trace = None
 
 
 def build_prompt(tokenizer: Any, messages: list[dict[str, str]]) -> tuple[str | list[int], int]:
@@ -100,10 +89,28 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
             if self.path != "/v1/chat/completions":
                 self._send_json(404, {"error": {"message": "not found"}})
                 return
-            trace_id = self.headers.get(TRACE_ID_HEADER)
-            trajectory_id = self.headers.get(TRACE_TRAJECTORY_HEADER)
-            parent_span = self.headers.get(TRACE_SPAN_HEADER)
-            call_span = new_span_id()
+            call_span = None
+            call_ctx = None
+            identity: dict[str, Any] = {}
+            if fusion_trace is not None:
+                trace = fusion_trace.context_from_headers(dict(self.headers.items()))
+                correlation = fusion_trace.candidate_baggage_of(trace)
+                identity = {
+                    "gen_ai.operation.name": "chat",
+                    "gen_ai.provider.name": "local-mlx",
+                    "gen_ai.request.model": model_id,
+                    "fusion.model.id": model_id,
+                    "fusion.candidate.id": correlation.get("fusion.candidate.id"),
+                    "fusion.trajectory.id": correlation.get("fusion.trajectory.id"),
+                }
+                call_span = fusion_trace.start_fusion_span(
+                    "panel-model", f"chat {model_id}", trace, identity
+                )
+                call_ctx = (
+                    fusion_trace.context_of_span(call_span, trace)
+                    if call_span is not None
+                    else None
+                )
             try:
                 length = int(self.headers.get("content-length", "0"))
                 request = json.loads(self.rfile.read(length).decode("utf-8"))
@@ -115,20 +122,13 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                 raw_top_p = request.get("top_p")
                 temperature = float(raw_temperature if raw_temperature is not None else 0.2)
                 top_p = float(raw_top_p if raw_top_p is not None else 0.95)
-                trace_emit(
-                    component="panel-model",
-                    event_type="model.call.started",
-                    trace_id=trace_id,
-                    span_id=call_span,
-                    parent_span_id=parent_span,
-                    trajectory_id=trajectory_id,
-                    model_id=model_id,
-                    payload={
-                        "model": model_id,
-                        "provider": "local-mlx",
-                        "message_count": len(messages),
-                    },
-                )
+                if fusion_trace is not None:
+                    fusion_trace.emit_marker(
+                        "panel-model",
+                        "fusion.model_call.started",
+                        call_ctx,
+                        {**identity, "fusion.message_count": len(messages)},
+                    )
 
                 prompt, prompt_tokens = build_prompt(tokenizer, messages)
                 sampler = make_sampler(temperature, top_p)
@@ -145,27 +145,26 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                 mx.clear_cache()
                 latency_s = time.perf_counter() - started
                 completion_tokens = len(tokenizer.encode(text)) if text else 0
-                trace_emit(
-                    component="panel-model",
-                    event_type="model.call.finished",
-                    trace_id=trace_id,
-                    span_id=call_span,
-                    parent_span_id=parent_span,
-                    trajectory_id=trajectory_id,
-                    model_id=model_id,
-                    payload={
-                        "model": model_id,
-                        "provider": "local-mlx",
-                        "latency_s": round(latency_s, 3),
-                        "finish_reason": "length" if completion_tokens >= max_tokens else "stop",
-                        "content_preview": (text or "")[:400],
-                        "usage": {
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": completion_tokens,
-                            "total_tokens": prompt_tokens + completion_tokens,
-                        },
-                    },
-                )
+                finish_reason = "length" if completion_tokens >= max_tokens else "stop"
+                if fusion_trace is not None and call_span is not None:
+                    call_span.set_attributes(
+                        {
+                            "gen_ai.usage.input_tokens": prompt_tokens,
+                            "gen_ai.usage.output_tokens": completion_tokens,
+                            "gen_ai.response.finish_reasons": [finish_reason],
+                            "fusion.finish_reason": finish_reason,
+                            "fusion.content": (text or "")[:400],
+                            "fusion.usage": fusion_trace.json_attr(
+                                {
+                                    "prompt_tokens": prompt_tokens,
+                                    "completion_tokens": completion_tokens,
+                                    "total_tokens": prompt_tokens + completion_tokens,
+                                    "latency_s": round(latency_s, 3),
+                                }
+                            )
+                            or "",
+                        }
+                    )
                 print(
                     json.dumps(
                         {
@@ -201,8 +200,14 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                         },
                     },
                 )
+                if fusion_trace is not None:
+                    fusion_trace.end_fusion_span(call_span)
             except Exception as exc:
                 traceback.print_exc()
+                if fusion_trace is not None:
+                    fusion_trace.end_fusion_span(
+                        call_span, error=f"{exc.__class__.__name__}: {exc}"
+                    )
                 self._send_json(
                     500,
                     {"error": {"message": str(exc), "type": exc.__class__.__name__}},
@@ -218,6 +223,8 @@ def main() -> None:
     parser.add_argument("--port", type=int, required=True)
     args = parser.parse_args()
 
+    if fusion_trace is not None:
+        fusion_trace.setup_fusion_tracing("fusionkit-panel-model")
     print(json.dumps({"event": "loading", "model": args.model}), flush=True)
     model, tokenizer = load(args.model)
     mx.eval(model.parameters())

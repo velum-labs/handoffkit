@@ -54,7 +54,7 @@ from fusionkit_core.run import (
     make_id,
 )
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER, new_span_id
+from fusionkit_core.trace import context_from_headers
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall
 from pydantic import BaseModel, Field, ValidationError
 
@@ -333,8 +333,7 @@ def create_app(
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
     async def fuse_trajectories(
         request: FuseTrajectoriesRequest,
-        trace_id: str | None = Header(default=None, alias=TRACE_ID_HEADER),
-        span_id: str | None = Header(default=None, alias=TRACE_SPAN_HEADER),
+        http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         judge_model = request.judge_model or config.resolved_judge_model
         synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
@@ -363,7 +362,7 @@ def create_app(
         messages = [_to_chat_message(message) for message in request.messages]
         tools = _normalize_tools(request.tools)
         tool_choice = _normalize_tool_choice(request.tool_choice)
-        resolved_span = span_id or new_span_id()
+        trace = context_from_headers(dict(http_request.headers))
         # Real streaming: the synthesizer turn streams tokens; the fused
         # trajectory metadata rides on the terminal SSE chunk.
         if request.stream:
@@ -376,8 +375,7 @@ def create_app(
                 tools=tools,
                 tool_choice=tool_choice,
                 prompts=request.prompts,
-                trace_id=trace_id,
-                span_id=resolved_span,
+                trace=trace,
             )
             return StreamingResponse(
                 _fused_completion_sse(request.model, stream),
@@ -393,8 +391,7 @@ def create_app(
                 tools=tools,
                 tool_choice=tool_choice,
                 prompts=request.prompts,
-                trace_id=trace_id,
-                span_id=resolved_span,
+                trace=trace,
             )
         except ProviderCallError as exc:
             return _provider_error_response(exc)
