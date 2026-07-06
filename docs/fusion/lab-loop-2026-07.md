@@ -8,6 +8,8 @@ precise meaning, it is defined the first time it appears.
 produces our first launch products — several named ensembles, each sold as a
 single model — and the data that will later power a router that picks
 between them.
+**Implementation:** the staged engineering spec for building this loop as
+code is `lab-loop-implementation-spec-2026-07.md`.
 
 ---
 
