@@ -1,5 +1,4 @@
 {
-  "$schema": "./registry.schema.json",
   "name": "fusion-trace-conventions",
   "version": "1.0.0",
   "description": "Semantic conventions for the fusion stack's OpenTelemetry traces. Spans named here are the only spans fusion components emit; attributes named here are the only fusion attributes they carry. Where the OTel GenAI semantic conventions define an attribute (gen_ai.*), it is used instead of a fusion.* invention so model-call spans render natively in GenAI-aware backends (e.g. PostHog LLM analytics). Sensitivity classes drive redaction at sink boundaries: 'local' attributes never leave the machine through the product-telemetry pipeline; 'exportable' attributes may.",
@@ -13,194 +12,666 @@
     "cursor-bridge": "fusionkit.cursor-bridge"
   },
   "attributes": {
-    "fusion.turn": { "type": "int", "sensitivity": "exportable", "description": "1-based user-turn index within a session; a follow-up message is a new turn." },
-    "fusion.dialect": { "type": "string", "sensitivity": "exportable", "description": "Front-door dialect: fusion-step, openai-chat, openai-responses, anthropic-messages, acp, native-passthrough." },
-    "fusion.status": { "type": "string", "sensitivity": "exportable", "description": "Terminal status of the unit: succeeded, failed, skipped." },
-    "fusion.repo": { "type": "string", "sensitivity": "local", "description": "Absolute path of the coding workspace the panel fuses over." },
-    "fusion.prompt_preview": { "type": "string", "sensitivity": "local", "description": "Leading slice of the user prompt." },
-    "fusion.environment": { "type": "string", "sensitivity": "local", "description": "JSON environment snapshot: repo, harnesses, judge_model, models[{id,model,endpoint_id,provider}], model_endpoints, fusion_backend_url." },
-    "fusion.evidence": { "type": "string", "sensitivity": "local", "description": "JSON array of run evidence strings." },
-    "fusion.run_id": { "type": "string", "sensitivity": "exportable", "description": "Run-store run id, when the unit corresponds to a persisted run." },
-    "fusion.session_id": { "type": "string", "sensitivity": "exportable", "description": "Gateway session key the unit belongs to." },
-    "fusion.candidate.id": { "type": "string", "sensitivity": "exportable", "description": "Panel candidate id (one harness run of one panel member within a turn)." },
-    "fusion.trajectory.id": { "type": "string", "sensitivity": "exportable", "description": "Wire trajectory id carried into the fuse step." },
-    "fusion.model.id": { "type": "string", "sensitivity": "exportable", "description": "Panel member id (the short handle from the panel config, e.g. 'gpt')." },
-    "fusion.branch_name": { "type": "string", "sensitivity": "local", "description": "Git branch the candidate worked on." },
-    "fusion.worktree_path": { "type": "string", "sensitivity": "local", "description": "Worktree directory the candidate worked in." },
-    "fusion.step_count": { "type": "int", "sensitivity": "exportable", "description": "Number of trajectory steps the candidate produced." },
-    "fusion.proposed_calls": { "type": "string", "sensitivity": "local", "description": "JSON array of the candidate's terminal proposal (a bounded rollout's captured k-th batch): [{name, arguments_preview}]." },
-    "fusion.tool_call_count": { "type": "int", "sensitivity": "exportable", "description": "Number of tool calls in the unit." },
-    "fusion.finish_reason": { "type": "string", "sensitivity": "exportable", "description": "Model/harness finish reason." },
-    "fusion.verification_status": { "type": "string", "sensitivity": "exportable", "description": "Candidate verification outcome: passed, failed, skipped." },
-    "fusion.final_output_preview": { "type": "string", "sensitivity": "local", "description": "Leading slice of the unit's final output." },
-    "fusion.final_output": { "type": "string", "sensitivity": "local", "description": "Full final output of the unit." },
-    "fusion.content": { "type": "string", "sensitivity": "local", "description": "Raw content of a judge step response." },
-    "fusion.step": { "type": "string", "sensitivity": "local", "description": "JSON trajectory step: {index,type,text?,tool_name?,tool_call_id?,tool_input?,is_error?}." },
-    "fusion.step.index": { "type": "int", "sensitivity": "exportable", "description": "Trajectory step index." },
-    "fusion.step.type": { "type": "string", "sensitivity": "exportable", "description": "Trajectory step type: reasoning, tool_call, observation, output." },
-    "fusion.prompt": { "type": "string", "sensitivity": "local", "description": "User/task prompt sent to a panel model." },
-    "fusion.system_prompt": { "type": "string", "sensitivity": "local", "description": "System prompt sent to a panel model." },
-    "fusion.message_count": { "type": "int", "sensitivity": "exportable", "description": "Number of chat messages in a model call." },
-    "fusion.tool_count": { "type": "int", "sensitivity": "exportable", "description": "Number of tools offered in a model call." },
-    "fusion.judge.model": { "type": "string", "sensitivity": "exportable", "description": "Judge model name for the turn." },
-    "fusion.synthesizer.model": { "type": "string", "sensitivity": "exportable", "description": "Synthesizer model name for the fuse step." },
-    "fusion.messages": { "type": "string", "sensitivity": "local", "description": "JSON chat messages handed to the judge." },
-    "fusion.trajectories": { "type": "string", "sensitivity": "local", "description": "JSON wire trajectories handed to the judge." },
-    "fusion.tools": { "type": "string", "sensitivity": "local", "description": "JSON tool definitions handed to the judge." },
-    "fusion.trajectory_ids": { "type": "string[]", "sensitivity": "exportable", "description": "Trajectory ids handed to the judge." },
-    "fusion.raw_analysis": { "type": "string", "sensitivity": "local", "description": "The judge's raw analyze response (its thinking)." },
-    "fusion.tool_calls": { "type": "string", "sensitivity": "local", "description": "JSON tool calls requested by a judge step." },
-    "fusion.analysis": { "type": "string", "sensitivity": "local", "description": "JSON structured FusionAnalysis: consensus, contradictions, unique_insights, coverage_gaps, likely_errors." },
-    "fusion.metrics": { "type": "string", "sensitivity": "local", "description": "JSON judge metrics: best_trajectory, candidate_ranks, recommended_final_structure." },
-    "fusion.input_ids": { "type": "string[]", "sensitivity": "exportable", "description": "Candidate/trajectory ids the judge scored." },
-    "fusion.raw_output": { "type": "string", "sensitivity": "local", "description": "The synthesizer's raw output." },
-    "fusion.synthesis_empty": { "type": "boolean", "sensitivity": "exportable", "description": "True when synthesis produced empty output and a fallback was used." },
-    "fusion.synthesis": { "type": "string", "sensitivity": "local", "description": "JSON TrajectorySynthesis record (decision, selected id, rationale, metrics)." },
-    "fusion.decision": { "type": "string", "sensitivity": "exportable", "description": "Judge decision: synthesize or select_trajectory." },
-    "fusion.selected.trajectory_id": { "type": "string", "sensitivity": "exportable", "description": "Trajectory selected verbatim when decision is select_trajectory." },
-    "fusion.rationale": { "type": "string", "sensitivity": "local", "description": "Judge rationale for its decision." },
-    "fusion.judge.degraded": { "type": "string", "sensitivity": "exportable", "description": "Failure category when judge analysis degraded (provider error, parse failure)." },
-    "fusion.terminal": { "type": "boolean", "sensitivity": "exportable", "description": "True when a judge step is the turn's terminal step (no pending tool calls)." },
-    "fusion.fusion_unit": { "type": "string", "sensitivity": "exportable", "description": "What the judge fused: trajectory or trajectory_step." },
-    "fusion.endpoint_id": { "type": "string", "sensitivity": "exportable", "description": "Router endpoint id serving a model call or passthrough." },
-    "fusion.usage": { "type": "string", "sensitivity": "local", "description": "JSON usage blob: prompt_tokens, completion_tokens, total_tokens, latency_s, model_id." },
-    "fusion.cost.stage": { "type": "string", "sensitivity": "exportable", "description": "Cost meter stage: panel, judge_synth, passthrough." },
-    "fusion.cost.model": { "type": "string", "sensitivity": "exportable", "description": "Model the cost entry was priced against." },
-    "fusion.cost.turn_usd": { "type": "double", "sensitivity": "exportable", "description": "USD cost of the metered entry." },
-    "fusion.cost.provider_usd": { "type": "double", "sensitivity": "exportable", "description": "Provider-reported USD cost, when available." },
-    "fusion.cost.local_compute_usd": { "type": "double", "sensitivity": "exportable", "description": "Estimated local-compute USD cost, when available." },
-    "fusion.cost.session_total_usd": { "type": "double", "sensitivity": "exportable", "description": "Session running USD total after this entry." },
-    "fusion.cost.unknown": { "type": "boolean", "sensitivity": "exportable", "description": "True when the entry could not be priced." },
-    "fusion.cost.unknown_usage": { "type": "boolean", "sensitivity": "exportable", "description": "True when the entry had no usable usage." },
-    "fusion.headline": { "type": "string", "sensitivity": "local", "description": "Narration beat headline." },
-    "fusion.prose": { "type": "string", "sensitivity": "local", "description": "Narration beat prose." },
-    "fusion.execution_id": { "type": "string", "sensitivity": "exportable", "description": "Tool execution record id." },
-    "fusion.plan_id": { "type": "string", "sensitivity": "exportable", "description": "Tool call plan id." },
-    "fusion.output_hash": { "type": "string", "sensitivity": "exportable", "description": "Content hash of a tool execution output." },
-    "fusion.error": { "type": "string", "sensitivity": "local", "description": "Error message text." },
-    "error.type": { "type": "string", "sensitivity": "exportable", "description": "OTel standard error class/kind for failed units." },
-    "http.response.status_code": { "type": "int", "sensitivity": "exportable", "description": "OTel standard HTTP response status code." },
-    "gen_ai.operation.name": { "type": "string", "sensitivity": "exportable", "description": "GenAI semconv operation, always 'chat' for fusion model calls." },
-    "gen_ai.provider.name": { "type": "string", "sensitivity": "exportable", "description": "GenAI semconv provider: openai, anthropic, openrouter, local-mlx, ..." },
-    "gen_ai.request.model": { "type": "string", "sensitivity": "exportable", "description": "GenAI semconv requested model name." },
-    "gen_ai.response.finish_reasons": { "type": "string[]", "sensitivity": "exportable", "description": "GenAI semconv finish reasons." },
-    "gen_ai.usage.input_tokens": { "type": "int", "sensitivity": "exportable", "description": "GenAI semconv input token count." },
-    "gen_ai.usage.output_tokens": { "type": "int", "sensitivity": "exportable", "description": "GenAI semconv output token count." }
+    "fusion.turn": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "1-based user-turn index within a session; a follow-up message is a new turn."
+    },
+    "fusion.dialect": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Front-door dialect: fusion-step, openai-chat, openai-responses, anthropic-messages, acp, native-passthrough."
+    },
+    "fusion.status": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Terminal status of the unit: succeeded, failed, skipped."
+    },
+    "fusion.repo": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Absolute path of the coding workspace the panel fuses over."
+    },
+    "fusion.prompt_preview": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Leading slice of the user prompt."
+    },
+    "fusion.environment": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON environment snapshot: repo, harnesses, judge_model, models[{id,model,endpoint_id,provider}], model_endpoints, fusion_backend_url."
+    },
+    "fusion.evidence": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON array of run evidence strings."
+    },
+    "fusion.run_id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Run-store run id, when the unit corresponds to a persisted run."
+    },
+    "fusion.session_id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Gateway session key the unit belongs to."
+    },
+    "fusion.candidate.id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Panel candidate id (one harness run of one panel member within a turn)."
+    },
+    "fusion.trajectory.id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Wire trajectory id carried into the fuse step."
+    },
+    "fusion.model.id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Panel member id (the short handle from the panel config, e.g. 'gpt')."
+    },
+    "fusion.branch_name": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Git branch the candidate worked on."
+    },
+    "fusion.worktree_path": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Worktree directory the candidate worked in."
+    },
+    "fusion.step_count": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "Number of trajectory steps the candidate produced."
+    },
+    "fusion.proposed_calls": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON array of the candidate's terminal proposal (a bounded rollout's captured k-th batch): [{name, arguments_preview}]."
+    },
+    "fusion.tool_call_count": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "Number of tool calls in the unit."
+    },
+    "fusion.finish_reason": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Model/harness finish reason."
+    },
+    "fusion.verification_status": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Candidate verification outcome: passed, failed, skipped."
+    },
+    "fusion.final_output_preview": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Leading slice of the unit's final output."
+    },
+    "fusion.final_output": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Full final output of the unit."
+    },
+    "fusion.content": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Raw content of a judge step response."
+    },
+    "fusion.step": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON trajectory step: {index,type,text?,tool_name?,tool_call_id?,tool_input?,is_error?}."
+    },
+    "fusion.step.index": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "Trajectory step index."
+    },
+    "fusion.step.type": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Trajectory step type: reasoning, tool_call, observation, output."
+    },
+    "fusion.prompt": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "User/task prompt sent to a panel model."
+    },
+    "fusion.system_prompt": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "System prompt sent to a panel model."
+    },
+    "fusion.message_count": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "Number of chat messages in a model call."
+    },
+    "fusion.tool_count": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "Number of tools offered in a model call."
+    },
+    "fusion.judge.model": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Judge model name for the turn."
+    },
+    "fusion.synthesizer.model": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Synthesizer model name for the fuse step."
+    },
+    "fusion.messages": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON chat messages handed to the judge."
+    },
+    "fusion.trajectories": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON wire trajectories handed to the judge."
+    },
+    "fusion.tools": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON tool definitions handed to the judge."
+    },
+    "fusion.trajectory_ids": {
+      "type": "string[]",
+      "sensitivity": "exportable",
+      "description": "Trajectory ids handed to the judge."
+    },
+    "fusion.raw_analysis": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "The judge's raw analyze response (its thinking)."
+    },
+    "fusion.tool_calls": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON tool calls requested by a judge step."
+    },
+    "fusion.analysis": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON structured FusionAnalysis: consensus, contradictions, unique_insights, coverage_gaps, likely_errors."
+    },
+    "fusion.metrics": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON judge metrics: best_trajectory, candidate_ranks, recommended_final_structure."
+    },
+    "fusion.input_ids": {
+      "type": "string[]",
+      "sensitivity": "exportable",
+      "description": "Candidate/trajectory ids the judge scored."
+    },
+    "fusion.raw_output": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "The synthesizer's raw output."
+    },
+    "fusion.synthesis_empty": {
+      "type": "boolean",
+      "sensitivity": "exportable",
+      "description": "True when synthesis produced empty output and a fallback was used."
+    },
+    "fusion.synthesis": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON TrajectorySynthesis record (decision, selected id, rationale, metrics)."
+    },
+    "fusion.decision": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Judge decision: synthesize or select_trajectory."
+    },
+    "fusion.selected.trajectory_id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Trajectory selected verbatim when decision is select_trajectory."
+    },
+    "fusion.rationale": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Judge rationale for its decision."
+    },
+    "fusion.judge.degraded": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Failure category when judge analysis degraded (provider error, parse failure)."
+    },
+    "fusion.terminal": {
+      "type": "boolean",
+      "sensitivity": "exportable",
+      "description": "True when a judge step is the turn's terminal step (no pending tool calls)."
+    },
+    "fusion.fusion_unit": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "What the judge fused: trajectory or trajectory_step."
+    },
+    "fusion.endpoint_id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Router endpoint id serving a model call or passthrough."
+    },
+    "fusion.usage": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "JSON usage blob: prompt_tokens, completion_tokens, total_tokens, latency_s, model_id."
+    },
+    "fusion.cost.stage": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Cost meter stage: panel, judge_synth, passthrough."
+    },
+    "fusion.cost.model": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Model the cost entry was priced against."
+    },
+    "fusion.cost.turn_usd": {
+      "type": "double",
+      "sensitivity": "exportable",
+      "description": "USD cost of the metered entry."
+    },
+    "fusion.cost.provider_usd": {
+      "type": "double",
+      "sensitivity": "exportable",
+      "description": "Provider-reported USD cost, when available."
+    },
+    "fusion.cost.local_compute_usd": {
+      "type": "double",
+      "sensitivity": "exportable",
+      "description": "Estimated local-compute USD cost, when available."
+    },
+    "fusion.cost.session_total_usd": {
+      "type": "double",
+      "sensitivity": "exportable",
+      "description": "Session running USD total after this entry."
+    },
+    "fusion.cost.unknown": {
+      "type": "boolean",
+      "sensitivity": "exportable",
+      "description": "True when the entry could not be priced."
+    },
+    "fusion.cost.unknown_usage": {
+      "type": "boolean",
+      "sensitivity": "exportable",
+      "description": "True when the entry had no usable usage."
+    },
+    "fusion.headline": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Narration beat headline."
+    },
+    "fusion.prose": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Narration beat prose."
+    },
+    "fusion.execution_id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Tool execution record id."
+    },
+    "fusion.plan_id": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Tool call plan id."
+    },
+    "fusion.output_hash": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "Content hash of a tool execution output."
+    },
+    "fusion.error": {
+      "type": "string",
+      "sensitivity": "local",
+      "description": "Error message text."
+    },
+    "error.type": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "OTel standard error class/kind for failed units."
+    },
+    "http.response.status_code": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "OTel standard HTTP response status code."
+    },
+    "gen_ai.operation.name": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "GenAI semconv operation, always 'chat' for fusion model calls."
+    },
+    "gen_ai.provider.name": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "GenAI semconv provider: openai, anthropic, openrouter, local-mlx, ..."
+    },
+    "gen_ai.request.model": {
+      "type": "string",
+      "sensitivity": "exportable",
+      "description": "GenAI semconv requested model name."
+    },
+    "gen_ai.response.finish_reasons": {
+      "type": "string[]",
+      "sensitivity": "exportable",
+      "description": "GenAI semconv finish reasons."
+    },
+    "gen_ai.usage.input_tokens": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "GenAI semconv input token count."
+    },
+    "gen_ai.usage.output_tokens": {
+      "type": "int",
+      "sensitivity": "exportable",
+      "description": "GenAI semconv output token count."
+    }
   },
   "spans": {
     "fusion.run": {
       "kind": "span",
       "component": "gateway",
       "description": "A bounded front-door run: one prompt through panel + fusion to a final output (openai-chat/responses/anthropic/acp dialects). Root of its trace.",
-      "attributes": ["fusion.dialect", "fusion.turn", "fusion.prompt_preview", "fusion.environment", "fusion.repo", "fusion.status", "fusion.run_id", "fusion.final_output_preview", "fusion.evidence", "fusion.error", "error.type"]
+      "attributes": [
+        "fusion.dialect",
+        "fusion.turn",
+        "fusion.prompt_preview",
+        "fusion.environment",
+        "fusion.repo",
+        "fusion.status",
+        "fusion.run_id",
+        "fusion.final_output_preview",
+        "fusion.evidence",
+        "fusion.error",
+        "error.type"
+      ]
     },
     "fusion.turn": {
       "kind": "span",
       "component": "gateway",
       "description": "One fused turn inside an interactive session: panel fan-out, fuse step, finalize. Parents onto the session's virtual root span context.",
-      "attributes": ["fusion.turn", "fusion.dialect", "fusion.status", "fusion.session_id", "fusion.error", "error.type"]
+      "attributes": [
+        "fusion.turn",
+        "fusion.dialect",
+        "fusion.status",
+        "fusion.session_id",
+        "fusion.error",
+        "error.type"
+      ]
     },
     "fusion.candidate": {
       "kind": "span",
       "component": "panel-model",
       "description": "One panel member's harness run for one turn.",
-      "attributes": ["fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "gen_ai.request.model", "fusion.turn", "fusion.branch_name", "fusion.worktree_path", "fusion.status", "fusion.step_count", "fusion.tool_call_count", "fusion.finish_reason", "fusion.verification_status", "fusion.final_output_preview", "fusion.proposed_calls"]
+      "attributes": [
+        "fusion.candidate.id",
+        "fusion.trajectory.id",
+        "fusion.model.id",
+        "gen_ai.request.model",
+        "fusion.turn",
+        "fusion.branch_name",
+        "fusion.worktree_path",
+        "fusion.status",
+        "fusion.step_count",
+        "fusion.tool_call_count",
+        "fusion.finish_reason",
+        "fusion.verification_status",
+        "fusion.final_output_preview",
+        "fusion.proposed_calls"
+      ]
     },
     "fusion.judge": {
       "kind": "span",
       "component": "judge",
       "description": "The judge phase of one turn on the gateway side: fuse-step request through terminal response.",
-      "attributes": ["fusion.turn", "fusion.judge.model", "fusion.decision", "fusion.selected.trajectory_id", "fusion.rationale", "fusion.final_output", "fusion.content", "fusion.synthesis", "fusion.tool_calls", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "http.response.status_code", "fusion.error", "error.type"]
+      "attributes": [
+        "fusion.turn",
+        "fusion.judge.model",
+        "fusion.decision",
+        "fusion.selected.trajectory_id",
+        "fusion.rationale",
+        "fusion.final_output",
+        "fusion.content",
+        "fusion.synthesis",
+        "fusion.tool_calls",
+        "fusion.usage",
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens",
+        "http.response.status_code",
+        "fusion.error",
+        "error.type"
+      ]
     },
     "fusion.fuse": {
       "kind": "span",
       "component": "synthesis",
       "description": "Server-side execution of one fuse step (judge analysis + synthesis) in the Python engine. Child of the gateway's fusion.judge span via traceparent.",
-      "attributes": ["fusion.judge.model", "fusion.synthesizer.model", "fusion.fusion_unit", "fusion.decision", "fusion.error", "error.type"]
+      "attributes": [
+        "fusion.judge.model",
+        "fusion.synthesizer.model",
+        "fusion.fusion_unit",
+        "fusion.decision",
+        "fusion.error",
+        "error.type"
+      ]
     },
     "chat": {
       "kind": "span",
       "component": "panel-model",
       "description": "One GenAI model invocation, named '{gen_ai.operation.name} {gen_ai.request.model}' per the OTel GenAI semantic conventions so GenAI-aware backends ingest it natively.",
-      "attributes": ["gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "gen_ai.response.finish_reasons", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.turn", "fusion.endpoint_id", "fusion.message_count", "fusion.tool_count", "fusion.tool_call_count", "fusion.final_output", "fusion.content", "fusion.usage", "fusion.error", "error.type"]
+      "attributes": [
+        "gen_ai.operation.name",
+        "gen_ai.provider.name",
+        "gen_ai.request.model",
+        "gen_ai.response.finish_reasons",
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens",
+        "fusion.candidate.id",
+        "fusion.trajectory.id",
+        "fusion.model.id",
+        "fusion.turn",
+        "fusion.endpoint_id",
+        "fusion.message_count",
+        "fusion.tool_count",
+        "fusion.tool_call_count",
+        "fusion.final_output",
+        "fusion.content",
+        "fusion.usage",
+        "fusion.error",
+        "error.type"
+      ]
     },
     "fusion.passthrough": {
       "kind": "span",
       "component": "gateway",
       "description": "A native vendor passthrough request proxied by the gateway. Root of its own trace.",
-      "attributes": ["fusion.dialect", "gen_ai.request.model", "fusion.model.id", "fusion.endpoint_id", "fusion.status", "http.response.status_code"]
+      "attributes": [
+        "fusion.dialect",
+        "gen_ai.request.model",
+        "fusion.model.id",
+        "fusion.endpoint_id",
+        "fusion.status",
+        "http.response.status_code"
+      ]
     },
     "fusion.turn.info": {
       "kind": "marker",
       "component": "gateway",
       "description": "Instant marker at run/turn start carrying the environment snapshot and prompt preview, so dashboards can show the unit live before its span ends.",
-      "attributes": ["fusion.dialect", "fusion.turn", "fusion.prompt_preview", "fusion.environment", "fusion.repo"]
+      "attributes": [
+        "fusion.dialect",
+        "fusion.turn",
+        "fusion.prompt_preview",
+        "fusion.environment",
+        "fusion.repo"
+      ]
     },
     "fusion.candidate.started": {
       "kind": "marker",
       "component": "panel-model",
       "description": "Instant marker at candidate start (live roster signal).",
-      "attributes": ["fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "gen_ai.request.model", "fusion.turn", "fusion.branch_name", "fusion.worktree_path"]
+      "attributes": [
+        "fusion.candidate.id",
+        "fusion.trajectory.id",
+        "fusion.model.id",
+        "gen_ai.request.model",
+        "fusion.turn",
+        "fusion.branch_name",
+        "fusion.worktree_path"
+      ]
     },
     "fusion.candidate.step": {
       "kind": "marker",
       "component": "panel-model",
       "description": "Instant marker for one trajectory step, streamed live as the candidate works.",
-      "attributes": ["fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.turn", "fusion.step", "fusion.step.index", "fusion.step.type"]
+      "attributes": [
+        "fusion.candidate.id",
+        "fusion.trajectory.id",
+        "fusion.model.id",
+        "fusion.turn",
+        "fusion.step",
+        "fusion.step.index",
+        "fusion.step.type"
+      ]
     },
     "fusion.model_call.started": {
       "kind": "marker",
       "component": "panel-model",
       "description": "Instant marker at model-call start carrying the prompts (live signal; terminal facts land on the chat span).",
-      "attributes": ["gen_ai.provider.name", "gen_ai.request.model", "fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.turn", "fusion.prompt", "fusion.system_prompt", "fusion.message_count", "fusion.tool_count"]
+      "attributes": [
+        "gen_ai.provider.name",
+        "gen_ai.request.model",
+        "fusion.candidate.id",
+        "fusion.trajectory.id",
+        "fusion.model.id",
+        "fusion.turn",
+        "fusion.prompt",
+        "fusion.system_prompt",
+        "fusion.message_count",
+        "fusion.tool_count"
+      ]
     },
     "fusion.judge.request": {
       "kind": "marker",
       "component": "judge",
       "description": "Instant marker when the judge is invoked, carrying the full judge input (live 'judging' signal).",
-      "attributes": ["fusion.judge.model", "fusion.turn", "fusion.messages", "fusion.trajectories", "fusion.tools", "fusion.trajectory_ids"]
+      "attributes": [
+        "fusion.judge.model",
+        "fusion.turn",
+        "fusion.messages",
+        "fusion.trajectories",
+        "fusion.tools",
+        "fusion.trajectory_ids"
+      ]
     },
     "fusion.judge.thinking": {
       "kind": "marker",
       "component": "judge",
       "description": "Instant marker for the judge's raw analysis or an intermediate tool-calling step.",
-      "attributes": ["fusion.turn", "fusion.fusion_unit", "fusion.raw_analysis", "fusion.content", "fusion.tool_calls", "fusion.terminal", "fusion.judge.degraded", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "fusion.error"]
+      "attributes": [
+        "fusion.turn",
+        "fusion.fusion_unit",
+        "fusion.raw_analysis",
+        "fusion.content",
+        "fusion.tool_calls",
+        "fusion.terminal",
+        "fusion.judge.degraded",
+        "fusion.usage",
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens",
+        "fusion.error"
+      ]
     },
     "fusion.judge.scored": {
       "kind": "marker",
       "component": "judge",
       "description": "Instant marker for the judge's structured analysis and per-candidate scoring.",
-      "attributes": ["fusion.turn", "fusion.fusion_unit", "fusion.analysis", "fusion.metrics", "fusion.input_ids", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"]
+      "attributes": [
+        "fusion.turn",
+        "fusion.fusion_unit",
+        "fusion.analysis",
+        "fusion.metrics",
+        "fusion.input_ids",
+        "fusion.usage",
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens"
+      ]
     },
     "fusion.judge.synthesis": {
       "kind": "marker",
       "component": "judge",
       "description": "Instant marker for the synthesizer's raw output.",
-      "attributes": ["fusion.turn", "fusion.raw_output", "fusion.synthesis_empty", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"]
+      "attributes": [
+        "fusion.turn",
+        "fusion.raw_output",
+        "fusion.synthesis_empty",
+        "fusion.usage",
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens"
+      ]
     },
     "fusion.cost": {
       "kind": "marker",
       "component": "gateway",
       "description": "Instant marker for one metered cost entry.",
-      "attributes": ["fusion.session_id", "fusion.turn", "fusion.cost.stage", "fusion.cost.model", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "fusion.cost.turn_usd", "fusion.cost.provider_usd", "fusion.cost.local_compute_usd", "fusion.cost.session_total_usd", "fusion.cost.unknown", "fusion.cost.unknown_usage"]
+      "attributes": [
+        "fusion.session_id",
+        "fusion.turn",
+        "fusion.cost.stage",
+        "fusion.cost.model",
+        "fusion.usage",
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens",
+        "fusion.cost.turn_usd",
+        "fusion.cost.provider_usd",
+        "fusion.cost.local_compute_usd",
+        "fusion.cost.session_total_usd",
+        "fusion.cost.unknown",
+        "fusion.cost.unknown_usage"
+      ]
     },
     "fusion.narration": {
       "kind": "marker",
       "component": "gateway",
       "description": "Instant marker mirroring one narration beat into the trace stream.",
-      "attributes": ["fusion.turn", "fusion.headline", "fusion.prose"]
+      "attributes": [
+        "fusion.turn",
+        "fusion.headline",
+        "fusion.prose"
+      ]
     },
     "fusion.tool.execution": {
       "kind": "marker",
       "component": "ensemble",
       "description": "Instant marker for one tool-execution-record outcome.",
-      "attributes": ["fusion.candidate.id", "fusion.turn", "fusion.execution_id", "fusion.plan_id", "fusion.status", "fusion.output_hash", "fusion.tool_call_count"]
+      "attributes": [
+        "fusion.candidate.id",
+        "fusion.turn",
+        "fusion.execution_id",
+        "fusion.plan_id",
+        "fusion.status",
+        "fusion.output_hash",
+        "fusion.tool_call_count"
+      ]
     },
     "fusion.cursor.route": {
       "kind": "marker",
       "component": "cursor-bridge",
       "description": "Instant marker for a Cursor bridge route decision (emitted by cursorkit, registered here so consumers know the name).",
-      "attributes": ["fusion.turn"]
+      "attributes": [
+        "fusion.turn"
+      ]
     }
   }
 }

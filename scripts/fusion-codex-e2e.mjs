@@ -88,12 +88,16 @@ function writeCodexHome(home, gatewayUrl) {
 async function main() {
   const root = mkdtempSync(join(tmpdir(), "fusion-codex-e2e-"));
   const repo = materializeRepo(join(root, "repo"));
-  const traceDir = join(root, "trace");
   const codexHome = join(root, "codex-home");
-  mkdirSync(traceDir, { recursive: true });
-  process.env.FUSION_TRACE_DIR = traceDir;
+  // Capture the run's spans with an in-script OTLP collector: the in-process
+  // gateway/ensemble tracer and every spawned child (panel servers, the
+  // Python synthesis engine) export to it over standard OTLP/HTTP.
+  const capture = await startOtlpCapture();
+  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = capture.endpoint;
+  initFusionTracing({ serviceName: "fusion-e2e" });
 
   log(`repo: ${repo}`);
+  log(`otlp capture: ${capture.endpoint}`);
   log(`starting fusion stack (${E2E_PANEL.panelId}, judge ${E2E_JUDGE_MODEL})...`);
   const stack = await startFusionStack({
     repo,

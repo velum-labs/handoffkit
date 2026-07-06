@@ -23,7 +23,7 @@ import type {
 } from "@fusionkit/ensemble";
 import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
-import { emitFusionMarker, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
+import { emitFusionMarker, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
   FusionBackend,
   installAcpAdapters,
@@ -412,6 +412,9 @@ export async function startFusionStepGateway(input: {
   defaultModel?: string;
 }): Promise<Gateway> {
   const { config } = input;
+  // Idempotent: the quickstart boot already initialized (with the --observe
+  // endpoint exported); direct callers get a provider here.
+  initFusionTracing({ serviceName: "fusionkit-gateway" });
   const base = trimTrailingSlashes(config.fusionBackendUrl);
   const stepUrl = `${base}/v1/fusion/trajectories:fuse`;
   const ensembles = config.ensembles ?? [];
@@ -663,6 +666,9 @@ export async function startConfiguredGateway(input: {
   authToken?: string;
   defaultModel?: string;
 }): Promise<FusionGateway> {
+  // Standalone gateway entry (outside the quickstart boot): install the tracer
+  // provider here so a user-configured OTLP endpoint exports. Idempotent.
+  initFusionTracing({ serviceName: "fusionkit-gateway" });
   return await startFusionGateway({
     runner: buildFrontDoorRunner(input.config),
     host: input.host,
@@ -673,6 +679,7 @@ export async function startConfiguredGateway(input: {
 }
 
 export async function runGatewayAcp(config: GatewayRunnerConfig): Promise<void> {
+  initFusionTracing({ serviceName: "fusionkit-gateway" });
   await runAcpAgent({ runner: buildAcpRunner(config) });
 }
 
