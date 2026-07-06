@@ -210,8 +210,11 @@ function updateSession(span: StoredSpan): void {
         attrStr(span, "fusion.final_output_preview") ?? null,
         span.trace_id
       );
-  } else if (span.name === "fusion.judge") {
+  } else if (span.name === "fusion.judge" || span.name === "fusion.fuse") {
+    // A terminal judge (or, for directly-driven fuse steps, fuse) span ends
+    // the fused turn: carry the output and settle a running session.
     const finalOutput = attrStr(span, "fusion.final_output") ?? attrStr(span, "fusion.content");
+    const terminal = span.name === "fusion.judge" || finalOutput !== undefined;
     handle
       .prepare(
         `UPDATE sessions SET
@@ -219,7 +222,7 @@ function updateSession(span: StoredSpan): void {
            status = CASE WHEN status = 'running' AND ? IS NOT NULL THEN 'succeeded' ELSE status END
          WHERE trace_id = ?`
       )
-      .run(finalOutput ?? null, span.status === "ok" ? 1 : null, span.trace_id);
+      .run(finalOutput ?? null, span.status === "ok" && terminal ? 1 : null, span.trace_id);
   }
 }
 

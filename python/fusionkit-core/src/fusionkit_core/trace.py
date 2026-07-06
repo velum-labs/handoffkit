@@ -21,14 +21,18 @@ import threading
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
+from google.protobuf.json_format import MessageToDict
 from opentelemetry import baggage as otel_baggage
 from opentelemetry import propagate
 from opentelemetry import trace as otel_trace
 from opentelemetry.context import Context
+from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.trace import Span, StatusCode
 
 from fusionkit_core._generated.trace_conventions import ATTR, FUSION_SCOPES
@@ -84,13 +88,11 @@ def setup_fusion_tracing(
             return
         processors: list[SpanProcessor] = list(extra_processors or [])
         if is_tracing_configured():
-            # Imported lazily so environments without the exporter extra still
-            # import fusionkit_core.trace (helpers just stay no-ops).
-            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-
             # Live dashboards want markers quickly; 500ms batches keep exports
             # frequent without per-span requests.
-            processors.append(BatchSpanProcessor(OTLPSpanExporter(), schedule_delay_millis=500))
+            processors.append(
+                BatchSpanProcessor(_JsonOtlpSpanExporter(), schedule_delay_millis=500)
+            )
         if not processors:
             return
         provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
@@ -108,6 +110,60 @@ def shutdown_fusion_tracing() -> None:
     _provider = None
     if provider is not None:
         provider.shutdown()
+
+
+class _JsonOtlpSpanExporter(SpanExporter):
+    """OTLP/HTTP with a JSON body (the protobuf JSON mapping).
+
+    The stock ``opentelemetry-exporter-otlp-proto-http`` exporter only speaks
+    binary protobuf, and the official ``opentelemetry-exporter-otlp-json-http``
+    package is not yet published to PyPI (its ``opentelemetry-proto-json``
+    dependency never shipped). Until it lands, this exporter reuses the
+    official protobuf encoder and serializes the message with protobuf's
+    standard JSON mapping — receivers (the scope collector, and OTLP servers
+    that follow the spec's "accept both encodings" guidance) decode it
+    directly. Queueing/batching stay with ``BatchSpanProcessor``.
+    """
+
+    def __init__(self) -> None:
+        endpoint = os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+        if not endpoint:
+            base = (os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or "").rstrip("/")
+            endpoint = f"{base}/v1/traces" if base else ""
+        self._endpoint = endpoint
+        self._headers = _parse_otlp_headers(
+            os.environ.get("OTEL_EXPORTER_OTLP_TRACES_HEADERS")
+            or os.environ.get("OTEL_EXPORTER_OTLP_HEADERS")
+        )
+
+    def export(self, spans: Any) -> SpanExportResult:
+        if not self._endpoint:
+            return SpanExportResult.SUCCESS
+        body = json.dumps(MessageToDict(encode_spans(spans))).encode("utf-8")
+        request = urllib_request.Request(
+            self._endpoint,
+            data=body,
+            headers={"content-type": "application/json", **self._headers},
+            method="POST",
+        )
+        try:
+            with urllib_request.urlopen(request, timeout=5.0):
+                return SpanExportResult.SUCCESS
+        except (urllib_error.URLError, OSError, ValueError):
+            return SpanExportResult.FAILURE
+
+    def shutdown(self) -> None:
+        return None
+
+
+def _parse_otlp_headers(raw: str | None) -> dict[str, str]:
+    """Parse the standard `k1=v1,k2=v2` OTLP headers env format."""
+    headers: dict[str, str] = {}
+    for pair in (raw or "").split(","):
+        key, sep, value = pair.partition("=")
+        if sep and key.strip():
+            headers[key.strip()] = value.strip()
+    return headers
 
 
 def _tracer(scope: str) -> otel_trace.Tracer:
