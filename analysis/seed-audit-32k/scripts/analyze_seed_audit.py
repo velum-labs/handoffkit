@@ -203,10 +203,6 @@ def main() -> int:
         rows_64k = merge_reruns(OUTCOMES_64K, RERUN_64K)
         write_csv(OUTCOMES_64K, rows_64k)
         metrics_64k = model_metrics(rows_64k, max_tokens=65536)
-        for model, tasks in defaultdict(
-            list, {r["endpoint_id"]: [] for r in rows_64k}
-        ).items():
-            del tasks
         for model in metrics_64k:
             escalated_ids = [r["task_id"] for r in rows_64k if r["endpoint_id"] == model]
             if escalated_ids != ids:

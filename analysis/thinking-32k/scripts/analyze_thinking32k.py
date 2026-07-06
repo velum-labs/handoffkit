@@ -100,9 +100,11 @@ def merge_reruns(outcomes_path: Path = OUTCOMES_32K, rerun_paths: list[Path] = R
             key = (row["task_id"], row["endpoint_id"])
             if key in failed_keys:
                 prior = replacements.get(key)
-                if prior is None or prior["call_status"] != "succeeded":
-                    replacements[key] = row
-                elif row["call_status"] == "succeeded":
+                if (
+                    prior is None
+                    or prior["call_status"] != "succeeded"
+                    or row["call_status"] == "succeeded"
+                ):
                     replacements[key] = row
     return [replacements.get((row["task_id"], row["endpoint_id"]), row) for row in rows]
 

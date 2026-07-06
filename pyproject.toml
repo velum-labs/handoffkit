@@ -50,6 +50,7 @@ include = [
   "python/fusionkit-cli",
   "python/fusionkit-core",
   "python/fusionkit-evals",
+  "python/fusionkit-lab",
   "python/fusionkit-mlx",
   "python/fusionkit-server",
   "spec/model-fusion-contract/python",
@@ -62,7 +63,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
 # These analysis scripts emit long preregistered report prose and prompt literals.
-"analysis/phase0/scripts/*.py" = ["E501"]
+"analysis/*/scripts/*.py" = ["E501"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
