@@ -55,6 +55,8 @@ import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
 import type { PromptOverrides } from "./fusion-config.js";
 import {
+  logRequestDone,
+  logRequestStart,
   logTurnCandidates,
   logTurnFailed,
   logTurnStart,
@@ -290,6 +292,8 @@ export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunn
       [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
       [ATTR.FUSION_REPO]: config.repo
     });
+    logRequestStart({ requestId: input.requestId, dialect: input.dialect, preview: input.prompt });
+    const startedAt = Date.now();
     try {
       const report = await runUnifiedHarnessE2E({
         id: `gateway_${input.requestId}`,
@@ -315,9 +319,15 @@ export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunn
           [ATTR.FUSION_FINAL_OUTPUT_PREVIEW]: summary.finalOutput.slice(0, 600)
         }
       });
+      logRequestDone({
+        requestId: input.requestId,
+        status: summary.status,
+        elapsedMs: Date.now() - startedAt
+      });
       return summary;
     } catch (error) {
       run.end({ status: "failed", error: error instanceof Error ? error.message : String(error) });
+      logRequestDone({ requestId: input.requestId, status: "failed", elapsedMs: Date.now() - startedAt });
       throw error;
     }
   };

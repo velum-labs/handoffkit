@@ -114,3 +114,30 @@ export const requestLogGatewayLogger: FusionGatewayLogger = {
   warn: (message) => renderEngineLine("warn", message),
   error: (message) => renderEngineLine("error", message)
 };
+
+/** The "server is up" line that opens a request log. */
+export function logServing(): void {
+  write(cyan(glyph.arrow()), `${bold("serving")} ${dim("— request log below · Ctrl+C to stop")}`);
+}
+
+/** A front-door request arrived (harness-gateway surfaces without turn phases). */
+export function logRequestStart(input: { requestId: string; dialect: string; preview: string }): void {
+  if (!chatter) return;
+  const preview = input.preview.replace(/\s+/g, " ").trim();
+  const clipped = preview.length > 60 ? `${preview.slice(0, 59)}…` : preview;
+  write(
+    cyan(glyph.arrow()),
+    `request ${dim(input.requestId)} · ${bold(input.dialect)} ${dim(`· "${clipped}"`)}`
+  );
+}
+
+/** A front-door request finished (any terminal status). Failures always print. */
+export function logRequestDone(input: { requestId: string; status: string; elapsedMs: number }): void {
+  const ok = input.status === "succeeded";
+  if (!chatter && ok) return;
+  const seconds = `${(input.elapsedMs / 1000).toFixed(1)}s`;
+  write(
+    ok ? green(glyph.tick()) : red(glyph.cross()),
+    `request ${dim(input.requestId)} · ${ok ? input.status : red(input.status)} ${dim(`in ${seconds}`)}`
+  );
+}

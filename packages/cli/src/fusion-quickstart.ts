@@ -48,7 +48,7 @@ import {
 
 import { resolveSessionId } from "./commands/sessions.js";
 import { gatewaySetupSnippets, setGatewayChatter, setGatewayStatusSink } from "./gateway.js";
-import { requestLogGatewayLogger } from "./fusion/gateway-log.js";
+import { logServing, requestLogGatewayLogger } from "./fusion/gateway-log.js";
 import { toolRegistry } from "./tools.js";
 import { createPortlessSession } from "./shared/portless.js";
 import { PreflightError, runPreflight } from "./shared/preflight.js";
@@ -932,9 +932,7 @@ export async function runFusion(
           }
         });
         setTerminalTitle("fusionkit serve");
-        uiStream().write(
-          `${dim(new Date().toTimeString().slice(0, 8))} ${cyan(glyph.arrow())} ${bold("serving")} ${dim("— request log below · Ctrl+C to stop")}\n`
-        );
+        logServing();
         onShutdown = () => {
           printQueuedNotices();
           printReceipt(servedAt);
