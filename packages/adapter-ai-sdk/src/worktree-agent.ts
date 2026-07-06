@@ -6,6 +6,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 
 import { ATTR } from "@fusionkit/protocol";
+import { buildChildEnv } from "@fusionkit/runtime-utils";
 import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionSpan, FusionTraceCarrier } from "@fusionkit/tracing";
 
@@ -59,6 +60,14 @@ export type WorktreeAgentInput = {
   k?: number;
   /** Per-`run` command timeout in ms. Defaults to 120000. */
   commandTimeoutMs?: number;
+  /**
+   * Extra environment variable names/patterns forwarded to `run` tool
+   * commands, on top of the system baseline (PATH/HOME/locale/TLS/proxy).
+   * The panel model chooses what to execute, so the parent environment —
+   * provider API keys included — is never inherited wholesale; anything
+   * beyond the baseline must be named here explicitly.
+   */
+  envAllow?: readonly (string | RegExp)[];
   abortSignal?: AbortSignal;
   /** Candidate span carrier; when set, the agent's model call is traced under it. */
   trace?: FusionTraceCarrier;
@@ -146,15 +155,23 @@ function grepRepo(root: string, pattern: string): string {
   return truncate(output || "(no matches)", MAX_TOOL_OUTPUT);
 }
 
-function runCommand(root: string, command: string, timeoutMs: number): string {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
+/** Exported for tests: the `run` tool's command execution (env-allowlisted). */
+export function runWorktreeCommand(
+  root: string,
+  command: string,
+  timeoutMs: number,
+  envAllow: readonly (string | RegExp)[]
+): string {
+  // The model picks the command, so the child env is allowlist-built rather
+  // than inherited: a `run("env")` must not surface the parent's API keys
+  // into the trajectory (which is persisted and traced).
+  const env = buildChildEnv({ allow: envAllow });
   const result = spawnSync(command, { cwd: root, encoding: "utf8", timeout: timeoutMs, shell: true, env });
   const body = [result.stdout, result.stderr].filter(Boolean).join("\n");
   return truncate(`exit_code=${result.status ?? "null"}\n${body}`, MAX_TOOL_OUTPUT);
 }
 
-function worktreeTools(root: string, commandTimeoutMs: number) {
+function worktreeTools(root: string, commandTimeoutMs: number, envAllow: readonly (string | RegExp)[]) {
   return {
     read_file: tool({
       description: "Read a UTF-8 text file from the repository.",
@@ -216,7 +233,7 @@ function worktreeTools(root: string, commandTimeoutMs: number) {
         required: ["command"],
         additionalProperties: false
       }),
-      execute: async ({ command }): Promise<string> => runCommand(root, command, commandTimeoutMs)
+      execute: async ({ command }): Promise<string> => runWorktreeCommand(root, command, commandTimeoutMs, envAllow)
     })
   };
 }
@@ -317,7 +334,7 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
   // at that boundary. Observations count nothing extra — every tool call
   // conservatively marks a step boundary, per-generation, batch-atomic.
   let generation = 1;
-  const rawTools = worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000);
+  const rawTools = worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000, input.envAllow ?? []);
   const tools =
     input.k !== undefined
       ? withProposalBoundary(rawTools, input.k, () => generation)

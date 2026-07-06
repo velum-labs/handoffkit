@@ -200,6 +200,7 @@ function run(
 ): RunResult {
   const result = spawnSync(cmd, args, {
     encoding: "utf8",
+    // env-spread-allowed: trusted provisioning toolchain (uv/pip) we invoke ourselves, never model-chosen commands
     ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {})
   });
   if (result.error) {
@@ -226,6 +227,7 @@ function runStreaming(
 ): Promise<RunResult> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
+      // env-spread-allowed: trusted provisioning toolchain (uv/pip) we invoke ourselves, never model-chosen commands
       ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {})
     });
     let stdout = "";

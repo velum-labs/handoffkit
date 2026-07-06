@@ -39,6 +39,12 @@ export type AgentHarnessOptions = {
   k?: number;
   /** Per-`run` shell-command timeout (ms). */
   timeoutMs?: number;
+  /**
+   * Extra env var names/patterns forwarded to panel `run` tool commands.
+   * By default children get only the system baseline (PATH/HOME/locale/TLS),
+   * never the parent's credentials; name anything else explicitly.
+   */
+  envAllow?: readonly (string | RegExp)[];
   /** Overall wall-clock budget for one model's agent run (ms). */
   modelTimeoutMs?: number;
   /** Trace carrier of the enclosing run/turn; when set, each candidate is traced. */
@@ -140,6 +146,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
         ...(options.k !== undefined ? { k: options.k } : {}),
         ...(options.timeoutMs !== undefined ? { commandTimeoutMs: options.timeoutMs } : {}),
+        ...(options.envAllow !== undefined ? { envAllow: options.envAllow } : {}),
         ...(tracer.carrier !== undefined
           ? { trace: tracer.carrier, candidateId, modelId: model.id, onStep: tracer.step }
           : {})

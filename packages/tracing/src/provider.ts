@@ -17,17 +17,22 @@ import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 
+import { AllowlistSpanExporter, isLoopbackOtlpEndpoint } from "./exportable.js";
 import { hasSpanListeners, listenerSpanProcessor } from "./listener.js";
 
 let provider: NodeTracerProvider | undefined;
 let providerServiceName: string | undefined;
 let extraProcessorsInstalled = false;
 
-/** True when spans will actually be exported over OTLP. */
-export function isTraceExportConfigured(): boolean {
+function configuredOtlpEndpoint(): string | undefined {
   const endpoint =
     process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-  return endpoint !== undefined && endpoint.length > 0;
+  return endpoint !== undefined && endpoint.length > 0 ? endpoint : undefined;
+}
+
+/** True when spans will actually be exported over OTLP. */
+export function isTraceExportConfigured(): boolean {
+  return configuredOtlpEndpoint() !== undefined;
 }
 
 export type InitFusionTracingOptions = {
@@ -45,9 +50,20 @@ export function initFusionTracing(options: InitFusionTracingOptions): void {
   if (provider !== undefined) return;
   extraProcessorsInstalled = (options.spanProcessors?.length ?? 0) > 0;
   const processors: SpanProcessor[] = [listenerSpanProcessor(), ...(options.spanProcessors ?? [])];
-  if (isTraceExportConfigured()) {
+  const endpoint = configuredOtlpEndpoint();
+  if (endpoint !== undefined) {
+    // Full-fidelity spans (prompts, trajectories) only leave the process for
+    // a loopback collector or an explicit opt-in; any other destination gets
+    // the protocol's EXPORTABLE_ATTRIBUTES allowlist applied per span.
+    const fullFidelity =
+      process.env.FUSIONKIT_TRACE_FULL_FIDELITY === "1" || isLoopbackOtlpEndpoint(endpoint);
+    process.stderr.write(
+      fullFidelity
+        ? `fusionkit tracing: exporting full traces to ${endpoint}\n`
+        : `fusionkit tracing: exporting allowlisted span attributes to ${endpoint} (FUSIONKIT_TRACE_FULL_FIDELITY=1 to send full traces)\n`
+    );
     processors.push(
-      new BatchSpanProcessor(new OTLPTraceExporter(), {
+      new BatchSpanProcessor(new AllowlistSpanExporter(new OTLPTraceExporter(), { fullFidelity }), {
         // Live dashboards want markers quickly; 500ms batches keep exports
         // frequent without per-span requests.
         scheduledDelayMillis: 500

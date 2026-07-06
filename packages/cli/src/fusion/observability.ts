@@ -270,6 +270,7 @@ export async function startObservability(input: {
   // of the log just like the parent CLI. The per-run db/trace dir isolate state.
   const childEnv = withCaEnv(
     {
+      // env-spread-allowed: the local scope dashboard is a trusted infra child we spawn ourselves
       ...process.env,
       NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
       SCOPEKIT_DB: dbPath,

@@ -23,6 +23,7 @@ import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { chatToResponses, openAiSseToResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
+import { authorizedRequest } from "./auth.js";
 
 export type FrontDoorDialect = "openai-responses" | "anthropic-messages" | "openai-chat";
 
@@ -294,13 +295,6 @@ function writeJson(res: ServerResponse, status: number, value: unknown): void {
   res.end(payload);
 }
 
-function authorized(req: IncomingMessage, token: string): boolean {
-  const auth = req.headers.authorization;
-  if (typeof auth === "string" && auth === `Bearer ${token}`) return true;
-  const apiKey = req.headers["x-api-key"];
-  return typeof apiKey === "string" && apiKey === token;
-}
-
 function requestId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 12)}`;
 }
@@ -369,7 +363,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       return;
     }
 
-    if (authToken !== undefined && !authorized(req, authToken)) {
+    if (authToken !== undefined && !authorizedRequest(req, authToken)) {
       writeJson(res, 401, { error: { message: "unauthorized", type: "auth_error" } });
       return;
     }

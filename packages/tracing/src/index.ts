@@ -45,6 +45,13 @@ export type {
   FusionSpan,
   FusionTraceCarrier
 } from "./spans.js";
+export {
+  AllowlistSpanExporter,
+  isLoopbackOtlpEndpoint,
+  toExportable,
+  TRACE_REDACTED_ATTRIBUTE
+} from "./exportable.js";
+export type { AllowlistSpanExporterOptions } from "./exportable.js";
 export { attrBool, attrJson, attrNum, attrStr, spanEndMs, spanId, spanTraceId } from "./readable.js";
 export type { ReadableSpan } from "./readable.js";
 // Test support: capture finished spans in memory (used by consumer packages'

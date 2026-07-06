@@ -431,6 +431,7 @@ export async function startRouter(options: {
   // It calls providers directly and MLX over loopback (never a portless HTTPS
   // URL), so it needs no portless CA — and must keep its default certifi bundle
   // intact to verify real provider certificates.
+  // env-spread-allowed: the Python router is a trusted infra child that legitimately needs the user's provider keys
   const env: Record<string, string | undefined> = { ...process.env };
   if (options.fusionkitDir !== undefined) {
     loadEnvFileInto(join(options.fusionkitDir, ".env"), env);

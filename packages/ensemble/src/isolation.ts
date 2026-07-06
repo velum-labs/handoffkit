@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { promisify } from "node:util";
 
 import { hashCanonicalSha256 } from "@fusionkit/protocol";
-import { CANDIDATE_ISOLATION_DEFAULTS } from "@fusionkit/runtime-utils";
+import { buildChildEnv, CANDIDATE_ISOLATION_DEFAULTS } from "@fusionkit/runtime-utils";
 
 import type {
   CandidateActualIsolationKind,
@@ -431,19 +431,17 @@ async function runHostCommand(
   timeoutMs: number | undefined,
   env?: Record<string, string | undefined>
 ): Promise<CommandResult> {
-  const mergedEnv =
-    env === undefined
-      ? undefined
-      : {
-          ...process.env,
-          ...Object.fromEntries(
-            Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)
-          )
-        };
+  // Candidate commands are model-influenced, so the child env is always
+  // allowlist-built (system baseline + caller-injected values); the parent's
+  // credentials are never inherited wholesale.
+  const extra = Object.fromEntries(
+    Object.entries(env ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined)
+  );
+  const mergedEnv = buildChildEnv({ extra });
   try {
     const result = await execFileAsync(command, args, {
       cwd,
-      ...(mergedEnv !== undefined ? { env: mergedEnv } : {}),
+      env: mergedEnv,
       ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {})
     });
     return {

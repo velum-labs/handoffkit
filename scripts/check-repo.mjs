@@ -611,6 +611,50 @@ if (noConsoleListing.status === 0) {
   }
 }
 
+// Spawned children must never inherit the full parent environment: a panel
+// model or harness child that can run shell commands would see every
+// credential the parent holds (and persist them into trajectories/artifacts).
+// All spawn/exec env objects must be built through the runtime-utils
+// buildChildEnv allowlist; spreading process.env into an env literal is only
+// permitted inside runtime-utils itself (which implements the policy).
+const envSpreadListing = spawnSync(
+  "git",
+  ["ls-files", "packages/*/src/**/*.ts"],
+  { encoding: "utf8" }
+);
+// A deliberate exception (a *trusted* infra child we spawn ourselves, e.g.
+// the Python router that legitimately needs the user's provider keys) must
+// carry an `env-spread-allowed: <reason>` comment on the preceding line.
+if (envSpreadListing.status === 0) {
+  const envSpreadPattern = /\.\.\.process\.env\b/;
+  const waiverPattern = /env-spread-allowed:\s*\S/;
+  for (const file of envSpreadListing.stdout.split("\n").filter((line) => line.length > 0)) {
+    if (file.startsWith("packages/runtime-utils/")) continue;
+    if (file.includes("/test/")) continue;
+    if (!existsSync(file)) continue;
+    const lines = readFileSync(file, "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (envSpreadPattern.test(lines[i]) && !waiverPattern.test(lines[i - 1] ?? "")) {
+        fail(
+          `full parent env spread in ${file}:${i + 1} — build the child env with buildChildEnv (runtime-utils), ` +
+            `or add an "env-spread-allowed: <reason>" comment for a trusted infra child`
+        );
+      }
+    }
+  }
+}
+
+// Local secrets files must never be tracked, whatever .gitignore says.
+const trackedEnvFiles = spawnSync("git", ["ls-files", ".env", ".env.*", "**/.env", "**/.env.*"], {
+  encoding: "utf8"
+});
+if (trackedEnvFiles.status === 0) {
+  for (const file of trackedEnvFiles.stdout.split("\n").filter((line) => line.length > 0)) {
+    if (file.endsWith(".example")) continue;
+    fail(`secrets file is tracked in git: ${file}`);
+  }
+}
+
 // Build artifacts must never be tracked: a committed .tsbuildinfo makes
 // `tsc -b` skip emit on fresh clones, which breaks `pnpm build` from scratch.
 const tracked = spawnSync(

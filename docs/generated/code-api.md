@@ -488,6 +488,8 @@ narrator and product telemetry subscribe to.
 - `export type { SpanListener } from "./listener.js";`
 - `export { carrierFromEnv, carrierFromHeaders, carrierOf, contextOf, emitFusionMarker, envOf, fusionBaggageOf, headersOf, jsonAttr, newSessionCarrier, newSpanId, newTraceId, sessionCarrier, startFusionSpan, traceIdOf, withFusionBaggage } from "./spans.js";`
 - `export type { FusionAttributes, FusionBaggage, FusionScope, FusionSpan, FusionTraceCarrier } from "./spans.js";`
+- `export { AllowlistSpanExporter, isLoopbackOtlpEndpoint, toExportable, TRACE_REDACTED_ATTRIBUTE } from "./exportable.js";`
+- `export type { AllowlistSpanExporterOptions } from "./exportable.js";`
 - `export { attrBool, attrJson, attrNum, attrStr, spanEndMs, spanId, spanTraceId } from "./readable.js";`
 - `export type { ReadableSpan } from "./readable.js";`
 - `export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";`
