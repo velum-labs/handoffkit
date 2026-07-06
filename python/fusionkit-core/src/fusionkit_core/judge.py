@@ -81,6 +81,9 @@ class FuseResult(BaseModel):
     terminal: bool
     analysis: FusionAnalysis
     trajectory: Trajectory | None = None
+    #: True when the synthesizer returned empty content and the final output
+    #: fell back to the best candidate's own answer (see _build_fuse_result).
+    synthesis_empty: bool = False
 
 
 # Rough token cost of the fixed prompt scaffolding (section headers, labels)
@@ -287,9 +290,7 @@ class JudgeSynthesizer:
             if judged is not None:
                 combined = (judged + (result.response.reasoning or "")).rstrip()
                 result.response.reasoning = combined
-        self._emit_step(
-            trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
-        )
+        self._emit_step(trace_id, judge_span, result, trajectories)
         return result
 
     async def fuse_stream(
@@ -349,14 +350,7 @@ class JudgeSynthesizer:
             result.response = _with_analysis_provider_cost(
                 result.response, prepared.diagnostics.analysis_response
             )
-            self._emit_step(
-                trace_id,
-                judge_span,
-                result.response,
-                result.terminal,
-                result.trajectory,
-                trajectories,
-            )
+            self._emit_step(trace_id, judge_span, result, trajectories)
             yield result
             return
         accumulator = _StreamAccumulator()
@@ -396,9 +390,7 @@ class JudgeSynthesizer:
         result.response = _with_analysis_provider_cost(
             result.response, prepared.diagnostics.analysis_response
         )
-        self._emit_step(
-            trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
-        )
+        self._emit_step(trace_id, judge_span, result, trajectories)
         yield result
 
     def _identity(
@@ -589,12 +581,14 @@ class JudgeSynthesizer:
     ) -> FuseResult:
         terminal = not response.tool_calls
         output_trajectory: Trajectory | None = None
+        synthesis_empty = False
         if terminal:
             final_output = response.content
             if not final_output.strip() and trajectories:
                 # The synthesizer returned nothing (e.g. a reasoning model spent
                 # its budget on reasoning). Fall back to the best trajectory's own
                 # answer so a fused response is always produced.
+                synthesis_empty = True
                 final_output = _best_trajectory_output(trajectories)
                 response = response.model_copy(update={"content": final_output})
             output_trajectory = _consolidated_trajectory(
@@ -605,6 +599,7 @@ class JudgeSynthesizer:
             terminal=terminal,
             analysis=resolved_analysis,
             trajectory=output_trajectory,
+            synthesis_empty=synthesis_empty,
         )
 
     async def analyze(
@@ -678,17 +673,43 @@ class JudgeSynthesizer:
         )
         if diagnostics is not None:
             diagnostics.analysis_response = response
-        return parse_analysis(response.content)
+        analysis = parse_analysis(response.content)
+        # The structured verdict behind the raw thinking: what the judge found
+        # per candidate. Emitted separately so observers can render the parsed
+        # analysis without re-parsing raw_analysis.
+        _emit_judge(
+            trace_id,
+            judge_span,
+            "judge.scored",
+            payload={
+                "fusion_unit": "trajectory",
+                "analysis": {
+                    "consensus": analysis.consensus,
+                    "contradictions": analysis.contradictions,
+                    "unique_insights": analysis.unique_insights,
+                    "coverage_gaps": analysis.coverage_gaps,
+                    "likely_errors": analysis.likely_errors,
+                },
+                "metrics": {
+                    "best_trajectory": analysis.best_trajectory,
+                    "recommended_final_structure": analysis.recommended_final_structure,
+                },
+                "input_ids": [trajectory.id for trajectory in trajectories],
+                "usage": _usage_payload(response),
+            },
+        )
+        return analysis
 
     def _emit_step(
         self,
         trace_id: str | None,
         judge_span: str | None,
-        response: ModelResponse,
-        terminal: bool,
-        output_trajectory: Trajectory | None,
+        result: FuseResult,
         trajectories: Sequence[Trajectory],
     ) -> None:
+        response = result.response
+        terminal = result.terminal
+        output_trajectory = result.trajectory
         payload: dict[str, Any] = {
             "fusion_unit": "trajectory_step",
             "terminal": terminal,
@@ -700,14 +721,31 @@ class JudgeSynthesizer:
             "input_trajectory_ids": [trajectory.id for trajectory in trajectories],
             "usage": _usage_payload(response),
         }
+        synthesis = output_trajectory.synthesis if output_trajectory is not None else None
         if terminal and output_trajectory is not None:
-            synthesis = output_trajectory.synthesis
             payload["final_output"] = response.content
             if synthesis is not None:
                 payload["decision"] = synthesis.decision
                 payload["selected_trajectory_id"] = synthesis.selected_trajectory_id
                 payload["rationale"] = synthesis.rationale
                 payload["synthesis"] = synthesis.model_dump(mode="json")
+        if terminal and (
+            (synthesis is not None and synthesis.decision == "synthesize")
+            or result.synthesis_empty
+        ):
+            # The synthesizer's own terminal turn (select-verbatim steps skip
+            # it): the raw fused output, and whether it came back empty and
+            # fell back to the best candidate's answer.
+            _emit_judge(
+                trace_id,
+                judge_span,
+                "judge.synthesis",
+                payload={
+                    "raw_output": response.content,
+                    "empty": result.synthesis_empty,
+                    "usage": _usage_payload(response),
+                },
+            )
         _emit_judge(
             trace_id,
             judge_span,

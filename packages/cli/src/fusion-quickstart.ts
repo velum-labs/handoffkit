@@ -605,8 +605,9 @@ export async function runFusion(
   let stack: FusionStack;
   try {
     if (options.observe === true) {
-      // The dashboard (apps/scope) is a dev/monorepo-only app and is NOT bundled
-      // with the npm package, so it is best-effort: a missing or unbuildable
+      // The dashboard (apps/scope) ships prebuilt with the npm package (staged
+      // by scripts/stage-scope.mjs at release) and is built from source in the
+      // monorepo. Either way it is best-effort: a missing or unbuildable
       // dashboard must never block the core fusion run.
       try {
         observability = await startObservability({

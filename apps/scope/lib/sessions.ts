@@ -138,6 +138,10 @@ export type SessionDetail = {
   judgeSteps: JudgeStepView[];
   /** The reasoning-trace narration, in the order the coding agent saw it. */
   narration: NarrationBeatView[];
+  /** Total resolved spend for the session (gateway cost.metered entries). */
+  costUsd?: number;
+  /** True when at least one cost entry could not be priced. */
+  costIncomplete?: boolean;
   finalOutput?: string;
   evidence?: string[];
   durationMs: number;
@@ -202,6 +206,8 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
   let environment: EnvironmentView | undefined;
   let finalOutput: string | undefined;
   let evidence: string[] | undefined;
+  let costUsd: number | undefined;
+  let costIncomplete: boolean | undefined;
 
   const ensureCandidate = (id: string): CandidateView => {
     let candidate = candidates.get(id);
@@ -419,6 +425,11 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
             ...(str(payload.prose) !== undefined ? { prose: str(payload.prose) } : {})
           });
         }
+        // Gateway cost meter entries (kind: "cost.metered"): sum resolved USD.
+        if (payload.kind === "cost.metered") {
+          costUsd = (costUsd ?? 0) + (num(payload.turn_cost_usd) ?? 0);
+          if (payload.unknown_cost === true) costIncomplete = true;
+        }
         break;
       }
       default:
@@ -447,6 +458,8 @@ export function deriveSession(traceId: string, events: StoredEvent[]): SessionDe
     judge,
     judgeSteps: [...judgeStepMap.values()].sort((a, b) => a.ts - b.ts),
     narration: narration.sort((a, b) => a.ts - b.ts),
+    ...(costUsd !== undefined ? { costUsd } : {}),
+    ...(costIncomplete !== undefined ? { costIncomplete } : {}),
     ...(finalOutput !== undefined ? { finalOutput } : {}),
     ...(evidence !== undefined ? { evidence } : {}),
     durationMs: Math.max(0, lastTs - startedAt),

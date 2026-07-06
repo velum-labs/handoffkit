@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { CodeBlock } from "@/components/scope/code-block";
@@ -12,6 +12,7 @@ import { EnvironmentDetail } from "@/components/scope/environment-detail";
 import { ErrorBanner } from "@/components/scope/error-banner";
 import { EventInspector } from "@/components/scope/event-inspector";
 import { EventTable } from "@/components/scope/event-table";
+import { StatStripSkeleton } from "@/components/scope/loading";
 import { LiveDot, PageHeader } from "@/components/scope/page-header";
 import { RunFlow } from "@/components/scope/run-flow";
 import { Section } from "@/components/scope/section";
@@ -23,14 +24,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSessionDetail } from "@/lib/api";
 import type { SessionSummary } from "@/lib/api";
-import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative } from "@/lib/format";
+import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative, fmtUsd, shortTraceId } from "@/lib/format";
 import { tokensOf } from "@/lib/rollups";
 import type { SessionDetail } from "@/lib/sessions";
 import type { StoredEvent } from "@/lib/types";
-
-function shortId(traceId: string): string {
-  return traceId.replace(/^trace_/, "").slice(0, 12);
-}
+import { replaceSearchParams } from "@/lib/url-state";
 
 /** One-shot fetch of the session list to compute prev/next neighbors. */
 function useNeighbors(traceId: string): { prev?: string; next?: string } {
@@ -102,12 +100,53 @@ function NeighborLink({
   );
 }
 
-export default function SessionDetailPage() {
+function SessionDetailBody() {
   const params = useParams<{ traceId: string }>();
   const traceId = params.traceId;
+  const searchParams = useSearchParams();
   const { session, loading, error, live } = useSessionDetail(traceId);
   const neighbors = useNeighbors(traceId);
   const [inspected, setInspected] = useState<StoredEvent[] | undefined>(undefined);
+
+  // The inspected event/span mirrors into the URL (?event=<id> / ?span=<id>)
+  // so "look at this event" links are shareable and survive reloads.
+  const inspect = useCallback((events: StoredEvent[]) => {
+    setInspected(events);
+    if (events.length > 1) {
+      replaceSearchParams({ span: events[0].span_id, event: undefined });
+    } else if (events.length === 1) {
+      replaceSearchParams({ event: String(events[0].id), span: undefined });
+    }
+  }, []);
+
+  const closeInspector = useCallback(() => {
+    setInspected(undefined);
+    replaceSearchParams({ event: undefined, span: undefined });
+  }, []);
+
+  // Restore a deep-linked inspector once the session has loaded.
+  const restoredInspector = useRef(false);
+  useEffect(() => {
+    if (restoredInspector.current || session === undefined) return;
+    restoredInspector.current = true;
+    const eventId = searchParams.get("event");
+    const spanId = searchParams.get("span");
+    if (eventId !== null) {
+      const found = session.events.find((event) => String(event.id) === eventId);
+      if (found !== undefined) setInspected([found]);
+      return;
+    }
+    if (spanId !== null) {
+      const paired = session.events.filter(
+        (event) =>
+          event.span_id === spanId &&
+          (event.event_type.endsWith(".started") || event.event_type.endsWith(".finished"))
+      );
+      const matches =
+        paired.length > 0 ? paired : session.events.filter((event) => event.span_id === spanId);
+      if (matches.length > 0) setInspected(matches);
+    }
+  }, [session, searchParams]);
 
   const turnCount = useMemo(() => {
     if (session === undefined) return 0;
@@ -126,7 +165,7 @@ export default function SessionDetailPage() {
       <PageHeader
         title={
           <span className="flex items-center gap-2">
-            <span className="mono">{shortId(traceId)}</span>
+            <span className="mono">{shortTraceId(traceId)}</span>
             <CopyButton value={traceId} label="Copy trace id" />
             {session ? <StatusBadge status={session.status} /> : null}
           </span>
@@ -146,7 +185,8 @@ export default function SessionDetailPage() {
       <div className="px-8 py-6">
         {loading && session === undefined ? (
           <div className="space-y-6">
-            <Skeleton className="h-16 w-full" />
+            <StatStripSkeleton stats={6} />
+            <Skeleton className="h-24 w-full" />
             <Skeleton className="h-64 w-full" />
             <Skeleton className="h-80 w-full" />
           </div>
@@ -182,6 +222,14 @@ export default function SessionDetailPage() {
                 {
                   label: "Tokens",
                   value: totalTokens > 0 ? fmtNumber(totalTokens) : undefined,
+                  mono: true
+                },
+                {
+                  label: "Cost",
+                  value:
+                    session.costUsd !== undefined
+                      ? `${fmtUsd(session.costUsd)}${session.costIncomplete === true ? "+" : ""}`
+                      : undefined,
                   mono: true
                 },
                 { label: "Events", value: fmtNumber(session.events.length), mono: true }
@@ -238,7 +286,7 @@ export default function SessionDetailPage() {
                 events={session.events}
                 startedAt={session.startedAt}
                 durationMs={session.durationMs}
-                onInspect={setInspected}
+                onInspect={inspect}
               />
             </Section>
 
@@ -315,18 +363,26 @@ export default function SessionDetailPage() {
               <EventTable
                 events={session.events}
                 startedAt={session.startedAt}
-                onInspect={setInspected}
+                onInspect={inspect}
               />
             </Section>
 
             <EventInspector
               events={inspected}
               startedAt={session.startedAt}
-              onClose={() => setInspected(undefined)}
+              onClose={closeInspector}
             />
           </>
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function SessionDetailPage() {
+  return (
+    <Suspense>
+      <SessionDetailBody />
+    </Suspense>
   );
 }

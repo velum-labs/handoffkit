@@ -28,6 +28,16 @@ export function fmtNumber(value: number): string {
   return value.toLocaleString();
 }
 
+/**
+ * USD amounts across the range LLM spend actually spans: cents-precision for
+ * dollar-scale, four decimals for the sub-cent per-call costs.
+ */
+export function fmtUsd(usd: number): string {
+  if (usd === 0) return "$0";
+  if (usd >= 0.1) return `$${usd.toFixed(2)}`;
+  return `$${usd.toFixed(4)}`;
+}
+
 /** A compact relative timestamp ("just now", "2m ago", "3h ago"). */
 export function fmtRelative(ts: number, now: number = Date.now()): string {
   if (!ts) return "—";
@@ -42,53 +52,65 @@ export function fmtRelative(ts: number, now: number = Date.now()): string {
   return `${days}d ago`;
 }
 
+/**
+ * Compact display form of a trace id: strips the `trace_` prefix and
+ * middle-truncates long ids so the distinguishing tail stays visible
+ * (uuid-ish ids differ at the end, not the start).
+ */
+export function shortTraceId(traceId: string): string {
+  const id = traceId.replace(/^trace_/, "");
+  if (id.length <= 16) return id;
+  return `${id.slice(0, 6)}…${id.slice(-6)}`;
+}
+
+// Color helpers resolve to the semantic theme tokens defined in
+// app/globals.css, so every visualization tracks the active light/dark theme.
+
 export function statusColor(status: string | undefined): string {
   switch (status) {
     case "succeeded":
-      return "#3fb950";
+      return "var(--status-success)";
     case "failed":
-      return "#f85149";
+      return "var(--status-danger)";
     case "running":
-      return "#d29922";
-    case "skipped":
-      return "#8b98a9";
+      return "var(--status-warning)";
     default:
-      return "#8b98a9";
+      return "var(--status-neutral)";
   }
 }
 
 export function componentColor(component: string): string {
   switch (component) {
     case "gateway":
-      return "#6ea8fe";
+      return "var(--trace-gateway)";
     case "ensemble":
-      return "#a371f7";
+      return "var(--trace-ensemble)";
     case "agent":
-      return "#56d4dd";
+      return "var(--trace-agent)";
     case "panel-model":
-      return "#3fb950";
+      return "var(--trace-panel-model)";
     case "judge":
-      return "#e3b341";
+      return "var(--trace-judge)";
     case "synthesis":
-      return "#db61a2";
+      return "var(--trace-synthesis)";
     case "cursor-bridge":
-      return "#f0883e";
+      return "var(--trace-cursor-bridge)";
     default:
-      return "#8b98a9";
+      return "var(--trace-other)";
   }
 }
 
 export function stepColor(type: string): string {
   switch (type) {
     case "reasoning":
-      return "#a371f7";
+      return "var(--step-reasoning)";
     case "tool_call":
-      return "#6ea8fe";
+      return "var(--step-tool-call)";
     case "observation":
-      return "#56d4dd";
+      return "var(--step-observation)";
     case "output":
-      return "#3fb950";
+      return "var(--step-output)";
     default:
-      return "#8b98a9";
+      return "var(--step-other)";
   }
 }

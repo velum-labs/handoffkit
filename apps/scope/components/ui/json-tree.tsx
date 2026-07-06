@@ -29,12 +29,12 @@ function ValueSpan({ value }: { value: unknown }) {
   if (value === null) return <span className="text-muted-foreground italic">null</span>;
   switch (typeof value) {
     case "string":
-      return <span className="break-all text-emerald-400">&quot;{value}&quot;</span>;
+      return <span className="text-(--json-string) break-all">&quot;{value}&quot;</span>;
     case "number":
     case "bigint":
-      return <span className="text-amber-300">{String(value)}</span>;
+      return <span className="text-(--json-number)">{String(value)}</span>;
     case "boolean":
-      return <span className="text-sky-300">{String(value)}</span>;
+      return <span className="text-(--json-boolean)">{String(value)}</span>;
     case "undefined":
       return <span className="text-muted-foreground italic">undefined</span>;
     default:
@@ -67,7 +67,7 @@ function JsonNode({
       >
         {name !== undefined ? (
           <span className="shrink-0">
-            <span className="text-violet-300">{name}</span>
+            <span className="text-(--json-key)">{name}</span>
             <span className="text-muted-foreground">: </span>
           </span>
         ) : null}
@@ -91,7 +91,7 @@ function JsonNode({
         <ChevronRight
           className={cn("text-muted-foreground size-3 shrink-0 transition-transform", open && "rotate-90")}
         />
-        {name !== undefined ? <span className="text-violet-300">{name}</span> : null}
+        {name !== undefined ? <span className="text-(--json-key)">{name}</span> : null}
         <span className="text-muted-foreground">{summary}</span>
       </button>
       {open ? (

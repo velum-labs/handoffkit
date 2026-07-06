@@ -27,9 +27,11 @@ type Track = {
 };
 
 // Grid column template + horizontal padding shared by the ruler and every row,
-// so the bar column lines up exactly with the gridline/cursor overlay.
-const GRID = "grid grid-cols-[56px_200px_1fr_56px] gap-3 px-2";
-const BAR_COL_LEFT_PX = 8 + 56 + 12 + 200 + 12; // px-2 + col + gap + col + gap
+// so the bar column lines up exactly with the gridline/cursor overlay. The
+// label column is sized to fit the longest event types (harness.candidate,
+// judge.thinking, …) plus a candidate id without truncating.
+const GRID = "grid grid-cols-[56px_260px_1fr_56px] gap-3 px-2";
+const BAR_COL_LEFT_PX = 8 + 56 + 12 + 260 + 12; // px-2 + col + gap + col + gap
 const BAR_COL_RIGHT_PX = 8 + 56 + 12; // px-2 + last col + gap
 const TICKS = [0, 0.25, 0.5, 0.75, 1];
 
@@ -255,7 +257,7 @@ export function Timeline({
           />
           {live ? (
             <div
-              className="pointer-events-none absolute inset-y-0 z-0 w-px bg-emerald-500/60"
+              className="bg-(--status-success)/60 pointer-events-none absolute inset-y-0 z-0 w-px"
               style={{ right: BAR_COL_RIGHT_PX }}
             />
           ) : null}
@@ -303,11 +305,16 @@ export function Timeline({
                       <span className="inline-block size-3 shrink-0" />
                     )}
                     <span className="size-2 shrink-0 rounded-full" style={{ background: color }} />
-                    <span className="truncate text-xs font-medium" style={{ color }}>
+                    <span className="truncate text-xs font-medium" style={{ color }} title={track.label}>
                       {track.label}
                     </span>
                     {track.detail ? (
-                      <span className="text-muted-foreground mono truncate text-[11px]">{track.detail}</span>
+                      <span
+                        className="text-muted-foreground mono truncate text-[11px]"
+                        title={track.detail}
+                      >
+                        {track.detail}
+                      </span>
                     ) : null}
                   </div>
                   <Tooltip>
@@ -333,9 +340,13 @@ export function Timeline({
                     </TooltipTrigger>
                     <TooltipContent>
                       <div className="space-y-0.5">
-                        <div className="font-medium" style={{ color }}>
+                        {/* Plain text plus a colored dot: the theme-resolved
+                            component color is not readable on the inverted
+                            tooltip background. */}
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <span className="size-2 shrink-0 rounded-full" style={{ background: color }} />
                           {track.label}
-                          <span className="text-background/70 ml-1.5 font-normal">{track.component}</span>
+                          <span className="text-background/70 font-normal">{track.component}</span>
                         </div>
                         {track.detail ? <div className="mono">{track.detail}</div> : null}
                         <div className="mono">

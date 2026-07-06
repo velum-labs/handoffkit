@@ -4,7 +4,11 @@ import type { FusionTraceEvent } from "../lib/types";
  * A synthetic but realistic full fusion session: environment snapshot, two
  * panel candidates with stepped trajectories, paired model calls, and the
  * judge's thinking -> scored -> synthesis -> final flow. Used by the unit,
- * collector, and API round-trip tests (and handy for seeding a live dashboard).
+ * collector, and API round-trip tests, and by scripts/seed.ts for demo data.
+ *
+ * Component values mirror the production emitters (packages/ensemble emits
+ * harness + trajectory events as "panel-model"), so seeded timelines get the
+ * same legend and colors as real runs.
  */
 export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[] {
   const base = 1_750_000_000_000;
@@ -42,7 +46,7 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_cand_gpt",
       parent_span_id: "span_root",
       ts: base + 100,
-      component: "agent",
+      component: "panel-model",
       event_type: "harness.candidate.started",
       candidate_id: "cand_gpt",
       model_id: "gpt",
@@ -62,7 +66,7 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_step_gpt_0",
       parent_span_id: "span_cand_gpt",
       ts: base + 200,
-      component: "agent",
+      component: "panel-model",
       event_type: "trajectory.step",
       candidate_id: "cand_gpt",
       model_id: "gpt",
@@ -72,7 +76,7 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_step_gpt_1",
       parent_span_id: "span_cand_gpt",
       ts: base + 300,
-      component: "agent",
+      component: "panel-model",
       event_type: "trajectory.step",
       candidate_id: "cand_gpt",
       model_id: "gpt",
@@ -84,7 +88,7 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_step_gpt_2",
       parent_span_id: "span_cand_gpt",
       ts: base + 400,
-      component: "agent",
+      component: "panel-model",
       event_type: "trajectory.step",
       candidate_id: "cand_gpt",
       model_id: "gpt",
@@ -111,7 +115,7 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_cand_gpt",
       parent_span_id: "span_root",
       ts: base + 550,
-      component: "agent",
+      component: "panel-model",
       event_type: "harness.candidate.finished",
       candidate_id: "cand_gpt",
       model_id: "gpt",
@@ -127,7 +131,7 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_cand_opus",
       parent_span_id: "span_root",
       ts: base + 120,
-      component: "agent",
+      component: "panel-model",
       event_type: "harness.candidate.started",
       candidate_id: "cand_opus",
       model_id: "opus",
@@ -137,7 +141,7 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_step_opus_0",
       parent_span_id: "span_cand_opus",
       ts: base + 260,
-      component: "agent",
+      component: "panel-model",
       event_type: "trajectory.step",
       candidate_id: "cand_opus",
       model_id: "opus",
@@ -147,7 +151,7 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_step_opus_1",
       parent_span_id: "span_cand_opus",
       ts: base + 360,
-      component: "agent",
+      component: "panel-model",
       event_type: "trajectory.step",
       candidate_id: "cand_opus",
       model_id: "opus",
@@ -157,11 +161,53 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
       span_id: "span_cand_opus",
       parent_span_id: "span_root",
       ts: base + 600,
-      component: "agent",
+      component: "panel-model",
       event_type: "harness.candidate.finished",
       candidate_id: "cand_opus",
       model_id: "opus",
       payload: { status: "succeeded", tool_call_count: 2, verification_status: "passed" }
+    }),
+    ev({
+      span_id: "span_cost_gpt",
+      parent_span_id: "span_root",
+      ts: base + 620,
+      component: "gateway",
+      event_type: "log",
+      payload: {
+        kind: "cost.metered",
+        stage: "panel",
+        model: "openai:gpt-5.5",
+        usage: { promptTokens: 800, completionTokens: 120, totalTokens: 920 },
+        turn_cost_usd: 0.0031,
+        provider_cost_usd: 0.0031,
+        unknown_cost: false,
+        unknown_usage: false,
+        session_total_usd: 0.0031,
+        provider_total_usd: 0.0031,
+        local_compute_total_usd: 0,
+        currency: "USD"
+      }
+    }),
+    ev({
+      span_id: "span_cost_opus",
+      parent_span_id: "span_root",
+      ts: base + 640,
+      component: "gateway",
+      event_type: "log",
+      payload: {
+        kind: "cost.metered",
+        stage: "panel",
+        model: "anthropic:claude-opus-4-8",
+        usage: { promptTokens: 780, completionTokens: 190, totalTokens: 970 },
+        turn_cost_usd: 0.0058,
+        provider_cost_usd: 0.0058,
+        unknown_cost: false,
+        unknown_usage: false,
+        session_total_usd: 0.0089,
+        provider_total_usd: 0.0089,
+        local_compute_total_usd: 0,
+        currency: "USD"
+      }
     }),
     ev({
       span_id: "span_judge",
@@ -193,12 +239,11 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
           likely_errors: []
         },
         metrics: {
-          candidate_ranks: [
-            { candidate_id: "cand_opus", rank: 1, score: 0.92 },
-            { candidate_id: "cand_gpt", rank: 2, score: 0.88 }
-          ]
+          best_trajectory: "cand_opus",
+          recommended_final_structure: ["operator fix", "regression test"]
         },
-        input_ids: ["cand_gpt", "cand_opus"]
+        input_ids: ["cand_gpt", "cand_opus"],
+        usage: { total_tokens: 540 }
       }
     }),
     ev({
@@ -223,6 +268,27 @@ export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[
         rationale: "Operator fix plus a regression test is the most complete solution.",
         final_output: "export const add = (left, right) => left + right;",
         record: { synthesis_id: "synth_001", final_output: "export const add = (left, right) => left + right;" }
+      }
+    }),
+    ev({
+      span_id: "span_cost_judge",
+      parent_span_id: "span_root",
+      ts: base + 1050,
+      component: "gateway",
+      event_type: "log",
+      payload: {
+        kind: "cost.metered",
+        stage: "judge_synth",
+        model: "gpt-5.5",
+        usage: { promptTokens: 2100, completionTokens: 260, totalTokens: 2360 },
+        turn_cost_usd: 0.0104,
+        provider_cost_usd: 0.0104,
+        unknown_cost: false,
+        unknown_usage: false,
+        session_total_usd: 0.0193,
+        provider_total_usd: 0.0193,
+        local_compute_total_usd: 0,
+        currency: "USD"
       }
     }),
     ev({
