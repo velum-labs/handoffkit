@@ -24,9 +24,13 @@ fusionkit sessions
 fusionkit sessions rm <id>
 ```
 
-## No telemetry
+## Telemetry is opt-in
 
-FusionKit does not include product telemetry, phone-home analytics, or a hosted control plane. The CLI and gateway do not report usage back to Velum Labs.
+FusionKit sends no telemetry unless you explicitly turn it on with `fusionkit telemetry on`, and has no hosted control plane. When enabled, two anonymous event kinds are sent (via PostHog) from a fixed allow-list — command usage and fused-session aggregates such as panel size, provider names, judge decision, and token totals. Never prompts, code, diffs, file paths, repo names, or model outputs.
+
+`fusionkit telemetry status` prints the effective state and the complete field list; `DO_NOT_TRACK=1` or `FUSIONKIT_TELEMETRY=0` force it off above any stored consent. The only identifier is a random install UUID, deleted by `fusionkit telemetry off`.
+
+Tracing is OpenTelemetry-based and exports nowhere by default: `--observe` points spans at the local scope dashboard over loopback, and only a user-configured `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` sends them anywhere else.
 
 ## Where code travels
 

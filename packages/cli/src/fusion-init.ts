@@ -55,6 +55,7 @@ import { ownedMlxEnv } from "./fusion/mlx.js";
 import { buildPanel, isAllLocal, judgeOptions, withKeyEnv } from "./fusion/panel-builder.js";
 import { fetchDefaultPrompts } from "./fusion/prompts.js";
 import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "./shared/options.js";
+import { disableTelemetry, enableTelemetry, resolveTelemetry } from "./telemetry/consent.js";
 
 export { defaultMemberId, judgeOptions } from "./fusion/panel-builder.js";
 
@@ -406,6 +407,25 @@ export async function runFusionInit(input: {
         });
         if (observe === BACK) return BACK;
         return { ...state, observe };
+      }
+    },
+    {
+      id: "telemetry",
+      title: "telemetry",
+      run: async (state) => {
+        // One-time, opt-in, and never re-asked once decided anywhere (env,
+        // kill switch, or a previous answer). Default is no.
+        if (resolveTelemetry().source !== "default") return state;
+        const optIn = await confirm({
+          message:
+            "Share anonymous usage telemetry? (never prompts, code, or paths — `fusionkit telemetry status` shows the exact fields)",
+          defaultValue: false,
+          allowBack: true
+        });
+        if (optIn === BACK) return BACK;
+        if (optIn) enableTelemetry();
+        else disableTelemetry();
+        return state;
       }
     }
   ];

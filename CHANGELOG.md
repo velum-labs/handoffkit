@@ -2,6 +2,12 @@
 
 Release notes for the FusionKit monorepo: `@fusionkit/*` npm packages, the `@velum-labs/model-fusion-protocol` contract package, and the PyPI `fusionkit` package set. Release tags are named `handoffkit-v*` for historical reasons.
 
+## Unreleased
+
+- Replaced the hand-rolled fusion trace spine with OpenTelemetry end to end: native spans with W3C `traceparent`/`baggage` propagation, a new `@fusionkit/tracing` package, a semantic-conventions registry in `spec/fusion-trace/`, and standard `OTEL_*` configuration (PostHog/Jaeger/Tempo interop for free).
+- Rewrote the scope dashboard as a native OTLP span store (spans in SQLite, OTLP/HTTP JSON ingest, live SSE), replacing the custom `fusion-trace-event.v1` wire format, headers, and JSONL replay.
+- Added strictly opt-in anonymous product telemetry (`fusionkit telemetry on|off|status|inspect`, PostHog, allow-listed fields, `DO_NOT_TRACK` honored) and documented the complete field list in `docs/privacy.md`.
+
 ## 0.8.0 - 2026-06-29
 
 - Added failover, durable sessions, unified configuration, and turnkey Cursor IDE support for fused harness runs.

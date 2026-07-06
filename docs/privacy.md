@@ -25,7 +25,29 @@ Use `FUSIONKIT_SESSIONS_DIR` to move the durable session store, and `FUSIONKIT_C
 
 ## Telemetry
 
-FusionKit does **not** include product telemetry, phone-home analytics, or a hosted control plane. The CLI and gateway do not report usage back to Velum Labs.
+FusionKit sends **no telemetry unless you explicitly turn it on**, and has no hosted control plane. Anonymous usage telemetry (PostHog) is strictly opt-in: it is off by default, never enabled by an update, and `fusionkit init` asks at most once.
+
+When enabled, exactly two event kinds are sent, built from a fixed allow-list — never prompts, code, diffs, file paths, repo names, or model outputs:
+
+- `cli.command`: command name, CLI version, os/arch, node major version, coarse duration bucket, exit kind, boolean flag presence (`observe`, `local`), and whether the run was in CI.
+- `fusion.session`: panel size, provider names (e.g. `openai`, `anthropic`, `mlx`), harness kind, judge decision (`synthesize` or `select_trajectory`), turn count, coarse duration bucket, token totals, and error kind.
+
+Events are anonymous by design: the only identifier is a random install UUID minted when you opt in, and PostHog person profiles and client IP retention are disabled on every event (`$process_person_profile: false`, `$ip: null`).
+
+Controls:
+
+```bash
+fusionkit telemetry status   # effective state, deciding layer, and the full field list
+fusionkit telemetry on       # opt in (mints the anonymous install id)
+fusionkit telemetry off      # opt out (deletes the install id)
+fusionkit telemetry inspect  # print what would be sent, sending nothing
+```
+
+`DO_NOT_TRACK=1` and `FUSIONKIT_TELEMETRY=0` force telemetry off above any stored consent; consent lives in `~/.fusionkit/telemetry.json` (override with `FUSIONKIT_TELEMETRY_PATH`).
+
+## Tracing
+
+Fusion runs are instrumented with OpenTelemetry. By default spans go nowhere: without an `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` no exporter is installed and nothing leaves the process. `--observe` points the exporter at the local scope dashboard (loopback only). You may point it at any OTLP backend yourself — that is your egress choice, and span attributes classified `local` in `spec/fusion-trace/registry.json` (prompts, code, outputs, paths) are only ever consumed locally by the product's own pipelines.
 
 ## Provider egress
 
