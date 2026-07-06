@@ -73,6 +73,16 @@ test("changelogToDocsMdx emits frontmatter and escapes JSX-significant character
   assert.match(mdx, /const x: Promise<void> = run\(\{\}\);/);
 });
 
+test("changelogToDocsMdx escapes backslashes so pre-escaped input cannot bypass escaping", () => {
+  const mdx = changelogToDocsMdx("# Changelog\n\n## Unreleased\n\n- A literal \\< sequence and a C:\\path outside code, `\\<` inside code.\n");
+  // `\<` in the source becomes `\\\<` (escaped backslash + escaped `<`): no
+  // raw `<` survives outside code, so MDX can never parse it as JSX.
+  assert.match(mdx, /A literal \\\\\\< sequence/);
+  assert.match(mdx, /C:\\\\path/);
+  // Inline code is untouched.
+  assert.match(mdx, /`\\<` inside code/);
+});
+
 test("the committed docs changelog page is in sync with CHANGELOG.md", () => {
   const result = spawnSync(process.execPath, ["scripts/sync-docs-changelog.mjs", "--check"], {
     encoding: "utf8"

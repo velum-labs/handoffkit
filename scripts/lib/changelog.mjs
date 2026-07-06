@@ -108,6 +108,9 @@ export function promoteUnreleased(text, version, date) {
 
 // Escape `<` and `{` outside code fences and inline code spans so the markdown
 // changelog can be embedded in an MDX page without being parsed as JSX.
+// Backslashes are escaped first so input like `\<` cannot smuggle an
+// unescaped `<` past the transform (CodeQL js/incomplete-sanitization); the
+// output always renders the source text literally.
 function escapeForMdx(text) {
   const out = [];
   let inFence = false;
@@ -125,7 +128,11 @@ function escapeForMdx(text) {
     out.push(
       line
         .split(/(`[^`]*`)/)
-        .map((seg) => (seg.startsWith("`") ? seg : seg.replace(/</g, "\\<").replace(/\{/g, "\\{")))
+        .map((seg) =>
+          seg.startsWith("`")
+            ? seg
+            : seg.replace(/\\/g, "\\\\").replace(/</g, "\\<").replace(/\{/g, "\\{")
+        )
         .join("")
     );
   }
