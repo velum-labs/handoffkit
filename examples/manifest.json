@@ -2,118 +2,6 @@
   "//": "Single source of truth for the example projects: scripts/demo.mjs (listing/running), test/demos.test.js (the acceptance suite), scripts/check-repo.mjs (required files), and @fusionkit/example-utils demoBanner (per-demo narration) all read this file.",
   "demos": [
     {
-      "id": "01",
-      "directory": "governed-run",
-      "title": "legacy: governed run",
-      "summary": "Run an agent harness on a runner you control, under a signed contract, and get a receipt that answers the five questions.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "02",
-      "directory": "dry-run",
-      "title": "legacy: dry run \u2014 what would move?",
-      "summary": "dryRun is a security feature: the complete disclosure report, with nothing uploaded, issued, or executed.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "03",
-      "directory": "consent-secrets",
-      "title": "legacy: consent and brokered secrets",
-      "summary": "A run requesting a production secret blocks on human approval; the value is injected into the session and never appears in any contract, event, or receipt.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "04",
-      "directory": "egress-policy",
-      "title": "legacy: deny-by-default egress",
-      "summary": "Network policy is decided at contract time and enforced at the session boundary; every attempted connection is recorded in the receipt.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "05",
-      "directory": "offline-verify",
-      "title": "legacy: offline verification and tamper evidence",
-      "summary": "Receipts verify against nothing but published schemas and keys. Rewriting history \u2014 or quietly dropping a secret release \u2014 breaks the math.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "06",
-      "directory": "handoff",
-      "title": "legacy: handoff \u2014 continue local work on a governed runner",
-      "summary": "The continuation SDK: checkpoint local state, hand it to a runner pool under policy, and pull the results (and the proof) back. One gesture, full provenance.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "07",
-      "directory": "parallel-fanout",
-      "title": "legacy: parallel fan-out and review",
-      "summary": "Fork one checkpoint into isolated attempts, each with its own contract and receipt, then choose deterministically. Topology, not an agent tournament.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "08",
-      "directory": "control-panel",
-      "title": "legacy: control panel",
-      "summary": "Boot a plane + runner, seed realistic runs (a continuation, a success, a failure, a cancellation, and one awaiting approval), and leave the control panel up for you to explore.",
-      "interactive": true,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "09",
-      "directory": "ai-sdk-loop",
-      "title": "legacy: AI SDK app-owned loop with governed remote tools",
-      "summary": "Your generateText loop, your model \u2014 Warrant governs the tool boundary: every tool call is a signed contract executed on a runner, returned with a verifiable receipt. Honestly labeled: no durability claim attaches to the loop itself.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "10",
-      "directory": "compute-sandbox",
-      "title": "legacy: ComputeSDK-shaped sandbox over governed sessions",
-      "summary": "The sandbox shape developers already write \u2014 create, runCommand, filesystem \u2014 where every command is a signed contract with a receipt, and continuity flows through the workspace.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "11",
-      "directory": "golden-interface",
-      "title": "legacy: the golden interface",
-      "summary": "The predecessor spec's golden shape, built on Warrant primitives: h.tools wraps your AI SDK tools (journaled semantic state), h.needs gates the boundary, h.continueIn moves the work, h.compute is the sandbox surface, h.summary explains it all.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "12",
-      "directory": "model-escalation",
-      "title": "legacy: model escalation",
-      "summary": "h.model starts on the local model and escalates to cloud under deterministic conditions \u2014 here, a prompt-size threshold standing in for 'context too large'. Every routing decision lands in the trace, and escalation makes continuation 'needed'.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "13",
-      "directory": "hermetic-session",
-      "title": "legacy: hermetic session isolation",
-      "summary": "Run the command harness inside a simulated bash interpreter (just-bash) with a virtual filesystem and interpreter-enforced egress. No real process, no real socket \u2014 nothing to escape with. The receipt records isolation: hermetic.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
-      "id": "14",
-      "directory": "swarm",
-      "title": "legacy: cloud orchestrator, local swarm",
-      "summary": "A cloud orchestrator drives a governed swarm via swarmTools: dispatch fans a goal out across cheap local workers, each a signed run; completed workers are judged from deterministic evidence and pulled, overlaps are caught from receipts and escalated to a cloud target. The orchestration loop is the harness's own; Warrant governs the boundary.",
-      "interactive": false,
-      "location": "legacy/examples"
-    },
-    {
       "id": "15",
       "directory": "runtime-kernel",
       "title": "FusionKit runtime kernel",
@@ -123,22 +11,8 @@
   ],
   "infra": [
     {
-      "directory": "bench",
-      "purpose": "performance budgets from spec section 8.4 (pnpm bench)"
-    },
-    {
-      "directory": "microvm-isolation-bench",
-      "purpose": "ENG-596 microVM isolation migration measurements (pnpm microvm:bench)",
-      "location": "legacy/examples"
-    },
-    {
       "directory": "mlx",
       "purpose": "Apple Silicon managed-MLX smoke and stress tools (pnpm mlx, pnpm mlx:stress)"
-    },
-    {
-      "directory": "seed",
-      "purpose": "showcase seeding library for Docker compose and the control-panel demo",
-      "location": "legacy/examples"
     }
   ]
 }

@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(SCRIPT_DIR);
-const WORKSPACE_PACKAGE_DIRS = ["packages", "legacy/packages"];
+const WORKSPACE_PACKAGE_DIRS = ["packages"];
 
 const log = (msg) => process.stdout.write(`${msg}\n`);
 const die = (msg) => {

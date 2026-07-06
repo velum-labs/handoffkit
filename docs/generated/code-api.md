@@ -387,25 +387,6 @@ No module JSDoc was found.
 - `export function escapeMarkdownCell(value: string): string ...`
 - `export function markdownTable(headers: readonly string[], rows: readonly (readonly string[])[]): string[] ...`
 
-### `packages/testkit/src/index.ts`
-
-@fusionkit/testkit provides in-process plane and runner stacks plus git
-fixtures shared by integration tests and demos.
-
-Everything runs locally with the built-in mock agent. It does not require
-vendor CLIs or API keys, which makes it the preferred harness for deterministic
-tests and examples.
-
-- `export function git(cwd: string, args: string[]): string ...`
-  Re-exported shared git helper so fixtures and tests share one implementation.
-- `export type RepoFixtureOptions ...`
-- `export function makeRepo(options: RepoFixtureOptions ...`
-  A throwaway git repository with an initial commit.
-- `export type StackOptions ...`
-- `export type Stack ...`
-- `export function mockRunRequest(`
-  The standard mock-agent run request the demos and tests share: human requester, deny-by-default network, empty budget, minimal-context disclosure. Pass overrides for whatever the scenario actually varies.
-
 ### `packages/tool-claude/src/index.ts`
 
 Claude Code tool integration entry point. It exposes launcher environment helpers and the Claude Code ensemble harness adapter.

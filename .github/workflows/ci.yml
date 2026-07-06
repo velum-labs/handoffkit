@@ -59,9 +59,6 @@ jobs:
       - name: Standalone examples
         run: pnpm demo all
 
-      - name: Performance budgets (spec section 8.4)
-        run: pnpm bench
-
       - name: Audit dependencies
         run: pnpm audit --audit-level high
 
@@ -145,43 +142,3 @@ jobs:
           rm -rf dist
           uv build --all-packages
           uv run --with twine python -m twine check dist/*
-
-  docker:
-    name: legacy Warrant docker compose smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Build images
-        run: docker compose -f legacy/docker/docker-compose.yml build
-
-      - name: Boot plane, runner, and seeder
-        run: docker compose -f legacy/docker/docker-compose.yml up -d --wait plane runner
-
-      - name: Wait for seeded showcase runs
-        run: |
-          docker compose -f legacy/docker/docker-compose.yml up seed
-          # "done." is the seeder's documented completion line; asserting on
-          # it is the smoke contract, and a failure dumps the full logs.
-          docker compose -f legacy/docker/docker-compose.yml logs seed | grep -q "done." || (docker compose -f legacy/docker/docker-compose.yml logs && exit 1)
-
-      - name: Smoke-test the API and control panel
-        run: |
-          # These assert stable, documented surface: the health/ready JSON
-          # shapes are named constants in the plane and the UI title is part
-          # of the control panel's contract.
-          curl -fsS http://localhost:7172/v1/health
-          curl -fsS http://localhost:7172/v1/ready | grep -q '"ready":true'
-          curl -fsS http://localhost:7172/ui/ | grep -q "Warrant — Control Panel"
-          TOKEN=$(docker compose -f legacy/docker/docker-compose.yml exec plane warrant ui | grep "login token" | awk '{print $3}')
-          curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:7172/v1/runs | grep -q '"runId"'
-          curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:7172/v1/metrics | grep -q '"metrics"'
-          docker compose -f legacy/docker/docker-compose.yml exec plane warrant runs
-
-      - name: Tear down
-        if: always()
-        run: docker compose -f legacy/docker/docker-compose.yml down -v

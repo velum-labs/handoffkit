@@ -14,9 +14,6 @@
       "path": "packages/model-gateway"
     },
     {
-      "path": "legacy/packages/adapter-compute"
-    },
-    {
       "path": "packages/protocol"
     },
     {
@@ -24,27 +21,6 @@
     },
     {
       "path": "packages/workspace"
-    },
-    {
-      "path": "legacy/packages/sdk"
-    },
-    {
-      "path": "legacy/packages/plane"
-    },
-    {
-      "path": "legacy/packages/runner"
-    },
-    {
-      "path": "legacy/packages/session-hermetic"
-    },
-    {
-      "path": "legacy/packages/session-vercel-sandbox"
-    },
-    {
-      "path": "legacy/packages/session-harness"
-    },
-    {
-      "path": "legacy/packages/handoff"
     },
     {
       "path": "packages/ensemble"
@@ -71,9 +47,6 @@
       "path": "packages/tool-opencode"
     },
     {
-      "path": "packages/testkit"
-    },
-    {
       "path": "packages/cli-ui"
     },
     {
@@ -83,58 +56,7 @@
       "path": "packages/example-utils"
     },
     {
-      "path": "examples/bench"
-    },
-    {
-      "path": "legacy/examples/microvm-isolation-bench"
-    },
-    {
-      "path": "legacy/examples/seed"
-    },
-    {
-      "path": "legacy/examples/governed-run"
-    },
-    {
-      "path": "legacy/examples/dry-run"
-    },
-    {
-      "path": "legacy/examples/consent-secrets"
-    },
-    {
-      "path": "legacy/examples/egress-policy"
-    },
-    {
-      "path": "legacy/examples/offline-verify"
-    },
-    {
-      "path": "legacy/examples/handoff"
-    },
-    {
-      "path": "legacy/examples/parallel-fanout"
-    },
-    {
-      "path": "legacy/examples/control-panel"
-    },
-    {
-      "path": "legacy/examples/ai-sdk-loop"
-    },
-    {
-      "path": "legacy/examples/compute-sandbox"
-    },
-    {
-      "path": "legacy/examples/golden-interface"
-    },
-    {
-      "path": "legacy/examples/model-escalation"
-    },
-    {
       "path": "examples/runtime-kernel"
-    },
-    {
-      "path": "legacy/examples/hermetic-session"
-    },
-    {
-      "path": "legacy/examples/swarm"
     },
     {
       "path": "examples/mlx"
