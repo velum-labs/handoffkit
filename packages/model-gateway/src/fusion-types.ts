@@ -1,4 +1,5 @@
 import type { WireTrajectory } from "@fusionkit/protocol";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
 import type { NarrationWriter } from "./frontdoor/narration.js";
 import type { FusionGatewayLogger } from "./logger.js";
@@ -46,8 +47,8 @@ export type ChatBody = {
 export type PanelRunInput = {
   task: string;
   messages: ChatMessageLike[];
-  traceId: string;
-  sessionSpanId: string;
+  /** Session trace carrier; panel candidate spans parent onto it. */
+  trace: FusionTraceCarrier;
   sessionKey: string;
   turn: number;
   ensembleModelId?: string;
@@ -125,6 +126,8 @@ export type FusionBackendKernelSessionState = {
   id: string;
   traceId: string;
   sessionSpan: string;
+  /** Virtual session root carrier every turn's spans parent onto. */
+  trace: FusionTraceCarrier;
   turns: Map<number, Promise<WireTrajectory[]>>;
   turnAborts: Map<number, AbortController>;
   meteredPanelTurns: Set<number>;

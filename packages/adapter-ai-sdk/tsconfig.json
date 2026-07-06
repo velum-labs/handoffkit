@@ -13,6 +13,9 @@
     },
     {
       "path": "../runtime-utils"
+    },
+    {
+      "path": "../tracing"
     }
   ]
 }

@@ -1,7 +1,10 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
-import { artifactHash, emitTrace, newSpanId } from "@fusionkit/protocol";
+import { artifactHash, ATTR } from "@fusionkit/protocol";
 import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
+import { emitFusionMarker } from "@fusionkit/tracing";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
+import { traceCandidate } from "./candidate-trace.js";
 import {
   panelMemberPreamble,
   type HarnessAdapter,
@@ -32,11 +35,9 @@ export type AgentHarnessOptions = {
   timeoutMs?: number;
   /** Overall wall-clock budget for one model's agent run (ms). */
   modelTimeoutMs?: number;
-  /** Observability correlation id; when set, each candidate is traced. */
-  traceId?: string;
-  /** Session root span; candidate spans parent under it for a correct tree. */
-  parentSpanId?: string;
-  /** User-turn index this panel run belongs to (stamped on candidate events). */
+  /** Trace carrier of the enclosing run/turn; when set, each candidate is traced. */
+  trace?: FusionTraceCarrier;
+  /** User-turn index this panel run belongs to (stamped on candidate spans). */
   turn?: number;
   /** When true, prepend a per-member identity line to the prompt (see harness.ts). */
   panelIdentity?: boolean;
@@ -72,24 +73,15 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
       const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
       const executionId = `exec_${candidateId}`;
       const planId = `plan_${candidateId}`;
-      const traceId = options.traceId;
-      const candidateSpan = newSpanId();
-      if (traceId !== undefined) {
-        emitTrace({
-          component: "panel-model",
-          event_type: "harness.candidate.started",
-          traceId,
-          spanId: candidateSpan,
-          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+      const tracer = traceCandidate(
+        { ...(options.trace !== undefined ? { trace: options.trace } : {}), ...(options.turn !== undefined ? { turn: options.turn } : {}) },
+        {
           candidateId,
           modelId: model.id,
-          payload: {
-            model: model.model,
-            ...(options.turn !== undefined ? { turn: options.turn } : {}),
-            ...(worktree ? { branch_name: worktree.branchName, worktree_path: worktree.path } : {})
-          }
-        });
-      }
+          model: model.model,
+          ...(worktree ? { branchName: worktree.branchName, worktreePath: worktree.path } : {})
+        }
+      );
       // Bound the whole agent run so a hung model HTTP call cannot wedge a
       // candidate forever (the per-command timeout only bounds `run`).
       const modelTimeoutMs = options.modelTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS;
@@ -112,7 +104,9 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
         ...(options.maxSteps !== undefined ? { maxSteps: options.maxSteps } : {}),
         ...(options.timeoutMs !== undefined ? { commandTimeoutMs: options.timeoutMs } : {}),
-        ...(traceId !== undefined ? { traceId, candidateId, parentSpanId: candidateSpan } : {})
+        ...(tracer.carrier !== undefined
+          ? { trace: tracer.carrier, candidateId, modelId: model.id, onStep: tracer.step }
+          : {})
       });
 
       const steps: TrajectoryStep[] = result.steps;
@@ -130,40 +124,23 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
 
       const transcript = JSON.stringify(steps, null, 2);
       const outputHash = artifactHash(transcript);
-      if (traceId !== undefined) {
-        emitTrace({
-          component: "panel-model",
-          event_type: "harness.candidate.finished",
-          traceId,
-          spanId: candidateSpan,
-          candidateId,
-          modelId: model.id,
-          payload: {
-            status,
-            ...(options.turn !== undefined ? { turn: options.turn } : {}),
-            tool_call_count: result.toolCallCount,
-            finish_reason: result.finishReason,
-            step_count: steps.length,
-            final_output_preview: result.finalOutput.slice(0, 400)
-          }
-        });
-        emitTrace({
-          component: "panel-model",
-          event_type: "tool.execution",
-          traceId,
-          spanId: candidateSpan,
-          candidateId,
-          modelId: model.id,
-          payload: {
-            execution_id: executionId,
-            plan_id: planId,
-            status,
-            ...(options.turn !== undefined ? { turn: options.turn } : {}),
-            output_hash: outputHash,
-            tool_call_count: result.toolCallCount
-          }
-        });
-      }
+      emitFusionMarker("ensemble", "fusion.tool.execution", tracer.carrier, {
+        [ATTR.FUSION_CANDIDATE_ID]: candidateId,
+        [ATTR.FUSION_MODEL_ID]: model.id,
+        [ATTR.FUSION_TURN]: options.turn,
+        [ATTR.FUSION_EXECUTION_ID]: executionId,
+        [ATTR.FUSION_PLAN_ID]: planId,
+        [ATTR.FUSION_STATUS]: status,
+        [ATTR.FUSION_OUTPUT_HASH]: outputHash,
+        [ATTR.FUSION_TOOL_CALL_COUNT]: result.toolCallCount
+      });
+      tracer.finished({
+        status,
+        steps,
+        finalOutput: result.finalOutput,
+        toolCallCount: result.toolCallCount,
+        finishReason: result.finishReason
+      });
       return {
         candidateId,
         model,

@@ -22,12 +22,8 @@ import type {
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
 import type { ResumeCursor } from "@fusionkit/harness-core";
-import {
-  emitTrace,
-  newSpanId,
-  newTraceId,
-  normalizeWireTrajectories
-} from "@fusionkit/protocol";
+import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
+import { emitFusionMarker, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
   FusionBackend,
   installAcpAdapters,
@@ -263,30 +259,29 @@ function summarize(report: UnifiedHarnessE2EResult, primary: UnifiedHarnessKind)
 
 export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunner {
   return async (input) => {
-    const traceId = input.traceId;
-    const sessionSpan = newSpanId();
-    emitTrace({
-      component: "gateway",
-      event_type: "session.started",
-      traceId,
-      spanId: sessionSpan,
-      payload: {
-        request_id: input.requestId,
-        dialect: input.dialect,
-        prompt_preview: input.prompt.slice(0, 600),
-        environment: {
-          repo: config.repo,
-          fusion_backend_url: config.fusionBackendUrl,
-          harnesses: config.harnesses,
-          judge_model: config.judgeModel ?? null,
-          models: config.models.map((model) => ({
-            id: model.id,
-            model: model.model,
-            ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
-          })),
-          ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
-        }
-      }
+    const environment = {
+      repo: config.repo,
+      fusion_backend_url: config.fusionBackendUrl,
+      harnesses: config.harnesses,
+      judge_model: config.judgeModel ?? null,
+      models: config.models.map((model) => ({
+        id: model.id,
+        model: model.model,
+        ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
+      })),
+      ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
+    };
+    const run = startFusionSpan("gateway", "fusion.run", input.trace, {
+      [ATTR.FUSION_DIALECT]: input.dialect,
+      [ATTR.FUSION_PROMPT_PREVIEW]: input.prompt.slice(0, 600),
+      [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
+      [ATTR.FUSION_REPO]: config.repo
+    });
+    run.marker("gateway", "fusion.turn.info", {
+      [ATTR.FUSION_DIALECT]: input.dialect,
+      [ATTR.FUSION_PROMPT_PREVIEW]: input.prompt.slice(0, 600),
+      [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
+      [ATTR.FUSION_REPO]: config.repo
     });
     try {
       const report = await runUnifiedHarnessE2E({
@@ -297,7 +292,7 @@ export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunn
         prompt: input.prompt,
         harnesses: config.harnesses,
         models: config.models,
-        traceId,
+        trace: run.carrier,
         ...(config.command !== undefined ? { command: config.command } : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
         ...(config.judgeModel !== undefined ? { judgeModel: config.judgeModel } : {}),
@@ -305,28 +300,17 @@ export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunn
         ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {})
       });
       const summary = summarize(report, config.harnesses[0] ?? "command");
-      emitTrace({
-        component: "gateway",
-        event_type: "session.finished",
-        traceId,
-        spanId: sessionSpan,
-        payload: {
-          status: summary.status,
-          run_id: summary.runId,
-          evidence: summary.evidence,
-          final_output_preview: summary.finalOutput.slice(0, 600),
-          ...(summary.reportPath !== undefined ? { report_path: summary.reportPath } : {})
+      run.end({
+        status: summary.status,
+        attributes: {
+          [ATTR.FUSION_RUN_ID]: summary.runId,
+          [ATTR.FUSION_EVIDENCE]: jsonAttr(summary.evidence),
+          [ATTR.FUSION_FINAL_OUTPUT_PREVIEW]: summary.finalOutput.slice(0, 600)
         }
       });
       return summary;
     } catch (error) {
-      emitTrace({
-        component: "gateway",
-        event_type: "session.finished",
-        traceId,
-        spanId: sessionSpan,
-        payload: { status: "failed", error: error instanceof Error ? error.message : String(error) }
-      });
+      run.end({ status: "failed", error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   };
@@ -340,7 +324,7 @@ export function buildAcpRunner(config: GatewayRunnerConfig): AcpRunner {
       prompt: input.prompt,
       requestedModel: undefined,
       requestId: input.requestId,
-      traceId: newTraceId()
+      trace: newSessionCarrier().carrier
     });
     return {
       finalOutput: result.finalOutput,
@@ -474,8 +458,7 @@ export async function startFusionStepGateway(input: {
   const runPanels: PanelRunner = async ({
     task,
     messages,
-    traceId,
-    sessionSpanId,
+    trace,
     sessionKey,
     turn,
     ensembleModelId,
@@ -499,28 +482,24 @@ export async function startFusionStepGateway(input: {
       ensembleModelId !== undefined
         ? ensemblesByModelId.get(ensembleModelId)?.judgeModelName
         : undefined;
-    emitTrace({
-      component: "gateway",
-      event_type: "session.started",
-      traceId,
-      spanId: sessionSpanId,
-      payload: {
-        dialect: "fusion-step",
-        prompt_preview: task.slice(0, 600),
-        environment: {
-          repo: config.repo,
-          fusion_backend_url: config.fusionBackendUrl,
-          harnesses: config.harnesses,
-          ...(ensembleModelId !== undefined ? { ensemble_model_id: ensembleModelId } : {}),
-          judge_model: ensembleJudge ?? config.judgeModel ?? null,
-          models: panelModels.map((model) => ({
-            id: model.id,
-            model: model.model,
-            ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
-          })),
-          ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
-        }
-      }
+    emitFusionMarker("gateway", "fusion.turn.info", trace, {
+      [ATTR.FUSION_DIALECT]: "fusion-step",
+      [ATTR.FUSION_TURN]: turn,
+      [ATTR.FUSION_PROMPT_PREVIEW]: task.slice(0, 600),
+      [ATTR.FUSION_REPO]: config.repo,
+      [ATTR.FUSION_ENVIRONMENT]: jsonAttr({
+        repo: config.repo,
+        fusion_backend_url: config.fusionBackendUrl,
+        harnesses: config.harnesses,
+        ...(ensembleModelId !== undefined ? { ensemble_model_id: ensembleModelId } : {}),
+        judge_model: ensembleJudge ?? config.judgeModel ?? null,
+        models: panelModels.map((model) => ({
+          id: model.id,
+          model: model.model,
+          ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
+        })),
+        ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
+      })
     });
     if (gatewayChatter) {
       const excluded =
@@ -543,8 +522,7 @@ export async function startFusionStepGateway(input: {
         models: panelModels,
         harness: config.harnesses[0] ?? "agent",
         fusionBackendUrl: config.fusionBackendUrl,
-        traceId,
-        parentSpanId: sessionSpanId,
+        trace,
         turn,
         ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),

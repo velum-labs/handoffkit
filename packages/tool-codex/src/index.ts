@@ -42,8 +42,7 @@ export const codexTool: ToolIntegration = {
     harnessDriversEnabled() ? codexDriverHarness(options) : createCodexHarness({
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
-      ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+      ...(options.trace !== undefined ? { trace: options.trace } : {}),
       ...(options.turn !== undefined ? { turn: options.turn } : {}),
       ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
       ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
@@ -116,8 +115,7 @@ function codexDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter 
     driver: createCodexDriver(),
     fusionBackendUrl: options.fusionBackendUrl,
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
-    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),
     configForModel: (route) =>

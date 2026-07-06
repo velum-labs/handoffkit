@@ -19,6 +19,7 @@ import {
 import type { CliCaptureResult } from "@fusionkit/tools";
 
 import { KernelBackend, traceCandidate } from "@fusionkit/ensemble";
+import type { FusionTraceCarrier } from "@fusionkit/ensemble";
 import { createClaudeStreamStepEmitter, parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
 import type {
   EnsembleDescriptor,
@@ -57,9 +58,8 @@ export type ClaudeCodeHarnessOptions = {
   env?: ClaudeCodeHarnessEnv;
   timeoutMs?: number;
   skipWhenUnavailable?: boolean;
-  /** Observability correlation for per-candidate trace events. */
-  traceId?: string;
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing run/turn; candidates span under it. */
+  trace?: FusionTraceCarrier;
   turn?: number;
   /** Enable native sub-agents inside panel members (default on). */
   subagents?: boolean;
@@ -307,8 +307,7 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
       // candidate's trajectory live (started now, finished when the run completes).
       const tracer = traceCandidate(
         {
-          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.trace !== undefined ? { trace: options.trace } : {}),
           ...(options.turn !== undefined ? { turn: options.turn } : {})
         },
         {

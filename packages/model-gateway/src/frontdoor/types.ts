@@ -44,8 +44,6 @@ export type FrontdoorRequestValue = {
   sessionKey: string;
   /** 1-based user-turn index (a follow-up user message is a new turn). */
   turn: number;
-  /** The judge span id, minted once per turn so request/final share it. */
-  judgeSpanId: string;
   /** Whether the client asked for a streamed (SSE) response. */
   streaming: boolean;
   /**

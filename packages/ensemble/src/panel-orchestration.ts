@@ -1,5 +1,7 @@
 import type { WireTrajectory } from "@fusionkit/protocol";
-import { newSpanId, TRACE_ID_HEADER, TRACE_SPAN_HEADER } from "@fusionkit/protocol";
+import { ATTR } from "@fusionkit/protocol";
+import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import type { ResumeCursor } from "@fusionkit/harness-core";
 import { PanelGenerateOperator } from "./fusion-operators.js";
 import { runEnsemble } from "./run.js";
@@ -204,15 +206,13 @@ export function createFusionKitJudgeSynthesizer(input: {
   model: string;
   apiKey?: string;
   responseShape: string;
-  traceId?: string;
+  /** Trace carrier of the enclosing run; each synthesize() runs in a fusion.judge span. */
+  trace?: FusionTraceCarrier;
+  turn?: number;
 }): JudgeSynthesizer {
   const authHeaders: Record<string, string> = input.apiKey
     ? { authorization: `Bearer ${input.apiKey}` }
     : {};
-  const traceHeaders: Record<string, string> =
-    input.traceId !== undefined
-      ? { [TRACE_ID_HEADER]: input.traceId, [TRACE_SPAN_HEADER]: newSpanId() }
-      : {};
   return {
     async synthesize(judgeInput: JudgeInput): Promise<JudgeSynthesisOutput> {
       // The one fusion operation: post the candidate trajectories + the request
@@ -223,19 +223,43 @@ export function createFusionKitJudgeSynthesizer(input: {
       const trajectories = judgeInput.candidates
         .map((candidate) => candidate.trajectory)
         .filter((trajectory): trajectory is HarnessTrajectory => trajectory !== undefined);
+      const wires = trajectories.map(trajectoryToWire);
+      const messages = [{ role: "user", content: judgeInput.descriptor.prompt }];
+      const judgeSpan =
+        input.trace !== undefined
+          ? startFusionSpan("judge", "fusion.judge", input.trace, {
+              [ATTR.FUSION_JUDGE_MODEL]: input.model,
+              [ATTR.FUSION_TURN]: input.turn
+            })
+          : undefined;
+      judgeSpan?.marker("judge", "fusion.judge.request", {
+        [ATTR.FUSION_JUDGE_MODEL]: input.model,
+        [ATTR.FUSION_TURN]: input.turn,
+        [ATTR.FUSION_MESSAGES]: jsonAttr(messages),
+        [ATTR.FUSION_TRAJECTORIES]: jsonAttr(wires),
+        [ATTR.FUSION_TRAJECTORY_IDS]: wires.map((wire) => String(wire.trajectory_id))
+      });
       const fuseResponse = await fetch(trajectoryFuseUrl(input.fusionBackendUrl), {
         method: "POST",
-        headers: { "content-type": "application/json", ...authHeaders, ...traceHeaders },
+        headers: {
+          "content-type": "application/json",
+          ...authHeaders,
+          ...(judgeSpan !== undefined ? headersOf(judgeSpan.carrier) : {})
+        },
         body: JSON.stringify({
           model: input.model,
-          messages: [{ role: "user", content: judgeInput.descriptor.prompt }],
-          trajectories: trajectories.map(trajectoryToWire)
+          messages,
+          trajectories: wires
         })
       });
       if (!fuseResponse.ok) {
-        throw new Error(
-          `FusionKit trajectory fusion failed: ${fuseResponse.status} ${(await fuseResponse.text()).slice(0, 500)}`
-        );
+        const failureBody = (await fuseResponse.text()).slice(0, 500);
+        judgeSpan?.end({
+          status: "failed",
+          error: `trajectory fusion failed: ${fuseResponse.status}`,
+          attributes: { "http.response.status_code": fuseResponse.status }
+        });
+        throw new Error(`FusionKit trajectory fusion failed: ${fuseResponse.status} ${failureBody}`);
       }
       const fused = (await fuseResponse.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
@@ -251,6 +275,17 @@ export function createFusionKitJudgeSynthesizer(input: {
       };
       const finalOutput = fused.choices?.[0]?.message?.content ?? "";
       const synthesis = fused.fusion?.trajectory?.synthesis;
+      judgeSpan?.end({
+        status: "succeeded",
+        attributes: {
+          [ATTR.FUSION_DECISION]:
+            synthesis?.decision === "select_trajectory" ? "select_trajectory" : "synthesize",
+          [ATTR.FUSION_SELECTED_TRAJECTORY_ID]: synthesis?.selected_trajectory_id ?? undefined,
+          [ATTR.FUSION_RATIONALE]: synthesis?.rationale ?? undefined,
+          [ATTR.FUSION_FINAL_OUTPUT]: finalOutput,
+          [ATTR.FUSION_SYNTHESIS]: jsonAttr(synthesis)
+        }
+      });
       const output: JudgeSynthesisOutput = {
         decision: synthesis?.decision === "select_trajectory" ? "select_trajectory" : "synthesize",
         finalOutput,
@@ -288,9 +323,8 @@ export type FusionPanelOptions = {
   signal?: AbortSignal;
   /** Straggler grace window after the first success; see EnsemblePolicy.stragglerGraceMs. */
   stragglerGraceMs?: number;
-  traceId?: string;
-  /** Session root span so panel candidate spans nest under the session. */
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing run/turn; panel candidate spans nest under it. */
+  trace?: FusionTraceCarrier;
   /** User-turn index this panel run belongs to (for per-turn grouping). */
   turn?: number;
   /**
@@ -346,8 +380,7 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
     ...(options.stragglerGraceMs !== undefined ? { stragglerGraceMs: options.stragglerGraceMs } : {}),
-    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
     ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),

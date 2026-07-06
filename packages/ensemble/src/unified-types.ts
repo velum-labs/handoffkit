@@ -1,5 +1,6 @@
 import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
 import type { ResumeCursor } from "@fusionkit/harness-core";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import type { EnsembleDescriptor, EnsembleModel, EnsembleRunResult, HarnessAdapter } from "./harness.js";
 
 export type UnifiedHarnessKind =
@@ -67,12 +68,11 @@ export type ToolHarnessResolveOptions = {
    */
   modelEndpoints?: Record<string, string>;
   /**
-   * Observability correlation passed to the tool harness so it can emit
-   * per-candidate trace events (`harness.candidate.*`, `trajectory.step`) under
-   * the session, mirroring the agent harness. Unset outside a traced run.
+   * Trace carrier of the enclosing run/turn, passed to the tool harness so it
+   * can wrap each candidate in a `fusion.candidate` span with live step
+   * markers, mirroring the agent harness. Unset outside a traced run.
    */
-  traceId?: string;
-  parentSpanId?: string;
+  trace?: FusionTraceCarrier;
   turn?: number;
   /** When true, the tool harness tells its model which panel member it is. */
   panelIdentity?: boolean;
@@ -172,14 +172,12 @@ export type UnifiedHarnessE2EOptions = {
    */
   modelEndpoints?: Record<string, string>;
   /**
-   * Observability correlation id. When set, the agent harness, panel-model
-   * calls, and the FusionKit trajectory synthesis are all tagged with this
-   * trace so the companion app can reconstruct one session.
+   * Trace carrier of the enclosing run/turn. When set, the harnesses,
+   * panel-model calls, and the FusionKit trajectory synthesis all parent
+   * their spans onto it so any OTLP consumer can reconstruct one session.
    */
-  traceId?: string;
-  /** Session root span; panel candidate spans parent under it. */
-  parentSpanId?: string;
-  /** User-turn index this panel run belongs to (stamped on candidate events). */
+  trace?: FusionTraceCarrier;
+  /** User-turn index this panel run belongs to (stamped on candidate spans). */
   turn?: number;
   /** When true, each harness tells its model which panel member it is (see FusionPanelOptions). */
   panelIdentity?: boolean;

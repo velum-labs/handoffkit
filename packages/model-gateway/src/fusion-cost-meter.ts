@@ -1,5 +1,7 @@
-import { emitTrace, getTraceEmitter, newSpanId } from "@fusionkit/protocol";
+import { ATTR } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import { emitFusionMarker, jsonAttr } from "@fusionkit/tracing";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
 import {
   addLedgerEntry,
@@ -204,8 +206,7 @@ export class FusionCostMeter {
   meterPanelCandidates(input: {
     sessionId: string;
     turn: number;
-    traceId: string;
-    parentSpanId: string;
+    trace: FusionTraceCarrier;
     meteredPanelTurns: Set<number>;
     candidates: readonly WireTrajectory[];
   }): void {
@@ -238,8 +239,7 @@ export class FusionCostMeter {
           ...(providerCost !== undefined ? { providerCost } : {}),
           ...(localCompute !== undefined ? { localCompute } : {})
         },
-        input.traceId,
-        input.parentSpanId
+        input.trace
       );
     }
   }
@@ -257,8 +257,7 @@ export class FusionCostMeter {
       providerCost?: ProviderCostMetadata;
       localCompute?: ReturnType<typeof localComputeFromLatency>;
     },
-    traceId?: string,
-    parentSpanId?: string
+    trace?: FusionTraceCarrier
   ): CostLedgerEntry {
     const entry = meterCall({
       model: input.model,
@@ -281,33 +280,21 @@ export class FusionCostMeter {
     }
     const line = turnCostLine(entry, total.totalUsd);
     this.#logger.error(`fusion: ${input.stage} ${line}`);
-    if (getTraceEmitter().isEnabled()) {
-      emitTrace({
-        component: "gateway",
-        event_type: "log",
-        ...(traceId !== undefined ? { traceId } : {}),
-        spanId: newSpanId(),
-        ...(parentSpanId !== undefined ? { parentSpanId } : {}),
-        sessionId,
-        payload: {
-          kind: "cost.metered",
-          stage: input.stage,
-          model: entry.model,
-          usage: entry.usage,
-          turn_cost_usd: entry.costUsd ?? null,
-          provider_cost_usd: entry.providerCostUsd ?? null,
-          provider_cost: entry.providerCost ?? null,
-          local_compute_cost_usd: entry.localComputeCostUsd ?? null,
-          local_compute: entry.localCompute ?? null,
-          unknown_cost: entry.unknownCost,
-          unknown_usage: entry.unknownUsage,
-          session_total_usd: total.totalUsd,
-          provider_total_usd: total.providerUsd ?? total.totalUsd,
-          local_compute_total_usd: total.localComputeUsd ?? 0,
-          currency: total.currency
-        }
-      });
-    }
+    emitFusionMarker("gateway", "fusion.cost", trace, {
+      [ATTR.FUSION_SESSION_ID]: sessionId,
+      [ATTR.FUSION_TURN]: input.turn,
+      [ATTR.FUSION_COST_STAGE]: input.stage,
+      [ATTR.FUSION_COST_MODEL]: entry.model,
+      [ATTR.FUSION_USAGE]: jsonAttr(entry.usage),
+      [ATTR.GEN_AI_USAGE_INPUT_TOKENS]: entry.usage?.promptTokens,
+      [ATTR.GEN_AI_USAGE_OUTPUT_TOKENS]: entry.usage?.completionTokens,
+      [ATTR.FUSION_COST_TURN_USD]: entry.costUsd,
+      [ATTR.FUSION_COST_PROVIDER_USD]: entry.providerCostUsd,
+      [ATTR.FUSION_COST_LOCAL_COMPUTE_USD]: entry.localComputeCostUsd,
+      [ATTR.FUSION_COST_SESSION_TOTAL_USD]: total.totalUsd,
+      [ATTR.FUSION_COST_UNKNOWN]: entry.unknownCost,
+      [ATTR.FUSION_COST_UNKNOWN_USAGE]: entry.unknownUsage
+    });
     return entry;
   }
 
@@ -315,25 +302,18 @@ export class FusionCostMeter {
     sessionId: string,
     model: string,
     usage: TokenUsage | undefined,
-    traceId?: string,
-    parentSpanId?: string,
+    trace?: FusionTraceCarrier,
     stage: CostStage = "passthrough",
     turn?: number
   ): TurnCost {
-    return this.meterEntry(
-      sessionId,
-      { model, usage, stage, ...(turn !== undefined ? { turn } : {}) },
-      traceId,
-      parentSpanId
-    );
+    return this.meterEntry(sessionId, { model, usage, stage, ...(turn !== undefined ? { turn } : {}) }, trace);
   }
 
   async meterResponseClone(
     response: Response,
     sessionId: string,
     model: string,
-    traceId?: string,
-    parentSpanId?: string,
+    trace?: FusionTraceCarrier,
     stage: CostStage = "passthrough",
     turn?: number
   ): Promise<void> {
@@ -351,8 +331,7 @@ export class FusionCostMeter {
           ...(turn !== undefined ? { turn } : {}),
           ...(providerCost !== undefined ? { providerCost } : {})
         },
-        traceId,
-        parentSpanId
+        trace
       );
     } catch {
       // best-effort: an unreadable body means the turn is left unmetered.

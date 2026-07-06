@@ -12,6 +12,7 @@ export {
   flushFusionTracing,
   fusionTracingServiceName,
   initFusionTracing,
+  isFusionTracingActive,
   isTraceExportConfigured,
   resetFusionTracingForTest,
   shutdownFusionTracing
@@ -26,13 +27,13 @@ export {
   contextOf,
   emitFusionMarker,
   envOf,
-  ephemeralCarrier,
   fusionBaggageOf,
   headersOf,
   jsonAttr,
   newSessionCarrier,
   newSpanId,
   newTraceId,
+  sessionCarrier,
   startFusionSpan,
   traceIdOf,
   withFusionBaggage
@@ -46,6 +47,10 @@ export type {
 } from "./spans.js";
 export { attrBool, attrJson, attrNum, attrStr, spanEndMs, spanId, spanTraceId } from "./readable.js";
 export type { ReadableSpan } from "./readable.js";
+// Test support: capture finished spans in memory (used by consumer packages'
+// tests; re-exported so they need no direct OTel dependency).
+export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
+export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 export {
   ATTR,
   EXPORTABLE_ATTRIBUTES,

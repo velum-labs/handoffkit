@@ -14,7 +14,8 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { newTraceId, TRACE_ID_HEADER } from "@fusionkit/protocol";
+import { carrierFromHeaders, newSessionCarrier } from "@fusionkit/tracing";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 
 import { chatToAnthropicMessage, openAiSseToAnthropic } from "./adapters/anthropic.js";
@@ -30,8 +31,8 @@ export type FrontDoorRunnerInput = {
   prompt: string;
   requestedModel: string | undefined;
   requestId: string;
-  /** Correlates this front-door request with all downstream trace events. */
-  traceId: string;
+  /** Trace carrier this front-door request runs under (its fusion.run span parents here). */
+  trace: FusionTraceCarrier;
 };
 
 export type FrontDoorRunnerResult = {
@@ -320,11 +321,13 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
     requestedModel: string | undefined,
     stream: boolean,
     format: (finalOutput: string, model: string) => Record<string, unknown>,
-    traceId: string
+    trace: FusionTraceCarrier
   ): Promise<void> {
     const id = requestId(dialect);
-    res.setHeader(TRACE_ID_HEADER, traceId);
-    const result = await runner({ dialect, prompt, requestedModel, requestId: id, traceId });
+    // Clients and e2e scripts correlate their request with the trace via the
+    // echoed W3C traceparent.
+    res.setHeader("traceparent", trace.traceparent);
+    const result = await runner({ dialect, prompt, requestedModel, requestId: id, trace });
     res.setHeader(FUSION_RUN_ID_HEADER, result.runId);
     res.setHeader(FUSION_STATUS_HEADER, result.status);
     res.setHeader(FUSION_EVIDENCE_HEADER, JSON.stringify(result.evidence));
@@ -351,11 +354,10 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
     }
   }
 
-  function traceIdFor(req: IncomingMessage): string {
-    const incoming = req.headers[TRACE_ID_HEADER];
-    if (typeof incoming === "string" && incoming.length > 0) return incoming;
-    if (Array.isArray(incoming) && incoming.length > 0 && incoming[0]) return incoming[0];
-    return newTraceId();
+  function traceFor(req: IncomingMessage): FusionTraceCarrier {
+    // Honor an incoming W3C trace context (e.g. the Cursor bridge); otherwise
+    // this request starts its own session trace.
+    return carrierFromHeaders(req.headers) ?? newSessionCarrier().carrier;
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -392,7 +394,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ResponsesRequest;
-      await runFrontDoor(res, "openai-responses", promptFromResponses(body), body.model, body.stream === true, formatResponses, traceIdFor(req));
+      await runFrontDoor(res, "openai-responses", promptFromResponses(body), body.model, body.stream === true, formatResponses, traceFor(req));
       return;
     }
 
@@ -409,7 +411,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as AnthropicRequest;
-      await runFrontDoor(res, "anthropic-messages", promptFromAnthropic(body), body.model, body.stream === true, formatAnthropic, traceIdFor(req));
+      await runFrontDoor(res, "anthropic-messages", promptFromAnthropic(body), body.model, body.stream === true, formatAnthropic, traceFor(req));
       return;
     }
 
@@ -417,7 +419,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ChatRequest;
-      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat, traceIdFor(req));
+      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat, traceFor(req));
       return;
     }
 
@@ -439,7 +441,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
         return;
       }
       const body = translateCursorRequest(raw) as ChatRequest;
-      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat, traceIdFor(req));
+      await runFrontDoor(res, "openai-chat", promptFromChat(body), body.model, body.stream === true, formatChat, traceFor(req));
       return;
     }
 

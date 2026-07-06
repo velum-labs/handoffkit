@@ -30,7 +30,8 @@
     "@fusionkit/kernel": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*"
+    "@fusionkit/runtime-utils": "workspace:*",
+    "@fusionkit/tracing": "workspace:*"
   },
   "keywords": [
     "fusionkit",

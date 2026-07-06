@@ -504,6 +504,9 @@ importers:
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@fusionkit/tracing':
+        specifier: workspace:*
+        version: link:../tracing
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -546,6 +549,9 @@ importers:
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@fusionkit/tracing':
+        specifier: workspace:*
+        version: link:../tracing
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
@@ -612,6 +618,9 @@ importers:
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@fusionkit/tracing':
+        specifier: workspace:*
+        version: link:../tracing
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
@@ -671,6 +680,9 @@ importers:
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@fusionkit/tracing':
+        specifier: workspace:*
+        version: link:../tracing
 
   packages/protocol: {}
 
@@ -747,6 +759,9 @@ importers:
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@fusionkit/tracing':
+        specifier: workspace:*
+        version: link:../tracing
       '@openai/codex-sdk':
         specifier: 0.142.5
         version: 0.142.5

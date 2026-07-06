@@ -62,10 +62,12 @@ export function newSpanId(): string {
  */
 export function newSessionCarrier(): { traceId: string; carrier: FusionTraceCarrier } {
   const traceId = newTraceId();
-  return {
-    traceId,
-    carrier: { traceparent: `00-${traceId}-${newSpanId()}-01` }
-  };
+  return { traceId, carrier: sessionCarrier(traceId, newSpanId()) };
+}
+
+/** Rebuild a session carrier from persisted 32-hex trace / 16-hex span ids. */
+export function sessionCarrier(traceId: string, spanId: string): FusionTraceCarrier {
+  return { traceparent: `00-${traceId}-${spanId}-01` };
 }
 
 /** Rebuild an OTel Context from a carrier (or the root context when absent). */
@@ -205,7 +207,8 @@ export type FusionAttributes = Record<string, AttributeValue | undefined>;
 
 /**
  * Emit an instant marker span: started and ended at the same timestamp,
- * parented onto `carrier`. This is the live-signal primitive.
+ * parented onto `carrier`. This is the live-signal primitive. A no-op when
+ * there is no carrier — a signal with no trace identity has no consumer.
  */
 export function emitFusionMarker(
   scope: FusionScope,
@@ -213,6 +216,7 @@ export function emitFusionMarker(
   carrier: FusionTraceCarrier | undefined,
   attributes: FusionAttributes
 ): void {
+  if (carrier === undefined) return;
   const span = tracerFor(scope).startSpan(
     name,
     { kind: SpanKind.INTERNAL, attributes: compactAttributes(attributes) },
@@ -277,14 +281,6 @@ export function startFusionSpan(
       span.end();
     }
   };
-}
-
-/**
- * A non-exported placeholder carrier for signals with no ambient trace (the
- * emitter still needs a valid parent so ids are well-formed).
- */
-export function ephemeralCarrier(): FusionTraceCarrier {
-  return newSessionCarrier().carrier;
 }
 
 export { SpanKind, SpanStatusCode, TraceFlags };

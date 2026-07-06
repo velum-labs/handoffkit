@@ -17,7 +17,7 @@ import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 
-import { listenerSpanProcessor } from "./listener.js";
+import { hasSpanListeners, listenerSpanProcessor } from "./listener.js";
 
 let provider: NodeTracerProvider | undefined;
 let providerServiceName: string | undefined;
@@ -66,6 +66,15 @@ export function initFusionTracing(options: InitFusionTracingOptions): void {
 /** The active provider's service name, if tracing was initialized. */
 export function fusionTracingServiceName(): string | undefined {
   return providerServiceName;
+}
+
+/**
+ * True when emitted spans have at least one consumer (an OTLP endpoint or an
+ * in-process listener). Callers use this to skip *expensive preparation work*
+ * (cloning responses, JSON-parsing bodies) — emission itself is always safe.
+ */
+export function isFusionTracingActive(): boolean {
+  return provider !== undefined && (isTraceExportConfigured() || hasSpanListeners());
 }
 
 /** Flush all pending spans (bounded by the exporter's own timeout). */

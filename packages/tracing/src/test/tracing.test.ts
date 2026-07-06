@@ -125,10 +125,8 @@ test("in-process listeners see finished spans synchronously and survive throwing
   }
 });
 
-test("markers without a carrier still emit under a fresh trace", () => {
+test("markers without a carrier are dropped (no trace identity, no consumer)", () => {
   exporter.reset();
   emitFusionMarker("gateway", "fusion.cost", undefined, { "fusion.cost.turn_usd": 0.01 });
-  const [only] = finished();
-  assert.equal(only!.name, "fusion.cost");
-  assert.match(only!.spanContext().traceId, /^[0-9a-f]{32}$/);
+  assert.equal(finished().length, 0);
 });

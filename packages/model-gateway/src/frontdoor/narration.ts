@@ -24,8 +24,18 @@
  * fail a turn.
  */
 
-import { addTraceListener, emitTrace, removeTraceListener } from "@fusionkit/protocol";
-import type { FusionTraceEvent } from "@fusionkit/protocol";
+import { ATTR } from "@fusionkit/protocol";
+import {
+  addSpanListener,
+  attrJson,
+  attrNum,
+  attrStr,
+  emitFusionMarker,
+  removeSpanListener,
+  spanEndMs,
+  spanTraceId
+} from "@fusionkit/tracing";
+import type { FusionTraceCarrier, ReadableSpan } from "@fusionkit/tracing";
 import type { RuntimeEvent } from "@fusionkit/kernel";
 
 /** A narration delta for the client stream (serialized as `delta.reasoning_content`). */
@@ -396,8 +406,10 @@ export function narrationBeat(state: NarratorState, trigger: NarrationTrigger): 
 // ---- the live narrator ------------------------------------------------------
 
 export type TurnNarratorInput = {
-  /** The session trace id: only this session's events are narrated. */
+  /** The session trace id: only this session's spans are narrated. */
   traceId: string;
+  /** The session carrier, for mirroring beats onto the trace stream. */
+  trace?: FusionTraceCarrier;
   /** The 1-based user-turn index: other turns' events are ignored. */
   turn: number;
   /** The configured judge model name, for the judging headline. */
@@ -418,14 +430,15 @@ const DEFAULT_WRITER_TIMEOUT_MS = 400;
 /** Length cap for a writer-authored comparison sentence (longer than a gist). */
 const COMPARISON_MAX_LENGTH = 160;
 
-function candidateLabel(event: FusionTraceEvent): string | undefined {
-  return event.model_id ?? event.candidate_id;
+function candidateLabel(span: ReadableSpan): string | undefined {
+  return attrStr(span, ATTR.FUSION_MODEL_ID) ?? attrStr(span, ATTR.FUSION_CANDIDATE_ID);
 }
 
-function rosterOf(payload: Record<string, unknown>): Array<{ id: string; model?: string }> {
-  const environment = payload.environment as
-    | { models?: Array<{ id?: unknown; model?: unknown }> }
-    | undefined;
+function rosterOf(span: ReadableSpan): Array<{ id: string; model?: string }> {
+  const environment = attrJson<{ models?: Array<{ id?: unknown; model?: unknown }> }>(
+    span,
+    ATTR.FUSION_ENVIRONMENT
+  );
   const models = Array.isArray(environment?.models) ? environment.models : [];
   return models
     .filter((entry): entry is { id: string; model?: unknown } => typeof entry.id === "string")
@@ -435,8 +448,9 @@ function rosterOf(payload: Record<string, unknown>): Array<{ id: string; model?:
     }));
 }
 
-function judgeCandidatesOf(payload: Record<string, unknown>): JudgeCandidate[] {
-  const wires = Array.isArray(payload.trajectories) ? payload.trajectories : [];
+function judgeCandidatesOf(span: ReadableSpan): JudgeCandidate[] {
+  const parsed = attrJson<unknown[]>(span, ATTR.FUSION_TRAJECTORIES);
+  const wires = Array.isArray(parsed) ? parsed : [];
   return wires
     .filter((wire): wire is Record<string, unknown> => wire !== null && typeof wire === "object")
     .map((wire) => {
@@ -520,50 +534,51 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     queue.push(text);
     // Mirror the beat onto the trace stream so the observability dashboard
     // shows the narration alongside the run (fire-and-forget, never blocking).
-    emitTrace({
-      component: "gateway",
-      event_type: "log",
-      traceId: input.traceId,
-      payload: {
-        kind: "narration.beat",
-        turn: input.turn,
-        headline: beat.headline,
-        ...(beat.prose !== undefined ? { prose: beat.prose } : {})
-      }
+    emitFusionMarker("gateway", "fusion.narration", input.trace, {
+      [ATTR.FUSION_TURN]: input.turn,
+      [ATTR.FUSION_HEADLINE]: beat.headline,
+      [ATTR.FUSION_PROSE]: beat.prose
     });
     state.lastBeatAt = at;
     if (quiet) state.quietStage += 1;
     else state.quietStage = 0;
   };
 
-  const listener = (event: FusionTraceEvent): void => {
-    if (closed || event.trace_id !== input.traceId) return;
-    const payload = event.payload ?? {};
-    if (typeof payload.turn === "number" && payload.turn !== input.turn) return;
-    switch (event.event_type) {
-      case "session.started": {
+  const listener = (span: ReadableSpan): void => {
+    if (closed || spanTraceId(span) !== input.traceId) return;
+    // Narration mirrors would echo back into this listener; ignore them.
+    if (span.name === "fusion.narration") return;
+    const spanTurn = attrNum(span, ATTR.FUSION_TURN);
+    if (spanTurn !== undefined && spanTurn !== input.turn) return;
+    const at = spanEndMs(span);
+    switch (span.name) {
+      case "fusion.turn.info": {
         // The per-turn panel kickoff (emitted right before the fan-out).
-        if (payload.dialect !== "fusion-step") return;
-        const roster = rosterOf(payload);
-        enqueue(() => emitBeat(narrationBeat(state, { kind: "fanout", roster, at: event.ts }), event.ts, false));
+        if (attrStr(span, ATTR.FUSION_DIALECT) !== "fusion-step") return;
+        const roster = rosterOf(span);
+        enqueue(() => emitBeat(narrationBeat(state, { kind: "fanout", roster, at }), at, false));
         return;
       }
-      case "harness.candidate.started": {
+      case "fusion.candidate.started": {
         // Silent: all members start together; the fan-out beat covers it. Only
         // the start time is recorded (for per-candidate elapsed). The sawPanel
         // mutation rides the chain so it cannot overtake a pending fan-out beat.
-        if (event.candidate_id !== undefined) candidateStartedAt.set(event.candidate_id, event.ts);
+        const candidateId = attrStr(span, ATTR.FUSION_CANDIDATE_ID);
+        if (candidateId !== undefined) candidateStartedAt.set(candidateId, at);
         enqueue(() => {
           state.sawPanel = true;
         });
         return;
       }
-      case "harness.candidate.finished": {
-        const id = candidateLabel(event);
+      case "fusion.candidate": {
+        const id = candidateLabel(span);
         if (id === undefined) return;
-        const began = event.candidate_id !== undefined ? candidateStartedAt.get(event.candidate_id) : undefined;
-        const preview = typeof payload.final_output_preview === "string" ? payload.final_output_preview : undefined;
-        const ok = payload.status === "succeeded";
+        const candidateId = attrStr(span, ATTR.FUSION_CANDIDATE_ID);
+        const began = candidateId !== undefined ? candidateStartedAt.get(candidateId) : undefined;
+        const preview = attrStr(span, ATTR.FUSION_FINAL_OUTPUT_PREVIEW);
+        const ok = attrStr(span, ATTR.FUSION_STATUS) === "succeeded";
+        const finishReason = attrStr(span, ATTR.FUSION_FINISH_REASON);
+        const stepCount = attrNum(span, ATTR.FUSION_STEP_COUNT);
         enqueue(async () => {
           // The writer sees the raw preview; its sentence (and the fallback)
           // both pass through the sanitize gate before entering the channel.
@@ -576,25 +591,25 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
           const finish: CandidateFinish = {
             id,
             ok,
-            ...(typeof payload.finish_reason === "string" ? { finishReason: payload.finish_reason } : {}),
-            ...(began !== undefined ? { elapsedMs: event.ts - began } : {}),
-            ...(typeof payload.step_count === "number" ? { steps: payload.step_count } : {}),
+            ...(finishReason !== undefined ? { finishReason } : {}),
+            ...(began !== undefined ? { elapsedMs: at - began } : {}),
+            ...(stepCount !== undefined ? { steps: stepCount } : {}),
             ...(gist !== undefined ? { gist } : {})
           };
-          emitBeat(narrationBeat(state, { kind: "finish", finish, at: event.ts }), event.ts, false);
+          emitBeat(narrationBeat(state, { kind: "finish", finish, at }), at, false);
         });
         return;
       }
-      case "judge.request": {
-        const candidates = judgeCandidatesOf(payload);
+      case "fusion.judge.request": {
+        const candidates = judgeCandidatesOf(span);
         enqueue(async () => {
-          const beat = narrationBeat(state, { kind: "judging", candidates, at: event.ts });
+          const beat = narrationBeat(state, { kind: "judging", candidates, at });
           if (beat !== null && writer !== undefined && candidates.length > 0) {
             const written = await withBudget((signal) => writer.compareCandidates({ candidates }, signal));
             const sanitized = written !== undefined ? sanitizeGist(written, COMPARISON_MAX_LENGTH) : undefined;
             if (sanitized !== undefined) beat.prose = sanitized;
           }
-          emitBeat(beat, event.ts, false);
+          emitBeat(beat, at, false);
         });
         return;
       }
@@ -615,12 +630,12 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
   }, Math.min(QUIET_POLL_MS, ...quietDelays.map((delay) => Math.max(50, Math.floor(delay / 2)))));
   quietTimer.unref();
 
-  addTraceListener(listener);
+  addSpanListener(listener);
   const close = (): void => {
     if (closed) return;
     closed = true;
     clearInterval(quietTimer);
-    removeTraceListener(listener);
+    removeSpanListener(listener);
     // Abort any in-flight writer call so the chain settles promptly, flush the
     // already-enqueued beats (template fallback), then end the queue.
     closeController.abort();
