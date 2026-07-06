@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { createCommandHarness, createMockHarness } from "@fusionkit/ensemble";
 import type { EnsembleRunResult, HarnessAdapter } from "@fusionkit/ensemble";
 
+import { bold, dim, glyph, green, red } from "@fusionkit/cli-ui";
+
 import type { HarnessSmokeDashboard } from "../dashboard.js";
 import {
   assertBenchmarkTaskRecordV1,
@@ -234,17 +236,24 @@ export function handoffSideEffects(
   return task.allowed_tools.some((tool) => writeTools.has(tool)) ? "writes_workspace" : "read_only";
 }
 
+/** A status-colored glyph: green tick for success, red cross otherwise. */
+function statusMark(status: string): string {
+  return status === "succeeded" ? green(glyph.tick()) : red(glyph.cross());
+}
+
 export function renderEnsembleSummary(outDir: string, result: EnsembleRunResult): string {
   const lines = [
-    `ensemble ${result.descriptorId} [${result.harnessRunResult.status}]`,
-    `candidates: ${result.candidates.length}`,
-    ...result.candidates.map((candidate) => `  ${candidate.candidate_id}: ${candidate.status}`),
-    `verification: ${result.verification.id}`,
+    `${statusMark(result.harnessRunResult.status)} ${bold(`ensemble ${result.descriptorId} [${result.harnessRunResult.status}]`)}`,
+    `${dim("candidates:")} ${result.candidates.length}`,
+    ...result.candidates.map(
+      (candidate) => `  ${statusMark(candidate.status)} ${candidate.candidate_id}: ${candidate.status}`
+    ),
+    `${dim("verification:")} ${result.verification.id}`,
     result.judgeSynthesisRecord
-      ? `judge: ${result.judgeSynthesisRecord.status}/${result.judgeSynthesisRecord.decision}`
-      : "judge: none",
-    `output: ${outDir}`,
-    `summary: ${join(outDir, "summary.json")}`
+      ? `${dim("judge:")} ${result.judgeSynthesisRecord.status}/${result.judgeSynthesisRecord.decision}`
+      : `${dim("judge:")} none`,
+    dim(`output: ${outDir}`),
+    dim(`summary: ${join(outDir, "summary.json")}`)
   ];
   return lines.join("\n");
 }
@@ -258,10 +267,11 @@ export function renderHarnessSmokeDashboardSummary(dashboard: HarnessSmokeDashbo
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([status, count]) => `${status}:${count}`)
     .join(", ");
+  const allPassed = dashboard.records.every((record) => record.result.status === "succeeded");
   return [
-    `harness dashboard [${countText}]`,
-    `records: ${dashboard.records.length}`,
-    `dashboard: ${dashboard.dashboardPath}`,
-    `output: ${dashboard.outputRoot}`
+    `${allPassed ? green(glyph.tick()) : red(glyph.cross())} ${bold(`harness dashboard [${countText}]`)}`,
+    `${dim("records:")} ${dashboard.records.length}`,
+    dim(`dashboard: ${dashboard.dashboardPath}`),
+    dim(`output: ${dashboard.outputRoot}`)
   ].join("\n");
 }

@@ -209,6 +209,10 @@ export class FileSystemSessionStore implements SessionStore {
     try {
       const meta = JSON.parse(readFileSync(metaPath, "utf8")) as SessionMeta;
       meta.cost = cost;
+      // Cost accrual is session activity: a resumed session that replays
+      // stored candidates never re-appends turns, so without this bump it
+      // would look idle to `sessions list` and the end-of-run receipt.
+      meta.updatedAt = Date.now();
       this.#writeJsonAtomic(metaPath, meta);
     } catch {
       // A corrupt header should not block the turn; cost is best-effort.
@@ -300,7 +304,7 @@ export class InMemorySessionStore implements SessionStore {
   recordCost(id: string, cost: SessionCost): void {
     const existing = this.#sessions.get(id);
     if (existing === undefined) return;
-    existing.meta = { ...existing.meta, cost };
+    existing.meta = { ...existing.meta, cost, updatedAt: Date.now() };
   }
 
   recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): void {

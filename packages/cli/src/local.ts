@@ -1,4 +1,4 @@
-import { bold, cyan, dim, glyph, green, uiStream } from "@fusionkit/cli-ui";
+import { bold, box, cyan, dim, glyph, green, isInteractive, uiStream } from "@fusionkit/cli-ui";
 import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
 import type { BackendConfig } from "@fusionkit/model-gateway";
 import { KernelBackend } from "@fusionkit/ensemble";
@@ -89,7 +89,12 @@ export async function runLocal(
   const needsTunnel = tool === "cursor" && options.ide !== true && publicUrl === undefined;
   const authToken = options.authToken ?? (needsTunnel ? generateSessionToken() : undefined);
   const gateway = await startLocalGateway(config, authToken);
-  log(`${green(glyph.tick())} ${bold("local gateway")} ${cyan(gateway.url)} ${dim(`(model: ${model})`)}`);
+  // The framed summary renders only on the default interactive surface;
+  // injected log sinks (tests, programmatic callers) keep plain lines.
+  const styled = options.log === undefined && isInteractive();
+  if (!styled || tool !== "serve") {
+    log(`${green(glyph.tick())} ${bold("local gateway")} ${cyan(gateway.url)} ${dim(`(model: ${model})`)}`);
+  }
 
   const disposers: Array<() => Promise<void> | void> = [];
   try {
@@ -109,10 +114,26 @@ export async function runLocal(
       }
     }
     if (tool === "serve") {
-      log(`  ${dim("OpenAI:")}    ${cyan(`${gateway.url}/v1`)}`);
-      log(`  ${dim("Anthropic:")} ${cyan(`${gateway.url}/v1/messages`)}`);
-      log(`  ${dim("Responses:")} ${cyan(`${gateway.url}/v1/responses`)}`);
-      log(dim("Press Ctrl+C to stop."));
+      const label = (text: string): string => dim(text.padEnd("anthropic".length));
+      const rows = [
+        `${label("openai")}  ${cyan(`${gateway.url}/v1`)}`,
+        `${label("anthropic")}  ${cyan(`${gateway.url}/v1/messages`)}`,
+        `${label("responses")}  ${cyan(`${gateway.url}/v1/responses`)}`,
+        `${label("model")}  ${model}`
+      ];
+      if (styled) {
+        uiStream().write(`\n${box("local gateway", rows)}\n`);
+        uiStream().write(
+          `${green(glyph.tick())} ${bold("gateway is running")} ${dim("— point any tool at it, or Ctrl+C to stop")}\n`
+        );
+        process.once("SIGINT", () => {
+          uiStream().write(`\n${green(glyph.tick())} ${bold("gateway stopped")}\n`);
+          process.exit(130);
+        });
+      } else {
+        for (const row of rows) log(row);
+        log(dim("Press Ctrl+C to stop."));
+      }
       await new Promise<void>(() => {
         /* run until interrupted */
       });

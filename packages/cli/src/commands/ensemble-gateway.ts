@@ -4,6 +4,8 @@ import { Command } from "commander";
 
 import { bold, cyan, dim, glyph, gray, green, red, uiStream } from "@fusionkit/cli-ui";
 
+import { logServing } from "../fusion/gateway-log.js";
+
 import {
   codexConfigSnippet,
   gatewaySetupSnippets,
@@ -92,7 +94,8 @@ export function buildGatewayCommand(): Command {
       uiStream().write(
         `${green(glyph.tick())} ${bold("fusion harness gateway")} ${cyan(instance.url())}\n\n`
       );
-      uiStream().write(gatewaySetupSnippets(instance.url(), "http://127.0.0.1:<cursorkit-port>") + "\n");
+      uiStream().write(gatewaySetupSnippets(instance.url(), "http://127.0.0.1:<cursorkit-port>") + "\n\n");
+      logServing();
     });
   gateway.addCommand(serve, { isDefault: true });
 
