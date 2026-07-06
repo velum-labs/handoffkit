@@ -15,6 +15,7 @@ members = [
     "fusionkit",
     "fusionkit-core",
     "fusionkit-evals",
+    "fusionkit-lab",
     "fusionkit-mlx",
     "fusionkit-server",
     "uniroute",
@@ -826,6 +827,21 @@ requires-dist = [
 provides-extras = ["evals", "livecodebench"]
 
 [[package]]
+name = "fusionkit-lab"
+version = "0.1.0"
+source = { editable = "python/fusionkit-lab" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
+
+[[package]]
 name = "fusionkit-mlx"
 version = "0.8.0"
 source = { editable = "python/fusionkit-mlx" }
@@ -1259,7 +1275,7 @@ name = "mlx"
 version = "0.31.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mlx-metal", marker = "sys_platform == 'darwin'" },
+    { name = "mlx-metal" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/94/89/1e77ec3ff380e8fb9e7258047374d31452a0f9828a0e370f127b07dd8288/mlx-0.31.2-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:4a3f181b367d404e44a6bd68ef5eb573930809ac60cacd51d0c851c629b1b651", size = 586911, upload-time = "2026-04-22T03:14:29.675Z" },
@@ -1282,7 +1298,7 @@ version = "0.31.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jinja2" },
-    { name = "mlx", marker = "sys_platform == 'darwin'" },
+    { name = "mlx" },
     { name = "numpy" },
     { name = "protobuf" },
     { name = "pyyaml" },

@@ -1,0 +1,41 @@
+# Previous-generation bridge models; the current-generation shortlist (spec open
+# decision #5) is added at cycle start. r1 and terminus deliberately share the
+# deepseek-v3 lineage to exercise the lineage veto.
+cycle_id: 2026-q3
+models:
+  - endpoint_id: r1
+    provider: openrouter
+    model: deepseek/deepseek-r1-0528
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.50
+    output_price_per_m: 2.15
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - deepseek-v3
+    generation: 2025-h2
+  - endpoint_id: terminus
+    provider: openrouter
+    model: deepseek/deepseek-v3.1-terminus
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.27
+    output_price_per_m: 0.95
+    max_completion_tokens: 32768
+    escalated_completion_tokens:
+    lineage:
+      - deepseek-v3
+    generation: 2025-h2
+  - endpoint_id: qwen3t
+    provider: openrouter
+    model: qwen/qwen3-235b-a22b-thinking-2507
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.1495
+    output_price_per_m: 1.495
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - qwen3
+    generation: 2025-h2
