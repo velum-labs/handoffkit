@@ -1,18 +1,23 @@
-import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import type { FusionTraceEvent, StoredEvent } from "./types";
+import { attrJson, attrStr } from "./types";
+import type { IncomingSpan, StoredSpan } from "./types";
 
 /**
- * The collector store. A single local SQLite file (via Node's built-in
- * node:sqlite) holds every ingested trace event plus a lightweight derived
- * `sessions` row. An in-process EventEmitter fans newly ingested events out to
- * SSE subscribers for live updates. The whole thing is process-local, which is
+ * The collector store: a single local SQLite file (via Node's built-in
+ * node:sqlite) holding every ingested span plus a lightweight derived
+ * `sessions` row per trace. An in-process EventEmitter fans newly ingested
+ * spans out to SSE subscribers for live updates. Process-local by design —
  * exactly right for a single-command local dashboard.
+ *
+ * Trace data is disposable: the schema carries a version (PRAGMA
+ * user_version) and the store recreates itself on mismatch. No migrations.
  */
+
+const SCHEMA_VERSION = 2;
 
 export type SessionRow = {
   trace_id: string;
@@ -24,7 +29,7 @@ export type SessionRow = {
   environment: string | null;
   prompt_preview: string | null;
   final_output: string | null;
-  event_count: number;
+  span_count: number;
 };
 
 const globalForDb = globalThis as unknown as {
@@ -45,28 +50,25 @@ export function bus(): EventEmitter {
   return globalForDb.__scopekitBus;
 }
 
-export function db(): DatabaseSync {
-  if (globalForDb.__scopekitDb !== undefined) return globalForDb.__scopekitDb;
-  const path = dbPath();
-  mkdirSync(dirname(path), { recursive: true });
-  const handle = new DatabaseSync(path);
+function createSchema(handle: DatabaseSync): void {
   handle.exec(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS events (
+    CREATE TABLE IF NOT EXISTS spans (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      hash TEXT UNIQUE,
       trace_id TEXT NOT NULL,
       span_id TEXT NOT NULL,
       parent_span_id TEXT,
-      seq INTEGER NOT NULL,
-      ts REAL NOT NULL,
+      name TEXT NOT NULL,
       component TEXT NOT NULL,
-      event_type TEXT NOT NULL,
-      candidate_id TEXT,
-      model_id TEXT,
-      payload TEXT
+      service TEXT,
+      start_ms REAL NOT NULL,
+      end_ms REAL NOT NULL,
+      status TEXT NOT NULL,
+      status_message TEXT,
+      attributes TEXT,
+      UNIQUE(trace_id, span_id)
     );
-    CREATE INDEX IF NOT EXISTS events_trace_idx ON events (trace_id, ts, id);
+    CREATE INDEX IF NOT EXISTS spans_trace_idx ON spans (trace_id, start_ms, id);
+    CREATE INDEX IF NOT EXISTS spans_name_idx ON spans (name);
     CREATE TABLE IF NOT EXISTS sessions (
       trace_id TEXT PRIMARY KEY,
       started_at REAL NOT NULL,
@@ -78,188 +80,184 @@ export function db(): DatabaseSync {
       prompt_preview TEXT,
       final_output TEXT
     );
+    PRAGMA user_version = ${SCHEMA_VERSION};
   `);
-  try {
-    // Migration for stores created before the prompt_preview column existed.
-    handle.exec(`ALTER TABLE sessions ADD COLUMN prompt_preview TEXT`);
-  } catch {
-    // column already present
+}
+
+export function db(): DatabaseSync {
+  if (globalForDb.__scopekitDb !== undefined) return globalForDb.__scopekitDb;
+  const path = dbPath();
+  mkdirSync(dirname(path), { recursive: true });
+  const handle = new DatabaseSync(path);
+  handle.exec("PRAGMA journal_mode = WAL;");
+  const versionRow = handle.prepare("PRAGMA user_version").get() as { user_version?: number };
+  if ((versionRow.user_version ?? 0) !== SCHEMA_VERSION) {
+    // A pre-cutover (or future) store: recreate. Trace data is disposable.
+    handle.exec("DROP TABLE IF EXISTS spans; DROP TABLE IF EXISTS events; DROP TABLE IF EXISTS sessions;");
   }
+  createSchema(handle);
   globalForDb.__scopekitDb = handle;
   return handle;
 }
 
-function eventHash(event: FusionTraceEvent): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify([
-        event.trace_id,
-        event.span_id,
-        event.component,
-        event.event_type,
-        event.seq,
-        event.ts,
-        event.payload ?? null
-      ])
-    )
-    .digest("hex");
+function rowToSpan(row: Record<string, unknown>): StoredSpan {
+  let attributes: Record<string, unknown> = {};
+  if (typeof row.attributes === "string" && row.attributes.length > 0) {
+    try {
+      attributes = JSON.parse(row.attributes) as Record<string, unknown>;
+    } catch {
+      // tolerate a corrupt row rather than failing the page
+    }
+  }
+  return {
+    id: row.id as number,
+    trace_id: row.trace_id as string,
+    span_id: row.span_id as string,
+    ...(row.parent_span_id !== null ? { parent_span_id: row.parent_span_id as string } : {}),
+    name: row.name as string,
+    component: row.component as string,
+    ...(row.service !== null ? { service: row.service as string } : {}),
+    start_ms: row.start_ms as number,
+    end_ms: row.end_ms as number,
+    status: row.status as StoredSpan["status"],
+    ...(row.status_message !== null ? { status_message: row.status_message as string } : {}),
+    attributes
+  };
 }
 
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-/** Insert one event (idempotent by content hash) and update its session row. */
-export function ingestEvent(event: FusionTraceEvent): boolean {
+/**
+ * Insert one span (idempotent per trace_id+span_id) and fold it into its
+ * session row. Returns the stored span when newly inserted, undefined when it
+ * was a duplicate.
+ */
+export function ingestSpan(span: IncomingSpan): StoredSpan | undefined {
   const handle = db();
-  const hash = eventHash(event);
   const insert = handle.prepare(
-    `INSERT OR IGNORE INTO events
-       (hash, trace_id, span_id, parent_span_id, seq, ts, component, event_type, candidate_id, model_id, payload)
+    `INSERT OR IGNORE INTO spans
+       (trace_id, span_id, parent_span_id, name, component, service, start_ms, end_ms, status, status_message, attributes)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const result = insert.run(
-    hash,
-    event.trace_id,
-    event.span_id,
-    event.parent_span_id ?? null,
-    event.seq,
-    event.ts,
-    event.component,
-    event.event_type,
-    event.candidate_id ?? null,
-    event.model_id ?? null,
-    event.payload !== undefined ? JSON.stringify(event.payload) : null
+    span.trace_id,
+    span.span_id,
+    span.parent_span_id ?? null,
+    span.name,
+    span.component,
+    span.service ?? null,
+    span.start_ms,
+    span.end_ms,
+    span.status,
+    span.status_message ?? null,
+    JSON.stringify(span.attributes)
   );
-  if (result.changes === 0) return false;
-  updateSession(event);
-  bus().emit("event", event);
-  return true;
+  if (result.changes === 0) return undefined;
+  const stored: StoredSpan = { ...span, id: Number(result.lastInsertRowid) };
+  updateSession(stored);
+  bus().emit("span", stored);
+  return stored;
 }
 
-function updateSession(event: FusionTraceEvent): void {
+/** Fold one ingested span into its trace's derived session row. */
+function updateSession(span: StoredSpan): void {
   const handle = db();
-  const payload = event.payload ?? {};
   handle
     .prepare(
       `INSERT INTO sessions (trace_id, started_at, last_ts, status)
        VALUES (?, ?, ?, 'running')
-       ON CONFLICT(trace_id) DO UPDATE SET last_ts = max(last_ts, excluded.last_ts)`
+       ON CONFLICT(trace_id) DO UPDATE SET
+         started_at = min(started_at, excluded.started_at),
+         last_ts = max(last_ts, excluded.last_ts)`
     )
-    .run(event.trace_id, event.ts, event.ts);
+    .run(span.trace_id, span.start_ms, span.end_ms);
 
-  if (event.event_type === "session.started") {
-    const environment = (payload as { environment?: unknown }).environment;
+  // Session identity: the turn-info marker (or a run/passthrough span) carries
+  // the dialect, environment snapshot, and prompt preview.
+  if (span.name === "fusion.turn.info" || span.name === "fusion.run" || span.name === "fusion.passthrough") {
+    const environment = attrStr(span, "fusion.environment");
+    const repo =
+      attrStr(span, "fusion.repo") ?? attrJson<{ repo?: string }>(span, "fusion.environment")?.repo;
     handle
       .prepare(
-        `UPDATE sessions
-         SET started_at = min(started_at, ?), dialect = ?, repo = ?, environment = ?,
-             prompt_preview = coalesce(?, prompt_preview)
+        `UPDATE sessions SET
+           dialect = coalesce(?, dialect),
+           repo = coalesce(?, repo),
+           environment = coalesce(?, environment),
+           prompt_preview = coalesce(?, prompt_preview)
          WHERE trace_id = ?`
       )
       .run(
-        event.ts,
-        asString((payload as { dialect?: unknown }).dialect),
-        asString((environment as { repo?: unknown } | undefined)?.repo),
-        environment !== undefined ? JSON.stringify(environment) : null,
-        asString((payload as { prompt_preview?: unknown }).prompt_preview),
-        event.trace_id
+        attrStr(span, "fusion.dialect") ?? null,
+        repo ?? null,
+        environment ?? null,
+        attrStr(span, "fusion.prompt_preview") ?? null,
+        span.trace_id
       );
   }
 
-  if (event.event_type === "session.finished") {
-    handle
-      .prepare(`UPDATE sessions SET status = ?, final_output = coalesce(?, final_output) WHERE trace_id = ?`)
-      .run(
-        asString((payload as { status?: unknown }).status) ?? "succeeded",
-        asString((payload as { final_output_preview?: unknown }).final_output_preview),
-        event.trace_id
-      );
-  }
-
-  if (event.event_type === "judge.final" && (payload as { tool_calls?: unknown }).tool_calls === undefined) {
-    // In the judge-streamed-trajectory front door there is no single
-    // session.finished (the harness simply stops calling); the judge's terminal
-    // answer (judge.final) is the natural completion marker, so mark the session
-    // succeeded and capture the final output unless an explicit finish set it.
-    // A judge.final that still carries tool_calls is an intermediate step (the
-    // harness will call back), so it must not mark the session done.
-    const record = (payload as { record?: { final_output?: unknown } }).record;
-    const full = asString(record?.final_output) ?? asString((payload as { final_output?: unknown }).final_output);
+  // Terminal signals: a run/passthrough span ends the session outright; a
+  // judge span ending a fused turn marks the session succeeded (until a later
+  // turn reopens it) and carries the fused output.
+  if (span.name === "fusion.run" || span.name === "fusion.passthrough") {
     handle
       .prepare(
-        `UPDATE sessions
-         SET final_output = coalesce(?, final_output),
-             status = CASE WHEN status = 'running' THEN 'succeeded' ELSE status END
+        `UPDATE sessions SET
+           status = coalesce(?, status),
+           final_output = coalesce(?, final_output)
          WHERE trace_id = ?`
       )
-      .run(full, event.trace_id);
+      .run(
+        attrStr(span, "fusion.status") ?? null,
+        attrStr(span, "fusion.final_output_preview") ?? null,
+        span.trace_id
+      );
+  } else if (span.name === "fusion.judge") {
+    const finalOutput = attrStr(span, "fusion.final_output") ?? attrStr(span, "fusion.content");
+    handle
+      .prepare(
+        `UPDATE sessions SET
+           final_output = coalesce(?, final_output),
+           status = CASE WHEN status = 'running' AND ? IS NOT NULL THEN 'succeeded' ELSE status END
+         WHERE trace_id = ?`
+      )
+      .run(finalOutput ?? null, span.status === "ok" ? 1 : null, span.trace_id);
   }
 }
 
 export function listSessions(limit = 200): SessionRow[] {
-  const handle = db();
-  const rows = handle
+  const rows = db()
     .prepare(
-      `SELECT s.*, (SELECT count(*) FROM events e WHERE e.trace_id = s.trace_id) AS event_count
-       FROM sessions s
-       ORDER BY s.last_ts DESC
-       LIMIT ?`
+      `SELECT s.*, (SELECT count(*) FROM spans p WHERE p.trace_id = s.trace_id) AS span_count
+       FROM sessions s ORDER BY s.last_ts DESC LIMIT ?`
     )
     .all(limit) as unknown as SessionRow[];
   return rows;
 }
 
 export function getSession(traceId: string): SessionRow | undefined {
-  const handle = db();
-  const row = handle
+  const row = db()
     .prepare(
-      `SELECT s.*, (SELECT count(*) FROM events e WHERE e.trace_id = s.trace_id) AS event_count
+      `SELECT s.*, (SELECT count(*) FROM spans p WHERE p.trace_id = s.trace_id) AS span_count
        FROM sessions s WHERE s.trace_id = ?`
     )
     .get(traceId) as unknown as SessionRow | undefined;
   return row;
 }
 
-function rowToEvent(row: Record<string, unknown>): StoredEvent {
-  return {
-    id: row.id as number,
-    schema: "fusion-trace-event.v1",
-    trace_id: row.trace_id as string,
-    span_id: row.span_id as string,
-    parent_span_id: (row.parent_span_id as string | null) ?? undefined,
-    seq: row.seq as number,
-    ts: row.ts as number,
-    component: row.component as StoredEvent["component"],
-    event_type: row.event_type as StoredEvent["event_type"],
-    candidate_id: (row.candidate_id as string | null) ?? undefined,
-    model_id: (row.model_id as string | null) ?? undefined,
-    payload: typeof row.payload === "string" ? (JSON.parse(row.payload) as Record<string, unknown>) : undefined
-  };
+/** Every span of one trace, in start order (ingest id as tiebreak). */
+export function getSpans(traceId: string): StoredSpan[] {
+  const rows = db()
+    .prepare("SELECT * FROM spans WHERE trace_id = ? ORDER BY start_ms ASC, id ASC")
+    .all(traceId) as unknown as Record<string, unknown>[];
+  return rows.map(rowToSpan);
 }
 
-export function getEvents(traceId: string): StoredEvent[] {
-  const handle = db();
-  const rows = handle
-    .prepare(`SELECT * FROM events WHERE trace_id = ? ORDER BY ts ASC, id ASC`)
-    .all(traceId) as unknown as Array<Record<string, unknown>>;
-  return rows.map(rowToEvent);
-}
-
-export function allEvents(limit = 5000): StoredEvent[] {
-  const handle = db();
-  const rows = handle
-    .prepare(`SELECT * FROM events ORDER BY ts ASC, id ASC LIMIT ?`)
-    .all(limit) as unknown as Array<Record<string, unknown>>;
-  return rows.map(rowToEvent);
-}
-
-export function eventsByType(types: string[], limit = 20000): StoredEvent[] {
-  if (types.length === 0) return [];
-  const handle = db();
-  const placeholders = types.map(() => "?").join(", ");
-  const rows = handle
-    .prepare(`SELECT * FROM events WHERE event_type IN (${placeholders}) ORDER BY ts ASC, id ASC LIMIT ?`)
-    .all(...types, limit) as unknown as Array<Record<string, unknown>>;
-  return rows.map(rowToEvent);
+/** Cross-session span scan by name (exact or prefix via `like`). */
+export function spansByName(names: string[], limit = 20000): StoredSpan[] {
+  if (names.length === 0) return [];
+  const placeholders = names.map(() => "name = ? OR name LIKE ?").join(" OR ");
+  const params = names.flatMap((name) => [name, `${name} %`]);
+  const rows = db()
+    .prepare(`SELECT * FROM spans WHERE ${placeholders} ORDER BY start_ms ASC, id ASC LIMIT ?`)
+    .all(...params, limit) as unknown as Record<string, unknown>[];
+  return rows.map(rowToSpan);
 }

@@ -1,306 +1,526 @@
-import type { FusionTraceEvent } from "../lib/types";
+import { FUSION_SCOPES } from "../lib/generated/trace-conventions";
+import type { IncomingSpan, StoredSpan } from "../lib/types";
 
 /**
- * A synthetic but realistic full fusion session: environment snapshot, two
- * panel candidates with stepped trajectories, paired model calls, and the
- * judge's thinking -> scored -> synthesis -> final flow. Used by the unit,
- * collector, and API round-trip tests, and by scripts/seed.ts for demo data.
- *
- * Component values mirror the production emitters (packages/ensemble emits
- * harness + trajectory events as "panel-model"), so seeded timelines get the
- * same legend and colors as real runs.
+ * A realistic synthetic session as spans: turn info, two candidates (with
+ * live step markers and a model call), cost markers, the judge flow
+ * (request -> thinking -> scored -> synthesis), and the terminal judge span.
+ * Mirrors what one fused turn through the gateway actually emits.
  */
-export function syntheticSession(traceId = "trace_test_0001"): FusionTraceEvent[] {
-  const base = 1_750_000_000_000;
-  let seq = 0;
-  const ev = (partial: Omit<FusionTraceEvent, "schema" | "trace_id" | "seq">): FusionTraceEvent => ({
-    schema: "fusion-trace-event.v1",
-    trace_id: traceId,
-    seq: seq++,
-    ...partial
-  });
 
-  return [
-    ev({
-      span_id: "span_root",
-      ts: base,
+const BASE_TS = 1_750_000_000_000;
+
+type SpanInput = {
+  name: string;
+  component: string;
+  spanId: string;
+  parentSpanId?: string;
+  /** Offsets from the session base, in ms. Markers omit `end`. */
+  start: number;
+  end?: number;
+  status?: "ok" | "error";
+  attributes?: Record<string, unknown>;
+};
+
+let uniq = 0;
+
+export function syntheticSession(traceId = "1111111111111111111111111111aaaa"): IncomingSpan[] {
+  uniq += 1;
+  // Deterministic, label-distinct 16-hex span ids (labels hex-encode first).
+  const sid = (label: string): string =>
+    (Buffer.from(label).toString("hex") + String(uniq).padStart(4, "0")).padEnd(16, "0").slice(0, 16);
+  const environment = {
+    repo: "/tmp/fusion-sample",
+    fusion_backend_url: "http://127.0.0.1:8080",
+    harnesses: ["agent"],
+    judge_model: "gpt-5.5",
+    models: [
+      { id: "gpt", model: "gpt-5.5", provider: "openai" },
+      { id: "opus", model: "claude-opus-4-6", provider: "anthropic" }
+    ],
+    model_endpoints: { gpt: "http://127.0.0.1:8081", opus: "http://127.0.0.1:8082" }
+  };
+
+  const spans: SpanInput[] = [
+    {
+      name: "fusion.turn.info",
       component: "gateway",
-      event_type: "session.started",
-      payload: {
-        dialect: "codex",
-        prompt_preview: "Fix the add() sign bug so npm test passes.",
-        environment: {
-          repo: "/tmp/fusion-sample",
-          fusion_backend_url: "http://127.0.0.1:8920",
-          harnesses: ["agent"],
-          judge_model: "gpt-5.5",
-          models: [
-            { id: "gpt", model: "openai:gpt-5.5", provider: "openai" },
-            { id: "opus", model: "anthropic:claude-opus-4-8", provider: "anthropic" }
-          ],
-          model_endpoints: { gpt: "http://127.0.0.1:8921", opus: "http://127.0.0.1:8922" }
-        }
+      spanId: sid("a1"),
+      parentSpanId: sid("00"),
+      start: 0,
+      attributes: {
+        "fusion.dialect": "codex",
+        "fusion.turn": 1,
+        "fusion.prompt_preview": "Fix the add() sign bug so npm test passes.",
+        "fusion.repo": "/tmp/fusion-sample",
+        "fusion.environment": JSON.stringify(environment)
       }
-    }),
-    ev({
-      span_id: "span_cand_gpt",
-      parent_span_id: "span_root",
-      ts: base + 100,
+    },
+    // Candidate gpt: started marker, steps, model call, candidate span.
+    {
+      name: "fusion.candidate.started",
       component: "panel-model",
-      event_type: "harness.candidate.started",
-      candidate_id: "cand_gpt",
-      model_id: "gpt",
-      payload: { model: "openai:gpt-5.5", branch_name: "fusion/gpt", worktree_path: "/tmp/wt/gpt" }
-    }),
-    ev({
-      span_id: "span_call_gpt",
-      parent_span_id: "span_cand_gpt",
-      ts: base + 150,
-      component: "panel-model",
-      event_type: "model.call.started",
-      candidate_id: "cand_gpt",
-      model_id: "gpt",
-      payload: { provider: "openai", model: "gpt-5.5" }
-    }),
-    ev({
-      span_id: "span_step_gpt_0",
-      parent_span_id: "span_cand_gpt",
-      ts: base + 200,
-      component: "panel-model",
-      event_type: "trajectory.step",
-      candidate_id: "cand_gpt",
-      model_id: "gpt",
-      payload: { step: { index: 0, type: "reasoning", text: "The add() helper subtracts; flip the operator." } }
-    }),
-    ev({
-      span_id: "span_step_gpt_1",
-      parent_span_id: "span_cand_gpt",
-      ts: base + 300,
-      component: "panel-model",
-      event_type: "trajectory.step",
-      candidate_id: "cand_gpt",
-      model_id: "gpt",
-      payload: {
-        step: { index: 1, type: "tool_call", tool_name: "apply_patch", tool_input: "- left - right\n+ left + right" }
+      spanId: sid("b1"),
+      parentSpanId: sid("c1"),
+      start: 40,
+      attributes: {
+        "fusion.candidate.id": "cand_gpt",
+        "fusion.model.id": "gpt",
+        "gen_ai.request.model": "gpt-5.5",
+        "fusion.turn": 1,
+        "fusion.branch_name": "fusion/cand-gpt",
+        "fusion.worktree_path": "/tmp/worktrees/cand-gpt"
       }
-    }),
-    ev({
-      span_id: "span_step_gpt_2",
-      parent_span_id: "span_cand_gpt",
-      ts: base + 400,
+    },
+    {
+      name: "fusion.model_call.started",
       component: "panel-model",
-      event_type: "trajectory.step",
-      candidate_id: "cand_gpt",
-      model_id: "gpt",
-      payload: { step: { index: 2, type: "observation", text: "npm test: 1 passing" } }
-    }),
-    ev({
-      span_id: "span_call_gpt",
-      parent_span_id: "span_cand_gpt",
-      ts: base + 500,
-      component: "panel-model",
-      event_type: "model.call.finished",
-      candidate_id: "cand_gpt",
-      model_id: "gpt",
-      payload: {
-        provider: "openai",
-        model: "gpt-5.5",
-        latency_s: 0.35,
-        finish_reason: "stop",
-        usage: { prompt_tokens: 800, completion_tokens: 120, total_tokens: 920 },
-        content_preview: "Patched add()."
+      spanId: sid("b2"),
+      parentSpanId: sid("d1"),
+      start: 60,
+      attributes: {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": "openai",
+        "gen_ai.request.model": "gpt-5.5",
+        "fusion.candidate.id": "cand_gpt",
+        "fusion.model.id": "gpt",
+        "fusion.turn": 1,
+        "fusion.system_prompt": "You are a coding agent working in a real repository checkout.",
+        "fusion.prompt": "Fix the add() sign bug so npm test passes.",
+        "fusion.tool_count": 5
       }
-    }),
-    ev({
-      span_id: "span_cand_gpt",
-      parent_span_id: "span_root",
-      ts: base + 550,
+    },
+    {
+      name: "fusion.candidate.step",
       component: "panel-model",
-      event_type: "harness.candidate.finished",
-      candidate_id: "cand_gpt",
-      model_id: "gpt",
-      payload: {
-        status: "succeeded",
-        tool_call_count: 1,
-        finish_reason: "stop",
-        verification_status: "passed",
-        final_output_preview: "add() now returns left + right."
+      spanId: sid("b3"),
+      parentSpanId: sid("c1"),
+      start: 80,
+      attributes: {
+        "fusion.candidate.id": "cand_gpt",
+        "fusion.model.id": "gpt",
+        "fusion.turn": 1,
+        "fusion.step.index": 0,
+        "fusion.step.type": "reasoning",
+        "fusion.step": JSON.stringify({ index: 0, type: "reasoning", text: "The regression test asserts add(2,3)=5." })
       }
-    }),
-    ev({
-      span_id: "span_cand_opus",
-      parent_span_id: "span_root",
-      ts: base + 120,
+    },
+    {
+      name: "fusion.candidate.step",
       component: "panel-model",
-      event_type: "harness.candidate.started",
-      candidate_id: "cand_opus",
-      model_id: "opus",
-      payload: { model: "anthropic:claude-opus-4-8", branch_name: "fusion/opus" }
-    }),
-    ev({
-      span_id: "span_step_opus_0",
-      parent_span_id: "span_cand_opus",
-      ts: base + 260,
+      spanId: sid("b4"),
+      parentSpanId: sid("c1"),
+      start: 120,
+      attributes: {
+        "fusion.candidate.id": "cand_gpt",
+        "fusion.model.id": "gpt",
+        "fusion.turn": 1,
+        "fusion.step.index": 1,
+        "fusion.step.type": "tool_call",
+        "fusion.step": JSON.stringify({
+          index: 1,
+          type: "tool_call",
+          tool_name: "apply_patch",
+          tool_input: "*** Update File: calculator.js"
+        })
+      }
+    },
+    {
+      name: "fusion.candidate.step",
       component: "panel-model",
-      event_type: "trajectory.step",
-      candidate_id: "cand_opus",
-      model_id: "opus",
-      payload: { step: { index: 0, type: "reasoning", text: "Fix operator and add a regression test." } }
-    }),
-    ev({
-      span_id: "span_step_opus_1",
-      parent_span_id: "span_cand_opus",
-      ts: base + 360,
+      spanId: sid("b5"),
+      parentSpanId: sid("c1"),
+      start: 200,
+      attributes: {
+        "fusion.candidate.id": "cand_gpt",
+        "fusion.model.id": "gpt",
+        "fusion.turn": 1,
+        "fusion.step.index": 2,
+        "fusion.step.type": "output",
+        "fusion.step": JSON.stringify({ index: 2, type: "output", text: "Changed `l - r` to `l + r`; tests pass." })
+      }
+    },
+    {
+      name: "chat gpt-5.5",
       component: "panel-model",
-      event_type: "trajectory.step",
-      candidate_id: "cand_opus",
-      model_id: "opus",
-      payload: { step: { index: 1, type: "output", text: "Added calculator.regression.test.js" } }
-    }),
-    ev({
-      span_id: "span_cand_opus",
-      parent_span_id: "span_root",
-      ts: base + 600,
+      spanId: sid("d1"),
+      parentSpanId: sid("c1"),
+      start: 55,
+      end: 405,
+      attributes: {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": "openai",
+        "gen_ai.request.model": "gpt-5.5",
+        "gen_ai.usage.input_tokens": 800,
+        "gen_ai.usage.output_tokens": 120,
+        "gen_ai.response.finish_reasons": ["stop"],
+        "fusion.candidate.id": "cand_gpt",
+        "fusion.model.id": "gpt",
+        "fusion.turn": 1,
+        "fusion.finish_reason": "stop",
+        "fusion.final_output": "Fixed add() to use left + right.",
+        "fusion.content": "Fixed add() to use left + right.",
+        "fusion.usage": JSON.stringify({ prompt_tokens: 800, completion_tokens: 120, total_tokens: 920, latency_s: 0.35 })
+      }
+    },
+    {
+      name: "fusion.candidate",
       component: "panel-model",
-      event_type: "harness.candidate.finished",
-      candidate_id: "cand_opus",
-      model_id: "opus",
-      payload: { status: "succeeded", tool_call_count: 2, verification_status: "passed" }
-    }),
-    ev({
-      span_id: "span_cost_gpt",
-      parent_span_id: "span_root",
-      ts: base + 620,
+      spanId: sid("c1"),
+      parentSpanId: sid("00"),
+      start: 40,
+      end: 420,
+      attributes: {
+        "fusion.candidate.id": "cand_gpt",
+        "fusion.model.id": "gpt",
+        "gen_ai.request.model": "gpt-5.5",
+        "fusion.turn": 1,
+        "fusion.status": "succeeded",
+        "fusion.step_count": 3,
+        "fusion.tool_call_count": 2,
+        "fusion.finish_reason": "stop",
+        "fusion.verification_status": "passed",
+        "fusion.final_output_preview": "Fixed add() to use left + right."
+      }
+    },
+    // Candidate opus: started, two steps, candidate span.
+    {
+      name: "fusion.candidate.started",
+      component: "panel-model",
+      spanId: sid("b6"),
+      parentSpanId: sid("c2"),
+      start: 45,
+      attributes: {
+        "fusion.candidate.id": "cand_opus",
+        "fusion.model.id": "opus",
+        "gen_ai.request.model": "claude-opus-4-6",
+        "fusion.turn": 1,
+        "fusion.branch_name": "fusion/cand-opus"
+      }
+    },
+    {
+      name: "fusion.candidate.step",
+      component: "panel-model",
+      spanId: sid("b7"),
+      parentSpanId: sid("c2"),
+      start: 150,
+      attributes: {
+        "fusion.candidate.id": "cand_opus",
+        "fusion.model.id": "opus",
+        "fusion.turn": 1,
+        "fusion.step.index": 0,
+        "fusion.step.type": "reasoning",
+        "fusion.step": JSON.stringify({ index: 0, type: "reasoning", text: "The subtraction is a typo." })
+      }
+    },
+    {
+      name: "fusion.candidate.step",
+      component: "panel-model",
+      spanId: sid("b8"),
+      parentSpanId: sid("c2"),
+      start: 260,
+      attributes: {
+        "fusion.candidate.id": "cand_opus",
+        "fusion.model.id": "opus",
+        "fusion.turn": 1,
+        "fusion.step.index": 1,
+        "fusion.step.type": "output",
+        "fusion.step": JSON.stringify({ index: 1, type: "output", text: "Patched calculator.js." })
+      }
+    },
+    {
+      name: "fusion.candidate",
+      component: "panel-model",
+      spanId: sid("c2"),
+      parentSpanId: sid("00"),
+      start: 45,
+      end: 500,
+      attributes: {
+        "fusion.candidate.id": "cand_opus",
+        "fusion.model.id": "opus",
+        "gen_ai.request.model": "claude-opus-4-6",
+        "fusion.turn": 1,
+        "fusion.status": "succeeded",
+        "fusion.step_count": 2,
+        "fusion.tool_call_count": 2,
+        "fusion.verification_status": "passed"
+      }
+    },
+    // Cost markers: two panel entries + one judge entry.
+    {
+      name: "fusion.cost",
       component: "gateway",
-      event_type: "log",
-      payload: {
-        kind: "cost.metered",
-        stage: "panel",
-        model: "openai:gpt-5.5",
-        usage: { promptTokens: 800, completionTokens: 120, totalTokens: 920 },
-        turn_cost_usd: 0.0031,
-        provider_cost_usd: 0.0031,
-        unknown_cost: false,
-        unknown_usage: false,
-        session_total_usd: 0.0031,
-        provider_total_usd: 0.0031,
-        local_compute_total_usd: 0,
-        currency: "USD"
+      spanId: sid("e1"),
+      parentSpanId: sid("00"),
+      start: 430,
+      attributes: {
+        "fusion.session_id": "session_1",
+        "fusion.turn": 1,
+        "fusion.cost.stage": "panel",
+        "fusion.cost.model": "gpt-5.5",
+        "gen_ai.usage.input_tokens": 800,
+        "gen_ai.usage.output_tokens": 120,
+        "fusion.usage": JSON.stringify({ promptTokens: 800, completionTokens: 120, totalTokens: 920 }),
+        "fusion.cost.turn_usd": 0.0056,
+        "fusion.cost.session_total_usd": 0.0056,
+        "fusion.cost.unknown": false
       }
-    }),
-    ev({
-      span_id: "span_cost_opus",
-      parent_span_id: "span_root",
-      ts: base + 640,
+    },
+    {
+      name: "fusion.cost",
       component: "gateway",
-      event_type: "log",
-      payload: {
-        kind: "cost.metered",
-        stage: "panel",
-        model: "anthropic:claude-opus-4-8",
-        usage: { promptTokens: 780, completionTokens: 190, totalTokens: 970 },
-        turn_cost_usd: 0.0058,
-        provider_cost_usd: 0.0058,
-        unknown_cost: false,
-        unknown_usage: false,
-        session_total_usd: 0.0089,
-        provider_total_usd: 0.0089,
-        local_compute_total_usd: 0,
-        currency: "USD"
+      spanId: sid("e2"),
+      parentSpanId: sid("00"),
+      start: 510,
+      attributes: {
+        "fusion.session_id": "session_1",
+        "fusion.turn": 1,
+        "fusion.cost.stage": "panel",
+        "fusion.cost.model": "claude-opus-4-6",
+        "gen_ai.usage.input_tokens": 700,
+        "gen_ai.usage.output_tokens": 90,
+        "fusion.usage": JSON.stringify({ promptTokens: 700, completionTokens: 90, totalTokens: 790 }),
+        "fusion.cost.turn_usd": 0.0033,
+        "fusion.cost.session_total_usd": 0.0089,
+        "fusion.cost.unknown": false
       }
-    }),
-    ev({
-      span_id: "span_judge",
-      parent_span_id: "span_root",
-      ts: base + 700,
+    },
+    // The judge phase: request/thinking/scored/synthesis markers under the judge span.
+    {
+      name: "fusion.judge.request",
       component: "judge",
-      event_type: "judge.thinking",
-      model_id: "judge:gpt-5.5",
-      payload: {
-        fusion_unit: "trajectory",
-        raw_analysis: "Both candidates fix the sign bug. Opus adds a regression test.",
-        usage: { total_tokens: 540 }
+      spanId: sid("f1"),
+      parentSpanId: sid("j1"),
+      start: 520,
+      attributes: {
+        "fusion.judge.model": "gpt-5.5",
+        "fusion.turn": 1,
+        "fusion.messages": JSON.stringify([{ role: "user", content: "Fix the add() sign bug so npm test passes." }]),
+        "fusion.trajectories": JSON.stringify([
+          { trajectory_id: "cand_gpt", model_id: "gpt", status: "succeeded" },
+          { trajectory_id: "cand_opus", model_id: "opus", status: "succeeded" }
+        ]),
+        "fusion.trajectory_ids": ["cand_gpt", "cand_opus"]
       }
-    }),
-    ev({
-      span_id: "span_judge",
-      parent_span_id: "span_root",
-      ts: base + 800,
+    },
+    {
+      name: "fusion.judge.thinking",
       component: "judge",
-      event_type: "judge.scored",
-      model_id: "judge:gpt-5.5",
-      payload: {
-        fusion_unit: "trajectory",
-        analysis: {
-          consensus: ["both candidates fix the add() sign bug"],
+      spanId: sid("f2"),
+      parentSpanId: sid("g1"),
+      start: 600,
+      attributes: {
+        "fusion.fusion_unit": "trajectory",
+        "fusion.raw_analysis": "Both candidates fixed the sign; gpt also ran the regression test.",
+        "fusion.usage": JSON.stringify({ prompt_tokens: 1200, completion_tokens: 260, total_tokens: 1460 })
+      }
+    },
+    {
+      name: "fusion.judge.scored",
+      component: "judge",
+      spanId: sid("f3"),
+      parentSpanId: sid("g1"),
+      start: 640,
+      attributes: {
+        "fusion.fusion_unit": "trajectory",
+        "fusion.analysis": JSON.stringify({
+          consensus: ["both fixed add"],
           contradictions: [],
-          unique_insights: ["opus adds a regression test"],
+          unique_insights: ["gpt verified with npm test"],
           coverage_gaps: [],
           likely_errors: []
-        },
-        metrics: {
-          best_trajectory: "cand_opus",
-          recommended_final_structure: ["operator fix", "regression test"]
-        },
-        input_ids: ["cand_gpt", "cand_opus"],
-        usage: { total_tokens: 540 }
+        }),
+        "fusion.metrics": JSON.stringify({ best_trajectory: "cand_gpt" }),
+        "fusion.input_ids": ["cand_gpt", "cand_opus"],
+        "fusion.usage": JSON.stringify({ total_tokens: 1460 })
       }
-    }),
-    ev({
-      span_id: "span_judge",
-      parent_span_id: "span_root",
-      ts: base + 900,
+    },
+    {
+      name: "fusion.judge.synthesis",
       component: "judge",
-      event_type: "judge.synthesis",
-      model_id: "judge:gpt-5.5",
-      payload: { raw_output: "Combine the operator fix with the regression test.", empty: false, usage: { total_tokens: 310 } }
-    }),
-    ev({
-      span_id: "span_judge",
-      parent_span_id: "span_root",
-      ts: base + 1000,
+      spanId: sid("f4"),
+      parentSpanId: sid("g1"),
+      start: 800,
+      attributes: {
+        "fusion.raw_output": "Change `exports.add = (l, r) => l - r` to use `left + right`.",
+        "fusion.synthesis_empty": false,
+        "fusion.usage": JSON.stringify({ prompt_tokens: 1800, completion_tokens: 560, total_tokens: 2360 })
+      }
+    },
+    // The Python fuse span (server-side), child of the gateway judge span.
+    {
+      name: "fusion.fuse",
+      component: "synthesis",
+      spanId: sid("g1"),
+      parentSpanId: sid("j1"),
+      start: 540,
+      end: 880,
+      attributes: {
+        "fusion.judge.model": "gpt-5.5",
+        "fusion.synthesizer.model": "gpt-5.5",
+        "fusion.fusion_unit": "trajectory",
+        "fusion.terminal": true,
+        "fusion.decision": "synthesize",
+        "fusion.final_output": "Change add() to use left + right; both candidates agree and tests pass.",
+        "fusion.synthesis_empty": false
+      }
+    },
+    // The gateway judge span, terminal for the turn.
+    {
+      name: "fusion.judge",
       component: "judge",
-      event_type: "judge.final",
-      model_id: "judge:gpt-5.5",
-      payload: {
-        synthesis_id: "synth_001",
-        decision: "synthesize",
-        rationale: "Operator fix plus a regression test is the most complete solution.",
-        final_output: "export const add = (left, right) => left + right;",
-        record: { synthesis_id: "synth_001", final_output: "export const add = (left, right) => left + right;" }
+      spanId: sid("j1"),
+      parentSpanId: sid("00"),
+      start: 520,
+      end: 900,
+      attributes: {
+        "fusion.turn": 1,
+        "fusion.judge.model": "gpt-5.5",
+        "fusion.decision": "synthesize",
+        "fusion.rationale": "gpt's patch is verified; opus agrees on the fix.",
+        "fusion.final_output": "Change add() to use left + right; both candidates agree and tests pass.",
+        "fusion.synthesis": JSON.stringify({ decision: "synthesize", selected_trajectory_id: null }),
+        "fusion.usage": JSON.stringify({ prompt_tokens: 1800, completion_tokens: 560, total_tokens: 2360 })
       }
-    }),
-    ev({
-      span_id: "span_cost_judge",
-      parent_span_id: "span_root",
-      ts: base + 1050,
+    },
+    {
+      name: "fusion.cost",
       component: "gateway",
-      event_type: "log",
-      payload: {
-        kind: "cost.metered",
-        stage: "judge_synth",
-        model: "gpt-5.5",
-        usage: { promptTokens: 2100, completionTokens: 260, totalTokens: 2360 },
-        turn_cost_usd: 0.0104,
-        provider_cost_usd: 0.0104,
-        unknown_cost: false,
-        unknown_usage: false,
-        session_total_usd: 0.0193,
-        provider_total_usd: 0.0193,
-        local_compute_total_usd: 0,
-        currency: "USD"
+      spanId: sid("e3"),
+      parentSpanId: sid("00"),
+      start: 905,
+      attributes: {
+        "fusion.session_id": "session_1",
+        "fusion.turn": 1,
+        "fusion.cost.stage": "judge_synth",
+        "fusion.cost.model": "gpt-5.5",
+        "gen_ai.usage.input_tokens": 1800,
+        "gen_ai.usage.output_tokens": 560,
+        "fusion.usage": JSON.stringify({ promptTokens: 1800, completionTokens: 560, totalTokens: 2360 }),
+        "fusion.cost.turn_usd": 0.0104,
+        "fusion.cost.session_total_usd": 0.0193,
+        "fusion.cost.unknown": false
       }
-    }),
-    ev({
-      span_id: "span_root",
-      ts: base + 1100,
+    },
+    // Narration beats mirrored by the gateway narrator.
+    {
+      name: "fusion.narration",
       component: "gateway",
-      event_type: "session.finished",
-      payload: {
-        status: "succeeded",
-        evidence: ["npm test passed on fused output"],
-        final_output_preview: "export const add = (left, right) => left + right;"
+      spanId: sid("e4"),
+      parentSpanId: sid("00"),
+      start: 50,
+      attributes: {
+        "fusion.turn": 1,
+        "fusion.headline": "Fanning out to 2 models",
+        "fusion.prose": "gpt-5.5 and claude-opus-4-6 are each taking a shot in isolated worktrees."
       }
-    })
+    },
+    {
+      name: "fusion.narration",
+      component: "gateway",
+      spanId: sid("e5"),
+      parentSpanId: sid("00"),
+      start: 530,
+      attributes: {
+        "fusion.turn": 1,
+        "fusion.headline": "Judging 2 candidates"
+      }
+    },
+    // The bounded run wrapper (one-shot front-door runs end the session).
+    {
+      name: "fusion.run",
+      component: "gateway",
+      spanId: sid("00"),
+      start: 0,
+      end: 950,
+      attributes: {
+        "fusion.dialect": "codex",
+        "fusion.prompt_preview": "Fix the add() sign bug so npm test passes.",
+        "fusion.repo": "/tmp/fusion-sample",
+        "fusion.environment": JSON.stringify(environment),
+        "fusion.status": "succeeded",
+        "fusion.final_output_preview": "Change add() to use left + right; both candidates agree and tests pass.",
+        "fusion.evidence": JSON.stringify(["npm test passed on fused output"])
+      }
+    }
   ];
+
+  return spans.map((span): IncomingSpan => {
+    const start = BASE_TS + span.start;
+    const end = BASE_TS + (span.end ?? span.start);
+    return {
+      trace_id: traceId,
+      span_id: span.spanId,
+      ...(span.parentSpanId !== undefined ? { parent_span_id: span.parentSpanId } : {}),
+      name: span.name,
+      component: span.component,
+      service: "scope-fixture",
+      start_ms: start,
+      end_ms: end,
+      status: span.status ?? "ok",
+      attributes: span.attributes ?? {}
+    };
+  });
+}
+
+/** Assign ids for pure-derivation tests (as the collector would). */
+export function stored(spans: IncomingSpan[]): StoredSpan[] {
+  return spans.map((span, index) => ({ ...span, id: index + 1 }));
+}
+
+// ---- OTLP encoding (for API round-trip tests and seeding) ----
+
+type OtlpAnyValue =
+  | { stringValue: string }
+  | { intValue: number }
+  | { doubleValue: number }
+  | { boolValue: boolean }
+  | { arrayValue: { values: OtlpAnyValue[] } };
+
+function encodeValue(value: unknown): OtlpAnyValue {
+  if (typeof value === "string") return { stringValue: value };
+  if (typeof value === "boolean") return { boolValue: value };
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? { intValue: value } : { doubleValue: value };
+  }
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(encodeValue) } };
+  return { stringValue: JSON.stringify(value) };
+}
+
+const COMPONENT_TO_SCOPE = FUSION_SCOPES as Record<string, string>;
+
+/** Encode spans as a spec-shaped OTLP `ExportTraceServiceRequest` (JSON). */
+export function toOtlpExport(spans: IncomingSpan[]): Record<string, unknown> {
+  const byComponent = new Map<string, IncomingSpan[]>();
+  for (const span of spans) {
+    const list = byComponent.get(span.component) ?? [];
+    list.push(span);
+    byComponent.set(span.component, list);
+  }
+  return {
+    resourceSpans: [
+      {
+        resource: {
+          attributes: [{ key: "service.name", value: { stringValue: spans[0]?.service ?? "scope-fixture" } }]
+        },
+        scopeSpans: [...byComponent.entries()].map(([component, componentSpans]) => ({
+          scope: { name: COMPONENT_TO_SCOPE[component] ?? `fusionkit.${component}` },
+          spans: componentSpans.map((span) => ({
+            traceId: span.trace_id,
+            spanId: span.span_id,
+            ...(span.parent_span_id !== undefined ? { parentSpanId: span.parent_span_id } : {}),
+            name: span.name,
+            kind: 1,
+            startTimeUnixNano: String(Math.round(span.start_ms * 1e6)),
+            endTimeUnixNano: String(Math.round(span.end_ms * 1e6)),
+            attributes: Object.entries(span.attributes).map(([key, value]) => ({
+              key,
+              value: encodeValue(value)
+            })),
+            status: { code: span.status === "error" ? 2 : 1 }
+          }))
+        }))
+      }
+    ]
+  };
 }
