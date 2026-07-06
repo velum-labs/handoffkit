@@ -186,12 +186,34 @@ class AnthropicModelClient:
         # a fused turn metered off the synthesizer step (Node gateway) reads cost
         # with completion tokens only and under-reports it.
         prompt_tokens: int | None = None
+        # Anthropic streams a tool call as a ``content_block_start`` (carrying the
+        # block id + name) followed by ``input_json_delta`` fragments that only
+        # reference the block by its content index. Map index -> (id, name) so the
+        # argument fragments can be re-attached to the right call, mirroring the
+        # non-stream tool_use mapping above.
+        tool_use_blocks: dict[int, tuple[str, str]] = {}
         async for event in stream:
             event_type = getattr(event, "type", None)
             if event_type == "message_start":
                 start_usage = getattr(getattr(event, "message", None), "usage", None)
                 if start_usage is not None:
                     prompt_tokens = getattr(start_usage, "input_tokens", None)
+            elif event_type == "content_block_start":
+                block = getattr(event, "content_block", None)
+                if getattr(block, "type", None) == "tool_use":
+                    index = getattr(event, "index", None)
+                    block_id = getattr(block, "id", "") or ""
+                    block_name = getattr(block, "name", "") or ""
+                    if isinstance(index, int):
+                        tool_use_blocks[index] = (block_id, block_name)
+                    # Open the call with an empty-argument fragment so the id/name
+                    # are captured even if no input_json_delta follows (a tool with
+                    # no arguments).
+                    yield StreamChunk(
+                        tool_call_delta=ToolCall(
+                            id=block_id, name=block_name, arguments=""
+                        )
+                    )
             elif event_type == "content_block_delta":
                 delta = event.delta
                 delta_type = getattr(delta, "type", None)
@@ -203,6 +225,19 @@ class AnthropicModelClient:
                     thinking = getattr(delta, "thinking", None)
                     if isinstance(thinking, str) and thinking:
                         yield StreamChunk(model_reasoning_delta=thinking)
+                elif delta_type == "input_json_delta":
+                    # Streamed tool-call arguments: JSON text arriving in fragments.
+                    partial = getattr(delta, "partial_json", None)
+                    if isinstance(partial, str) and partial:
+                        index = getattr(event, "index", None)
+                        block_id, block_name = tool_use_blocks.get(
+                            index if isinstance(index, int) else -1, ("", "")
+                        )
+                        yield StreamChunk(
+                            tool_call_delta=ToolCall(
+                                id=block_id, name=block_name, arguments=partial
+                            )
+                        )
             elif event_type == "message_delta":
                 finish_reason = getattr(event.delta, "stop_reason", None)
                 usage = None

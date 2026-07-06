@@ -58,6 +58,12 @@ export type FrontdoorRequestValue = {
   notice?: string;
   /** Optional model-call id header forwarded downstream. */
   modelCallId?: string;
+  /**
+   * The caller will translate the streamed response to another dialect
+   * (Anthropic / Responses) with its own keepalive, so the chat-layer
+   * `: keepalive` comments are suppressed to avoid a redundant second keepalive.
+   */
+  suppressChatKeepalive?: boolean;
   /** The client abort signal (runtime handle, not data). */
   [FRONTDOOR_SIGNAL]?: AbortSignal;
 };

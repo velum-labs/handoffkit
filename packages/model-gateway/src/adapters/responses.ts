@@ -660,7 +660,13 @@ export async function handleResponses(
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
   const toolRegistry = responsesToolRegistry(body);
   const chat = responsesToChat(body, upstreamModel);
-  const upstream = await backend.chat(chat, signal, { modelCallId, ...(panelDepth !== undefined ? { panelDepth } : {}) });
+  const upstream = await backend.chat(chat, signal, {
+    modelCallId,
+    ...(panelDepth !== undefined ? { panelDepth } : {}),
+    // The streamed response is translated to Responses SSE by
+    // openAiSseToResponses, which emits its own keepalive.
+    ...(body.stream === true ? { translated: true } : {})
+  });
 
   if (!upstream.ok) {
     const detail = await upstream.text();

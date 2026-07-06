@@ -313,7 +313,8 @@ async function handleModelCall(
   res.once("close", onClose);
   try {
     const upstream = await route.invoke(callId, aborter.signal);
-    const body = await pipeUpstream(res, upstream);
+    // Only buffer the response body when a provenance sink will consume it.
+    const body = await pipeUpstream(res, upstream, sink !== undefined);
     const result = {
       statusCode: upstream.status,
       responseBody: body,
@@ -339,7 +340,20 @@ async function handleModelCall(
   }
 }
 
-async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<Buffer> {
+/**
+ * Cap on the body we buffer for provenance. A streamed turn is piped to the
+ * client regardless; this only bounds the in-memory copy kept for the
+ * provenance sink (request/response hashing + usage extraction), so a runaway
+ * upstream cannot grow gateway memory without bound. 2 MiB comfortably covers a
+ * fused chat completion (JSON or SSE); past it, provenance sees a truncated body.
+ */
+const PROVENANCE_BODY_CAP_BYTES = 2 * 1024 * 1024;
+
+async function pipeUpstream(
+  res: ServerResponse,
+  upstream: Response,
+  collectBody = false
+): Promise<Buffer> {
   res.statusCode = upstream.status;
   const contentType = upstream.headers.get("content-type");
   if (contentType !== null) res.setHeader("content-type", contentType);
@@ -350,13 +364,19 @@ async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<Bu
   }
   const reader = body.getReader();
   const chunks: Buffer[] = [];
+  let collectedBytes = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (value !== undefined) {
         const chunk = Buffer.from(value);
-        chunks.push(chunk);
+        // Accumulate for provenance only when a sink wants it, and only up to
+        // the cap; the client always receives the full stream via res.write.
+        if (collectBody && collectedBytes < PROVENANCE_BODY_CAP_BYTES) {
+          chunks.push(chunk);
+          collectedBytes += chunk.length;
+        }
         if (!res.write(chunk)) await once(res, "drain");
       }
     }

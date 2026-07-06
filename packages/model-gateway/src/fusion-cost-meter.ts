@@ -3,6 +3,8 @@ import type { WireTrajectory } from "@fusionkit/protocol";
 import { emitFusionMarker, jsonAttr } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
+import { decodeBufferedSse } from "./sse/parse.js";
+
 import {
   addLedgerEntry,
   emptySessionCost,
@@ -123,18 +125,17 @@ export function providerCostFromPayload(payload: unknown): ProviderCostMetadata 
 
 export function providerCostFromSse(text: string): ProviderCostMetadata | undefined {
   let providerCost: ProviderCostMetadata | undefined;
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const payload = trimmed.slice(5).trim();
-    if (payload.length === 0 || payload === "[DONE]") continue;
+  for (const event of decodeBufferedSse(text)) {
+    if (event.data.length === 0 || event.data === "[DONE]") continue;
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(payload) as unknown;
-      const candidate = providerCostFromPayload(parsed);
-      if (candidate !== undefined) providerCost = candidate;
+      parsed = JSON.parse(event.data) as unknown;
     } catch {
-      // partial / non-JSON line
+      // Best-effort post-hoc metering: skip a non-JSON payload in a buffered scan.
+      continue;
     }
+    const candidate = providerCostFromPayload(parsed);
+    if (candidate !== undefined) providerCost = candidate;
   }
   return providerCost;
 }

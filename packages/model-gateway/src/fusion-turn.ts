@@ -5,27 +5,23 @@ import type { FusionSpan } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 import { withDeadline } from "@fusionkit/runtime-utils";
 
-import { parseUsage, parseUsageFromSse } from "./cost.js";
+import { parseUsage } from "./cost.js";
 import { createTurnNarrator, proposalsAgree, renderProposal, terminalProposal } from "./frontdoor/narration.js";
 import type { NarrationWriter, ProposedCall, TurnNarration } from "./frontdoor/narration.js";
 import type { FrontdoorRequestValue } from "./frontdoor/types.js";
 import type { FusionGatewayLogger } from "./logger.js";
-import { FusionCostMeter, providerCostFromPayload, providerCostFromSse, usageWithProviderCost } from "./fusion-cost-meter.js";
+import { FusionCostMeter, providerCostFromPayload, usageWithProviderCost } from "./fusion-cost-meter.js";
+import type { ProviderCostMetadata } from "./cost.js";
 import { hasUsableCandidates, type FusionSessionManager } from "./fusion-session.js";
 import { sseResponse } from "./sse-wire.js";
+import { ChatStreamAssembler } from "./sse/chat-assembler.js";
+import type { AssembledToolCall } from "./sse/chat-assembler.js";
+import { decodeBufferedSse } from "./sse/parse.js";
 import type {
   FusedModelRoute,
   FuseStepRunner,
   FusionBackendKernelSessionState
 } from "./fusion-types.js";
-
-type AssembledStep = {
-  content: string;
-  usage?: unknown;
-  toolCalls: unknown[];
-  finishReason?: string;
-  fusion?: unknown;
-};
 
 function jsonError(status: number, message: string): Response {
   return new Response(JSON.stringify({ error: { message, type: "fusion_error" } }), {
@@ -34,55 +30,28 @@ function jsonError(status: number, message: string): Response {
   });
 }
 
-function assembleSseContent(buffer: string): AssembledStep {
-  let content = "";
-  let usage: unknown;
-  let finishReason: string | undefined;
-  let fusion: unknown;
-  const toolCalls: unknown[] = [];
-  for (const line of buffer.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const data = trimmed.slice(5).trim();
-    if (data.length === 0 || data === "[DONE]") continue;
-    try {
-      const json = JSON.parse(data) as {
-        choices?: Array<{ delta?: { content?: unknown; tool_calls?: unknown }; finish_reason?: unknown }>;
-        usage?: unknown;
-        fusion?: unknown;
-      };
-      const choice = json.choices?.[0];
-      const delta = choice?.delta?.content;
-      if (typeof delta === "string") content += delta;
-      if (Array.isArray(choice?.delta?.tool_calls)) toolCalls.push(...choice.delta.tool_calls);
-      if (typeof choice?.finish_reason === "string") finishReason = choice.finish_reason;
-      if (json.usage !== undefined && json.usage !== null) usage = json.usage;
-      if (json.fusion !== undefined && json.fusion !== null) fusion = json.fusion;
-    } catch {
-      // ignore partial/non-JSON lines
-    }
-  }
-  return {
-    content,
-    toolCalls,
-    ...(usage !== undefined ? { usage } : {}),
-    ...(finishReason !== undefined ? { finishReason } : {}),
-    ...(fusion !== undefined ? { fusion } : {})
-  };
-}
-
-/** The committed step's OpenAI tool calls as a proposal batch (for pick matching). */
-function committedCallsAsProposal(toolCalls: readonly unknown[] | undefined): ProposedCall[] {
+/** Normalize a buffered response's OpenAI `message.tool_calls` to the assembler shape. */
+function assembledFromMessageToolCalls(toolCalls: unknown): AssembledToolCall[] {
   if (!Array.isArray(toolCalls)) return [];
   return toolCalls
     .filter((call): call is Record<string, unknown> => call !== null && typeof call === "object")
     .map((call) => {
       const fn = (call.function ?? {}) as { name?: unknown; arguments?: unknown };
       return {
+        ...(typeof call.id === "string" ? { id: call.id } : {}),
         ...(typeof fn.name === "string" ? { name: fn.name } : {}),
-        ...(typeof fn.arguments === "string" ? { arguments: fn.arguments } : {})
+        arguments: typeof fn.arguments === "string" ? fn.arguments : ""
       };
     });
+}
+
+/** The committed step's tool calls as a proposal batch (for pick matching). */
+function committedCallsAsProposal(toolCalls: readonly AssembledToolCall[] | undefined): ProposedCall[] {
+  if (!Array.isArray(toolCalls)) return [];
+  return toolCalls.map((call) => ({
+    ...(call.name !== undefined ? { name: call.name } : {}),
+    ...(call.arguments.length > 0 ? { arguments: call.arguments } : {})
+  }));
 }
 
 function synthesisOf(fusion: unknown): unknown {
@@ -267,34 +236,54 @@ export class FusionTurnAssembler {
 
   meterAndTraceStream(req: FrontdoorRequestValue, sseBuffer: string): void {
     const session = this.#sessions.ensureSession(req.sessionKey);
-    const providerCost = providerCostFromSse(sseBuffer);
+    // Single pass: decode the buffered fuse-step SSE once and fold every event
+    // through one ChatStreamAssembler, extracting provider cost from the same
+    // parsed chunks — instead of re-splitting the buffer three times (usage,
+    // provider cost, content/tool-calls). The assembler's merge rules also fix
+    // the old per-fragment tool-call mis-attribution: fragmented arguments are
+    // merged by index/id rather than pushed as separate raw fragments.
+    const assembler = new ChatStreamAssembler();
+    let providerCost: ProviderCostMetadata | undefined;
+    for (const event of decodeBufferedSse(sseBuffer)) {
+      if (event.data.length === 0 || event.data === "[DONE]") continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch {
+        // Best-effort metering/tracing over a buffered stream: skip a non-JSON line.
+        continue;
+      }
+      assembler.pushParsed(parsed);
+      const candidate = providerCostFromPayload(parsed);
+      if (candidate !== undefined) providerCost = candidate;
+    }
+    const turn = assembler.result();
     this.#cost.meterEntry(
       req.sessionKey,
       {
         model: this.#fusedCostModel(req),
-        usage: usageWithProviderCost(parseUsageFromSse(sseBuffer), providerCost),
+        usage: usageWithProviderCost(parseUsage(turn.usage), providerCost),
         stage: "judge_synth",
         turn: req.turn,
         ...(providerCost !== undefined ? { providerCost } : {})
       },
       session.trace
     );
-    const assembled = assembleSseContent(sseBuffer);
-    this.#stashJudgePick(session, req.turn, assembled.fusion, assembled.toolCalls);
+    this.#stashJudgePick(session, req.turn, turn.fusion, turn.toolCalls);
     if (!isFusionTracingActive()) return;
-    if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
-      const synthesis = synthesisOf(assembled.fusion);
+    if (isTerminalJudgeStep(turn.toolCalls, turn.finishReason)) {
+      const synthesis = synthesisOf(turn.fusion);
       this.#emitJudgeFinal(req, session, {
         httpStatus: 200,
-        ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
+        ...(turn.content.length > 0 ? { content: turn.content } : {}),
         ...(synthesis !== undefined ? { synthesis } : {}),
-        ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
+        ...(turn.usage !== undefined ? { usage: turn.usage } : {})
       });
     } else {
       this.#emitJudgeStep(req, session, {
-        ...(assembled.content.length > 0 ? { content: assembled.content } : {}),
-        toolCalls: assembled.toolCalls,
-        ...(assembled.usage !== undefined ? { usage: assembled.usage } : {})
+        ...(turn.content.length > 0 ? { content: turn.content } : {}),
+        toolCalls: turn.toolCalls,
+        ...(turn.usage !== undefined ? { usage: turn.usage } : {})
       });
     }
   }
@@ -460,7 +449,7 @@ export class FusionTurnAssembler {
         const choice = judged.choices?.[0];
         const message = choice?.message;
         const content = typeof message?.content === "string" ? message.content : undefined;
-        const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+        const toolCalls = assembledFromMessageToolCalls(message?.tool_calls);
         // Remember the adopted candidate for the next round's narration opener
         // (the streaming path stashes from its assembled SSE; buffered turns
         // stash here so mixed sessions never lose the pick).
@@ -501,7 +490,7 @@ export class FusionTurnAssembler {
     session: FusionBackendKernelSessionState,
     turn: number,
     fusion: unknown,
-    committedToolCalls?: readonly unknown[]
+    committedToolCalls?: readonly AssembledToolCall[]
   ): void {
     const extension = (fusion !== null && typeof fusion === "object" ? fusion : {}) as {
       trajectory?: { synthesis?: { selected_trajectory_id?: unknown } | null };

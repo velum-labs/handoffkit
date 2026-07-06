@@ -171,6 +171,7 @@ export class FusionBackend implements Backend {
         ? { panelDepth: options.panelDepth }
         : {}),
       ...(options.modelCallId !== undefined ? { modelCallId: options.modelCallId } : {}),
+      ...(options.translated === true ? { suppressChatKeepalive: true } : {}),
       ...(signal !== undefined ? { [FRONTDOOR_SIGNAL]: signal } : {})
     };
     return runFrontdoorRequest(this.#services, req);

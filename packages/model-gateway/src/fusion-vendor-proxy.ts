@@ -11,13 +11,15 @@ import { FusionCostMeter, providerCostFromSse, usageWithProviderCost } from "./f
 import {
   failoverNotice,
   failureFromErrorObject,
-  firstSseSignal,
   isFailoverWorthy,
   normalizeFailoverCategory,
   rebuildErrorResponse,
   resumeNotice,
-  sseEventError
+  sseEventError,
+  sseObjectError,
+  sseObjectHasContent
 } from "./fusion-failover.js";
+import { SseDecoder } from "./sse/parse.js";
 import { errorText } from "./fusion-session.js";
 import type {
   FailoverCategory,
@@ -183,22 +185,43 @@ export class FusionVendorProxy {
   ): Promise<VendorProxyOutcome> {
     const reader = upstream.getReader();
     const decoder = new TextDecoder();
+    // Detect the first content/error signal incrementally: feed only each new
+    // chunk to a single SseDecoder rather than re-scanning the whole accumulated
+    // buffer per chunk (the old `firstSseSignal(buffered)` call was O(n^2)).
+    const signalDecoder = new SseDecoder();
     let buffered = "";
     let signalKind: "content" | "error" | "none" = "none";
     let preFailure: ProxyFailure | undefined;
-    for (;;) {
+    let signalSeen = false;
+    while (!signalSeen) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value !== undefined) buffered += decoder.decode(value, { stream: true });
-      const signalSeen = firstSseSignal(buffered);
-      if (signalSeen.kind === "error") {
-        signalKind = "error";
-        preFailure = signalSeen.error;
-        break;
-      }
-      if (signalSeen.kind === "content") {
-        signalKind = "content";
-        break;
+      if (value === undefined) continue;
+      const chunk = decoder.decode(value, { stream: true });
+      buffered += chunk;
+      for (const event of signalDecoder.feed(chunk)) {
+        if (event.data.length === 0 || event.data === "[DONE]") continue;
+        let object: Record<string, unknown> | undefined;
+        try {
+          const json = JSON.parse(event.data) as unknown;
+          object = json !== null && typeof json === "object" ? (json as Record<string, unknown>) : undefined;
+        } catch {
+          // Best-effort pre-stream signal detection: skip a non-JSON payload.
+          object = undefined;
+        }
+        if (object === undefined) continue;
+        const failure = sseObjectError(object);
+        if (failure !== undefined) {
+          signalKind = "error";
+          preFailure = failure;
+          signalSeen = true;
+          break;
+        }
+        if (sseObjectHasContent(object)) {
+          signalKind = "content";
+          signalSeen = true;
+          break;
+        }
       }
     }
 

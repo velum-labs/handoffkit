@@ -1,4 +1,5 @@
 import { randomId } from "@fusionkit/runtime-utils";
+import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 
 const ENCODER = new TextEncoder();
@@ -106,12 +107,18 @@ export function openAiSseToResponses(
   toolRegistry: ResponsesToolRegistry = new Map()
 ): ReadableStream<Uint8Array> {
   const reader = upstream.getReader();
-  const decoder = new TextDecoder();
+  const sseDecoder = new SseDecoder();
   const responseId = `resp_${randomId()}`;
   const messageItemId = `msg_${randomId()}`;
   const reasoningItemId = `rs_${randomId()}`;
-  const tools = new Map<number, ToolAccumulator>();
-  let buffer = "";
+  // Tool fragments keyed by `index`, falling back to `id`, with id/index-less
+  // fragments appended to the last open call (parallel index-less calls no
+  // longer collapse into one — the same fix the shared assembler encodes).
+  // `toolList` preserves open order for the finalize/assemble passes.
+  const toolByIndex = new Map<number, ToolAccumulator>();
+  const toolById = new Map<string, ToolAccumulator>();
+  const toolList: ToolAccumulator[] = [];
+  let lastTool: ToolAccumulator | undefined;
   let created = false;
   let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
   let textOpen = false;
@@ -289,13 +296,13 @@ export function openAiSseToResponses(
         content: [{ type: "output_text", text: textValue, annotations: [] }]
       });
     }
-    for (const tool of tools.values()) {
+    for (const tool of toolList) {
       output.push(streamedToolItem(tool));
     }
     return output;
   };
 
-  const finalize = (controller: Controller): void => {
+  const finalize = (controller: Controller, terminal: "completed" | "incomplete" = "completed"): void => {
     if (finished) return;
     finished = true;
     if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
@@ -330,7 +337,7 @@ export function openAiSseToResponses(
         })
       );
     }
-    for (const tool of tools.values()) {
+    for (const tool of toolList) {
       if (tool.kind === "custom") {
         // The raw input is only extractable from the completed JSON arguments,
         // so a custom call flushes its whole input here in one delta + done.
@@ -362,7 +369,15 @@ export function openAiSseToResponses(
         sse("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
       );
     }
-    controller.enqueue(sse("response.completed", { response: baseResponse("completed", assembleOutput()) }));
+    // Truncation is an error, not a clean stop: an upstream that ended without a
+    // finish_reason terminates as `response.incomplete`, never a fabricated
+    // `response.completed` (WS5.2), so callers that meter/persist see the turn
+    // as incomplete.
+    controller.enqueue(
+      terminal === "completed"
+        ? sse("response.completed", { response: baseResponse("completed", assembleOutput()) })
+        : sse("response.incomplete", { response: baseResponse("incomplete", assembleOutput()) })
+    );
   };
 
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
@@ -398,8 +413,14 @@ export function openAiSseToResponses(
 
     if (Array.isArray(delta.tool_calls)) {
       for (const call of delta.tool_calls) {
-        const openAiIndex = typeof call.index === "number" ? call.index : 0;
-        let tool = tools.get(openAiIndex);
+        const indexKey = typeof call.index === "number" ? call.index : undefined;
+        const idKey = typeof call.id === "string" && call.id.length > 0 ? call.id : undefined;
+        let tool =
+          indexKey !== undefined
+            ? toolByIndex.get(indexKey)
+            : idKey !== undefined
+              ? toolById.get(idKey)
+              : lastTool;
         if (tool === undefined) {
           ensureCreated(controller);
           closeReasoning(controller);
@@ -415,7 +436,7 @@ export function openAiSseToResponses(
             kind,
             ...(entry.namespace !== undefined ? { namespace: entry.namespace } : {})
           };
-          tools.set(openAiIndex, tool);
+          toolList.push(tool);
           controller.enqueue(
             sse("response.output_item.added", {
               output_index: tool.outputIndex,
@@ -435,6 +456,9 @@ export function openAiSseToResponses(
             })
           );
         }
+        if (indexKey !== undefined && !toolByIndex.has(indexKey)) toolByIndex.set(indexKey, tool);
+        if (idKey !== undefined && !toolById.has(idKey)) toolById.set(idKey, tool);
+        lastTool = tool;
         if (call.function?.name !== undefined && tool.name.length === 0) tool.name = call.function.name;
         const args = call.function?.arguments;
         if (typeof args === "string" && args.length > 0) {
@@ -458,6 +482,58 @@ export function openAiSseToResponses(
     }
   };
 
+  // Backpressure handshake: the pump awaits `resumePull` while the consumer's
+  // queue is full; `pull` resolves it. This replaces the "return when
+  // desiredSize changed" hack with an explicit pump that drains the upstream
+  // reader to completion while honoring backpressure.
+  let resumePull: (() => void) | undefined;
+  const awaitPull = (): Promise<void> =>
+    new Promise((resolve) => {
+      resumePull = resolve;
+    });
+
+  const handleEvent = (controller: Controller, data: string): void => {
+    if (data.length === 0) return;
+    if (data === "[DONE]") {
+      // A `[DONE]` with no prior finish_reason is truncation, not a clean stop.
+      if (!finished) finalize(controller, "incomplete");
+      return;
+    }
+    let chunk: OpenAiChunk;
+    try {
+      chunk = JSON.parse(data) as OpenAiChunk;
+    } catch (error) {
+      // The live upstream stream is authoritative: a malformed payload is a
+      // stream error, never silently skipped (WS5).
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new SseParseError(`malformed OpenAI SSE payload in Responses translation: ${detail}`, data.slice(0, 200));
+    }
+    process(controller, chunk);
+  };
+
+  const pump = async (controller: Controller): Promise<void> => {
+    try {
+      for (;;) {
+        if ((controller.desiredSize ?? 1) <= 0) await awaitPull();
+        const { done, value } = await reader.read();
+        if (done) {
+          for (const event of sseDecoder.flush()) handleEvent(controller, event.data);
+          // Upstream closed with no finish_reason: incomplete, not completed.
+          if (!finished) finalize(controller, "incomplete");
+          controller.close();
+          return;
+        }
+        if (value !== undefined) {
+          for (const event of sseDecoder.feed(value)) handleEvent(controller, event.data);
+        }
+      }
+    } catch (error) {
+      if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
+      controller.error(error);
+      void reader.cancel(error).catch(() => undefined);
+    }
+  };
+
   return new ReadableStream<Uint8Array>({
     start(controller) {
       // Emit `response.created` immediately and keep the connection alive with
@@ -467,51 +543,24 @@ export function openAiSseToResponses(
       ensureCreated(controller);
       keepaliveTimer = setInterval(() => {
         if (finished) return;
+        // Honor backpressure: skip the keepalive if the consumer's queue is full.
+        if ((controller.desiredSize ?? 1) <= 0) return;
         try {
           controller.enqueue(ENCODER.encode(": keepalive\n\n"));
         } catch {
           // controller closed
         }
       }, 3000);
+      void pump(controller);
     },
-    async pull(controller) {
-      // Keep reading upstream until at least one chunk is enqueued (or the
-      // stream closes). A pull that resolves without enqueuing anything can
-      // stall Node's webstreams pull scheduling permanently (observed on Node
-      // 24 when e.g. the upstream's `[DONE]` line arrives after finalize
-      // already ran — the keepalive timer is cleared by then, so nothing else
-      // ever unblocks the stream).
-      for (;;) {
-        const sizeBefore = controller.desiredSize ?? 0;
-        const { done, value } = await reader.read();
-        if (done) {
-          if (!finished) finalize(controller);
-          controller.close();
-          return;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        let newline = buffer.indexOf("\n");
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline).trim();
-          buffer = buffer.slice(newline + 1);
-          newline = buffer.indexOf("\n");
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (payload === "[DONE]") {
-            if (!finished) finalize(controller);
-            continue;
-          }
-          try {
-            process(controller, JSON.parse(payload) as OpenAiChunk);
-          } catch {
-            // ignore malformed lines
-          }
-        }
-        if ((controller.desiredSize ?? 0) !== sizeBefore) return;
-      }
+    pull() {
+      resumePull?.();
+      resumePull = undefined;
     },
     cancel(reason) {
       if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
+      resumePull?.();
+      resumePull = undefined;
       return reader.cancel(reason);
     }
   });

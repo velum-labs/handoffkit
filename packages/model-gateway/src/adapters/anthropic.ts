@@ -11,6 +11,7 @@
 import type { Backend } from "../backend.js";
 import { defaultFusionGatewayLogger } from "../logger.js";
 import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
+import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 
 const ENCODER = new TextEncoder();
@@ -317,8 +318,16 @@ export function openAiSseToAnthropic(
   model: string
 ): ReadableStream<Uint8Array> {
   const reader = upstream.getReader();
-  const decoder = new TextDecoder();
-  const tools = new Map<number, number>();
+  const sseDecoder = new SseDecoder();
+  // OpenAI tool-call fragments map onto Anthropic `tool_use` content blocks.
+  // Fragments are keyed by `index` when present, else by `id`; an id/index-less
+  // fragment (Anthropic/Responses translations omit `index`) appends to the last
+  // open call. Keying everything to index 0 used to merge parallel index-less
+  // calls into one block — the same bug the shared assembler now avoids.
+  const toolBlockByIndex = new Map<number, number>();
+  const toolBlockById = new Map<string, number>();
+  const toolBlocks: number[] = [];
+  let lastToolBlock: number | undefined;
   const messageId = `msg_${randomId()}`;
   const state: StreamState = {
     started: false,
@@ -333,7 +342,6 @@ export function openAiSseToAnthropic(
     outputTokens: undefined,
     keepaliveTimer: undefined
   };
-  let buffer = "";
 
   type Controller = ReadableStreamDefaultController<Uint8Array>;
 
@@ -398,17 +406,21 @@ export function openAiSseToAnthropic(
     );
   };
 
-  const finalize = (controller: Controller, stopReason: string): void => {
-    if (state.finished) return;
-    state.finished = true;
-    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+  const closeOpenBlocks = (controller: Controller): void => {
     closeThinking(controller);
     if (state.textOpen) {
       controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index: state.textIndex }));
     }
-    for (const index of tools.values()) {
+    for (const index of toolBlocks) {
       controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
     }
+  };
+
+  const finalize = (controller: Controller, stopReason: string): void => {
+    if (state.finished) return;
+    state.finished = true;
+    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+    closeOpenBlocks(controller);
     controller.enqueue(
       sse("message_delta", {
         type: "message_delta",
@@ -424,6 +436,25 @@ export function openAiSseToAnthropic(
       })
     );
     controller.enqueue(sse("message_stop", { type: "message_stop" }));
+  };
+
+  /**
+   * The upstream ended (reader closed or a `[DONE]` arrived) before any
+   * `finish_reason`. Truncation is an error, not a clean stop (WS5.2): emit an
+   * Anthropic `error` event rather than fabricating `stop_reason:"end_turn"`, so
+   * the caller sees a failed turn instead of silently accepting a partial answer.
+   */
+  const finalizeTruncated = (controller: Controller, detail: string): void => {
+    if (state.finished) return;
+    state.finished = true;
+    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+    closeOpenBlocks(controller);
+    controller.enqueue(
+      sse("error", {
+        type: "error",
+        error: { type: "incomplete_stream", message: detail }
+      })
+    );
   };
 
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
@@ -475,17 +506,23 @@ export function openAiSseToAnthropic(
 
     if (Array.isArray(delta.tool_calls)) {
       for (const call of delta.tool_calls) {
-        const openAiIndex = typeof call.index === "number" ? call.index : 0;
-        let index = tools.get(openAiIndex);
-        if (index === undefined) {
+        const indexKey = typeof call.index === "number" ? call.index : undefined;
+        const idKey = typeof call.id === "string" && call.id.length > 0 ? call.id : undefined;
+        let block =
+          indexKey !== undefined
+            ? toolBlockByIndex.get(indexKey)
+            : idKey !== undefined
+              ? toolBlockById.get(idKey)
+              : lastToolBlock;
+        if (block === undefined) {
           ensureStarted(controller);
           closeThinking(controller);
-          index = state.nextIndex++;
-          tools.set(openAiIndex, index);
+          block = state.nextIndex++;
+          toolBlocks.push(block);
           controller.enqueue(
             sse("content_block_start", {
               type: "content_block_start",
-              index,
+              index: block,
               content_block: {
                 type: "tool_use",
                 id: call.id ?? `toolu_${randomId()}`,
@@ -495,12 +532,15 @@ export function openAiSseToAnthropic(
             })
           );
         }
+        if (indexKey !== undefined && !toolBlockByIndex.has(indexKey)) toolBlockByIndex.set(indexKey, block);
+        if (idKey !== undefined && !toolBlockById.has(idKey)) toolBlockById.set(idKey, block);
+        lastToolBlock = block;
         const args = call.function?.arguments;
         if (typeof args === "string" && args.length > 0) {
           controller.enqueue(
             sse("content_block_delta", {
               type: "content_block_delta",
-              index,
+              index: block,
               delta: { type: "input_json_delta", partial_json: args }
             })
           );
@@ -515,59 +555,86 @@ export function openAiSseToAnthropic(
     }
   };
 
+  // Backpressure handshake: the pump awaits `resumePull` whenever the consumer's
+  // desired size drops to zero, and `pull` resolves it. This replaces the old
+  // "return when desiredSize changed" hack with an explicit pump that reads the
+  // upstream reader to completion while honoring backpressure.
+  let resumePull: (() => void) | undefined;
+  const awaitPull = (): Promise<void> =>
+    new Promise((resolve) => {
+      resumePull = resolve;
+    });
+
+  const handleEvent = (controller: Controller, data: string): void => {
+    if (data.length === 0) return;
+    if (data === "[DONE]") {
+      // A `[DONE]` without a prior finish_reason is truncation, not a clean stop.
+      if (!state.finished) finalizeTruncated(controller, "upstream sent [DONE] before a finish reason");
+      return;
+    }
+    let chunk: OpenAiChunk;
+    try {
+      chunk = JSON.parse(data) as OpenAiChunk;
+    } catch (error) {
+      // The live upstream stream is authoritative: a malformed payload is a
+      // stream error, never silently skipped (WS5). Surface it and stop.
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new SseParseError(`malformed OpenAI SSE payload in Anthropic translation: ${detail}`, data.slice(0, 200));
+    }
+    process(controller, chunk);
+  };
+
+  const pump = async (controller: Controller): Promise<void> => {
+    try {
+      for (;;) {
+        if ((controller.desiredSize ?? 1) <= 0) await awaitPull();
+        const { done, value } = await reader.read();
+        if (done) {
+          for (const event of sseDecoder.flush()) handleEvent(controller, event.data);
+          // Upstream closed with no finish_reason: incomplete, not `end_turn`.
+          if (!state.finished) finalizeTruncated(controller, "upstream stream ended before a finish reason");
+          controller.close();
+          return;
+        }
+        if (value !== undefined) {
+          for (const event of sseDecoder.feed(value)) handleEvent(controller, event.data);
+        }
+      }
+    } catch (error) {
+      if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+      controller.error(error);
+      void reader.cancel(error).catch(() => undefined);
+    }
+  };
+
   return new ReadableStream<Uint8Array>({
     start(controller) {
       // Start the message immediately and keep the connection alive with `ping`
       // events while the upstream is still producing its first token. Claude
       // Code times out if it sees nothing during the fusion panel phase (the
-      // chat-layer keepalive comments are dropped by this translator).
+      // chat-layer keepalive comments are dropped by this translator, so this
+      // ping is the single keepalive that reaches the client).
       ensureStarted(controller);
       state.keepaliveTimer = setInterval(() => {
         if (state.finished) return;
+        // Honor backpressure: skip the ping if the consumer's queue is full.
+        if ((controller.desiredSize ?? 1) <= 0) return;
         try {
           controller.enqueue(sse("ping", { type: "ping" }));
         } catch {
           // controller closed
         }
       }, 3000);
+      void pump(controller);
     },
-    async pull(controller) {
-      // Keep reading upstream until at least one chunk is enqueued (or the
-      // stream closes). A pull that resolves without enqueuing anything can
-      // stall Node's webstreams pull scheduling permanently (e.g. a late
-      // upstream line after finalize already ran, once the keepalive timer is
-      // cleared) — see the identical loop in the Responses adapter.
-      for (;;) {
-        const sizeBefore = controller.desiredSize ?? 0;
-        const { done, value } = await reader.read();
-        if (done) {
-          if (!state.finished) finalize(controller, "end_turn");
-          controller.close();
-          return;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        let newline = buffer.indexOf("\n");
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline).trim();
-          buffer = buffer.slice(newline + 1);
-          newline = buffer.indexOf("\n");
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (payload === "[DONE]") {
-            if (!state.finished) finalize(controller, "end_turn");
-            continue;
-          }
-          try {
-            process(controller, JSON.parse(payload) as OpenAiChunk);
-          } catch {
-            // ignore malformed lines; the upstream stream is authoritative
-          }
-        }
-        if ((controller.desiredSize ?? 0) !== sizeBefore) return;
-      }
+    pull() {
+      resumePull?.();
+      resumePull = undefined;
     },
     cancel(reason) {
       if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+      resumePull?.();
+      resumePull = undefined;
       return reader.cancel(reason);
     }
   });
@@ -600,7 +667,13 @@ export async function handleAnthropicMessages(
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
   const chat = anthropicToChat(body, upstreamModel);
-  const upstream = await backend.chat(chat, signal, { modelCallId, ...(panelDepth !== undefined ? { panelDepth } : {}) });
+  const upstream = await backend.chat(chat, signal, {
+    modelCallId,
+    ...(panelDepth !== undefined ? { panelDepth } : {}),
+    // The streamed response is translated to Anthropic SSE by
+    // openAiSseToAnthropic, which emits its own `ping` keepalive.
+    ...(body.stream === true ? { translated: true } : {})
+  });
 
   if (!upstream.ok) {
     const detail = await upstream.text();

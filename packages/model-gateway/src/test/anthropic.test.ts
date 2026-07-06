@@ -244,6 +244,62 @@ test("anthropic streaming starts eagerly and pings during the panel phase", asyn
   }
 });
 
+test("streams a fused tool call end to end as Anthropic tool_use blocks", async () => {
+  // OpenAI-chat SSE with a tool call whose arguments arrive fragmented across
+  // chunks, then a tool_calls finish. The adapter must reconstruct one tool_use
+  // block with the fully-merged JSON input.
+  const chunks = [
+    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"search","arguments":"{\\"q\\":"}}]}}]}\n\n',
+    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"cats\\"}"}}]}}]}\n\n',
+    'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+    "data: [DONE]\n\n"
+  ];
+  const encoder = new TextEncoder();
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    }
+  });
+  const decoder = new TextDecoder();
+  const reader = openAiSseToAnthropic(upstream, "claude-x").getReader();
+  let out = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value !== undefined) out += decoder.decode(value);
+  }
+  assert.ok(out.includes('"type":"tool_use"'), "a tool_use content block must be emitted");
+  assert.ok(out.includes('"name":"search"'), "the tool name must be carried through");
+  assert.ok(out.includes("input_json_delta"), "the arguments must stream as input_json_delta");
+  // Both fragments ("{\"q\": and \"cats\"}) must reach the client.
+  assert.ok(out.includes("cats"), "both argument fragments must be forwarded");
+  assert.ok(out.includes('"stop_reason":"tool_use"'), "tool_calls maps to a tool_use stop reason");
+});
+
+test("truncated stream (no finish_reason) surfaces an Anthropic error, not end_turn", async () => {
+  // Upstream ends after some content but never sends a finish_reason / [DONE].
+  const encoder = new TextEncoder();
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n')
+      );
+      controller.close();
+    }
+  });
+  const decoder = new TextDecoder();
+  const reader = openAiSseToAnthropic(upstream, "claude-x").getReader();
+  let out = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value !== undefined) out += decoder.decode(value);
+  }
+  assert.ok(out.includes("event: error"), "a truncated stream must emit an error event");
+  assert.ok(!out.includes('"stop_reason":"end_turn"'), "truncation must not fabricate a clean end_turn");
+});
+
 test("chatToAnthropicMessage produces a text content block", () => {
   const message = chatToAnthropicMessage(
     {

@@ -22,6 +22,8 @@
 import { DEFAULT_MODEL_PRICING as REGISTRY_MODEL_PRICING, PRICING_ALIASES } from "@fusionkit/registry";
 import { randomId } from "@fusionkit/runtime-utils";
 
+import { decodeBufferedSse } from "./sse/parse.js";
+
 /** USD price for a model, per 1,000,000 tokens. */
 export type ModelPricing = {
   inputPer1mTokens: number;
@@ -180,18 +182,18 @@ export function parseUsage(usage: unknown): TokenUsage | undefined {
 /** Extract the last `usage` block carried on an OpenAI-style SSE stream. */
 export function parseUsageFromSse(text: string): TokenUsage | undefined {
   let usage: TokenUsage | undefined;
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const payload = trimmed.slice(5).trim();
-    if (payload.length === 0 || payload === "[DONE]") continue;
+  for (const event of decodeBufferedSse(text)) {
+    if (event.data.length === 0 || event.data === "[DONE]") continue;
+    let json: { usage?: unknown };
     try {
-      const json = JSON.parse(payload) as { usage?: unknown };
-      const parsed = parseUsage(json.usage);
-      if (parsed !== undefined) usage = parsed;
+      json = JSON.parse(event.data) as { usage?: unknown };
     } catch {
-      // partial / non-JSON line
+      // Best-effort post-hoc metering: skip a non-JSON payload rather than
+      // failing the whole scan (unlike a live stream, this text is buffered).
+      continue;
     }
+    const parsed = parseUsage(json.usage);
+    if (parsed !== undefined) usage = parsed;
   }
   return usage;
 }

@@ -46,6 +46,13 @@ export type BackendRequestOptions = {
    * sub-agent access below one level of delegation.
    */
   panelDepth?: number;
+  /**
+   * The caller will wrap the returned stream in a dialect translator
+   * (Anthropic / Responses) that emits its own keepalive. The fusion backend
+   * then suppresses its chat-layer `: keepalive` comments, which the translator
+   * would only drop anyway, so exactly one keepalive reaches the client.
+   */
+  translated?: boolean;
 };
 
 export type OpenAiBackendOptions = {

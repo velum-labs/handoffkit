@@ -27,6 +27,7 @@ from fusionkit_core.clients import (
 )
 from fusionkit_core.config import EndpointAuth, ModelEndpoint, ProviderKind, SamplingConfig
 from fusionkit_core.credentials import clear_credential_cache
+from fusionkit_core.judge import accumulate_tool_call
 from fusionkit_core.types import ChatMessage, ToolCall
 
 TOOLS = [
@@ -568,6 +569,54 @@ async def test_anthropic_stream_chat_includes_prompt_tokens() -> None:
     assert terminal.usage.prompt_tokens == 11
     assert terminal.usage.completion_tokens == 5
     assert terminal.usage.total_tokens == 16
+
+
+async def test_anthropic_stream_chat_reconstructs_streamed_tool_use() -> None:
+    # A streamed tool call arrives as a content_block_start (id + name) followed
+    # by input_json_delta fragments that only reference the block by index. The
+    # client must emit tool_call_delta chunks that fold back into one call.
+    client = AnthropicModelClient(_endpoint("anthropic"))
+    events = [
+        SimpleNamespace(
+            type="message_start",
+            message=SimpleNamespace(usage=SimpleNamespace(input_tokens=7, output_tokens=0)),
+        ),
+        SimpleNamespace(
+            type="content_block_start",
+            index=0,
+            content_block=SimpleNamespace(type="tool_use", id="toolu_1", name="search"),
+        ),
+        SimpleNamespace(
+            type="content_block_delta",
+            index=0,
+            delta=SimpleNamespace(type="input_json_delta", partial_json='{"q": '),
+        ),
+        SimpleNamespace(
+            type="content_block_delta",
+            index=0,
+            delta=SimpleNamespace(type="input_json_delta", partial_json='"cats"}'),
+        ),
+        SimpleNamespace(
+            type="message_delta",
+            delta=SimpleNamespace(stop_reason="tool_use"),
+            usage=SimpleNamespace(output_tokens=4),
+        ),
+    ]
+    client._client.messages.create = AsyncMock(return_value=_aiter(events))
+
+    chunks = [chunk async for chunk in client.stream_chat([ChatMessage(role="user", content="hi")])]
+
+    accumulator: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for chunk in chunks:
+        if chunk.tool_call_delta is not None:
+            accumulate_tool_call(accumulator, seen_ids, chunk.tool_call_delta)
+
+    assert len(accumulator) == 1
+    assert accumulator[0]["id"] == "toolu_1"
+    assert accumulator[0]["name"] == "search"
+    assert json.loads(accumulator[0]["arguments"]) == {"q": "cats"}
+    assert chunks[-1].finish_reason == "tool_use"
 
 
 # --- subscription auth clients ---------------------------------------------
