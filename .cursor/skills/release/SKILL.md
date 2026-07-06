@@ -65,7 +65,13 @@ Follow these steps. Show the user the plan and get confirmation before applying.
 node scripts/release.mjs refresh
 ```
 
-2. Set the desired version(s). Edit `release/desired.json` directly, or:
+2. Make sure the `## Unreleased` section of `CHANGELOG.md` describes what is
+   shipping (for units with a changelog — currently handoffkit). Apply promotes
+   it to the version heading, uses it as the GitHub Release notes, and
+   regenerates the docs changelog page; if it is empty a stub entry is written
+   and a warning printed.
+
+3. Set the desired version(s). Edit `release/desired.json` directly, or:
 
 ```bash
 node scripts/release.mjs bump <unit> <patch|minor|major|X.Y.Z>
@@ -73,7 +79,7 @@ node scripts/release.mjs bump <unit> <patch|minor|major|X.Y.Z>
 
 Units: `fusionkit-protocol`, `fusionkit-pypi`, `cursorkit`, `handoffkit`, `mlx-lm`.
 
-3. Produce the plan and present the diff to the user:
+4. Produce the plan and present the diff to the user:
 
 ```bash
 node scripts/release.mjs plan          # add -target=<unit> to scope
@@ -83,9 +89,9 @@ Summarize what will bump, what pin propagates, and what publishes. If the plan
 prints a `pin-lag` warning (protocol changing but a consumer not being
 released), tell the user and offer to bump that consumer too.
 
-4. Confirm with the user. Releases are irreversible (they publish to npm/PyPI).
+5. Confirm with the user. Releases are irreversible (they publish to npm/PyPI).
 
-5. Apply:
+6. Apply:
 
 ```bash
 node scripts/release.mjs apply --auto-approve            # blocking: waits for each workflow
@@ -103,7 +109,7 @@ unit in `release/workspace.release.json`, or pass `--include <path>` (repeatable
 at apply time. If you have intentionally staged other edits, add `--allow-dirty`
 (only tool-touched + `--include` files are staged regardless).
 
-6. Report the per-unit apply summary, including any failure (apply stops at the
+7. Report the per-unit apply summary, including any failure (apply stops at the
 first failure so dependents are not released against a broken upstream).
 
 ## Important constraints
