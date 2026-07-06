@@ -30,6 +30,7 @@
     "@ai-sdk/provider": "4.0.2",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/runtime-utils": "workspace:*",
+    "@fusionkit/tracing": "workspace:*",
     "ai": "6.0.200"
   },
   "keywords": [

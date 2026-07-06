@@ -1,4 +1,5 @@
-import { emitTrace, getTraceEmitter, newSpanId } from "@fusionkit/protocol";
+import { ATTR } from "@fusionkit/protocol";
+import { startFusionSpan } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 
 import { joinPath } from "./backend.js";
@@ -36,7 +37,6 @@ function jsonError(status: number, message: string): Response {
 export type FusionVendorProxyOptions = {
   defaultModel?: string;
   onRateLimit: OnRateLimitPolicy;
-  mintTraceId: () => string;
   logger: FusionGatewayLogger;
   costMeter: FusionCostMeter;
   passthroughFor: (requested: string | undefined) => PassthroughModel | undefined;
@@ -46,7 +46,6 @@ export type FusionVendorProxyOptions = {
 export class FusionVendorProxy {
   readonly #defaultModel: string | undefined;
   readonly #onRateLimit: OnRateLimitPolicy;
-  readonly #mintTraceId: () => string;
   readonly #logger: FusionGatewayLogger;
   readonly #cost: FusionCostMeter;
   readonly #passthroughFor: (requested: string | undefined) => PassthroughModel | undefined;
@@ -55,7 +54,6 @@ export class FusionVendorProxy {
   constructor(options: FusionVendorProxyOptions) {
     this.#defaultModel = options.defaultModel;
     this.#onRateLimit = options.onRateLimit;
-    this.#mintTraceId = options.mintTraceId;
     this.#logger = options.logger;
     this.#cost = options.costMeter;
     this.#passthroughFor = options.passthroughFor;
@@ -67,19 +65,15 @@ export class FusionVendorProxy {
     if (target === undefined) throw new Error("vendor proxy invoked without a native model");
     const chat = req.chat;
     const signal = this.#signalFor(req);
-    const traceId = this.#mintTraceId();
-    const spanId = newSpanId();
     const costSessionId = req.sessionKey;
-    const traceEnabled = getTraceEmitter().isEnabled();
-    if (traceEnabled) {
-      emitTrace({
-        component: "gateway",
-        event_type: "session.started",
-        traceId,
-        spanId,
-        payload: { dialect: "native-passthrough", model: target.modelId, endpoint_id: target.endpointId }
-      });
-    }
+    // A passthrough request is its own tiny trace: one root span per proxy call.
+    const span = startFusionSpan("gateway", "fusion.passthrough", undefined, {
+      [ATTR.FUSION_DIALECT]: "native-passthrough",
+      [ATTR.GEN_AI_REQUEST_MODEL]: target.modelId,
+      [ATTR.FUSION_MODEL_ID]: target.modelId,
+      [ATTR.FUSION_ENDPOINT_ID]: target.endpointId,
+      [ATTR.FUSION_SESSION_ID]: req.sessionKey
+    });
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (req.modelCallId) headers["x-velum-model-call-id"] = req.modelCallId;
     const body = JSON.stringify({ ...chat, model: target.endpointId });
@@ -89,23 +83,13 @@ export class FusionVendorProxy {
       body,
       ...(signal ? { signal } : {})
     });
-    if (traceEnabled) {
-      emitTrace({
-        component: "gateway",
-        event_type: "session.finished",
-        traceId,
-        spanId,
-        payload: {
-          status: response.ok ? "succeeded" : "failed",
-          model: target.modelId,
-          endpoint_id: target.endpointId,
-          http_status: response.status
-        }
-      });
-    }
+    span.end({
+      status: response.ok ? "succeeded" : "failed",
+      attributes: { "http.response.status_code": response.status }
+    });
 
     if (this.#onRateLimit === "passthrough") {
-      await this.#cost.meterResponseClone(response, costSessionId, target.modelId, traceId, spanId);
+      await this.#cost.meterResponseClone(response, costSessionId, target.modelId, span.carrier);
       return { kind: "response", response };
     }
 
@@ -120,7 +104,7 @@ export class FusionVendorProxy {
     if (chat.stream === true && contentType.includes("text/event-stream") && response.body !== null) {
       return this.#proxyVendorStream(response.body, target, req, costSessionId);
     }
-    await this.#cost.meterResponseClone(response, costSessionId, target.modelId, traceId, spanId);
+    await this.#cost.meterResponseClone(response, costSessionId, target.modelId, span.carrier);
     return { kind: "response", response };
   }
 

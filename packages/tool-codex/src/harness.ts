@@ -13,7 +13,7 @@ import {
 } from "@fusionkit/model-gateway";
 import type { Backend, CapturedTrajectory } from "@fusionkit/model-gateway";
 import { KernelBackend, panelMemberPreamble, traceCandidate } from "@fusionkit/ensemble";
-import type { FusedSubagentAccess } from "@fusionkit/ensemble";
+import type { FusedSubagentAccess, FusionTraceCarrier } from "@fusionkit/ensemble";
 import { PROVIDERS, SUBSCRIPTIONS } from "@fusionkit/registry";
 import {
   buildChildEnv,
@@ -125,9 +125,8 @@ export type CodexHarnessOptions = {
    * endpoint id as its model (so the router routes to that panel member).
    */
   modelEndpoints?: Record<string, string>;
-  /** Observability correlation for per-candidate trace events. */
-  traceId?: string;
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing run/turn; candidates span under it. */
+  trace?: FusionTraceCarrier;
   turn?: number;
   /**
    * When true, a per-member identity line (which panel member this model is) is
@@ -796,8 +795,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
       // candidate's trajectory live (started now, finished when the run completes).
       const tracer = traceCandidate(
         {
-          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.trace !== undefined ? { trace: options.trace } : {}),
           ...(options.turn !== undefined ? { turn: options.turn } : {})
         },
         {

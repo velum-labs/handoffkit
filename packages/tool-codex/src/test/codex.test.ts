@@ -8,8 +8,8 @@ import { test } from "node:test";
 
 import { createMockHarness, ensemble } from "@fusionkit/ensemble";
 import type { EnsembleDescriptor } from "@fusionkit/ensemble";
-import { addTraceListener, removeTraceListener } from "@fusionkit/protocol";
-import type { FusionTraceEvent } from "@fusionkit/protocol";
+import { addSpanListener, initFusionTracing, newSessionCarrier, removeSpanListener, spanTraceId } from "@fusionkit/tracing";
+import type { ReadableSpan } from "@fusionkit/tracing";
 
 import {
   codexAgentRoles,
@@ -653,12 +653,13 @@ test("defaultCodexRunner reports a non-zero exit code from the process", async (
 test("Codex OpenAI-compatible provider goes through Responses gateway records", async () => {
   const { outputRoot, cleanup } = tempOutputRoot();
   const upstream = await startOpenAiCompatibleServer();
-  const traceId = "trace_codex_live_capture";
-  const traceEvents: FusionTraceEvent[] = [];
-  const listener = (event: FusionTraceEvent): void => {
-    if (event.trace_id === traceId) traceEvents.push(event);
+  initFusionTracing({ serviceName: "codex-test" });
+  const session = newSessionCarrier();
+  const traceSpans: ReadableSpan[] = [];
+  const listener = (span: ReadableSpan): void => {
+    if (spanTraceId(span) === session.traceId) traceSpans.push(span);
   };
-  addTraceListener(listener);
+  addSpanListener(listener);
   let gatewayBaseUrl: string | undefined;
   const runner: CodexExecRunner = async (input) => {
     const codexHome = input.env.CODEX_HOME;
@@ -679,7 +680,7 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
     assert.equal(response.status, 200);
     await response.text();
     assert.ok(
-      traceEvents.some((event) => event.event_type === "trajectory.step"),
+      traceSpans.some((span) => span.name === "fusion.candidate.step"),
       "gateway capture emits a live trajectory step before Codex exits"
     );
     return { stdout: "codex gateway ok", stderr: "", exitCode: 0 };
@@ -695,7 +696,7 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
             baseUrl: `${upstream.url}/v1`,
             defaultModel: "local-model"
           },
-          traceId,
+          trace: session.carrier,
           runner
         })
       })
@@ -708,11 +709,11 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
     assert.equal(result.modelCallRecords[0]?.metadata?.dialect, "openai-responses");
     assert.equal(result.modelCallRecords[0]?.model, "local-model");
     assert.equal(result.candidates[0]?.metadata?.model_call_count, 1);
-    const stepIndex = traceEvents.findIndex((event) => event.event_type === "trajectory.step");
-    const finishedIndex = traceEvents.findIndex((event) => event.event_type === "harness.candidate.finished");
+    const stepIndex = traceSpans.findIndex((span) => span.name === "fusion.candidate.step");
+    const finishedIndex = traceSpans.findIndex((span) => span.name === "fusion.candidate");
     assert.ok(stepIndex >= 0 && finishedIndex >= 0 && stepIndex < finishedIndex);
   } finally {
-    removeTraceListener(listener);
+    removeSpanListener(listener);
     await upstream.close();
     cleanup();
   }

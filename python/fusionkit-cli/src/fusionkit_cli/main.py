@@ -137,8 +137,10 @@ def serve(
         )
         raise typer.Exit(code=1)
     import uvicorn
+    from fusionkit_core.trace import setup_fusion_tracing
     from fusionkit_server.app import create_app
 
+    setup_fusion_tracing("fusionkit-router")
     fusion_config = load_config(resolved)
     api = create_app(fusion_config)
     uvicorn.run(api, host=host, port=port)

@@ -47,7 +47,6 @@ function makeReq(overrides: Partial<FrontdoorRequestValue> = {}): FrontdoorReque
     chat: { messages: [] },
     sessionKey: "session",
     turn: 1,
-    judgeSpanId: "judge-span",
     streaming: false,
     ...overrides
   };

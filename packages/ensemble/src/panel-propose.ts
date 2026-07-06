@@ -12,8 +12,10 @@
  * substrate (`runFusionPanelWorkflow` is the k>1 sibling).
  */
 
-import { emitTrace, newSpanId } from "@fusionkit/protocol";
+import { ATTR } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import { jsonAttr, startFusionSpan } from "@fusionkit/tracing";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
 import { PanelGenerateOperator } from "./fusion-operators.js";
 import { FusionRuntime, StaticDAGScheduler, createArtifact } from "./runtime.js";
@@ -39,8 +41,8 @@ export type ProposalPanelOptions = {
   fusionApiKey?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
-  traceId?: string;
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing turn; proposer spans nest under it. */
+  trace?: FusionTraceCarrier;
   turn?: number;
 };
 
@@ -141,23 +143,18 @@ async function proposeOne(
     options.signal !== undefined
       ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
       : AbortSignal.timeout(timeoutMs);
-  const candidateSpan = newSpanId();
-  if (options.traceId !== undefined) {
-    emitTrace({
-      component: "panel-model",
-      event_type: "harness.candidate.started",
-      traceId: options.traceId,
-      spanId: candidateSpan,
-      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
-      candidateId,
-      modelId: model.id,
-      payload: {
-        model: model.model,
-        harness: "propose",
-        ...(options.turn !== undefined ? { turn: options.turn } : {})
-      }
-    });
-  }
+  const identity = {
+    [ATTR.FUSION_CANDIDATE_ID]: candidateId,
+    [ATTR.FUSION_TRAJECTORY_ID]: candidateId,
+    [ATTR.FUSION_MODEL_ID]: model.id,
+    [ATTR.GEN_AI_REQUEST_MODEL]: model.model,
+    [ATTR.FUSION_TURN]: options.turn
+  };
+  const candidateSpan =
+    options.trace !== undefined
+      ? startFusionSpan("panel-model", "fusion.candidate", options.trace, identity)
+      : undefined;
+  candidateSpan?.marker("panel-model", "fusion.candidate.started", identity);
   let wire: WireTrajectory;
   try {
     const response = await fetch(chatCompletionsUrl(baseUrl), {
@@ -194,28 +191,23 @@ async function proposeOne(
   } catch (error) {
     wire = failedWire(candidateId, model, error instanceof Error ? error.message : String(error));
   }
-  if (options.traceId !== undefined) {
+  if (candidateSpan !== undefined) {
     const proposedCalls = (wire.items ?? []).filter((item) => item.type === "function_call");
-    emitTrace({
-      component: "panel-model",
-      event_type: "harness.candidate.finished",
-      traceId: options.traceId,
-      spanId: candidateSpan,
-      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
-      candidateId,
-      modelId: model.id,
-      payload: {
-        status: wire.status,
+    candidateSpan.end({
+      status: wire.status === "succeeded" ? "succeeded" : "failed",
+      attributes: {
         // What the narrator (and dashboard) mine: the outcome shape, a bounded
         // answer preview, and the proposed batch with bounded arguments.
-        finish_reason: wire.status !== "succeeded" ? "error" : proposedCalls.length > 0 ? "tool_calls" : "stop",
-        final_output_preview: wire.final_output.slice(0, 400),
-        proposed_calls: proposedCalls.map((item) => ({
-          ...(typeof item.name === "string" ? { name: item.name } : {}),
-          arguments_preview: (typeof item.arguments === "string" ? item.arguments : "").slice(0, 160)
-        })),
-        proposed_tool_calls: proposedCalls.length,
-        ...(options.turn !== undefined ? { turn: options.turn } : {})
+        [ATTR.FUSION_FINISH_REASON]:
+          wire.status !== "succeeded" ? "error" : proposedCalls.length > 0 ? "tool_calls" : "stop",
+        [ATTR.FUSION_FINAL_OUTPUT_PREVIEW]: wire.final_output.slice(0, 400),
+        [ATTR.FUSION_PROPOSED_CALLS]: jsonAttr(
+          proposedCalls.map((item) => ({
+            ...(typeof item.name === "string" ? { name: item.name } : {}),
+            arguments_preview: (typeof item.arguments === "string" ? item.arguments : "").slice(0, 160)
+          }))
+        ),
+        [ATTR.FUSION_TOOL_CALL_COUNT]: proposedCalls.length
       }
     });
   }

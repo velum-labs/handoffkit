@@ -1,5 +1,6 @@
-import { isFiniteK, newSpanId, newTraceId } from "@fusionkit/protocol";
+import { isFiniteK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import { newSpanId, newTraceId } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 import { withTimeout } from "@fusionkit/runtime-utils";
 
@@ -127,7 +128,6 @@ export class FusionBackend implements Backend {
     this.#vendor = new FusionVendorProxy({
       defaultModel: this.defaultModel,
       onRateLimit: options.onRateLimit ?? "fusion",
-      mintTraceId,
       logger,
       costMeter: this.#cost,
       passthroughFor: (model) => this.#passthroughFor(model),
@@ -166,7 +166,6 @@ export class FusionBackend implements Backend {
       turn: messages.filter(
         (message: ChatMessageLike) => message.role === "user" && !isHarnessNotification(message)
       ).length,
-      judgeSpanId: newSpanId(),
       streaming: chat.stream === true,
       ...(options.panelDepth !== undefined && options.panelDepth > 0
         ? { panelDepth: options.panelDepth }
@@ -250,8 +249,7 @@ export class FusionBackend implements Backend {
     this.#cost.meterPanelCandidates({
       sessionId: session.id,
       turn: req.turn,
-      traceId: session.traceId,
-      parentSpanId: session.sessionSpan,
+      trace: session.trace,
       meteredPanelTurns: session.meteredPanelTurns,
       candidates
     });

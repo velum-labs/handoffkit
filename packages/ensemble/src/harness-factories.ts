@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { isFiniteK } from "@fusionkit/protocol";
 import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
 import { runCliCapture } from "@fusionkit/runtime-utils";
+import { envOf } from "@fusionkit/tracing";
 import { gitText } from "@fusionkit/workspace";
 import { createAgentHarness } from "./agent.js";
 import { createCommandHarness } from "./command.js";
@@ -63,8 +64,7 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
         fallbackBaseUrl: normalizeFusionBackendUrl(options.fusionBackendUrl),
         ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
         ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-        ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-        ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+        ...(options.trace !== undefined ? { trace: options.trace } : {}),
         ...(options.turn !== undefined ? { turn: options.turn } : {}),
         ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
         ...(options.k !== undefined ? { k: options.k } : {})
@@ -84,7 +84,8 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
             FUSIONKIT_MODEL: model.model,
             FUSIONKIT_MODEL_ID: model.id,
             ...(options.fusionApiKey ? { FUSIONKIT_API_KEY: options.fusionApiKey } : {}),
-            ...(options.traceId ? { FUSION_TRACE_ID: options.traceId } : {})
+            // W3C env propagation: a fusion-aware child continues the trace.
+            ...(options.trace !== undefined ? envOf(options.trace) : {})
           };
         }
       });
@@ -141,7 +142,8 @@ export function descriptorFor(
         model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/router",
         apiKey: options.fusionApiKey,
         responseShape: responseShapeFor(kind),
-        ...(options.traceId !== undefined ? { traceId: options.traceId } : {})
+        ...(options.trace !== undefined ? { trace: options.trace } : {}),
+        ...(options.turn !== undefined ? { turn: options.turn } : {})
       })
     },
     policy: {

@@ -32,6 +32,7 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
     "@fusionkit/tools": "workspace:*",
+    "@fusionkit/tracing": "workspace:*",
     "@openai/codex-sdk": "0.142.5",
     "zod": "4.4.3"
   },

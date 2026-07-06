@@ -35,12 +35,16 @@ from fusionkit_core.config import (
 from fusionkit_core.judge import accumulate_tool_call, warn_malformed_tool_calls
 from fusionkit_core.registry import PROVIDER_DEFAULT_BASE_URL
 from fusionkit_core.trace import (
-    TRACE_ID_HEADER,
-    TRACE_SPAN_HEADER,
-    TRACE_TRAJECTORY_HEADER,
-    new_span_id,
+    ATTR,
+    candidate_baggage_of,
+    context_from_headers,
+    context_of_span,
+    emit_marker,
+    end_fusion_span,
+    json_attr,
+    setup_fusion_tracing,
+    start_fusion_span,
 )
-from fusionkit_core.trace import emit as trace_emit
 from fusionkit_core.types import ChatMessage, ToolCall
 
 
@@ -258,10 +262,21 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
             if self.path != "/v1/chat/completions":
                 self._send_json(404, {"error": {"message": "not found"}})
                 return
-            trace_id = self.headers.get(TRACE_ID_HEADER)
-            trajectory_id = self.headers.get(TRACE_TRAJECTORY_HEADER)
-            parent_span = self.headers.get(TRACE_SPAN_HEADER)
-            call_span = new_span_id()
+            trace = context_from_headers(dict(self.headers.items()))
+            correlation = candidate_baggage_of(trace)
+            identity = {
+                ATTR.GEN_AI_OPERATION_NAME: "chat",
+                ATTR.GEN_AI_PROVIDER_NAME: endpoint.provider,
+                ATTR.GEN_AI_REQUEST_MODEL: endpoint.model,
+                ATTR.FUSION_MODEL_ID: endpoint.id,
+                ATTR.FUSION_ENDPOINT_ID: endpoint.id,
+                ATTR.FUSION_CANDIDATE_ID: correlation.get("fusion.candidate.id"),
+                ATTR.FUSION_TRAJECTORY_ID: correlation.get("fusion.trajectory.id"),
+            }
+            call_span = start_fusion_span(
+                "panel-model", f"chat {endpoint.model}", trace, identity
+            )
+            call_ctx = context_of_span(call_span, trace) if call_span is not None else None
             try:
                 length = int(self.headers.get("content-length", "0"))
                 request = json.loads(self.rfile.read(length).decode("utf-8"))
@@ -286,21 +301,21 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                 if request.get("stream"):
                     # Real passthrough streaming: drain the provider's stream_chat
                     # straight to the client as chat.completion.chunk SSE events.
-                    self._serve_stream(messages, sampling, tools, tool_choice)
+                    try:
+                        self._serve_stream(messages, sampling, tools, tool_choice)
+                    except Exception as exc:
+                        end_fusion_span(call_span, error=str(exc))
+                        raise
+                    end_fusion_span(call_span)
                     return
-                trace_emit(
-                    component="panel-model",
-                    event_type="model.call.started",
-                    trace_id=trace_id,
-                    span_id=call_span,
-                    parent_span_id=parent_span,
-                    trajectory_id=trajectory_id,
-                    model_id=endpoint.id,
-                    payload={
-                        "model": endpoint.model,
-                        "provider": endpoint.provider,
-                        "message_count": len(messages),
-                        "tool_count": len(tools) if tools else 0,
+                emit_marker(
+                    "panel-model",
+                    "fusion.model_call.started",
+                    call_ctx,
+                    {
+                        **identity,
+                        ATTR.FUSION_MESSAGE_COUNT: len(messages),
+                        ATTR.FUSION_TOOL_COUNT: len(tools) if tools else 0,
                     },
                 )
 
@@ -326,33 +341,29 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                     finish_reason = "tool_calls"
                 else:
                     finish_reason = response.finish_reason or "stop"
-                trace_emit(
-                    component="panel-model",
-                    event_type="model.call.finished",
-                    trace_id=trace_id,
-                    span_id=call_span,
-                    parent_span_id=parent_span,
-                    trajectory_id=trajectory_id,
-                    model_id=endpoint.id,
-                    payload={
-                        "model": endpoint.model,
-                        "provider": endpoint.provider,
-                        "latency_s": round(latency_s, 3),
-                        "finish_reason": finish_reason,
-                        "tool_call_count": len(response.tool_calls),
-                        "content_preview": (response.content or "")[:400],
-                        "usage": {
-                            "prompt_tokens": response.usage.prompt_tokens,
-                            "completion_tokens": response.usage.completion_tokens,
-                            "total_tokens": response.usage.total_tokens,
-                        },
-                        "provider_cost": (
-                            response.provider_cost.model_dump(mode="json", exclude_none=True)
-                            if response.provider_cost is not None
-                            else None
-                        ),
-                    },
-                )
+                if call_span is not None:
+                    call_span.set_attributes(
+                        {
+                            key: value
+                            for key, value in {
+                                ATTR.FUSION_USAGE: json_attr(
+                                    {
+                                        "prompt_tokens": response.usage.prompt_tokens,
+                                        "completion_tokens": response.usage.completion_tokens,
+                                        "total_tokens": response.usage.total_tokens,
+                                        "latency_s": round(latency_s, 3),
+                                    }
+                                ),
+                                ATTR.GEN_AI_USAGE_INPUT_TOKENS: response.usage.prompt_tokens,
+                                ATTR.GEN_AI_USAGE_OUTPUT_TOKENS: response.usage.completion_tokens,
+                                ATTR.GEN_AI_RESPONSE_FINISH_REASONS: [finish_reason],
+                                ATTR.FUSION_FINISH_REASON: finish_reason,
+                                ATTR.FUSION_TOOL_CALL_COUNT: len(response.tool_calls),
+                                ATTR.FUSION_CONTENT: (response.content or "")[:400],
+                            }.items()
+                            if value is not None
+                        }
+                    )
                 print(
                     json.dumps(
                         {
@@ -397,23 +408,10 @@ def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
                         mode="json", exclude_none=True
                     )
                 self._send_json(200, payload)
+                end_fusion_span(call_span)
             except Exception as exc:  # noqa: BLE001 - surface as an OpenAI error body
                 traceback.print_exc()
-                trace_emit(
-                    component="panel-model",
-                    event_type="model.call.finished",
-                    trace_id=trace_id,
-                    span_id=call_span,
-                    parent_span_id=parent_span,
-                    trajectory_id=trajectory_id,
-                    model_id=endpoint.id,
-                    payload={
-                        "model": endpoint.model,
-                        "provider": endpoint.provider,
-                        "error": str(exc),
-                        "error_type": exc.__class__.__name__,
-                    },
-                )
+                end_fusion_span(call_span, error=f"{exc.__class__.__name__}: {exc}")
                 # The trace payload keeps the real error server-side; the HTTP
                 # body stays generic so internals never leak to clients.
                 self._send_json(
@@ -463,6 +461,7 @@ def build_endpoint(
 
 
 def serve_single_endpoint(endpoint: ModelEndpoint, *, host: str = "127.0.0.1", port: int) -> None:
+    setup_fusion_tracing("fusionkit-panel-model")
     print(
         json.dumps(
             {

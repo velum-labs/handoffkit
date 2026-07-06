@@ -4,12 +4,27 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../adapter-ai-sdk" },
-    { "path": "../kernel" },
-    { "path": "../protocol" },
-    { "path": "../registry" },
-    { "path": "../runtime-utils" }
+    {
+      "path": "../adapter-ai-sdk"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../protocol"
+    },
+    {
+      "path": "../registry"
+    },
+    {
+      "path": "../runtime-utils"
+    },
+    {
+      "path": "../tracing"
+    }
   ]
 }

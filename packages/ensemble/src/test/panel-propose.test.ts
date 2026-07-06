@@ -3,10 +3,21 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
 import { test } from "node:test";
 
-import { addTraceListener, removeTraceListener } from "@fusionkit/protocol";
-import type { FusionTraceEvent } from "@fusionkit/protocol";
+import {
+  addSpanListener,
+  attrJson,
+  attrNum,
+  attrStr,
+  initFusionTracing,
+  newSessionCarrier,
+  removeSpanListener,
+  spanTraceId
+} from "@fusionkit/tracing";
+import type { ReadableSpan } from "@fusionkit/tracing";
 
 import { runProposalPanels } from "../panel-propose.js";
+
+initFusionTracing({ serviceName: "panel-propose-test" });
 
 type RecordedRequest = { url: string; body: Record<string, unknown> };
 
@@ -158,27 +169,29 @@ test("finished trace payloads carry the structural narration fields", async () =
       }
     ]
   }));
-  const events: FusionTraceEvent[] = [];
-  const listener = (event: FusionTraceEvent): void => {
-    if (event.event_type === "harness.candidate.finished") events.push(event);
+  const session = newSessionCarrier();
+  const spans: ReadableSpan[] = [];
+  const listener = (span: ReadableSpan): void => {
+    if (span.name === "fusion.candidate" && spanTraceId(span) === session.traceId) spans.push(span);
   };
-  addTraceListener(listener);
+  addSpanListener(listener);
   try {
     await runProposalPanels({
       models: [{ id: "alpha", model: "provider/alpha" }],
       messages: [{ role: "user", content: "go" }],
       fusionBackendUrl: endpoint.url,
-      traceId: "trace_propose_payload"
+      trace: session.carrier
     });
-    const payload = events.find((event) => event.trace_id === "trace_propose_payload")?.payload ?? {};
-    assert.equal(payload.finish_reason, "tool_calls");
-    assert.equal(payload.final_output_preview, "editing now");
-    assert.deepEqual(payload.proposed_calls, [
+    const candidate = spans[0];
+    assert.ok(candidate, "the proposer emitted its candidate span");
+    assert.equal(attrStr(candidate, "fusion.finish_reason"), "tool_calls");
+    assert.equal(attrStr(candidate, "fusion.final_output_preview"), "editing now");
+    assert.deepEqual(attrJson(candidate, "fusion.proposed_calls"), [
       { name: "write_file", arguments_preview: '{"path":"a.ts"}' }
     ]);
-    assert.equal(payload.proposed_tool_calls, 1);
+    assert.equal(attrNum(candidate, "fusion.tool_call_count"), 1);
   } finally {
-    removeTraceListener(listener);
+    removeSpanListener(listener);
     await endpoint.close();
   }
 });

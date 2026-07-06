@@ -47,8 +47,7 @@ export const claudeTool: ToolIntegration = {
       ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
-      ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+      ...(options.trace !== undefined ? { trace: options.trace } : {}),
       ...(options.turn !== undefined ? { turn: options.turn } : {}),
       ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
       ...(options.fusedSubagents !== undefined ? { fusedSubagents: options.fusedSubagents } : {})
@@ -116,8 +115,7 @@ function claudeDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter
   return createDriverHarness({
     driver: createClaudeDriver(),
     fusionBackendUrl: options.fusionBackendUrl,
-    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),
     configForModel: (route) =>

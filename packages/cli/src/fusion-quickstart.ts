@@ -62,6 +62,8 @@ import {
   loadEnvFileInto
 } from "./fusion/env.js";
 import type { EnsembleRunSpec, FusionTool, PanelModelSpec, RunFusionOptions, StackReporter } from "./fusion/env.js";
+import { initFusionTracing, shutdownFusionTracing } from "@fusionkit/tracing";
+
 import { openUrl, startObservability } from "./fusion/observability.js";
 import type { Observability } from "./fusion/observability.js";
 import { ensureLocalPanelSupported } from "./fusion/platform.js";
@@ -601,10 +603,11 @@ export async function runFusion(
   if (boot !== undefined) disposers.push(() => boot.stop());
   const report: StackReporter | undefined = boot?.report;
 
-  // When --observe is set, boot the dashboard and export the trace env BEFORE
-  // anything starts, so the in-process gateway/ensemble/agent emitters and every
-  // spawned child (panel servers, synthesis serve, cursor bridge) inherit it.
-  // Without the flag, FUSION_TRACE_* stays unset and all emitters are no-ops.
+  // When --observe is set, boot the dashboard and export the standard OTLP env
+  // BEFORE anything starts, so the in-process gateway/ensemble/agent tracers
+  // and every spawned child (panel servers, synthesis serve, cursor bridge)
+  // export spans to it. Without the flag (and without a user-provided
+  // OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) nothing is exported.
   let observability: Observability | undefined;
   let stack: FusionStack;
   try {
@@ -621,11 +624,12 @@ export async function runFusion(
           ...(report !== undefined ? { report } : {})
         });
         disposers.push(() => observability?.close() ?? Promise.resolve());
-        process.env.FUSION_TRACE_URL = observability.ingestUrl;
-        process.env.FUSION_TRACE_DIR = observability.traceDir;
+        // A user-configured endpoint (e.g. PostHog) wins; --observe fills the
+        // default so the local dashboard receives the spans.
+        process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ??= observability.otlpUrl;
         if (boot === undefined) {
           log(`fusion: observability dashboard at ${observability.url}`);
-          log(`fusion: trace events -> ${observability.ingestUrl} (jsonl fallback in ${observability.traceDir})`);
+          log(`fusion: spans -> ${observability.otlpUrl} (OTLP/HTTP)`);
         }
         openUrl(observability.url);
       } catch (error) {
@@ -635,6 +639,10 @@ export async function runFusion(
         else log(`fusion: observability dashboard unavailable; continuing without it (${first})`);
       }
     }
+    // Install the tracer provider now that the OTLP endpoint (if any) is known:
+    // the narrator's in-process listener always works; export is env-gated.
+    initFusionTracing({ serviceName: "fusionkit" });
+    disposers.push(() => shutdownFusionTracing());
 
     const panelHarness = toolRegistry.panelHarnessKindFor(tool);
     // B17: finite k>1 (stop at the k-th step boundary) needs a member loop

@@ -10,6 +10,7 @@ import type {
 } from "@fusionkit/ensemble";
 
 import { traceCandidate } from "@fusionkit/ensemble";
+import type { FusionTraceCarrier } from "@fusionkit/ensemble";
 
 import { createCursorStreamStepEmitter, parseCursorStreamJson } from "./stream-trajectory.js";
 import {
@@ -93,9 +94,8 @@ export type CursorHarnessOptions = {
    * panel member).
    */
   modelEndpoints?: Record<string, string>;
-  /** Observability correlation for per-candidate trace events. */
-  traceId?: string;
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing run/turn; candidates span under it. */
+  trace?: FusionTraceCarrier;
   turn?: number;
 };
 
@@ -440,8 +440,7 @@ export function createCursorHarness(
       // candidate's trajectory live (started now, finished when the run completes).
       const tracer = traceCandidate(
         {
-          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.trace !== undefined ? { trace: options.trace } : {}),
           ...(options.turn !== undefined ? { turn: options.turn } : {})
         },
         {

@@ -1,14 +1,7 @@
-import {
-  emitTrace,
-  getTraceEmitter,
-  isFiniteK,
-  judgeFinalPayload,
-  judgeRequestPayload,
-  judgeThinkingPayload,
-  panelModeForK,
-  TRACE_ID_HEADER
-} from "@fusionkit/protocol";
+import { ATTR, isFiniteK, panelModeForK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import { headersOf, isFusionTracingActive, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
+import type { FusionSpan } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 import { withDeadline } from "@fusionkit/runtime-utils";
 
@@ -104,6 +97,21 @@ function isTerminalJudgeStep(toolCalls: unknown, finishReason?: string): boolean
   return calls.length === 0 && finishReason !== "tool_calls";
 }
 
+function synthesisField(synthesis: unknown, key: string): string | undefined {
+  if (synthesis === null || typeof synthesis !== "object") return undefined;
+  const value = (synthesis as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function usageTokens(usage: unknown): { input?: number; output?: number } | undefined {
+  if (usage === null || typeof usage !== "object") return undefined;
+  const source = usage as Record<string, unknown>;
+  const input = typeof source.prompt_tokens === "number" ? source.prompt_tokens : undefined;
+  const output = typeof source.completion_tokens === "number" ? source.completion_tokens : undefined;
+  if (input === undefined && output === undefined) return undefined;
+  return { ...(input !== undefined ? { input } : {}), ...(output !== undefined ? { output } : {}) };
+}
+
 export type FusionTurnAssemblerOptions = {
   stepUrl: string;
   runFuseStep: FuseStepRunner;
@@ -134,6 +142,8 @@ export class FusionTurnAssembler {
   readonly #cost: FusionCostMeter;
   readonly #routeFor: (req: FrontdoorRequestValue) => FusedModelRoute | undefined;
   readonly #signalFor: (req: FrontdoorRequestValue) => AbortSignal | undefined;
+  /** Live judge span per front-door request (one judge phase per fused turn). */
+  readonly #judgeSpans = new WeakMap<FrontdoorRequestValue, FusionSpan>();
 
   constructor(options: FusionTurnAssemblerOptions) {
     this.#stepUrl = options.stepUrl;
@@ -158,6 +168,7 @@ export class FusionTurnAssembler {
     const k = this.#routeFor(req)?.k;
     return createTurnNarrator({
       traceId: session.traceId,
+      trace: session.trace,
       turn: req.turn,
       round: this.#sessions.nextNarrationRound(req.sessionKey, req.turn),
       ...(judgeModel !== undefined ? { judgeModel } : {}),
@@ -173,7 +184,7 @@ export class FusionTurnAssembler {
     this.#emitJudgeRequest(req, session, candidates);
     return this.#runFuseStep({
       stepUrl: this.#stepUrl,
-      headers: this.#buildHeaders(req, session),
+      headers: this.#buildHeaders(req),
       body: this.#buildStepBody(req, candidates),
       signal: withDeadline(this.#signalFor(req), this.#stepTimeoutMs),
       streaming: false
@@ -198,7 +209,7 @@ export class FusionTurnAssembler {
     }
     return this.#runFuseStep({
       stepUrl: this.#stepUrl,
-      headers: this.#buildHeaders(req, session),
+      headers: this.#buildHeaders(req),
       body: this.#buildStepBody(req, candidates),
       signal: withDeadline(this.#signalFor(req), this.#stepTimeoutMs),
       streaming: true
@@ -235,8 +246,7 @@ export class FusionTurnAssembler {
           turn: req.turn,
           ...(providerCost !== undefined ? { providerCost } : {})
         },
-        session.traceId,
-        req.judgeSpanId
+        session.trace
       );
       return new Response(JSON.stringify(payload), {
         status: 200,
@@ -248,8 +258,7 @@ export class FusionTurnAssembler {
       response,
       req.sessionKey,
       fusedCostModel,
-      session.traceId,
-      req.judgeSpanId,
+      session.trace,
       "judge_synth",
       req.turn
     );
@@ -268,12 +277,11 @@ export class FusionTurnAssembler {
         turn: req.turn,
         ...(providerCost !== undefined ? { providerCost } : {})
       },
-      session.traceId,
-      req.judgeSpanId
+      session.trace
     );
     const assembled = assembleSseContent(sseBuffer);
     this.#stashJudgePick(session, req.turn, assembled.fusion, assembled.toolCalls);
-    if (!getTraceEmitter().isEnabled()) return;
+    if (!isFusionTracingActive()) return;
     if (isTerminalJudgeStep(assembled.toolCalls, assembled.finishReason)) {
       const synthesis = synthesisOf(assembled.fusion);
       this.#emitJudgeFinal(req, session, {
@@ -320,10 +328,12 @@ export class FusionTurnAssembler {
     return JSON.stringify(stepBody);
   }
 
-  #buildHeaders(req: FrontdoorRequestValue, session: FusionBackendKernelSessionState): Record<string, string> {
+  #buildHeaders(req: FrontdoorRequestValue): Record<string, string> {
+    const judgeSpan = this.#judgeSpans.get(req);
     const headers: Record<string, string> = {
       "content-type": "application/json",
-      [TRACE_ID_HEADER]: session.traceId
+      // The Python fuse step continues this turn's judge span via traceparent.
+      ...(judgeSpan !== undefined ? headersOf(judgeSpan.carrier) : {})
     };
     if (req.modelCallId) headers["x-velum-model-call-id"] = req.modelCallId;
     return headers;
@@ -338,45 +348,71 @@ export class FusionTurnAssembler {
     return this.#routeFor(req)?.judgeModelName ?? this.#judgeModel;
   }
 
+  /** The turn's judge span: opened at the first judge signal, ended at judge final. */
+  #judgeSpan(req: FrontdoorRequestValue, session: FusionBackendKernelSessionState): FusionSpan {
+    const existing = this.#judgeSpans.get(req);
+    if (existing !== undefined) return existing;
+    const judgeModel = this.#judgeModelNameFor(req);
+    const span = startFusionSpan("judge", "fusion.judge", session.trace, {
+      [ATTR.FUSION_TURN]: req.turn,
+      [ATTR.FUSION_JUDGE_MODEL]: judgeModel,
+      [ATTR.FUSION_SESSION_ID]: req.sessionKey
+    });
+    this.#judgeSpans.set(req, span);
+    return span;
+  }
+
   #emitJudgeRequest(
     req: FrontdoorRequestValue,
     session: FusionBackendKernelSessionState,
     candidates: readonly WireTrajectory[]
   ): void {
-    if (!getTraceEmitter().isEnabled()) return;
+    if (!isFusionTracingActive()) return;
     const judgeModel = this.#judgeModelNameFor(req);
-    emitTrace({
-      component: "judge",
-      event_type: "judge.request",
-      traceId: session.traceId,
-      spanId: req.judgeSpanId,
-      parentSpanId: session.sessionSpan,
-      payload: judgeRequestPayload({
-        ...(judgeModel !== undefined ? { judgeModel } : {}),
-        messages: req.chat.messages ?? [],
-        trajectories: [...candidates],
-        ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
-        ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
-        trajectoryIds: candidates.map((candidate) => candidate.trajectory_id),
-        turn: req.turn
-      })
+    this.#judgeSpan(req, session).marker("judge", "fusion.judge.request", {
+      [ATTR.FUSION_JUDGE_MODEL]: judgeModel,
+      [ATTR.FUSION_TURN]: req.turn,
+      [ATTR.FUSION_MESSAGES]: jsonAttr(req.chat.messages ?? []),
+      [ATTR.FUSION_TRAJECTORIES]: jsonAttr([...candidates]),
+      [ATTR.FUSION_TOOLS]: jsonAttr(req.chat.tools),
+      [ATTR.FUSION_TRAJECTORY_IDS]: candidates.map((candidate) => String(candidate.trajectory_id))
     });
   }
 
   #emitJudgeFinal(
     req: FrontdoorRequestValue,
     session: FusionBackendKernelSessionState,
-    input: Parameters<typeof judgeFinalPayload>[0]
+    input: {
+      httpStatus?: number;
+      content?: string;
+      finalOutput?: string;
+      synthesis?: unknown;
+      usage?: unknown;
+      error?: string;
+    }
   ): void {
-    if (!getTraceEmitter().isEnabled()) return;
-    emitTrace({
-      component: "judge",
-      event_type: "judge.final",
-      traceId: session.traceId,
-      spanId: req.judgeSpanId,
-      parentSpanId: session.sessionSpan,
-      payload: judgeFinalPayload({ ...input, turn: req.turn })
+    if (this.#judgeSpans.get(req) === undefined && !isFusionTracingActive()) return;
+    const span = this.#judgeSpan(req, session);
+    const usage = usageTokens(input.usage);
+    const finalOutput = input.finalOutput ?? input.content;
+    span.end({
+      status: input.error !== undefined ? "failed" : "succeeded",
+      ...(input.error !== undefined ? { error: input.error } : {}),
+      attributes: {
+        [ATTR.FUSION_TURN]: req.turn,
+        [ATTR.FUSION_FINAL_OUTPUT]: finalOutput,
+        [ATTR.FUSION_CONTENT]: input.content,
+        [ATTR.FUSION_SYNTHESIS]: jsonAttr(input.synthesis),
+        [ATTR.FUSION_DECISION]: synthesisField(input.synthesis, "decision"),
+        [ATTR.FUSION_SELECTED_TRAJECTORY_ID]: synthesisField(input.synthesis, "selected_trajectory_id"),
+        [ATTR.FUSION_RATIONALE]: synthesisField(input.synthesis, "rationale"),
+        [ATTR.FUSION_USAGE]: jsonAttr(input.usage),
+        [ATTR.GEN_AI_USAGE_INPUT_TOKENS]: usage?.input,
+        [ATTR.GEN_AI_USAGE_OUTPUT_TOKENS]: usage?.output,
+        "http.response.status_code": input.httpStatus
+      }
     });
+    this.#judgeSpans.delete(req);
   }
 
   #emitJudgeStep(
@@ -384,24 +420,19 @@ export class FusionTurnAssembler {
     session: FusionBackendKernelSessionState,
     input: { content?: string; toolCalls?: unknown[]; usage?: unknown }
   ): void {
-    if (!getTraceEmitter().isEnabled()) return;
+    if (this.#judgeSpans.get(req) === undefined && !isFusionTracingActive()) return;
     const toolCallCount = input.toolCalls?.length ?? 0;
     const rawAnalysis =
       input.content !== undefined && input.content.length > 0
         ? input.content
         : `judge requested ${toolCallCount} tool call(s)`;
-    emitTrace({
-      component: "judge",
-      event_type: "judge.thinking",
-      traceId: session.traceId,
-      spanId: req.judgeSpanId,
-      parentSpanId: session.sessionSpan,
-      payload: judgeThinkingPayload({
-        rawAnalysis,
-        ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
-        ...(input.usage !== undefined ? { usage: input.usage } : {}),
-        turn: req.turn
-      })
+    this.#judgeSpan(req, session).marker("judge", "fusion.judge.thinking", {
+      [ATTR.FUSION_TURN]: req.turn,
+      [ATTR.FUSION_RAW_ANALYSIS]: rawAnalysis,
+      [ATTR.FUSION_CONTENT]: input.content,
+      [ATTR.FUSION_TERMINAL]: false,
+      [ATTR.FUSION_TOOL_CALLS]: jsonAttr(input.toolCalls),
+      [ATTR.FUSION_USAGE]: jsonAttr(input.usage)
     });
   }
 
@@ -410,7 +441,7 @@ export class FusionTurnAssembler {
     response: Response,
     session: FusionBackendKernelSessionState
   ): void {
-    if (!getTraceEmitter().isEnabled()) return;
+    if (!isFusionTracingActive()) return;
     const clone = response.clone();
     void (async () => {
       try {

@@ -1,9 +1,19 @@
-import type { RawEnvironment, StoredEvent } from "./types";
+import { attrBool, attrNum, attrStr, candidateIdOf, modelIdOf } from "./types";
+import type { RawEnvironment, StoredSpan } from "./types";
 
 /**
- * Pure cross-session aggregations for the Models and Environments pages. Kept
- * dependency-free so they can be unit tested directly off a flat event list.
+ * Pure cross-session aggregations for the Models, Judge, and Environments
+ * pages, folded from flat span lists. Kept dependency-free so they can be
+ * unit tested directly.
  */
+
+/** Total tokens carried by a usage blob (total, or prompt + completion). */
+export function tokensOf(usage: Record<string, unknown>): number {
+  if (typeof usage.total_tokens === "number") return usage.total_tokens;
+  const prompt = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
+  const completion = typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0;
+  return prompt + completion;
+}
 
 export type ModelRollup = {
   modelId: string;
@@ -19,38 +29,13 @@ export type ModelRollup = {
   lastTs: number;
 };
 
-function obj(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-}
-
-/** Total tokens carried by a usage payload (total, or prompt + completion). */
-export function tokensOf(usage: Record<string, unknown>): number {
-  if (typeof usage.total_tokens === "number") return usage.total_tokens;
-  const prompt = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
-  const completion = typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0;
-  return prompt + completion;
-}
-
-/**
- * tokensOf for the gateway cost meter, whose usage payloads are camelCase
- * (internal TokenUsage) rather than the wire snake_case.
- */
-function tokensOfAnyCase(usage: Record<string, unknown>): number {
-  const snake = tokensOf(usage);
-  if (snake > 0) return snake;
-  if (typeof usage.totalTokens === "number") return usage.totalTokens;
-  const prompt = typeof usage.promptTokens === "number" ? usage.promptTokens : 0;
-  const completion = typeof usage.completionTokens === "number" ? usage.completionTokens : 0;
-  return prompt + completion;
-}
-
 type ModelAcc = {
   modelId: string;
   provider?: string;
-  calls: number;
+  started: Set<string>;
+  finished: Set<string>;
   succeeded: number;
   failed: number;
-  running: number;
   latencies: number[];
   totalTokens: number;
   promptTokens: number;
@@ -58,17 +43,22 @@ type ModelAcc = {
   lastTs: number;
 };
 
-export function rollupModels(events: StoredEvent[]): ModelRollup[] {
+/**
+ * Fold model-call spans (`chat …`, plus their live start markers) into
+ * per-model stats. A start marker with no finished chat span is a running
+ * call; the chat span carries GenAI usage, latency, and outcome.
+ */
+export function rollupModels(spans: StoredSpan[]): ModelRollup[] {
   const byModel = new Map<string, ModelAcc>();
   const ensure = (modelId: string): ModelAcc => {
     let acc = byModel.get(modelId);
     if (acc === undefined) {
       acc = {
         modelId,
-        calls: 0,
+        started: new Set(),
+        finished: new Set(),
         succeeded: 0,
         failed: 0,
-        running: 0,
         latencies: [],
         totalTokens: 0,
         promptTokens: 0,
@@ -80,45 +70,54 @@ export function rollupModels(events: StoredEvent[]): ModelRollup[] {
     return acc;
   };
 
-  for (const event of events) {
-    const payload = obj(event.payload);
-    const modelId = event.model_id ?? (typeof payload.model === "string" ? payload.model : undefined);
+  for (const span of spans) {
+    const modelId = modelIdOf(span);
     if (modelId === undefined) continue;
-    const acc = ensure(modelId);
-    acc.lastTs = Math.max(acc.lastTs, event.ts);
-    if (typeof payload.provider === "string") acc.provider = payload.provider;
 
-    if (event.event_type === "model.call.started") {
-      acc.calls += 1;
-      acc.running += 1;
-    } else if (event.event_type === "model.call.finished") {
-      if (acc.running > 0) acc.running -= 1;
-      if (payload.error !== undefined) acc.failed += 1;
+    if (span.name === "fusion.model_call.started") {
+      const acc = ensure(modelId);
+      acc.lastTs = Math.max(acc.lastTs, span.end_ms);
+      const provider = attrStr(span, "gen_ai.provider.name");
+      if (provider !== undefined) acc.provider = provider;
+      acc.started.add(span.parent_span_id ?? span.span_id);
+    } else if (span.name.startsWith("chat")) {
+      const acc = ensure(modelId);
+      acc.lastTs = Math.max(acc.lastTs, span.end_ms);
+      const provider = attrStr(span, "gen_ai.provider.name");
+      if (provider !== undefined) acc.provider = provider;
+      acc.finished.add(span.span_id);
+      if (span.status === "error") acc.failed += 1;
       else acc.succeeded += 1;
-      if (typeof payload.latency_s === "number") acc.latencies.push(payload.latency_s);
-      const usage = obj(payload.usage);
-      acc.totalTokens += tokensOf(usage);
-      if (typeof usage.prompt_tokens === "number") acc.promptTokens += usage.prompt_tokens;
-      if (typeof usage.completion_tokens === "number") acc.completionTokens += usage.completion_tokens;
+      const latency = span.end_ms - span.start_ms;
+      if (latency > 0) acc.latencies.push(latency / 1000);
+      const prompt = attrNum(span, "gen_ai.usage.input_tokens") ?? 0;
+      const completion = attrNum(span, "gen_ai.usage.output_tokens") ?? 0;
+      acc.promptTokens += prompt;
+      acc.completionTokens += completion;
+      acc.totalTokens += prompt + completion;
     }
   }
 
   return [...byModel.values()]
-    .map((acc): ModelRollup => ({
-      modelId: acc.modelId,
-      ...(acc.provider !== undefined ? { provider: acc.provider } : {}),
-      calls: acc.calls,
-      succeeded: acc.succeeded,
-      failed: acc.failed,
-      running: acc.running,
-      ...(acc.latencies.length > 0
-        ? { avgLatencyS: acc.latencies.reduce((sum, value) => sum + value, 0) / acc.latencies.length }
-        : {}),
-      totalTokens: acc.totalTokens,
-      promptTokens: acc.promptTokens,
-      completionTokens: acc.completionTokens,
-      lastTs: acc.lastTs
-    }))
+    .map((acc): ModelRollup => {
+      const calls = new Set([...acc.started, ...acc.finished]).size;
+      const running = [...acc.started].filter((spanId) => !acc.finished.has(spanId)).length;
+      return {
+        modelId: acc.modelId,
+        ...(acc.provider !== undefined ? { provider: acc.provider } : {}),
+        calls,
+        succeeded: acc.succeeded,
+        failed: acc.failed,
+        running,
+        ...(acc.latencies.length > 0
+          ? { avgLatencyS: acc.latencies.reduce((sum, value) => sum + value, 0) / acc.latencies.length }
+          : {}),
+        totalTokens: acc.totalTokens,
+        promptTokens: acc.promptTokens,
+        completionTokens: acc.completionTokens,
+        lastTs: acc.lastTs
+      };
+    })
     .sort((a, b) => b.calls - a.calls || b.lastTs - a.lastTs);
 }
 
@@ -145,11 +144,11 @@ export type CostRollup = {
 };
 
 /**
- * Fold the gateway cost meter's `log`/`cost.metered` events into spend
- * rollups. Costs are attributed to the priced model name and the metering
- * stage (panel, judge_synth, passthrough, local).
+ * Fold the gateway cost meter's `fusion.cost` markers into spend rollups.
+ * Costs are attributed to the priced model name and the metering stage
+ * (panel, judge_synth, passthrough).
  */
-export function rollupCost(events: StoredEvent[]): CostRollup {
+export function rollupCost(spans: StoredSpan[]): CostRollup {
   const perModel = new Map<string, CostModelRow>();
   const perStage = new Map<string, { stage: string; entries: number; usd: number }>();
   const sessions = new Set<string>();
@@ -157,23 +156,25 @@ export function rollupCost(events: StoredEvent[]): CostRollup {
   let entries = 0;
   let unknownEntries = 0;
 
-  for (const event of events) {
-    const payload = obj(event.payload);
-    if (event.event_type !== "log" || payload.kind !== "cost.metered") continue;
+  for (const span of spans) {
+    if (span.name !== "fusion.cost") continue;
     entries += 1;
-    const stage = typeof payload.stage === "string" ? payload.stage : "unknown";
-    const model = typeof payload.model === "string" ? payload.model : "unknown";
-    const usd = typeof payload.turn_cost_usd === "number" ? payload.turn_cost_usd : 0;
-    if (payload.unknown_cost === true) unknownEntries += 1;
+    const stage = attrStr(span, "fusion.cost.stage") ?? "unknown";
+    const model = attrStr(span, "fusion.cost.model") ?? "unknown";
+    const usd = attrNum(span, "fusion.cost.turn_usd") ?? 0;
+    if (attrBool(span, "fusion.cost.unknown") === true) unknownEntries += 1;
     totalUsd += usd;
-    if (usd > 0) sessions.add(event.trace_id);
+    if (usd > 0) sessions.add(span.trace_id);
+
+    const prompt = attrNum(span, "gen_ai.usage.input_tokens") ?? 0;
+    const completion = attrNum(span, "gen_ai.usage.output_tokens") ?? 0;
 
     const key = `${model}\u0000${stage}`;
     const row = perModel.get(key) ?? { model, stage, entries: 0, usd: 0, tokens: 0, lastTs: 0 };
     row.entries += 1;
     row.usd += usd;
-    row.tokens += tokensOfAnyCase(obj(payload.usage));
-    row.lastTs = Math.max(row.lastTs, event.ts);
+    row.tokens += prompt + completion;
+    row.lastTs = Math.max(row.lastTs, span.end_ms);
     perModel.set(key, row);
 
     const stageRow = perStage.get(stage) ?? { stage, entries: 0, usd: 0 };
@@ -234,12 +235,12 @@ type JudgeTraceAcc = {
 };
 
 /**
- * Fold judge terminal events across sessions into decision stats: how often
+ * Fold terminal judge spans across sessions into decision stats: how often
  * the judge synthesizes vs selects a candidate verbatim, which panel models
  * win selections, and how often synthesis came back empty. One decision per
- * session (the last terminal judge.final that carries one).
+ * session (the last judge span that carries one).
  */
-export function rollupJudge(events: StoredEvent[]): JudgeRollup {
+export function rollupJudge(spans: StoredSpan[]): JudgeRollup {
   const traces = new Map<string, JudgeTraceAcc>();
   const ensure = (traceId: string): JudgeTraceAcc => {
     let acc = traces.get(traceId);
@@ -256,29 +257,25 @@ export function rollupJudge(events: StoredEvent[]): JudgeRollup {
     return acc;
   };
 
-  for (const event of events) {
-    const payload = obj(event.payload);
-    const acc = ensure(event.trace_id);
-    acc.ts = Math.max(acc.ts, event.ts);
+  for (const span of spans) {
+    const acc = ensure(span.trace_id);
+    acc.ts = Math.max(acc.ts, span.end_ms);
 
-    if (event.event_type === "harness.candidate.started") {
-      if (event.candidate_id !== undefined && event.model_id !== undefined) {
-        acc.candidateModels.set(event.candidate_id, event.model_id);
-        acc.panelModels.add(event.model_id);
+    if (span.name === "fusion.candidate.started" || span.name === "fusion.candidate") {
+      const candidateId = candidateIdOf(span);
+      const modelId = attrStr(span, "fusion.model.id");
+      if (candidateId !== undefined && modelId !== undefined) {
+        acc.candidateModels.set(candidateId, modelId);
+        acc.panelModels.add(modelId);
       }
-    } else if (event.event_type === "judge.synthesis") {
-      if (payload.empty === true) acc.synthesisEmpty = true;
-    } else if (event.event_type === "judge.final") {
-      // Only terminal finals that carry a decision count; the TS gateway also
-      // re-traces intermediate/duplicate finals without one.
-      const decision = typeof payload.decision === "string" ? payload.decision : undefined;
+    } else if (span.name === "fusion.judge.synthesis") {
+      if (attrBool(span, "fusion.synthesis_empty") === true) acc.synthesisEmpty = true;
+    } else if (span.name === "fusion.judge" || span.name === "fusion.fuse") {
+      const decision = attrStr(span, "fusion.decision");
       if (decision !== undefined) {
         acc.decision = decision;
-        acc.selectedId =
-          typeof payload.selected_trajectory_id === "string"
-            ? payload.selected_trajectory_id
-            : undefined;
-        acc.rationale = typeof payload.rationale === "string" ? payload.rationale : undefined;
+        acc.selectedId = attrStr(span, "fusion.selected.trajectory_id");
+        acc.rationale = attrStr(span, "fusion.rationale");
       }
     }
   }

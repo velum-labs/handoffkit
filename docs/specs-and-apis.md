@@ -129,28 +129,25 @@ The governance plane is created by `startPlaneServer()` from `@fusionkit/plane`.
 
 The plane API owns contracts, claims, approvals, principal auth, secrets, receipts, audit export, metrics, retention, and control panel serving. Use `PlaneClient` from `@fusionkit/sdk` rather than hand-written HTTP calls.
 
-## Fusion trace events
+## Fusion tracing (OpenTelemetry)
 
-The trace schema lives under `spec/fusion-trace/`. TypeScript trace helpers are exported by `@fusionkit/protocol` and `@fusionkit/ensemble`. Python trace helpers live in `fusionkit_core.trace`.
+Fusion traces with OpenTelemetry: real spans over OTLP/HTTP, W3C `traceparent`/`baggage` propagation, and standard `OTEL_*` configuration. The semantic conventions — span names, attribute keys, and per-attribute sensitivity classes — live in `spec/fusion-trace/registry.json`; `node scripts/generate-trace-conventions.mjs` regenerates the TypeScript, Python, and scope bindings, and `pnpm check` fails when they drift.
 
-Every trace event should preserve the same core shape: version, trace id, span id, optional parent span id, component, event type, timestamp, and payload. Trace payload helpers include model-call start and finish payloads and judge request, thinking, and final payloads.
+TypeScript span helpers live in `@fusionkit/tracing` (the OTel-backed engine; `@fusionkit/protocol` re-exports only the generated constants). Python helpers live in `fusionkit_core.trace`. Units of work (turn, candidate, judge, model call) are real spans; live point-in-time signals (steps, judge thinking, cost beats) are zero-duration markers so the scope dashboard updates while a unit is still running.
 
 Example:
 
 ```ts
-import {
-  emitTrace,
-  judgeFinalPayload,
-  newTraceId
-} from "@fusionkit/protocol";
+import { initFusionTracing, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
+import { ATTR } from "@fusionkit/protocol";
 
-const traceId = newTraceId();
-emitTrace({
-  traceId,
-  component: "judge",
-  type: "judge.final",
-  payload: judgeFinalPayload({ status: "ok" })
+initFusionTracing({ serviceName: "my-service" });
+const session = newSessionCarrier();
+const judge = startFusionSpan("judge", "fusion.judge", session.carrier, {
+  [ATTR.FUSION_JUDGE_MODEL]: "gpt-5.5"
 });
+judge.marker("judge", "fusion.judge.thinking", { [ATTR.FUSION_RAW_ANALYSIS]: "..." });
+judge.end({ status: "succeeded", attributes: { [ATTR.FUSION_DECISION]: "synthesize" } });
 ```
 
 ## Schema change workflow

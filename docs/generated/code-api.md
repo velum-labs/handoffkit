@@ -66,8 +66,7 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { runProposalPanels } from "./panel-propose.js";`
 - `export type { ProposalPanelOptions } from "./panel-propose.js";`
 - `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusedSubagentAccess, FusedSubagentEnsemble, FusionPanelOptions, PanelTrust, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
-- `export { ambientTraceId, emitTrace, getTraceEmitter, newSpanId, newTraceId, TRACE_CANDIDATE_HEADER, TRACE_ID_HEADER, TRACE_PARENT_SPAN_HEADER, TRACE_SPAN_HEADER, TraceEmitter } from "./trace.js";`
-- `export type { EmitInput, FusionTraceComponent, FusionTraceEvent, FusionTraceEventType } from "./trace.js";`
+- `export type { FusionTraceCarrier } from "@fusionkit/tracing";`
 - `export { runJudgeSynthesis } from "./synthesis.js";`
 - `export type { RunSynthesisInput, SynthesisResult } from "./synthesis.js";`
 - `export { ArtifactTypes, OperatorKinds } from "./artifact-types.js";`
@@ -254,8 +253,8 @@ interfaces instead of recreating local string lists or proof logic.
 - `export type { BundleVerification } from "./receipt.js";`
 - `export { buildReceiptStory, summarizeRunEvent } from "./receipt-story.js";`
 - `export type { EventSummary, ReceiptStory } from "./receipt-story.js";`
-- `export { addTraceListener, ambientTraceId, assertFusionTraceEvent, emitTrace, FUSION_TRACE_COMPONENTS, FUSION_TRACE_EVENT_SCHEMA, FUSION_TRACE_EVENT_TYPES, FUSION_TRACE_EVENT_VERSION, getTraceEmitter, isFusionTraceEvent, judgeFinalPayload, judgeRequestPayload, judgeThinkingPayload, modelCallFinishedPayload, modelCallStartedPayload, newSpanId, newTraceId, removeTraceListener, TRACE_CANDIDATE_HEADER, TRACE_ID_HEADER, TRACE_PARENT_SPAN_HEADER, TRACE_SPAN_HEADER, TraceEmitter } from "./trace.js";`
-- `export type { EmitInput, FusionTraceComponent, FusionTraceEvent, FusionTraceEventType, TraceListener } from "./trace.js";`
+- `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_MARKER_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES, FUSION_UNIT_SPAN_NAMES } from "./generated/trace-conventions.js";`
+- `export type { FusionAttributeKey, FusionMarkerName, FusionSpanName } from "./generated/trace-conventions.js";`
 - `export { PolicyDeniedError } from "./types.js";`
 - `export type { ActorRef, AgentKind, AgentSpec, ArtifactKind, AttestationTier, BudgetSpec, ChainedEvent, Checkpoint, CheckpointTier, ConsentRule, ContinuationRef, DataClassRule, DisclosureMode, DisclosureRecord, FailureClass, HandoffEnvelope, HandoffSource, HandoffTargetRef, KeyRef, ManifestFile, ModelUsageRecord, NetworkAccessRecord, NetworkPolicy, Policy, Receipt, ReceiptBundle, RetentionPolicy, RunContract, RunEvent, RunnerIdentity, RunnerSelector, RunStatus, SecretClaim, SecretReleaseRecord, SecretScopeRule, SemanticState, SessionIsolation, Signature, TaskSpec, ToolCallRecord, ToolJournal, WorkspaceManifest } from "./types.js";`
 - `export type { ClaimResult, DisclosureReport, PolicyDecision, RunnerSummary, RunRequest, RunRequestInput, RunSummary, RunView } from "./api.js";`
@@ -472,6 +471,30 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export { deriveFusedSubagents, fusedSubagentDescription, fusedSubagentDeveloperInstructions, fusedSubagentMembers } from "./fused-subagents.js";`
 - `export type { FusedSubagentDefinition, FusedSubagentDescriptionStyle } from "./fused-subagents.js";`
 
+### `packages/tracing/src/index.ts`
+
+@fusionkit/tracing — OpenTelemetry-based tracing for the fusion stack.
+
+The engine is the OTel SDK (ids, W3C propagation, batching, flush, OTLP
+export); this package owns the thin domain layer: typed span helpers over
+the fusion semantic conventions (spec/fusion-trace/registry.json), the
+serializable trace carrier that threads context through values, HTTP
+headers, and child environments, and the in-process span listener the
+narrator and product telemetry subscribe to.
+
+- `export { flushFusionTracing, fusionTracingServiceName, initFusionTracing, isFusionTracingActive, isTraceExportConfigured, resetFusionTracingForTest, shutdownFusionTracing } from "./provider.js";`
+- `export type { InitFusionTracingOptions } from "./provider.js";`
+- `export { addSpanListener, hasSpanListeners, listenerSpanProcessor, removeSpanListener } from "./listener.js";`
+- `export type { SpanListener } from "./listener.js";`
+- `export { carrierFromEnv, carrierFromHeaders, carrierOf, contextOf, emitFusionMarker, envOf, fusionBaggageOf, headersOf, jsonAttr, newSessionCarrier, newSpanId, newTraceId, sessionCarrier, startFusionSpan, traceIdOf, withFusionBaggage } from "./spans.js";`
+- `export type { FusionAttributes, FusionBaggage, FusionScope, FusionSpan, FusionTraceCarrier } from "./spans.js";`
+- `export { attrBool, attrJson, attrNum, attrStr, spanEndMs, spanId, spanTraceId } from "./readable.js";`
+- `export type { ReadableSpan } from "./readable.js";`
+- `export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";`
+- `export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";`
+- `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_MARKER_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES, FUSION_UNIT_SPAN_NAMES } from "@fusionkit/protocol";`
+- `export type { FusionAttributeKey, FusionMarkerName, FusionSpanName } from "@fusionkit/protocol";`
+
 ### `packages/workspace/src/index.ts`
 
 @fusionkit/workspace owns git workspace capture, materialization, output
@@ -506,10 +529,7 @@ import X`` keeps working unchanged for every name in ``__all__``.
 
 Public exports:
 
-- `TRACE_ID_HEADER`
-- `TRACE_PARENT_SPAN_HEADER`
-- `TRACE_SPAN_HEADER`
-- `TRACE_TRAJECTORY_HEADER`
+- `ATTR`
 - `AgentTrajectoryProducer`
 - `AnthropicModelClient`
 - `ArtifactRefV1`
@@ -576,35 +596,34 @@ Public exports:
 - `ToolExecutor`
 - `ToolPausePlaceholder`
 - `ToolResultSubmission`
+- `TraceContext`
 - `Trajectory`
 - `TrajectoryInspection`
 - `TrajectoryPack`
 - `TrajectoryProducer`
 - `TrajectoryV1`
-- `TraceEmitter`
 - `Usage`
-- `ambient_trace_id`
 - `build_client`
 - `build_clients`
 - `canonical_json`
 - `classify_provider_error`
+- `context_from_headers`
 - `contract_metadata`
 - `contract_model_for_schema`
-- `emit`
+- `emit_marker`
 - `endpoint_to_contract`
 - `estimate_cost`
 - `estimate_messages_tokens`
 - `estimate_tokens`
-- `get_emitter`
+- `fusion_span`
 - `hash_bytes`
 - `hash_json`
 - `hash_text`
+- `json_attr`
 - `judge_synthesizer_for`
 - `load_claude_code_credentials`
 - `load_codex_credentials`
 - `make_id`
-- `new_span_id`
-- `new_trace_id`
 - `normalize_usage`
 - `pack_trajectories`
 - `producer`
@@ -614,6 +633,8 @@ Public exports:
 - `resolve_api_key`
 - `resolve_credential`
 - `schema_bundle_hash`
+- `setup_fusion_tracing`
+- `shutdown_fusion_tracing`
 - `status_for_run_state`
 - `subscription_status`
 - `trajectory_from_contract`

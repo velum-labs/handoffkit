@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
-import { isFiniteK, newSpanId } from "@fusionkit/protocol";
+import { isFiniteK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import { newSpanId, sessionCarrier } from "@fusionkit/tracing";
 
 import type { SessionCost } from "./cost.js";
 import type { FusionGatewayLogger } from "./logger.js";
@@ -175,10 +176,13 @@ export class FusionSessionManager {
       }
     }
 
+    const traceId = this.#mintTraceId();
+    const sessionSpan = newSpanId();
     const session: FusionBackendKernelSessionState = {
       id: sessionKey,
-      traceId: this.#mintTraceId(),
-      sessionSpan: newSpanId(),
+      traceId,
+      sessionSpan,
+      trace: sessionCarrier(traceId, sessionSpan),
       turns: new Map(),
       turnAborts: new Map(),
       meteredPanelTurns: new Set(),
@@ -234,8 +238,7 @@ export class FusionSessionManager {
     const candidates = this.#runPanels({
       task: this.task(input.messages),
       messages: input.messages,
-      traceId: input.session.traceId,
-      sessionSpanId: input.session.sessionSpan,
+      trace: input.session.trace,
       sessionKey: input.sessionKey,
       turn: input.turn,
       signal: abort.signal,
@@ -285,10 +288,16 @@ export class FusionSessionManager {
         .filter((entry) => entry.stage === "panel" && entry.turn !== undefined)
         .map((entry) => entry.turn as number)
     );
+    // Sessions persisted before the OTel cutover carry non-W3C ids; re-mint
+    // the trace identity for them (trace data is disposable, resume is not).
+    const validIds = /^[0-9a-f]{32}$/.test(persisted.meta.traceId) && /^[0-9a-f]{16}$/.test(persisted.meta.sessionSpan);
+    const traceId = validIds ? persisted.meta.traceId : this.#mintTraceId();
+    const sessionSpan = validIds ? persisted.meta.sessionSpan : newSpanId();
     return {
       id: persisted.meta.id,
-      traceId: persisted.meta.traceId,
-      sessionSpan: persisted.meta.sessionSpan,
+      traceId,
+      sessionSpan,
+      trace: sessionCarrier(traceId, sessionSpan),
       turns,
       turnAborts: new Map(),
       meteredPanelTurns,

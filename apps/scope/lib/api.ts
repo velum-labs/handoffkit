@@ -25,7 +25,7 @@ export type SessionSummary = {
   environment: RawEnvironment | null;
   promptPreview: string | null;
   finalOutput: string | null;
-  eventCount: number;
+  spanCount: number;
   durationMs: number;
 };
 

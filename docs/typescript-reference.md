@@ -152,7 +152,7 @@ Wire trajectory exports include `assertWireTrajectory()`, `isWireTrajectory()`, 
 
 Key, contract, chain, and receipt exports include `generateEd25519KeyPair()`, `keyIdFromPublicPem()`, `signData()`, `verifyData()`, `contractHash()`, `signContract()`, `appendEvent()`, `verifyChain()`, `signReceipt()`, `verifyRunnerReceipt()`, `verifyReceiptBundle()`, `buildReceiptStory()`, and `summarizeRunEvent()`.
 
-Trace exports include `TraceEmitter`, `newTraceId()`, `newSpanId()`, `ambientTraceId()`, `emitTrace()`, `getTraceEmitter()`, `assertFusionTraceEvent()`, `isFusionTraceEvent()`, `judgeRequestPayload()`, `judgeThinkingPayload()`, `judgeFinalPayload()`, `modelCallStartedPayload()`, and `modelCallFinishedPayload()`.
+Trace exports are the generated semantic-convention constants: `ATTR`, `FUSION_SPAN_NAMES`, `FUSION_MARKER_NAMES`, `FUSION_SCOPES`, and `EXPORTABLE_ATTRIBUTES`. The OTel-backed span helpers (`initFusionTracing()`, `startFusionSpan()`, `emitFusionMarker()`, `newSessionCarrier()`, carrier/header/env propagation, and the in-process span listener) live in `@fusionkit/tracing`.
 
 Example:
 

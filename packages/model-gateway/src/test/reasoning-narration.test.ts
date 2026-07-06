@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { emitTrace, judgeRequestPayload } from "@fusionkit/protocol";
+import { ATTR } from "@fusionkit/protocol";
+import {
+  emitFusionMarker,
+  initFusionTracing,
+  jsonAttr,
+  newSessionCarrier,
+  startFusionSpan
+} from "@fusionkit/tracing";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
 import { anthropicToChat, openAiSseToAnthropic } from "../adapters/anthropic.js";
 import { openAiSseToResponses, responsesToChat } from "../adapters/responses.js";
@@ -44,6 +52,60 @@ function chatChunk(delta: Record<string, unknown>, finish: string | null = null)
 
 async function streamText(stream: ReadableStream<Uint8Array>): Promise<string> {
   return await new Response(stream).text();
+}
+
+// The narrator listens to real in-process spans, so tests need a provider.
+initFusionTracing({ serviceName: "narration-test" });
+
+type TestSession = { traceId: string; carrier: FusionTraceCarrier };
+
+function emitTurnInfo(session: TestSession, environment: unknown, turn = 1): void {
+  emitFusionMarker("gateway", "fusion.turn.info", session.carrier, {
+    [ATTR.FUSION_DIALECT]: "fusion-step",
+    [ATTR.FUSION_TURN]: turn,
+    [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment)
+  });
+}
+
+function emitCandidateStarted(session: TestSession, candidateId: string, modelId: string, turn = 1): void {
+  emitFusionMarker("panel-model", "fusion.candidate.started", session.carrier, {
+    [ATTR.FUSION_CANDIDATE_ID]: candidateId,
+    [ATTR.FUSION_MODEL_ID]: modelId,
+    [ATTR.FUSION_TURN]: turn
+  });
+}
+
+function emitCandidateFinished(
+  session: TestSession,
+  input: {
+    candidateId?: string;
+    modelId: string;
+    turn?: number;
+    status?: string;
+    stepCount?: number;
+    preview?: string;
+  }
+): void {
+  const span = startFusionSpan("panel-model", "fusion.candidate", session.carrier, {
+    [ATTR.FUSION_CANDIDATE_ID]: input.candidateId,
+    [ATTR.FUSION_MODEL_ID]: input.modelId,
+    [ATTR.FUSION_TURN]: input.turn ?? 1
+  });
+  span.end({
+    status: (input.status ?? "succeeded") === "succeeded" ? "succeeded" : "failed",
+    attributes: {
+      [ATTR.FUSION_STEP_COUNT]: input.stepCount,
+      [ATTR.FUSION_FINAL_OUTPUT_PREVIEW]: input.preview
+    }
+  });
+}
+
+function emitJudgeRequest(session: TestSession, trajectories: unknown[], turn = 1, judgeModel = "gpt-5.5"): void {
+  emitFusionMarker("judge", "fusion.judge.request", session.carrier, {
+    [ATTR.FUSION_JUDGE_MODEL]: judgeModel,
+    [ATTR.FUSION_TURN]: turn,
+    [ATTR.FUSION_TRAJECTORIES]: jsonAttr(trajectories)
+  });
 }
 
 const CALC_DIFF = [
@@ -313,69 +375,31 @@ test("narrationBeat: quiet beats name the stragglers and the judging phase", () 
 
 // ---- the live narrator (trace events -> beats) ----
 
-test("createTurnNarrator narrates the race from trace events and filters other sessions/turns", async () => {
-  const narrator = createTurnNarrator({ traceId: "trace_narr", turn: 1, judgeModel: "gpt-5.5" });
+test("createTurnNarrator narrates the race from finished spans and filters other sessions/turns", async () => {
+  const session = newSessionCarrier();
+  const other = newSessionCarrier();
+  const narrator = createTurnNarrator({ traceId: session.traceId, turn: 1, judgeModel: "gpt-5.5" });
 
-  emitTrace({
-    component: "gateway",
-    event_type: "session.started",
-    traceId: "trace_narr",
-    payload: {
-      dialect: "fusion-step",
-      environment: {
-        models: [
-          { id: "gpt", model: "gpt-5.5" },
-          { id: "sonnet", model: "claude-sonnet-4-6" }
-        ]
-      }
-    }
+  emitTurnInfo(session, {
+    models: [
+      { id: "gpt", model: "gpt-5.5" },
+      { id: "sonnet", model: "claude-sonnet-4-6" }
+    ]
   });
-  emitTrace({
-    component: "panel-model",
-    event_type: "harness.candidate.started",
-    traceId: "trace_narr",
+  emitCandidateStarted(session, "cand_gpt", "gpt");
+  emitCandidateFinished(session, {
     candidateId: "cand_gpt",
     modelId: "gpt",
-    payload: { turn: 1 }
-  });
-  emitTrace({
-    component: "panel-model",
-    event_type: "harness.candidate.finished",
-    traceId: "trace_narr",
-    candidateId: "cand_gpt",
-    modelId: "gpt",
-    payload: { turn: 1, status: "succeeded", step_count: 4, final_output_preview: "Fix `add()` to use +\nmore" }
+    stepCount: 4,
+    preview: "Fix `add()` to use +\nmore"
   });
   // A different session and a different turn are both ignored.
-  emitTrace({
-    component: "panel-model",
-    event_type: "harness.candidate.finished",
-    traceId: "trace_other",
-    modelId: "intruder",
-    payload: { turn: 1, status: "succeeded" }
-  });
-  emitTrace({
-    component: "panel-model",
-    event_type: "harness.candidate.finished",
-    traceId: "trace_narr",
-    modelId: "stale",
-    payload: { turn: 7, status: "succeeded" }
-  });
-  emitTrace({
-    component: "judge",
-    event_type: "judge.request",
-    traceId: "trace_narr",
-    payload: judgeRequestPayload({
-      judgeModel: "gpt-5.5",
-      messages: [],
-      trajectories: [
-        { trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", diff: CALC_DIFF },
-        { trajectory_id: "t_sonnet", model_id: "sonnet", status: "succeeded" }
-      ],
-      trajectoryIds: ["t_gpt", "t_sonnet"],
-      turn: 1
-    })
-  });
+  emitCandidateFinished(other, { modelId: "intruder" });
+  emitCandidateFinished(session, { modelId: "stale", turn: 7 });
+  emitJudgeRequest(session, [
+    { trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", diff: CALC_DIFF },
+    { trajectory_id: "t_sonnet", model_id: "sonnet", status: "succeeded" }
+  ]);
   narrator.close();
 
   const beats: string[] = [];
@@ -390,17 +414,13 @@ test("createTurnNarrator narrates the race from trace events and filters other s
 });
 
 test("createTurnNarrator emits escalating quiet beats while candidates are out", async () => {
+  const session = newSessionCarrier();
   const narrator = createTurnNarrator({
-    traceId: "trace_quiet",
+    traceId: session.traceId,
     turn: 1,
     quietDelaysMs: [60, 120, 240]
   });
-  emitTrace({
-    component: "gateway",
-    event_type: "session.started",
-    traceId: "trace_quiet",
-    payload: { dialect: "fusion-step", environment: { models: [{ id: "gpt", model: "gpt-5.5" }] } }
-  });
+  emitTurnInfo(session, { models: [{ id: "gpt", model: "gpt-5.5" }] });
   await new Promise((resolve) => setTimeout(resolve, 250));
   narrator.close();
 
@@ -412,16 +432,11 @@ test("createTurnNarrator emits escalating quiet beats while candidates are out",
   assert.equal(new Set(beats).size, beats.length, "no beat is ever repeated verbatim");
 });
 
-test("closing the narrator detaches its listener (later events are dropped)", async () => {
-  const narrator = createTurnNarrator({ traceId: "trace_closed", turn: 1 });
+test("closing the narrator detaches its listener (later spans are dropped)", async () => {
+  const session = newSessionCarrier();
+  const narrator = createTurnNarrator({ traceId: session.traceId, turn: 1 });
   narrator.close();
-  emitTrace({
-    component: "panel-model",
-    event_type: "harness.candidate.finished",
-    traceId: "trace_closed",
-    modelId: "gpt",
-    payload: { turn: 1, status: "succeeded" }
-  });
+  emitCandidateFinished(session, { modelId: "gpt" });
   const beats: string[] = [];
   for await (const event of narrator.events) beats.push(event.text);
   assert.equal(beats.length, 0);
@@ -429,34 +444,20 @@ test("closing the narrator detaches its listener (later events are dropped)", as
 
 // ---- NarrationWriter: prose from a model, guardrails from the engine ----
 
-/** Drive one full turn (finish + judge.request) through a narrator with `writer`. */
-async function narrateTurnWith(writer: NarrationWriter, traceId: string, timeoutMs = 60): Promise<string[]> {
+/** Drive one full turn (finish + judge request) through a narrator with `writer`. */
+async function narrateTurnWith(writer: NarrationWriter, timeoutMs = 60): Promise<string[]> {
+  const session = newSessionCarrier();
   const narrator = createTurnNarrator({
-    traceId,
+    traceId: session.traceId,
     turn: 1,
     judgeModel: "gpt-5.5",
     writer,
     writerTimeoutMs: timeoutMs
   });
-  emitTrace({
-    component: "panel-model",
-    event_type: "harness.candidate.finished",
-    traceId,
-    modelId: "gpt",
-    payload: { turn: 1, status: "succeeded", final_output_preview: "raw model words" }
-  });
-  emitTrace({
-    component: "judge",
-    event_type: "judge.request",
-    traceId,
-    payload: judgeRequestPayload({
-      judgeModel: "gpt-5.5",
-      messages: [],
-      trajectories: [{ trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", diff: CALC_DIFF, final_output: "ok" }],
-      trajectoryIds: ["t_gpt"],
-      turn: 1
-    })
-  });
+  emitCandidateFinished(session, { modelId: "gpt", preview: "raw model words" });
+  emitJudgeRequest(session, [
+    { trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", diff: CALC_DIFF, final_output: "ok" }
+  ]);
   // Let the serialized chain drain (writer budget + slack), then close.
   await new Promise((resolve) => setTimeout(resolve, timeoutMs * 3 + 60));
   narrator.close();
@@ -470,7 +471,7 @@ test("a writer's sentences replace the templated prose (sanitized), in order", a
     candidateGist: async () => "rewrote **add()** to sum\nsecond line ignored",
     compareCandidates: async () => "`gpt` stands alone with a verified one-line fix"
   };
-  const beats = await narrateTurnWith(writer, "trace_writer_ok");
+  const beats = await narrateTurnWith(writer);
   assert.equal(beats.length, 2);
   assert.equal(beats[0], "**gpt is back first**\n\nProposes: rewrote add() to sum\n\n");
   assert.equal(beats[1], "**Judging 1 candidate with gpt-5.5**\n\ngpt stands alone with a verified one-line fix\n\n");
@@ -481,7 +482,7 @@ test("a slow writer falls back to templated prose without reordering beats", asy
     candidateGist: () => new Promise(() => {}), // never resolves; ignores its signal
     compareCandidates: () => new Promise(() => {})
   };
-  const beats = await narrateTurnWith(writer, "trace_writer_slow");
+  const beats = await narrateTurnWith(writer);
   assert.equal(beats.length, 2);
   assert.equal(beats[0], "**gpt is back first**\n\nProposes: raw model words\n\n", "template gist ships");
   assert.match(beats[1] ?? "", /^\*\*Judging 1 candidate with gpt-5\.5\*\*\n\ngpt's patch/, "template comparison ships");
@@ -496,7 +497,7 @@ test("a throwing writer falls back to templated prose", async () => {
       throw new Error("writer boom");
     }
   };
-  const beats = await narrateTurnWith(writer, "trace_writer_throw");
+  const beats = await narrateTurnWith(writer);
   assert.equal(beats.length, 2);
   assert.match(beats[0] ?? "", /Proposes: raw model words/);
   assert.match(beats[1] ?? "", /gpt's patch/);
@@ -514,19 +515,14 @@ test("close aborts an in-flight writer call and flushes the beat with template p
       }),
     compareCandidates: async () => undefined
   };
+  const session = newSessionCarrier();
   const narrator = createTurnNarrator({
-    traceId: "trace_writer_abort",
+    traceId: session.traceId,
     turn: 1,
     writer,
     writerTimeoutMs: 5_000
   });
-  emitTrace({
-    component: "panel-model",
-    event_type: "harness.candidate.finished",
-    traceId: "trace_writer_abort",
-    modelId: "gpt",
-    payload: { turn: 1, status: "succeeded", final_output_preview: "x" }
-  });
+  emitCandidateFinished(session, { modelId: "gpt", preview: "x" });
   await new Promise((resolve) => setTimeout(resolve, 20));
   narrator.close(); // aborts the writer; the enqueued beat flushes with template prose
   const beats: string[] = [];
@@ -623,26 +619,15 @@ test("createChatNarrationWriter strips leading think blocks and rejects bad repl
 // ---- Merge: narration interleaves, then stops at the first judge byte ----
 
 test("mergeEventsWithNarration drains narration before judge chunks, never after", async () => {
-  const narrator = createTurnNarrator({ traceId: "trace_merge", turn: 1 });
+  const session = newSessionCarrier();
+  const narrator = createTurnNarrator({ traceId: session.traceId, turn: 1 });
   async function* main(): AsyncGenerator<{ type: "sse.chunk"; data: string }> {
     // Panel phase: narration lands while the main stream is pending.
-    emitTrace({
-      component: "panel-model",
-      event_type: "harness.candidate.finished",
-      traceId: "trace_merge",
-      modelId: "gpt",
-      payload: { turn: 1, status: "succeeded" }
-    });
+    emitCandidateFinished(session, { modelId: "gpt" });
     await new Promise((resolve) => setTimeout(resolve, 20));
     yield { type: "sse.chunk", data: "judge-bytes-1" };
     // Narration arriving after the first judge chunk must be dropped.
-    emitTrace({
-      component: "panel-model",
-      event_type: "harness.candidate.finished",
-      traceId: "trace_merge",
-      modelId: "sonnet",
-      payload: { turn: 1, status: "succeeded" }
-    });
+    emitCandidateFinished(session, { modelId: "sonnet" });
     yield { type: "sse.chunk", data: "judge-bytes-2" };
   }
 
@@ -658,7 +643,8 @@ test("mergeEventsWithNarration survives the role-announce handshake chunk", asyn
   // The Python step endpoint emits an empty `{"delta":{"role":"assistant"}}`
   // chunk the instant the POST connects — beats racing that handshake (the
   // judging beat, typically) must still flow until real judge bytes arrive.
-  const narrator = createTurnNarrator({ traceId: "trace_handshake", turn: 1 });
+  const session = newSessionCarrier();
+  const narrator = createTurnNarrator({ traceId: session.traceId, turn: 1 });
   const handshake =
     'data: {"id":"c","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n';
   const judgeBytes =
@@ -666,13 +652,7 @@ test("mergeEventsWithNarration survives the role-announce handshake chunk", asyn
   async function* main(): AsyncGenerator<{ type: "sse.chunk"; data: string }> {
     yield { type: "sse.chunk", data: handshake };
     // The beat lands after the handshake but before any judge output.
-    emitTrace({
-      component: "panel-model",
-      event_type: "harness.candidate.finished",
-      traceId: "trace_handshake",
-      modelId: "gpt",
-      payload: { turn: 1, status: "succeeded" }
-    });
+    emitCandidateFinished(session, { modelId: "gpt" });
     await new Promise((resolve) => setTimeout(resolve, 20));
     yield { type: "sse.chunk", data: judgeBytes };
   }
@@ -700,26 +680,19 @@ test("sseChunkHasPayload separates handshake and keepalive from judge output", (
 // ---- End to end: FusionBackend streaming turn narrates on both doors ----
 
 function fakePanelRunner(): (input: {
-  traceId: string;
+  trace: FusionTraceCarrier;
   turn: number;
   sessionKey: string;
 }) => Promise<WireTrajectory[]> {
   return async (input) => {
-    emitTrace({
-      component: "panel-model",
-      event_type: "harness.candidate.started",
-      traceId: input.traceId,
+    const session = { traceId: "", carrier: input.trace };
+    emitCandidateStarted(session, "cand_gpt", "gpt", input.turn);
+    emitCandidateFinished(session, {
       candidateId: "cand_gpt",
       modelId: "gpt",
-      payload: { turn: input.turn }
-    });
-    emitTrace({
-      component: "panel-model",
-      event_type: "harness.candidate.finished",
-      traceId: input.traceId,
-      candidateId: "cand_gpt",
-      modelId: "gpt",
-      payload: { turn: input.turn, status: "succeeded", step_count: 2, final_output_preview: "ok patch" }
+      turn: input.turn,
+      stepCount: 2,
+      preview: "ok patch"
     });
     return [{ trajectory_id: "t_gpt", model_id: "gpt", status: "succeeded", final_output: "ok" }];
   };

@@ -24,10 +24,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSessionDetail } from "@/lib/api";
 import type { SessionSummary } from "@/lib/api";
-import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative, fmtUsd, shortTraceId } from "@/lib/format";
 import { tokensOf } from "@/lib/rollups";
+import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative, fmtUsd, shortTraceId } from "@/lib/format";
 import type { SessionDetail } from "@/lib/sessions";
-import type { StoredEvent } from "@/lib/types";
+import type { StoredSpan } from "@/lib/types";
 import { replaceSearchParams } from "@/lib/url-state";
 
 /** One-shot fetch of the session list to compute prev/next neighbors. */
@@ -106,22 +106,20 @@ function SessionDetailBody() {
   const searchParams = useSearchParams();
   const { session, loading, error, live } = useSessionDetail(traceId);
   const neighbors = useNeighbors(traceId);
-  const [inspected, setInspected] = useState<StoredEvent[] | undefined>(undefined);
+  const [inspected, setInspected] = useState<StoredSpan[] | undefined>(undefined);
 
-  // The inspected event/span mirrors into the URL (?event=<id> / ?span=<id>)
-  // so "look at this event" links are shareable and survive reloads.
-  const inspect = useCallback((events: StoredEvent[]) => {
-    setInspected(events);
-    if (events.length > 1) {
-      replaceSearchParams({ span: events[0].span_id, event: undefined });
-    } else if (events.length === 1) {
-      replaceSearchParams({ event: String(events[0].id), span: undefined });
+  // The inspected span mirrors into the URL (?span=<id>) so "look at this
+  // span" links are shareable and survive reloads.
+  const inspect = useCallback((spans: StoredSpan[]) => {
+    setInspected(spans);
+    if (spans.length > 0) {
+      replaceSearchParams({ span: spans[0].span_id });
     }
   }, []);
 
   const closeInspector = useCallback(() => {
     setInspected(undefined);
-    replaceSearchParams({ event: undefined, span: undefined });
+    replaceSearchParams({ span: undefined });
   }, []);
 
   // Restore a deep-linked inspector once the session has loaded.
@@ -129,21 +127,9 @@ function SessionDetailBody() {
   useEffect(() => {
     if (restoredInspector.current || session === undefined) return;
     restoredInspector.current = true;
-    const eventId = searchParams.get("event");
     const spanId = searchParams.get("span");
-    if (eventId !== null) {
-      const found = session.events.find((event) => String(event.id) === eventId);
-      if (found !== undefined) setInspected([found]);
-      return;
-    }
     if (spanId !== null) {
-      const paired = session.events.filter(
-        (event) =>
-          event.span_id === spanId &&
-          (event.event_type.endsWith(".started") || event.event_type.endsWith(".finished"))
-      );
-      const matches =
-        paired.length > 0 ? paired : session.events.filter((event) => event.span_id === spanId);
+      const matches = session.spans.filter((span) => span.span_id === spanId);
       if (matches.length > 0) setInspected(matches);
     }
   }, [session, searchParams]);
@@ -232,7 +218,7 @@ function SessionDetailBody() {
                       : undefined,
                   mono: true
                 },
-                { label: "Events", value: fmtNumber(session.events.length), mono: true }
+                { label: "Spans", value: fmtNumber(session.spans.length), mono: true }
               ]}
             />
 
@@ -281,11 +267,12 @@ function SessionDetailBody() {
               )}
             </Section>
 
-            <Section title="Timeline" count={`${session.events.length} events`}>
+            <Section title="Timeline" count={`${session.spans.length} spans`}>
               <Timeline
-                events={session.events}
+                spans={session.spans}
                 startedAt={session.startedAt}
                 durationMs={session.durationMs}
+                live={session.status === "running"}
                 onInspect={inspect}
               />
             </Section>
@@ -351,24 +338,24 @@ function SessionDetailBody() {
             ) : null}
 
             <Section
-              title="Raw events"
+              title="Raw spans"
               defaultOpen={false}
-              summary={Object.entries(session.eventCounts)
+              summary={Object.entries(session.spanCounts)
                 .sort(([, a], [, b]) => b - a)
                 .slice(0, 4)
                 .map(([type, count]) => `${count} ${type}`)
                 .join(" · ")}
-              count={fmtNumber(session.events.length)}
+              count={fmtNumber(session.spans.length)}
             >
               <EventTable
-                events={session.events}
+                spans={session.spans}
                 startedAt={session.startedAt}
                 onInspect={inspect}
               />
             </Section>
 
             <EventInspector
-              events={inspected}
+              spans={inspected}
               startedAt={session.startedAt}
               onClose={closeInspector}
             />

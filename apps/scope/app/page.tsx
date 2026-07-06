@@ -4,14 +4,11 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   Boxes,
-  Check,
   ChevronRight,
-  RotateCcw,
   Search
 } from "lucide-react";
 
@@ -103,61 +100,6 @@ function SortableHead({
   );
 }
 
-/**
- * Backfill the collector from the FUSION_TRACE_DIR JSONL fallback. The label
- * never changes — progress and results surface via the icon and tooltip — so
- * the header controls never shift while a replay runs.
- */
-function ReplayButton({ onDone }: { onDone: () => void }) {
-  const [state, setState] = useState<"idle" | "busy" | "done" | "failed">("idle");
-  const [detail, setDetail] = useState<string | undefined>(undefined);
-
-  const onReplay = useCallback(() => {
-    setState("busy");
-    fetch("/api/replay", { method: "POST" })
-      .then(async (response) => {
-        const body = (await response.json()) as { ingested?: number; error?: string };
-        if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
-        setState("done");
-        setDetail(`Replayed ${body.ingested ?? 0} new events`);
-        onDone();
-      })
-      .catch((error: unknown) => {
-        setState("failed");
-        setDetail(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        setTimeout(() => {
-          setState("idle");
-          setDetail(undefined);
-        }, 3000);
-      });
-  }, [onDone]);
-
-  const icon =
-    state === "done" ? (
-      <Check className="text-(--status-success) size-4" />
-    ) : state === "failed" ? (
-      <AlertTriangle className="text-(--status-danger) size-4" />
-    ) : (
-      <RotateCcw className={cn("size-4", state === "busy" && "animate-spin")} />
-    );
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant="outline" size="sm" onClick={onReplay} disabled={state === "busy"}>
-          {icon}
-          Replay
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>
-        {detail ?? "Backfill sessions from the FUSION_TRACE_DIR JSONL fallback"}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function statusFromParam(value: string | null): StatusFilter {
   return STATUS_FILTERS.includes(value as StatusFilter) ? (value as StatusFilter) : "all";
 }
@@ -236,7 +178,7 @@ function SessionsPageBody() {
         case "duration":
           return (a.durationMs - b.durationMs) * dir;
         case "events":
-          return (a.eventCount - b.eventCount) * dir;
+          return (a.spanCount - b.spanCount) * dir;
         case "started":
           return (a.startedAt - b.startedAt) * dir;
         default:
@@ -252,7 +194,6 @@ function SessionsPageBody() {
         subtitle="Every fusion run observed across the stack, correlated by trace id."
       >
         <LiveDot active={live} />
-        <ReplayButton onDone={refetch} />
         <Button variant="outline" size="sm" onClick={refetch}>
           Refresh
         </Button>
@@ -392,7 +333,7 @@ function SessionsPageBody() {
                         {fmtDuration(session.durationMs)}
                       </TableCell>
                       <TableCell className="mono text-muted-foreground text-right text-sm">
-                        {session.eventCount}
+                        {session.spanCount}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-right text-sm">
                         <Tooltip>

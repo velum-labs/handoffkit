@@ -14,6 +14,7 @@ from fusionkit_core.run_models import (
     RunStateSummary,
     ToolResultSubmission,
 )
+from fusionkit_core.trace import TraceContext
 from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, Trajectory
 
 
@@ -186,8 +187,7 @@ class FusionKernel:
         tool_choice: ToolChoice | None = None,
         prompts: PromptOverrides | None = None,
         panel_mode: PanelMode = "trajectory",
-        trace_id: str | None = None,
-        span_id: str | None = None,
+        trace: TraceContext | None = None,
     ) -> FuseResult:
         return await self._judge_synthesizer_for(prompts, panel_mode).fuse(
             messages,
@@ -197,8 +197,7 @@ class FusionKernel:
             sampling=sampling,
             tools=tools,
             tool_choice=tool_choice,
-            trace_id=trace_id,
-            span_id=span_id,
+            trace=trace,
         )
 
     def fuse_trajectories_stream(
@@ -213,8 +212,7 @@ class FusionKernel:
         tool_choice: ToolChoice | None = None,
         prompts: PromptOverrides | None = None,
         panel_mode: PanelMode = "trajectory",
-        trace_id: str | None = None,
-        span_id: str | None = None,
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         return self._judge_synthesizer_for(prompts, panel_mode).fuse_stream(
             messages,
@@ -224,6 +222,5 @@ class FusionKernel:
             sampling=sampling,
             tools=tools,
             tool_choice=tool_choice,
-            trace_id=trace_id,
-            span_id=span_id,
+            trace=trace,
         )
