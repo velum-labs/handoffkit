@@ -799,7 +799,9 @@ export async function runFusion(
           (session) =>
             session.updatedAt >= launchedAt &&
             (session.repo === undefined || session.repo === repo) &&
-            (session.tool === undefined || session.tool === tool)
+            // `serve` fronts any tool, so it owns every session it touched;
+            // launchers only claim sessions recorded under their own tool.
+            (tool === "serve" || session.tool === undefined || session.tool === tool)
         );
       const receipt = sessionReceiptLines(receiptSessions, {
         elapsedMs: Date.now() - launchedAt,
