@@ -13,6 +13,7 @@ import { defaultFusionGatewayLogger } from "../logger.js";
 import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
+import { droppedField } from "./dropped.js";
 
 const ENCODER = new TextEncoder();
 
@@ -37,6 +38,8 @@ type AnthropicContentBlock =
   | AnthropicToolResultBlock
   | { type: string; [key: string]: unknown };
 
+type AnthropicThinking = { type?: string; budget_tokens?: number; effort?: string };
+
 type AnthropicMessage = { role: "user" | "assistant"; content: string | AnthropicContentBlock[] };
 
 export type AnthropicRequest = {
@@ -46,10 +49,17 @@ export type AnthropicRequest = {
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
+  top_k?: number;
+  thinking?: AnthropicThinking;
+  metadata?: Record<string, unknown>;
   stop_sequences?: string[];
   stream?: boolean;
   tools?: Array<{ type?: string; name: string; description?: string; input_schema?: unknown }>;
-  tool_choice?: { type: "auto" | "any" | "tool"; name?: string };
+  tool_choice?: {
+    type: "auto" | "any" | "tool" | "none";
+    name?: string;
+    disable_parallel_tool_use?: boolean;
+  };
 };
 
 /**
@@ -96,6 +106,8 @@ function mapToolChoice(
       return "auto";
     case "any":
       return "required";
+    case "none":
+      return "none";
     case "tool":
       return { type: "function", function: { name: choice.name ?? "" } };
     default: {
@@ -103,6 +115,25 @@ function mapToolChoice(
       return unreachable;
     }
   }
+}
+
+function mapThinking(thinking: AnthropicThinking): string | undefined {
+  const effort = thinking.effort;
+  if (effort === "low" || effort === "medium" || effort === "high") return effort;
+  const budget = thinking.budget_tokens;
+  if (typeof budget === "number") {
+    if (budget <= 1_024) return "low";
+    if (budget <= 8_192) return "medium";
+    return "high";
+  }
+  if (thinking.type === "disabled") return undefined;
+  droppedField("anthropic", "thinking");
+  return undefined;
+}
+
+function toolResultContent(result: AnthropicToolResultBlock): string {
+  const text = blockText(result.content);
+  return result.is_error === true ? `[tool_error]\n${text}` : text;
 }
 
 /**
@@ -151,16 +182,23 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
         }
         case "tool_result": {
           const result = block as AnthropicToolResultBlock;
-          toolResults.push({ id: result.tool_use_id, content: blockText(result.content) });
+          toolResults.push({ id: result.tool_use_id, content: toolResultContent(result) });
           break;
         }
+        case "thinking":
+          droppedField("anthropic", "thinking", "message");
+          break;
         default:
+          droppedField("anthropic", block.type, "message");
           break;
       }
     }
 
     if (message.role === "assistant") {
       const text = textParts.join("");
+      if (imageParts.length > 0) {
+        droppedField("anthropic", "image", "assistant_message");
+      }
       const assistant: Record<string, unknown> = { role: "assistant", content: text.length > 0 ? text : null };
       if (toolCalls.length > 0) assistant.tool_calls = toolCalls;
       messages.push(assistant);
@@ -191,16 +229,27 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
   if (typeof body.max_tokens === "number") chat.max_tokens = body.max_tokens;
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
+  if (typeof body.top_k === "number") chat.top_k = body.top_k;
+  if (body.metadata !== undefined) droppedField("anthropic", "metadata");
+  if (body.thinking !== undefined) {
+    const reasoningEffort = mapThinking(body.thinking);
+    if (reasoningEffort !== undefined) chat.reasoning_effort = reasoningEffort;
+  }
   if (Array.isArray(body.stop_sequences) && body.stop_sequences.length > 0) {
     chat.stop = body.stop_sequences;
   }
   if (Array.isArray(body.tools) && body.tools.length > 0) {
     const excluded = body.tools.filter(isAnthropicServerTool);
-    if (excluded.length > 0 && process.env.FUSION_DEBUG) {
-      defaultFusionGatewayLogger.error(
-        `[fusion-debug] anthropic: excluding ${excluded.length} server-executed tool(s) ` +
-          `from the fused turn: ${excluded.map((tool) => tool.name).join(", ")}`
-      );
+    if (excluded.length > 0) {
+      for (const tool of excluded) {
+        droppedField("anthropic", tool.name ?? tool.type ?? "server_tool", "tools");
+      }
+      if (process.env.FUSION_DEBUG) {
+        defaultFusionGatewayLogger.error(
+          `[fusion-debug] anthropic: excluding ${excluded.length} server-executed tool(s) ` +
+            `from the fused turn: ${excluded.map((tool) => tool.name).join(", ")}`
+        );
+      }
     }
     const tools = body.tools
       .filter((tool) => !isAnthropicServerTool(tool) && typeof tool.name === "string" && tool.name.length > 0)
@@ -214,7 +263,10 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
       }));
     if (tools.length > 0) chat.tools = tools;
   }
-  if (body.tool_choice !== undefined) chat.tool_choice = mapToolChoice(body.tool_choice);
+  if (body.tool_choice !== undefined) {
+    chat.tool_choice = mapToolChoice(body.tool_choice);
+    if (body.tool_choice.disable_parallel_tool_use === true) chat.parallel_tool_calls = false;
+  }
   if (body.stream === true) chat.stream_options = { include_usage: true };
   return chat;
 }
@@ -227,8 +279,9 @@ export function mapStopReason(finishReason: string | null | undefined): string {
       return "max_tokens";
     case "tool_calls":
       return "tool_use";
-    case "stop":
     case "content_filter":
+      return "refusal";
+    case "stop":
     case null:
     case undefined:
       return "end_turn";

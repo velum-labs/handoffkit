@@ -19,9 +19,11 @@ the control flow, the harness/sandbox owns execution.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
+from fusionkit_core.client_codex import CodexResponsesClient
 from fusionkit_core.clients import ChatClient, ProviderCallError, ToolDefinition
 from fusionkit_core.config import SamplingConfig
 from fusionkit_core.contracts import (
@@ -31,6 +33,24 @@ from fusionkit_core.contracts import (
     contract_metadata,
 )
 from fusionkit_core.types import ChatMessage, ModelResponse, Trajectory, TrajectorySynthesis
+
+_warned_codex_self_mode_sampling = False
+
+
+def _maybe_warn_codex_self_mode_sampling(client: ChatClient, sample_count: int) -> None:
+    """Warn once when self-mode diversity cannot affect a Codex endpoint."""
+    global _warned_codex_self_mode_sampling
+    if sample_count <= 1 or _warned_codex_self_mode_sampling:
+        return
+    if not isinstance(client, CodexResponsesClient):
+        return
+    _warned_codex_self_mode_sampling = True
+    logging.warning(
+        "fusionkit: Codex self-mode fans out over distinct temperatures, but "
+        "CodexResponsesClient ignores SamplingConfig — every parallel attempt "
+        "sends identical requests."
+    )
+
 
 # Cap on a single persisted reasoning item, mirroring the TS trajectory-capture
 # MAX_TEXT so evidence stays bounded regardless of how verbose a model thinks.
@@ -247,6 +267,9 @@ class ChatTrajectoryProducer:
         sample_count: int,
         tools: Sequence[ToolDefinition] | None = None,
     ) -> list[Trajectory]:
+        # Self-mode fans out one request per temperature; Codex endpoints ignore
+        # SamplingConfig, so diversity is ineffective there (see client_codex).
+        _maybe_warn_codex_self_mode_sampling(self._client(model_id), sample_count)
         selected_temperatures = list(temperatures)[:sample_count]
         if len(selected_temperatures) < sample_count:
             missing_count = sample_count - len(selected_temperatures)

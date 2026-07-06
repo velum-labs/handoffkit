@@ -88,6 +88,8 @@ class CodexResponsesClient:
         tool_choice: ToolChoice | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> ModelResponse:
+        # CodexResponsesClient does not forward SamplingConfig to the Responses API;
+        # self-mode temperature diversity is therefore ineffective for Codex endpoints.
         del sampling
         started = time.perf_counter()
         text_parts: list[str] = []
@@ -141,7 +143,7 @@ class CodexResponsesClient:
         tool_choice: ToolChoice | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        del sampling
+        del sampling  # see chat() — sampling is not honored on Codex Responses
         async for chunk in self._stream(messages, tools, tool_choice, extra):
             yield chunk
 

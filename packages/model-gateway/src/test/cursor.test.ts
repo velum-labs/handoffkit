@@ -68,7 +68,7 @@ test("translate maps the full agent-mode payload", () => {
   assert.equal(translated.stream, true);
   assert.equal(translated.temperature, 0.2);
   assert.equal(translated.tool_choice, "auto");
-  assert.equal(translated.max_tokens, 4096);
+  assert.equal(translated.max_completion_tokens, 4096);
   assert.deepEqual(translated.messages, [
     { role: "system", content: "You are a coding agent." },
     { role: "user", content: "fix the bug" },
@@ -405,7 +405,7 @@ test("local gateway /v1/cursor route translates the hybrid before the backend ca
     const sent = lastChatBody() as Record<string, unknown>;
     assert.equal("input" in sent, false, "the hybrid input list must not reach the backend");
     assert.equal(Array.isArray(sent.messages), true);
-    assert.equal(sent.max_tokens, 4096);
+    assert.equal(sent.max_completion_tokens, 4096);
     const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
     assert.equal(body.choices[0]?.message.content, "hello from fake");
   } finally {

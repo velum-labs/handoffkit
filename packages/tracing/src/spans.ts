@@ -194,6 +194,30 @@ export function jsonAttr(value: unknown): string | undefined {
   }
 }
 
+// OTel spans are write-only: attributes cannot be read back, so appending to a
+// list attribute needs per-span bookkeeping. WeakMap so finished spans free it.
+const listAttributes = new WeakMap<Span, Map<string, string[]>>();
+
+/**
+ * Append `value` to the string-array attribute `key` of `span`. Duplicate
+ * values are kept — each append is an occurrence.
+ */
+export function appendSpanListAttribute(span: Span, key: string, value: string): void {
+  if (!span.isRecording()) return;
+  let lists = listAttributes.get(span);
+  if (lists === undefined) {
+    lists = new Map();
+    listAttributes.set(span, lists);
+  }
+  let list = lists.get(key);
+  if (list === undefined) {
+    list = [];
+    lists.set(key, list);
+  }
+  list.push(value);
+  span.setAttribute(key, [...list]);
+}
+
 /** Drop undefined values so callers can build attribute bags inline. */
 function compactAttributes(attributes: Record<string, AttributeValue | undefined>): Attributes {
   const compact: Attributes = {};

@@ -16,6 +16,7 @@
 import type { Backend } from "../backend.js";
 import { randomId } from "@fusionkit/runtime-utils";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
+import { droppedField } from "./dropped.js";
 import { openAiSseToResponses } from "./responses-stream.js";
 export { openAiSseToResponses } from "./responses-stream.js";
 
@@ -55,6 +56,13 @@ export type ResponsesRequest = {
   max_output_tokens?: number;
   temperature?: number;
   top_p?: number;
+  parallel_tool_calls?: boolean;
+  reasoning?: { effort?: string; [key: string]: unknown };
+  text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } };
+  previous_response_id?: string;
+  truncation?: string | unknown;
+  metadata?: Record<string, unknown>;
+  include?: unknown[];
   stream?: boolean;
 };
 
@@ -70,10 +78,32 @@ type OpenAiResponse = {
 };
 
 function partText(part: ResponsesContentPart): string {
+  if (part.type === "refusal" && typeof part.text === "string") return part.text;
   if (typeof part.text === "string" && (part.type === "input_text" || part.type === "output_text" || part.type === "text")) {
     return part.text;
   }
   return "";
+}
+
+function mapTextFormat(text: NonNullable<ResponsesRequest["text"]>): unknown | undefined {
+  const format = text.format;
+  if (format === undefined) return undefined;
+  switch (format.type) {
+    case "json_schema":
+      return {
+        type: "json_schema",
+        json_schema: {
+          ...(typeof format.name === "string" ? { name: format.name } : {}),
+          ...(format.schema !== undefined ? { schema: format.schema } : {}),
+          ...(typeof format.strict === "boolean" ? { strict: format.strict } : {})
+        }
+      };
+    case "json_object":
+      return { type: "json_object" };
+    default:
+      droppedField("responses", "text");
+      return undefined;
+  }
 }
 
 function contentToText(content: string | ResponsesContentPart[]): string {
@@ -87,6 +117,8 @@ function contentToParts(content: string | ResponsesContentPart[]): string | Reco
   for (const part of content) {
     if (part.type === "input_image" && typeof part.image_url === "string") {
       parts.push({ type: "image_url", image_url: { url: part.image_url } });
+    } else if (part.type === "input_file") {
+      droppedField("responses", "input_file");
     } else {
       const text = partText(part);
       if (text.length > 0) parts.push({ type: "text", text });
@@ -380,7 +412,10 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
       // item may sit between an assistant message and its function calls, so
       // dropping it must not break their adjacency (`pendingAssistantText`
       // survives; every other item type invalidates it below).
-      if (item.type === "reasoning") continue;
+      if (item.type === "reasoning") {
+        droppedField("responses", "reasoning", "input");
+        continue;
+      }
       pendingAssistantText = undefined;
       if (item.type === "function_call_output" || item.type === "custom_tool_call_output") {
         const out = item as { call_id: string; output: unknown };
@@ -422,9 +457,26 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
     messages,
     stream: body.stream === true
   };
-  if (typeof body.max_output_tokens === "number") chat.max_tokens = body.max_output_tokens;
+  if (typeof body.max_output_tokens === "number") chat.max_completion_tokens = body.max_output_tokens;
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
+  if (typeof body.parallel_tool_calls === "boolean") chat.parallel_tool_calls = body.parallel_tool_calls;
+  if (body.reasoning !== undefined) {
+    const effort = body.reasoning.effort;
+    if (effort === "low" || effort === "medium" || effort === "high") {
+      chat.reasoning_effort = effort;
+    } else {
+      droppedField("responses", "reasoning");
+    }
+  }
+  if (body.text !== undefined) {
+    const responseFormat = mapTextFormat(body.text);
+    if (responseFormat !== undefined) chat.response_format = responseFormat;
+  }
+  if (body.previous_response_id !== undefined) droppedField("responses", "previous_response_id");
+  if (body.truncation !== undefined) droppedField("responses", "truncation");
+  if (body.metadata !== undefined) droppedField("responses", "metadata");
+  if (body.include !== undefined) droppedField("responses", "include");
   {
     // Every callable tool is forwarded as a chat function tool (Chat
     // Completions only speaks JSON function tools):
@@ -472,6 +524,14 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
             parameters: tool.parameters ?? { type: "object", properties: {} }
           }
         });
+      } else if (
+        typeof tool.type === "string" &&
+        tool.type.length > 0 &&
+        tool.type !== "function" &&
+        tool.type !== "custom" &&
+        (tool.name === undefined || tool.name.length === 0)
+      ) {
+        droppedField("responses", tool.type, "tools");
       }
     }
     // Tools discovered mid-conversation (via a prior `tool_search` execution)

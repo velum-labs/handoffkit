@@ -229,6 +229,58 @@ async def test_self_fusion_tolerates_single_sample_failure() -> None:
 
 
 @pytest.mark.asyncio
+async def test_judge_synthesize_uses_request_max_tokens_over_config_default() -> None:
+    class CaptureSynth:
+        model_id = "synth"
+        max_context = None
+
+        def __init__(self) -> None:
+            self.captured: list[SamplingConfig] = []
+
+        async def chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Any] | None = None,
+            tool_choice: Any | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> ModelResponse:
+            self.captured.append(sampling or SamplingConfig())
+            return ModelResponse(model_id=self.model_id, content="synthesized answer")
+
+        def stream_chat(self, *args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("stream_chat should not be called")
+
+        async def aclose(self) -> None:
+            return None
+
+    synth = CaptureSynth()
+    config = _config(default_mode="panel")
+    config.sampling = SamplingConfig(max_tokens=1024)
+    config.synthesizer_model = "synth"
+    clients = {
+        "fast": FakeModelClient("fast", ["panel member answer"]),
+        "judge": FakeModelClient(
+            "judge",
+            [
+                '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
+                '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
+            ],
+        ),
+        "synth": synth,
+    }
+    engine = FusionEngine(config=config, clients=clients)
+
+    result = await engine.run(
+        [ChatMessage(role="user", content="fuse this")],
+        sampling=SamplingConfig(max_tokens=8000),
+    )
+
+    assert result.content == "synthesized answer"
+    assert synth.captured[-1].max_tokens == 8000
+
+
+@pytest.mark.asyncio
 async def test_panel_fuses_from_survivor_when_one_model_fails() -> None:
     config = _config(default_mode="panel")
     config.panel_models = ["fast", "broken"]

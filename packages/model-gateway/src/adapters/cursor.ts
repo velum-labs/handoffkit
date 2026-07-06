@@ -16,10 +16,12 @@
  * boundary stays defensive without 4xx-ing on new shapes.
  */
 
+import { droppedField } from "./dropped.js";
+
 type JsonObject = Record<string, unknown>;
 
 /** Fields copied through unchanged when present and non-null. */
-const PASSTHROUGH_FIELDS = ["model", "temperature", "top_p", "tool_choice", "stream"] as const;
+const PASSTHROUGH_FIELDS = ["model", "temperature", "top_p", "top_k", "tool_choice", "stream", "parallel_tool_calls"] as const;
 
 /**
  * Permissive schema synthesized for grammar-based ("custom") tools that
@@ -72,6 +74,8 @@ export function translateCursorRequest(body: JsonObject): JsonObject {
   const tools = translateTools(body.tools);
   if (tools !== undefined) translated.tools = tools;
   translateSampling(body, translated);
+  translateReasoning(body, translated);
+  translateTextFormat(body, translated);
   if (translated.stream === true) {
     translated.stream_options = { include_usage: true };
   }
@@ -106,8 +110,11 @@ function inputItemsToMessages(items: unknown): JsonObject[] {
         tool_call_id: asStr(item.call_id),
         content: stringify(item.output)
       });
+    } else if (kind === "reasoning") {
+      droppedField("cursor", "reasoning", "input");
+    } else if (kind !== undefined && kind !== null) {
+      droppedField("cursor", asStr(kind), "input");
     }
-    // "reasoning" (encrypted/opaque items) and unknown types are dropped.
   }
   return messages;
 }
@@ -134,7 +141,17 @@ function contentText(content: unknown): string {
     const parts: string[] = [];
     for (const part of content) {
       if (typeof part === "string") parts.push(part);
-      else if (isObject(part) && typeof part.text === "string") parts.push(part.text);
+      else if (isObject(part)) {
+        if (part.type === "input_file") {
+          droppedField("cursor", "input_file");
+          continue;
+        }
+        if (part.type === "refusal" && typeof part.text === "string") {
+          parts.push(part.text);
+          continue;
+        }
+        if (typeof part.text === "string") parts.push(part.text);
+      }
     }
     return parts.join("");
   }
@@ -223,7 +240,43 @@ function customParameters(entry: JsonObject): JsonObject {
 function translateSampling(body: JsonObject, translated: JsonObject): void {
   const maxTokens = body.max_output_tokens ?? body.max_tokens;
   if (typeof maxTokens === "number" && Number.isInteger(maxTokens)) {
-    translated.max_tokens = maxTokens;
+    translated.max_completion_tokens = maxTokens;
+  }
+}
+
+function translateReasoning(body: JsonObject, translated: JsonObject): void {
+  const reasoning = body.reasoning;
+  if (!isObject(reasoning)) return;
+  const effort = reasoning.effort;
+  if (effort === "low" || effort === "medium" || effort === "high") {
+    translated.reasoning_effort = effort;
+    return;
+  }
+  droppedField("cursor", "reasoning");
+}
+
+function translateTextFormat(body: JsonObject, translated: JsonObject): void {
+  const text = body.text;
+  if (!isObject(text)) return;
+  const format = text.format;
+  if (!isObject(format) || typeof format.type !== "string") return;
+  switch (format.type) {
+    case "json_schema":
+      translated.response_format = {
+        type: "json_schema",
+        json_schema: {
+          ...(typeof format.name === "string" ? { name: format.name } : {}),
+          ...(format.schema !== undefined ? { schema: format.schema } : {}),
+          ...(typeof format.strict === "boolean" ? { strict: format.strict } : {})
+        }
+      };
+      break;
+    case "json_object":
+      translated.response_format = { type: "json_object" };
+      break;
+    default:
+      droppedField("cursor", "text");
+      break;
   }
 }
 

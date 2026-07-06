@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from fusionkit_core.artifacts import hash_text
-from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
+from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig, merge_sampling
 from fusionkit_core.contracts import (
     ContractArtifactRef,
     ContractError,
@@ -200,7 +200,7 @@ class FusionRunManager:
                 decision = self.engine.router.route(_runtime_messages(request.messages))
                 selected_mode = decision.route
 
-            sampling = _sampling_from_request(request)
+            sampling = merge_sampling(_sampling_from_request(request), self.engine.config.sampling)
             budget_error = self._check_candidate_budget(request, selected_mode)
             if budget_error is not None:
                 return self._fail_run(summary, budget_error)
@@ -266,6 +266,7 @@ class FusionRunManager:
                     fused = await self.engine._judge_synthesize(
                         _runtime_messages(request.messages),
                         trajectories,
+                        sampling=sampling,
                         after_judge=after_judge,
                     )
                 except _BudgetExceededSignal as signal:

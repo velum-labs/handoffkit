@@ -80,6 +80,26 @@ class SamplingConfig(BaseModel):
     seed: int | None = None
 
 
+def merge_sampling(
+    override: SamplingConfig | None, fallback: SamplingConfig
+) -> SamplingConfig:
+    """Overlay request sampling onto config defaults, field by field.
+
+    Only fields the caller explicitly set (differing from generic
+    :class:`SamplingConfig` defaults) replace the fallback; everything else
+    keeps the operator-configured value.
+    """
+    if override is None:
+        return fallback
+    defaults = SamplingConfig()
+    updates: dict[str, object] = {}
+    for field_name in SamplingConfig.model_fields:
+        override_val = getattr(override, field_name)
+        if override_val != getattr(defaults, field_name):
+            updates[field_name] = override_val
+    return fallback.model_copy(update=updates)
+
+
 def model_sampling_defaults(model: str) -> dict[str, float]:
     """Per-model sampling defaults for panel/passthrough model calls.
 

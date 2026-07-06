@@ -29,9 +29,8 @@ import type {
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
  * Completions backend (the owned mlx fork by default) and exposes the wire
- * dialects each agent harness needs. M1 implements the OpenAI chat surface
- * (opencode, Cursor IDE plan panel); the Anthropic Messages and OpenAI
- * Responses adapters return 501 until M2/M3 land.
+ * dialects each agent harness needs: OpenAI chat, Anthropic Messages, OpenAI
+ * Responses, and Cursor's Responses-hybrid BYOK shape.
  */
 
 export type GatewayOptions = {

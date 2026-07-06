@@ -21,6 +21,7 @@ export type { InitFusionTracingOptions } from "./provider.js";
 export { addSpanListener, hasSpanListeners, listenerSpanProcessor, removeSpanListener } from "./listener.js";
 export type { SpanListener } from "./listener.js";
 export {
+  appendSpanListAttribute,
   carrierFromEnv,
   carrierFromHeaders,
   carrierOf,

@@ -44,8 +44,10 @@ function customToolInput(args: string): string {
   }
 }
 
-function sse(type: string, data: Record<string, unknown>): Uint8Array {
-  return ENCODER.encode(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+function sse(type: string, data: Record<string, unknown>, sequenceNumber: number): Uint8Array {
+  return ENCODER.encode(
+    `event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: sequenceNumber, ...data })}\n\n`
+  );
 }
 
 type ToolAccumulator = {
@@ -135,6 +137,13 @@ export function openAiSseToResponses(
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   let providerCost: unknown;
+  let sequenceNumber = 0;
+
+  const emit = (type: string, data: Record<string, unknown>): Uint8Array => {
+    const encoded = sse(type, data, sequenceNumber);
+    sequenceNumber += 1;
+    return encoded;
+  };
 
   type Controller = ReadableStreamDefaultController<Uint8Array>;
 
@@ -163,7 +172,7 @@ export function openAiSseToResponses(
   const ensureCreated = (controller: Controller): void => {
     if (created) return;
     created = true;
-    controller.enqueue(sse("response.created", { response: baseResponse("in_progress", []) }));
+    controller.enqueue(emit("response.created", { response: baseResponse("in_progress", []) }));
   };
 
   // Reasoning summary item lifecycle. The item opens on the first reasoning
@@ -183,7 +192,7 @@ export function openAiSseToResponses(
     reasoningOpen = true;
     reasoningOutputIndex = nextOutputIndex++;
     controller.enqueue(
-      sse("response.output_item.added", {
+      emit("response.output_item.added", {
         output_index: reasoningOutputIndex,
         item: { type: "reasoning", id: reasoningItemId, summary: [] }
       })
@@ -198,12 +207,12 @@ export function openAiSseToResponses(
     reasoningParts.push(text);
     const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: summaryIndex };
     controller.enqueue(
-      sse("response.reasoning_summary_part.added", { ...base, part: { type: "summary_text", text: "" } })
+      emit("response.reasoning_summary_part.added", { ...base, part: { type: "summary_text", text: "" } })
     );
-    controller.enqueue(sse("response.reasoning_summary_text.delta", { ...base, delta: text }));
-    controller.enqueue(sse("response.reasoning_summary_text.done", { ...base, text }));
+    controller.enqueue(emit("response.reasoning_summary_text.delta", { ...base, delta: text }));
+    controller.enqueue(emit("response.reasoning_summary_text.done", { ...base, text }));
     controller.enqueue(
-      sse("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
+      emit("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
     );
   };
 
@@ -215,7 +224,7 @@ export function openAiSseToResponses(
       tokenPartIndex = reasoningParts.length;
       reasoningParts.push("");
       controller.enqueue(
-        sse("response.reasoning_summary_part.added", {
+        emit("response.reasoning_summary_part.added", {
           item_id: reasoningItemId,
           output_index: reasoningOutputIndex,
           summary_index: tokenPartIndex,
@@ -225,7 +234,7 @@ export function openAiSseToResponses(
     }
     reasoningParts[tokenPartIndex] += text;
     controller.enqueue(
-      sse("response.reasoning_summary_text.delta", {
+      emit("response.reasoning_summary_text.delta", {
         item_id: reasoningItemId,
         output_index: reasoningOutputIndex,
         summary_index: tokenPartIndex,
@@ -239,9 +248,9 @@ export function openAiSseToResponses(
     const text = reasoningParts[tokenPartIndex] ?? "";
     const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: tokenPartIndex };
     tokenPartIndex = -1;
-    controller.enqueue(sse("response.reasoning_summary_text.done", { ...base, text }));
+    controller.enqueue(emit("response.reasoning_summary_text.done", { ...base, text }));
     controller.enqueue(
-      sse("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
+      emit("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
     );
   };
 
@@ -253,7 +262,7 @@ export function openAiSseToResponses(
     closeTokenPart(controller);
     reasoningClosed = true;
     controller.enqueue(
-      sse("response.output_item.done", {
+      emit("response.output_item.done", {
         output_index: reasoningOutputIndex,
         item: { type: "reasoning", id: reasoningItemId, summary: reasoningSummary() }
       })
@@ -267,13 +276,13 @@ export function openAiSseToResponses(
     textOpen = true;
     messageOutputIndex = nextOutputIndex++;
     controller.enqueue(
-      sse("response.output_item.added", {
+      emit("response.output_item.added", {
         output_index: messageOutputIndex,
         item: { type: "message", id: messageItemId, status: "in_progress", role: "assistant", content: [] }
       })
     );
     controller.enqueue(
-      sse("response.content_part.added", {
+      emit("response.content_part.added", {
         item_id: messageItemId,
         output_index: messageOutputIndex,
         content_index: 0,
@@ -309,7 +318,7 @@ export function openAiSseToResponses(
     closeReasoning(controller);
     if (textOpen) {
       controller.enqueue(
-        sse("response.output_text.done", {
+        emit("response.output_text.done", {
           item_id: messageItemId,
           output_index: messageOutputIndex,
           content_index: 0,
@@ -317,7 +326,7 @@ export function openAiSseToResponses(
         })
       );
       controller.enqueue(
-        sse("response.content_part.done", {
+        emit("response.content_part.done", {
           item_id: messageItemId,
           output_index: messageOutputIndex,
           content_index: 0,
@@ -325,7 +334,7 @@ export function openAiSseToResponses(
         })
       );
       controller.enqueue(
-        sse("response.output_item.done", {
+        emit("response.output_item.done", {
           output_index: messageOutputIndex,
           item: {
             type: "message",
@@ -343,10 +352,10 @@ export function openAiSseToResponses(
         // so a custom call flushes its whole input here in one delta + done.
         const input = customToolInput(tool.args);
         const base = { item_id: tool.itemId, output_index: tool.outputIndex };
-        controller.enqueue(sse("response.custom_tool_call_input.delta", { ...base, delta: input }));
-        controller.enqueue(sse("response.custom_tool_call_input.done", { ...base, input }));
+        controller.enqueue(emit("response.custom_tool_call_input.delta", { ...base, delta: input }));
+        controller.enqueue(emit("response.custom_tool_call_input.done", { ...base, input }));
         controller.enqueue(
-          sse("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
+          emit("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
         );
         continue;
       }
@@ -354,19 +363,19 @@ export function openAiSseToResponses(
         // A typed tool's native item carries its arguments as a completed JSON
         // value, so it flushes whole in the item.done (no argument deltas).
         controller.enqueue(
-          sse("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
+          emit("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
         );
         continue;
       }
       controller.enqueue(
-        sse("response.function_call_arguments.done", {
+        emit("response.function_call_arguments.done", {
           item_id: tool.itemId,
           output_index: tool.outputIndex,
           arguments: tool.args
         })
       );
       controller.enqueue(
-        sse("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
+        emit("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
       );
     }
     // Truncation is an error, not a clean stop: an upstream that ended without a
@@ -375,8 +384,8 @@ export function openAiSseToResponses(
     // as incomplete.
     controller.enqueue(
       terminal === "completed"
-        ? sse("response.completed", { response: baseResponse("completed", assembleOutput()) })
-        : sse("response.incomplete", { response: baseResponse("incomplete", assembleOutput()) })
+        ? emit("response.completed", { response: baseResponse("completed", assembleOutput()) })
+        : emit("response.incomplete", { response: baseResponse("incomplete", assembleOutput()) })
     );
   };
 
@@ -402,7 +411,7 @@ export function openAiSseToResponses(
       ensureText(controller);
       textValue += delta.content;
       controller.enqueue(
-        sse("response.output_text.delta", {
+        emit("response.output_text.delta", {
           item_id: messageItemId,
           output_index: messageOutputIndex,
           content_index: 0,
@@ -438,7 +447,7 @@ export function openAiSseToResponses(
           };
           toolList.push(tool);
           controller.enqueue(
-            sse("response.output_item.added", {
+            emit("response.output_item.added", {
               output_index: tool.outputIndex,
               item:
                 kind === "custom"
@@ -466,7 +475,7 @@ export function openAiSseToResponses(
           // Custom and typed calls buffer their arguments (extracted at finalize).
           if (tool.kind === "function") {
             controller.enqueue(
-              sse("response.function_call_arguments.delta", {
+              emit("response.function_call_arguments.delta", {
                 item_id: tool.itemId,
                 output_index: tool.outputIndex,
                 delta: args

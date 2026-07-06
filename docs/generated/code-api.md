@@ -476,7 +476,7 @@ narrator and product telemetry subscribe to.
 - `export type { InitFusionTracingOptions } from "./provider.js";`
 - `export { addSpanListener, hasSpanListeners, listenerSpanProcessor, removeSpanListener } from "./listener.js";`
 - `export type { SpanListener } from "./listener.js";`
-- `export { carrierFromEnv, carrierFromHeaders, carrierOf, contextOf, emitFusionMarker, envOf, fusionBaggageOf, headersOf, jsonAttr, newSessionCarrier, newSpanId, newTraceId, sessionCarrier, startFusionSpan, traceIdOf, withFusionBaggage } from "./spans.js";`
+- `export { appendSpanListAttribute, carrierFromEnv, carrierFromHeaders, carrierOf, contextOf, emitFusionMarker, envOf, fusionBaggageOf, headersOf, jsonAttr, newSessionCarrier, newSpanId, newTraceId, sessionCarrier, startFusionSpan, traceIdOf, withFusionBaggage } from "./spans.js";`
 - `export type { FusionAttributes, FusionBaggage, FusionScope, FusionSpan, FusionTraceCarrier } from "./spans.js";`
 - `export { AllowlistSpanExporter, isLoopbackOtlpEndpoint, toExportable, TRACE_REDACTED_ATTRIBUTE } from "./exportable.js";`
 - `export type { AllowlistSpanExporterOptions } from "./exportable.js";`

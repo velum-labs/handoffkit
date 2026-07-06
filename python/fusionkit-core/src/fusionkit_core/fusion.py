@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
-from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
+from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig, merge_sampling
 from fusionkit_core.judge import (
     FuseResult,
     JudgeSynthesizer,
@@ -52,7 +52,7 @@ class FusionEngine:
         sample_count: int | None = None,
     ) -> FusionResult:
         selected_mode = mode or self.config.default_mode
-        selected_sampling = sampling or self.config.sampling
+        selected_sampling = merge_sampling(sampling, self.config.sampling)
         if selected_mode == "router":
             decision = self.router.route(messages)
             result = await self.run(
@@ -85,7 +85,7 @@ class FusionEngine:
             panel_models=panel_models,
             sample_count=sample_count,
         )
-        fused = await self._judge_synthesize(messages, trajectories)
+        fused = await self._judge_synthesize(messages, trajectories, sampling=selected_sampling)
         answer = fused.response.content
         metrics: dict[str, object] = {**_trajectory_metrics(trajectories)}
         synthesis = fused.trajectory.synthesis if fused.trajectory is not None else None
@@ -147,7 +147,7 @@ class FusionEngine:
         tool-aware.
         """
         selected_mode = self._resolve_mode(messages, mode)
-        selected_sampling = sampling or self.config.sampling
+        selected_sampling = merge_sampling(sampling, self.config.sampling)
         if selected_mode == "single":
             response = await self._client(self.config.default_model).chat(
                 messages, selected_sampling, tools=tools, tool_choice=tool_choice
@@ -172,7 +172,7 @@ class FusionEngine:
             survivors,
             judge_client=self._client(self.config.resolved_judge_model),
             synthesizer_client=self._client(self.config.resolved_synthesizer_model),
-            sampling=self.config.sampling,
+            sampling=selected_sampling,
             tools=tools,
             tool_choice=tool_choice,
         )
@@ -207,7 +207,7 @@ class FusionEngine:
         surface to the caller before the SSE stream opens.
         """
         selected_mode = self._resolve_mode(messages, mode)
-        selected_sampling = sampling or self.config.sampling
+        selected_sampling = merge_sampling(sampling, self.config.sampling)
         if selected_mode == "single":
             async for item in self._stream_client(
                 self._client(self.config.default_model),
@@ -232,7 +232,7 @@ class FusionEngine:
             survivors,
             judge_client=self._client(self.config.resolved_judge_model),
             synthesizer_client=self._client(self.config.resolved_synthesizer_model),
-            sampling=self.config.sampling,
+            sampling=selected_sampling,
             tools=tools,
             tool_choice=tool_choice,
         ):
@@ -320,11 +320,13 @@ class FusionEngine:
         messages: Sequence[ChatMessage],
         trajectories: Sequence[Trajectory],
         *,
+        sampling: SamplingConfig | None = None,
         after_judge: Callable[[ModelResponse | None], None] | None = None,
     ) -> FuseResult:
         judge = self._client(self.config.resolved_judge_model)
         synthesizer = self._client(self.config.resolved_synthesizer_model)
         survivors = [t for t in trajectories if t.status == "succeeded"] or list(trajectories)
+        resolved_sampling = merge_sampling(sampling, self.config.sampling)
         # Text fusion is a zero-tool-round fuse: no tools means the synthesizer is
         # terminal on turn 1 and the fused answer + synthesis come back at once.
         return await self.judge_synthesizer.fuse(
@@ -332,7 +334,7 @@ class FusionEngine:
             survivors,
             judge_client=judge,
             synthesizer_client=synthesizer,
-            sampling=self.config.sampling,
+            sampling=resolved_sampling,
             tools=None,
             after_judge=after_judge,
         )
