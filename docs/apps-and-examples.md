@@ -52,7 +52,7 @@ pnpm install
 pnpm test
 ```
 
-Use this app when validating observability behavior, trace rendering, session inspection, or local debugging workflows. When trace event shapes change, update both the app and [Specs and APIs](specs-and-apis.md).
+Use this app when validating observability behavior, trace rendering, session inspection, or local debugging workflows. When the trace semantic conventions change (`spec/fusion-trace/registry.json`), regenerate the bindings and update both the app and [Specs and APIs](specs-and-apis.md).
 
 ## Example execution model
 

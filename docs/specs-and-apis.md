@@ -1,6 +1,6 @@
 # Specs and APIs
 
-This page documents the repository's protocol contracts, HTTP APIs, generated bindings, fixtures, trace events, and schema maintenance workflow. It is the first page to read before changing anything under `spec/`, generated protocol code, or server request and response shapes.
+This page documents the repository's protocol contracts, HTTP APIs, generated bindings, fixtures, trace conventions, and schema maintenance workflow. It is the first page to read before changing anything under `spec/`, generated protocol code, or server request and response shapes.
 
 ## Contract ownership
 
@@ -171,7 +171,7 @@ Update these docs when the schema change affects a package author or API client:
 | --- | --- |
 | New record type | This page, `docs/typescript-reference.md`, and `docs/python-reference.md`. |
 | New HTTP endpoint | This page and the relevant CLI or gateway page. |
-| New trace event | This page and observability docs. |
+| New trace span or attribute | `spec/fusion-trace/registry.json`, regenerated bindings, this page, and observability docs. |
 | New benchmark contract | This page and benchmark docs. |
 | Backward-incompatible field change | Release docs, protocol release docs, and migration notes. |
 
@@ -187,4 +187,4 @@ A model call record should include provider, model id, request hash, response ha
 
 Generated validators are the compatibility gate. If a runtime payload cannot pass the relevant assertion in `@fusionkit/protocol` or model validation in `fusionkit_core.contracts`, it should not be persisted as a protocol record.
 
-Do not duplicate schema name strings in new packages when `MODEL_FUSION_SCHEMA_NAMES` or `contract_model_for_schema()` can be used. Do not hand-roll JSON hashing when `canonicalize()`, `hashCanonicalSha256()`, `requestHash()`, or `responseHash()` are available. Do not invent trace shapes when existing trace emitters and payload helpers can express the event.
+Do not duplicate schema name strings in new packages when `MODEL_FUSION_SCHEMA_NAMES` or `contract_model_for_schema()` can be used. Do not hand-roll JSON hashing when `canonicalize()`, `hashCanonicalSha256()`, `requestHash()`, or `responseHash()` are available. Do not invent span names or attribute keys outside `spec/fusion-trace/registry.json` when the existing conventions and span helpers can express the signal.

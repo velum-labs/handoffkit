@@ -71,6 +71,7 @@ are honored, and piped answers still drive prompts
 | `models` | Manage the local MLX model cache: `models list` / `models download` / `models rm`. | `packages/cli/src/commands/models.ts` |
 | `ensemble` | Manage named ensembles (`list` / `add` / `edit` / `remove` / `rename` / `use`) plus advanced maintainer harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts`, `ensemble-config.ts` |
 | `local <tool>` | Back a vendor agent (claude / codex / opencode / cursor) with a single local MLX model and no fusion; for a fused local panel use `fusionkit codex --local`. | `packages/cli/src/commands/local.ts` |
+| `telemetry` | Inspect and control anonymous, opt-in product telemetry: `telemetry status` / `on` / `off` / `inspect` (prints exactly what a session event would contain). Off by default; `DO_NOT_TRACK` beats everything. | `packages/cli/src/commands/telemetry.ts` |
 | `completion <shell>` | Print a static shell completion script for bash, zsh, or fish (advanced). | `packages/cli/src/commands/completion.ts` |
 | `runtime` | Advanced maintainer inspection of runtime-kernel workflows and composition primitives. | `packages/cli/src/commands/runtime.ts` |
 | `version` | Print the npm CLI and pinned Python synthesizer version matrix. | `packages/cli/src/commands/version.ts` |
@@ -100,7 +101,7 @@ Shared flags (full list in `applyFusionOptions`):
 | `--ensemble NAME` | The session-default ensemble from `.fusionkit/fusion.json` (all defined ensembles still register as their own `fusion-<name>` models). | core |
 | `--judge-model MODEL` | Model used for judge synthesis (applies to the selected ensemble). | core |
 | `--local` / `--no-local` | Run the panel on local MLX models (Apple Silicon only) instead of cloud providers. | core |
-| `--observe` / `--no-observe` | Boot the local scope dashboard and stream trace events. | core |
+| `--observe` / `--no-observe` | Boot the local scope dashboard and stream trace spans to it. | core |
 | `--repo DIR` | The coding workspace the panel fuses over. | core |
 | `--synthesis-url URL` / `--fusionkit-dir DIR` | Reuse a running `fusionkit serve`, or run a local FusionKit checkout (dev override). | core |
 | `--port N` / `--portless` / `--no-portless` | Gateway port / portless stable URLs. | core |
@@ -179,6 +180,9 @@ The full model is documented in [Configuration](configuration.md).
 | `FUSIONKIT_SESSIONS_DIR` | Durable session store (default: `~/.fusionkit/sessions`). |
 | `FUSIONKIT_CONSENT_PATH` | Cloud-panel cost consent file override (mostly tests/CI). |
 | `FUSIONKIT_SKIP_KEY_VALIDATION` | Skip live provider-key validation when set to `1`. |
+| `FUSIONKIT_TELEMETRY` | `1`/`0` overrides the stored product-telemetry consent for one invocation. |
+| `DO_NOT_TRACK` | Any non-empty value force-disables product telemetry, beating every other setting. |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Export fusion trace spans to your own OTLP/HTTP collector; `--observe` fills it with the local scope dashboard when unset. |
 | `PORTLESS` | Set to `0` to disable portless routing by default. |
 | `PORTLESS_STATE_DIR`, `PORTLESS_TLD` | Portless proxy state directory and local domain. |
 

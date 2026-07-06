@@ -55,7 +55,7 @@ flowchart LR
   gw --> step["judge step (tool-calling agent over candidates + conversation)"]
   step -->|"streamed assistant step (+ tool_calls)"| gw
   gw -->|"dialect-native SSE"| codex
-  gw -.->|"trace events"| dash["scope dashboard"]
+  gw -.->|"OTLP spans"| dash["scope dashboard"]
 ```
 
 The gateway is dialect-aware on the edge and dialect-agnostic on the inside:
