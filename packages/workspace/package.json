@@ -38,5 +38,8 @@
     "git",
     "worktree",
     "workspace"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

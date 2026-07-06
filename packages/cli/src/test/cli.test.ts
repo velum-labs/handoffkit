@@ -229,6 +229,9 @@ function doctorEnv(pathDir: string, extra: Record<string, string | undefined> = 
     ...extra,
     NO_COLOR: "1",
     FUSIONKIT_NO_TUI: "1",
+    // Hermetic: never scan the host's real MLX home — a dev machine with
+    // downloaded models would otherwise flip doctor's readiness verdict.
+    FUSIONKIT_MLX_HOME: join(pathDir, "mlx-home"),
     PATH: `${pathDir}${process.env.PATH !== undefined ? `:${process.env.PATH}` : ""}`
   };
 }

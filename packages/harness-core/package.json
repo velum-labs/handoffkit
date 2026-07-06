@@ -43,5 +43,8 @@
     "harness",
     "driver",
     "testing"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

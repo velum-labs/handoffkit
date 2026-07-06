@@ -9,5 +9,8 @@
     "@fusionkit/adapter-ai-sdk": "workspace:*",
     "@fusionkit/registry": "workspace:*",
     "ai": "6.0.200"
+  },
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
   }
 }

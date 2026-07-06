@@ -42,5 +42,8 @@
     "gateway",
     "openai-compatible",
     "streaming"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

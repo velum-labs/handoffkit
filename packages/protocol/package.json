@@ -34,5 +34,8 @@
     "protocol",
     "schema",
     "trajectory"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

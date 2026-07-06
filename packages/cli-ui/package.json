@@ -44,5 +44,8 @@
     "terminal-ui",
     "ink",
     "prompts"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

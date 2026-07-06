@@ -40,5 +40,8 @@
     "tooling",
     "harness",
     "adapter"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

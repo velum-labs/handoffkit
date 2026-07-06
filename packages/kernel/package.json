@@ -54,5 +54,8 @@
     "runtime-kernel",
     "operators",
     "schedulers"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

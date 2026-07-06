@@ -34,5 +34,8 @@
     "registry",
     "providers",
     "models"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

@@ -62,7 +62,10 @@ test("smoke dashboard writes schema-valid success, failure, skipped, and missing
       repo: fixture.repo,
       outputRoot: fixture.outputRoot,
       timeoutMs: 1_000,
-      createdAt: "2026-06-16T00:00:00.000Z"
+      createdAt: "2026-06-16T00:00:00.000Z",
+      // Hermetic: never read the host's credentials or PATH — the dashboard
+      // must render the same on a dev machine with every agent installed.
+      env: {}
     });
 
     assert.equal(dashboard.records.length, 6);

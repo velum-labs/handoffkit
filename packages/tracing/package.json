@@ -41,5 +41,8 @@
     "opentelemetry",
     "tracing",
     "observability"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

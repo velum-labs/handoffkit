@@ -165,7 +165,10 @@ function statusFor(check: Check): StatusKind {
 }
 
 /** Report on the local MLX runtime and any downloaded models (best-effort). */
-async function reportLocalMlx(presenter: Presenter, report: DoctorEntry[]): Promise<void> {
+async function reportLocalMlx(
+  presenter: Presenter,
+  report: DoctorEntry[]
+): Promise<{ modelsDownloaded: number }> {
   const host = detectHost();
   presenter.blank();
   presenter.heading("local MLX (Apple Silicon)");
@@ -177,7 +180,7 @@ async function reportLocalMlx(presenter: Presenter, report: DoctorEntry[]): Prom
       ok: false,
       detail: `not available on ${host.platform}/${host.arch}`
     });
-    return;
+    return { modelsDownloaded: 0 };
   }
 
   const env = ownedMlxEnv();
@@ -211,6 +214,7 @@ async function reportLocalMlx(presenter: Presenter, report: DoctorEntry[]): Prom
   presenter.line(
     `  ${dim(`${Math.round(host.totalRamGB)}GB RAM · cache ${env.dir} · ${formatBytes(info.diskBytes)} on disk`)}`
   );
+  return { modelsDownloaded: downloaded.length };
 }
 
 /** `fusionkit doctor` — a proactive environment checklist with fix hints. */
@@ -350,7 +354,7 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
     });
   }
 
-  await reportLocalMlx(presenter, report);
+  const localMlx = await reportLocalMlx(presenter, report);
 
   // Optional: actually warm the engine now (doctor + setup in one shot).
   if (opts.provision === true && runner) {
@@ -393,7 +397,11 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
     }
   }
 
-  const ready = runner && (anyCredentials || localCapable);
+  // A "local path" means a model is actually on disk, not merely that the
+  // hardware could host one — a bare Apple Silicon machine with no keys and no
+  // downloads still cannot serve a request.
+  const localReady = localCapable && localMlx.modelsDownloaded > 0;
+  const ready = runner && (anyCredentials || localReady);
   if (ctx.json) {
     ctx.emit({
       ready,
@@ -404,7 +412,8 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
           present: presentDefaultKeys.map((check) => check.env),
           missing: missingDefaultKeys.map((check) => check.env)
         },
-        localCapable
+        localCapable,
+        localReady
       },
       checks: report
     });
@@ -417,9 +426,12 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
       return 1;
     }
     const setupHint = engineWarm ? "" : ` Then run ${bold("fusionkit setup")} to pre-warm the engine.`;
+    const localHint = localCapable
+      ? ` Or download a local model with ${bold("fusionkit models")}.`
+      : "";
     presenter.line(
-      red("almost ready — no provider credentials found and local MLX is not available on this host.") +
-        ` Export one of ${bold(acceptedKeyEnvs.join(", "))}.${setupHint}`
+      red("almost ready — no provider credentials found and no local model is downloaded.") +
+        ` Export one of ${bold(acceptedKeyEnvs.join(", "))}.${localHint}${setupHint}`
     );
     return 1;
   }

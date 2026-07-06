@@ -474,6 +474,11 @@ for (const dir of workspaceDirs) {
   } else if (manifest.private !== true) {
     fail(`${manifestPath} must remain private`);
   }
+  // Test discovery is workspace-driven (`pnpm -r run test`), so a package with
+  // tests but no `test` script would silently drop out of the suite.
+  if (existsSync(join(dir, "src", "test")) && manifest.scripts?.test === undefined) {
+    fail(`${manifestPath} has src/test/ but no "test" script — its tests would never run`);
+  }
   checkDeps(manifestPath, manifest);
 }
 

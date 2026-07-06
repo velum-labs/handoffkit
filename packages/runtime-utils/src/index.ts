@@ -81,7 +81,10 @@ export function commandOnPath(
   env: Record<string, string | undefined> = process.env
 ): boolean {
   if (command.includes("/") || command.includes("\\")) return existsSync(command);
-  const pathValue = env.PATH ?? process.env.PATH ?? "";
+  // An explicitly passed env is authoritative: the probe must see exactly
+  // what the spawn will see. Falling back to the real PATH here would make
+  // availability checks pass for binaries the child could never resolve.
+  const pathValue = env.PATH ?? "";
   const exts =
     process.platform === "win32"
       ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter((entry) => entry.length > 0)
