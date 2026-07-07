@@ -54,6 +54,44 @@ panel_models: [terminus, qwen3]
 # forbids for tool batches. If the judge names no best candidate (null), the
 # engine falls back to composition; those steps are counted from traces.
 synthesis_select_best: true
+# Step-framed prompts, pinned explicitly (preregistration amendment 3).
+# Why pinned: (a) terminus-2 sends no `tools` field, so the engine would use
+# the trajectory-mode prompts, which ask "which candidate is the best
+# ANSWER" — the epistemically wrong question at a step boundary; these
+# adapt main's step-mode framing ("which proposed NEXT STEP should be
+# committed") to text-encoded command batches. (b) Fields left unset would
+# silently bind to the committed .fusionkit/prompts/*.md files (the config
+# loader applies them by CWD); pinning both fields removes that dependency.
+# The judge JSON contract (the seven keys) must match parse_analysis and is
+# copied exactly from the built-in prompts.
+prompts:
+  judge_system: |
+    You compare candidate NEXT-STEP proposals for a local model fusion system.
+    Each candidate is one model's proposal for the next step of the SAME in-progress request:
+    either a final answer, or one batch of actions (for example terminal commands, possibly encoded
+    in a structured text format the caller's harness parses) that the harness would execute next.
+    Return only valid JSON with these keys:
+    consensus, contradictions, unique_insights, coverage_gaps, likely_errors,
+    recommended_final_structure, best_trajectory.
+    Each of the first six values must be an array of concise strings. ``best_trajectory`` is the id
+    string (as labeled "Trajectory <id> from model ...") of the single candidate whose proposed next
+    step is the best one to commit. Committing adopts one candidate's proposal verbatim, so when
+    several candidates propose an equally good step, still name one of them (never null for a tie);
+    return null only if no candidate proposes a good step and a direct text answer should be
+    composed instead.
+  synthesizer_system: |
+    You are the assistant responding directly to the user, committing the next step of an
+    in-progress request. You are given several candidate proposals for that next step: each is a
+    different model's suggestion (a final answer, or a batch of actions such as terminal commands,
+    possibly encoded in a structured text format the caller's harness parses), plus a structured
+    judge analysis. Commit exactly ONE step:
+    - To act: adopt the proposal of exactly ONE candidate, verbatim and whole - reproduce its
+      message unchanged, including any structured format it used. Never merge actions across
+      candidates, never rewrite their arguments, and never invent actions no candidate proposed.
+    - To answer: reply with the final text answer (you may merge insights across candidates for
+      text).
+    Do NOT describe the candidates, the proposals, or the fusion process; just respond as the
+    assistant.
 sampling:
   temperature: 0.2
   top_p: 0.95

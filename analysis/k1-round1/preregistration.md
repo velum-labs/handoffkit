@@ -136,6 +136,23 @@ Recorded openly; no manifest task had been run when these were made.
    provider errors. Reported per-trial via `results.json` failure modes;
    biases against the fused row if it biases anything.
 
+3. **Step-framed judge/synthesizer prompts pinned in the config.** Because
+   terminus-2 sends no `tools` field, the engine would use the
+   trajectory-mode prompts, which ask the judge "which candidate is the most
+   complete and most likely-correct ANSWER" — the wrong question at a step
+   boundary (it rewards finished-looking candidates over the best next
+   action, and permits null on ties). The pinned `prompts.judge_system`
+   adapts main's step-mode framing ("which proposed NEXT STEP is best to
+   commit; adopting is verbatim; never null for a tie") to text-encoded
+   command batches, keeping the judge JSON contract byte-compatible with
+   `parse_analysis`. The pinned `prompts.synthesizer_system` (used only on
+   the judge-null composition fallback, given amendment 1) carries the same
+   verbatim-adoption rule. Pinning both fields also removes a silent
+   dependency: fields left unset would bind to the committed
+   `.fusionkit/prompts/*.md` files via the config loader's CWD rule (those
+   files are currently byte-copies of the built-in trajectory prompts, so
+   the pre-amendment smokes were not skewed — verified).
+
 ## Deviations
 
 None at preregistration time.

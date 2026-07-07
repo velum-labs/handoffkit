@@ -50,6 +50,17 @@ in `run_round1.sh`:
   vs ~137s under the synthesis config (consistent with the synthesizer call
   being skipped on select-verbatim steps).
 
+## Re-validation after amendment 3 (step-framed pinned prompts)
+
+- `load_config` on the final `panel.yaml` resolves `select_best=True` and
+  both prompt overrides (verified programmatically).
+- Integration smoke re-run under the final config: `tb` + terminus-2 driving
+  `fusionkit/panel` on `hello-world` → **1/1 resolved**.
+- Also verified: the committed `.fusionkit/prompts/{judge,synthesizer}.md`
+  (which the config loader would apply by CWD to unset prompt fields) are
+  byte-copies of the built-in trajectory prompts, so the earlier smokes were
+  not skewed; the final config pins both fields explicitly anyway.
+
 ## Known quirks recorded for the run
 
 - The server does not return `usage` token counts on the text path
