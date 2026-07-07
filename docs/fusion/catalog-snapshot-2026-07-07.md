@@ -269,3 +269,14 @@ selection.
 | 10 | `minimax/minimax-m3` | 58.78 | swe-bench-pro; artificial_analysis_coding_index | minimax-m3 |  |
 | 11 | `xiaomi/mimo-v2.5-pro` | 58.69 | swe-bench-pro; artificial_analysis_coding_index | mimo-v2.5 |  |
 | 12 | `z-ai/glm-5.1` | 58.40 | swe-bench-pro | glm-5 |  |
+
+## Visual briefing
+
+Open `analysis/phase-a-briefing-2026-07-07/phase_a_briefing.html` in a browser
+for a self-contained walkthrough: filter funnel, price-vs-score scatter,
+evidence coverage matrix, shortlist table, and all five hypothesis cards.
+Regenerate after snapshot or card changes:
+
+```bash
+uv run python analysis/phase-a-briefing-2026-07-07/scripts/build_briefing.py
+```
