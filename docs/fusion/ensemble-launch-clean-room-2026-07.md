@@ -542,14 +542,21 @@ Mechanical checks before spending money:
 
 ### Step B4 — Smoke tests (optional but recommended, ~$0–1)
 
-Per config, a tiny public-bench subset:
+Per config, run the identity smoke script (trivial chat per endpoint + one
+fused panel turn):
 
 ```bash
-FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.h1-backbone.yaml \
-  uv run fusionkit public-bench --suite livecodebench --subset 5 \
-    --runner-command "uv run python python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py" \
-    -o .fusionkit/fusion-bench/smoke-h1.jsonl
+uv run python labruns/2026-q3/scripts/smoke_panels.py \
+  configs/benchmark-panel.h1-backbone.yaml \
+  configs/benchmark-panel.h2-style-diverse.yaml \
+  configs/benchmark-panel.h5-thinking-heavy.yaml
 ```
+
+Record results in `labruns/<cycle>/smoke-results.md`.
+
+For a heavier end-to-end check (optional, Phase C scale), use
+`fusionkit public-bench` with the LiveCodeBench adapter and `datasets<4`. Prefer
+a frozen `LCB_MANIFEST` to avoid loading the full HF split.
 
 **Pass criteria:**
 

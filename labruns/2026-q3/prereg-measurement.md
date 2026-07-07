@@ -23,9 +23,9 @@ parallel panel → judge → synthesizer → one answer
 
 | Hypothesis | Config | Status |
 |---|---|---|
-| H1 backbone | `configs/benchmark-panel.h1-backbone.yaml` | ready |
-| H2 style-diverse | `configs/benchmark-panel.h2-style-diverse.yaml` | ready |
-| H5 thinking-heavy | `configs/benchmark-panel.h5-thinking-heavy.yaml` | ready |
+| H1 backbone | `configs/benchmark-panel.h1-backbone.yaml` | smoke_passed |
+| H2 style-diverse | `configs/benchmark-panel.h2-style-diverse.yaml` | smoke_passed |
+| H5 thinking-heavy | `configs/benchmark-panel.h5-thinking-heavy.yaml` | smoke_passed |
 | H3 cascade | — | out of scope |
 | H4 best-single | — | metric from each run's compound report |
 
@@ -58,15 +58,28 @@ Promote at most **1–2** surviving panels to Phase D.
 
 ## Smoke command (Phase B)
 
+Identity smoke (recommended for Phase B — no full LCB dataset download):
+
 ```bash
 export PATH="$HOME/.nvm/versions/node/v22.22.2/bin:$PATH"
-FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.h1-backbone.yaml \
-  uv run fusionkit public-bench --suite livecodebench --subset 5 \
-  --runner-command "uv run python python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py" \
-  -o .fusionkit/fusion-bench/smoke-h1.jsonl
+uv run python labruns/2026-q3/scripts/smoke_panels.py \
+  configs/benchmark-panel.h1-backbone.yaml \
+  configs/benchmark-panel.h2-style-diverse.yaml \
+  configs/benchmark-panel.h5-thinking-heavy.yaml
 ```
 
-Repeat for H2 and H5 configs.
+Results: `labruns/2026-q3/smoke-results.md` (passed 2026-07-07).
+
+Optional heavier path (Phase C scale; requires `datasets<4` and enough RAM, or a
+frozen `LCB_MANIFEST`):
+
+```bash
+export FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.h1-backbone.yaml
+export BENCH_SANDBOX=local
+uv run --with 'datasets<4' fusionkit public-bench --suite livecodebench --subset 5 \
+  --runner-command "uv run --with 'datasets<4' python python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py" \
+  -o .fusionkit/fusion-bench/smoke-h1.jsonl
+```
 
 ## Still not publishable
 

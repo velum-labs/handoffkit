@@ -1,7 +1,7 @@
 ---
 hypothesis_id: h1-backbone
 cycle: 2026-q3
-status: ready
+status: smoke_passed
 topology: panel
 fusionkit_config: configs/benchmark-panel.h1-backbone.yaml
 panel:

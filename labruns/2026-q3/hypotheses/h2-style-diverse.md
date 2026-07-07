@@ -1,7 +1,7 @@
 ---
 hypothesis_id: h2-style-diverse
 cycle: 2026-q3
-status: ready
+status: smoke_passed
 topology: panel
 fusionkit_config: configs/benchmark-panel.h2-style-diverse.yaml
 panel:

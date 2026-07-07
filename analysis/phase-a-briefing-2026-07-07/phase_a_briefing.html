@@ -175,7 +175,7 @@
     <dt>Scatter chart</dt>
     <dd><strong>Filled dot</strong> — panel member (ring if also judge). <strong>Small dot</strong> — other ranked candidates. Up and left is better (higher mean, lower cost).</dd>
     <dt>Hypothesis cards</dt>
-    <dd><span class="meta">ready</span> runnable in Phase B. <span class="meta">out_of_scope</span> / <span class="meta">baseline_metric</span> documented but not a benchmark config. <em>predicts</em> / <em>killed if</em> are preregistered falsification rules.</dd>
+    <dd><span class="meta">ready</span> runnable in Phase B. <span class="meta">smoke_passed</span> Phase B smoke complete. <span class="meta">out_of_scope</span> / <span class="meta">baseline_metric</span> documented but not a benchmark config. <em>predicts</em> / <em>killed if</em> are preregistered falsification rules.</dd>
   </dl>
 </aside>
 
@@ -278,7 +278,7 @@
 <article class="hyp" id="h1-backbone">
   <header class="hyphead">
     <h3>h1-backbone</h3>
-    <span class="hypmeta"><span class="meta">ready</span> <span class="meta">panel</span> K=1</span>
+    <span class="hypmeta"><span class="meta">smoke_passed</span> <span class="meta">panel</span> K=1</span>
   </header>
   <p class="lede">The honest default: take the three highest-ranked shortlist models that do not share a lineage family. Judge is the strongest panel member (ds32). Every other hypothesis must beat this on our own harness in Phase C.</p>
   <ul class="panel-list"><li><code>deepseek/deepseek-v3.2</code> <span class="mut">32k cap</span></li><li><code>nvidia/nemotron-3-super-120b-a12b</code> <span class="mut">32k cap</span></li><li><code>deepseek/deepseek-v4-pro</code> <span class="mut">32k cap</span></li></ul>
@@ -298,7 +298,7 @@
 <article class="hyp" id="h2-style-diverse">
   <header class="hyphead">
     <h3>h2-style-diverse</h3>
-    <span class="hypmeta"><span class="meta">ready</span> <span class="meta">panel</span> K=1</span>
+    <span class="hypmeta"><span class="meta">smoke_passed</span> <span class="meta">panel</span> K=1</span>
   </header>
   <p class="lede">Same as H1 but swaps one near-tie model (within ~3 pp on the public mean) for a different style — here GLM-5.2 replaces DeepSeek V4 Pro to spread reasoning vs code-specialist vs generalist families.</p>
   <ul class="panel-list"><li><code>deepseek/deepseek-v3.2</code> <span class="mut">32k cap</span></li><li><code>nvidia/nemotron-3-super-120b-a12b</code> <span class="mut">32k cap</span></li><li><code>z-ai/glm-5.2</code> <span class="mut">32k cap</span></li></ul>
@@ -358,7 +358,7 @@
 <article class="hyp" id="h5-thinking-heavy">
   <header class="hyphead">
     <h3>h5-thinking-heavy</h3>
-    <span class="hypmeta"><span class="meta">ready</span> <span class="meta">panel</span> K=1</span>
+    <span class="hypmeta"><span class="meta">smoke_passed</span> <span class="meta">panel</span> K=1</span>
   </header>
   <p class="lede">Two reasoning-class models plus one fast generalist, all at 64k completion budgets. Judge is ds32_64k (strongest panel member). Tests whether long thinking outputs buy headroom.</p>
   <ul class="panel-list"><li><code>deepseek/deepseek-v3.2</code> <span class="mut">64k cap</span></li><li><code>moonshotai/kimi-k2.6</code> <span class="mut">64k cap</span></li><li><code>nvidia/nemotron-3-super-120b-a12b</code> <span class="mut">64k cap</span></li></ul>

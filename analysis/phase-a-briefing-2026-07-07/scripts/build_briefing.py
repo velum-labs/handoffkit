@@ -204,7 +204,7 @@ def reading_guide(judge_slug: str) -> str:
     <dt>Scatter chart</dt>
     <dd><strong>Filled dot</strong> — panel member (ring if also judge). <strong>Small dot</strong> — other ranked candidates. Up and left is better (higher mean, lower cost).</dd>
     <dt>Hypothesis cards</dt>
-    <dd>{meta("ready")} runnable in Phase B. {meta("out_of_scope")} / {meta("baseline_metric")} documented but not a benchmark config. <em>predicts</em> / <em>killed if</em> are preregistered falsification rules.</dd>
+    <dd>{meta("ready")} runnable in Phase B. {meta("smoke_passed")} Phase B smoke complete. {meta("out_of_scope")} / {meta("baseline_metric")} documented but not a benchmark config. <em>predicts</em> / <em>killed if</em> are preregistered falsification rules.</dd>
   </dl>
 </aside>"""
 
