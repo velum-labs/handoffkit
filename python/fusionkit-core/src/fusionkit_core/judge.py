@@ -243,11 +243,13 @@ class JudgeSynthesizer:
         trajectories: Sequence[Trajectory],
         analysis: FusionAnalysis,
         synth_client: ChatClient,
-    ) -> ModelResponse | None:
-        """The judge-selected candidate's content as a terminal response, or None.
+    ) -> tuple[ModelResponse, str] | None:
+        """The judge-selected candidate's content (and its id) as a terminal response.
 
         Returns None (fall back to composition) when select-best is off, the judge
-        named no best candidate, or the named id is not a succeeded trajectory.
+        named no best candidate, or the named id is not a succeeded trajectory. The
+        selected id travels with the response so the synthesis decision is the
+        judge's declared verdict, never re-derived from output text.
         """
         if not self._select_best or not analysis.best_trajectory:
             return None
@@ -263,12 +265,13 @@ class JudgeSynthesizer:
         )
         if chosen is None:
             return None
-        return ModelResponse(
+        response = ModelResponse(
             model_id=synth_client.model_id,
             content=chosen.content,
             finish_reason="stop",
             usage=Usage(),
         )
+        return response, chosen.id
 
     async def fuse(
         self,
@@ -338,8 +341,9 @@ class JudgeSynthesizer:
                 else None
             )
             synthesizer_called = False
+            selected_trajectory_id: str | None = None
             if selected is not None:
-                response = selected
+                response, selected_trajectory_id = selected
             else:
                 try:
                     response = await synth_client.chat(
@@ -370,7 +374,7 @@ class JudgeSynthesizer:
                         # Step 2: no synthesizer call fits; fall back to a
                         # candidate answer so the turn still produces a fused
                         # response.
-                        response = self._overflow_fallback_response(
+                        response, selected_trajectory_id = self._overflow_fallback_response(
                             trajectories, resolved_analysis, synth_client, prepared.diagnostics
                         )
             result = self._build_fuse_result(
@@ -379,6 +383,7 @@ class JudgeSynthesizer:
                 resolved_analysis,
                 prepared.diagnostics,
                 synthesizer_called=synthesizer_called,
+                selected_trajectory_id=selected_trajectory_id,
             )
             if result.terminal:
                 # Parity with fuse_stream's Act III: surface the judge's
@@ -450,13 +455,15 @@ class JudgeSynthesizer:
             else None
         )
         if selected is not None:
-            yield StreamChunk(delta=selected.content)
+            selected_response, selected_trajectory_id = selected
+            yield StreamChunk(delta=selected_response.content)
             result = self._build_fuse_result(
-                selected,
+                selected_response,
                 trajectories,
                 resolved_analysis,
                 prepared.diagnostics,
                 synthesizer_called=False,
+                selected_trajectory_id=selected_trajectory_id,
             )
             self._emit_step(step_ctx, fuse_span_handle, result, trajectories)
             _end_fuse_span(fuse_span_handle)
@@ -490,8 +497,9 @@ class JudgeSynthesizer:
                     _end_fuse_span(fuse_span_handle, error=str(exc))
                     raise
         synthesizer_called = response is not None
+        fallback_trajectory_id: str | None = None
         if response is None:
-            response = self._overflow_fallback_response(
+            response, fallback_trajectory_id = self._overflow_fallback_response(
                 trajectories, resolved_analysis, synth_client, prepared.diagnostics
             )
             yield StreamChunk(delta=response.content)
@@ -501,6 +509,7 @@ class JudgeSynthesizer:
             resolved_analysis,
             prepared.diagnostics,
             synthesizer_called=synthesizer_called,
+            selected_trajectory_id=fallback_trajectory_id,
         )
         self._emit_step(step_ctx, fuse_span_handle, result, trajectories)
         _end_fuse_span(fuse_span_handle)
@@ -653,12 +662,14 @@ class JudgeSynthesizer:
         analysis: FusionAnalysis,
         synth_client: ChatClient,
         diagnostics: _TurnDiagnostics,
-    ) -> ModelResponse:
-        """A candidate answer as the terminal response when no synth call fits.
+    ) -> tuple[ModelResponse, str | None]:
+        """A candidate answer (and its id) as the terminal response when no synth call fits.
 
         Prefers the judge-selected best candidate verbatim (permitted here even
         when ``synthesis_select_best`` is off — this is a failure fallback, not
-        the selection mode), then the best trajectory's own output.
+        the selection mode), then the best trajectory's own output. The adopted
+        candidate's id travels with the response so the synthesis decision
+        reflects the actual selection.
         """
         chosen = next(
             (
@@ -672,16 +683,16 @@ class JudgeSynthesizer:
         )
         if chosen is not None:
             diagnostics.synth_fallback = "select_best_verbatim"
-            content = chosen.content
         else:
             diagnostics.synth_fallback = "best_output"
-            content = _best_trajectory_output(trajectories)
-        return ModelResponse(
+            chosen = _best_trajectory(trajectories)
+        response = ModelResponse(
             model_id=synth_client.model_id,
-            content=content,
+            content=chosen.content if chosen is not None else _NO_USABLE_RESULT,
             finish_reason="stop",
             usage=Usage(),
         )
+        return response, chosen.id if chosen is not None else None
 
     def _build_fuse_result(
         self,
@@ -691,6 +702,7 @@ class JudgeSynthesizer:
         diagnostics: _TurnDiagnostics | None = None,
         *,
         synthesizer_called: bool = True,
+        selected_trajectory_id: str | None = None,
     ) -> FuseResult:
         terminal = not response.tool_calls
         output_trajectory: Trajectory | None = None
@@ -702,10 +714,19 @@ class JudgeSynthesizer:
                 # its budget on reasoning). Fall back to the best trajectory's own
                 # answer so a fused response is always produced.
                 synthesis_empty = True
-                final_output = _best_trajectory_output(trajectories)
+                fallback = _best_trajectory(trajectories)
+                if fallback is not None:
+                    final_output = fallback.content.strip()
+                    selected_trajectory_id = fallback.id
+                else:
+                    final_output = _NO_USABLE_RESULT
                 response = response.model_copy(update={"content": final_output})
             output_trajectory = _consolidated_trajectory(
-                final_output, trajectories, resolved_analysis, diagnostics=diagnostics
+                final_output,
+                trajectories,
+                resolved_analysis,
+                selected_trajectory_id=selected_trajectory_id,
+                diagnostics=diagnostics,
             )
         return FuseResult(
             response=response,
@@ -747,6 +768,7 @@ class JudgeSynthesizer:
             + _PROMPT_SCAFFOLD_TOKENS
         )
         evidence_budget = budget.evidence_tokens(overhead)
+        response_format = _judge_response_format(judge_client)
 
         async def call(budget_tokens: int) -> ModelResponse:
             packed, report = pack_trajectories(
@@ -763,6 +785,7 @@ class JudgeSynthesizer:
                     ),
                 ],
                 judge_sampling,
+                extra=response_format,
             )
 
         try:
@@ -1012,6 +1035,29 @@ def accumulate_tool_call(
     current["arguments"] += delta.arguments
 
 
+def _judge_response_format(judge_client: ChatClient) -> Mapping[str, Any] | None:
+    """A ``response_format`` JSON schema for endpoints declaring structured output.
+
+    When the judge endpoint's ``capabilities.structured_output`` is true, the
+    judge call carries the :class:`FusionAnalysis` schema so the provider
+    enforces the JSON contract at generation time. The regex ``_extract_json``
+    path in :func:`parse_analysis` stays as the fallback parser, not the
+    primary.
+    """
+    endpoint = getattr(judge_client, "endpoint", None)
+    capabilities = getattr(endpoint, "capabilities", None)
+    if getattr(capabilities, "structured_output", None) is not True:
+        return None
+    schema = FusionAnalysis.model_json_schema()
+    schema["additionalProperties"] = False
+    return {
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "fusion_judge_analysis", "schema": schema},
+        }
+    }
+
+
 def parse_analysis(content: str) -> FusionAnalysis:
     try:
         return FusionAnalysis.model_validate_json(_extract_json(content))
@@ -1027,10 +1073,17 @@ def _consolidated_trajectory(
     trajectories: Sequence[Trajectory],
     analysis: FusionAnalysis,
     *,
+    selected_trajectory_id: str | None = None,
     diagnostics: _TurnDiagnostics | None = None,
 ) -> Trajectory:
-    """Build the fused output trajectory with its ``synthesis`` metadata."""
-    selected_trajectory_id = _selected_trajectory_id(final_output, trajectories)
+    """Build the fused output trajectory with its ``synthesis`` metadata.
+
+    ``selected_trajectory_id`` is the id of the candidate whose answer was
+    adopted verbatim, threaded from the path that actually made that decision
+    (judge select-best, or the overflow/empty-synthesis fallbacks). The
+    classification is never inferred by comparing output strings — a
+    synthesizer answer that merely coincides with a candidate is a synthesis.
+    """
     synthesis = TrajectorySynthesis(
         decision="select_trajectory" if selected_trajectory_id else "synthesize",
         selected_trajectory_id=selected_trajectory_id,
@@ -1086,36 +1139,33 @@ def _synthesis_metrics(
     return metrics
 
 
-def _best_trajectory_output(trajectories: Sequence[Trajectory]) -> str:
-    """Pick a non-empty answer: prefer a succeeded trajectory, then any with text."""
+_NO_USABLE_RESULT = "No candidate produced a usable result."
+
+
+def _best_trajectory(trajectories: Sequence[Trajectory]) -> Trajectory | None:
+    """The trajectory whose answer a fallback adopts: succeeded first, then any with text."""
 
     def _rank(trajectory: Trajectory) -> int:
         return 0 if trajectory.status == "succeeded" else 1
 
-    ordered = sorted(trajectories, key=_rank)
-    for trajectory in ordered:
+    for trajectory in sorted(trajectories, key=_rank):
         if trajectory.content.strip():
-            return trajectory.content.strip()
-    return "No candidate produced a usable result."
-
-
-def _selected_trajectory_id(final_output: str, trajectories: Sequence[Trajectory]) -> str | None:
-    stripped = final_output.strip()
-    for trajectory in trajectories:
-        if stripped == trajectory.content.strip():
-            return trajectory.id
+            return trajectory
     return None
 
 
 def _trajectory_id_for_reason(reason: str, trajectories: Sequence[Trajectory]) -> str | None:
-    lower_reason = reason.lower()
+    """The explicit trajectory id a rejection reason names, or None.
+
+    The judge contract requires every likely_errors entry to start with the
+    exact trajectory id followed by ":". Attribution is id-based only — the old
+    substring / "candidate two" ordinal guessing mis-attributed reasons whose
+    prose merely mentioned a model name.
+    """
+    head = reason.split(":", 1)[0].strip()
     for trajectory in trajectories:
-        if trajectory.id.lower() in lower_reason or trajectory.model_id.lower() in lower_reason:
+        if trajectory.id == head:
             return trajectory.id
-    ordinal_words = ("one", "two", "three", "four", "five")
-    for index, word in enumerate(ordinal_words):
-        if index < len(trajectories) and f"candidate {word}" in lower_reason:
-            return trajectories[index].id
     return None
 
 

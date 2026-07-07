@@ -156,7 +156,7 @@ async def test_fuse_synthesis_metrics_carry_contributions_and_rejections() -> No
         "judge",
         [
             '{"consensus":["candidate one is grounded"],"contradictions":[],'
-            '"unique_insights":[],"coverage_gaps":[],"likely_errors":["candidate two is terse"],'
+            '"unique_insights":[],"coverage_gaps":[],"likely_errors":["candidate_2: terse"],'
             '"recommended_final_structure":["combine"]}',
             "combined answer",
         ],
