@@ -214,6 +214,35 @@ When `panel` is unset, the default is hardware-shaped:
 - **Local (`local: true` / `--local`)**: the MLX trio (Apple Silicon): Qwen3
   1.7B, Gemma 3 1B, and Llama 3.2 1B.
 
+## Web search (gateway-executed)
+
+Codex and Claude Code both declare a *server-executed* web search tool
+(`web_search` on the Responses API, `web_search_20250305` on the Anthropic
+API). On the real provider APIs the backend runs the search mid-turn; behind
+FusionKit the gateway plays that role: it projects the tool to the fused
+panel, and when the fused model calls it, the gateway executes the search by
+delegating to a real provider's native web search, feeds the results back,
+and continues the turn. The caller sees native search items in its own
+dialect, exactly as if it were talking to the provider directly.
+
+Each dialect prefers its own provider — Codex searches via OpenAI, Claude
+Code via Anthropic — and falls back to the other when only one key is set.
+With neither key, the tool is dropped with the usual honest-drop warning.
+
+Environment variables:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `FUSIONKIT_WEB_SEARCH` | on | Set to `0` to disable gateway web search entirely. |
+| `FUSIONKIT_WEB_SEARCH_OPENAI_MODEL` | `gpt-5.5` | Model used for OpenAI-delegated searches. |
+| `FUSIONKIT_WEB_SEARCH_ANTHROPIC_MODEL` | `claude-haiku-4-5` | Model used for Anthropic-delegated searches. |
+| `FUSIONKIT_WEB_SEARCH_OPENAI_URL` | `https://api.openai.com/v1` | Base URL for the OpenAI search side call. |
+| `FUSIONKIT_WEB_SEARCH_ANTHROPIC_URL` | `https://api.anthropic.com/v1` | Base URL for the Anthropic search side call. |
+
+Searches are capped at 8 per caller turn and 90 seconds each; a failed search
+becomes an error tool result the model can react to, never a failed turn.
+`fusionkit doctor` reports which provider serves each dialect.
+
 ## The derived router YAML (raw `fusionkit serve`)
 
 Most users never touch the Python YAML. The Node CLI generates it in-process for

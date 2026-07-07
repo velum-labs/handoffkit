@@ -130,6 +130,9 @@ test("anthropicToChat maps system, tools, and tool results", () => {
 
   const messages = chat.messages as Record<string, unknown>[];
   assert.equal(chat.model, "local-model");
+  // Modern spelling: OpenAI reasoning models reject legacy `max_tokens`.
+  assert.equal(chat.max_completion_tokens, 100);
+  assert.equal(chat.max_tokens, undefined);
   assert.equal(messages[0]?.role, "system");
   assert.equal(messages[1]?.role, "user");
   assert.equal(messages[2]?.role, "assistant");
