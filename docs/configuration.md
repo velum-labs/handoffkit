@@ -250,7 +250,7 @@ An empty or absent file falls back to the built-in default at run time.
 
 `fusionkit init` walks you through building a panel (live model lists,
 hardware-aware local picks), the judge, optional extras (budget, rate-limit
-policy, panel trust, reasoning), and optional named ensembles, then writes
+policy, panel sandbox, reasoning), and optional named ensembles, then writes
 `.fusionkit/`. On a non-interactive stdin (CI) it falls back to the default
 cloud trio so it still produces a sensible config. `fusionkit doctor` checks
 prerequisites (uv, agents, provider keys, git) and reports the repo's config
