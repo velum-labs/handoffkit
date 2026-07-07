@@ -19,19 +19,20 @@ User-approved 3×2 matrix (see `prereg-judge-experiment.md`):
 
 Gemini OpenRouter slug: `google/gemini-3.1-pro-preview`.
 
-## Infrastructure
+## Panel runs (judge matrix)
 
-| Item | Status |
-|------|--------|
-| LCB streaming loader (OOM fix) | Done |
-| Frozen manifest | Committed |
-| Runner script + judge matrix | `run_phase_c.py` (`run-judge-matrix`) |
-| Six judge-exp YAML configs | Committed |
+| Hypothesis | Status | Output |
+|------------|--------|--------|
+| j1-g | **in progress** | `labdata/runs/2026-q3/phase-c/j1-g-20260707T212305Z.jsonl` |
+| j1-m | pending | — |
+| j2-g | pending | — |
+| j2-m | pending | — |
+| j3-g | pending | — |
+| j3-m | pending | — |
 
-## Legacy H1 run (optional / deprioritized)
+Runner log: `labdata/runs/2026-q3/phase-c/judge-matrix-run.log` (tmux session `phase-c-judge-matrix`).
 
-Partial H1 backbone run may exist in cache (`h1-20260707T174909Z.jsonl`). The judge matrix
-uses different configs and separate cache signatures.
+Legacy H1 backbone completed earlier: 23/60 fused pass, ledger ~$0.53.
 
 ## Commands
 
