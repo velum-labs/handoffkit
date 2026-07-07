@@ -99,7 +99,7 @@ function applyFusionOptions(command: Command): Command {
     )
     .option(
       "--on-rate-limit <policy>",
-      "vendor rate-limit/credit handoff: fusion (continue on the ensemble, default) | passthrough | fail"
+      "vendor rate-limit/credit handoff: fusion (rerun the turn on the ensemble minus the throttled vendor, default) | passthrough (return the vendor error as-is) | fail (stop the session)"
     )
     .option("--budget <usd>", "stop the session once it has spent this much (gateway-observed USD)")
     .option(

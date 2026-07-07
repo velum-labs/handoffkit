@@ -22,7 +22,12 @@ import {
   DEFAULT_REASONING,
   DEFAULT_TOOL
 } from "../fusion/effective-config.js";
-import { ON_RATE_LIMIT_POLICIES, PANEL_TRUST_LEVELS } from "../shared/options.js";
+import {
+  ON_RATE_LIMIT_MESSAGE,
+  ON_RATE_LIMIT_OPTIONS,
+  ON_RATE_LIMIT_POLICIES,
+  PANEL_TRUST_LEVELS
+} from "../shared/options.js";
 import { fail } from "../shared/errors.js";
 import type { CommandContext } from "../shared/context.js";
 
@@ -139,12 +144,8 @@ function buildFields(ensembleNames: string[]): Field[] {
       current: (shape) => valueLabel(shape.onRateLimit, DEFAULT_ON_RATE_LIMIT),
       edit: async (shape) => {
         shape.onRateLimit = await select<string>({
-          message: "When a vendor passthrough model hits a rate limit / credit wall",
-          options: [
-            { value: "fusion", label: "fusion", hint: "continue on the ensemble (default)" },
-            { value: "passthrough", label: "passthrough", hint: "surface the vendor error to the tool" },
-            { value: "fail", label: "fail", hint: "stop the session" }
-          ],
+          message: ON_RATE_LIMIT_MESSAGE,
+          options: [...ON_RATE_LIMIT_OPTIONS],
           defaultIndex: Math.max(
             0,
             ON_RATE_LIMIT_POLICIES.indexOf(
