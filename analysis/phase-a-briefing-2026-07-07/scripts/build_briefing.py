@@ -82,11 +82,15 @@ HYPOTHESIS_BLURBS: dict[str, str] = {
     ),
 }
 
-# Monochrome design system — no per-family rainbow colors.
-DOT_FILL = "#404040"
-DOT_MUTED = "#b0b0b0"
-DOT_PANEL_STROKE = "#111111"
-DOT_JUDGE_STROKE = "#111111"
+# Velum Labs design tokens (velum-labs.com)
+VELUM_BG = "#0a0a0a"
+VELUM_SURFACE = "#0f0f0f"
+VELUM_ACCENT = "#8b5cf6"
+VELUM_ACCENT_DARK = "#7c3aed"
+DOT_FILL = VELUM_ACCENT
+DOT_MUTED = "rgba(10,10,10,0.22)"
+DOT_PANEL_STROKE = VELUM_ACCENT_DARK
+DOT_JUDGE_STROKE = VELUM_BG
 
 # Cost model shared with the hypothesis cards: default request = 2k input + 8k output.
 REQ_IN_TOK, REQ_OUT_TOK = 2_000, 8_000
@@ -105,6 +109,32 @@ def esc(text: Any) -> str:
 
 def link(url: str, label: str) -> str:
     return f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(label)}</a>'
+
+
+def velum_brand() -> str:
+    return """
+<a class="brand" href="https://velum-labs.com" target="_blank" rel="noopener" aria-label="Velum Labs">
+  <span class="mark" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="200" height="200" fill="#7c3aed"/>
+      <line x1="100" y1="15" x2="100" y2="185" stroke="#fff" stroke-width="42" stroke-linecap="square"/>
+      <line x1="173.6" y1="57.5" x2="26.4" y2="142.5" stroke="#fff" stroke-width="42" stroke-linecap="square"/>
+      <line x1="173.6" y1="142.5" x2="26.4" y2="57.5" stroke="#fff" stroke-width="42" stroke-linecap="square"/>
+    </svg>
+  </span>
+  <span class="wordmark">Velum Labs</span>
+</a>"""
+
+
+def section_kicker(label: str) -> str:
+    return f'<div class="kicker"><span class="dot" aria-hidden="true"></span><span>{esc(label)}</span></div>'
+
+
+def section_title(num: int, title: str) -> str:
+    return (
+        f'<div class="headrow"><h2 class="title">{esc(title)}</h2>'
+        f'<span class="secnum">{num:02d}</span></div>'
+    )
 
 
 def meta(label: str, title: str = "") -> str:
@@ -160,7 +190,8 @@ def reading_guide(judge_slug: str) -> str:
     judge = judge_slug or "judge"
     return f"""
 <aside class="guide" id="visual-key">
-  <h3>Reading guide</h3>
+  {section_kicker("Reading guide")}
+  <h3>How to read the tables and charts</h3>
   <dl class="deflist">
     <dt>Evidence scores</dt>
     <dd><strong>Plain number</strong> — third-party leaderboard; counts toward the ranking mean (click to open source).
@@ -222,14 +253,16 @@ def hypothesis_key() -> str:
 
 def hero_stats(snap: dict[str, Any], candidates: int, shortlist: int, cards: int) -> str:
     return f"""
-<dl class="stats">
-  <div><dt>OpenRouter rows</dt><dd>{snap["total_rows_in_api"]}</dd></div>
-  <div><dt>Candidates</dt><dd>{candidates}</dd></div>
-  <div><dt>Shortlist</dt><dd>{shortlist}</dd></div>
-  <div><dt>Hypotheses</dt><dd>{cards}</dd></div>
-  <div><dt>API spend</dt><dd>$0</dd></div>
-  <div><dt>Retrieved</dt><dd>{esc(snap["retrieved_at"])}</dd></div>
-</dl>"""
+<div class="stats-strip">
+  <dl class="stats">
+    <div><dt>OpenRouter rows</dt><dd>{snap["total_rows_in_api"]}</dd></div>
+    <div><dt>Candidates</dt><dd>{candidates}</dd></div>
+    <div><dt>Shortlist</dt><dd>{shortlist}</dd></div>
+    <div><dt>Hypotheses</dt><dd>{cards}</dd></div>
+    <div><dt>API spend</dt><dd>$0</dd></div>
+    <div><dt>Retrieved</dt><dd class="mono">{esc(snap["retrieved_at"])}</dd></div>
+  </dl>
+</div>"""
 
 
 def scatter_svg(candidates: list[dict[str, Any]], panel_slugs: set[str], judge_slug: str) -> str:
@@ -252,8 +285,8 @@ def scatter_svg(candidates: list[dict[str, Any]], panel_slugs: set[str], judge_s
         f'aria-label="Scatter chart of model cost versus public aggregate score" '
         f'style="width:100%;height:auto;background:transparent">'
     ]
-    grid_stroke = "#ebebeb"
-    text_muted = "#888888"
+    grid_stroke = "rgba(10,10,10,0.08)"
+    text_muted = "rgba(10,10,10,0.4)"
     for tick in [0.001, 0.003, 0.01, 0.03]:
         if xmin <= math.log10(tick) <= xmax:
             x = sx(tick)
@@ -283,9 +316,9 @@ def scatter_svg(candidates: list[dict[str, Any]], panel_slugs: set[str], judge_s
         x, y = sx(blended_request_cost(cand["pricing"])), sy(cand["aggregate_mean"])
         in_panel, is_judge = slug in panel_slugs, slug == judge_slug
         if is_judge:
-            radius, fill, stroke, sw = 7, "#fff", DOT_JUDGE_STROKE, 2
+            radius, fill, stroke, sw = 7, "#fff", VELUM_ACCENT, 2
         elif in_panel:
-            radius, fill, stroke, sw = 6.5, DOT_FILL, DOT_PANEL_STROKE, 1.5
+            radius, fill, stroke, sw = 6.5, VELUM_ACCENT, VELUM_ACCENT_DARK, 1.5
         else:
             radius, fill, stroke, sw = 4.5, DOT_MUTED, DOT_MUTED, 1
         parts.append(
@@ -298,7 +331,7 @@ def scatter_svg(candidates: list[dict[str, Any]], panel_slugs: set[str], judge_s
             anchor, dx = ("start", 10) if x < width - 200 else ("end", -10)
             parts.append(
                 f'<text x="{x + dx:.1f}" y="{y + 3.5:.1f}" text-anchor="{anchor}" font-size="10.5" '
-                f'fill="#333">{esc(name)}</text>'
+                f'fill="{VELUM_BG}">{esc(name)}</text>'
             )
     parts.append("</svg>")
     return "".join(parts)
@@ -495,96 +528,124 @@ def build() -> None:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Phase A briefing — catalog, shortlist, hypotheses (2026-07-07)</title>
 <style>
-  :root{{--ink:#111;--muted:#666;--faint:#999;--line:#e5e5e5;--bg:#fff;--surface:#fafafa;--rule:#111}}
+  :root{{
+    --bg:#ffffff;--ink:#0a0a0a;--muted:rgba(10,10,10,.6);--faint:rgba(10,10,10,.4);
+    --line:rgba(10,10,10,.08);--surface:#fafafa;--dark:#0a0a0a;--dark-2:#0f0f0f;
+    --accent:#8b5cf6;--accent-dark:#7c3aed;
+    --serif:Georgia,"Iowan Old Style","Palatino Linotype",Palatino,"Times New Roman",serif;
+    --sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }}
   *{{box-sizing:border-box}}
   html{{scroll-behavior:smooth}}
-  body{{margin:0;font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}}
-  .wrap{{max-width:720px;margin:0 auto;padding:48px 24px 96px}}
-  header.mast{{border-bottom:1px solid var(--line);padding-bottom:32px;margin-bottom:40px}}
-  header.mast .eyebrow{{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:600}}
-  header.mast h1{{margin:0 0 12px;font-size:1.75rem;font-weight:600;letter-spacing:-.02em;line-height:1.25}}
-  header.mast .deck{{margin:0;color:var(--muted);font-size:1rem;max-width:58ch}}
-  .prose{{color:var(--muted);margin:0 0 12px;font-size:15px;line-height:1.65;max-width:62ch}}
-  dl.stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:16px 24px;margin:28px 0 0;padding:0}}
-  dl.stats div{{margin:0}}
-  dl.stats dt{{margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}}
-  dl.stats dd{{margin:4px 0 0;font-size:15px;font-variant-numeric:tabular-nums}}
-  nav.toc{{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:20px 0;margin:0 0 40px}}
-  nav.toc h2{{margin:0 0 12px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:600}}
-  nav.toc ol{{margin:0;padding-left:20px;color:var(--muted);font-size:14px}}
-  nav.toc li{{margin:6px 0}}
+  body{{margin:0;font:16px/1.75 var(--sans);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}}
+  .hero-band{{background:var(--dark);color:#fff;padding:56px 24px 0}}
+  .hero-inner,.content{{max-width:920px;margin:0 auto}}
+  .content{{padding:0 24px 96px}}
+  .brand{{display:flex;align-items:center;gap:10px;margin-bottom:28px}}
+  .brand .mark{{display:inline-flex;line-height:0}}
+  .brand .wordmark{{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#fff}}
+  header.mast h1{{margin:0 0 16px;font:600 clamp(2rem,5vw,3rem)/1.05 var(--serif);letter-spacing:-.02em;max-width:16ch}}
+  header.mast .deck{{margin:0;color:rgba(255,255,255,.6);font-size:17px;line-height:1.75;max-width:52ch}}
+  header.mast .product{{margin:0 0 10px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.45)}}
+  .stats-strip{{margin:40px -24px 0;border-top:1px solid rgba(255,255,255,.08)}}
+  dl.stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0;padding:0}}
+  dl.stats div{{margin:0;padding:24px 28px;border-right:1px solid rgba(255,255,255,.06)}}
+  dl.stats div:nth-child(3n){{border-right:none}}
+  dl.stats dt{{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.4)}}
+  dl.stats dd{{margin:8px 0 0;font:400 1.75rem/1.1 var(--serif);font-variant-numeric:tabular-nums;color:#fff}}
+  dl.stats dd.mono{{font:500 .95rem/1.4 var(--mono)}}
+  nav.toc{{padding:28px 0 32px;border-bottom:1px solid var(--line);margin-bottom:48px}}
+  nav.toc .kicker{{margin-bottom:14px}}
+  nav.toc ol{{margin:0;padding-left:20px;color:var(--muted);font-size:15px}}
+  nav.toc li{{margin:8px 0}}
   nav.toc a{{color:var(--ink);text-decoration:none}}
-  nav.toc a:hover{{text-decoration:underline}}
-  aside.guide{{background:var(--surface);border:1px solid var(--line);padding:20px 22px;margin-bottom:40px}}
-  aside.guide h3{{margin:0 0 14px;font-size:14px;font-weight:600}}
-  dl.deflist{{margin:0;font-size:14px}}
-  dl.deflist dt{{font-weight:600;margin:14px 0 4px}}
+  nav.toc a:hover{{color:var(--accent-dark);text-decoration:underline}}
+  .kicker{{display:flex;align-items:center;gap:10px;margin:0 0 16px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);font-weight:500}}
+  .kicker .dot{{width:8px;height:8px;background:var(--accent);flex:none}}
+  .headrow{{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:20px}}
+  .headrow .title{{margin:0;font:500 clamp(1.6rem,3.5vw,2.35rem)/1.08 var(--serif);letter-spacing:-.02em;max-width:18ch}}
+  .secnum{{font:400 .8rem/1 var(--mono);color:rgba(10,10,10,.25);padding-top:.35rem;flex:none}}
+  aside.guide{{background:var(--surface);border:1px solid var(--line);padding:24px 26px;margin-bottom:48px}}
+  aside.guide h3{{margin:0 0 16px;font-size:15px;font-weight:600}}
+  dl.deflist{{margin:0;font-size:15px}}
+  dl.deflist dt{{font-weight:600;margin:16px 0 6px}}
   dl.deflist dt:first-child{{margin-top:0}}
-  dl.deflist dd{{margin:0 0 0 0;color:var(--muted);line-height:1.6}}
-  section{{margin:48px 0}}
-  section>h2{{margin:0 0 8px;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);display:flex;align-items:baseline;gap:10px}}
-  section>h2 .idx{{color:var(--ink);font-variant-numeric:tabular-nums}}
-  .lede,.sub{{color:var(--muted);margin:0 0 20px;font-size:15px;line-height:1.65;max-width:62ch}}
-  .lede strong,.sub strong{{color:var(--ink);font-weight:600}}
-  aside.note{{margin:0 0 16px;padding:12px 0 12px 14px;border-left:2px solid var(--line);font-size:14px;color:var(--muted);line-height:1.6}}
+  dl.deflist dd{{margin:0;color:var(--muted);line-height:1.7}}
+  section{{margin:64px 0;padding-top:64px;border-top:1px solid var(--line)}}
+  section:first-of-type{{border-top:none;padding-top:0}}
+  .prose{{color:var(--muted);margin:0 0 14px;font-size:16px;line-height:1.75;max-width:62ch}}
+  .sub{{color:var(--muted);margin:0 0 20px;font-size:16px;line-height:1.75;max-width:62ch}}
+  .sub strong,.prose strong{{color:var(--ink);font-weight:600}}
+  aside.note{{margin:0 0 18px;padding:14px 0 14px 16px;border-left:2px solid var(--accent);font-size:15px;color:var(--muted);line-height:1.7;background:linear-gradient(90deg,rgba(139,92,246,.05),transparent)}}
   aside.note strong{{color:var(--ink);font-weight:600}}
-  aside.caveat{{margin:16px 0;padding:14px 16px;background:var(--surface);border-left:2px solid var(--rule);font-size:14px;line-height:1.6;color:var(--muted)}}
+  aside.caveat{{margin:18px 0;padding:18px 20px;background:var(--surface);border:1px solid var(--line);font-size:15px;line-height:1.7;color:var(--muted)}}
   aside.caveat strong{{color:var(--ink)}}
-  .panel{{border:1px solid var(--line);padding:0;margin:0 0 16px;overflow-x:auto}}
+  .panel{{border:1px solid var(--line);background:#fff;padding:0;margin:0 0 18px;overflow-x:auto;box-shadow:0 4px 32px rgba(0,0,0,.04)}}
   .panel.scroll{{max-height:520px;overflow-y:auto}}
-  table{{width:100%;border-collapse:collapse;font-size:13.5px}}
-  th{{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}}
-  td{{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}}
+  table{{width:100%;border-collapse:collapse;font-size:14px}}
+  th{{text-align:left;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap}}
+  td{{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}}
   tr:last-child td{{border-bottom:none}}
   td.num,th.num{{text-align:right;font-variant-numeric:tabular-nums}}
-  tr.featured td:first-child{{box-shadow:inset 3px 0 0 var(--rule)}}
-  code{{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.88em}}
-  a{{color:var(--ink);text-decoration:underline;text-underline-offset:2px}}
-  a:hover{{text-decoration-thickness:2px}}
+  tr.featured td:first-child{{box-shadow:inset 3px 0 0 var(--accent)}}
+  code{{font-family:var(--mono);font-size:.86em}}
+  a{{color:var(--accent-dark);text-decoration:underline;text-underline-offset:3px}}
+  a:hover{{color:var(--accent)}}
   .mut{{color:var(--muted)}}
-  .meta{{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border:1px solid var(--line);color:var(--muted);margin-left:4px;vertical-align:1px}}
+  .meta{{display:inline-block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border:1px solid var(--line);color:var(--faint);margin-left:6px;vertical-align:1px}}
   .cov{{text-align:right;font-variant-numeric:tabular-nums}}
-  .cov.tp a{{font-weight:500;text-decoration:none}}
-  .cov.tp a:hover{{text-decoration:underline}}
+  .cov.tp a{{font-weight:500;color:var(--ink);text-decoration:none}}
+  .cov.tp a:hover{{color:var(--accent-dark);text-decoration:underline}}
   .cov.vendor,.cov.sat{{color:var(--faint)}}
   .cov.none{{color:var(--faint);text-align:center}}
   .ev.thin{{font-style:italic;color:var(--faint)}}
-  ul.tight{{margin:8px 0 16px;padding-left:20px;color:var(--muted);font-size:15px}}
-  ul.tight li{{margin:6px 0}}
-  article.hyp{{border-top:1px solid var(--line);padding:28px 0}}
+  ul.tight{{margin:8px 0 16px;padding-left:20px;color:var(--muted);font-size:16px}}
+  ul.tight li{{margin:8px 0}}
+  article.hyp{{border-top:1px solid var(--line);padding:32px 0}}
   article.hyp:first-of-type{{border-top:none;padding-top:0}}
-  .hyphead{{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}}
-  .hyphead h3{{margin:0;font-size:17px;font-weight:600}}
+  .hyphead{{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}}
+  .hyphead h3{{margin:0;font:600 1.15rem/1.3 var(--serif)}}
   .hypmeta{{font-size:13px;color:var(--muted)}}
-  ul.panel-list{{margin:12px 0;padding-left:18px;font-size:14px}}
-  ul.panel-list li{{margin:4px 0}}
-  .costrow{{display:grid;grid-template-columns:88px 1fr auto;gap:12px;align-items:center;margin:16px 0;font-size:13px}}
+  ul.panel-list{{margin:12px 0;padding-left:18px;font-size:15px}}
+  ul.panel-list li{{margin:5px 0}}
+  .costrow{{display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;margin:18px 0;font-size:13px}}
   .costlab{{text-align:right;color:var(--muted)}}
   .costtrack{{height:3px;background:var(--line)}}
-  .costfill{{height:100%;background:var(--ink)}}
+  .costfill{{height:100%;background:var(--accent)}}
   .costval{{font-variant-numeric:tabular-nums;white-space:nowrap}}
-  dl.verdict{{margin:16px 0 0;font-size:14px;display:grid;grid-template-columns:72px 1fr;gap:6px 12px}}
-  dl.verdict dt{{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:0}}
-  dl.verdict dd{{margin:0;color:var(--muted);line-height:1.55}}
-  dl.glossary{{margin:0;font-size:14px}}
-  dl.glossary dt{{font-weight:600;margin:16px 0 4px}}
+  dl.verdict{{margin:18px 0 0;font-size:15px;display:grid;grid-template-columns:80px 1fr;gap:8px 14px}}
+  dl.verdict dt{{color:var(--faint);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0}}
+  dl.verdict dd{{margin:0;color:var(--muted);line-height:1.6}}
+  dl.glossary{{margin:0;font-size:15px}}
+  dl.glossary dt{{font-weight:600;margin:18px 0 6px}}
   dl.glossary dt:first-child{{margin-top:0}}
-  dl.glossary dd{{margin:0;color:var(--muted);line-height:1.6}}
-  footer{{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}}
-  @media(max-width:600px){{dl.stats{{grid-template-columns:1fr 1fr}} .costrow{{grid-template-columns:1fr;gap:6px}}}}
+  dl.glossary dd{{margin:0;color:var(--muted);line-height:1.7}}
+  footer{{margin-top:72px;padding-top:24px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}}
+  @media(max-width:720px){{
+    dl.stats{{grid-template-columns:1fr 1fr}}
+    dl.stats div{{border-right:none;border-bottom:1px solid rgba(255,255,255,.06)}}
+    .headrow{{flex-direction:column;gap:8px}}
+    .costrow{{grid-template-columns:1fr;gap:8px}}
+  }}
 </style>
 </head>
-<body><div class="wrap">
+<body>
 
+<div class="hero-band"><div class="hero-inner">
 <header class="mast">
-  <p class="eyebrow">FusionKit Lab · Phase A</p>
+  {velum_brand()}
+  <p class="product">FusionKit Lab · Phase A</p>
   <h1>Capability index briefing</h1>
-  <p class="deck">Public catalog pull, mechanical shortlist, and preregistered hypothesis cards — before any billed fusion run. All numbers trace to committed repo artifacts.</p>
+  <p class="deck">Public catalog pull, mechanical shortlist, and preregistered hypothesis cards — before any billed fusion run.</p>
   {hero_stats(snap, len(candidates), len(shortlist), len(cards))}
 </header>
+</div></div>
+
+<div class="content">
 
 <nav class="toc">
-  <h2>Contents</h2>
+  {section_kicker("Contents")}
   <ol>
     <li><a href="#visual-key">Reading guide</a></li>
     <li><a href="#start">What is Phase A?</a></li>
@@ -602,7 +663,8 @@ def build() -> None:
 {reading_guide(judge_slug)}
 
 <section id="start">
-  <h2><span class="idx">0</span> What is Phase A?</h2>
+  {section_kicker("Overview")}
+  {section_title(0, "What is Phase A?")}
   <p class="sub">Phase A is the <strong>hypothesis formation</strong> step of the clean-room ensemble launch plan
   ({link("https://github.com/velum-labs/handoffkit/blob/main/docs/fusion/ensemble-launch-clean-room-2026-07.md", "ensemble-launch-clean-room-2026-07.md")}).
   It answers: <em>which open-source model panels should we try?</em> — not <em>which panel wins?</em></p>
@@ -625,7 +687,8 @@ def build() -> None:
 </section>
 
 <section id="funnel">
-  <h2><span class="idx">1</span> Catalog funnel</h2>
+  {section_kicker("Catalog")}
+  {section_title(1, "Catalog funnel")}
   <p class="sub">{snap["total_rows_in_api"]} OpenRouter API rows → {len(candidates)} candidates after mechanical filters.
   No model was dropped for scoring low — score-based selection happens in Step 4 (shortlist).</p>
   <p class="prose"><strong>Source:</strong> {link(snap["source_url"], snap["source_url"])} — pulled at
@@ -641,7 +704,8 @@ def build() -> None:
 </section>
 
 <section id="value">
-  <h2><span class="idx">2</span> Score vs cost</h2>
+  {section_kicker("Value")}
+  {section_title(2, "Score vs cost")}
   <p class="sub">Each dot is one candidate with a computed <code>aggregate_mean</code>.
   Vertical axis: simple mean of third-party, unsaturated benchmark scores (0–100).
   Horizontal axis: blended request cost at a fixed token budget.</p>
@@ -655,7 +719,8 @@ def build() -> None:
 </section>
 
 <section id="coverage">
-  <h2><span class="idx">3</span> Evidence coverage</h2>
+  {section_kicker("Evidence")}
+  {section_title(3, "Evidence coverage")}
   <p class="sub">Third-party benchmark aggregates for every candidate. Hover a cell for harness text and retrieval date.
   Suffix <strong>†</strong> = vendor-claimed (excluded from mean); <strong>°</strong> = saturated benchmark (excluded).</p>
   <aside class="caveat">
@@ -673,7 +738,8 @@ def build() -> None:
 </section>
 
 <section id="shortlist">
-  <h2><span class="idx">4</span> Shortlist</h2>
+  {section_kicker("Shortlist")}
+  {section_title(4, "Ranked candidates")}
   <p class="sub">Top {len(shortlist)} models by simple unweighted mean. Rows with a left rule are used in at least one hypothesis card.</p>
   {shortlist_key()}
   <div class="panel">
@@ -684,7 +750,8 @@ def build() -> None:
 </section>
 
 <section id="hypotheses">
-  <h2><span class="idx">5</span> Hypothesis cards</h2>
+  {section_kicker("Hypotheses")}
+  {section_title(5, "Hypothesis cards")}
   <p class="sub">Preregistered experiment configs. Costs use the shared 2k/8k token model.
   Full reasoning in <code>labruns/2026-q3/hypotheses/*.md</code>;
   pinned identities in <code>python/fusionkit-lab/registry/2026-q3.yaml</code>.</p>
@@ -694,7 +761,8 @@ def build() -> None:
 </section>
 
 <section id="read">
-  <h2><span class="idx">6</span> How to read this</h2>
+  {section_kicker("Interpretation")}
+  {section_title(6, "How to read this")}
   <ul class="tight">
     <li><strong>Nothing here is a measured result.</strong> Phase A produces hypotheses, not pass rates on our harness.
     The shortlist mean is a shortlisting heuristic — "which models are worth Phase C money," not "which model is best."</li>
@@ -714,7 +782,8 @@ def build() -> None:
 </section>
 
 <section id="sources">
-  <h2><span class="idx">7</span> Sources</h2>
+  {section_kicker("Provenance")}
+  {section_title(7, "Sources")}
   <p class="sub">Every number should trace to one of these. Per-model score cells link directly to leaderboard pages.</p>
   <div class="panel scroll">
     {sources_table(source_rows)}
@@ -722,7 +791,8 @@ def build() -> None:
 </section>
 
 <section id="glossary">
-  <h2><span class="idx">8</span> Glossary</h2>
+  {section_kicker("Reference")}
+  {section_title(8, "Glossary")}
   <dl class="glossary">
     <dt>Panel</dt>
     <dd>2–4 models that all attempt the same coding task in parallel before a judge merges answers.</dd>
