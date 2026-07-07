@@ -111,7 +111,16 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
       if (baseUrl === undefined) {
         throw new Error(`no model endpoint configured for panel model "${model.id}"`);
       }
-      const root = worktree?.path ?? process.cwd();
+      // No silent process.cwd() fallback: running N concurrent panel agents in
+      // the user's real checkout would be destructive. A missing worktree AND
+      // workspace is a hard, actionable error.
+      const root = worktree?.path ?? descriptor.workspace;
+      if (root === undefined) {
+        throw new Error(
+          `agent harness for panel model "${model.id}" has no worktree and no descriptor.workspace; ` +
+            "set descriptor.workspace (or enable worktree isolation) so candidates never run in the current directory"
+        );
+      }
       const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
       const executionId = `exec_${candidateId}`;
       const planId = `plan_${candidateId}`;

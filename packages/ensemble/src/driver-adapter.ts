@@ -1,5 +1,3 @@
-import { captureWorktreeDiff } from "@fusionkit/runtime-utils";
-
 import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelFusionErrorKind, ModelFusionHarnessKind } from "@fusionkit/protocol";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
@@ -29,6 +27,7 @@ import type {
   HarnessTrajectory,
   TrajectoryStep
 } from "./harness.js";
+import { diffWorkspace } from "./worktree.js";
 
 const MAX_STEP_TEXT = 4000;
 const MAX_TOOL_INPUT = 600;
@@ -233,7 +232,16 @@ export function createDriverHarness<Config>(
     run: async (input: HarnessRunInput): Promise<HarnessCandidateOutput> => {
       const { descriptor, model, ordinal, worktree, signal } = input;
       const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
-      const cwd = worktree?.path ?? descriptor.workspace ?? process.cwd();
+      // No silent process.cwd() fallback: a missing worktree AND workspace would
+      // otherwise run the driver in the user's real checkout. Hard error instead.
+      const cwd = worktree?.path ?? descriptor.workspace;
+      if (cwd === undefined) {
+        throw new Error(
+          `${options.driver.kind} driver harness for panel model "${model.id}" has no worktree and no ` +
+            "descriptor.workspace; set descriptor.workspace (or enable worktree isolation) so candidates " +
+            "never run in the current directory"
+        );
+      }
       const tracer = traceCandidate(
         {
           ...(options.trace !== undefined ? { trace: options.trace } : {}),
@@ -278,7 +286,12 @@ export function createDriverHarness<Config>(
       }
 
       const folded = foldEvents(events);
-      const diff = captureWorktreeDiff(cwd);
+      // Add-then-diff against the base so untracked/new files count; `has_diff`
+      // no longer reports a false negative for a candidate that only created
+      // files. Empty diff normalizes back to undefined for the callers below.
+      const base = worktree?.baseGitSha || descriptor.baseGitSha || "HEAD";
+      const rawDiff = diffWorkspace(cwd, base);
+      const diff = rawDiff.length > 0 ? rawDiff : undefined;
       const transcript = folded.finalOutput.length > 0 ? folded.finalOutput : `(${options.driver.kind} produced no text)`;
       const outputHash = artifactHash(transcript);
       for (const step of folded.steps) tracer.step(step);

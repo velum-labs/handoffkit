@@ -1,5 +1,6 @@
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { ATTR } from "@fusionkit/protocol";
+import { randomId } from "@fusionkit/runtime-utils";
 import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import type { ResumeCursor } from "@fusionkit/harness-core";
@@ -362,7 +363,9 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
   let evidence: readonly JudgeCandidateEvidence[] = [];
   const harness: UnifiedHarnessKind = options.harness ?? "agent";
   const e2eOptions: UnifiedHarnessE2EOptions = {
-    id: options.id ?? `panels_${Date.now()}`,
+    // A random suffix keeps two panels started in the same millisecond from
+    // colliding on output roots / request ids (Date.now() alone is not unique).
+    id: options.id ?? `panels_${Date.now()}_${randomId(6)}`,
     fusionBackendUrl: options.fusionBackendUrl,
     repo: options.repo,
     outputRoot: options.outputRoot,

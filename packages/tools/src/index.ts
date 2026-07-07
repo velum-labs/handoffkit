@@ -7,11 +7,16 @@ export {
   distillLog,
   formatDurationMs,
   freePort,
+  registerCleanup,
+  reservePort,
+  runCleanups,
   runCliCapture,
   sleep,
   spawnLogged,
   spawnTool,
+  superviseSpawn,
   terminate,
+  terminateGroup,
   waitForHttp,
   waitForOutput,
   withDeadline,
@@ -20,8 +25,12 @@ export {
 export type {
   CliCaptureOptions,
   CliCaptureResult,
+  ExitInfo,
   LoggedChild,
-  LoggedSpawnOptions
+  LoggedSpawnOptions,
+  ReservedPort,
+  Spawned,
+  SuperviseSpawnOptions
 } from "./proc.js";
 export {
   CANDIDATE_ISOLATION_DEFAULTS,

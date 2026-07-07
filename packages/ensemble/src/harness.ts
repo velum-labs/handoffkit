@@ -104,6 +104,8 @@ export type CandidateContainerDriverInput = {
   workdir: string;
   mountPolicy: Required<CandidateIsolationMountPolicy>;
   networkPolicy: Required<CandidateIsolationNetworkPolicy>;
+  /** Aborts the container run (and reaps the container) when fired. */
+  signal?: AbortSignal;
 };
 
 export type CandidateContainerDriverResult = {
@@ -148,6 +150,8 @@ export type CandidateMicrovmDriverInput = {
   mountPolicy: Required<CandidateIsolationMountPolicy>;
   networkPolicy: Required<CandidateIsolationNetworkPolicy>;
   secretPolicy: Required<CandidateIsolationSecretPolicy>;
+  /** Aborts the sandbox run when fired. */
+  signal?: AbortSignal;
 };
 
 export type CandidateMicrovmDriverResult = {

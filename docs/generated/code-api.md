@@ -107,7 +107,7 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { createCliContainerDriver, runCandidateCommandWithIsolation, secretAbsenceMetadata, secretValueHash } from "./isolation.js";`
 - `export type { FusionKitToolExecutionBatch, FusionKitToolExecutionRequest, FusionKitToolExecutionResponse, FusionKitToolExecutionResult, FusionKitToolExecutorServer, FusionKitToolExecutorServerOptions } from "./external-executor.js";`
 - `export type { CandidateCommandIsolationInput, CandidateCommandIsolationResult } from "./isolation.js";`
-- `export { cleanupCandidateWorktree, cleanupWorktreePlan, createWorktreePlan, defaultOutputRoot, diffCandidateWorktree, sealCandidateWorktree } from "./worktree.js";`
+- `export { cleanupCandidateWorktree, cleanupWorktreePlan, createWorktreePlan, defaultOutputRoot, diffCandidateWorktree, diffWorkspace, sealCandidateWorktree } from "./worktree.js";`
 - `export type { CandidateWorktree, WorktreePlan } from "./worktree.js";`
 - `export { deriveSourceRepo } from "./source-repo.js";`
 - `export { hardeningToJson, panelMemberPreamble } from "./harness.js";`
@@ -357,6 +357,9 @@ it without cycles.
 
 No module JSDoc was found.
 
+- `export { registerCleanup, runCleanups } from "./cleanup.js";`
+- `export { superviseSpawn, terminateGroup } from "./process.js";`
+- `export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";`
 - `export const RUNTIME_TIMEOUT_MS ...`
 - `export const MANAGED_SERVER_DEFAULTS ...`
 - `export const CANDIDATE_ISOLATION_DEFAULTS ...`
@@ -382,6 +385,8 @@ No module JSDoc was found.
   Build a child environment from an explicit allowlist instead of spreading the entire parent environment: a harness CLI driven headlessly must not inherit every credential the parent process happens to hold. The baseline covers system plumbing (PATH/HOME/locale/TLS/proxy); everything else must be named by the caller.
 - `export const DEFAULT_BRIDGE_SCRUB_PREFIXES ...`
 - `export function scrubBridgeEnv(`
+- `export type ReservedPort ...`
+  A held ephemeral port: the loopback listener stays open (so nothing else can grab the port) until the caller `release()`s it — ideally immediately before spawning the process that will bind it, which closes the classic probe-then-close race where a returned port is stolen in the gap. The `server` is exposed so a Node-side caller can adopt the already-bound listener instead of releasing and re-binding.
 - `export type CliCaptureOptions ...`
 - `export type CliCaptureResult ...`
 - `export function runCliCapture(`
@@ -393,6 +398,7 @@ No module JSDoc was found.
 - `export function distillLog(raw: string, options: ...`
 - `export function waitForOutput(`
 - `export function terminate(child: ChildProcess, graceMs ...`
+  SIGTERM -> SIGKILL a child's whole process group. Thin wrapper over {@link terminateGroup} (the shared supervisor primitive) kept for the many existing `terminate(child)` call sites.
 - `export function escapeMarkdownCell(value: string): string ...`
 - `export function markdownTable(headers: readonly string[], rows: readonly (readonly string[])[]): string[] ...`
 
@@ -447,8 +453,8 @@ opencode tool integration entry point. It exposes launcher configuration helpers
 
 Tool integration entry point. It exposes the launcher and harness integration contract, registry helpers, process helpers, constants, environment compatibility helpers, and skipped-candidate utilities.
 
-- `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, runCliCapture, sleep, spawnLogged, spawnTool, terminate, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
-- `export type { CliCaptureOptions, CliCaptureResult, LoggedChild, LoggedSpawnOptions } from "./proc.js";`
+- `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, registerCleanup, reservePort, runCleanups, runCliCapture, sleep, spawnLogged, spawnTool, superviseSpawn, terminate, terminateGroup, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
+- `export type { CliCaptureOptions, CliCaptureResult, ExitInfo, LoggedChild, LoggedSpawnOptions, ReservedPort, Spawned, SuperviseSpawnOptions } from "./proc.js";`
 - `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS, trimTrailingSlashes } from "@fusionkit/runtime-utils";`
 - `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`

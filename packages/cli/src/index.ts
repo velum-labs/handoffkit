@@ -4,6 +4,10 @@
  */
 import "./quiet-warnings.js";
 import { PolicyDeniedError } from "@fusionkit/protocol";
+// Importing the cleanup registry installs the process-wide SIGINT/SIGTERM/exit
+// handlers once, so anything registered during a run (worktrees, supervised
+// process groups) is torn down on interrupt or normal exit.
+import { runCleanups } from "@fusionkit/tools";
 
 import { uiStream } from "@fusionkit/cli-ui";
 
@@ -73,6 +77,9 @@ async function main(): Promise<void> {
     }
     await program.parseAsync(process.argv);
   });
+  // Flush async teardown while the event loop is still alive: the `exit` handler
+  // can only complete synchronous cleanups.
+  await runCleanups();
 }
 
 /** Structured failure for --json mode: `{ error: { code, message, details? } }`. */

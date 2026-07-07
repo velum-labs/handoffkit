@@ -20,7 +20,13 @@ import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { DEFAULT_ENSEMBLE_NAME, formatDurationMs, FUSION_PANEL_MODEL, fusionModelId } from "@fusionkit/tools";
+import {
+  DEFAULT_ENSEMBLE_NAME,
+  formatDurationMs,
+  FUSION_PANEL_MODEL,
+  fusionModelId,
+  registerCleanup
+} from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
 import { isLookaheadK } from "@fusionkit/protocol";
@@ -494,9 +500,11 @@ export async function runFusion(
   // soon as they exist; cleanup runs them in reverse order, exactly once.
   const disposers: Array<() => Promise<void> | void> = [];
   let cleaned = false;
+  let unregisterCleanup: () => void = () => {};
   const cleanup = async (): Promise<void> => {
     if (cleaned) return;
     cleaned = true;
+    unregisterCleanup();
     for (const dispose of disposers.reverse()) {
       try {
         await dispose();
@@ -505,18 +513,12 @@ export async function runFusion(
       }
     }
   };
-  let signalled = false;
-  const onSignal = (): void => {
-    if (signalled) return;
-    signalled = true;
-    // Never wedge on shutdown: if cleanup stalls (a child ignoring SIGTERM),
-    // force-exit after a grace period.
-    const forced = setTimeout(() => process.exit(1), 10_000);
-    forced.unref();
-    void cleanup().then(() => process.exit(130));
-  };
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
+  // A Ctrl+C (SIGINT) or SIGTERM routes through the shared cleanup registry: it
+  // runs the registered teardown (this disposer stack, plus any supervised
+  // process groups) then re-raises the conventional exit code (130/143). This
+  // replaces a bespoke signal handler so the forced exit can never bypass
+  // runCleanups(); the registry also bounds the whole shutdown by a hard timeout.
+  unregisterCleanup = registerCleanup(cleanup);
 
   // Out-of-band per-turn status: while the coding agent owns the screen, the
   // only channel that cannot corrupt its TUI is the terminal title.

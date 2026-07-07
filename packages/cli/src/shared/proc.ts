@@ -5,6 +5,7 @@
 export {
   distillLog,
   freePort,
+  reservePort,
   sleep,
   spawnLogged,
   spawnTool,
@@ -12,4 +13,4 @@ export {
   waitForHttp,
   waitForOutput
 } from "@fusionkit/tools";
-export type { LoggedChild, LoggedSpawnOptions } from "@fusionkit/tools";
+export type { LoggedChild, LoggedSpawnOptions, ReservedPort } from "@fusionkit/tools";

@@ -26,7 +26,7 @@ import type { GatewayEnsembleConfig, GatewayRunnerConfig } from "../gateway.js";
 import { CliError } from "../shared/errors.js";
 import { createPortlessSession } from "../shared/portless.js";
 import type { PortlessSession } from "../shared/portless.js";
-import { freePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
+import { reservePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
 
 import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";
@@ -487,16 +487,26 @@ export async function startRouter(options: {
     const configPath = join(configDir, "router.yaml");
     writeFileSync(configPath, config);
     const runner = fusionkitPyCommand(options.fusionkitDir);
-    const port = await freePort();
-    const proc = spawnLogged(
-      runner.command,
-      [...runner.prefix, "serve", "--config", configPath, "--host", "127.0.0.1", "--port", String(port)],
-      {
-        ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
-        ...(options.logsDir !== undefined ? { logFile: join(options.logsDir, "router.log") } : {}),
-        env
-      }
-    );
+    // Hold the port until the instant before the router process binds it, so a
+    // concurrent picker cannot slip in between choosing and spawning.
+    const reservation = await reservePort();
+    const port = reservation.port;
+    const routerArgs = [
+      ...runner.prefix,
+      "serve",
+      "--config",
+      configPath,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port)
+    ];
+    await reservation.release();
+    const proc = spawnLogged(runner.command, routerArgs, {
+      ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
+      ...(options.logsDir !== undefined ? { logFile: join(options.logsDir, "router.log") } : {}),
+      env
+    });
     proc.child.once("exit", () => rmSync(configDir, { recursive: true, force: true }));
     const url = `http://127.0.0.1:${port}`;
     // Surface the engine's own boot chatter (uvx resolve/download on a cold

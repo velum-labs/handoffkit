@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -11,12 +12,48 @@ import { createDriverHarness } from "../driver-adapter.js";
 import { ensemble } from "../run.js";
 import type { EnsembleDescriptor } from "../harness.js";
 
-function tempOutputRoot(): { outputRoot: string; cleanup: () => void } {
-  const outputRoot = mkdtempSync(join(tmpdir(), "driver-adapter-out-"));
-  return { outputRoot, cleanup: () => rmSync(outputRoot, { recursive: true, force: true }) };
+// A real scratch repo so the driver harness runs candidates in isolated
+// worktrees (it now hard-errors rather than falling back to process.cwd(), and
+// the add-then-diff stays confined to disposable worktrees off this repo).
+function makeRepo(): { dir: string; sha: string } {
+  const dir = mkdtempSync(join(tmpdir(), "driver-adapter-repo-"));
+  const git = (args: string[]): string =>
+    execFileSync("git", args, { cwd: dir, encoding: "utf8" });
+  git(["init", "--initial-branch=main"]);
+  git(["config", "user.email", "test@fusionkit.dev"]);
+  git(["config", "user.name", "FusionKit Test"]);
+  writeFileSync(join(dir, "README.md"), "scratch\n");
+  git(["add", "-A"]);
+  git(["commit", "-m", "init"]);
+  const sha = git(["rev-parse", "HEAD"]).trim();
+  return { dir, sha };
 }
 
-function descriptor(outputRoot: string, harness: EnsembleDescriptor["harness"]): EnsembleDescriptor {
+function tempOutputRoot(): {
+  outputRoot: string;
+  workspace: string;
+  sha: string;
+  cleanup: () => void;
+} {
+  const outputRoot = mkdtempSync(join(tmpdir(), "driver-adapter-out-"));
+  const repo = makeRepo();
+  return {
+    outputRoot,
+    workspace: repo.dir,
+    sha: repo.sha,
+    cleanup: () => {
+      rmSync(outputRoot, { recursive: true, force: true });
+      rmSync(repo.dir, { recursive: true, force: true });
+    }
+  };
+}
+
+function descriptor(
+  outputRoot: string,
+  workspace: string,
+  sha: string,
+  harness: EnsembleDescriptor["harness"]
+): EnsembleDescriptor {
   return {
     id: "driver_adapter_test",
     harness,
@@ -31,13 +68,14 @@ function descriptor(outputRoot: string, harness: EnsembleDescriptor["harness"]):
     },
     prompt: "summarize the plan",
     sourceRepo: "handoffkit",
-    baseGitSha: "c".repeat(40),
+    baseGitSha: sha,
+    workspace,
     outputRoot
   };
 }
 
 test("driver bridge runs a panel candidate with a reconstructed trajectory", async () => {
-  const { outputRoot, cleanup } = tempOutputRoot();
+  const { outputRoot, workspace, sha, cleanup } = tempOutputRoot();
   const driver = createMockDriver();
   const harness = createDriverHarness({
     driver,
@@ -45,7 +83,7 @@ test("driver bridge runs a panel candidate with a reconstructed trajectory", asy
     configForModel: () => driver.configSchema.parse({ replies: ["fused answer"] })
   });
   try {
-    const result = await ensemble.run(descriptor(outputRoot, harness));
+    const result = await ensemble.run(descriptor(outputRoot, workspace, sha, harness));
     assert.equal(result.harnessRunResult.status, "succeeded");
     const candidate = result.candidates[0];
     assert.equal(candidate?.status, "succeeded");
@@ -70,28 +108,35 @@ test("driver bridge reconstructs trajectory steps from canonical events", async 
     descriptor: {} as never,
     request: {} as never
   });
-  const output = await harness.run({
-    descriptor: {
-      id: "d",
-      prompt: "do the thing",
-      models: [{ id: "m1", model: "mock" }],
-      workspace: process.cwd()
-    } as never,
-    request: {} as never,
-    model: { id: "m1", model: "mock" },
-    ordinal: 0,
-    prepared
-  });
-  assert.equal(output.status, "succeeded");
-  assert.ok(output.trajectory, "a candidate must carry a trajectory for the fuse step");
-  const steps = output.trajectory?.steps ?? [];
-  // A tool observation (from the auto-approved exec) and the final output step.
-  assert.ok(steps.some((step) => step.type === "output" && (step.text ?? "").includes("fused answer")));
-  assert.equal(output.trajectory?.finalOutput.includes("the fused answer"), true);
+  // A throwaway workspace instead of process.cwd(): the harness runs (and does
+  // its add-then-diff) here so the test never stages the real repo's index.
+  const workspace = mkdtempSync(join(tmpdir(), "driver-adapter-ws-"));
+  try {
+    const output = await harness.run({
+      descriptor: {
+        id: "d",
+        prompt: "do the thing",
+        models: [{ id: "m1", model: "mock" }],
+        workspace
+      } as never,
+      request: {} as never,
+      model: { id: "m1", model: "mock" },
+      ordinal: 0,
+      prepared
+    });
+    assert.equal(output.status, "succeeded");
+    assert.ok(output.trajectory, "a candidate must carry a trajectory for the fuse step");
+    const steps = output.trajectory?.steps ?? [];
+    // A tool observation (from the auto-approved exec) and the final output step.
+    assert.ok(steps.some((step) => step.type === "output" && (step.text ?? "").includes("fused answer")));
+    assert.equal(output.trajectory?.finalOutput.includes("the fused answer"), true);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
 });
 
 test("driver bridge resumes each member's native session across turns", async () => {
-  const { outputRoot, cleanup } = tempOutputRoot();
+  const { outputRoot, workspace, sha, cleanup } = tempOutputRoot();
   const driver = createMockDriver();
   // One resume map for the whole conversation (as the gateway owns per session).
   const resumeCursors = new Map<string, ResumeCursor>();
@@ -106,7 +151,7 @@ test("driver bridge resumes each member's native session across turns", async ()
       resumeCursors
     });
   try {
-    const first = await ensemble.run(descriptor(outputRoot, makeHarness()));
+    const first = await ensemble.run(descriptor(outputRoot, workspace, sha, makeHarness()));
     assert.equal(first.candidates[0]?.status, "succeeded");
 
     const cursor = resumeCursors.get("m1");
@@ -116,7 +161,7 @@ test("driver bridge resumes each member's native session across turns", async ()
     assert.ok(afterTurnOne.sessionId);
     assert.equal(afterTurnOne.turnCount, 1);
 
-    await ensemble.run(descriptor(outputRoot, makeHarness()));
+    await ensemble.run(descriptor(outputRoot, workspace, sha, makeHarness()));
     // Native resume: same session id, and the turn count advanced (the second
     // run resumed the mock session rather than starting a fresh one).
     const afterTurnTwo = resumeCursors.get("m1")?.data as { sessionId?: string; turnCount?: number };

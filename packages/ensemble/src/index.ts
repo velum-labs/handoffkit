@@ -301,6 +301,7 @@ export {
   createWorktreePlan,
   defaultOutputRoot,
   diffCandidateWorktree,
+  diffWorkspace,
   sealCandidateWorktree
 } from "./worktree.js";
 export type { CandidateWorktree, WorktreePlan } from "./worktree.js";

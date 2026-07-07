@@ -21,7 +21,7 @@ import {
   captureWorktreeDiff,
   commandOnPath,
   definedEnv,
-  freePort,
+  reservePort,
   runCliCapture,
   spawnLogged,
   terminate,
@@ -178,9 +178,10 @@ function skippedCandidate(input: {
 export async function defaultCursorRunner(
   input: CursorExecInput
 ): Promise<CursorExecResult> {
-  // Reserve a real free loopback port instead of a random guess so parallel
-  // candidates cannot collide on the same bridge port.
-  const bridgePort = await freePort();
+  // Hold a real free loopback port until the bridge is about to bind it, so
+  // parallel candidates cannot collide on (or steal) the same bridge port.
+  const reservation = await reservePort();
+  const bridgePort = reservation.port;
   const bridgeEnv = cursorBridgeEnv({
     baseEnv: input.env,
     port: bridgePort,
@@ -195,6 +196,7 @@ export async function defaultCursorRunner(
   });
 
   const { serveCli } = resolveCursorkitCli();
+  await reservation.release();
   const bridge = spawnLogged(process.execPath, [serveCli, "serve"], {
     cwd: input.cwd,
     env: bridgeEnv
