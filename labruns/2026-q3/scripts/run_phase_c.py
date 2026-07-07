@@ -30,11 +30,21 @@ OUT_DIR = REPO / "labdata" / "runs" / "2026-q3" / "phase-c"
 SPEND_LEDGER = OUT_DIR / "spend_ledger.jsonl"
 RUNNER_PREFIX = ["uv", "run", "--with", "datasets<4"]
 
-PANELS: dict[str, str] = {
+LEGACY_PANELS: dict[str, str] = {
     "h1": "configs/benchmark-panel.h1-backbone.yaml",
     "h2": "configs/benchmark-panel.h2-style-diverse.yaml",
     "h5": "configs/benchmark-panel.h5-thinking-heavy.yaml",
 }
+JUDGE_EXP_PANELS: dict[str, str] = {
+    "j1-g": "configs/benchmark-panel.judge-exp.j1-gemini.yaml",
+    "j1-m": "configs/benchmark-panel.judge-exp.j1-mimo.yaml",
+    "j2-g": "configs/benchmark-panel.judge-exp.j2-gemini.yaml",
+    "j2-m": "configs/benchmark-panel.judge-exp.j2-mimo.yaml",
+    "j3-g": "configs/benchmark-panel.judge-exp.j3-gemini.yaml",
+    "j3-m": "configs/benchmark-panel.judge-exp.j3-mimo.yaml",
+}
+PANELS: dict[str, str] = {**LEGACY_PANELS, **JUDGE_EXP_PANELS}
+JUDGE_MATRIX_ORDER = ("j1-g", "j1-m", "j2-g", "j2-m", "j3-g", "j3-m")
 SPEND_CAP_USD = 75.0
 PREFLIGHT_TIMEOUT_S = 7200.0
 PANEL_TIMEOUT_S = 21600.0
@@ -281,6 +291,36 @@ def run_all() -> None:
         run_panel(hypothesis)
 
 
+def run_judge_matrix(*, parallel: bool = False) -> None:
+    """Run the six preregistered judge-swap panels on the frozen manifest."""
+    if parallel:
+        import concurrent.futures
+
+        pending = [
+            hypothesis
+            for hypothesis in JUDGE_MATRIX_ORDER
+            if _ledger_total() < SPEND_CAP_USD
+        ]
+        if not pending:
+            print("spend cap reached before judge matrix", file=sys.stderr)
+            return
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(pending)) as pool:
+            futures = {pool.submit(run_panel, hypothesis): hypothesis for hypothesis in pending}
+            for future in concurrent.futures.as_completed(futures):
+                hypothesis = futures[future]
+                try:
+                    future.result()
+                except SystemExit as exc:
+                    print(f"{hypothesis} failed: {exc}", file=sys.stderr)
+        return
+
+    for hypothesis in JUDGE_MATRIX_ORDER:
+        if _ledger_total() >= SPEND_CAP_USD:
+            print(f"stopping before {hypothesis}: spend cap reached", file=sys.stderr)
+            break
+        run_panel(hypothesis)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Phase C benchmark runner")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -289,6 +329,15 @@ def main() -> None:
     run = sub.add_parser("run", help="run full manifest for one panel")
     run.add_argument("--hypothesis", choices=sorted(PANELS), required=True)
     sub.add_parser("run-all", help="run H1, H2, H5 sequentially until spend cap")
+    judge = sub.add_parser(
+        "run-judge-matrix",
+        help="run the six judge-experiment panels (j1-g … j3-m) until spend cap",
+    )
+    judge.add_argument(
+        "--parallel",
+        action="store_true",
+        help="run all pending judge panels concurrently (separate cache signatures)",
+    )
     args = parser.parse_args()
 
     if args.command == "preflight":
@@ -297,6 +346,8 @@ def main() -> None:
         run_panel(args.hypothesis)
     elif args.command == "run-all":
         run_all()
+    elif args.command == "run-judge-matrix":
+        run_judge_matrix(parallel=args.parallel)
 
 
 if __name__ == "__main__":
