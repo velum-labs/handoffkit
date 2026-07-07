@@ -36,6 +36,8 @@ PANELS: dict[str, str] = {
     "h5": "configs/benchmark-panel.h5-thinking-heavy.yaml",
 }
 SPEND_CAP_USD = 75.0
+PREFLIGHT_TIMEOUT_S = 7200.0
+PANEL_TIMEOUT_S = 21600.0
 
 
 @dataclass
@@ -95,6 +97,7 @@ def _public_bench(
     subset: int | None,
     output: Path,
     report: Path,
+    runner_timeout_s: float,
 ) -> RunResult:
     env = os.environ.copy()
     env["FUSIONKIT_BENCH_CONFIG"] = str(REPO / config_rel)
@@ -115,6 +118,8 @@ def _public_bench(
         str(output),
         "--report",
         str(report),
+        "--runner-timeout-s",
+        str(runner_timeout_s),
     ]
     proc = subprocess.run(
         cmd,
@@ -184,7 +189,13 @@ def run_preflight(hypothesis: str = "h1") -> RunResult:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output = OUT_DIR / f"preflight-{hypothesis}-{stamp}.jsonl"
     report = OUT_DIR / f"preflight-{hypothesis}-{stamp}.md"
-    result = _public_bench(config_rel=config, subset=5, output=output, report=report)
+    result = _public_bench(
+        config_rel=config,
+        subset=5,
+        output=output,
+        report=report,
+        runner_timeout_s=PREFLIGHT_TIMEOUT_S,
+    )
     result.hypothesis = hypothesis
     _append_ledger(
         {
@@ -214,7 +225,13 @@ def run_panel(hypothesis: str) -> RunResult:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output = OUT_DIR / f"{hypothesis}-{stamp}.jsonl"
     report = OUT_DIR / f"{hypothesis}-{stamp}.md"
-    result = _public_bench(config_rel=config, subset=None, output=output, report=report)
+    result = _public_bench(
+        config_rel=config,
+        subset=None,
+        output=output,
+        report=report,
+        runner_timeout_s=PANEL_TIMEOUT_S,
+    )
     result.hypothesis = hypothesis
     member_rates = _summarize_member_pass_rates(result.raw["run"])  # type: ignore[arg-type]
     best_single = max(member_rates.values()) if member_rates else None
