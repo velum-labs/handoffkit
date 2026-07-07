@@ -598,6 +598,30 @@ test("openAiSseToResponses keeps function tools on the incremental function_call
   assert.ok(!text.includes("custom_tool_call"));
 });
 
+test("a mid-stream provider error event becomes response.failed with the upstream message", async () => {
+  // The fusion router surfaces a classified provider failure as an OpenAI-style
+  // `data: {"error": {...}}` SSE event. The Responses translation must carry
+  // that message to the consumer (codex shows it verbatim) instead of ending
+  // the stream as a bare disconnect.
+  const stream = openAiSseToResponses(
+    sseStream(
+      `data: ${JSON.stringify({
+        error: {
+          message: "openrouter call failed (unknown); see the server logs for the provider's message",
+          type: "provider_error",
+          code: "unknown"
+        }
+      })}\n\n`,
+      "data: [DONE]\n\n"
+    ),
+    "grok-4"
+  );
+  const text = await new Response(stream).text();
+  assert.ok(text.includes("event: response.failed"));
+  assert.ok(text.includes("openrouter call failed (unknown)"));
+  assert.ok(!text.includes("event: response.completed"));
+});
+
 test("translates a streamed Responses event sequence", async () => {
   const mock = await startMock();
   const gateway = await startGateway({

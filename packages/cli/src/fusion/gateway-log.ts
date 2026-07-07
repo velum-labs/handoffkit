@@ -57,23 +57,59 @@ export function logTurnStart(input: {
   );
 }
 
+/** Bound a failure reason to one log line; provider bodies can be huge. */
+const FAILURE_DETAIL_MAX = 300;
+
+/**
+ * One failed panel candidate, as the turn log renders it: the end-reason kind
+ * (`exit_error`, `timeout`, `spawn_error`, ...) distinguishes an internal
+ * runner failure from a provider/API rejection, and `detail` carries the
+ * harness/provider message (e.g. the upstream HTTP status and error body) so
+ * a bare "failed" is debuggable straight from the log.
+ */
+export function candidateFailureReason(candidate: {
+  status: string;
+  endReason?: string;
+  detail?: string;
+}): string | undefined {
+  if (candidate.status === "succeeded") return undefined;
+  const parts = [candidate.endReason, candidate.detail].filter(
+    (part): part is string => typeof part === "string" && part.length > 0
+  );
+  if (parts.length === 0) return undefined;
+  const reason = parts.join(": ").replace(/\s+/g, " ").trim();
+  return reason.length > FAILURE_DETAIL_MAX ? `${reason.slice(0, FAILURE_DETAIL_MAX - 1)}…` : reason;
+}
+
 /** `turn.candidates`: the panel finished and produced candidate trajectories. */
 export function logTurnCandidates(input: {
   turn: number;
-  candidates: ReadonlyArray<{ modelId: string; status: string }>;
+  candidates: ReadonlyArray<{ modelId: string; status: string; endReason?: string; detail?: string }>;
 }): void {
-  if (!chatter) return;
-  const marks = input.candidates
-    .map((candidate) =>
-      candidate.status === "succeeded"
-        ? `${candidate.modelId} ${green(glyph.tick())}`
-        : `${candidate.modelId} ${red(candidate.status)}`
-    )
-    .join(dim(", "));
-  write(
-    green(glyph.tick()),
-    `turn ${input.turn} · panel done ${dim("—")} ${input.candidates.length} candidate${input.candidates.length === 1 ? "" : "s"} ${dim("(")}${marks}${dim(")")}`
-  );
+  if (chatter) {
+    const marks = input.candidates
+      .map((candidate) =>
+        candidate.status === "succeeded"
+          ? `${candidate.modelId} ${green(glyph.tick())}`
+          : `${candidate.modelId} ${red(candidate.status)}`
+      )
+      .join(dim(", "));
+    write(
+      green(glyph.tick()),
+      `turn ${input.turn} · panel done ${dim("—")} ${input.candidates.length} candidate${input.candidates.length === 1 ? "" : "s"} ${dim("(")}${marks}${dim(")")}`
+    );
+  }
+  // Failed members always explain themselves (like turn.failed / warnings):
+  // one line per failure with its end-reason kind + provider/harness detail,
+  // so an `exit_error` is attributable without digging into artifacts.
+  for (const candidate of input.candidates) {
+    const reason = candidateFailureReason(candidate);
+    if (reason === undefined) continue;
+    write(
+      yellow(glyph.warn()),
+      `turn ${input.turn} · ${candidate.modelId} ${red(candidate.status)} ${dim("—")} ${yellow(reason)}`
+    );
+  }
 }
 
 /** `turn.failed`: the panel phase failed outright. Always prints. */
