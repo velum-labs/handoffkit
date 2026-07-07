@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FusionKit Phase A Briefing - Clean-Room Catalog, Shortlist, Hypotheses (2026-07-07)</title>
+<style>
+  :root{--ink:#1a2233;--muted:#5b6579;--line:#e3e7ef;--bg:#f7f8fb;--card:#fff;
+    --blue:#2563eb;--blue-soft:#dbeafe;--green:#16a34a;--green-soft:#dcfce7;
+    --red:#dc2626;--red-soft:#fee2e2;--amber:#d97706;--amber-soft:#fef3c7;
+    --violet:#7c3aed;--violet-soft:#ede9fe}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 28px 80px}
+  header.hero{background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);color:#fff;border-radius:14px;padding:30px 34px;margin-bottom:26px}
+  header.hero h1{margin:0 0 6px;font-size:25px}
+  header.hero p{margin:0;color:#c7d2fe;font-size:15px}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .chip{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:5px 14px;font-size:13px;color:#e0e7ff}
+  .chip b{color:#fff}
+  h2{font-size:20px;margin:38px 0 6px;display:flex;align-items:center;gap:10px}
+  h2 .num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--blue);color:#fff;font-size:14px;flex:none}
+  .sub{color:var(--muted);margin:0 0 14px;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px}
+  .tag{display:inline-block;border-radius:6px;padding:2px 9px;font-size:12px;font-weight:600}
+  .tag.pass{background:var(--green-soft);color:var(--green)}
+  .tag.fail{background:var(--red-soft);color:var(--red)}
+  .tag.warn{background:var(--amber-soft);color:var(--amber)}
+  .tag.info{background:var(--blue-soft);color:var(--blue)}
+  .tag.dir{background:var(--violet-soft);color:var(--violet)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;color:var(--muted);font-weight:600;padding:7px 10px;border-bottom:2px solid var(--line);white-space:nowrap}
+  td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr.inuse{background:#f0f6ff}
+  code{font-size:12.5px;background:#eef1f6;border-radius:4px;padding:1px 5px}
+  .mut{color:var(--muted)}
+  .cov{text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px}
+  .cov.tp{background:var(--green-soft);color:#14532d}
+  .cov.vendor{background:var(--amber-soft);color:#7c2d12}
+  .cov.sat{background:var(--violet-soft);color:#4c1d95}
+  .cov.none{color:#cbd5e1;text-align:center}
+  .fam{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:10px 0 0}
+  .legend .cov{padding:1px 8px;border-radius:5px}
+  .barrow{display:grid;grid-template-columns:120px 1fr 150px;align-items:center;gap:12px;margin:7px 0}
+  .barrow .lab{font-size:13px;text-align:right;color:var(--ink)}
+  .barrow .val{font-size:13px;color:var(--muted);white-space:nowrap}
+  .track{background:#eef1f6;border-radius:6px;height:22px;overflow:hidden}
+  .fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-size:12px;font-weight:600;min-width:44px}
+  .fill.blue{background:var(--blue)}
+  .hyp .hyphead{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .hyp h3{margin:0;font-size:16px}
+  .mchips{display:flex;gap:8px;flex-wrap:wrap}
+  .mchip{border:2px solid;border-radius:8px;padding:4px 10px;font-size:13px;background:#fff}
+  .mchip small{color:var(--muted)}
+  table.pk td{border-bottom:none;padding:3px 8px;font-size:13px}
+  td.pklab{color:var(--muted);white-space:nowrap;width:70px;font-weight:600}
+  .readme li{margin:6px 0}
+</style>
+</head>
+<body><div class="wrap">
+
+<header class="hero">
+  <h1>Phase A Briefing - Clean-Room Catalog, Shortlist &amp; Hypotheses</h1>
+  <p>What the 2026-07-07 snapshot says, how the shortlist was ranked, and what the five
+     hypothesis cards commit us to test. Everything here traces to committed artifacts.</p>
+  <div class="chips">
+    <span class="chip">API rows <b>343</b></span>
+    <span class="chip">candidates <b>34</b></span>
+    <span class="chip">shortlist <b>12</b></span>
+    <span class="chip">hypotheses <b>5</b></span>
+    <span class="chip">spend <b>$0</b></span>
+    <span class="chip">retrieved <b>2026-07-07T04:52:40Z</b></span>
+  </div>
+</header>
+
+<h2><span class="num">1</span>The funnel: 343 API rows &rarr; 34 candidates</h2>
+<p class="sub">Mechanical filters only - no score-based selection happened at this stage.
+Source: <code>docs/fusion/catalog-snapshot-2026-07-07.yaml</code> filter ledger.</p>
+<div class="card">
+<table><thead><tr><th>Filter</th><th class="num">Rows removed</th><th class="num">Rows after</th></tr></thead>
+<tbody><tr><td>open_weights_only</td><td class="num">-152</td><td class="num">191</td></tr><tr><td>context_length</td><td class="num">-26</td><td class="num">165</td></tr><tr><td>recency</td><td class="num">-43</td><td class="num">122</td></tr><tr><td>coding_capable</td><td class="num">-63</td><td class="num">59</td></tr><tr><td>free_and_duplicate_variants</td><td class="num">-25</td><td class="num">34</td></tr></tbody></table>
+</div>
+
+<h2><span class="num">2</span>Value map: what you pay vs what leaderboards say</h2>
+<p class="sub">Each dot is a candidate with at least one usable third-party score. Black-ring dots
+sit on a hypothesis panel; the amber-ring dot is the judge. Up and left is better.
+Hover for exact numbers.</p>
+<div class="card"><svg viewBox="0 0 940 430" role="img" style="width:100%;height:auto;background:#fff;border-radius:8px"><line x1="116.2" y1="18" x2="116.2" y2="374" stroke="#eef1f6"/><text x="116.2" y="392" text-anchor="middle" font-size="12" fill="#5b6579">$0.001</text><line x1="352.1" y1="18" x2="352.1" y2="374" stroke="#eef1f6"/><text x="352.1" y="392" text-anchor="middle" font-size="12" fill="#5b6579">$0.003</text><line x1="610.6" y1="18" x2="610.6" y2="374" stroke="#eef1f6"/><text x="610.6" y="392" text-anchor="middle" font-size="12" fill="#5b6579">$0.01</text><line x1="846.5" y1="18" x2="846.5" y2="374" stroke="#eef1f6"/><text x="846.5" y="392" text-anchor="middle" font-size="12" fill="#5b6579">$0.03</text><line x1="64" y1="329.5" x2="920" y2="329.5" stroke="#eef1f6"/><text x="56" y="333.5" text-anchor="end" font-size="12" fill="#5b6579">40</text><line x1="64" y1="263.7" x2="920" y2="263.7" stroke="#eef1f6"/><text x="56" y="267.7" text-anchor="end" font-size="12" fill="#5b6579">50</text><line x1="64" y1="197.8" x2="920" y2="197.8" stroke="#eef1f6"/><text x="56" y="201.8" text-anchor="end" font-size="12" fill="#5b6579">60</text><line x1="64" y1="131.9" x2="920" y2="131.9" stroke="#eef1f6"/><text x="56" y="135.9" text-anchor="end" font-size="12" fill="#5b6579">70</text><line x1="64" y1="66.1" x2="920" y2="66.1" stroke="#eef1f6"/><text x="56" y="70.1" text-anchor="end" font-size="12" fill="#5b6579">80</text><text x="492" y="420" text-anchor="middle" font-size="12.5" fill="#5b6579">blended cost per default request (2k in + 8k out, log scale)</text><text x="16" y="196" text-anchor="middle" font-size="12.5" fill="#5b6579" transform="rotate(-90 16 196)">aggregate mean (0-100)</text><circle cx="382.7" cy="347.7" r="5.5" fill="#64748b" stroke="#fff"><title>nousresearch/hermes-4-70b - mean 37.2, $0.0035/req</title></circle><circle cx="694.8" cy="325.6" r="5.5" fill="#4ade80" stroke="#fff"><title>z-ai/glm-4.7 - mean 40.6, $0.0148/req</title></circle><circle cx="165.9" cy="317.7" r="5.5" fill="#64748b" stroke="#fff"><title>openai/gpt-oss-120b - mean 41.8, $0.0013/req</title></circle><circle cx="666.9" cy="286.7" r="5.5" fill="#64748b" stroke="#fff"><title>mistralai/mistral-large-2512 - mean 46.5, $0.0130/req</title></circle><circle cx="391.3" cy="268.9" r="5.5" fill="#64748b" stroke="#fff"><title>poolside/laguna-m.1 - mean 49.2, $0.0036/req</title></circle><circle cx="743.9" cy="268.5" r="5.5" fill="#f87171" stroke="#fff"><title>nvidia/nemotron-3-ultra-550b-a55b - mean 49.3, $0.0186/req</title></circle><circle cx="722.0" cy="251.8" r="5.5" fill="#64748b" stroke="#fff"><title>mistralai/devstral-2512 - mean 51.8, $0.0168/req</title></circle><circle cx="628.7" cy="250.2" r="5.5" fill="#a855f7" stroke="#fff"><title>qwen/qwen3.7-plus - mean 52.0, $0.0109/req</title></circle><circle cx="718.9" cy="230.1" r="5.5" fill="#16a34a" stroke="#fff"><title>z-ai/glm-5 - mean 55.1, $0.0166/req</title></circle><circle cx="505.2" cy="222.8" r="5.5" fill="#2dd4bf" stroke="#fff"><title>minimax/minimax-m2.7 - mean 56.2, $0.0061/req</title></circle><circle cx="817.6" cy="208.3" r="5.5" fill="#16a34a" stroke="#fff"><title>z-ai/glm-5.1 - mean 58.4, $0.0262/req</title></circle><text x="806.6" y="212.3" text-anchor="end" font-size="11.5" fill="#1a2233">glm-5.1</text><circle cx="558.1" cy="206.4" r="5.5" fill="#db2777" stroke="#fff"><title>xiaomi/mimo-v2.5-pro - mean 58.7, $0.0078/req</title></circle><text x="569.1" y="210.4" text-anchor="start" font-size="11.5" fill="#1a2233">mimo-v2.5-pro</text><circle cx="614.9" cy="205.8" r="5.5" fill="#0d9488" stroke="#fff"><title>minimax/minimax-m3 - mean 58.8, $0.0102/req</title></circle><text x="625.9" y="209.8" text-anchor="start" font-size="11.5" fill="#1a2233">minimax-m3</text><circle cx="111.9" cy="200.4" r="5.5" fill="#7c3aed" stroke="#fff"><title>qwen/qwen3-235b-a22b-2507 - mean 59.6, $0.0010/req</title></circle><text x="122.9" y="204.4" text-anchor="start" font-size="11.5" fill="#1a2233">qwen3-235b-a22b-2507</text><circle cx="836.2" cy="196.6" r="8" fill="#d97706" stroke="#0f172a" stroke-width="2.5"><title>moonshotai/kimi-k2.6 - mean 60.2, $0.0286/req</title></circle><text x="825.2" y="200.6" text-anchor="end" font-size="11.5" fill="#1a2233">kimi-k2.6</text><circle cx="863.7" cy="176.2" r="8" fill="#a855f7" stroke="#d97706" stroke-width="2.5"><title>qwen/qwen3.7-max - mean 63.3, $0.0325/req</title></circle><text x="852.7" y="180.2" text-anchor="end" font-size="11.5" fill="#1a2233">qwen3.7-max</text><circle cx="466.0" cy="174.1" r="5.5" fill="#64748b" stroke="#fff"><title>mistralai/mistral-small-2603 - mean 63.6, $0.0051/req</title></circle><text x="477.0" y="178.1" text-anchor="start" font-size="11.5" fill="#1a2233">mistral-small-2603</text><circle cx="804.4" cy="162.1" r="8" fill="#16a34a" stroke="#0f172a" stroke-width="2.5"><title>z-ai/glm-5.2 - mean 65.4, $0.0247/req</title></circle><text x="793.4" y="166.1" text-anchor="end" font-size="11.5" fill="#1a2233">glm-5.2</text><circle cx="219.8" cy="160.8" r="5.5" fill="#0ea5e9" stroke="#fff"><title>deepseek/deepseek-v4-flash - mean 65.6, $0.0016/req</title></circle><text x="230.8" y="164.8" text-anchor="start" font-size="11.5" fill="#1a2233">deepseek-v4-flash</text><circle cx="558.1" cy="143.0" r="8" fill="#0ea5e9" stroke="#0f172a" stroke-width="2.5"><title>deepseek/deepseek-v4-pro - mean 68.3, $0.0078/req</title></circle><text x="569.1" y="147.0" text-anchor="start" font-size="11.5" fill="#1a2233">deepseek-v4-pro</text><circle cx="400.6" cy="58.2" r="8" fill="#dc2626" stroke="#0f172a" stroke-width="2.5"><title>nvidia/nemotron-3-super-120b-a12b - mean 81.2, $0.0038/req</title></circle><text x="411.6" y="62.2" text-anchor="start" font-size="11.5" fill="#1a2233">nemotron-3-super-120b-a12b</text><circle cx="366.2" cy="44.3" r="8" fill="#2563eb" stroke="#0f172a" stroke-width="2.5"><title>deepseek/deepseek-v3.2 - mean 83.3, $0.0032/req</title></circle><text x="377.2" y="48.3" text-anchor="start" font-size="11.5" fill="#1a2233">deepseek-v3.2</text></svg></div>
+
+<h2><span class="num">3</span>Evidence coverage: how much do we actually know?</h2>
+<p class="sub">The single most important caveat in Phase A. 25 of 34 candidates
+have any third-party score; 3 have none at all. Ranks built on one benchmark are weaker
+than ranks built on three - see the recorded limitation in the snapshot prose.</p>
+<div class="card" style="max-height:520px;overflow-y:auto"><table><thead><tr><th>Model</th><th>Family</th><th>LiveCodeBench</th><th>SWE-bench Pro</th><th>Aider polyglot</th><th>AA coding index</th><th>Mean</th></tr></thead><tbody><tr><td><code>deepseek/deepseek-v3.2</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#2563eb"></span>deepseek-v3</td><td class="cov tp" title="third-party: LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: DeepSeek-V3.2)">83.3</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">83.3</td></tr><tr><td><code>nvidia/nemotron-3-super-120b-a12b</code> </td><td><span class="fam" style="background:#dc2626"></span>nemotron-3-super</td><td class="cov tp" title="third-party: LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: Nemotron 3 Super 120B A12B)">81.2</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">81.2</td></tr><tr><td><code>deepseek/deepseek-v4-pro</code> </td><td><span class="fam" style="background:#0ea5e9"></span>deepseek-v4</td><td class="cov tp" title="third-party: LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: DeepSeek-V4-Pro-Max; max-effort variant of catalog slug)">93.5</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: DeepSeek V4 Pro)">52.1</td><td class="cov none">-</td><td class="cov tp" title="third-party: Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: DeepSeek V4 Pro max)">59.4</td><td class="num">68.3</td></tr><tr><td><code>deepseek/deepseek-v4-flash</code> </td><td><span class="fam" style="background:#0ea5e9"></span>deepseek-v4</td><td class="cov tp" title="third-party: LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: DeepSeek-V4-Flash-Max; max-effort variant of catalog slug)">91.6</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: DeepSeek V4 Flash)">49.1</td><td class="cov none">-</td><td class="cov tp" title="third-party: Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: DeepSeek V4 Flash max)">56.2</td><td class="num">65.6</td></tr><tr><td><code>z-ai/glm-5.2</code> </td><td><span class="fam" style="background:#16a34a"></span>glm-5</td><td class="cov none">-</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: GLM-5.2)">62.1</td><td class="cov none">-</td><td class="cov tp" title="third-party: Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: GLM-5.2 max)">68.8</td><td class="num">65.4</td></tr><tr><td><code>mistralai/mistral-small-2603</code> </td><td><span class="fam" style="background:#64748b"></span>mistral-small-4</td><td class="cov tp" title="third-party: LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: Mistral Small 4)">63.6</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">63.6</td></tr><tr><td><code>qwen/qwen3.7-max</code> </td><td><span class="fam" style="background:#a855f7"></span>qwen3.7</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3.7 Max)">91.6</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: Qwen3.7 Max)">60.6</td><td class="cov none">-</td><td class="cov tp" title="third-party: Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: Qwen3.7 Max)">66.0</td><td class="num">63.3</td></tr><tr><td><code>moonshotai/kimi-k2.6</code> </td><td><span class="fam" style="background:#d97706"></span>kimi-k2</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Kimi K2.6)">89.6</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: Kimi K2.6)">58.6</td><td class="cov none">-</td><td class="cov tp" title="third-party: Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: Kimi K2.6)">61.8</td><td class="num">60.2</td></tr><tr><td><code>qwen/qwen3-235b-a22b-2507</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#7c3aed"></span>qwen3</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3-235B-A22B-Instruct-2507)">51.8</td><td class="cov none">-</td><td class="cov tp" title="third-party: Aider official polyglot coding leaderboard (225 Exercism tasks; row: Qwen3 235B A22B diff, no think, Alibaba API)">59.6</td><td class="cov none">-</td><td class="num">59.6</td></tr><tr><td><code>minimax/minimax-m3</code> </td><td><span class="fam" style="background:#0d9488"></span>minimax-m3</td><td class="cov none">-</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: MiniMax M3)">59.0</td><td class="cov none">-</td><td class="cov tp" title="third-party: Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: MiniMax-M3)">58.6</td><td class="num">58.8</td></tr><tr><td><code>xiaomi/mimo-v2.5-pro</code> </td><td><span class="fam" style="background:#db2777"></span>mimo-v2.5</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: MiMo-V2.5-Pro)">39.6</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: MiMo-V2.5-Pro)">57.2</td><td class="cov none">-</td><td class="cov tp" title="third-party: Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: MiMo-V2.5-Pro)">60.2</td><td class="num">58.7</td></tr><tr><td><code>z-ai/glm-5.1</code> </td><td><span class="fam" style="background:#16a34a"></span>glm-5</td><td class="cov none">-</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: GLM-5.1)">58.4</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">58.4</td></tr><tr><td><code>minimax/minimax-m2.7</code> </td><td><span class="fam" style="background:#2dd4bf"></span>minimax-m2</td><td class="cov none">-</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: MiniMax M2.7)">56.2</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">56.2</td></tr><tr><td><code>z-ai/glm-5</code> </td><td><span class="fam" style="background:#16a34a"></span>glm-5</td><td class="cov none">-</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: GLM-5)">55.1</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">55.1</td></tr><tr><td><code>qwen/qwen3.7-plus</code> </td><td><span class="fam" style="background:#a855f7"></span>qwen3.7</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3.7-Plus)">89.6</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: Qwen3.7 Plus)">57.6</td><td class="cov none">-</td><td class="cov tp" title="third-party: Easy Benchmarks model page citing Artificial Analysis Coding Index (row: Qwen3.7 Plus)">46.5</td><td class="num">52.0</td></tr><tr><td><code>mistralai/devstral-2512</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#64748b"></span>devstral-2</td><td class="cov tp" title="third-party: BenchmarkList LiveCodeBench implementation (model page aggregate; row: devstral-2512)">51.8</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">51.8</td></tr><tr><td><code>nvidia/nemotron-3-ultra-550b-a55b</code> </td><td><span class="fam" style="background:#f87171"></span>nemotron-3-ultra</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Nemotron 3 Ultra 550B A55B)">89.0</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov tp" title="third-party: Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: Nemotron 3 Ultra)">49.3</td><td class="num">49.3</td></tr><tr><td><code>poolside/laguna-m.1</code> </td><td><span class="fam" style="background:#64748b"></span>laguna-m</td><td class="cov none">-</td><td class="cov tp" title="third-party: BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: Laguna M.1)">49.2</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">49.2</td></tr><tr><td><code>mistralai/mistral-large-2512</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#64748b"></span>mistral-large-3</td><td class="cov tp" title="third-party: VerdictPal model benchmark table citing Artificial Analysis LiveCodeBench run for Mistral Large 3">46.5</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">46.5</td></tr><tr><td><code>openai/gpt-oss-120b</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#64748b"></span>gpt-oss</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: GPT OSS 120B High)">81.9</td><td class="cov none">-</td><td class="cov tp" title="third-party: Aider official polyglot coding leaderboard (225 Exercism tasks; row: gpt-oss-120b high; diff edit format)">41.8</td><td class="cov none">-</td><td class="num">41.8</td></tr><tr><td><code>z-ai/glm-4.7</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#4ade80"></span>glm-4.7</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: GLM-4.7)">84.9</td><td class="cov tp" title="third-party: DataLearner coding leaderboard (SWE-Bench Pro - Public row for GLM-4.7)">40.6</td><td class="cov none">-</td><td class="cov none">-</td><td class="num">40.6</td></tr><tr><td><code>nousresearch/hermes-4-70b</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#64748b"></span>llama-3.1-hermes-4-70b</td><td class="cov tp" title="third-party: Easy Benchmarks model page (LiveCodeBench row; Hermes 4 70B reasoning variant)">65.3</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov tp" title="third-party: Puter model page citing Artificial Analysis Coding Index for Hermes 4 70B non-reasoning">9.2</td><td class="num">37.2</td></tr><tr><td><code>moonshotai/kimi-k2-thinking</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#d97706"></span>kimi-k2</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Kimi K2-Thinking-0905; dated variant of catalog slug)">83.1</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>moonshotai/kimi-k2.7-code</code> </td><td><span class="fam" style="background:#d97706"></span>kimi-k2</td><td class="cov sat" title="saturated: Vendor-reported LiveCodeBench v6 claim for Kimi K2.7 Code, reported by VM0 from Moonshot release materials">89.6</td><td class="cov vendor" title="vendor-claimed: Vendor-reported SWE-bench Pro claim for Kimi K2.7 Code, reported by VM0 from Moonshot release materials">58.6</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>nex-agi/nex-n2-pro</code> </td><td><span class="fam" style="background:#64748b"></span>nex-n2</td><td class="cov none">-</td><td class="cov vendor" title="vendor-claimed: Vendor-reported Nex-N2-Pro benchmark table (SWE-Bench Pro row)">58.8</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>nousresearch/hermes-4-405b</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#64748b"></span>llama-3.1-hermes-4-405b</td><td class="cov vendor" title="vendor-claimed: Vendor-reported Hermes 4 405B LiveCodeBench score summarized from Nous benchmark materials">61.3</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>nvidia/llama-3.3-nemotron-super-49b-v1.5</code> <span class="tag warn">aging</span> <span class="tag warn">aggregate-none</span></td><td><span class="fam" style="background:#64748b"></span>llama-3.3-nemotron</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>qwen/qwen3-235b-a22b-thinking-2507</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#7c3aed"></span>qwen3</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3-235B-A22B-Thinking-2507)">74.1</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>qwen/qwen3-coder</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#8b5cf6"></span>qwen3-coder</td><td class="cov vendor" title="vendor-claimed: evals.report Qwen 3 Coder 480B model page (reported LiveCodeBench pass@1; status: Unverified)">58.5</td><td class="cov vendor" title="vendor-claimed: evals.report Qwen 3 Coder 480B model page (reported SWE-bench Pro % resolved; status: Official)">38.7</td><td class="cov vendor" title="vendor-claimed: evals.report Qwen 3 Coder 480B model page (reported Aider Polyglot % correct; status: Unverified)">61.8</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>qwen/qwen3-max</code> <span class="tag warn">aging</span></td><td><span class="fam" style="background:#c084fc"></span>qwen3-max</td><td class="cov sat" title="saturated: LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3 Max)">69.0</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>qwen/qwen3-max-thinking</code> </td><td><span class="fam" style="background:#c084fc"></span>qwen3-max</td><td class="cov sat" title="saturated: Vendor-reported Alibaba Cloud Community LiveCodeBench v6 score for Qwen3-Max-Thinking default scaling; article also reports 91.4 with heavy test-time scaling">87.7</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>z-ai/glm-4.7-flash</code> </td><td><span class="fam" style="background:#4ade80"></span>glm-4.7</td><td class="cov vendor" title="vendor-claimed: Vendor-reported GLM-4.7-Flash LiveCodeBench v6 benchmark table summarized by Awesome Agents">64.0</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>z-ai/glm-5-turbo</code> <span class="tag warn">aggregate-none</span></td><td><span class="fam" style="background:#16a34a"></span>glm-5</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr><tr><td><code>z-ai/glm-5v-turbo</code> <span class="tag warn">aggregate-none</span></td><td><span class="fam" style="background:#16a34a"></span>glm-5</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="cov none">-</td><td class="num"><span class="mut">-</span></td></tr></tbody></table></div>
+<div class="legend">
+  <span class="cov tp">third-party</span>
+  <span class="cov vendor">vendor-claimed (excluded from ranking)</span>
+  <span class="cov sat">saturated (excluded from ranking)</span>
+  <span class="cov none" style="background:#eef1f6">- no data</span>
+</div>
+
+<h2><span class="num">4</span>The shortlist: 12 models by simple unweighted mean</h2>
+<p class="sub">Highlighted rows are used by a hypothesis (panel member or judge). The "benches"
+column shows how many unsaturated third-party benchmarks back each mean - treat 1-bench ranks
+with caution.</p>
+<div class="card">
+<table><thead><tr><th class="num">#</th><th>Model</th><th class="num">Mean</th><th>Evidence</th>
+<th>Family</th><th class="num">$/request</th></tr></thead>
+<tbody><tr class=inuse><td class="num">1</td><td><code>deepseek/deepseek-v3.2</code> <span class="tag pass">panel</span></td><td class="num">83.3</td><td><span class="tag warn">1 bench</span></td><td>deepseek-v3</td><td class="num">$0.0032</td></tr><tr class=inuse><td class="num">2</td><td><code>nvidia/nemotron-3-super-120b-a12b</code> <span class="tag pass">panel</span></td><td class="num">81.2</td><td><span class="tag warn">1 bench</span></td><td>nemotron-3-super</td><td class="num">$0.0038</td></tr><tr class=inuse><td class="num">3</td><td><code>deepseek/deepseek-v4-pro</code> <span class="tag pass">panel</span></td><td class="num">68.3</td><td><span class="tag pass">3 benches</span></td><td>deepseek-v4</td><td class="num">$0.0078</td></tr><tr><td class="num">4</td><td><code>deepseek/deepseek-v4-flash</code> </td><td class="num">65.6</td><td><span class="tag pass">3 benches</span></td><td>deepseek-v4</td><td class="num">$0.0016</td></tr><tr class=inuse><td class="num">5</td><td><code>z-ai/glm-5.2</code> <span class="tag pass">panel</span></td><td class="num">65.4</td><td><span class="tag pass">2 benches</span></td><td>glm-5</td><td class="num">$0.0247</td></tr><tr><td class="num">6</td><td><code>mistralai/mistral-small-2603</code> </td><td class="num">63.6</td><td><span class="tag warn">1 bench</span></td><td>mistral-small-4</td><td class="num">$0.0051</td></tr><tr class=inuse><td class="num">7</td><td><code>qwen/qwen3.7-max</code> <span class="tag warn">judge</span></td><td class="num">63.3</td><td><span class="tag pass">2 benches</span></td><td>qwen3.7</td><td class="num">$0.0325</td></tr><tr class=inuse><td class="num">8</td><td><code>moonshotai/kimi-k2.6</code> <span class="tag pass">panel</span></td><td class="num">60.2</td><td><span class="tag pass">2 benches</span></td><td>kimi-k2</td><td class="num">$0.0286</td></tr><tr><td class="num">9</td><td><code>qwen/qwen3-235b-a22b-2507</code> </td><td class="num">59.6</td><td><span class="tag warn">1 bench</span></td><td>qwen3</td><td class="num">$0.0010</td></tr><tr><td class="num">10</td><td><code>minimax/minimax-m3</code> </td><td class="num">58.8</td><td><span class="tag pass">2 benches</span></td><td>minimax-m3</td><td class="num">$0.0102</td></tr><tr><td class="num">11</td><td><code>xiaomi/mimo-v2.5-pro</code> </td><td class="num">58.7</td><td><span class="tag pass">2 benches</span></td><td>mimo-v2.5</td><td class="num">$0.0078</td></tr><tr><td class="num">12</td><td><code>z-ai/glm-5.1</code> </td><td class="num">58.4</td><td><span class="tag warn">1 bench</span></td><td>glm-5</td><td class="num">$0.0262</td></tr></tbody></table>
+</div>
+
+<h2><span class="num">5</span>The five bets: hypothesis cards at a glance</h2>
+<p class="sub">Each card is a falsifiable commitment made before any run. Costs use the shared
+model: 2k input + 8k output per member (20k output for 64k thinking budgets), judge 15k in + 4k out.
+Frontier anchor (GPT-5.5-class) costs ~$0.25/request; the panel envelope is one third of that.</p>
+
+<div class="card hyp">
+  <div class="hyphead">
+    <h3>h1-backbone</h3>
+    <span class="tag pass">ready</span>
+    <span class="tag info">parallel_judge</span>
+    <span class="tag dir">K=1</span>
+  </div>
+  <div class="mchips"><span class="mchip" style="border-color:#2563eb"><span class="fam" style="background:#2563eb"></span>deepseek-v3.2 <small>32k</small></span><span class="mchip" style="border-color:#dc2626"><span class="fam" style="background:#dc2626"></span>nemotron-3-super-120b-a12b <small>32k</small></span><span class="mchip" style="border-color:#0ea5e9"><span class="fam" style="background:#0ea5e9"></span>deepseek-v4-pro <small>32k</small></span></div>
+  <p class="sub" style="margin:8px 0 10px">judge: <b>qwen3.7-max</b></p>
+  <div class="barrow"><div class="lab">60-task sweep</div>
+    <div class="track"><div class="fill blue" style="width:42%">$2.91</div></div>
+    <div class="val">$0.0485/request</div></div>
+  <table class="pk"><tbody>
+    <tr><td class="pklab">predicts</td><td>Beats the strongest single shortlist member by at least 2 pp on the calibration bank.</td></tr>
+    <tr><td class="pklab">killed if</td><td>H4 Self-MoA &gt;= H1 on the same calibration bank; route, do not fuse.</td></tr>
+  </tbody></table>
+</div>
+<div class="card hyp">
+  <div class="hyphead">
+    <h3>h2-style-diverse</h3>
+    <span class="tag pass">ready</span>
+    <span class="tag info">parallel_judge</span>
+    <span class="tag dir">K=1</span>
+  </div>
+  <div class="mchips"><span class="mchip" style="border-color:#2563eb"><span class="fam" style="background:#2563eb"></span>deepseek-v3.2 <small>32k</small></span><span class="mchip" style="border-color:#dc2626"><span class="fam" style="background:#dc2626"></span>nemotron-3-super-120b-a12b <small>32k</small></span><span class="mchip" style="border-color:#16a34a"><span class="fam" style="background:#16a34a"></span>glm-5.2 <small>32k</small></span></div>
+  <p class="sub" style="margin:8px 0 10px">judge: <b>qwen3.7-max</b></p>
+  <div class="barrow"><div class="lab">60-task sweep</div>
+    <div class="track"><div class="fill blue" style="width:57%">$3.92</div></div>
+    <div class="val">$0.0654/request</div></div>
+  <table class="pk"><tbody>
+    <tr><td class="pklab">predicts</td><td>Beats H1 by at least 2 pp by trading one DeepSeek-heavy member for a GLM-5 reasoning style.</td></tr>
+    <tr><td class="pklab">killed if</td><td>H2 &lt;= H1 on the calibration bank; stop near-tie diversity swaps.</td></tr>
+  </tbody></table>
+</div>
+<div class="card hyp">
+  <div class="hyphead">
+    <h3>h3-cheap-cascade</h3>
+    <span class="tag warn">deferred</span>
+    <span class="tag info">cascade</span>
+    <span class="tag dir">K=1</span>
+  </div>
+  <div class="mchips"><span class="mchip" style="border-color:#dc2626"><span class="fam" style="background:#dc2626"></span>nemotron-3-super-120b-a12b <small>32k</small></span><span class="mchip" style="border-color:#2563eb"><span class="fam" style="background:#2563eb"></span>deepseek-v3.2 <small>32k</small></span><span class="mchip" style="border-color:#0ea5e9"><span class="fam" style="background:#0ea5e9"></span>deepseek-v4-pro <small>32k</small></span></div>
+  <p class="sub" style="margin:8px 0 10px">judge: <b>qwen3.7-max</b></p>
+  <div class="barrow"><div class="lab">60-task sweep</div>
+    <div class="track"><div class="fill blue" style="width:19%">$1.30</div></div>
+    <div class="val">$0.0217/request</div></div>
+  <table class="pk"><tbody>
+    <tr><td class="pklab">predicts</td><td>Achieves at least 80% of H1 pass rate at no more than 40% of H1 cost.</td></tr>
+    <tr><td class="pklab">killed if</td><td>Escalation rate &gt; 60%; cascade saves too little to justify the wrapper.</td></tr>
+  </tbody></table>
+</div>
+<div class="card hyp">
+  <div class="hyphead">
+    <h3>h4-self-moa</h3>
+    <span class="tag pass">ready</span>
+    <span class="tag info">exec_select</span>
+    <span class="tag dir">K=3</span>
+  </div>
+  <div class="mchips"><span class="mchip" style="border-color:#2563eb"><span class="fam" style="background:#2563eb"></span>deepseek-v3.2 <small>32k</small></span></div>
+  <p class="sub" style="margin:8px 0 10px">judge: <b>none</b> (execution-guided selection)</p>
+  <div class="barrow"><div class="lab">60-task sweep</div>
+    <div class="track"><div class="fill blue" style="width:8%">$0.58</div></div>
+    <div class="val">$0.0096/request</div></div>
+  <table class="pk"><tbody>
+    <tr><td class="pklab">predicts</td><td>Mandatory baseline: best-of-3 DeepSeek V3.2 samples set the routing bar for all panels.</td></tr>
+    <tr><td class="pklab">killed if</td><td>If H4 &gt;= all panels, ship a routing verdict instead of a fusion verdict.</td></tr>
+  </tbody></table>
+</div>
+<div class="card hyp">
+  <div class="hyphead">
+    <h3>h5-thinking-heavy</h3>
+    <span class="tag pass">ready</span>
+    <span class="tag info">parallel_judge</span>
+    <span class="tag dir">K=1</span>
+  </div>
+  <div class="mchips"><span class="mchip" style="border-color:#2563eb"><span class="fam" style="background:#2563eb"></span>deepseek-v3.2 <small>64k</small></span><span class="mchip" style="border-color:#d97706"><span class="fam" style="background:#d97706"></span>kimi-k2.6 <small>64k</small></span><span class="mchip" style="border-color:#dc2626"><span class="fam" style="background:#dc2626"></span>nemotron-3-super-120b-a12b <small>64k</small></span></div>
+  <p class="sub" style="margin:8px 0 10px">judge: <b>qwen3.7-max</b></p>
+  <div class="barrow"><div class="lab">60-task sweep</div>
+    <div class="track"><div class="fill blue" style="width:100%">$6.86</div></div>
+    <div class="val">$0.1143/request</div></div>
+  <table class="pk"><tbody>
+    <tr><td class="pklab">predicts</td><td>Beats H1 on the hard-difficulty task slice where 64k reasoning budgets matter.</td></tr>
+    <tr><td class="pklab">killed if</td><td>H5 &lt;= H1 on the full calibration bank; drop the 64k reasoning bet.</td></tr>
+  </tbody></table>
+</div>
+
+<h2><span class="num">6</span>How to read all of this</h2>
+<div class="card readme">
+<ul>
+<li><b>Nothing here is a result.</b> Phase A produces <i>hypotheses</i>, not measurements. The
+shortlist mean is a shortlisting heuristic over incompatible public harnesses, not a ranking
+we would defend. The first real numbers arrive in Phase C, on our own graded task manifest.</li>
+<li><b>The question each hypothesis answers:</b> h1 is the honest default (top-3 by rank under
+vetoes); h2 asks if style diversity beats rank; h3 asks if a cheap-first cascade wins on $/solve;
+h4 asks if one strong model sampled 3x makes panels pointless (if it wins, we ship routing, not
+fusion); h5 asks if paying for 64k thinking budgets is worth it.</li>
+<li><b>What would change our minds:</b> every card carries a preregistered kill condition. The
+plan treats "H4 wins, route don't fuse" as a fully acceptable shippable outcome.</li>
+<li><b>Where to dig deeper:</b> machine-readable data in
+<code>docs/fusion/catalog-snapshot-2026-07-07.yaml</code> (per-score provenance URLs), prose and
+judgment calls in the companion <code>.md</code>, full card reasoning in
+<code>labruns/2026-q3/hypotheses/</code>, pinned identities in
+<code>python/fusionkit-lab/registry/2026-q3.yaml</code>.</li>
+<li><b>Known weaknesses (recorded, not hidden):</b> ranks 1-2 rest on a single benchmark
+(LiveCodeBench rolling) while lower ranks average in the much harder SWE-bench Pro; vendor-claimed
+scores were excluded from ranking; 3 candidates have no public evidence at all. Phase C measures
+all 12 shortlisted models on one harness, which supersedes this heuristic entirely.</li>
+</ul>
+</div>
+
+<p class="sub" style="margin-top:30px">Generated from committed artifacts by
+<code>analysis/phase-a-briefing-2026-07-07/scripts/build_briefing.py</code>. Regenerate after any
+snapshot or card change.</p>
+
+</div></body></html>
