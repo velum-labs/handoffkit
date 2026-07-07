@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -6,8 +7,7 @@ import {
   deriveFusedSubagents,
   fusedSubagentDescription,
   fusedSubagentDeveloperInstructions,
-  LOCAL_MODEL_LABEL,
-  spawnTool
+  LOCAL_MODEL_LABEL
 } from "@fusionkit/tools";
 import type { FusedEnsembleInfo, ToolLaunchContext } from "@fusionkit/tools";
 
@@ -22,8 +22,30 @@ const CATALOG_FILE = "model-catalog.json";
  * only ever loaded once, via the explicit config_file reference.
  */
 const AGENT_ROLES_DIR = "agent-roles";
-/** A fast non-zero exit within this window is treated as a config-load failure. */
-const EARLY_EXIT_MS = 2000;
+
+/**
+ * Stderr signatures of a Codex config-load failure (the catalog schema drifted
+ * across releases, a role file collided, the TOML is rejected, ...). Only these
+ * trigger a degraded relaunch — a genuine fast failure (bad flag, dead
+ * gateway, SIGINT at the prompt) keeps its real exit instead of being
+ * relaunched with progressively degraded config.
+ */
+const CONFIG_FAILURE_PATTERNS: readonly RegExp[] = [
+  /config\.toml/i,
+  /model_catalog/i,
+  /duplicate agent role/i,
+  /error (?:reading|parsing|loading) config/i,
+  /invalid config/i,
+  /unknown field/i,
+  /missing field/i,
+  /agent role/i
+];
+
+/** Classify a Codex exit as a config-load failure from its stderr. */
+export function isCodexConfigFailure(code: number, stderr: string): boolean {
+  if (code === 0) return false;
+  return CONFIG_FAILURE_PATTERNS.some((pattern) => pattern.test(stderr));
+}
 
 /** A TOML table key: bare when it is a simple identifier, else quoted. */
 function tomlKey(name: string): string {
@@ -231,10 +253,45 @@ export function codexLaunchConfigToml(
   return lines.join("\n");
 }
 
+/** Bounded stderr tail retained for exit classification. */
+const STDERR_TAIL_BYTES = 8192;
+
+/**
+ * Spawn Codex interactively (stdin/stdout inherited for the TUI) while teeing
+ * stderr through to the terminal and keeping a bounded tail, so a non-zero
+ * exit can be classified as a config-load failure vs a genuine one.
+ */
+function spawnCodexTool(
+  args: readonly string[],
+  home: string,
+  cwd: string | undefined
+): Promise<{ code: number; stderrTail: string }> {
+  return new Promise((resolveExit, reject) => {
+    const child = spawn("codex", args, {
+      stdio: ["inherit", "inherit", "pipe"],
+      // env-spread-allowed: launching the user's own coding agent, which legitimately needs their full shell env
+      env: { ...process.env, CODEX_HOME: home },
+      ...(cwd !== undefined ? { cwd } : {})
+    });
+    let tail = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      process.stderr.write(chunk);
+      tail = (tail + chunk.toString("utf8")).slice(-STDERR_TAIL_BYTES);
+    });
+    child.on("error", reject);
+    child.on("exit", (code) => resolveExit({ code: code ?? 0, stderrTail: tail }));
+  });
+}
+
 /** Boot the Codex CLI against the gateway via an ephemeral CODEX_HOME. */
 export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   const home = mkdtempSync(join(tmpdir(), "fusionkit-codex-"));
   ctx.registerDisposer(() => rmSync(home, { recursive: true, force: true }));
+  // The ephemeral home shadows the user's own Codex config for this run. Say
+  // so — silently dropping their MCP servers/instructions/trust reads as a bug.
+  if (existsSync(join(homedir(), ".codex", "config.toml"))) {
+    ctx.log("fusion: your ~/.codex/config.toml (MCP servers, instructions, trust) is bypassed for this run");
+  }
   const nativeModels = ctx.nativeModels ?? [];
   const fusedModels = ctx.fusedModels ?? [];
   const configPath = join(home, "config.toml");
@@ -275,25 +332,26 @@ export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   if (ctx.mode === "fusion") {
     ctx.log("fusion: launching codex (each prompt is a coding task fused across the panel)...");
   }
-  const run = async (): Promise<{ code: number; early: boolean }> => {
-    const startedAt = Date.now();
-    const code = await spawnTool("codex", ctx.toolArgs, { CODEX_HOME: home }, ctx.repo);
-    return { code, early: code !== 0 && Date.now() - startedAt < EARLY_EXIT_MS };
+  const run = async (): Promise<{ code: number; configFailure: boolean }> => {
+    const exit = await spawnCodexTool(ctx.toolArgs, home, ctx.repo);
+    return { code: exit.code, configFailure: isCodexConfigFailure(exit.code, exit.stderrTail) };
   };
 
   // Graceful degradation, one optional extra per retry: Codex validates
   // `model_catalog_json` (its schema drifts across releases) and the `[agents]`
-  // section at startup and exits immediately on a mismatch. A fast failure
-  // first drops the catalog (profiles + the fused default still work), then the
-  // agent roles — so neither extra can brick `fusionkit codex`.
+  // section at startup and exits immediately on a mismatch. Only an exit whose
+  // stderr classifies as a config-load failure degrades — first dropping the
+  // catalog (profiles + the fused default still work), then the agent roles —
+  // so neither extra can brick `fusionkit codex`, and a genuine failure keeps
+  // its real exit code instead of being relaunched with degraded config.
   let result = await run();
-  if (result.early && catalogPath !== undefined) {
-    ctx.log("fusion: codex exited early; retrying without the model catalog (fusion still works)...");
+  if (result.configFailure && catalogPath !== undefined) {
+    ctx.log("fusion: codex rejected its config; retrying without the model catalog (fusion still works)...");
     writeConfig(undefined, agentRoles);
     result = await run();
   }
-  if (result.early && agentRoles !== undefined) {
-    ctx.log("fusion: codex exited early; retrying without the ensemble sub-agent roles (fusion still works)...");
+  if (result.configFailure && agentRoles !== undefined) {
+    ctx.log("fusion: codex rejected its config; retrying without the ensemble sub-agent roles (fusion still works)...");
     writeConfig(undefined, undefined);
     result = await run();
   }

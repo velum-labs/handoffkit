@@ -25,11 +25,3 @@ process.emitWarning = function patchedEmitWarning(
   if (isExperimental(warning, typeOrOptions)) return;
   (original as (...args: unknown[]) => void)(warning, typeOrOptions, ...rest);
 } as EmitWarning;
-
-// Children inherit process.env, so make Node subprocesses (the launched coding
-// agent, the cursor bridge, the dashboard) start with experimental warnings
-// disabled too. Non-Node children (python via uv/uvx) ignore NODE_OPTIONS.
-const DISABLE_EXPERIMENTAL = "--disable-warning=ExperimentalWarning";
-if (!(process.env.NODE_OPTIONS ?? "").includes(DISABLE_EXPERIMENTAL)) {
-  process.env.NODE_OPTIONS = [process.env.NODE_OPTIONS, DISABLE_EXPERIMENTAL].filter(Boolean).join(" ");
-}

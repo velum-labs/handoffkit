@@ -74,9 +74,9 @@ test("routerConfigYaml emits auth blocks and omits api_key_env for subscriptions
   assert.match(yaml, /provider: anthropic\n {4}auth:\n {6}mode: claude-code/);
   assert.match(yaml, /provider: codex\n {4}auth:\n {6}mode: codex/);
   // API-key cloud model still gets its env var.
-  assert.match(yaml, /api_key_env: "OPENAI_API_KEY"/);
+  assert.match(yaml, /api_key_env: OPENAI_API_KEY/);
   // Subscription endpoints carry no api_key_env.
-  const claudeBlock = yaml.slice(yaml.indexOf('id: "claude-code"'), yaml.indexOf('id: "codex"'));
+  const claudeBlock = yaml.slice(yaml.indexOf("id: claude-code"), yaml.indexOf("id: codex"));
   assert.doesNotMatch(claudeBlock, /api_key_env/);
 });
 
@@ -89,14 +89,14 @@ test("routerConfigYaml emits the OpenRouter base URL and default key env", () =>
 
   assert.match(yaml, /provider: openrouter/);
   // No trailing /v1: fusionkit's OpenAI-compatible client appends it.
-  assert.match(yaml, /base_url: "https:\/\/openrouter\.ai\/api"/);
-  assert.match(yaml, /api_key_env: "OPENROUTER_API_KEY"/);
-  assert.match(yaml, /model: "deepseek\/deepseek-chat:free"/);
+  assert.match(yaml, /base_url: https:\/\/openrouter\.ai\/api/);
+  assert.match(yaml, /api_key_env: OPENROUTER_API_KEY/);
+  assert.match(yaml, /model: deepseek\/deepseek-chat:free/);
 });
 
 // --- login detection -------------------------------------------------------
 
-test("detectSubscription(codex) reads a temp auth.json", () => {
+test("detectSubscription(codex) reads a temp auth.json", async () => {
   const home = freshHome();
   process.env.HOME = home;
   mkdirSync(join(home, ".codex"), { recursive: true });
@@ -106,15 +106,15 @@ test("detectSubscription(codex) reads a temp auth.json", () => {
   });
   writeFileSync(join(home, ".codex", "auth.json"), JSON.stringify({ tokens: { access_token: token } }));
 
-  const status = detectSubscription("codex");
+  const status = await detectSubscription("codex");
   assert.equal(status.available, true);
   assert.equal(status.expired, false);
   assert.equal(status.accountId, "acct_test");
 });
 
-test("detectSubscription(codex) reports unavailable with no auth.json", () => {
+test("detectSubscription(codex) reports unavailable with no auth.json", async () => {
   process.env.HOME = freshHome();
-  const status = detectSubscription("codex");
+  const status = await detectSubscription("codex");
   assert.equal(status.available, false);
 });
 

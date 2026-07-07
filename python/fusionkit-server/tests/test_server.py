@@ -175,6 +175,32 @@ def test_chat_completions_records_a_run_when_opted_in(tmp_path) -> None:
     assert list((tmp_path / "runs").iterdir())
 
 
+def test_health_serves_the_router_identity_token(tmp_path, monkeypatch) -> None:
+    # Acceptance (WS9.4): the spawning CLI hashes its full effective config and
+    # passes the token down; /health serves it back so a later run's
+    # discover-or-spawn probe can tell a compatible router from a stale one
+    # (changed model, prompt override, or API key) with the same endpoint ids.
+    monkeypatch.setenv("FUSIONKIT_ROUTER_IDENTITY", "cafef00d:m1,judge")
+    client = _panel_app(tmp_path)
+
+    body = client.get("/health").json()
+
+    assert body["status"] == "ok"
+    assert body["identity"] == "cafef00d:m1,judge"
+
+
+def test_health_omits_identity_when_not_spawned_by_the_cli(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("FUSIONKIT_ROUTER_IDENTITY", raising=False)
+    client = _panel_app(tmp_path)
+
+    body = client.get("/health").json()
+
+    assert body["status"] == "ok"
+    assert "identity" not in body
+
+
 def test_models_endpoint_remains_openai_compatible(tmp_path) -> None:
     app = create_app(_config(), run_store_path=tmp_path / "runs")
     client = TestClient(app)

@@ -411,8 +411,10 @@ const TRUSTED_THIRD_PARTY = new Map([
   // Product telemetry engine: official PostHog server SDK (batched, async,
   // shutdown flush). Only the CLI's opt-in telemetry module uses it.
   ["posthog-node", "5.39.4"],
+  ["string-width", "8.2.1"],
   ["typescript", "6.0.3"],
   ["ws", "8.21.0"],
+  ["yaml", "2.9.0"],
   ["zod", "4.4.3"]
 ]);
 

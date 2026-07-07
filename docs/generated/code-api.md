@@ -420,7 +420,7 @@ Codex tool integration entry point. It exposes the Codex launcher and ensemble h
 - `export const codexTool: ToolIntegration ...`
 - `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, codexMemberCatalogJson, createCodexHarness, defaultCodexRunner, memberChatBackend } from "./harness.js";`
 - `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
-- `export { codexAgentRoles, codexAgentRoleToml, codexLaunchConfigToml, codexModelCatalogJson, codexRoleDescription, launchCodex, readCodexCatalogTemplate } from "./launch.js";`
+- `export { codexAgentRoles, codexAgentRoleToml, codexLaunchConfigToml, codexModelCatalogJson, codexRoleDescription, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate } from "./launch.js";`
 - `export type { CodexAgentRole } from "./launch.js";`
 - `export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";`
 - `export type { CodexDriverConfig } from "./driver.js";`

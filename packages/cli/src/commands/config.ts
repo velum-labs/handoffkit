@@ -513,7 +513,7 @@ export function registerConfig(program: Command): void {
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON (includes provenance)")
     .action((opts: ConfigOpts, command: Command) => {
-      process.exit(runShow(opts, contextFor(command)));
+      process.exitCode = runShow(opts, contextFor(command));
     });
 
   config
@@ -522,7 +522,7 @@ export function registerConfig(program: Command): void {
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON")
     .action((opts: ConfigOpts, command: Command) => {
-      process.exit(runPath(opts, contextFor(command)));
+      process.exitCode = runPath(opts, contextFor(command));
     });
 
   config
@@ -535,7 +535,7 @@ export function registerConfig(program: Command): void {
       const ctx = contextFor(command);
       const { root } = repoRootFor(opts);
       const resolved = await pathArgOrPick(path, loadConfigOrFail(root, ctx.presenter), "read");
-      process.exit(runGet(resolved, opts, ctx));
+      process.exitCode = runGet(resolved, opts, ctx);
     });
 
   config
@@ -556,7 +556,7 @@ export function registerConfig(program: Command): void {
         }
         resolvedValue = await promptConfigValue(parseConfigPath(resolvedPath));
       }
-      process.exit(runSet(resolvedPath, resolvedValue, opts, ctx));
+      process.exitCode = runSet(resolvedPath, resolvedValue, opts, ctx);
     });
 
   config
@@ -569,7 +569,7 @@ export function registerConfig(program: Command): void {
       const ctx = contextFor(command);
       const { root } = repoRootFor(opts);
       const resolved = await pathArgOrPick(path, loadConfigOrFail(root, ctx.presenter), "unset");
-      process.exit(runUnset(resolved, opts, ctx));
+      process.exitCode = runUnset(resolved, opts, ctx);
     });
 
   config
@@ -577,7 +577,7 @@ export function registerConfig(program: Command): void {
     .description("interactively edit every setting (tool, budget, trust, reasoning, ...)")
     .option("--repo <dir>", "repo whose .fusionkit/ to edit (default: cwd's git root)")
     .action(async (opts: ConfigOpts, command: Command) => {
-      process.exit(await runConfigEdit(opts, contextFor(command)));
+      process.exitCode = await runConfigEdit(opts, contextFor(command));
     });
 
   config
@@ -586,6 +586,6 @@ export function registerConfig(program: Command): void {
     .option("-o, --out <file>", "write the YAML to a file instead of stdout")
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .action((opts: ConfigOpts, command: Command) => {
-      process.exit(runExportYaml(opts, contextFor(command)));
+      process.exitCode = runExportYaml(opts, contextFor(command));
     });
 }

@@ -28,7 +28,8 @@
   "dependencies": {
     "figlet": "1.11.0",
     "ink": "7.1.0",
-    "react": "19.2.7"
+    "react": "19.2.7",
+    "string-width": "8.2.1"
   },
   "devDependencies": {
     "@types/figlet": "1.7.0",

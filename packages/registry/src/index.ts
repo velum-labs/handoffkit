@@ -18,7 +18,8 @@ export { REGISTRY };
 
 // ---- providers --------------------------------------------------------------
 
-export type ProviderAuthStyle = "bearer" | "x-api-key" | "x-goog-api-key" | "query-key";
+// Keys always travel in headers, never query strings (URLs land in logs/traces).
+export type ProviderAuthStyle = "bearer" | "x-api-key" | "x-goog-api-key";
 
 export type ProviderKeyProbe = {
   path: string;

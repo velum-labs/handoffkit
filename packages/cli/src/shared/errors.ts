@@ -27,6 +27,8 @@ export type CliErrorInput = {
   docs?: string;
   /** Process exit code (default 1). */
   exitCode?: number;
+  /** Render as a one-line `error: <message>` instead of the framed panel. */
+  plain?: boolean;
 };
 
 /** A CLI failure carrying presentation fields for the error panel. */
@@ -37,6 +39,7 @@ export class CliError extends Error {
   readonly tryCommand?: string;
   readonly docs?: string;
   readonly exitCode: number;
+  readonly plain: boolean;
 
   constructor(input: CliErrorInput) {
     super(input.message);
@@ -47,6 +50,7 @@ export class CliError extends Error {
     if (input.tryCommand !== undefined) this.tryCommand = input.tryCommand;
     if (input.docs !== undefined) this.docs = input.docs;
     this.exitCode = input.exitCode ?? 1;
+    this.plain = input.plain === true;
   }
 }
 
@@ -64,11 +68,15 @@ export function cliErrorPayload(error: CliError): { error: Record<string, unknow
   };
 }
 
-/** Render a CliError to the human UI channel (a red panel) and exit. */
-export function exitWithCliError(error: CliError): never {
+/** Render a CliError to the human UI channel and return its exit code. */
+export function renderCliError(error: CliError): number {
   if (isJsonMode()) {
     emitJson(cliErrorPayload(error));
-    process.exit(error.exitCode);
+    return error.exitCode;
+  }
+  if (error.plain) {
+    uiStream().write(`error: ${error.message}\n`);
+    return error.exitCode;
   }
   const presenter = createPresenter({ interactive: false });
   presenter.errorPanel({
@@ -78,15 +86,10 @@ export function exitWithCliError(error: CliError): never {
     ...(error.tryCommand !== undefined ? { tryCommand: error.tryCommand } : {}),
     ...(error.docs !== undefined ? { docs: error.docs } : {})
   });
-  process.exit(error.exitCode);
+  return error.exitCode;
 }
 
 export function fail(message: string | CliErrorInput): never {
-  if (typeof message !== "string") exitWithCliError(new CliError(message));
-  if (isJsonMode()) {
-    emitJson({ error: { code: "error", message } });
-    process.exit(1);
-  }
-  uiStream().write(`error: ${message}\n`);
-  process.exit(1);
+  if (typeof message === "string") throw new CliError({ message, plain: true });
+  throw new CliError(message);
 }

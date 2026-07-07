@@ -5,7 +5,7 @@
  * children.
  */
 import { createHash } from "node:crypto";
-import { spawn, execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   appendFileSync,
   existsSync,
@@ -22,11 +22,19 @@ import { fileURLToPath } from "node:url";
 import { spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
 import type { LoggedChild } from "../shared/proc.js";
 import type { PortlessSession } from "../shared/portless.js";
+import { superviseSpawn } from "@fusionkit/runtime-utils";
 
 import type { StackReporter } from "./env.js";
 
 /** Fixed port for the local observability dashboard (the scope app). */
-export const SCOPE_DASHBOARD_PORT = 4317;
+export function scopeDashboardPort(): number {
+  const raw = process.env.FUSIONKIT_DASHBOARD_PORT;
+  if (raw !== undefined && raw.length > 0) {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return 6971;
+}
 
 /**
  * Locate the isolated scope dashboard app (handoffkit/apps/scope) by walking up
@@ -170,12 +178,28 @@ function startBundledDashboard(input: {
   serverJs: string;
   env: Record<string, string | undefined>;
   logFile?: string;
+  port: number;
 }): LoggedChild {
   return spawnLogged(process.execPath, [input.serverJs], {
     cwd: dirname(input.serverJs),
     ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
-    env: { ...input.env, PORT: String(SCOPE_DASHBOARD_PORT), HOSTNAME: "127.0.0.1" }
+    env: { ...input.env, PORT: String(input.port), HOSTNAME: "127.0.0.1" }
   });
+}
+
+async function collectSpawnOutput(
+  spawned: ReturnType<typeof superviseSpawn>
+): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  spawned.child.stdout?.on("data", (chunk: Buffer | string) => {
+    stdout.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+  });
+  spawned.child.stderr?.on("data", (chunk: Buffer | string) => {
+    stderr.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+  });
+  const exit = await spawned.done;
+  return { exitCode: exit.exitCode, stdout: stdout.join(""), stderr: stderr.join("") };
 }
 
 /**
@@ -183,11 +207,12 @@ function startBundledDashboard(input: {
  * `next start` it on the fixed port. Only reached in a handoffkit checkout where
  * no bundle was staged; published installs always use {@link startBundledDashboard}.
  */
-function startDevDashboard(input: {
+async function startDevDashboard(input: {
   env: Record<string, string | undefined>;
   identity: string;
   logFile?: string;
-}): LoggedChild {
+  port: number;
+}): Promise<LoggedChild> {
   const scopeDir = findScopeAppDir();
   const nextBin = join(scopeDir, "node_modules", ".bin", "next");
   if (!existsSync(nextBin)) {
@@ -203,30 +228,28 @@ function startDevDashboard(input: {
   const alreadyBuilt =
     existsSync(join(scopeDir, ".next", "BUILD_ID")) && readTrimmed(buildIdentityFile) === input.identity;
   if (!alreadyBuilt) {
-    try {
-      const buildOut = execFileSync(nextBin, ["build"], {
+    const build = await collectSpawnOutput(
+      superviseSpawn(nextBin, ["build"], {
         cwd: scopeDir,
-        env: input.env,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"]
-      });
-      if (input.logFile !== undefined) appendFileSync(input.logFile, buildOut);
-      writeFileSync(buildIdentityFile, `${input.identity}\n`);
-    } catch (error) {
+        env: Object.fromEntries(
+          Object.entries(input.env).filter((entry): entry is [string, string] => entry[1] !== undefined)
+        )
+      })
+    );
+    if (build.exitCode !== 0) {
       if (input.logFile !== undefined) {
-        appendFileSync(
-          input.logFile,
-          String((error as { stdout?: string }).stdout ?? "") + String((error as { stderr?: string }).stderr ?? "")
-        );
+        appendFileSync(input.logFile, build.stdout + build.stderr);
       }
       throw new Error(
         "the observability dashboard failed to build. See the log for details" +
           (input.logFile ? `: ${input.logFile}` : "")
       );
     }
+    if (input.logFile !== undefined) appendFileSync(input.logFile, build.stdout);
+    writeFileSync(buildIdentityFile, `${input.identity}\n`);
   }
 
-  return spawnLogged(nextBin, ["start", "-p", String(SCOPE_DASHBOARD_PORT)], {
+  return spawnLogged(nextBin, ["start", "-p", String(input.port)], {
     cwd: scopeDir,
     ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
     env: input.env
@@ -268,6 +291,7 @@ export async function startObservability(input: {
 
   // The dashboard server loads node:sqlite; keep its experimental warnings out
   // of the log just like the parent CLI. The per-run db/trace dir isolate state.
+  const dashboardPort = scopeDashboardPort();
   const childEnv = withCaEnv(
     {
       // env-spread-allowed: the local scope dashboard is a trusted infra child we spawn ourselves
@@ -291,18 +315,20 @@ export async function startObservability(input: {
           ? startBundledDashboard({
               serverJs: bundled,
               env: childEnv,
+              port: dashboardPort,
               ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
             })
-          : startDevDashboard({
+          : await startDevDashboard({
               env: childEnv,
               identity: dashboardIdentity,
+              port: dashboardPort,
               ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
             });
     } catch (error) {
       throw error instanceof Error ? error : new Error(String(error));
     }
     try {
-      await waitForHttp(`http://127.0.0.1:${SCOPE_DASHBOARD_PORT}`, proc, {
+      await waitForHttp(`http://127.0.0.1:${dashboardPort}`, proc, {
         timeoutMs: 60_000,
         label: "dashboard"
       });
@@ -311,7 +337,7 @@ export async function startObservability(input: {
       throw error instanceof Error ? error : new Error(String(error));
     }
     return {
-      port: SCOPE_DASHBOARD_PORT,
+      port: dashboardPort,
       ...(proc.child.pid !== undefined ? { pid: proc.child.pid } : {}),
       close: () => terminate(proc.child)
     };
@@ -323,7 +349,6 @@ export async function startObservability(input: {
       name: "scope",
       identity: dashboardIdentity,
       healthCheck: (loopbackUrl) => probeDashboardIdentity(loopbackUrl, dashboardIdentity),
-      replaceStale: true,
       spawn: spawnDashboard
     });
   } catch (error) {

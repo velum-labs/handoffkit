@@ -2,7 +2,7 @@ import { join, resolve } from "node:path";
 
 import { Command } from "commander";
 
-import { bold, cyan, dim, glyph, gray, green, red, uiStream } from "@fusionkit/cli-ui";
+import { bold, cyan, dim } from "@fusionkit/cli-ui";
 
 import {
   codexConfigSnippet,
@@ -13,6 +13,7 @@ import {
   startConfiguredGateway
 } from "../gateway.js";
 import type { GatewayRunnerConfig } from "../gateway.js";
+import { contextFor } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
 import {
   collect,
@@ -79,7 +80,9 @@ export function buildGatewayCommand(): Command {
     .option("--host <host>", "bind host", "127.0.0.1")
     .option("--port <n>", "bind port", "8787")
     .option("--auth-token <token>", "require a bearer token on the gateway")
-    .action(async (opts: GatewayOpts) => {
+    .option("--json", "emit machine-readable JSON")
+    .action(async (opts: GatewayOpts, command: Command) => {
+      const ctx = contextFor(command);
       const config = gatewayConfig(opts);
       const host = opts.host ?? "127.0.0.1";
       const port = parsePort(opts.port, 8787);
@@ -89,10 +92,14 @@ export function buildGatewayCommand(): Command {
         port,
         ...(opts.authToken !== undefined ? { authToken: opts.authToken } : {})
       });
-      uiStream().write(
-        `${green(glyph.tick())} ${bold("fusion harness gateway")} ${cyan(instance.url())}\n\n`
-      );
-      uiStream().write(gatewaySetupSnippets(instance.url(), "http://127.0.0.1:<cursorkit-port>") + "\n");
+      if (ctx.json) {
+        // The server keeps running; the JSON line tells the caller where.
+        ctx.emit({ url: instance.url(), host, port });
+        return;
+      }
+      ctx.presenter.success(`${bold("fusion harness gateway")} ${cyan(instance.url())}`);
+      ctx.presenter.blank();
+      ctx.presenter.line(gatewaySetupSnippets(instance.url(), "http://127.0.0.1:<cursorkit-port>"));
     });
   gateway.addCommand(serve, { isDefault: true });
 
@@ -109,7 +116,9 @@ export function buildGatewayCommand(): Command {
     .command("install [ids...]")
     .description("install registry-backed ACP adapters")
     .option("--install-dir <dir>", "adapter metadata dir", ".fusionkit/acp-registry")
-    .action(async (ids: string[], opts: { installDir: string }) => {
+    .option("--json", "emit machine-readable JSON")
+    .action(async (ids: string[], opts: { installDir: string }, command: Command) => {
+      const ctx = contextFor(command);
       const defaultAgentIds = toolRegistry
         .list()
         .map((tool) => tool.acpAdapterId)
@@ -119,8 +128,12 @@ export function buildGatewayCommand(): Command {
         agentIds,
         installDir: resolve(opts.installDir)
       });
-      uiStream().write(`${green(glyph.tick())} installed ${installed.length} ACP registry adapter(s)\n`);
-      for (const line of installed) uiStream().write(`  ${gray(glyph.bullet())} ${line}\n`);
+      if (ctx.json) {
+        ctx.emit({ installed });
+        return;
+      }
+      ctx.presenter.success(`installed ${installed.length} ACP registry adapter(s)`);
+      for (const line of installed) ctx.presenter.note(line);
     });
   gateway.addCommand(acpRegistry);
 
@@ -129,7 +142,9 @@ export function buildGatewayCommand(): Command {
       .description("unified front-door acceptance suite")
       .option("--host <host>", "bind host", "127.0.0.1")
       .option("--sentinel <text>", "expected substring", "FUSION_OK")
-      .action(async (opts: GatewayOpts) => {
+      .option("--json", "emit machine-readable JSON")
+      .action(async (opts: GatewayOpts, command: Command) => {
+        const ctx = contextFor(command);
         const config = gatewayConfig(opts);
         const sentinel = opts.sentinel ?? "FUSION_OK";
         const outPath = resolve(opts.out ?? ".fusionkit/front-door-e2e/front-door-report.json");
@@ -144,11 +159,13 @@ export function buildGatewayCommand(): Command {
           host: opts.host ?? "127.0.0.1",
           outPath
         });
-        uiStream().write(
-          failed
-            ? `${red(glyph.cross())} front-door acceptance failed ${dim(`— report: ${reportPath}`)}\n`
-            : `${green(glyph.tick())} front-door acceptance passed ${dim(`— report: ${reportPath}`)}\n`
-        );
+        if (ctx.json) {
+          ctx.emit({ passed: !failed, reportPath });
+        } else if (failed) {
+          ctx.presenter.error(`front-door acceptance failed ${dim(`— report: ${reportPath}`)}`);
+        } else {
+          ctx.presenter.success(`front-door acceptance passed ${dim(`— report: ${reportPath}`)}`);
+        }
         if (failed) process.exitCode = 1;
       })
   );

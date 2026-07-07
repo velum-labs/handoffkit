@@ -5,12 +5,12 @@
  * login exists, whether it is expired, and (for codex) the account id + pinned
  * model. FusionKit does the real auth at run time.
  */
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform, userInfo } from "node:os";
 import { join } from "node:path";
 
 import { SUBSCRIPTIONS } from "@fusionkit/registry";
+import { superviseSpawn } from "@fusionkit/runtime-utils";
 
 import type { PanelAuthMode } from "./env.js";
 
@@ -60,21 +60,28 @@ function decodeJwtClaims(token: string): Record<string, unknown> {
   }
 }
 
-function readMacosKeychain(service: string): string | undefined {
+async function readMacosKeychain(service: string): Promise<string | undefined> {
   if (platform() !== "darwin") return undefined;
   try {
-    const out = execFileSync(
+    const spawned = superviseSpawn(
       "security",
       ["find-generic-password", "-s", service, "-a", userInfo().username, "-w"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
-    ).trim();
+      { stdio: ["ignore", "pipe", "ignore"] }
+    );
+    const chunks: string[] = [];
+    spawned.child.stdout?.on("data", (chunk: Buffer | string) => {
+      chunks.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+    });
+    const exit = await spawned.done;
+    if (exit.exitCode !== 0) return undefined;
+    const out = chunks.join("").trim();
     return out.length > 0 ? out : undefined;
   } catch {
     return undefined;
   }
 }
 
-function detectClaudeCode(): SubscriptionStatus {
+async function detectClaudeCode(): Promise<SubscriptionStatus> {
   let blob: string | undefined;
   const path = claudeCredentialsPath();
   if (existsSync(path)) {
@@ -84,7 +91,7 @@ function detectClaudeCode(): SubscriptionStatus {
       blob = undefined;
     }
   }
-  blob ??= readMacosKeychain(CLAUDE_KEYCHAIN_SERVICE);
+  blob ??= await readMacosKeychain(CLAUDE_KEYCHAIN_SERVICE);
   if (blob === undefined) return { mode: "claude-code", available: false, expired: false };
 
   let oauth: unknown;
@@ -142,7 +149,7 @@ function detectCodex(): SubscriptionStatus {
 }
 
 /** Detect whether a subscription login is present locally (read-only). */
-export function detectSubscription(mode: PanelAuthMode): SubscriptionStatus {
+export async function detectSubscription(mode: PanelAuthMode): Promise<SubscriptionStatus> {
   return mode === "claude-code" ? detectClaudeCode() : detectCodex();
 }
 

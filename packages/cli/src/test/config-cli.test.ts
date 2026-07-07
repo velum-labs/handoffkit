@@ -108,7 +108,7 @@ test("config export-yaml stdout is exactly the derived router YAML (no drift)", 
     );
     // Sanity: it is valid-looking router YAML.
     assert.match(result.stdout, /^endpoints:/);
-    assert.match(result.stdout, /judge_model: "sonnet"/);
+    assert.match(result.stdout, /judge_model: sonnet/);
   } finally {
     fixture.cleanup();
   }
@@ -130,7 +130,7 @@ test("routerConfigYaml emits endpoint pricing when configured", () => {
   assert.match(yaml, /pricing:/);
   assert.match(yaml, /input_per_1m_tokens: 1\.25/);
   assert.match(yaml, /output_per_1m_tokens: 10/);
-  assert.match(yaml, /currency: "USD"/);
+  assert.match(yaml, /currency: USD/);
 });
 
 test("config export-yaml -o writes the YAML to a file and reports it on stderr", () => {

@@ -197,7 +197,7 @@ export function registerSessions(program: Command): void {
     .description("list, inspect, and remove durable gateway sessions")
     .option("--json", "emit machine-readable JSON")
     .action((_opts: { json?: boolean }, command: Command) => {
-      process.exit(runList(store, contextFor(command)));
+      process.exitCode = runList(store, contextFor(command));
     });
 
   sessions
@@ -205,7 +205,7 @@ export function registerSessions(program: Command): void {
     .description("list stored sessions (id, tool, panel, turns, last activity)")
     .option("--json", "emit machine-readable JSON")
     .action((_opts: { json?: boolean }, command: Command) => {
-      process.exit(runList(store, contextFor(command)));
+      process.exitCode = runList(store, contextFor(command));
     });
 
   sessions
@@ -215,7 +215,7 @@ export function registerSessions(program: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action(async (id: string | undefined, _opts: { json?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      process.exit(runShow(store, id ?? (await pickSessionId(store, "show")), ctx));
+      process.exitCode = runShow(store, id ?? (await pickSessionId(store, "show")), ctx);
     });
 
   sessions
@@ -226,6 +226,6 @@ export function registerSessions(program: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action(async (id: string | undefined, _opts: { json?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      process.exit(runRemove(store, id ?? (await pickSessionId(store, "delete")), ctx));
+      process.exitCode = runRemove(store, id ?? (await pickSessionId(store, "delete")), ctx);
     });
 }

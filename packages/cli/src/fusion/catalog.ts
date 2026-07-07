@@ -299,10 +299,10 @@ async function fetchAnthropic(): Promise<CatalogModel[]> {
 
 async function fetchGoogle(): Promise<CatalogModel[]> {
   const key = process.env[defaultKeyEnv("google") ?? "GEMINI_API_KEY"] ?? "";
-  const body = await fetchJson(
-    `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`,
-    {}
-  );
+  // Key in a header, never the query string: URLs land in logs and traces.
+  const body = await fetchJson("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {
+    "x-goog-api-key": key
+  });
   const chatIds = new Set(parseGoogleModels(body));
   const data = Array.isArray(body.models) ? (body.models as JsonRecord[]) : [];
   return data
@@ -411,7 +411,13 @@ export function catalogModelHint(model: CatalogModel): string | undefined {
 
 /** Where a model list came from (drives the picker's source note). */
 export type ModelSource = "live" | "models.dev" | "curated";
-export type ModelListResult = { models: CatalogModel[]; source: ModelSource };
+
+export type ModelListResult = {
+  models: CatalogModel[];
+  source: ModelSource;
+  /** Present when a live/models.dev fetch failed and the list fell back to curated. */
+  degraded?: { reason: string; provider: string };
+};
 
 /** Curated fallbacks per auth choice, from the registry's model catalog. */
 function curatedFor(choice: AuthChoice): CatalogModel[] {
@@ -450,7 +456,7 @@ async function fetchProviderModels(
 ): Promise<string[]> {
   const baseUrl = providerDefaultBaseUrl(provider);
   if (baseUrl === undefined) return [];
-  let url = `${baseUrl}${discovery.path}`;
+  const url = `${baseUrl}${discovery.path}`;
   const headers: Record<string, string> = { ...discovery.extraHeaders };
   switch (discovery.auth) {
     case "bearer":
@@ -461,9 +467,6 @@ async function fetchProviderModels(
       break;
     case "x-goog-api-key":
       headers["x-goog-api-key"] = key;
-      break;
-    case "query-key":
-      url = `${url}?key=${encodeURIComponent(key)}`;
       break;
     default: {
       const exhaustive: never = discovery.auth;
@@ -512,8 +515,11 @@ export async function listModelsForAuth(
     try {
       const models = await fetchModelsDevCatalog(provider, fetchImpl);
       return models.length > 0 ? { models, source: "models.dev" } : curated;
-    } catch {
-      return curated;
+    } catch (error) {
+      return {
+        ...curated,
+        degraded: { reason: error instanceof Error ? error.message : String(error), provider: choice }
+      };
     }
   }
   try {
@@ -532,7 +538,11 @@ export async function listModelsForAuth(
       fetchImpl
     );
     return { models, source: "live" };
-  } catch {
-    return curated;
+  } catch (error) {
+    const keyEnvName = registryDefaultKeyEnv(choice) ?? choice;
+    return {
+      ...curated,
+      degraded: { reason: error instanceof Error ? error.message : String(error), provider: keyEnvName }
+    };
   }
 }

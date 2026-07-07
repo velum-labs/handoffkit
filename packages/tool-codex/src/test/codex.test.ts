@@ -20,6 +20,7 @@ import {
   codexMemberCatalogJson,
   codexModelCatalogJson,
   defaultCodexRunner,
+  isCodexConfigFailure,
   memberChatBackend
 } from "../index.js";
 import type { CodexExecRunner } from "../index.js";
@@ -318,6 +319,19 @@ test("codexLaunchConfigToml omits features/agents sections without roles", () =>
   const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", ["gpt-5.5"]);
   assert.ok(!toml.includes("[features]"));
   assert.ok(!toml.includes("[agents"));
+});
+
+test("codex exits classify as config failures only on config-shaped stderr (WS9.3)", () => {
+  // Config-load rejections (the reason the degraded relaunch ladder exists).
+  assert.ok(isCodexConfigFailure(1, "error: duplicate agent role name `fusion-deep` declared in the same config layer"));
+  assert.ok(isCodexConfigFailure(1, "Error reading config file at /tmp/x/config.toml: unknown field `slug`"));
+  assert.ok(isCodexConfigFailure(2, "failed to deserialize model_catalog_json: missing field `display_name`"));
+  // Genuine failures keep their exit code: no relaunch with degraded config.
+  assert.ok(!isCodexConfigFailure(1, "error: unexpected argument '--frobnicate' found"));
+  assert.ok(!isCodexConfigFailure(1, "connection refused (os error 61)"));
+  assert.ok(!isCodexConfigFailure(130, ""));
+  // A clean exit is never a config failure, whatever stderr said.
+  assert.ok(!isCodexConfigFailure(0, "warning: config.toml uses a deprecated key"));
 });
 
 test("codexAgentRoles + codexAgentRoleToml pin each role to its ensemble model", () => {

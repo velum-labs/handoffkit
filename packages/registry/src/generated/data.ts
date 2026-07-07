@@ -62,7 +62,7 @@ export const REGISTRY = {
       },
       "discovery": {
         "path": "/v1beta/models",
-        "auth": "query-key",
+        "auth": "x-goog-api-key",
         "responseShape": "google"
       }
     },

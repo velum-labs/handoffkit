@@ -4,6 +4,7 @@
  * through the presenter and support `--json` for scripting/CI.
  */
 import { existsSync, realpathSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { delimiter, join, resolve } from "node:path";
 
 import type { Command } from "commander";
@@ -263,6 +264,20 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
     ok: repoRoot !== undefined,
     ...(repoRoot !== undefined ? { detail: repoRoot } : { hint: "cd into your project, or run `git init`" })
   });
+  if (repoRoot !== undefined) {
+    let hasCommit = false;
+    try {
+      execFileSync("git", ["rev-parse", "--verify", "HEAD"], { cwd: repoRoot, stdio: "ignore" });
+      hasCommit = true;
+    } catch {
+      hasCommit = false;
+    }
+    checks.push({
+      label: "repository has at least one commit",
+      ok: hasCommit,
+      ...(hasCommit ? { detail: repoRoot } : { hint: "make an initial commit (`git add . && git commit -m \"init\"`)" })
+    });
+  }
 
   presenter.heading("prerequisites");
   for (const check of checks) {
@@ -572,7 +587,7 @@ export function registerDoctor(program: Command): void {
     .option("--provision", "also pre-provision (warm) the fusion engine into the uv cache")
     .option("--json", "emit machine-readable JSON")
     .action(async (opts: { provision?: boolean; json?: boolean }, command: Command) => {
-      process.exit(await runDoctor({ provision: opts.provision === true }, contextFor(command)));
+      process.exitCode = await runDoctor({ provision: opts.provision === true }, contextFor(command));
     });
 
   program
@@ -580,6 +595,6 @@ export function registerDoctor(program: Command): void {
     .description("show the effective fusion config and a dry-run preview")
     .option("--json", "emit machine-readable JSON")
     .action((_opts: { json?: boolean }, command: Command) => {
-      process.exit(runStatus(contextFor(command)));
+      process.exitCode = runStatus(contextFor(command));
     });
 }

@@ -163,6 +163,7 @@ export {
   codexLaunchConfigToml,
   codexModelCatalogJson,
   codexRoleDescription,
+  isCodexConfigFailure,
   launchCodex,
   readCodexCatalogTemplate
 } from "./launch.js";

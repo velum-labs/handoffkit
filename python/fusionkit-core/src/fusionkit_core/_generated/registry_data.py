@@ -66,7 +66,7 @@ REGISTRY: Final[dict[str, Any]] = {
             },
             "discovery": {
                 "path": "/v1beta/models",
-                "auth": "query-key",
+                "auth": "x-goog-api-key",
                 "responseShape": "google",
             },
         },

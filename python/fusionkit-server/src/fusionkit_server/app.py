@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import traceback
 import uuid
@@ -177,9 +178,17 @@ def create_app(
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
     kernel = FusionKernel(engine, native_runs)
 
+    # An opaque token the spawning CLI passes down so its discover-or-spawn
+    # health probe can tell "the exact router I would start" apart from a
+    # sibling with the same endpoint ids but different prompts/keys/sampling.
+    identity = os.environ.get("FUSIONKIT_ROUTER_IDENTITY", "")
+
     @app.get("/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok"}
+        payload = {"status": "ok"}
+        if identity:
+            payload["identity"] = identity
+        return payload
 
     def _models_payload() -> dict[str, Any]:
         data: list[dict[str, Any]] = [

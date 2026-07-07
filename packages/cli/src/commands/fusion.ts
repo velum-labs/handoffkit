@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { dim, done, note, uiStream } from "@fusionkit/cli-ui";
+import { dim, uiStream } from "@fusionkit/cli-ui";
 
 import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
@@ -15,6 +15,7 @@ import { fail } from "../shared/errors.js";
 import { warnPassthroughTypos } from "../shared/flag-suggest.js";
 
 import { registerPaletteAction } from "./palette.js";
+import { runFusionStop } from "./stop.js";
 import {
   collect,
   parseBudget,
@@ -26,7 +27,6 @@ import {
   parsePanelTrust,
   parsePort
 } from "../shared/options.js";
-import { reapFusionServices } from "../shared/portless.js";
 
 type FusionOpts = {
   tool?: string;
@@ -275,7 +275,7 @@ export function registerFusion(program: Command): void {
     })),
     { label: "Run the gateway for any tool", hint: "fusionkit serve", argv: ["serve"] },
     { label: "Set up this repo (.fusionkit/)", hint: "fusionkit init", argv: ["init"] },
-    { label: "Stop background fusion services", hint: "fusionkit fusion stop", argv: ["fusion", "stop"] }
+    { label: "Stop background fusion services", hint: "fusionkit stop", argv: ["stop"] }
   );
 
   // Top-level shortcuts: `fusionkit codex`, `fusionkit claude`, etc.
@@ -298,7 +298,7 @@ export function registerFusion(program: Command): void {
           fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
         }
         const code = await runFusion(tool, args, options);
-        process.exit(code);
+        process.exitCode = code;
       });
   }
 
@@ -323,10 +323,8 @@ export function registerFusion(program: Command): void {
       // `fusion stop` reaps persistent portless singletons left running by prior
       // runs (the router, dashboard, ...).
       if (positionalTool === "stop") {
-        const stopped = await reapFusionServices((line) => uiStream().write(`${dim(line)}\n`));
-        if (stopped === 0) note("no background fusion services were running");
-        else done(`stopped ${stopped} background fusion service(s)`);
-        process.exit(0);
+        process.exitCode = await runFusionStop();
+        return;
       }
 
       const { options, configTool } = resolveContext(opts);
@@ -345,7 +343,7 @@ export function registerFusion(program: Command): void {
         fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
       }
       const code = await runFusion(resolvedTool, toolArgs, options);
-      process.exit(code);
+      process.exitCode = code;
     });
 
   // Top-level `init` — scaffold a committed .fusionkit/ folder for this repo.
@@ -363,6 +361,6 @@ export function registerFusion(program: Command): void {
         force: opts.force === true,
         ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
       });
-      process.exit(code);
+      process.exitCode = code;
     });
 }

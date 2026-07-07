@@ -467,7 +467,7 @@ export async function runFusionInit(input: {
   // If the Python CLI is unreachable, skip silently — unset prompts use the
   // built-in defaults at run time, and the user can eject them later with
   // `fusionkit prompts edit`.
-  const defaultPrompts = fetchDefaultPrompts(input.fusionkitDir);
+  const defaultPrompts = await fetchDefaultPrompts(input.fusionkitDir);
   const wrotePrompts =
     defaultPrompts !== undefined
       ? writeFusionPrompts(input.repoRoot, defaultPrompts, { force })

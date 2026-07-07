@@ -79,6 +79,11 @@ const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[];
   }
 };
 
+function runtimeWorkflowIds(): string[] {
+  registerBuiltInWorkflows();
+  return [...new Set([...listWorkflows(), ...Object.keys(WORKFLOW_DETAILS)])].sort();
+}
+
 export function registerRuntime(program: Command): void {
   const runtime = program
     .command("runtime")
@@ -90,8 +95,7 @@ export function registerRuntime(program: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action((_opts: { json?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      registerBuiltInWorkflows();
-      const ids = [...new Set([...listWorkflows(), ...Object.keys(WORKFLOW_DETAILS)])].sort();
+      const ids = runtimeWorkflowIds();
       if (ctx.json) {
         ctx.emit({
           workflows: ids.map((id) => ({ id, ...(WORKFLOW_DETAILS[id] ?? {}) }))
@@ -123,13 +127,20 @@ export function registerRuntime(program: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action((workflow: string, _opts: { json?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      registerBuiltInWorkflows();
-      const detail = WORKFLOW_DETAILS[workflow];
-      if (detail === undefined) {
+      const ids = runtimeWorkflowIds();
+      if (!ids.includes(workflow)) {
         throw new CliError({
           code: "unknown-workflow",
           message: `unknown built-in workflow "${workflow}"`,
           hint: "workflow ids come from the runtime kernel's built-in registry",
+          tryCommand: "fusionkit runtime list"
+        });
+      }
+      const detail = WORKFLOW_DETAILS[workflow];
+      if (detail === undefined) {
+        throw new CliError({
+          code: "unknown-workflow",
+          message: `workflow "${workflow}" is registered but has no explain metadata yet`,
           tryCommand: "fusionkit runtime list"
         });
       }

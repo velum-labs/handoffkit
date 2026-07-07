@@ -146,6 +146,14 @@ test("fusion.session aggregates are allow-listed and carry no payload text", asy
   assert.equal(sessionEvents.length, 1, "the aggregate ships once at flush");
 });
 
+test("FUSIONKIT_TELEMETRY=1 without a consent file mints an ephemeral install id", () => {
+  clearTelemetryFile();
+  const decision = resolveTelemetry({ FUSIONKIT_TELEMETRY: "1" });
+  assert.equal(decision.enabled, true);
+  assert.equal(decision.source, "env");
+  assert.ok(decision.installId, "env-only opt-in must mint an ephemeral install id");
+});
+
 test("cli.command records the allow-listed invocation shape", async () => {
   clearTelemetryFile();
   resetTelemetryForTest();

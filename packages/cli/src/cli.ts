@@ -14,6 +14,7 @@ import { registerPrompts } from "./commands/prompts.js";
 import { registerRuntime } from "./commands/runtime.js";
 import { registerSessions } from "./commands/sessions.js";
 import { registerSetup } from "./commands/setup.js";
+import { registerStop } from "./commands/stop.js";
 import { registerTelemetry } from "./commands/telemetry.js";
 import { registerVersion } from "./commands/version.js";
 import { attachGlobalFlags } from "./shared/context.js";
@@ -55,6 +56,7 @@ export function buildProgram(): Command {
   registerRuntime(program);
   registerTelemetry(program);
   registerVersion(program);
+  registerStop(program);
 
   program.addHelpText(
     "after",

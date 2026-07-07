@@ -432,7 +432,7 @@ export function registerEnsembleConfig(ensemble: Command): void {
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON")
     .action((opts: EnsembleCommandOpts, command: Command) => {
-      process.exit(runList(opts, contextFor(command)));
+      process.exitCode = runList(opts, contextFor(command));
     });
 
   ensemble
@@ -446,7 +446,7 @@ export function registerEnsembleConfig(ensemble: Command): void {
     .option("--synthesizer <model>", "synthesizer model (defaults to the judge)")
     .option("--json", "emit machine-readable JSON")
     .action(async (name: string, opts: EnsembleCommandOpts, command: Command) => {
-      process.exit(await runAdd(name, opts, contextFor(command)));
+      process.exitCode = await runAdd(name, opts, contextFor(command));
     });
 
   ensemble
@@ -462,7 +462,7 @@ export function registerEnsembleConfig(ensemble: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action(async (name: string | undefined, opts: EnsembleCommandOpts, command: Command) => {
       const ctx = contextFor(command);
-      process.exit(await runEdit(await ensembleNameOrPick(name, opts, ctx, "edit"), opts, ctx));
+      process.exitCode = await runEdit(await ensembleNameOrPick(name, opts, ctx, "edit"), opts, ctx);
     });
 
   ensemble
@@ -475,7 +475,7 @@ export function registerEnsembleConfig(ensemble: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action(async (name: string | undefined, opts: EnsembleCommandOpts, command: Command) => {
       const ctx = contextFor(command);
-      process.exit(await runRemove(await ensembleNameOrPick(name, opts, ctx, "remove"), opts, ctx));
+      process.exitCode = await runRemove(await ensembleNameOrPick(name, opts, ctx, "remove"), opts, ctx);
     });
 
   ensemble
@@ -486,7 +486,7 @@ export function registerEnsembleConfig(ensemble: Command): void {
     .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON")
     .action((from: string, to: string, opts: EnsembleCommandOpts, command: Command) => {
-      process.exit(runRename(from, to, opts, contextFor(command)));
+      process.exitCode = runRename(from, to, opts, contextFor(command));
     });
 
   ensemble
@@ -497,6 +497,6 @@ export function registerEnsembleConfig(ensemble: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action(async (name: string | undefined, opts: EnsembleCommandOpts, command: Command) => {
       const ctx = contextFor(command);
-      process.exit(runUse(await ensembleNameOrPick(name, opts, ctx, "use"), opts, ctx));
+      process.exitCode = runUse(await ensembleNameOrPick(name, opts, ctx, "use"), opts, ctx);
     });
 }
