@@ -167,6 +167,8 @@ const requiredFiles = [
   "scripts/generate-code-docs.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "scripts/release.mjs",
+  "scripts/lib/changelog.mjs",
+  "scripts/sync-docs-changelog.mjs",
   "scripts/monorepo.mjs",
   "release/npm-packages.json",
   "release/workspace.release.json",
@@ -180,6 +182,7 @@ const requiredFiles = [
   "legacy/docs/handoff-sdk.md",
   "docs/privacy.md",
   "apps/docs/content/docs/privacy.mdx",
+  "apps/docs/content/docs/changelog.mdx",
   "docs/release-publishing.md",
   "docs/releasing.md",
   "docs/planning/ensemble-product-plan.md",
@@ -363,6 +366,23 @@ if (generatedCodeDocsCheck.stderr.trim()) {
 }
 if (generatedCodeDocsCheck.status !== 0) {
   fail("generated code documentation check failed");
+}
+
+// The docs-site changelog page is generated from CHANGELOG.md; fail when it
+// has drifted (run `node scripts/sync-docs-changelog.mjs` to regenerate).
+const docsChangelogCheck = spawnSync(
+  process.execPath,
+  ["scripts/sync-docs-changelog.mjs", "--check"],
+  { encoding: "utf8" }
+);
+if (docsChangelogCheck.stdout.trim()) {
+  console.log(docsChangelogCheck.stdout.trim());
+}
+if (docsChangelogCheck.stderr.trim()) {
+  console.error(docsChangelogCheck.stderr.trim());
+}
+if (docsChangelogCheck.status !== 0) {
+  fail("docs changelog page is out of sync with CHANGELOG.md");
 }
 
 const releasePublishCheck = spawnSync(

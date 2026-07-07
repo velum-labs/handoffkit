@@ -30,8 +30,7 @@ pnpm start
 ## Content
 
 Docs live in `content/docs/**/*.mdx`, grouped into folder-based sidebar sections,
-each ordered by its own `meta.json` (and the root `content/docs/meta.json`):
-
+each ordered by its own `meta.json` (and the root `content/docs/meta.json`).
 The sidebar is organized by reader intent:
 
 - **Get started**: installation and the quickstart.
@@ -43,6 +42,10 @@ The sidebar is organized by reader intent:
 - **Reference**: the command reference, `.fusionkit/` configuration, models and
   panels, and the package map.
 - **API reference**: runtime route overview plus generated contract reference.
+- **Changelog**: release notes, generated from the repo-root `CHANGELOG.md` by
+  `scripts/sync-docs-changelog.mjs` (runs on every dev/build; the release
+  coordinator regenerates it in each release commit, and `pnpm check` at the
+  repo root fails when it drifts).
 
 When a page moves between sections, add a permanent redirect in
 `next.config.mjs` so deployed URLs keep working.
