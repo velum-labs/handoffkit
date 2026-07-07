@@ -22,11 +22,15 @@
       "name": "@fusionkit/protocol"
     },
     {
+      "path": "packages/tracing",
+      "name": "@fusionkit/tracing"
+    },
+    {
       "path": "packages/kernel",
       "name": "@fusionkit/kernel"
     },
     {
-      "path": "packages/sdk",
+      "path": "legacy/packages/sdk",
       "name": "@fusionkit/sdk"
     },
     {
@@ -34,19 +38,19 @@
       "name": "@fusionkit/workspace"
     },
     {
-      "path": "packages/plane",
+      "path": "legacy/packages/plane",
       "name": "@fusionkit/plane"
     },
     {
-      "path": "packages/runner",
+      "path": "legacy/packages/runner",
       "name": "@fusionkit/runner"
     },
     {
-      "path": "packages/handoff",
+      "path": "legacy/packages/handoff",
       "name": "@fusionkit/handoff"
     },
     {
-      "path": "packages/adapter-compute",
+      "path": "legacy/packages/adapter-compute",
       "name": "@fusionkit/adapter-compute"
     },
     {
@@ -54,15 +58,15 @@
       "name": "@fusionkit/adapter-ai-sdk"
     },
     {
-      "path": "packages/session-vercel-sandbox",
+      "path": "legacy/packages/session-vercel-sandbox",
       "name": "@fusionkit/session-vercel-sandbox"
     },
     {
-      "path": "packages/session-hermetic",
+      "path": "legacy/packages/session-hermetic",
       "name": "@fusionkit/session-hermetic"
     },
     {
-      "path": "packages/session-harness",
+      "path": "legacy/packages/session-harness",
       "name": "@fusionkit/session-harness"
     },
     {
@@ -100,6 +104,10 @@
     {
       "path": "packages/tool-opencode",
       "name": "@fusionkit/tool-opencode"
+    },
+    {
+      "path": "packages/cli-ui",
+      "name": "@fusionkit/cli-ui"
     },
     {
       "path": "packages/cli",

@@ -354,7 +354,6 @@ function JudgeDecision({ judge }: { judge: JudgeView }) {
             ) : undefined
           },
           { label: "Selected candidate", value: judge.final?.selectedCandidateId, mono: true },
-          { label: "Synthesis id", value: judge.final?.synthesisId, mono: true },
           {
             label: "Synthesis fallback",
             value: judge.synthesis?.empty === true ? (

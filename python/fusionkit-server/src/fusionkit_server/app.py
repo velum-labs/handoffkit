@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import traceback
 import uuid
 from collections.abc import AsyncIterator
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, assert_never, cast
+from typing import Any, assert_never, cast, get_args
 
-from fastapi import FastAPI, Header, Query
+from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import (
@@ -20,6 +23,8 @@ from fusionkit_core.clients import (
 from fusionkit_core.config import (
     FusionConfig,
     FusionMode,
+    PromptOverrides,
+    ProviderKind,
     SamplingConfig,
     model_sampling_defaults,
 )
@@ -49,9 +54,13 @@ from fusionkit_core.run import (
     make_id,
 )
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.trace import TRACE_ID_HEADER, TRACE_SPAN_HEADER, new_span_id
-from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall
-from pydantic import BaseModel, Field
+from fusionkit_core.trace import context_from_headers
+from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, ToolCall
+from pydantic import BaseModel, Field, ValidationError
+
+from fusionkit_server.cursor_endpoint import translate_cursor_request
+
+logger = logging.getLogger(__name__)
 
 
 class FusionToolExecutionOptions(BaseModel):
@@ -130,7 +139,22 @@ class FuseTrajectoriesRequest(BaseModel):
     tool_choice: str | dict[str, Any] | None = None
     judge_model: str | None = None
     synthesizer_model: str | None = None
+    # Per-request system-prompt overrides (a named ensemble's committed
+    # prompts). Fields win per key; unset falls back to the config overrides.
+    prompts: PromptOverrides | None = None
+    # "step" = candidates are receding-horizon next-step proposals (finite-k
+    # panels): the judge selects and the synthesizer adopts one candidate's
+    # tool-call batch verbatim or answers in text. Absent = "trajectory"
+    # (today's behavior), so older gateways keep working unchanged.
+    panel_mode: PanelMode = "trajectory"
     stream: bool = False
+
+
+def _package_version() -> str:
+    try:
+        return distribution_version("fusionkit-server")
+    except PackageNotFoundError:
+        return "0.0.0"
 
 
 def create_app(
@@ -139,7 +163,7 @@ def create_app(
     run_manager: FusionRunManager | None = None,
     run_store_path: Path | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="fusionkit", version="0.2.0")
+    app = FastAPI(title="fusionkit", version=_package_version())
     model_clients = clients or build_clients(config)
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
@@ -149,8 +173,7 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/v1/models")
-    async def models() -> dict[str, Any]:
+    def _models_payload() -> dict[str, Any]:
         data: list[dict[str, Any]] = [
             {"id": alias, "object": "model"} for alias in FUSION_MODEL_ALIASES
         ]
@@ -159,6 +182,16 @@ def create_app(
             for endpoint in config.endpoints
         )
         return {"object": "list", "data": data}
+
+    @app.get("/v1/models")
+    async def models() -> dict[str, Any]:
+        return _models_payload()
+
+    @app.get("/v1/cursor/models")
+    async def cursor_models() -> dict[str, Any]:
+        # Cursor may probe the models list relative to its BYOK base URL
+        # (`.../v1/cursor`); mirror /v1/models there.
+        return _models_payload()
 
     @app.post("/v1/fusion/runs")
     async def create_fusion_run(
@@ -221,8 +254,7 @@ def create_app(
             return _native_error_response(result, status_code=409)
         return _json_response(result.model_dump(mode="json"))
 
-    @app.post("/v1/chat/completions", response_model=None)
-    async def chat_completions(
+    async def _handle_chat_completions(
         request: FusionRequest,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         # Per-model passthrough: when `model` names a configured endpoint, call
@@ -261,23 +293,66 @@ def create_app(
         final_output, metadata = resolved
         return _openai_chat_response(request.model, final_output, metadata)
 
+    @app.post("/v1/chat/completions", response_model=None)
+    async def chat_completions(
+        request: FusionRequest,
+    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
+        return await _handle_chat_completions(request)
+
+    @app.post("/v1/cursor/chat/completions", response_model=None)
+    async def cursor_chat_completions(
+        raw_request: Request,
+    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
+        # Cursor's BYOK base-URL override POSTs a Responses-API-shaped body to
+        # `{base_url}/chat/completions` while expecting Chat Completions back
+        # (a known Cursor hybrid). The body is parsed raw — FastAPI validating
+        # it as a FusionRequest would 422 on the hybrid shape — translated via
+        # `translate_cursor_request`, then delegated to the exact code path
+        # the plain /v1/chat/completions route uses. Plain Chat Completions
+        # bodies (Cursor Ask mode) pass through untranslated.
+        try:
+            body = await raw_request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return _openai_error_response(
+                "invalid_json", "request body must be a JSON object", status_code=400
+            )
+        if not isinstance(body, dict) or ("messages" not in body and "input" not in body):
+            return _openai_error_response(
+                "invalid_request",
+                "request body must include either 'messages' or 'input'",
+                status_code=400,
+            )
+        try:
+            request = FusionRequest.model_validate(translate_cursor_request(body))
+        except ValidationError:
+            # The pydantic error detail can echo request fragments; keep the
+            # response body generic and log the specifics server-side.
+            logger.warning("cursor request failed validation", exc_info=True)
+            return _openai_error_response(
+                "invalid_request",
+                "request body could not be validated as a chat completion request",
+                status_code=400,
+            )
+        return await _handle_chat_completions(request)
+
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
     async def fuse_trajectories(
         request: FuseTrajectoriesRequest,
-        trace_id: str | None = Header(default=None, alias=TRACE_ID_HEADER),
-        span_id: str | None = Header(default=None, alias=TRACE_SPAN_HEADER),
+        http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         judge_model = request.judge_model or config.resolved_judge_model
         synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
-        try:
-            kernel.client(judge_model)
-            kernel.client(synthesizer_model)
-        except KeyError as exc:
-            return _openai_error_response(
-                "unknown_model",
-                f"Unknown model endpoint {exc}.",
-                status_code=400,
-            )
+        for required_model in (judge_model, synthesizer_model):
+            try:
+                kernel.client(required_model)
+            except KeyError:
+                # Name the model from request/config data rather than echoing
+                # the exception text into the response body.
+                return _openai_error_response(
+                    "unknown_model",
+                    f"Unknown model endpoint {required_model!r}.",
+                    status_code=400,
+                )
         trajectories = [
             trajectory_from_contract(
                 TrajectoryV1.model_validate(
@@ -292,7 +367,7 @@ def create_app(
         messages = [_to_chat_message(message) for message in request.messages]
         tools = _normalize_tools(request.tools)
         tool_choice = _normalize_tool_choice(request.tool_choice)
-        resolved_span = span_id or new_span_id()
+        trace = context_from_headers(dict(http_request.headers))
         # Real streaming: the synthesizer turn streams tokens; the fused
         # trajectory metadata rides on the terminal SSE chunk.
         if request.stream:
@@ -304,8 +379,9 @@ def create_app(
                 sampling=config.sampling,
                 tools=tools,
                 tool_choice=tool_choice,
-                trace_id=trace_id,
-                span_id=resolved_span,
+                prompts=request.prompts,
+                panel_mode=request.panel_mode,
+                trace=trace,
             )
             return StreamingResponse(
                 _fused_completion_sse(request.model, stream),
@@ -320,16 +396,17 @@ def create_app(
                 sampling=config.sampling,
                 tools=tools,
                 tool_choice=tool_choice,
-                trace_id=trace_id,
-                span_id=resolved_span,
+                prompts=request.prompts,
+                panel_mode=request.panel_mode,
+                trace=trace,
             )
         except ProviderCallError as exc:
             return _provider_error_response(exc)
-        except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+        except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
             traceback.print_exc()
             return _openai_error_response(
-                exc.__class__.__name__,
-                f"fusion step failed: {exc}",
+                "internal_error",
+                "fusion step failed; see the server logs for details",
                 status_code=502,
             )
         return _openai_step_response(request.model, result.response, _fusion_extension(result))
@@ -383,11 +460,11 @@ async def _passthrough_chat(
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)
-    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
         traceback.print_exc()
         return _openai_error_response(
-            exc.__class__.__name__,
-            f"passthrough chat failed: {exc}",
+            "internal_error",
+            "passthrough chat failed; see the server logs for details",
             status_code=502,
         )
     return _openai_step_response(request.model, response)
@@ -418,14 +495,19 @@ async def _fusion_tool_step(
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)
-    except PanelExhaustedError as exc:
-        return _openai_error_response(
-            "all_models_failed", f"fusion step failed: {exc}", status_code=502
-        )
-    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error body
+    except PanelExhaustedError:
+        # The aggregated per-model error text embeds upstream provider
+        # messages; log it server-side and keep the response body generic.
         traceback.print_exc()
         return _openai_error_response(
-            exc.__class__.__name__, f"fusion step failed: {exc}", status_code=502
+            "all_models_failed",
+            "fusion step failed: every panel model failed; see the server logs for details",
+            status_code=502,
+        )
+    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
+        traceback.print_exc()
+        return _openai_error_response(
+            "internal_error", "fusion step failed; see the server logs for details", status_code=502
         )
     return _openai_step_response(request.model, result.response, _fusion_extension(result))
 
@@ -578,23 +660,17 @@ async def _fused_completion_sse(
 
 def _sse_error_event(exc: BaseException) -> str:
     if isinstance(exc, ProviderCallError):
-        body: dict[str, Any] = {
-            "message": str(exc),
-            "type": "provider_error",
-            "code": exc.category,
-            # Mirror the non-streaming error body so a mid-stream failure carries
-            # the same canonical ``error_category`` failover signal (WS5).
-            "error_category": exc.category,
-            "category": exc.category,
-            "provider": exc.provider,
-        }
-        if exc.retry_after is not None:
-            body["retry_after"] = exc.retry_after
+        # Mirror the non-streaming error body so a mid-stream failure carries
+        # the same canonical ``error_category`` failover signal (WS5).
+        body: dict[str, Any] = _provider_error_body(exc)
     else:
+        # Unclassified exceptions must not leak internals (messages can embed
+        # paths, config, or stack fragments); the full traceback is logged
+        # server-side where the stream is caught.
         body = {
-            "message": str(exc),
-            "type": exc.__class__.__name__,
-            "code": exc.__class__.__name__,
+            "message": "internal error during streaming; see the server logs for details",
+            "type": "internal_error",
+            "code": "internal_error",
         }
     return f"data: {json.dumps({'error': body})}\n\n"
 
@@ -813,9 +889,33 @@ def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
     return ChatMessage(**kwargs)
 
 
+# `type` values that mark a wire shape or a choice mode, never a tool identity.
+_NON_TOOL_TYPES = frozenset({"function", "custom", "auto", "none", "required", "any", "tool"})
+
+
+def _resolved_tool_name(entry: dict[str, Any], function: dict[str, Any]) -> str:
+    """The provider-facing name for a tool definition.
+
+    Named tools keep their name. A *typed* nameless tool (e.g. an OpenAI
+    Responses `{type: "tool_search", ...}` / `{type: "web_search", ...}` entry)
+    is projected under its ``type``: the caller executes those tools client-side
+    and dispatches the returned tool call by that same name, so the projection
+    round-trips losslessly. Shape/mode markers (``function``, ``auto``, ...)
+    are never treated as tool identities.
+    """
+    name = function.get("name", "")
+    if isinstance(name, str) and name:
+        return name
+    kind = entry.get("type", "") if isinstance(entry, dict) else ""
+    if isinstance(kind, str) and kind and kind not in _NON_TOOL_TYPES:
+        return kind
+    return ""
+
+
 def _normalize_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
-    """Accept OpenAI-nested ({type:function, function:{...}}) or flat tool defs and
-    return the flat {name, description, parameters} shape FusionKit's clients expect."""
+    """Accept OpenAI-nested ({type:function, function:{...}}), flat, or typed
+    nameless tool defs and return the flat {name, description, parameters}
+    shape FusionKit's clients expect (typed tools projected under their type)."""
     if not tools:
         return None
     normalized: list[dict[str, Any]] = []
@@ -825,10 +925,10 @@ def _normalize_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]
         )
         if not isinstance(function, dict):
             continue
-        name = function.get("name", "")
-        # Skip tools without a usable name (some agent CLIs advertise custom or
-        # freeform tool shapes that resolve to an empty name, which providers reject).
-        if not isinstance(name, str) or not name:
+        name = _resolved_tool_name(entry, function)
+        # Skip only tools with no resolvable identity at all: nothing for the
+        # model to call and nothing the caller could dispatch back.
+        if not name:
             continue
         normalized.append(
             {
@@ -845,8 +945,10 @@ def _normalize_tool_choice(choice: str | dict[str, Any] | None) -> str | dict[st
         return choice
     if isinstance(choice, dict):
         function = choice.get("function") if "function" in choice else choice
-        name = function.get("name") if isinstance(function, dict) else None
-        if isinstance(name, str) and name:
+        name = (
+            _resolved_tool_name(choice, function) if isinstance(function, dict) else ""
+        )
+        if name:
             return {"name": name}
     return None
 
@@ -871,13 +973,19 @@ def _usage_dict(response: ModelResponse) -> dict[str, Any]:
 
 
 def _fusion_extension(result: FuseResult) -> dict[str, Any] | None:
-    """The ``fusion`` extension carried on a terminal fuse response.
+    """The ``fusion`` extension carried on a fuse response.
 
     On the terminal step the fused output is a trajectory whose ``synthesis``
-    holds the fusion result (decision/selected/rationale/metrics). It rides on the
-    chat completion so the gateway can surface it without a separate record."""
+    holds the fusion result (decision/selected/rationale/metrics). A
+    non-terminal step (the synthesizer committed a tool-call batch the caller
+    will execute) carries the judge's ``best_trajectory`` instead, so the
+    gateway can attribute the adopted proposal between rounds (narration's
+    "last round the judge picked X" opener)."""
     trajectory = result.trajectory
     if not result.terminal or trajectory is None:
+        best = result.analysis.best_trajectory if result.analysis is not None else None
+        if best:
+            return {"analysis": {"best_trajectory": best}}
         return None
     return {
         "trajectory": {
@@ -923,27 +1031,56 @@ def _openai_step_response(
     return payload
 
 
-def _provider_error_response(exc: ProviderCallError) -> JSONResponse:
-    """Map a classified egress failure onto an OpenAI-style error body.
+# Closed vocabularies for laundering classified-error fields into response
+# bodies: values come from these literal maps, never from the exception object,
+# so upstream exception text cannot ride along into a client-visible payload.
+_SAFE_CATEGORIES: dict[str, ProviderErrorCategory] = {
+    name: name for name in get_args(ProviderErrorCategory)
+}
+_SAFE_PROVIDERS: dict[str, str] = {name: name for name in get_args(ProviderKind)}
 
-    The taxonomy ``category`` (and ``retry_after``) is surfaced verbatim so a
-    client - or the WS5 failover layer reading this response - can branch on it
-    without re-parsing the upstream provider error.
+
+def _safe_category(category: object) -> ProviderErrorCategory:
+    return _SAFE_CATEGORIES.get(str(category), "unknown")
+
+
+def _provider_error_body(exc: ProviderCallError) -> dict[str, Any]:
+    """Build the OpenAI-style error body for a classified egress failure.
+
+    The taxonomy ``category`` (and ``retry_after``) is surfaced so a client -
+    or the WS5 failover layer reading this response - can branch on it without
+    re-parsing the upstream provider error. The upstream provider's message is
+    logged server-side rather than echoed to the client: provider error bodies
+    can embed request excerpts and infrastructure details.
     """
+    category = _safe_category(exc.category)
+    provider = _SAFE_PROVIDERS.get(str(exc.provider), "custom")
+    logger.warning("provider call failed (%s/%s): %s", provider, category, exc)
     body: dict[str, Any] = {
-        "message": str(exc),
+        "message": (
+            f"{provider} call failed ({category}); see the server logs for the provider's message"
+        ),
         "type": "provider_error",
-        "code": exc.category,
+        "code": category,
         # ``error_category`` is the canonical machine-readable failover signal
         # the Node gateway (WS5) branches on without re-parsing provider text;
         # ``category``/``code`` are kept as aliases for existing readers.
-        "error_category": exc.category,
-        "category": exc.category,
-        "provider": exc.provider,
+        "error_category": category,
+        "category": category,
+        "provider": provider,
     }
-    if exc.retry_after is not None:
-        body["retry_after"] = exc.retry_after
-    return _json_response({"error": body}, status_code=_status_for_category(exc.category))
+    retry_after = exc.retry_after
+    if isinstance(retry_after, int | float):
+        body["retry_after"] = float(retry_after)
+    return body
+
+
+def _provider_error_response(exc: ProviderCallError) -> JSONResponse:
+    """Map a classified egress failure onto an OpenAI-style error body."""
+    body = _provider_error_body(exc)
+    return _json_response(
+        {"error": body}, status_code=_status_for_category(_safe_category(exc.category))
+    )
 
 
 def _status_for_category(category: ProviderErrorCategory) -> int:

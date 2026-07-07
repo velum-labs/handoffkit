@@ -12,8 +12,19 @@
  */
 export { startGateway } from "./server.js";
 export type { Gateway, GatewayOptions } from "./server.js";
-export { joinPath, OpenAiBackend } from "./backend.js";
-export type { Backend, BackendRequestOptions, OpenAiBackendOptions } from "./backend.js";
+export {
+  joinPath,
+  ModelRoutedBackend,
+  OpenAiBackend,
+  PANEL_DEPTH_HEADER,
+  parsePanelDepth
+} from "./backend.js";
+export type {
+  Backend,
+  BackendRequestOptions,
+  ModelRoutedBackendOptions,
+  OpenAiBackendOptions
+} from "./backend.js";
 export { FusionBackend } from "./fusion-backend.js";
 export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";
 export {
@@ -64,6 +75,7 @@ export type {
 } from "./frontdoor/types.js";
 export type {
   ChatMessageLike,
+  FusedModelRoute,
   FuseStepRunInput,
   FuseStepRunner,
   FusionBackendKernelSessionState,
@@ -111,11 +123,14 @@ export type {
   TokenUsage,
   TurnCost
 } from "./cost.js";
+export { defaultFusionGatewayLogger } from "./logger.js";
+export type { FusionGatewayLogger } from "./logger.js";
 export { MlxBackend } from "./mlx-backend.js";
 export type { MlxBackendOptions } from "./mlx-backend.js";
 export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";
 export type { BackendConfig } from "./config.js";
 export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
+export { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 export {
   anthropicModelsResponse,
   anthropicToChat,
@@ -130,11 +145,17 @@ export {
 export type { AnthropicRequest } from "./adapters/anthropic.js";
 export {
   chatToResponses,
+  customToolNames,
   handleResponses,
   openAiSseToResponses,
-  responsesToChat
+  responsesToChat,
+  responsesToolRegistry
 } from "./adapters/responses.js";
-export type { ResponsesRequest } from "./adapters/responses.js";
+export type {
+  ResponsesRequest,
+  ResponsesToolKind,
+  ResponsesToolRegistry
+} from "./adapters/responses.js";
 export {
   FUSION_EVIDENCE_HEADER,
   FUSION_REPORT_HEADER,

@@ -7,7 +7,9 @@ import { fail } from "../shared/errors.js";
 export function registerLocal(program: Command): void {
   program
     .command("local")
-    .description("back a vendor agent with a local model")
+    .description(
+      "back a vendor agent with a single local MLX model (no fusion); for a fused local panel use `fusionkit codex --local`"
+    )
     .argument("[tool]", `${LOCAL_TOOLS.join(" | ")}`)
     .argument("[args...]", "arguments forwarded to the tool")
     .option("--public-url <url>", "public tunnel URL for Cursor (or FUSIONKIT_PUBLIC_URL)")

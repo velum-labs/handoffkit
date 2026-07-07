@@ -6,30 +6,35 @@ description: Watch sessions, trajectories, and the judge with --observe.
 ## The trace dashboard
 
 Pass `--observe` to boot a local dashboard (the **scope** app) that streams live
-fusion-trace events: sessions, environments, per-panel-model trajectories, and
-the judge's thinking-to-final flow:
+fusion spans: sessions, environments, per-panel-model trajectories, and the
+judge's thinking-to-final flow:
 
 ```bash
 fusionkit codex --observe
 ```
 
-fusionkit exports the trace endpoint into every spawned process, opens the
-dashboard in your browser, and tears it down on exit.
+fusionkit exports the standard `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` into every
+spawned process, opens the dashboard in your browser, and tears it down on exit.
 
 ## What gets traced
 
-Every component emits `fusion-trace-event.v1` events correlated by one
-`trace_id`:
+Fusion traces with **OpenTelemetry**: every component emits real spans over
+OTLP/HTTP, correlated by one trace id and propagated with W3C
+`traceparent`/`baggage`. The vocabulary lives in the semantic-conventions
+registry (`spec/fusion-trace/registry.json`):
 
-- `session.started` (with an environment snapshot)
-- `harness.candidate.started` / `harness.candidate.finished`
-- `trajectory.step`
-- `model.call.started` / `model.call.finished`
-- `tool.execution`
-- the judge's `judge.thinking` (each tool-call step) → `judge.final` (terminal)
+- `fusion.turn.info` (an instant marker with the environment snapshot)
+- `fusion.candidate` spans with live `fusion.candidate.step` markers
+- GenAI `chat` spans for model calls (`gen_ai.*` attributes)
+- `fusion.tool.execution` and `fusion.cost` markers
+- the judge's `fusion.judge.thinking` markers under the terminal `fusion.judge`
+  span, whose end carries the final answer and marks the session succeeded
 
-The terminal `judge.final` carries the final answer and marks the session
-succeeded in the collector.
+Because the pipeline is standard OTLP, the same spans can be exported to any
+OTel backend instead (PostHog distributed tracing, Jaeger, Tempo) by setting
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (and `OTEL_EXPORTER_OTLP_TRACES_HEADERS`
+for auth) yourself; `--observe` only fills the default when the variable is
+unset.
 
 ## Availability
 
@@ -55,6 +60,13 @@ When portless is enabled, the dashboard uses a stable local HTTPS name. Without
 portless, FusionKit prints the raw loopback URL. In both cases, the gateway,
 panel runner, Python synthesizer, and dashboard share the same trace id for a
 session.
+
+## Product telemetry (separate, opt-in)
+
+Tracing above is local-only plumbing. Anonymous product telemetry is a separate,
+strictly opt-in pipeline (`fusionkit telemetry on`), off by default, with a
+published allow-list of fields — see the privacy page and
+`fusionkit telemetry status`. `DO_NOT_TRACK=1` forces it off.
 
 ## Correlating a run
 

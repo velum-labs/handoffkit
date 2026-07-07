@@ -2,16 +2,40 @@
 name = "fusionkit"
 version = "0.8.0"
 description = "Command line interface for fusionkit: local response-level model fusion."
+readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
+authors = [{ name = "Velum Labs" }]
+keywords = [
+  "fusionkit",
+  "model-fusion",
+  "llm",
+  "ensemble",
+  "coding-agent",
+  "router",
+  "cli",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+]
 dependencies = [
   "fusionkit-core==0.8.0",
   "fusionkit-evals==0.8.0",
   "fusionkit-mlx==0.8.0",
   "fusionkit-server==0.8.0",
-  "typer>=0.20.0",
+  "typer>=0.26.8",
 ]
+
+[project.urls]
+Homepage = "https://fusionkit.velum-labs.com"
+Repository = "https://github.com/velum-labs/handoffkit"
+Documentation = "https://fusionkit.velum-labs.com"
 
 [project.scripts]
 fusionkit = "fusionkit_cli.main:app"

@@ -1,82 +1,34 @@
 ---
 title: Core Concepts
-description: Panels, trajectories, synthesis, gateways, sessions, and the retained platform concepts in this repository.
+description: Panels, judges, synthesizers, fused models, passthrough models, sessions, and rate-limit handoff.
 ---
 
-FusionKit's product concepts start with model fusion: a single request is routed
-to multiple model endpoints, each endpoint produces an independent candidate,
-and a judge synthesizes the final response. The same idea works as a raw
-inference endpoint and behind coding harnesses such as Codex, Claude Code, and
-Cursor.
+FusionKit's product concepts start with model fusion: a single request is routed to multiple model endpoints, each endpoint produces an independent candidate or harness trajectory, and a judge/synthesizer returns the final response. The same idea works as a raw inference endpoint and behind Codex, Claude Code, and Cursor.
 
-The repository also contains older Warrant platform concepts: contracts,
-receipts, governed runners, handoff workflows, and VM isolation. Those are real
-maintained code paths, but they are not required for the normal `fusionkit codex`
-or `fusionkit serve` product path. Use [Product scope](/docs/concepts/product-scope)
-when deciding whether a page describes the shipped product or retained platform
-depth.
+## Glossary
+
+| Term | Meaning |
+| --- | --- |
+| Panel | The set of model endpoints that receive the same task. A panel can mix OpenAI, Anthropic, Gemini, OpenAI-compatible endpoints, OpenRouter models, and local MLX models. |
+| Judge | The model or process that compares candidates and decides how to synthesize the final answer. |
+| Synthesizer | The final-output step that writes the answer in the caller's native shape. It often uses the judge model unless configured separately. |
+| Fusion / ensemble | Used interchangeably in older docs and commands; `fusion` is the preferred product term. |
+| Fused model | A model id that runs panel fanout + judge + synthesis. In the Node gateway, the default fused id is `fusion-panel`. |
+| Passthrough model | A direct model id for one panel member, such as `gpt`, `sonnet`, or `kimi`; it skips synthesis unless rate-limit handoff fires. |
+| `fusion-panel` | The gateway model id exposed to Codex, Claude Code, Cursor, and OpenAI-compatible clients through the Node gateway. |
+| `fusionkit/panel` | The Python router model id for `/v1/chat/completions` when calling `fusionkit serve` directly. |
+| Handoff | In product docs, rate-limit failover from a failed passthrough turn to the fused panel. The legacy governance handoff SDK is archived under `legacy/docs/`. |
 
 ## Product concepts
 
 | Concept | Meaning | Where to read more |
 | --- | --- | --- |
-| Panel | The set of model endpoints that receive the same task. A panel can mix OpenAI, Anthropic, Gemini, OpenAI-compatible endpoints, and local MLX models. | [Models and panels](/docs/cli/models-and-panels) |
 | Candidate | One panel member's answer or harness trajectory before synthesis. | [Model fusion](/docs/concepts/model-fusion) |
-| Trajectory | A structured record of a harness attempt: messages, tool calls, observations, failures, and final answer. | [Architecture](/docs/concepts/architecture) |
-| Judge | The model or process that compares candidates and writes the final response in the shape the caller asked for. | [Model fusion](/docs/concepts/model-fusion) |
+| Trajectory | A structured record of a harness attempt: messages, tool calls, observations, failures, and final answer. | [Model fusion](/docs/concepts/model-fusion) |
 | Fusion gateway | The local HTTP gateway that speaks the caller's native dialect while routing fused and passthrough models. | [Command reference](/docs/cli/commands) |
 | Python engine | The PyPI `fusionkit` package that serves `/v1/chat/completions` and fusion APIs. The CLI provisions it through `uvx`. | [Inference endpoint](/docs/getting-started/inference-endpoint) |
 | `.fusionkit/` config | The committed per-repo source of truth for panels, judge, tool defaults, run defaults, and prompts. | [Configuration](/docs/getting-started/configuration) |
 | Durable session | Gateway state that can be resumed with `--resume <id>` or `--continue`. | [Command reference](/docs/cli/commands) |
 | Rate-limit handoff | Fallback from a throttled vendor passthrough model to the fused panel. | [Rate-limit handoff](/docs/getting-started/rate-limit-handoff) |
 
-## Retained platform concepts
-
-The following concepts belong to the Warrant governance and VM-isolation stack.
-They remain documented for contributors and platform builders, but most FusionKit
-users do not need them.
-
-### Core objects
-
-| Concept | Meaning | Where implemented |
-| --- | --- | --- |
-| Run contract | A signed authorization to run a specific task under stated policy, identity, workspace, tool, model, secret, egress, and runtime conditions. | `@fusionkit/protocol` |
-| Receipt | A signed record of what actually happened: status, events, evidence, workspace changes, runtime details, secrets released, and verification material. | `@fusionkit/protocol` |
-| Event chain | Hash-chained run events used for timeline integrity and replayable audit stories. | `@fusionkit/protocol` |
-| Manifest | Content-addressed description of captured workspace inputs and outputs. | `@fusionkit/protocol`, `@fusionkit/workspace` |
-| Policy | Deny-by-default rules over identity, agent kind, runner pool, network egress, secrets, approvals, and capabilities. | `@fusionkit/plane` |
-| Checkpoint | Portable continuation state: a workspace snapshot plus semantic state such as tool journals and model routing decisions. | `@fusionkit/protocol`, `@fusionkit/handoff` |
-| Handoff envelope | A portable description of continuation intent and the checkpoint to move across a runtime boundary. | `@fusionkit/protocol`, `@fusionkit/handoff` |
-
-### Runtime actors
-
-- **Client** creates run requests through the CLI, SDK, handoff SDK, AI SDK
-  adapter, compute adapter, or a demo.
-- **Control plane** turns requests into signed contracts, evaluates policy,
-  brokers secrets, records events, handles approvals, countersigns receipts, and
-  serves the control panel.
-- **Runner** polls outbound, claims eligible contracts, materializes workspaces,
-  executes the configured agent harness in a session backend, and signs runner
-  receipts.
-- **Session backend** provides the isolation boundary for the actual execution:
-  hermetic just-bash, Vercel Sandbox microVMs, or AI SDK harness bindings.
-- **Verifier** checks signatures, hashes, event chains, and receipt bundles
-  offline using `@fusionkit/protocol` and `@fusionkit/sdk`.
-
-### The five receipt questions
-
-Receipts are designed to answer, without trusting the online plane:
-
-1. Who asked for the work, and under which authority?
-2. What was the agent asked to do?
-3. What code, files, tools, model, runtime, network, and secrets could it see?
-4. What happened during execution?
-5. What changed, and can the result be pulled or audited safely?
-
-### Continuation model
-
-Continuation is not a separate transport. The [handoff SDK](/docs/sdks/handoff-sdk)
-packages local work as a checkpoint, asks the plane for a governed run, and later
-pulls the receipt and workspace delta back through the same provenance model.
-Parallel attempts, reviews, cloud escalation, and local swarm dispatch are all
-topologies over the same contract/receipt primitives.
+The repository still preserves legacy governance code under `legacy/`, but the public FusionKit journey does not require a plane, runner, governance SDK, Docker compose, or VM isolation stack. Use [Product scope](/docs/concepts/product-scope) for the boundary.

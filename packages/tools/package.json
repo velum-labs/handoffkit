@@ -30,5 +30,15 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
     "@fusionkit/runtime-utils": "workspace:*"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "tooling",
+    "harness",
+    "adapter"
+  ]
 }

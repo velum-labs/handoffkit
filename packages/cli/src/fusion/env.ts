@@ -88,8 +88,35 @@ export type PanelModelSpec = {
   localCompute?: PanelLocalComputeSpec;
 };
 
+/**
+ * One named ensemble as the run orchestrator consumes it: its panel members,
+ * judge/synthesizer model names, and prompt overrides. An empty `models` array
+ * means "use the hardware-shaped default trio".
+ */
+export type EnsembleRunSpec = {
+  name: string;
+  models: PanelModelSpec[];
+  judgeModel?: string;
+  synthesizerModel?: string;
+  /**
+   * Step boundaries per panel member before aggregation: 1 = single-completion
+   * proposers over the caller's messages+tools; finite > 1 = bounded managed
+   * rollout (lookahead); unset = unbounded (today's behavior).
+   */
+  k?: number;
+  prompts?: PromptOverrides;
+};
+
 export type RunFusionOptions = {
   models?: PanelModelSpec[];
+  /**
+   * Named ensembles (config-provided). Every ensemble is registered as its own
+   * gateway model; `ensemble` names the session default. When unset, a single
+   * `default` ensemble is built from `models`/`judgeModel`/`prompts`.
+   */
+  ensembles?: EnsembleRunSpec[];
+  /** The session-default ensemble name (`--ensemble`); must name a defined ensemble. */
+  ensemble?: string;
   endpoints?: Record<string, string>;
   fusionkitDir?: string;
   repo?: string;
@@ -98,6 +125,17 @@ export type RunFusionOptions = {
   authToken?: string;
   port?: number;
   timeoutMs?: number;
+  /**
+   * `serve` only: expose the gateway on a public HTTPS Quick Tunnel (for
+   * clients that cannot reach loopback, e.g. Cursor BYOK). Always enforces a
+   * gateway bearer token — auto-generated when `authToken` is unset.
+   */
+  expose?: boolean;
+  /**
+   * Step boundaries per panel member (`--k`); applies to the session-default
+   * ensemble, like `--judge-model`. See {@link EnsembleRunSpec.k}.
+   */
+  k?: number;
   /** Use the local MLX panel trio (Apple Silicon) instead of the cloud panel. */
   local?: boolean;
   /** Boot the local scope dashboard and stream trace events into it. */
@@ -121,6 +159,12 @@ export type RunFusionOptions = {
   reasoningModel?: string;
   /** Skip the interactive cost/scope confirmation for the cloud panel. */
   yes?: boolean;
+  /**
+   * Auto-provision one native sub-agent per ensemble in the launched tool
+   * (Codex roles, Claude --agents, Cursor/opencode agent files). Default on;
+   * `--no-subagents` (or `subagents: false` in .fusionkit) turns it off.
+   */
+  subagents?: boolean;
   /** Route services through portless (stable named URLs + singletons). Default on. */
   portless?: boolean;
   /** Cursor only: wire the desktop IDE (not just cursor-agent) to the gateway. */

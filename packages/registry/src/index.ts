@@ -116,6 +116,23 @@ export function providerForAuthMode(mode: SubscriptionMode): string {
 /** The model label the fused panel is fronted under (gateway + tool pickers). */
 export const FUSION_PANEL_MODEL: string = REGISTRY.fusion.fusedModelLabel;
 
+/** The name of the implicit/default ensemble (advertised as {@link FUSION_PANEL_MODEL}). */
+export const DEFAULT_ENSEMBLE_NAME = "default";
+
+/** The id prefix every non-default ensemble's fused model is advertised under. */
+export const FUSION_MODEL_ID_PREFIX = "fusion-";
+
+/**
+ * The advertised model id for a named ensemble: `fusion-<name>`, except the
+ * default ensemble which keeps the canonical {@link FUSION_PANEL_MODEL} id
+ * (`fusion-panel`) for full back-compat with single-ensemble configs.
+ */
+export function fusionModelId(ensemble: string): string {
+  return ensemble === DEFAULT_ENSEMBLE_NAME
+    ? FUSION_PANEL_MODEL
+    : `${FUSION_MODEL_ID_PREFIX}${ensemble}`;
+}
+
 /** The model name the Cursor bridge exposes to cursor-agent. */
 export const CURSOR_BRIDGE_MODEL_NAME: string = REGISTRY.fusion.bridgeModelName;
 

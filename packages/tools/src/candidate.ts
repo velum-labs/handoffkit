@@ -22,7 +22,11 @@ export function buildSkippedCandidate(input: {
   metadata?: Record<string, JsonValue>;
 }): HarnessCandidateOutput {
   const { descriptor, model, ordinal, reason, adapter, transcript } = input;
-  const hash = artifactHash(transcript);
+  // The skip artifact is synthetic (redaction_status below says so), so its
+  // hash covers a stable identity descriptor rather than the free-text
+  // transcript: skip reasons embed credential env-var hints, and hashing
+  // credential-adjacent text trips security scanning for no provenance gain.
+  const hash = artifactHash(`skipped:${adapter}:${descriptor.id}:${model.id}:${ordinal}`);
   return {
     candidateId: `${descriptor.id}_${model.id}_${ordinal}`,
     model,

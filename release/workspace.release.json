@@ -70,6 +70,7 @@
       "registries": [{ "kind": "npm", "package": "@fusionkit/cli" }],
       "versionSources": ["package.json#version"],
       "preflight": ["pnpm", "check"],
+      "changelog": "CHANGELOG.md",
       "dependsOn": ["fusionkit-protocol"]
     },
     {

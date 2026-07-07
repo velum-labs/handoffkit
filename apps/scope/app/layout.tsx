@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 
 import { SidebarNav } from "@/components/scope/sidebar-nav";
+import { ThemeToggle } from "@/components/scope/theme-toggle";
 import {
   Sidebar,
   SidebarContent,
@@ -14,6 +15,7 @@ import {
   SidebarRail
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { isTheme, THEME_COOKIE, THEME_INIT_SCRIPT } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 import "./globals.css";
@@ -29,9 +31,20 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
+  const themeCookie = cookieStore.get(THEME_COOKIE)?.value;
+  const theme = isTheme(themeCookie) ? themeCookie : "system";
 
   return (
-    <html lang="en" className={cn("dark", geist.variable, geistMono.variable)}>
+    // Explicit themes render server-side (no flash); "system" is resolved by
+    // the inline script below before first paint, hence suppressHydrationWarning.
+    <html
+      lang="en"
+      className={cn(theme === "dark" && "dark", geist.variable, geistMono.variable)}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="antialiased">
         <TooltipProvider delayDuration={200}>
           <SidebarProvider defaultOpen={defaultOpen}>
@@ -51,8 +64,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </SidebarGroup>
               </SidebarContent>
               <SidebarFooter>
-                <div className="text-muted-foreground px-1 pb-1 text-[11px] leading-relaxed group-data-[collapsible=icon]:hidden">
-                  Tails the fusion-trace event spine across FusionKit, HandoffKit, and Cursorkit.
+                <div className="px-1 pb-1 group-data-[collapsible=icon]:hidden">
+                  <ThemeToggle className="mb-2" />
+                  <div className="text-muted-foreground text-[11px] leading-relaxed">
+                    Tails the fusion-trace event spine across FusionKit, HandoffKit, and Cursorkit.
+                  </div>
                 </div>
               </SidebarFooter>
               <SidebarRail />

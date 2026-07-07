@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, Cpu, Layers } from "lucide-react";
+import { Boxes, Cpu, Layers, Scale } from "lucide-react";
 
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 
 const NAV = [
   { href: "/", label: "Sessions", icon: Boxes },
   { href: "/models", label: "Models", icon: Cpu },
+  { href: "/judge", label: "Judge", icon: Scale },
   { href: "/environments", label: "Environments", icon: Layers }
 ];
 

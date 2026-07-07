@@ -26,6 +26,8 @@ import { get as httpsGet } from "node:https";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { extractNotes, promoteUnreleased } from "./lib/changelog.mjs";
+
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(SCRIPT_DIR);
 const RELEASE_DIR = join(REPO_ROOT, "release");
@@ -454,7 +456,12 @@ async function buildPlan(targets) {
         }
         if (needsBump) {
           actions.push({ type: "bump", to: desired });
-          if (unit.key === "handoffkit") actions.push({ type: "changelog", version: desired });
+          if (unit.changelog) actions.push({ type: "changelog", version: desired });
+        }
+        // Preflight runs after the bump (so it validates what will actually
+        // ship) and before the commit (so a failure leaves nothing pushed).
+        if (unit.preflight?.length) {
+          actions.push({ type: "preflight", command: unit.preflight });
         }
         actions.push({ type: "commit", message: `release(${unit.key}): v${desired}` });
         actions.push({ type: "push" });
@@ -599,7 +606,9 @@ function describeAction(action) {
     case "bump":
       return `bump version -> ${action.to}`;
     case "changelog":
-      return `update CHANGELOG.md for ${action.version}`;
+      return `promote Unreleased -> ${action.version} in CHANGELOG.md (+ docs changelog page)`;
+    case "preflight":
+      return `run preflight: ${action.command.join(" ")}`;
     case "commit":
       return `git commit "${action.message}"`;
     case "push":
@@ -879,13 +888,16 @@ async function assertReleasable(unit, planUnit) {
 async function executeAction(unit, action, planUnit, ctx) {
   switch (action.type) {
     case "propagate-pin":
-      for (const f of propagateProtocolPin(unit, action.version)) ctx.touched.add(f);
+      for (const f of await propagateProtocolPin(unit, action.version)) ctx.touched.add(f);
       return;
     case "bump":
       for (const f of applyBump(unit, action.to)) ctx.touched.add(f);
       return;
     case "changelog":
       for (const f of updateChangelog(unit, action.version)) ctx.touched.add(f);
+      return;
+    case "preflight":
+      runPreflight(unit, action.command);
       return;
     case "commit":
       // Stage tool-touched files plus any unit-declared or agent-supplied
@@ -904,7 +916,7 @@ async function executeAction(unit, action, planUnit, ctx) {
       gitPushTag(unit, action.tag);
       return;
     case "gh-release":
-      ctx.releaseUrl = ghRelease(unit, action.tag);
+      ctx.releaseUrl = ghRelease(unit, action.tag, planUnit.desired);
       return;
     case "wait-workflow":
       ctx.run = await waitForWorkflow(unit, action.workflow, ctx.sha);
@@ -1024,9 +1036,10 @@ function regenerateUvLock(unit) {
 
 // --- protocol pin propagation into consumers ------------------------------
 
-function propagateProtocolPin(unit, version) {
+async function propagateProtocolPin(unit, version) {
   const touched = [];
   const pkgPath = join(unit.absRepo, "package.json");
+  let pkgChanged = false;
   if (existsSync(pkgPath)) {
     const pkg = readJson(pkgPath);
     let changed = false;
@@ -1045,7 +1058,15 @@ function propagateProtocolPin(unit, version) {
     if (changed) {
       writeJson(pkgPath, pkg);
       touched.push("package.json");
+      pkgChanged = true;
     }
+  }
+  // A changed package.json pin makes pnpm-lock.yaml stale, and every publish
+  // workflow installs with --frozen-lockfile, so refresh the lockfile in the
+  // same commit. The new protocol version may still be propagating to the npm
+  // registry (especially with --no-wait), so retry briefly before giving up.
+  if (pkgChanged && existsSync(join(unit.absRepo, "pnpm-lock.yaml"))) {
+    touched.push(...(await refreshPnpmLockfile(unit, version)));
   }
   // handoffkit pins it in a second place: the trusted-dependency allowlist.
   const rel = "scripts/check-repo.mjs";
@@ -1062,16 +1083,62 @@ function propagateProtocolPin(unit, version) {
   return touched;
 }
 
+async function refreshPnpmLockfile(unit, protocolVersion) {
+  const attempts = 6;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const res = run("pnpm", ["install", "--lockfile-only"], { cwd: unit.absRepo });
+    if (res.ok) {
+      log("  refreshed pnpm-lock.yaml for the new protocol pin");
+      return ["pnpm-lock.yaml"];
+    }
+    if (attempt < attempts) {
+      log(
+        `  pnpm-lock.yaml refresh failed (protocol ${protocolVersion} may not be on npm yet); retrying in 15s (${attempt}/${attempts})`
+      );
+      await new Promise((r) => setTimeout(r, 15000));
+    } else {
+      throw new Error(`pnpm install --lockfile-only failed after ${attempts} attempts: ${res.stderr || res.stdout}`);
+    }
+  }
+  return [];
+}
+
+// Promote the accumulated `## Unreleased` notes into the release section (or
+// insert a fallback entry when none accumulated), then regenerate the docs
+// changelog page so it ships in the same release commit.
 function updateChangelog(unit, version) {
-  const path = join(unit.absRepo, "CHANGELOG.md");
+  const rel = unit.changelog ?? "CHANGELOG.md";
+  const path = join(unit.absRepo, rel);
   const date = new Date().toISOString().slice(0, 10);
-  const entry = `## ${version} - ${date}\n\n- Release cut via the cross-repo coordinator (\`scripts/release.mjs\`).\n\n`;
-  let text = existsSync(path) ? readFileSync(path, "utf8") : "# Changelog\n\n";
-  text = text.replace(/^(# Changelog\n\n)/, `$1${entry}`);
-  if (!text.includes(entry)) text = `# Changelog\n\n${entry}${text.replace(/^# Changelog\n\n/, "")}`;
+  const current = existsSync(path) ? readFileSync(path, "utf8") : "";
+  const { text, notes, promoted } = promoteUnreleased(current, version, date);
   writeFileSync(path, text);
-  log(`  updated CHANGELOG.md`);
-  return ["CHANGELOG.md"];
+  log(promoted ? `  promoted Unreleased -> ${version} in ${rel}` : `  updated ${rel} for ${version}`);
+  if (!promoted && notes.includes("Release cut via")) {
+    warn(`  ${unit.key}: no Unreleased notes accumulated; wrote a fallback changelog entry`);
+  }
+
+  const touched = [rel];
+  const syncScript = join(unit.absRepo, "scripts", "sync-docs-changelog.mjs");
+  if (existsSync(syncScript)) {
+    const res = run(process.execPath, [syncScript], { cwd: unit.absRepo });
+    if (!res.ok) throw new Error(`sync-docs-changelog failed: ${res.stderr || res.stdout}`);
+    touched.push("apps/docs/content/docs/changelog.mdx");
+    log("  regenerated apps/docs/content/docs/changelog.mdx");
+  }
+  return touched;
+}
+
+// Run the unit's declared preflight command inside its repo. A failure aborts
+// the unit before anything is committed or pushed.
+function runPreflight(unit, command) {
+  const [cmd, ...args] = command;
+  log(`  preflight: ${command.join(" ")}`);
+  const res = run(cmd, args, { cwd: unit.absRepo, stdio: OPTIONS.json ? "pipe" : "inherit" });
+  if (!res.ok) {
+    throw new Error(`preflight failed (${command.join(" ")}): ${res.stderr || res.stdout || `exit ${res.status}`}`);
+  }
+  log("  preflight ok");
 }
 
 // --- git / gh actions -----------------------------------------------------
@@ -1117,8 +1184,17 @@ function gitPushTag(unit, tag) {
   log(`  pushed tag ${tag} (triggers ${unit.publishWorkflow})`);
 }
 
+// The changelog section for this version, when the unit maintains one; used
+// as the GitHub Release body so release notes are the real notes.
+function releaseNotesFor(unit, version) {
+  if (!unit.changelog || !version) return null;
+  const path = join(unit.absRepo, unit.changelog);
+  if (!existsSync(path)) return null;
+  return extractNotes(readFileSync(path, "utf8"), version);
+}
+
 // Returns the GitHub Release URL (the agent can report/listen to it).
-function ghRelease(unit, tag) {
+function ghRelease(unit, tag, version) {
   const slug = remoteSlug(unit);
   const baseArgs = slug ? ["-R", slug] : [];
   const already = run("gh", ["release", "view", tag, ...baseArgs, "--json", "url", "-q", ".url"]);
@@ -1126,6 +1202,9 @@ function ghRelease(unit, tag) {
     log(`  GitHub Release ${tag} already exists`);
     return already.stdout || releaseUrl(slug, tag);
   }
+  const notes =
+    releaseNotesFor(unit, version) ??
+    `Automated release of ${unit.key} ${tag} via the cross-repo coordinator.`;
   const res = run("gh", [
     "release",
     "create",
@@ -1134,7 +1213,7 @@ function ghRelease(unit, tag) {
     "--title",
     tag,
     "--notes",
-    `Automated release of ${unit.key} ${tag} via the cross-repo coordinator.`,
+    notes,
     "--target",
     unit.branch ?? "main"
   ]);

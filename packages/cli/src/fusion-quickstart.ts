@@ -20,20 +20,40 @@ import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { formatDurationMs, FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import { DEFAULT_ENSEMBLE_NAME, formatDurationMs, FUSION_PANEL_MODEL, fusionModelId } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
+import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
+import { isLookaheadK } from "@fusionkit/protocol";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
 import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+import { cursorInstructions } from "@fusionkit/tool-cursor";
+
+import {
+  bold,
+  box,
+  brandBanner,
+  canPromptInteractively,
+  confirm,
+  createPresenter,
+  cyan,
+  dim,
+  glyph,
+  gray,
+  green,
+  isInteractive,
+  select,
+  uiStream,
+  yellow
+} from "@fusionkit/cli-ui";
 
 import { resolveSessionId } from "./commands/sessions.js";
 import { gatewaySetupSnippets, setGatewayChatter, setGatewayStatusSink } from "./gateway.js";
+import { logServing, requestLogGatewayLogger } from "./fusion/gateway-log.js";
 import { toolRegistry } from "./tools.js";
 import { createPortlessSession } from "./shared/portless.js";
 import { PreflightError, runPreflight } from "./shared/preflight.js";
-import { createBootView } from "./ui/boot.js";
-import { confirm, select } from "./ui/prompt.js";
-import { canPromptInteractively, isInteractive, uiStream } from "./ui/runtime.js";
-import { bold, brandBanner, dim, glyph, gray, green, yellow } from "./ui/theme.js";
+import { generateSessionToken, startPublicTunnel } from "./shared/tunnel.js";
+import { createBootView } from "./fusion/boot-view.js";
 
 import { hasCloudConsent, recordCloudConsent } from "./fusion/consent.js";
 import {
@@ -43,12 +63,14 @@ import {
   gitToplevel,
   loadEnvFileInto
 } from "./fusion/env.js";
-import type { FusionTool, PanelModelSpec, RunFusionOptions, StackReporter } from "./fusion/env.js";
+import type { EnsembleRunSpec, FusionTool, PanelModelSpec, RunFusionOptions, StackReporter } from "./fusion/env.js";
+import { initFusionTracing, shutdownFusionTracing } from "@fusionkit/tracing";
+
 import { openUrl, startObservability } from "./fusion/observability.js";
 import type { Observability } from "./fusion/observability.js";
 import { ensureLocalPanelSupported } from "./fusion/platform.js";
 import { provisionFusionEngine } from "./fusion/provision.js";
-import { resolveNarratorModel, startFusionStack } from "./fusion/stack.js";
+import { resolveNarratorModel, startFusionStack, unionPanelSpecs } from "./fusion/stack.js";
 import type { FusionStack } from "./fusion/stack.js";
 import { localPanelMemoryWarning, preflightRequirements, validateProviderKeys } from "./fusion/preflight.js";
 
@@ -65,7 +87,7 @@ export const FUSION_TOOLS: readonly FusionTool[] = [
   "serve"
 ];
 
-/** The model label the launched tool uses; the gateway ignores it for routing. */
+/** The default fused model label (the `default` ensemble's advertised id). */
 const FUSION_MODEL_LABEL = FUSION_PANEL_MODEL;
 
 /** Whether portless is enabled: explicit flag/config wins, else on unless PORTLESS=0. */
@@ -112,6 +134,10 @@ export function fusionPreambleLines(input: {
   repo: string;
   models: readonly PanelModelSpec[];
   judgeLabel: string;
+  /** The session-default fused model id (default: `fusion-panel`). */
+  modelLabel?: string;
+  /** Every registered ensemble (session default first) for multi-ensemble repos. */
+  ensembles?: readonly EnsembleRunSpec[];
   endpoints?: Record<string, string>;
   observe?: boolean;
   budgetUsd?: number;
@@ -120,13 +146,20 @@ export function fusionPreambleLines(input: {
 }): string[] {
   const lines = [
     `tool: ${input.tool} -> FusionKit gateway`,
-    `model: ${FUSION_MODEL_LABEL}`,
+    `model: ${input.modelLabel ?? FUSION_MODEL_LABEL}`,
     `repo: ${input.repo}`,
     `judge: ${input.judgeLabel}`,
     `panel: ${input.models.map((model) => panelMemberSummary(model, input.endpoints)).join(", ")}`
   ];
   const auth = toolAuthSummary(input.tool);
   if (auth !== undefined) lines.splice(1, 0, auth);
+  // Other registered ensembles: each is selectable in the tool's own picker.
+  for (const ensemble of input.ensembles ?? []) {
+    if (fusionModelId(ensemble.name) === (input.modelLabel ?? FUSION_MODEL_LABEL)) continue;
+    lines.push(
+      `ensemble ${ensemble.name} (${fusionModelId(ensemble.name)}): ${ensemble.models.map((spec) => spec.id).join(", ")}`
+    );
+  }
   if (input.resumeId !== undefined) lines.push(`resume: ${input.resumeId}`);
   if (input.observe === true) lines.push("observe: on");
   if (input.budgetUsd !== undefined) lines.push(`budget: $${input.budgetUsd}`);
@@ -183,15 +216,42 @@ export function sessionReceiptLines(
   return lines;
 }
 
+/**
+ * Style the plain `key: value` preamble lines for the framed launch card: dim
+ * aligned labels, and one bullet line per panel member so long model ids never
+ * run into each other.
+ */
+export function styledPreambleLines(lines: readonly string[]): string[] {
+  type Row = { label: string; value: string };
+  const rows: Row[] = lines.map((line) => {
+    const split = line.indexOf(": ");
+    return split === -1 ? { label: "", value: line } : { label: line.slice(0, split), value: line.slice(split + 2) };
+  });
+  const width = Math.max(0, ...rows.map((row) => row.label.length));
+  const out: string[] = [];
+  for (const row of rows) {
+    if (row.label === "panel" || row.label.startsWith("ensemble ")) {
+      out.push(`${dim(row.label.padEnd(width))}`);
+      for (const member of row.value.split(", ")) out.push(`  ${gray(glyph.bullet())} ${member}`);
+      continue;
+    }
+    out.push(row.label.length === 0 ? row.value : `${dim(row.label.padEnd(width))}  ${row.value}`);
+  }
+  return out;
+}
+
 export async function runFusion(
   tool: FusionTool,
   toolArgs: string[],
   options: RunFusionOptions = {}
 ): Promise<number> {
-  const log = options.log ?? ((line: string) => console.error(line));
+  const log = options.log ?? ((line: string) => uiStream().write(`${line}\n`));
   const root = mkdtempSync(join(tmpdir(), "fusionkit-fusion-"));
   const logsDir = join(root, "logs");
   mkdirSync(logsDir, { recursive: true });
+  // `serve --expose` publishes the gateway on a public tunnel, so a bearer
+  // token is always enforced — auto-generated when the user did not set one.
+  const authToken = options.authToken ?? (options.expose === true ? generateSessionToken() : undefined);
   // Default the fused repo to the current directory's git repo: the panel models
   // and the launched harness must operate on the SAME codebase, and the launched
   // tool runs in this repo (below). No hidden sample repo — if the user wants a
@@ -212,43 +272,122 @@ export async function runFusion(
   // an explicitly set (even empty) key is never overridden.
   loadEnvFileInto(join(process.cwd(), ".env"), process.env);
   if (repo !== process.cwd()) loadEnvFileInto(join(repo, ".env"), process.env);
-  let models = options.models ?? (options.local === true ? [...DEFAULT_TRIO] : [...DEFAULT_CLOUD_PANEL]);
 
-  // Adaptive default panel: when the user did not pick a panel themselves,
-  // work with the keys they have instead of failing preflight for the full
-  // trio. Members whose key env is missing are dropped with an explicit note;
-  // if NO key is present the full panel flows into preflight, which then names
-  // every missing key with a fix hint.
-  const panelNotes: string[] = [];
-  if (options.models === undefined && options.local !== true && options.endpoints === undefined) {
-    const hasCredential = (spec: PanelModelSpec): boolean => {
-      if (spec.auth !== undefined) return true;
-      const provider = spec.provider ?? "mlx";
-      if (provider === "mlx") return true;
-      const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);
-      if (keyEnv === undefined) return true;
-      return (process.env[keyEnv] ?? "").length > 0;
-    };
-    const present = models.filter(hasCredential);
-    if (present.length > 0 && present.length < models.length) {
-      for (const spec of models) {
-        if (hasCredential(spec)) continue;
-        const keyEnv = spec.keyEnv ?? defaultKeyEnv(spec.provider ?? "mlx");
-        panelNotes.push(
-          `panel: ${spec.id} (${spec.model}) skipped — ${keyEnv ?? "its API key"} is not set (export it to add ${spec.id} back)`
-        );
+  // Resolve the named-ensemble list: config-provided ensembles, else one
+  // implicit `default` ensemble from the flag/default panel. Every ensemble is
+  // registered as its own gateway model; the selected one (--ensemble, then the
+  // config's defaultEnsemble, then the first) is the session default.
+  const fallbackPanel = (): PanelModelSpec[] =>
+    options.local === true ? DEFAULT_TRIO.map((spec) => ({ ...spec })) : DEFAULT_CLOUD_PANEL.map((spec) => ({ ...spec }));
+  // Ensemble names whose panel fell back to the built-in trio (adaptive-drop eligible).
+  const defaultedPanels = new Set<string>();
+  let ensembles: EnsembleRunSpec[];
+  if (options.ensembles !== undefined && options.ensembles.length > 0 && options.endpoints === undefined) {
+    ensembles = options.ensembles.map((ensemble) => {
+      const defaulted = ensemble.models.length === 0;
+      if (defaulted) defaultedPanels.add(ensemble.name);
+      return {
+        ...ensemble,
+        models: (defaulted ? fallbackPanel() : ensemble.models).map((spec) => ({ ...spec }))
+      };
+    });
+  } else {
+    if (options.models === undefined) defaultedPanels.add(DEFAULT_ENSEMBLE_NAME);
+    ensembles = [
+      {
+        name: DEFAULT_ENSEMBLE_NAME,
+        models: (options.models ?? fallbackPanel()).map((spec) => ({ ...spec })),
+        ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
+        ...(options.k !== undefined ? { k: options.k } : {}),
+        ...(options.prompts !== undefined ? { prompts: options.prompts } : {})
       }
-      models = present;
-    }
+    ];
   }
+  const selectedName = options.ensemble ?? ensembles[0]?.name ?? DEFAULT_ENSEMBLE_NAME;
+  const selectedIndex = ensembles.findIndex((ensemble) => ensemble.name === selectedName);
+  if (selectedIndex === -1) {
+    throw new Error(
+      `unknown ensemble "${selectedName}" (have: ${ensembles.map((ensemble) => ensemble.name).join(", ")})`
+    );
+  }
+  if (selectedIndex > 0) ensembles.unshift(...ensembles.splice(selectedIndex, 1));
+  const selected = ensembles[0] as EnsembleRunSpec;
+  // Explicit flags override the selected ensemble only.
+  if (options.ensembles !== undefined && options.ensembles.length > 0) {
+    if (options.models !== undefined) {
+      selected.models = options.models.map((spec) => ({ ...spec }));
+      defaultedPanels.delete(selected.name);
+    }
+    if (options.judgeModel !== undefined) selected.judgeModel = options.judgeModel;
+    if (options.k !== undefined) selected.k = options.k;
+  }
+  const modelLabel = fusionModelId(selected.name);
+
+  // Adaptive default panel: when an ensemble's panel is the built-in default
+  // (nobody picked it), work with the keys the user has instead of failing
+  // preflight for the full trio. Members whose key env is missing are dropped
+  // with an explicit note; if NO key is present the full panel flows into
+  // preflight, which then names every missing key with a fix hint. Non-selected
+  // ensembles are additionally soft: a keyless member is dropped (it would fail
+  // its slot anyway) and an ensemble left empty is skipped with a warning
+  // rather than failing the launch.
+  const panelNotes: string[] = [];
+  const hasCredential = (spec: PanelModelSpec): boolean => {
+    if (spec.auth !== undefined) return true;
+    const provider = spec.provider ?? "mlx";
+    if (provider === "mlx") return true;
+    const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);
+    if (keyEnv === undefined) return true;
+    return (process.env[keyEnv] ?? "").length > 0;
+  };
+  const skipNote = (spec: PanelModelSpec, ensembleName: string): void => {
+    const keyEnv = spec.keyEnv ?? defaultKeyEnv(spec.provider ?? "mlx");
+    const where = ensembleName === selected.name ? "panel" : `ensemble ${ensembleName}`;
+    panelNotes.push(
+      `${where}: ${spec.id} (${spec.model}) skipped — ${keyEnv ?? "its API key"} is not set (export it to add ${spec.id} back)`
+    );
+  };
+  if (options.endpoints === undefined) {
+    if (defaultedPanels.has(selected.name) && options.local !== true) {
+      const present = selected.models.filter(hasCredential);
+      if (present.length > 0 && present.length < selected.models.length) {
+        for (const spec of selected.models) {
+          if (!hasCredential(spec)) skipNote(spec, selected.name);
+        }
+        selected.models = present;
+      }
+    }
+    ensembles = ensembles.filter((ensemble) => {
+      if (ensemble.name === selected.name) return true;
+      const present = ensemble.models.filter(hasCredential);
+      if (present.length === ensemble.models.length) return true;
+      for (const spec of ensemble.models) {
+        if (!hasCredential(spec)) skipNote(spec, ensemble.name);
+      }
+      if (present.length === 0) {
+        panelNotes.push(
+          `ensemble ${ensemble.name} (${fusionModelId(ensemble.name)}) skipped — no member has a usable credential`
+        );
+        return false;
+      }
+      ensemble.models = present;
+      return true;
+    });
+  }
+
+  // The selected ensemble's panel (preamble, session metadata) and the union of
+  // members across every ensemble (one router endpoint each: preflight, key
+  // probes, memory sizing, consent, and the stack itself).
+  const models = selected.models;
+  const unionModels = unionPanelSpecs(ensembles);
 
   // Cross-platform gating (WS8): a local MLX panel only runs on Apple Silicon.
   // Fail early with a pointer at the cross-platform cloud path instead of
   // crashing deep in the MLX backend on Linux/Windows.
-  ensureLocalPanelSupported(models);
+  ensureLocalPanelSupported(unionModels);
 
   // Fail fast on missing prerequisites before we start spawning a stack.
-  runPreflight(preflightRequirements(tool, models, options));
+  runPreflight(preflightRequirements(tool, unionModels, options));
 
   const spawnsRouter = !(options.endpoints !== undefined && options.synthesisUrl !== undefined);
 
@@ -259,13 +398,21 @@ export async function runFusion(
   if (spawnsRouter) {
     void provisionFusionEngine({
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
-    }).catch(() => {});
+    })
+      .then((outcome) => {
+        // Name the one-time cold start when it actually happened, so a slow
+        // first boot explains itself (and promises speed next time).
+        if (outcome.kind === "provisioned") {
+          log("fusion: fusion engine provisioned (one-time cold start — future runs boot fast)");
+        }
+      })
+      .catch(() => {});
   }
 
   // Validate provider keys concurrently with the prompt/boot preamble: a bad
   // key should fail here in ~2s with the env var named, not after the router's
   // 60s readiness timeout. Awaited right before the stack boots.
-  const keyValidation = spawnsRouter ? validateProviderKeys(models) : Promise.resolve([]);
+  const keyValidation = spawnsRouter ? validateProviderKeys(unionModels) : Promise.resolve([]);
 
   // Size the local (MLX) members against this machine's usable memory,
   // concurrently with the preamble like the key probes. A panel that does not
@@ -275,10 +422,10 @@ export async function runFusion(
   // panel member or provider/model token loads nothing locally).
   const narratorResolution =
     options.reasoningModel !== undefined && options.reasoning !== false
-      ? resolveNarratorModel(options.reasoningModel, models)
+      ? resolveNarratorModel(options.reasoningModel, unionModels)
       : undefined;
   const memoryCheck = spawnsRouter
-    ? localPanelMemoryWarning(models, {
+    ? localPanelMemoryWarning(unionModels, {
         ...(narratorResolution?.kind === "mlx" ? { extraModels: [narratorResolution.model] } : {})
       }).catch(() => undefined)
     : Promise.resolve(undefined);
@@ -299,38 +446,50 @@ export async function runFusion(
     resumeId = sessionStore.list()[0]?.id;
     log(resumeId !== undefined ? `fusion: continuing latest session ${resumeId}` : "fusion: no prior session to continue; starting fresh.");
   }
+  const sessionJudgeModel = selected.judgeModel ?? options.judgeModel;
   const sessionMeta: SessionMetaInput = {
     tool,
     repo,
     models: models.map((spec) => ({ id: spec.id, model: spec.model })),
-    ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {})
+    ...(sessionJudgeModel !== undefined ? { judgeModel: sessionJudgeModel } : {})
+  };
+
+  // The live boot checklist only renders on an interactive TTY when the caller
+  // did not supply its own log sink (tests/programmatic callers stay on the
+  // plain line-log path so their output is deterministic).
+  const useBootView = options.log === undefined && isInteractive();
+  // Environment asides ("portless not installed", ...) render dim on the rich
+  // TTY surface instead of as raw prefixed lines.
+  const aside = (line: string): void => {
+    if (useBootView) uiStream().write(`${dim(line.replace(/^fusion:\s*/, ""))}\n`);
+    else log(line);
   };
 
   // Bring up the portless session (programmatic RouteStore). Portless is a
   // polish layer, never a hard requirement: when it is off, unavailable (Node <
   // 24), or its proxy isn't running, the session degrades to loopback URLs and
   // logs a one-line hint, so a fresh install always runs out of the box.
-  const portless = await createPortlessSession({ enabled: portlessEnabled(options), log });
+  const portless = await createPortlessSession({ enabled: portlessEnabled(options), log: aside });
 
-  const judgeLabel = options.judgeModel ?? models[0]?.model ?? "(first panel model)";
+  const judgeLabel = selected.judgeModel ?? options.judgeModel ?? models[0]?.model ?? "(first panel model)";
   const preambleLines = fusionPreambleLines({
     tool,
     repo,
     models,
     judgeLabel,
+    modelLabel,
+    ensembles,
     ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
     ...(options.observe !== undefined ? { observe: options.observe } : {}),
     ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
     ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
     ...(resumeId !== undefined ? { resumeId } : {})
   });
-  // The live boot checklist only renders on an interactive TTY when the caller
-  // did not supply its own log sink (tests/programmatic callers stay on the
-  // plain line-log path so their output is deterministic).
-  const useBootView = options.log === undefined && isInteractive();
   if (useBootView) {
-    uiStream().write(`\n${brandBanner()}\n`);
-    uiStream().write(`${preambleLines.join("\n")}\n`);
+    // The launch card: the one "you're about to spend money" screen — panel,
+    // judge, budget, and session wiring in a single framed block.
+    uiStream().write(`\n${brandBanner()}\n\n`);
+    uiStream().write(`${box(`fusion · ${tool}`, styledPreambleLines(preambleLines))}\n`);
     for (const note of panelNotes) uiStream().write(`${yellow(glyph.warn())} ${note}\n`);
     uiStream().write("\n");
   } else {
@@ -355,10 +514,19 @@ export async function runFusion(
       }
     }
   };
+  // A last-words hook for long-running modes (`serve`): settle any live UI and
+  // print the session receipt before teardown starts. Must be synchronous-ish
+  // and never throw.
+  let onShutdown: (() => void) | undefined;
   let signalled = false;
   const onSignal = (): void => {
     if (signalled) return;
     signalled = true;
+    try {
+      onShutdown?.();
+    } catch {
+      // shutdown niceties must never block teardown
+    }
     // Never wedge on shutdown: if cleanup stalls (a child ignoring SIGTERM),
     // force-exit after a grace period.
     const forced = setTimeout(() => process.exit(1), 10_000);
@@ -392,6 +560,7 @@ export async function runFusion(
     }
     noticeCounts.set(line, (noticeCounts.get(line) ?? 0) + 1);
     if (passthroughActive) setTerminalTitle(`fusionkit · ${line}`);
+    else if (useBootView) requestLogGatewayLogger.warn(line);
     else log(`fusion: warning: ${line}`);
   };
 
@@ -400,14 +569,14 @@ export async function runFusion(
   // spend — once per repo+panel: an interactive approval is persisted, so the
   // prompt is a one-time moment, not a per-run toll. --yes still skips it.
   const spawningCloud =
-    options.endpoints === undefined && models.some((model) => (model.provider ?? "mlx") !== "mlx");
+    options.endpoints === undefined && unionModels.some((model) => (model.provider ?? "mlx") !== "mlx");
   if (useBootView && spawningCloud && options.yes !== true && canPromptInteractively()) {
-    if (hasCloudConsent(repo, models)) {
+    if (hasCloudConsent(repo, unionModels)) {
       uiStream().write(`${gray("cloud panel previously approved for this repo — starting.")}\n`);
     } else {
       // Subscription members are billed by the subscription (and subject to its
       // rate limits); API-key members incur per-token provider usage.
-      const usesSubscription = models.some((model) => model.auth !== undefined);
+      const usesSubscription = unionModels.some((model) => model.auth !== undefined);
       const cost = usesSubscription ? "provider usage / subscription limits apply" : "provider usage applies";
       const proceed = await confirm({
         message: `Run the cloud panel? Each prompt fans out across ${models.length} model(s) + a judge (${cost}).`,
@@ -417,7 +586,7 @@ export async function runFusion(
         uiStream().write(`${gray("aborted — nothing was started.")}\n`);
         return 130;
       }
-      recordCloudConsent(repo, models);
+      recordCloudConsent(repo, unionModels);
       uiStream().write(`${gray("approved — remembered for this repo and panel (won't ask again).")}\n`);
     }
   }
@@ -444,7 +613,7 @@ export async function runFusion(
   const bootStartedAt = Date.now();
   const boot = useBootView
     ? createBootView({
-        servers: spawnsRouter ? [{ id: "router", label: `router · ${models.map((model) => model.id).join(", ")}` }] : [],
+        servers: spawnsRouter ? [{ id: "router", label: `router · ${unionModels.map((model) => model.id).join(", ")}` }] : [],
         includeSynth: false,
         includeDashboard: options.observe === true,
         title: dim("booting the fusion stack")
@@ -453,16 +622,18 @@ export async function runFusion(
   if (boot !== undefined) disposers.push(() => boot.stop());
   const report: StackReporter | undefined = boot?.report;
 
-  // When --observe is set, boot the dashboard and export the trace env BEFORE
-  // anything starts, so the in-process gateway/ensemble/agent emitters and every
-  // spawned child (panel servers, synthesis serve, cursor bridge) inherit it.
-  // Without the flag, FUSION_TRACE_* stays unset and all emitters are no-ops.
+  // When --observe is set, boot the dashboard and export the standard OTLP env
+  // BEFORE anything starts, so the in-process gateway/ensemble/agent tracers
+  // and every spawned child (panel servers, synthesis serve, cursor bridge)
+  // export spans to it. Without the flag (and without a user-provided
+  // OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) nothing is exported.
   let observability: Observability | undefined;
   let stack: FusionStack;
   try {
     if (options.observe === true) {
-      // The dashboard (apps/scope) is a dev/monorepo-only app and is NOT bundled
-      // with the npm package, so it is best-effort: a missing or unbuildable
+      // The dashboard (apps/scope) ships prebuilt with the npm package (staged
+      // by scripts/stage-scope.mjs at release) and is built from source in the
+      // monorepo. Either way it is best-effort: a missing or unbuildable
       // dashboard must never block the core fusion run.
       try {
         observability = await startObservability({
@@ -472,11 +643,12 @@ export async function runFusion(
           ...(report !== undefined ? { report } : {})
         });
         disposers.push(() => observability?.close() ?? Promise.resolve());
-        process.env.FUSION_TRACE_URL = observability.ingestUrl;
-        process.env.FUSION_TRACE_DIR = observability.traceDir;
+        // A user-configured endpoint (e.g. PostHog) wins; --observe fills the
+        // default so the local dashboard receives the spans.
+        process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ??= observability.otlpUrl;
         if (boot === undefined) {
           log(`fusion: observability dashboard at ${observability.url}`);
-          log(`fusion: trace events -> ${observability.ingestUrl} (jsonl fallback in ${observability.traceDir})`);
+          log(`fusion: spans -> ${observability.otlpUrl} (OTLP/HTTP)`);
         }
         openUrl(observability.url);
       } catch (error) {
@@ -486,27 +658,46 @@ export async function runFusion(
         else log(`fusion: observability dashboard unavailable; continuing without it (${first})`);
       }
     }
+    // Install the tracer provider now that the OTLP endpoint (if any) is known:
+    // the narrator's in-process listener always works; export is env-gated.
+    initFusionTracing({ serviceName: "fusionkit" });
+    disposers.push(() => shutdownFusionTracing());
 
     const panelHarness = toolRegistry.panelHarnessKindFor(tool);
+    // B17: finite k>1 (stop at the k-th step boundary) needs a member loop
+    // fusionkit owns. k=1 never reaches a harness, and k=∞ (unset) is every
+    // harness's native behavior.
+    const lookahead = ensembles.find((ensemble) => isLookaheadK(ensemble.k));
+    if (lookahead !== undefined && panelHarness !== undefined && !harnessSupportsFiniteK(panelHarness)) {
+      throw new PreflightError(
+        `fusionkit preflight failed:\nensemble "${lookahead.name}" configures k=${lookahead.k}, but the ` +
+          `"${panelHarness}" panel harness cannot stop at a step boundary (its loop is harness-owned). ` +
+          `Use k=1, unset k, or run a tool whose panel uses the generic agent harness (e.g. serve).`
+      );
+    }
+    const stackPrompts = selected.prompts ?? options.prompts;
+    const stackJudgeModel = selected.judgeModel ?? options.judgeModel;
     stack = await startFusionStack({
       repo,
       outputRoot: join(root, "runs"),
-      models,
+      models: unionModels,
+      ensembles,
       logsDir,
       portless,
       ...(panelHarness !== undefined ? { harness: panelHarness } : {}),
       ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
-      ...(options.prompts !== undefined ? { prompts: options.prompts } : {}),
-      ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
+      ...(stackPrompts !== undefined ? { prompts: stackPrompts } : {}),
+      ...(stackJudgeModel !== undefined ? { judgeModel: stackJudgeModel } : {}),
       ...(options.synthesisUrl !== undefined ? { synthesisUrl: options.synthesisUrl } : {}),
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(authToken !== undefined ? { authToken } : {}),
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
       ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
       ...(options.reasoningModel !== undefined ? { reasoningModel: options.reasoningModel } : {}),
       sessionStore,
@@ -530,7 +721,7 @@ export async function runFusion(
     // coding tool owns the screen from here on, so no live UI may remain.
     boot.stop();
     uiStream().write(
-      `${green(glyph.tick())} ${bold("fusion ready")} ${dim(`in ${bootSeconds}s${reusedNote}`)}  ${dim(stack.fusionUrl)} ${dim(`(model: ${FUSION_MODEL_LABEL})`)}\n`
+      `${green(glyph.tick())} ${bold("fusion ready")} ${dim(`in ${bootSeconds}s${reusedNote}`)}  ${dim(stack.fusionUrl)} ${dim(`(model: ${modelLabel})`)}\n`
     );
     uiStream().write(`${dim(`logs: ${logsDir}`)}\n`);
     if (observability !== undefined) {
@@ -539,7 +730,7 @@ export async function runFusion(
       uiStream().write(`${dim("tip: add --observe to watch every fused turn in a live dashboard")}\n`);
     }
   } else {
-    log(`fusion: gateway on ${stack.fusionUrl} (model: ${FUSION_MODEL_LABEL})`);
+    log(`fusion: gateway on ${stack.fusionUrl} (model: ${modelLabel})`);
     log(`fusion: ready in ${bootSeconds}s${reusedNote}`);
     log(`fusion: logs in ${logsDir}`);
   }
@@ -548,6 +739,93 @@ export async function runFusion(
   // chatter (it would corrupt a full-screen agent TUI; trace events still flow
   // to --observe), move turn status to the terminal title, and make sure the
   // cursor is restored.
+  // Running spend for the terminal-title ticker and the budget early warning:
+  // the only live cost signal the user gets while the agent owns the screen.
+  const spendSoFar = (): { usd: number; turns: number } => {
+    try {
+      const sessions = sessionStore
+        .list()
+        .filter((session) => session.updatedAt >= bootStartedAt && (session.repo === undefined || session.repo === repo));
+      return {
+        usd: sessions.reduce(
+          (sum, session) => sum + (session.cost?.providerUsd ?? session.cost?.totalUsd ?? 0),
+          0
+        ),
+        turns: sessions.reduce((sum, session) => sum + session.turnCount, 0)
+      };
+    } catch {
+      return { usd: 0, turns: 0 };
+    }
+  };
+  let budgetWarned = false;
+  const maybeWarnBudget = (usd: number): void => {
+    if (budgetWarned || options.budgetUsd === undefined || options.budgetUsd <= 0) return;
+    if (usd >= 0.8 * options.budgetUsd) {
+      budgetWarned = true;
+      notify(
+        `session spend ${formatUsd(usd)} has reached 80% of the $${options.budgetUsd} budget — the session stops at the cap`
+      );
+    }
+  };
+
+  // Queued incident notices, printed once the screen is ours again (after the
+  // tool exits, or when `serve` shuts down). Best-effort by contract.
+  const printQueuedNotices = (): void => {
+    try {
+      if (noticeCounts.size === 0) return;
+      const noticeLines = [...noticeCounts.entries()].map(
+        ([line, count]) => (count > 1 ? `${line} (x${count})` : line)
+      );
+      if (useBootView) {
+        uiStream().write("\n");
+        for (const line of noticeLines) uiStream().write(`${yellow(glyph.warn())} ${line}\n`);
+        uiStream().write(`${dim(`incident log: ${join(logsDir, "incidents.log")}`)}\n`);
+      } else {
+        for (const line of noticeLines) log(`fusion: warning: ${line}`);
+      }
+    } catch {
+      // never let notices mask the exit
+    }
+  };
+
+  // The end-of-run receipt: what the fusion engine actually did (fused turns,
+  // spend, how to resume). Framed on the rich surface, plain lines otherwise.
+  // Best-effort by contract: a receipt failure must never change the exit code.
+  const printReceipt = (launchedAt: number): void => {
+    try {
+      const receiptSessions = sessionStore
+        .list()
+        .filter(
+          (session) =>
+            session.updatedAt >= launchedAt &&
+            (session.repo === undefined || session.repo === repo) &&
+            // `serve` fronts any tool, so it owns every session it touched;
+            // launchers only claim sessions recorded under their own tool.
+            (tool === "serve" || session.tool === undefined || session.tool === tool)
+        );
+      const receipt = sessionReceiptLines(receiptSessions, {
+        elapsedMs: Date.now() - launchedAt,
+        tool
+      });
+      if (receipt.length === 0) return;
+      if (useBootView) {
+        // The receipt is the screen users judge the run by: frame it, and
+        // always end on the copy-pasteable resume command.
+        const body = receipt.map((line, index) => {
+          if (index === 0) return `${green(glyph.tick())} ${bold(line)}`;
+          const resume = line.match(/^resume this session: (.+)$/);
+          if (resume !== null) return `${dim("resume:")} ${cyan(resume[1] ?? "")}`;
+          return dim(line);
+        });
+        uiStream().write(`\n${box("fusion receipt", body)}\n`);
+      } else {
+        for (const line of receipt) log(`fusion: ${line}`);
+      }
+    } catch {
+      // never let the receipt mask the exit
+    }
+  };
+
   const prepareForPassthrough = (): void => {
     passthroughActive = true;
     setGatewayChatter(false);
@@ -561,9 +839,16 @@ export async function runFusion(
             `fusionkit · judging ${status.candidates} candidate${status.candidates === 1 ? "" : "s"} (turn ${status.turn})`
           );
           break;
-        case "idle":
-          setTerminalTitle(undefined);
+        case "idle": {
+          const spend = spendSoFar();
+          setTerminalTitle(
+            spend.turns > 0
+              ? `fusionkit · ${spend.turns} turn${spend.turns === 1 ? "" : "s"} · ${formatUsd(spend.usd)} spent`
+              : undefined
+          );
+          maybeWarnBudget(spend.usd);
           break;
+        }
         default: {
           const exhaustive: never = status;
           throw new Error(`unknown gateway status: ${String(exhaustive)}`);
@@ -580,10 +865,93 @@ export async function runFusion(
 
   try {
     if (tool === "serve") {
-      log("");
-      log(gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>"));
-      log("");
-      log("Gateway is running. Point any tool at it, or Ctrl+C to stop.");
+      // Publish the gateway for clients that cannot reach loopback (Cursor
+      // BYOK goes through Cursor's backend, which blocks private networks).
+      // Tunnel the raw loopback port: a portless HTTPS name is not dialable
+      // by cloudflared. Started before the summary so its URL appears in it.
+      let tunnelUrl: string | undefined;
+      if (options.expose === true) {
+        const tunnel = await startPublicTunnel({
+          gatewayUrl: `http://127.0.0.1:${stack.gatewayPort}`,
+          log: aside
+        });
+        disposers.push(() => tunnel.close());
+        tunnelUrl = tunnel.url;
+      }
+
+      // The gateway summary: everything a client needs on one framed screen.
+      const fusedIds = ensembles.map((ensemble) => fusionModelId(ensemble.name));
+      const labelWidth = Math.max("anthropic".length, tunnelUrl !== undefined ? "public".length : 0);
+      const row = (label: string, value: string): string => `${dim(label.padEnd(labelWidth))}  ${value}`;
+      const gatewayRows = [
+        row("openai", `${cyan(`${stack.fusionUrl}/v1`)} ${dim("(chat + Responses)")}`),
+        row("anthropic", `${cyan(stack.fusionUrl)} ${dim("(Claude appends /v1/messages)")}`),
+        ...(tunnelUrl !== undefined
+          ? [row("public", `${cyan(`${tunnelUrl}/v1`)} ${dim("(bearer token required)")}`)]
+          : []),
+        row("models", fusedIds.join(dim(" · "))),
+        row("logs", dim(logsDir))
+      ];
+      if (useBootView) {
+        uiStream().write(`\n${box("fusion gateway", gatewayRows)}\n\n`);
+        uiStream().write(`${gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>")}\n`);
+        if (tunnelUrl !== undefined) {
+          uiStream().write(`\n${cursorInstructions(tunnelUrl, modelLabel, fusedIds, authToken)}\n`);
+        }
+        uiStream().write("\n");
+
+        // The serve cockpit runs like a dev server: the timestamped request
+        // log (fusion/gateway-log.ts) narrates every fused turn inline, the
+        // terminal title carries the phase + running spend, and Ctrl+C prints
+        // queued incidents plus the session receipt before exiting.
+        const servedAt = Date.now();
+        setGatewayStatusSink((gatewayStatus) => {
+          switch (gatewayStatus.phase) {
+            case "panel":
+              setTerminalTitle(
+                `fusionkit serve · fusing ${gatewayStatus.models.join(" + ")} (turn ${gatewayStatus.turn})`
+              );
+              break;
+            case "judging":
+              setTerminalTitle(`fusionkit serve · judging (turn ${gatewayStatus.turn})`);
+              break;
+            case "idle": {
+              const spend = spendSoFar();
+              setTerminalTitle(
+                spend.turns > 0
+                  ? `fusionkit serve · ${spend.turns} turn${spend.turns === 1 ? "" : "s"} · ${formatUsd(spend.usd)} spent`
+                  : "fusionkit serve"
+              );
+              maybeWarnBudget(spend.usd);
+              break;
+            }
+            default: {
+              const exhaustive: never = gatewayStatus;
+              throw new Error(`unknown gateway status: ${String(exhaustive)}`);
+            }
+          }
+        });
+        setTerminalTitle("fusionkit serve");
+        logServing();
+        onShutdown = () => {
+          printQueuedNotices();
+          printReceipt(servedAt);
+          uiStream().write(`${green(glyph.tick())} ${bold("gateway stopped")}\n`);
+        };
+      } else {
+        log("");
+        for (const line of gatewayRows) log(line);
+        log("");
+        log(gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>"));
+        if (tunnelUrl !== undefined) {
+          log("");
+          log(cursorInstructions(tunnelUrl, modelLabel, fusedIds, authToken));
+          log("");
+          log(`Public gateway (bearer token required): ${tunnelUrl}/v1`);
+        }
+        log("");
+        log(`${green(glyph.tick())} ${bold("gateway is running")} ${dim("— point any tool at it, or Ctrl+C to stop")}`);
+      }
       await new Promise<void>(() => {
         /* run until interrupted */
       });
@@ -596,12 +964,22 @@ export async function runFusion(
     const ctx: ToolLaunchContext = {
       mode: "fusion",
       gatewayUrl: stack.fusionUrl,
-      modelLabel: FUSION_MODEL_LABEL,
-      nativeModels: models.map((spec) => spec.model),
+      modelLabel,
+      fusedModels: ensembles.map((ensemble) => fusionModelId(ensemble.name)),
+      // The detail sub-agent auto-provisioning needs: each launcher defines one
+      // native sub-agent per ensemble from this list (session default first).
+      fusedEnsembles: ensembles.map((ensemble) => ({
+        name: ensemble.name,
+        modelId: fusionModelId(ensemble.name),
+        memberIds: ensemble.models.map((spec) => spec.id),
+        ...(ensemble.judgeModel !== undefined ? { judgeModel: ensemble.judgeModel } : {})
+      })),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+      nativeModels: [...new Set(unionModels.map((spec) => spec.model))],
       toolArgs,
       repo,
       ...(options.ide === true ? { ide: true } : {}),
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(authToken !== undefined ? { authToken } : {}),
       ...(portless.caCertPath !== undefined ? { caCertPath: portless.caCertPath } : {}),
       logsDir,
       log,
@@ -616,68 +994,36 @@ export async function runFusion(
     // Incidents that happened while the agent owned the terminal (an OOM-killed
     // panel server, a dead router): the tool could only show a bare stream
     // error, so explain what actually happened now that we have the screen back.
-    // Best-effort: a notice failure must never change the exit code.
-    try {
-      if (noticeCounts.size > 0) {
-        const noticeLines = [...noticeCounts.entries()].map(
-          ([line, count]) => (count > 1 ? `${line} (x${count})` : line)
-        );
-        if (useBootView) {
-          uiStream().write("\n");
-          for (const line of noticeLines) uiStream().write(`${yellow(glyph.warn())} ${line}\n`);
-          uiStream().write(`${dim(`incident log: ${join(logsDir, "incidents.log")}`)}\n`);
-        } else {
-          for (const line of noticeLines) log(`fusion: warning: ${line}`);
-        }
-      }
-    } catch {
-      // never let notices mask the tool's exit
-    }
+    printQueuedNotices();
     // The end-of-run receipt: the engine worked invisibly while the agent owned
     // the terminal — this is the one place we say what it actually did.
-    // Best-effort: a receipt failure must never change the exit code.
-    try {
-      const receiptSessions = sessionStore
-        .list()
-        .filter(
-          (session) =>
-            session.updatedAt >= launchedAt &&
-            (session.repo === undefined || session.repo === repo) &&
-            (session.tool === undefined || session.tool === tool)
-        );
-      const receipt = sessionReceiptLines(receiptSessions, {
-        elapsedMs: Date.now() - launchedAt,
-        tool
-      });
-      if (receipt.length > 0) {
-        if (useBootView) {
-          uiStream().write(`\n${green(glyph.tick())} ${bold(receipt[0] ?? "")}\n`);
-          for (const line of receipt.slice(1)) uiStream().write(`  ${dim(line)}\n`);
-        } else {
-          for (const line of receipt) log(`fusion: ${line}`);
-        }
-      }
-    } catch {
-      // never let the receipt mask the tool's exit
-    }
+    printReceipt(launchedAt);
     return code;
   } finally {
     await cleanup();
   }
 }
 
+/**
+ * Selectable fusion tools (registry-derived launchers + the `serve`
+ * pseudo-tool), shared by every tool picker (`pickTool`, the init wizard).
+ */
+export function toolSelectOptions(): Array<{ value: FusionTool; label: string; hint: string }> {
+  return [
+    ...toolRegistry.launchableFusion().map((tool) => ({
+      value: tool.id,
+      label: tool.id,
+      hint: tool.pickerHint
+    })),
+    { value: "serve" as FusionTool, label: "serve", hint: "just run the gateway and print setup" }
+  ];
+}
+
 /** Interactive tool picker for when no `--tool` was provided on a TTY. */
 export async function pickTool(): Promise<FusionTool> {
   return select<FusionTool>({
     message: "Which coding agent should model fusion back?",
-    options: [
-      ...toolRegistry.launchableFusion().map((tool) => ({
-        value: tool.id,
-        label: tool.id,
-        hint: tool.pickerHint
-      })),
-      { value: "serve", label: "serve", hint: "just run the gateway and print setup" }
-    ],
+    options: toolSelectOptions(),
     defaultIndex: 0
   });
 }

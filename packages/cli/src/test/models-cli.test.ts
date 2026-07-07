@@ -34,21 +34,21 @@ function runCli(args: string[]): { status: number | null; stdout: string; stderr
 }
 
 test("`models list` shows the catalog with nothing downloaded in a fresh cache", () => {
-  const { status, stdout } = runCli(["models", "list"]);
+  const { status, stderr: out } = runCli(["models", "list"]);
   assert.equal(status, 0);
-  assert.match(stdout, /catalog/);
-  assert.match(stdout, /mlx-community\/Qwen3-1\.7B-4bit/);
-  assert.match(stdout, /none yet/);
+  assert.match(out, /catalog/);
+  assert.match(out, /mlx-community\/Qwen3-1\.7B-4bit/);
+  assert.match(out, /none yet/);
 });
 
 test("bare `models` defaults to listing", () => {
-  const { status, stdout } = runCli(["models"]);
+  const { status, stderr: out } = runCli(["models"]);
   assert.equal(status, 0);
-  assert.match(stdout, /catalog/);
+  assert.match(out, /catalog/);
 });
 
 test("`models rm` reports when a model was not cached", () => {
-  const { status, stdout } = runCli(["models", "rm", "mlx-community/Not-Here"]);
+  const { status, stderr: out } = runCli(["models", "rm", "mlx-community/Not-Here"]);
   assert.equal(status, 0);
-  assert.match(stdout, /was not in the local cache/);
+  assert.match(out, /was not in the local cache/);
 });

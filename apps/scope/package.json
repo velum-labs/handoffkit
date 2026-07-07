@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start -p 4317",
     "lint": "next lint",
+    "seed": "tsx scripts/seed.ts",
     "test": "node --test --import tsx test/*.test.ts"
   },
   "portless": { "name": "scope", "script": "dev:app" },

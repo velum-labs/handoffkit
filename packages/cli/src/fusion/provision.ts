@@ -11,10 +11,11 @@
  */
 import { spawn } from "node:child_process";
 
+import { createPresenter, dim, gray, yellow } from "@fusionkit/cli-ui";
+import type { Presenter } from "@fusionkit/cli-ui";
+
 import { distillLog } from "../shared/proc.js";
 import { hasBinary } from "../shared/preflight.js";
-import { Spinner } from "../ui/spinner.js";
-import { dim, gray, yellow } from "../ui/theme.js";
 
 import { FUSIONKIT_PYPI_VERSION, fusionkitWarmArgv } from "./env.js";
 
@@ -117,48 +118,51 @@ export async function provisionFusionEngine(options: {
 }
 
 /**
- * Provision with a live spinner and human-readable result lines. Shared by
+ * Provision with a live task line and human-readable result lines. Shared by
  * `fusionkit setup` and `fusionkit doctor --provision`. Returns a process exit
  * code (0 ok, 1 on failure / missing runner).
  */
-export async function provisionEngineWithProgress(options: {
-  fusionkitDir?: string;
-  force?: boolean;
-}): Promise<number> {
+export async function provisionEngineWithProgress(
+  options: {
+    fusionkitDir?: string;
+    force?: boolean;
+  },
+  presenter: Presenter = createPresenter()
+): Promise<number> {
   const runner = runnerBinary(options.fusionkitDir);
+  const label = `provisioning the fusion engine (${engineLabel(options.fusionkitDir)})`;
   if (!hasBinary(runner)) {
-    const spinner = new Spinner(`provisioning the fusion engine (${engineLabel(options.fusionkitDir)})`).start();
-    spinner.fail(`cannot provision: ${runner} is not on PATH`);
-    console.error(
+    const task = presenter.task(label);
+    task.fail(`cannot provision: ${runner} is not on PATH`);
+    presenter.line(
       `    ${yellow("→")} install uv (ships ${runner}): https://docs.astral.sh/uv/getting-started/installation/`
     );
     return 1;
   }
 
-  const spinner = new Spinner(`provisioning the fusion engine (${engineLabel(options.fusionkitDir)})`).start();
-  let lastTail = "";
+  const task = presenter.task(label);
   const outcome = await provisionFusionEngine({
     ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
     ...(options.force === true ? { force: true } : {}),
     onLine: (line) => {
-      lastTail = line.length > 60 ? `…${line.slice(line.length - 60)}` : line;
-      spinner.update(`provisioning the fusion engine ${dim(`· ${lastTail}`)}`);
+      const tail = line.length > 60 ? `…${line.slice(line.length - 60)}` : line;
+      task.update(`provisioning the fusion engine ${dim(`· ${tail}`)}`);
     }
   });
 
   switch (outcome.kind) {
     case "cached":
-      spinner.succeed(`fusion engine ready ${dim(`(${outcome.label} already cached — offline-fast)`)}`);
+      task.succeed(`fusion engine ready ${dim(`(${outcome.label} already cached — offline-fast)`)}`);
       return 0;
     case "provisioned":
-      spinner.succeed(`fusion engine provisioned ${dim(`(${outcome.label} warmed into the uv cache)`)}`);
+      task.succeed(`fusion engine provisioned ${dim(`(${outcome.label} warmed into the uv cache)`)}`);
       return 0;
     case "no-runner":
-      spinner.fail(`cannot provision: ${outcome.runner} is not on PATH`);
+      task.fail(`cannot provision: ${outcome.runner} is not on PATH`);
       return 1;
     case "failed":
-      spinner.fail(`could not provision ${outcome.label}`);
-      console.error(`    ${gray(outcome.detail)}`);
+      task.fail(`could not provision ${outcome.label}`);
+      presenter.line(`    ${gray(outcome.detail)}`);
       return 1;
     default: {
       const exhaustive: never = outcome;

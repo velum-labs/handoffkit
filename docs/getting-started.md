@@ -112,7 +112,7 @@ portless service install   # run the HTTPS proxy at OS startup
 portless trust             # add the local CA to your system trust store
 ```
 
-Then `fusionkit codex|claude|cursor|serve` and `fusionkit plane start` print
+Then `fusionkit codex|claude|cursor|serve` print
 `https://*.localhost` URLs automatically. To opt out for a run (raw loopback
 ports, e.g. in CI), pass `--no-portless` or set `PORTLESS=0`. When portless is
 not installed (Node `<24`) the stack transparently falls back to ports.
@@ -126,9 +126,8 @@ showcase data. It is preserved for legacy governance work only and is not part o
 normal FusionKit development.
 
 ```sh
-docker compose up --build
-docker compose exec plane warrant ui
-docker compose exec plane warrant runs
+docker compose -f legacy/docker/docker-compose.yml up --build
+# Inside the legacy Docker image, use the archived entrypoint for UI/runs commands.
 ```
 
 Open the control panel at `http://localhost:7172/ui/`.

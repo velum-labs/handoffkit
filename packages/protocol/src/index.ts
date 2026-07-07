@@ -62,6 +62,8 @@ export {
   normalizeWireTrajectories
 } from "./fusion-wire.js";
 export type { WireTrajectory } from "./fusion-wire.js";
+export { isFiniteK, isLookaheadK, isProposalK, panelModeForK } from "./panel-k.js";
+export type { PanelMode } from "./panel-k.js";
 export {
   artifactHash,
   hashCanonical,
@@ -151,37 +153,19 @@ export type { BundleVerification } from "./receipt.js";
 export { buildReceiptStory, summarizeRunEvent } from "./receipt-story.js";
 export type { EventSummary, ReceiptStory } from "./receipt-story.js";
 export {
-  addTraceListener,
-  ambientTraceId,
-  assertFusionTraceEvent,
-  emitTrace,
-  FUSION_TRACE_COMPONENTS,
-  FUSION_TRACE_EVENT_SCHEMA,
-  FUSION_TRACE_EVENT_TYPES,
-  FUSION_TRACE_EVENT_VERSION,
-  getTraceEmitter,
-  isFusionTraceEvent,
-  judgeFinalPayload,
-  judgeRequestPayload,
-  judgeThinkingPayload,
-  modelCallFinishedPayload,
-  modelCallStartedPayload,
-  newSpanId,
-  newTraceId,
-  removeTraceListener,
-  TRACE_CANDIDATE_HEADER,
-  TRACE_ID_HEADER,
-  TRACE_PARENT_SPAN_HEADER,
-  TRACE_SPAN_HEADER,
-  TraceEmitter
-} from "./trace.js";
+  ATTR,
+  EXPORTABLE_ATTRIBUTES,
+  FUSION_CONVENTIONS_VERSION,
+  FUSION_MARKER_NAMES,
+  FUSION_SCOPES,
+  FUSION_SPAN_NAMES,
+  FUSION_UNIT_SPAN_NAMES
+} from "./generated/trace-conventions.js";
 export type {
-  EmitInput,
-  FusionTraceComponent,
-  FusionTraceEvent,
-  FusionTraceEventType,
-  TraceListener
-} from "./trace.js";
+  FusionAttributeKey,
+  FusionMarkerName,
+  FusionSpanName
+} from "./generated/trace-conventions.js";
 export { PolicyDeniedError } from "./types.js";
 export type {
   ActorRef,

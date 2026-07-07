@@ -4,9 +4,16 @@ import { join } from "node:path";
 
 import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
-import { createTrajectoryCapture, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
-import type { CapturedTrajectory } from "@fusionkit/model-gateway";
+import {
+  createTrajectoryCapture,
+  ModelRoutedBackend,
+  OpenAiBackend,
+  PANEL_DEPTH_HEADER,
+  startGateway
+} from "@fusionkit/model-gateway";
+import type { Backend, CapturedTrajectory } from "@fusionkit/model-gateway";
 import { KernelBackend, panelMemberPreamble, traceCandidate } from "@fusionkit/ensemble";
+import type { FusedSubagentAccess, FusionTraceCarrier } from "@fusionkit/ensemble";
 import { PROVIDERS, SUBSCRIPTIONS } from "@fusionkit/registry";
 import {
   buildChildEnv,
@@ -24,6 +31,9 @@ import type {
   HarnessCandidateOutput,
   HarnessEndReason
 } from "@fusionkit/ensemble";
+
+import { readCodexCatalogTemplate } from "./launch.js";
+import type { CodexModelPreset } from "./launch.js";
 
 const DEFAULT_CODEX_COMMAND = "codex";
 const DEFAULT_PROVIDER_ID = "fusionkit-codex";
@@ -115,9 +125,8 @@ export type CodexHarnessOptions = {
    * endpoint id as its model (so the router routes to that panel member).
    */
   modelEndpoints?: Record<string, string>;
-  /** Observability correlation for per-candidate trace events. */
-  traceId?: string;
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing run/turn; candidates span under it. */
+  trace?: FusionTraceCarrier;
   turn?: number;
   /**
    * When true, a per-member identity line (which panel member this model is) is
@@ -125,6 +134,21 @@ export type CodexHarnessOptions = {
    * each other; see `panelMemberPreamble`.
    */
   panelIdentity?: boolean;
+  /**
+   * Enable Codex's native sub-agent tools for this panel member so it can
+   * parallelize its own work. Spawned children inherit the member's model and
+   * provider (its own router endpoint) by default; with `fusedSubagents` set
+   * the fused ensemble models are also spawnable. Default on; the repo-wide
+   * `subagents: false` / `--no-subagents` switch turns it off.
+   */
+  subagents?: boolean;
+  /**
+   * Fused sub-agent access: the member's model catalog additionally lists the
+   * fused ensemble models, and the member's capture gateway routes requests
+   * for them to the front-door fusion gateway (stamped with the panel depth),
+   * so `spawn_agent(model: "fusion-<name>")` works from inside the panel.
+   */
+  fusedSubagents?: FusedSubagentAccess;
 };
 
 export type CodexHarnessEnv = Record<string, string | undefined>;
@@ -133,6 +157,15 @@ export type CodexConfigTomlInput = {
   model: string;
   sandboxMode: CodexSandboxMode;
   approvalPolicy: CodexApprovalPolicy;
+  /**
+   * Path to a `ModelsResponse` catalog naming the member's model. Codex only
+   * registers its multi-agent tools for models it can resolve in a catalog, so
+   * custom-provider members need this one-entry file for sub-agents to work
+   * (its absence was the "unsupported call: multi_agent_v1" failure mode).
+   */
+  modelCatalogPath?: string;
+  /** Pin the multi-agent tools on and emit conservative `[agents]` limits. */
+  subagents?: boolean;
   provider?: {
     providerId?: string;
     name?: string;
@@ -302,9 +335,12 @@ export function codexConfigToml(input: CodexConfigTomlInput): string {
       ? `model_provider = ${tomlString(input.provider.providerId ?? DEFAULT_PROVIDER_ID)}`
       : `model_provider = "openai"`,
     `approval_policy = ${tomlString(input.approvalPolicy)}`,
-    `sandbox_mode = ${tomlString(input.sandboxMode)}`,
-    ""
+    `sandbox_mode = ${tomlString(input.sandboxMode)}`
   ];
+  if (input.modelCatalogPath !== undefined) {
+    lines.push(`model_catalog_json = ${tomlString(input.modelCatalogPath)}`);
+  }
+  lines.push("");
 
   if (input.provider !== undefined) {
     const providerId = input.provider.providerId ?? DEFAULT_PROVIDER_ID;
@@ -321,6 +357,13 @@ export function codexConfigToml(input: CodexConfigTomlInput): string {
     lines.push("");
   }
 
+  if (input.subagents === true) {
+    lines.push("[features]", "multi_agent = true", "");
+    // Same-model parallelization only, with a tight budget: a panel member is
+    // already one of several candidates, so deep/wide fan-out multiplies cost.
+    lines.push("[agents]", "max_depth = 1", "max_threads = 3", "");
+  }
+
   return lines.join("\n");
 }
 
@@ -332,6 +375,37 @@ function codexArgs(): string[] {
   return ["exec", "--json", "--skip-git-repo-check", "-"];
 }
 
+/**
+ * The panel member's `ModelsResponse` catalog: its own model plus (with fused
+ * sub-agent access) every fused ensemble model, each cloned from the installed
+ * Codex's own catalog entry so the schema matches that version. Codex only
+ * registers its multi-agent tools for models it can resolve in a catalog, and
+ * `spawn_agent` validates its `model` argument against it — so the fused
+ * entries are exactly what make "spawn a sub-agent on fusion-<name>" work from
+ * inside the panel ("Unknown model 'fusion-*' for spawn_agent" otherwise).
+ */
+export function codexMemberCatalogJson(
+  model: string,
+  template: CodexModelPreset,
+  fusedModelIds: readonly string[] = []
+): string {
+  const ids = [model, ...fusedModelIds.filter((id) => id !== model)];
+  const models = ids.map((id, index) => ({
+    ...template,
+    slug: id,
+    display_name: id,
+    description:
+      id === model
+        ? "FusionKit panel member model (routed via the fusion router)."
+        : "Fused ensemble model (sub-agent turns route to the fusion front door).",
+    visibility: "list",
+    priority: index,
+    availability_nux: null,
+    upgrade: null
+  }));
+  return JSON.stringify({ models }, null, 2);
+}
+
 function writeCodexHome(input: {
   tempRoot: string;
   model: EnsembleModel;
@@ -341,6 +415,8 @@ function writeCodexHome(input: {
   descriptor: EnsembleDescriptor;
   sandboxMode?: CodexSandboxMode;
   approvalPolicy: CodexApprovalPolicy;
+  subagents?: boolean;
+  fusedSubagents?: FusedSubagentAccess;
 }): string {
   const codexHome = mkdtempSync(join(input.tempRoot, "candidate-"));
   const providerConfig =
@@ -359,12 +435,32 @@ function writeCodexHome(input: {
               ? input.provider.requiresOpenAiAuth ?? true
               : false
         };
+  // Sub-agents (default on): pin the multi-agent tools and give the member's
+  // model a catalog entry so Codex registers them; with fused sub-agent access
+  // the fused ensemble models get entries too, so `spawn_agent` accepts them
+  // (the member's capture gateway routes those turns to the front door).
+  // Without the installed Codex's catalog template (schema varies per release)
+  // the member runs without sub-agents rather than risking a config-load failure.
+  const template = input.subagents !== false ? readCodexCatalogTemplate() : undefined;
+  let modelCatalogPath: string | undefined;
+  if (input.subagents !== false && template !== undefined) {
+    modelCatalogPath = join(codexHome, "model-catalog.json");
+    writeFileSync(
+      modelCatalogPath,
+      codexMemberCatalogJson(
+        input.model.model,
+        template,
+        input.fusedSubagents?.ensembles.map((ensemble) => ensemble.modelId) ?? []
+      )
+    );
+  }
   writeFileSync(
     join(codexHome, "config.toml"),
     codexConfigToml({
       model: input.model.model,
       sandboxMode: sandboxModeFor(input.descriptor, input.sandboxMode),
       approvalPolicy: input.approvalPolicy,
+      ...(modelCatalogPath !== undefined ? { modelCatalogPath, subagents: true } : {}),
       ...(providerConfig ? { provider: providerConfig } : {})
     })
   );
@@ -390,6 +486,23 @@ function writeCodexHome(input: {
  * (interrupt/abort) even though the exit code is 0. Persisted into the session
  * record so early stops are attributable from the trace UI.
  */
+/**
+ * Human-readable failure message for a failed codex run. Never empty: the
+ * protocol's harness-candidate-record schema rejects empty `error.message`,
+ * and an aborted CLI (e.g. a straggler dropped after the grace window) often
+ * dies with SIGINT and a blank stderr.
+ */
+export function codexFailureMessage(result: CodexExecResult, endReason: HarnessEndReason): string {
+  if (result.timedOut === true) return "Codex CLI timed out.";
+  const stderr = result.stderr.trim().slice(0, 500);
+  if (stderr.length > 0) return stderr;
+  if (result.aborted === true) {
+    return `Codex CLI run aborted (${result.abortReason ?? "aborted"}).`;
+  }
+  if (endReason.detail !== undefined && endReason.detail.length > 0) return endReason.detail;
+  return `Codex CLI exited with code ${result.exitCode}.`;
+}
+
 export function codexEndReason(result: CodexExecResult): HarnessEndReason {
   let sawTurnCompleted = false;
   let failureDetail: string | undefined;
@@ -454,10 +567,31 @@ export async function defaultCodexRunner(input: CodexExecInput): Promise<CodexEx
   };
 }
 
+/**
+ * The member capture gateway's chat core: the member's own router endpoint,
+ * plus — with fused sub-agent access — a routed branch that sends the fused
+ * ensemble models' requests to the front-door fusion gateway, stamped with the
+ * panel depth so the front door never re-provisions fused access downstream.
+ */
+export function memberChatBackend(primary: Backend, fused: FusedSubagentAccess | undefined): Backend {
+  if (fused === undefined || fused.ensembles.length === 0) return primary;
+  const routed = new OpenAiBackend({
+    baseUrl: normalizeApiBaseUrl(fused.gatewayUrl),
+    ...(fused.authToken !== undefined ? { apiKey: fused.authToken } : {}),
+    headers: { [PANEL_DEPTH_HEADER]: String(fused.depth) }
+  });
+  return new ModelRoutedBackend({
+    routedModelIds: fused.ensembles.map((ensemble) => ensemble.modelId),
+    routed,
+    primary
+  });
+}
+
 async function runProvider(input: {
   provider: CodexProvider;
   env: Record<string, string>;
   model: EnsembleModel;
+  fusedSubagents?: FusedSubagentAccess;
   onCapturedTrajectory?: (trajectory: CapturedTrajectory) => void;
 }): Promise<CodexRunProvider> {
   switch (input.provider.kind) {
@@ -476,13 +610,19 @@ async function runProvider(input: {
           ? input.env[input.provider.apiKeyEnvName]
           : input.env.OPENAI_API_KEY);
       const gateway = await startGateway({
-        backend: new KernelBackend(new OpenAiBackend({
-          baseUrl: normalizeApiBaseUrl(stripResponsesRoute(input.provider.baseUrl)),
-          ...(apiKey !== undefined ? { apiKey } : {}),
-          defaultModel: input.model.model
-        }), {
-          workflowIds: { chat: "native-passthrough-turn", models: "native-passthrough-models", embeddings: "native-passthrough-embeddings" }
-        }),
+        backend: new KernelBackend(
+          memberChatBackend(
+            new OpenAiBackend({
+              baseUrl: normalizeApiBaseUrl(stripResponsesRoute(input.provider.baseUrl)),
+              ...(apiKey !== undefined ? { apiKey } : {}),
+              defaultModel: input.model.model
+            }),
+            input.fusedSubagents
+          ),
+          {
+            workflowIds: { chat: "native-passthrough-turn", models: "native-passthrough-models", embeddings: "native-passthrough-embeddings" }
+          }
+        ),
         provenance: {
           onModelCall(record) {
             records.push(record);
@@ -510,13 +650,19 @@ async function runProvider(input: {
           ? input.env[input.provider.apiKeyEnvName]
           : input.env.OPENAI_API_KEY);
       const gateway = await startGateway({
-        backend: new KernelBackend(new OpenAiBackend({
-          baseUrl: normalizeApiBaseUrl(input.provider.baseUrl),
-          ...(apiKey !== undefined ? { apiKey } : {}),
-          defaultModel: input.provider.defaultModel ?? input.model.model
-        }), {
-          workflowIds: { chat: "native-passthrough-turn", models: "native-passthrough-models", embeddings: "native-passthrough-embeddings" }
-        }),
+        backend: new KernelBackend(
+          memberChatBackend(
+            new OpenAiBackend({
+              baseUrl: normalizeApiBaseUrl(input.provider.baseUrl),
+              ...(apiKey !== undefined ? { apiKey } : {}),
+              defaultModel: input.provider.defaultModel ?? input.model.model
+            }),
+            input.fusedSubagents
+          ),
+          {
+            workflowIds: { chat: "native-passthrough-turn", models: "native-passthrough-models", embeddings: "native-passthrough-embeddings" }
+          }
+        ),
         provenance: {
           onModelCall(record) {
             records.push(record);
@@ -626,7 +772,8 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
     capabilities: () => ({
       workspace_read: "supported",
       apply_patch: "supported",
-      // TODO(@000alen): why degraded? Codex adapter capability metadata should be the source of truth, with ToolDashboardMetadata documenting the shell_command limitation.
+      // Codex shell execution is available, but dashboard metadata still treats
+      // it as constrained because policy and sandbox settings can narrow access.
       shell_command: "degraded",
       artifact_capture: "supported",
       model_gateway_responses: "supported",
@@ -648,8 +795,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
       // candidate's trajectory live (started now, finished when the run completes).
       const tracer = traceCandidate(
         {
-          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.trace !== undefined ? { trace: options.trace } : {}),
           ...(options.turn !== undefined ? { turn: options.turn } : {})
         },
         {
@@ -675,6 +821,9 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         provider: effectiveProvider,
         env: state.env,
         model: effectiveModel,
+        ...(options.subagents !== false && options.fusedSubagents !== undefined
+          ? { fusedSubagents: options.fusedSubagents }
+          : {}),
         onCapturedTrajectory: (trajectory) => {
           for (const step of trajectory.steps) tracer.step(step);
         }
@@ -710,7 +859,11 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
           env,
           descriptor,
           sandboxMode: options.sandboxMode,
-          approvalPolicy
+          approvalPolicy,
+          ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+          ...(options.subagents !== false && options.fusedSubagents !== undefined
+            ? { fusedSubagents: options.fusedSubagents }
+            : {})
         });
         env.CODEX_HOME = codexHome;
         const prompt =
@@ -746,6 +899,14 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
         const status: HarnessCandidateOutput["status"] =
           result.exitCode === 0 && result.timedOut !== true ? "succeeded" : "failed";
         const endReason = codexEndReason(result);
+        const failureError =
+          status === "failed"
+            ? {
+                kind: result.timedOut === true ? ("timeout" as const) : ("provider_error" as const),
+                message: codexFailureMessage(result, endReason),
+                retryable: result.timedOut === true
+              }
+            : undefined;
         const outputHash = artifactHash(transcript);
         const modelCallRecord = provider.modelCallRecords.at(-1);
         const reconstructed = provider.reconstruct?.();
@@ -801,26 +962,10 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
               plan_id: `plan_${descriptor.id}_${model.id}_${ordinal}_codex`,
               status,
               output_hash: outputHash,
-              ...(status === "failed"
-                ? {
-                    error: {
-                      kind: result.timedOut === true ? "timeout" : "provider_error",
-                      message: result.timedOut === true ? "Codex CLI timed out." : result.stderr.slice(0, 500),
-                      retryable: result.timedOut === true
-                    }
-                  }
-                : {})
+              ...(failureError !== undefined ? { error: failureError } : {})
             }
           ],
-          ...(status === "failed"
-            ? {
-                error: {
-                  kind: result.timedOut === true ? "timeout" : "provider_error",
-                  message: result.timedOut === true ? "Codex CLI timed out." : result.stderr.slice(0, 500),
-                  retryable: result.timedOut === true
-                }
-              }
-            : {}),
+          ...(failureError !== undefined ? { error: failureError } : {}),
           metadata: metadataFor({
             command,
             args,

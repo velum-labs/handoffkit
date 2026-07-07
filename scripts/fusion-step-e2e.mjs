@@ -15,6 +15,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { initFusionTracing, shutdownFusionTracing } from "../packages/tracing/dist/index.js";
+
+import { startOtlpCapture } from "./otlp-capture.mjs";
 import { startFusionStack } from "../packages/cli/dist/fusion-quickstart.js";
 import { BENCHMARK_PANEL_PRESETS } from "../packages/registry/dist/index.js";
 
@@ -170,32 +173,18 @@ async function driveHarness(gatewayUrl, repo, task) {
   return "(max turns reached)";
 }
 
-function analyzeTrace(dir) {
-  const counts = {};
-  const components = {};
-  let traceIds = new Set();
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".jsonl"))) {
-    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const event = JSON.parse(trimmed);
-      counts[event.event_type] = (counts[event.event_type] ?? 0) + 1;
-      components[event.component] = (components[event.component] ?? 0) + 1;
-      traceIds.add(event.trace_id);
-    }
-  }
-  return { counts, components, traceIds: [...traceIds] };
-}
-
 async function main() {
   const root = mkdtempSync(join(tmpdir(), "fusion-step-e2e-"));
   const repo = materializeRepo(join(root, "repo"));
-  const traceDir = join(root, "trace");
-  mkdirSync(traceDir, { recursive: true });
-  process.env.FUSION_TRACE_DIR = traceDir;
+  // Capture the run's spans with an in-script OTLP collector: the in-process
+  // gateway/ensemble tracer and every spawned child (panel servers, the
+  // Python synthesis engine) export to it over standard OTLP/HTTP.
+  const capture = await startOtlpCapture();
+  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = capture.endpoint;
+  initFusionTracing({ serviceName: "fusion-e2e" });
 
   log(`repo: ${repo}`);
-  log(`trace dir: ${traceDir}`);
+  log(`otlp capture: ${capture.endpoint}`);
   log(`starting fusion stack (${E2E_PANEL.panelId}, judge ${E2E_JUDGE_MODEL})...`);
   const stack = await startFusionStack({
     repo,
@@ -223,10 +212,12 @@ async function main() {
     log((test.stdout + test.stderr).slice(-600));
 
     log("\n=== TRACE DATA FLOW ===");
-    const trace = analyzeTrace(traceDir);
+    await shutdownFusionTracing();
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    const trace = capture.analyze();
     log(`trace_ids: ${trace.traceIds.join(", ")}`);
-    log(`components: ${JSON.stringify(trace.components)}`);
-    log(`event_types: ${JSON.stringify(trace.counts)}`);
+    log(`scopes: ${JSON.stringify(trace.scopes)}`);
+    log(`span_names: ${JSON.stringify(trace.counts)}`);
 
     log(`\nRESULT: ${test.status === 0 ? "GREEN (tests pass out of the box)" : "RED (tests still failing)"}`);
     process.exitCode = test.status === 0 ? 0 : 1;

@@ -14,6 +14,8 @@ import type { EnsembleDescriptor } from "@fusionkit/ensemble";
 import { assertHarnessRunRequestV1, assertHarnessRunResultV1 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
 
+import { bold, dim, glyph, green, red, uiStream } from "@fusionkit/cli-ui";
+
 import { runHarnessSmokeDashboard } from "../dashboard.js";
 import { fail } from "../shared/errors.js";
 import {
@@ -23,7 +25,9 @@ import {
   parseTimeoutMs,
   unifiedHarnessKinds
 } from "../shared/options.js";
+import { registerEnsembleConfig } from "./ensemble-config.js";
 import { buildGatewayCommand } from "./ensemble-gateway.js";
+import { registerPaletteAction } from "./palette.js";
 import {
   type HandoffPayload,
   handoffSideEffects,
@@ -92,7 +96,7 @@ async function runEnsembleRun(task: string[], opts: EnsembleRunOpts): Promise<vo
     fail('--harness must be "mock" or "command"');
   }
   const repo = resolve(opts.repo);
-  const outDir = resolve(opts.out ?? ".warrant/ensemble-cli");
+  const outDir = resolve(opts.out ?? ".fusionkit/ensemble-cli");
   const timeoutMs = parseTimeoutMs(opts.timeoutMs, 30000);
   if (harnessId === "command" && !opts.command) {
     fail("--command is required when --harness command");
@@ -139,7 +143,7 @@ async function runEnsembleRun(task: string[], opts: EnsembleRunOpts): Promise<vo
   assertHarnessRunRequestV1(result.harnessRunRequest);
   assertHarnessRunResultV1(result.harnessRunResult);
   writeEnsembleOutput(outDir, result);
-  console.log(renderEnsembleSummary(outDir, result));
+  uiStream().write(renderEnsembleSummary(outDir, result) + "\n");
   if (result.harnessRunResult.status !== "succeeded" || result.failureSummary) {
     process.exitCode = 1;
   }
@@ -227,7 +231,7 @@ async function runEnsembleDashboard(extra: string[], opts: EnsembleDashboardOpts
     timeoutMs,
     liveSmoke: liveSmokeTargets(opts.liveSmoke)
   });
-  console.log(renderHarnessSmokeDashboardSummary(dashboard));
+  uiStream().write(renderHarnessSmokeDashboardSummary(dashboard) + "\n");
   if (
     dashboard.records.some(
       (record) => record.purpose === "live" && record.result.status !== "succeeded"
@@ -267,23 +271,33 @@ async function runEnsembleE2E(task: string[], opts: EnsembleE2EOpts): Promise<vo
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([status, count]) => `${status}:${count}`)
     .join(", ");
-  console.log(`unified e2e [${countText}]`);
-  console.log(`results: ${result.results.length}`);
-  console.log(`report: ${result.reportPath}`);
+  const anyFailed = result.results.some((row) => row.status === "failed");
+  uiStream().write(`${bold(`unified e2e [${countText}]`)}\n`);
+  uiStream().write(`${dim(`results: ${result.results.length} · report: ${result.reportPath}`)}\n`);
   for (const row of result.results) {
-    console.log(`  ${row.harness}: ${row.status} (${row.message})`);
+    const mark = row.status === "failed" ? red(glyph.cross()) : green(glyph.tick());
+    uiStream().write(`  ${mark} ${row.harness}: ${row.status} ${dim(`(${row.message})`)}\n`);
   }
-  if (result.results.some((row) => row.status === "failed")) {
+  if (anyFailed) {
     process.exitCode = 1;
   }
 }
 
 export function registerEnsemble(program: Command): void {
-  const ensemble = new Command("ensemble").description("local ensemble + FusionKit harness tooling");
+  registerPaletteAction({
+    label: "Manage named ensembles",
+    hint: "fusionkit ensemble list",
+    argv: ["ensemble", "list"]
+  });
+  const ensemble = new Command("ensemble").description(
+    "manage named ensembles; advanced subcommands are harness-dev tools"
+  );
+
+  registerEnsembleConfig(ensemble);
 
   ensemble
     .command("run")
-    .description("run local ensemble smoke")
+    .description("advanced/maintainer: run a local ensemble smoke")
     .argument("[task...]", "task prompt")
     .option("--harness <h>", "harness to run: mock | command", "mock")
     .option("--command <cmd>", "shell command for command harness")
@@ -299,7 +313,7 @@ export function registerEnsemble(program: Command): void {
 
   ensemble
     .command("handoff")
-    .description("FusionKit stdin/stdout handoff executor")
+    .description("advanced/maintainer: FusionKit stdin/stdout handoff executor")
     .argument("[extra...]", "(handoff reads its task from stdin)")
     .option("--harness <h>", "mock | command | claude-code | codex", "mock")
     .option("--command <cmd>", "shell command for command harness")
@@ -314,7 +328,7 @@ export function registerEnsemble(program: Command): void {
 
   ensemble
     .command("dashboard")
-    .description("generate harness smoke dashboard")
+    .description("advanced/maintainer: generate a harness smoke dashboard")
     .argument("[extra...]", "(dashboard takes no positional arguments)")
     .option("--repo <dir>", "workspace repository", ".")
     .option("--out <dir>", "output directory")
@@ -324,7 +338,7 @@ export function registerEnsemble(program: Command): void {
 
   ensemble
     .command("e2e")
-    .description("unified FusionKit-backed harness matrix")
+    .description("advanced/maintainer: run the unified FusionKit-backed harness matrix")
     .argument("[task...]", "task prompt")
     .option("--fusion-backend <url>", "FusionKit/OpenAI-compatible backend URL")
     .option("--harness <target>", "mock | command | codex | claude-code | cursor-acp | cursor-desktop (repeatable)", collect)

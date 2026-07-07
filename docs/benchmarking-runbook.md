@@ -48,7 +48,7 @@ exact commands. Companion docs go deeper:
   /pids limits). Default to `docker` for anything at scale.
 - Reproducibility: pin a frozen manifest (`LCB_MANIFEST`) of exact `question_id`s +
   dataset version for comparable runs; example at
-  `python/fusionkit-evals/fixtures/public-bench/livecodebench/manifest-2025h2-medium-hard.example.json`.
+  `python/fusionkit-evals/src/fusionkit_evals/data/fixtures/public-bench/livecodebench/manifest-2025h2-medium-hard.example.json`.
 - Caching/resumability: the public-bench adapter caches per task (keyed by panel +
   scoring version), so reruns resume cheaply. Bump `SCORING_VERSION` in the adapter
   when extraction/checker/execution logic changes so stale cache is invalidated.
@@ -94,7 +94,7 @@ export FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.example.yaml
 export LCB_MIN_DATE=2025-01-01 BENCH_SANDBOX=docker LCB_CONCURRENCY=4
 uv run --with 'datasets<4' fusionkit public-bench \
   --suite livecodebench --panel decorrelated-peers --subset 15 \
-  --runner-command "python python/fusionkit-evals/adapters/livecodebench_adapter.py" \
+  --runner-command "python python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py" \
   --output out/lcb.jsonl --report out/lcb.md --ledger out/ledger.jsonl
 ```
 

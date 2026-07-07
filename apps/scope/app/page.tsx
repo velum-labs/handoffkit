@@ -3,10 +3,18 @@
 import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, ChevronRight, RotateCcw, Search } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Boxes,
+  ChevronRight,
+  Search
+} from "lucide-react";
 
 import { EmptyState } from "@/components/scope/empty-state";
 import { ErrorBanner } from "@/components/scope/error-banner";
+import { TableSkeleton } from "@/components/scope/loading";
 import { LiveDot, PageHeader } from "@/components/scope/page-header";
 import { StatusBadge } from "@/components/scope/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -23,12 +31,9 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSessions } from "@/lib/api";
 import type { SessionSummary } from "@/lib/api";
-import { fmtDateTime, fmtDuration, fmtRelative } from "@/lib/format";
+import { fmtDateTime, fmtDuration, fmtRelative, shortTraceId } from "@/lib/format";
+import { replaceSearchParams } from "@/lib/url-state";
 import { cn } from "@/lib/utils";
-
-function shortId(traceId: string): string {
-  return traceId.replace(/^trace_/, "").slice(0, 8);
-}
 
 const STATUS_FILTERS = ["all", "running", "succeeded", "failed", "skipped"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
@@ -95,48 +100,12 @@ function SortableHead({
   );
 }
 
-/** Backfill the collector from the FUSION_TRACE_DIR JSONL fallback. */
-function ReplayButton({ onDone }: { onDone: () => void }) {
-  const [state, setState] = useState<"idle" | "busy" | "done" | "failed">("idle");
-  const [detail, setDetail] = useState<string | undefined>(undefined);
+function statusFromParam(value: string | null): StatusFilter {
+  return STATUS_FILTERS.includes(value as StatusFilter) ? (value as StatusFilter) : "all";
+}
 
-  const onReplay = useCallback(() => {
-    setState("busy");
-    fetch("/api/replay", { method: "POST" })
-      .then(async (response) => {
-        const body = (await response.json()) as { ingested?: number; error?: string };
-        if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
-        setState("done");
-        setDetail(`${body.ingested ?? 0} new events`);
-        onDone();
-      })
-      .catch((error: unknown) => {
-        setState("failed");
-        setDetail(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        setTimeout(() => {
-          setState("idle");
-          setDetail(undefined);
-        }, 3000);
-      });
-  }, [onDone]);
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant="outline" size="sm" onClick={onReplay} disabled={state === "busy"}>
-          <RotateCcw className={cn("size-4", state === "busy" && "animate-spin")} />
-          {state === "done" ? (detail ?? "Replayed") : state === "failed" ? "Replay failed" : "Replay"}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>
-        {state === "failed" && detail !== undefined
-          ? detail
-          : "Backfill sessions from the FUSION_TRACE_DIR JSONL fallback"}
-      </TooltipContent>
-    </Tooltip>
-  );
+function sortFromParam(value: string | null): SortKey {
+  return value === "duration" || value === "events" ? value : "started";
 }
 
 function SessionsPageBody() {
@@ -144,18 +113,36 @@ function SessionsPageBody() {
   const searchParams = useSearchParams();
   const { sessions, loading, error, live, refetch } = useSessions();
 
-  const [query, setQuery] = useState(searchParams.get("q") ?? "");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("started");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  // Filter/sort state lives in the URL (?q=&status=&sort=&dir=) so filtered
+  // views are shareable and survive reload/back navigation.
+  const [query, setQueryState] = useState(searchParams.get("q") ?? "");
+  const [statusFilter, setStatusFilterState] = useState<StatusFilter>(
+    statusFromParam(searchParams.get("status"))
+  );
+  const [sortKey, setSortKey] = useState<SortKey>(sortFromParam(searchParams.get("sort")));
+  const [sortDir, setSortDir] = useState<SortDir>(
+    searchParams.get("dir") === "asc" ? "asc" : "desc"
+  );
+
+  const setQuery = (value: string): void => {
+    setQueryState(value);
+    replaceSearchParams({ q: value });
+  };
+
+  const setStatusFilter = (status: StatusFilter): void => {
+    setStatusFilterState(status);
+    replaceSearchParams({ status: status === "all" ? undefined : status });
+  };
 
   const onSort = (key: SortKey): void => {
-    if (key === sortKey) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
+    let nextDir: SortDir = "desc";
+    if (key === sortKey) nextDir = sortDir === "asc" ? "desc" : "asc";
+    setSortKey(key);
+    setSortDir(nextDir);
+    replaceSearchParams({
+      sort: key === "started" ? undefined : key,
+      dir: nextDir === "desc" ? undefined : nextDir
+    });
   };
 
   const counts = useMemo(() => {
@@ -191,7 +178,7 @@ function SessionsPageBody() {
         case "duration":
           return (a.durationMs - b.durationMs) * dir;
         case "events":
-          return (a.eventCount - b.eventCount) * dir;
+          return (a.spanCount - b.spanCount) * dir;
         case "started":
           return (a.startedAt - b.startedAt) * dir;
         default:
@@ -207,7 +194,6 @@ function SessionsPageBody() {
         subtitle="Every fusion run observed across the stack, correlated by trace id."
       >
         <LiveDot active={live} />
-        <ReplayButton onDone={refetch} />
         <Button variant="outline" size="sm" onClick={refetch}>
           Refresh
         </Button>
@@ -217,10 +203,12 @@ function SessionsPageBody() {
         <ErrorBanner error={error} />
 
         {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <Skeleton key={index} className="h-12 w-full" />
-            ))}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <Skeleton className="h-8 w-72" />
+              <Skeleton className="h-8 w-72" />
+            </div>
+            <TableSkeleton rows={5} />
           </div>
         ) : sessions.length === 0 ? (
           <EmptyState
@@ -228,7 +216,7 @@ function SessionsPageBody() {
             title="No sessions yet"
             hint={
               <>
-                Run <code className="mono">warrant fusion --observe</code> (or point any emitter at{" "}
+                Run <code className="mono">fusionkit codex --observe</code> (or point any emitter at{" "}
                 <code className="mono">FUSION_TRACE_URL</code>) and live sessions will appear here.
               </>
             }
@@ -313,13 +301,18 @@ function SessionsPageBody() {
                       </TableCell>
                       <TableCell className="max-w-[320px]">
                         <div>
-                          <Link
-                            href={`/sessions/${session.traceId}`}
-                            onClick={(event) => event.stopPropagation()}
-                            className="mono font-medium hover:underline"
-                          >
-                            {shortId(session.traceId)}
-                          </Link>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Link
+                                href={`/sessions/${session.traceId}`}
+                                onClick={(event) => event.stopPropagation()}
+                                className="mono font-medium hover:underline"
+                              >
+                                {shortTraceId(session.traceId)}
+                              </Link>
+                            </TooltipTrigger>
+                            <TooltipContent className="mono">{session.traceId}</TooltipContent>
+                          </Tooltip>
                           {session.dialect ? (
                             <span className="text-muted-foreground ml-2 text-xs">{session.dialect}</span>
                           ) : null}
@@ -340,7 +333,7 @@ function SessionsPageBody() {
                         {fmtDuration(session.durationMs)}
                       </TableCell>
                       <TableCell className="mono text-muted-foreground text-right text-sm">
-                        {session.eventCount}
+                        {session.spanCount}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-right text-sm">
                         <Tooltip>

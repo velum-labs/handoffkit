@@ -1,0 +1,42 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../packages/protocol"
+    },
+    {
+      "path": "../../../packages/registry"
+    },
+    {
+      "path": "../runner"
+    },
+    {
+      "path": "../../../packages/runtime-utils"
+    },
+    {
+      "path": "../session-hermetic"
+    },
+    {
+      "path": "../session-vercel-sandbox"
+    },
+    {
+      "path": "../../../packages/workspace"
+    },
+    {
+      "path": "../plane"
+    },
+    {
+      "path": "../sdk"
+    },
+    {
+      "path": "../../../packages/testkit"
+    }
+  ]
+}

@@ -83,14 +83,19 @@ export function createChatNarrationWriter(options: ChatNarrationWriterOptions): 
     candidateGist: (input, signal) =>
       ask(
         options,
-        `A coding model just finished a candidate solution. Its final message:\n` +
-          `${snippet(input.finalOutput, OUTPUT_SNIPPET_LIMIT)}\n` +
-          `One sentence: what did this candidate do?`,
+        `A coding model just finished a candidate. ` +
+          `${input.proposal !== undefined ? `It proposes the next action: ${snippet(input.proposal, OUTPUT_SNIPPET_LIMIT)}\n` : ""}` +
+          `${input.finalOutput.length > 0 ? `Its final message:\n${snippet(input.finalOutput, OUTPUT_SNIPPET_LIMIT)}\n` : ""}` +
+          `One sentence: what does this candidate do or propose?`,
         signal
       ),
     compareCandidates: (input, signal) => {
+      // Structural lines: each candidate's proposal (when it ends in one),
+      // answer text, and patch render side by side — the input carries the
+      // structure, so no mode parameter is needed.
       const lines = input.candidates.map((candidate) => {
         const bits = [
+          candidate.proposal !== undefined ? `proposes: ${snippet(candidate.proposal, OUTPUT_SNIPPET_LIMIT)}` : undefined,
           candidate.verificationStatus !== undefined ? `verification: ${candidate.verificationStatus}` : undefined,
           candidate.finalOutput !== undefined ? `says: ${snippet(candidate.finalOutput, OUTPUT_SNIPPET_LIMIT)}` : undefined,
           candidate.diff !== undefined ? `patch: ${snippet(candidate.diff, DIFF_SNIPPET_LIMIT)}` : undefined
@@ -99,7 +104,7 @@ export function createChatNarrationWriter(options: ChatNarrationWriterOptions): 
       });
       return ask(
         options,
-        `Candidate solutions from different models:\n${lines.join("\n")}\n` +
+        `Candidates from different models (each proposes a next action or answers):\n${lines.join("\n")}\n` +
           `One sentence comparing them for the user.`,
         signal
       );

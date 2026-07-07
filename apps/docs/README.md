@@ -46,6 +46,10 @@ each ordered by its own `meta.json` (and the root `content/docs/meta.json`):
 - **Self-Hosting**: operations guidance for the plane, runners, and release
   publishing.
 - **Examples**: scenario-based task guidance.
+- **Changelog**: release notes, generated from the repo-root `CHANGELOG.md` by
+  `scripts/sync-docs-changelog.mjs` (runs on every dev/build; the release
+  coordinator regenerates it in each release commit, and `pnpm check` at the
+  repo root fails when it drifts).
 - **API Reference**: runtime route overview plus generated contract reference.
 
 Mermaid code blocks render as diagrams (via `remarkMdxMermaid` plus the

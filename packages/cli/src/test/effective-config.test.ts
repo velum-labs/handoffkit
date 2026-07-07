@@ -45,8 +45,12 @@ test("config values win over defaults and are tagged as config-sourced", () => {
   const config: FusionConfig = {
     version: FUSION_CONFIG_VERSION,
     tool: "claude",
-    panel: [{ id: "gpt", model: "gpt-5.5", provider: "openai", keyEnv: "OPENAI_API_KEY" }],
-    judgeModel: "gpt-5.5",
+    ensembles: {
+      default: {
+        panel: [{ id: "gpt", model: "gpt-5.5", provider: "openai", keyEnv: "OPENAI_API_KEY" }],
+        judgeModel: "gpt-5.5"
+      }
+    },
     observe: true,
     onRateLimit: "passthrough"
   };
@@ -83,10 +87,66 @@ test("explicit flag overrides win over the config file (full precedence)", () =>
 });
 
 test("an empty panel array is treated as unset (default trio applies)", () => {
-  const config: FusionConfig = { version: FUSION_CONFIG_VERSION, panel: [] };
+  const config: FusionConfig = {
+    version: FUSION_CONFIG_VERSION,
+    ensembles: { default: { panel: [] } }
+  };
   const effective = resolveEffectiveConfig(config);
   assert.equal(effective.panel.source, "default");
   assert.equal(effective.panel.value.length, DEFAULT_CLOUD_PANEL.length);
+});
+
+test("multiple ensembles resolve, each with its own model id, panel, and judge", () => {
+  const config: FusionConfig = {
+    version: FUSION_CONFIG_VERSION,
+    ensembles: {
+      default: {
+        panel: [{ id: "gpt", model: "gpt-5.5", provider: "openai" }],
+        judgeModel: "gpt-5.5"
+      },
+      deep: {
+        panel: [
+          { id: "opus", model: "claude-opus-4-8", provider: "anthropic" },
+          { id: "gpt", model: "gpt-5.5", provider: "openai" }
+        ],
+        judgeModel: "claude-opus-4-8",
+        synthesizerModel: "claude-opus-4-8"
+      }
+    }
+  };
+  const effective = resolveEffectiveConfig(config);
+  assert.equal(effective.ensembles.source, "config");
+  assert.equal(effective.ensembles.value.length, 2);
+  // Session default (`default`) sorts first and supplies the top-level fields.
+  assert.deepEqual(effective.defaultEnsemble, { value: "default", source: "default" });
+  assert.equal(effective.ensembles.value[0]?.name, "default");
+  assert.equal(effective.ensembles.value[0]?.modelId, "fusion-panel");
+  assert.equal(effective.ensembles.value[1]?.name, "deep");
+  assert.equal(effective.ensembles.value[1]?.modelId, "fusion-deep");
+  assert.equal(effective.ensembles.value[1]?.judgeModel, "claude-opus-4-8");
+  assert.equal(effective.ensembles.value[1]?.synthesizerModel, "claude-opus-4-8");
+  assert.equal(effective.panel.value[0]?.id, "gpt");
+});
+
+test("--ensemble selects the session default and receives flag overrides", () => {
+  const config: FusionConfig = {
+    version: FUSION_CONFIG_VERSION,
+    ensembles: {
+      default: { panel: [{ id: "gpt", model: "gpt-5.5", provider: "openai" }] },
+      deep: {
+        panel: [{ id: "opus", model: "claude-opus-4-8", provider: "anthropic" }],
+        judgeModel: "claude-opus-4-8"
+      }
+    }
+  };
+  const effective = resolveEffectiveConfig(config, { ensemble: "deep", judgeModel: "gpt-5.5" });
+  assert.deepEqual(effective.defaultEnsemble, { value: "deep", source: "flag" });
+  assert.equal(effective.ensembles.value[0]?.name, "deep");
+  // The flag judge override applies to the selected ensemble only.
+  assert.deepEqual(effective.judgeModel, { value: "gpt-5.5", source: "flag" });
+  assert.equal(effective.panel.value[0]?.id, "opus");
+
+  assert.throws(() => resolveEffectiveConfig(config, { ensemble: "nope" }), /unknown ensemble/);
 });
 
 test("reasoning + reasoningModel resolve with full precedence", () => {

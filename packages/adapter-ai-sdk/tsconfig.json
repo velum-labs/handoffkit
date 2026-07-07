@@ -4,12 +4,18 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../handoff" },
-    { "path": "../protocol" },
-    { "path": "../runtime-utils" },
-    { "path": "../sdk" },
-    { "path": "../testkit" }
+    {
+      "path": "../protocol"
+    },
+    {
+      "path": "../runtime-utils"
+    },
+    {
+      "path": "../tracing"
+    }
   ]
 }

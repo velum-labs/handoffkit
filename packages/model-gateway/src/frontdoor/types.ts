@@ -10,7 +10,8 @@
 
 import type { WireTrajectory } from "@fusionkit/protocol";
 
-import type { ChatMessageLike } from "../fusion-backend.js";
+import type { ChatMessageLike } from "../fusion-types.js";
+import type { FusionGatewayLogger } from "../logger.js";
 import type { TurnNarration } from "./narration.js";
 
 /** The parsed OpenAI Chat Completions body the front door reads (data only). */
@@ -43,10 +44,14 @@ export type FrontdoorRequestValue = {
   sessionKey: string;
   /** 1-based user-turn index (a follow-up user message is a new turn). */
   turn: number;
-  /** The judge span id, minted once per turn so request/final share it. */
-  judgeSpanId: string;
   /** Whether the client asked for a streamed (SSE) response. */
   streaming: boolean;
+  /**
+   * Fusion panel depth of the caller (0 = user request; >= 1 = issued from
+   * inside a panel member, e.g. a member's fused sub-agent turn). Panel runs
+   * for depth >= 1 requests do not re-provision fused sub-agent access.
+   */
+  panelDepth?: number;
   /** Panel members to exclude this turn (WS5 failover drops the throttled vendor). */
   excludeModelIds?: readonly string[];
   /** A leading assistant content-delta notice (failover handoff). */
@@ -74,6 +79,8 @@ export type VendorProxyOutcome =
  * identity, spans, headers, and cost from the request + the kernel state store.
  */
 export type FrontdoorServices = {
+  /** Logger for human-facing gateway diagnostics. */
+  readonly logger: FusionGatewayLogger;
   /** The configured USD budget cap, if any. */
   readonly budgetUsd: number | undefined;
   /** The conversation's accrued gateway-observed cost (USD). */

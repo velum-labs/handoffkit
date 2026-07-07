@@ -39,6 +39,13 @@ export type Backend = {
 
 export type BackendRequestOptions = {
   modelCallId?: string;
+  /**
+   * How many fusion panel levels are above this request. 0 / absent = a user
+   * front-door request; 1 = issued by a panel member (e.g. a member's fused
+   * sub-agent turn). The fusion backend uses it to stop provisioning fused
+   * sub-agent access below one level of delegation.
+   */
+  panelDepth?: number;
 };
 
 export type OpenAiBackendOptions = {
@@ -64,7 +71,25 @@ export type OpenAiBackendOptions = {
    * receive the endpoint id. Absent means the client's model passes through.
    */
   forceModel?: string;
+  /** Extra headers sent on every request (e.g. the panel-depth marker). */
+  headers?: Record<string, string>;
 };
+
+/**
+ * Header carrying the fusion panel depth of the caller: requests issued from
+ * inside a panel member (e.g. a member's fused sub-agent turn) arrive at the
+ * front-door gateway with depth >= 1, which stops fused sub-agent provisioning
+ * from recursing (a depth-1 panel's members get no fused model access).
+ */
+export const PANEL_DEPTH_HEADER = "x-fusionkit-panel-depth";
+
+/** Parse a panel-depth header value; absent/invalid means depth 0 (a user request). */
+export function parsePanelDepth(value: string | string[] | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === undefined) return 0;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
 
 /** Join a base URL (which may end in `/`) with a route path. */
 export function joinPath(baseUrl: string, path: string): string {
@@ -78,12 +103,14 @@ export class OpenAiBackend implements Backend {
   readonly #baseUrl: string;
   readonly #apiKey: string;
   readonly #forceModel: string | undefined;
+  readonly #extraHeaders: Record<string, string>;
   readonly defaultModel: string | undefined;
 
   constructor(options: OpenAiBackendOptions) {
     this.#baseUrl = options.baseUrl;
     this.#apiKey = options.apiKey ?? "not-needed";
     this.#forceModel = options.forceModel;
+    this.#extraHeaders = options.headers ?? {};
     this.defaultModel = options.defaultModel;
   }
 
@@ -91,6 +118,7 @@ export class OpenAiBackend implements Backend {
     return {
       "content-type": "application/json",
       authorization: `Bearer ${this.#apiKey}`,
+      ...this.#extraHeaders,
       ...(options.modelCallId ? { "x-velum-model-call-id": options.modelCallId } : {})
     };
   }
@@ -127,5 +155,73 @@ export class OpenAiBackend implements Backend {
       body: JSON.stringify(body),
       ...(signal ? { signal } : {})
     });
+  }
+}
+
+export type ModelRoutedBackendOptions = {
+  /** Requested model ids served by `routed` instead of the primary backend. */
+  routedModelIds: readonly string[];
+  /** Backend for the routed ids (e.g. the front-door fusion gateway). */
+  routed: Backend;
+  /** Backend for everything else (e.g. the member's router endpoint). */
+  primary: Backend;
+};
+
+/**
+ * A backend that dispatches by requested model id: ids in `routedModelIds` go
+ * to the `routed` backend, everything else to `primary`. Used by panel-member
+ * capture gateways so a member's own-model traffic keeps hitting its router
+ * endpoint while its fused sub-agent traffic (`fusion-*`) reaches the
+ * front-door fusion gateway.
+ */
+export class ModelRoutedBackend implements Backend {
+  readonly #routedIds: ReadonlySet<string>;
+  readonly #routed: Backend;
+  readonly #primary: Backend;
+  readonly defaultModel: string | undefined;
+
+  constructor(options: ModelRoutedBackendOptions) {
+    this.#routedIds = new Set(options.routedModelIds);
+    this.#routed = options.routed;
+    this.#primary = options.primary;
+    this.defaultModel = options.primary.defaultModel;
+  }
+
+  #backendFor(model: string | undefined): Backend {
+    return model !== undefined && this.#routedIds.has(model) ? this.#routed : this.#primary;
+  }
+
+  listModelIds(): readonly string[] {
+    const ids = [...(this.#primary.listModelIds?.() ?? (this.defaultModel !== undefined ? [this.defaultModel] : []))];
+    for (const id of this.#routedIds) {
+      if (!ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  }
+
+  resolveModel(requested: string | undefined): string | undefined {
+    if (requested !== undefined && this.#routedIds.has(requested)) return requested;
+    return this.#primary.resolveModel?.(requested) ?? this.#primary.defaultModel;
+  }
+
+  chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
+    const model =
+      typeof body === "object" && body !== null && typeof (body as { model?: unknown }).model === "string"
+        ? (body as { model: string }).model
+        : undefined;
+    return this.#backendFor(model).chat(body, signal, options);
+  }
+
+  models(signal?: AbortSignal): Promise<Response> {
+    return this.#primary.models(signal);
+  }
+
+  embeddings(body: unknown, signal?: AbortSignal): Promise<Response> {
+    return this.#primary.embeddings(body, signal);
+  }
+
+  async close(): Promise<void> {
+    await this.#primary.close?.();
+    await this.#routed.close?.();
   }
 }

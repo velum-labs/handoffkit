@@ -7,7 +7,6 @@ import { after, test } from "node:test";
 import { generateText, streamText } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 
-import { handoffModel } from "../model.js";
 import { managedModelServer } from "../managed-server.js";
 import type { ManagedServerEvent } from "../managed-server.js";
 import { MlxCapabilityError } from "../mlx-env.js";
@@ -17,8 +16,7 @@ import type { SpawnSpec } from "../mlx-env.js";
  * Lifecycle tests against a fake OpenAI-compatible server (a node child
  * process fully under the test's control) so they run on any host: lazy
  * start, shared start across concurrent calls, idle scale-to-zero,
- * transparent restart, stream leases, and cloud escalation when the env
- * cannot be prepared.
+ * transparent restart, and stream leases.
  */
 
 // Serves /v1/models (health) and /v1/chat/completions (plain + SSE).
@@ -233,33 +231,3 @@ test("startup failure surfaces with server output in the message", async () => {
   assert.equal(model.status(), "stopped");
 });
 
-test("under handoffModel, an unpreparable env escalates to cloud", async () => {
-  const local = managedModelServer({
-    prepare: () =>
-      Promise.reject(
-        new MlxCapabilityError("MLX requires macOS on Apple Silicon")
-      ),
-    modelId: "mlx-community/some-model"
-  });
-  const cloud = new MockLanguageModelV3({
-    modelId: "frontier-cloud",
-    doGenerate: async () => ({
-      content: [{ type: "text" as const, text: "cloud handled it" }],
-      finishReason: { unified: "stop" as const, raw: "stop" },
-      usage: {
-        inputTokens: {
-          total: 1,
-          noCache: 1,
-          cacheRead: undefined,
-          cacheWrite: undefined
-        },
-        outputTokens: { total: 1, text: 1, reasoning: undefined }
-      },
-      warnings: []
-    })
-  });
-
-  const model = handoffModel({ local, cloud });
-  const result = await generateText({ model, prompt: "hello" });
-  assert.equal(result.text, "cloud handled it");
-});

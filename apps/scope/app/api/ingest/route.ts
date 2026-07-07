@@ -1,39 +1,30 @@
 import { NextResponse } from "next/server";
 
-import { ingestEvent } from "@/lib/db";
-import { isFusionTraceEvent } from "@/lib/types";
+import { ingestSpan } from "@/lib/db";
+import { parseOtlpExport } from "@/lib/otlp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type IngestBody = { events?: unknown } | unknown[] | unknown;
-
-/** Accept a single event, an array of events, or { events: [...] }. */
-function extractEvents(body: IngestBody): unknown[] {
-  if (Array.isArray(body)) return body;
-  if (typeof body === "object" && body !== null && Array.isArray((body as { events?: unknown }).events)) {
-    return (body as { events: unknown[] }).events;
-  }
-  if (typeof body === "object" && body !== null) return [body];
-  return [];
-}
-
+/**
+ * The OTLP/HTTP traces receiver. Fusion components point their standard
+ * OTLP exporters here (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`); the endpoint
+ * accepts `ExportTraceServiceRequest` JSON (spec-conformant hex-id encoding
+ * or the protobuf-JSON mapping) and replies with the standard export
+ * response shape.
+ */
 export async function POST(request: Request): Promise<NextResponse> {
-  let body: IngestBody;
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
+  const spans = parseOtlpExport(body);
   let accepted = 0;
-  let rejected = 0;
-  for (const candidate of extractEvents(body)) {
-    if (isFusionTraceEvent(candidate)) {
-      ingestEvent(candidate);
-      accepted += 1;
-    } else {
-      rejected += 1;
-    }
+  for (const span of spans) {
+    if (ingestSpan(span) !== undefined) accepted += 1;
   }
-  return NextResponse.json({ accepted, rejected });
+  // Standard OTLP success response; `accepted` is a collector-local extra.
+  return NextResponse.json({ partialSuccess: {}, accepted });
 }

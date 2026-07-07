@@ -11,16 +11,16 @@ This map ties every major repository area to the documentation that owns it. Use
 | `packages/model-gateway` | `docs/fusion-harness-gateway.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, `docs/specs-and-apis.md`, public API Reference | Gateway routes, dialect adapters, streaming, sessions, cost, rate-limit handoff, provenance, frontdoor workflows, and trajectory capture. |
 | `packages/ensemble` | `docs/fusion-judge-trajectory.md`, `docs/fusion/runtime-kernel.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, public Runtime Kernel | Panel execution, worktrees, harnesses, judge synthesis, kernel workflows, operators, schedulers, isolation, and tool execution. |
 | `packages/kernel` | `docs/typescript-reference.md`, `docs/fusion/runtime-kernel.md`, public Runtime Kernel | Dependency-free runtime substrate, artifacts, operators, graphs, validation, wire artifacts, and replay records. |
-| `packages/protocol` | `docs/specs-and-apis.md`, `docs/model-fusion-protocol-consumption.md`, `docs/typescript-reference.md` | Contracts, validators, hashes, signing, generated OpenAPI SDKs, trace events, and protocol consumption. |
+| `packages/protocol` | `docs/specs-and-apis.md`, `docs/model-fusion-protocol-consumption.md`, `docs/typescript-reference.md` | Contracts, validators, hashes, signing, generated OpenAPI SDKs, trace conventions, and protocol consumption. |
 | `packages/workspace` | `docs/typescript-reference.md`, `docs/repository-reference.md` | Git capture, materialization, safe paths, output collection, and divergence-safe pull. |
 | `packages/tools` and `packages/tool-*` | `docs/typescript-reference.md`, public Package Map | Tool integration contract, registry, launchers, harness adapters, Cursor bridge, Codex, Claude Code, and opencode integration. |
-| `packages/adapter-ai-sdk` | `docs/typescript-reference.md`, public Adapters | Remote tools, swarm tools, handoff models, routed models, worktree agents, and MLX server helpers. |
-| `packages/plane` | `docs/concepts.md`, `docs/architecture.md`, `docs/typescript-reference.md`, public Core Concepts | Control plane, policy, approvals, principals, secrets, contracts, receipts, metrics, retention, and UI. |
-| `packages/runner` | `docs/concepts.md`, `docs/architecture.md`, `docs/typescript-reference.md`, public Self-hosting | Claim loop, execution preparation, session backend lifecycle, egress integration, and runner receipts. |
-| `packages/sdk` | `docs/typescript-reference.md`, public Plane SDK | Plane client and offline receipt verification helpers. |
-| `packages/handoff` | `docs/handoff-sdk.md`, `docs/typescript-reference.md`, public Handoff SDK | Continuations, checkpoints, `continueIn`, review, pull, tools, routing, triggers, and policies. |
-| `packages/adapter-compute` | `docs/typescript-reference.md`, public Adapters | ComputeSDK-shaped sandbox surface backed by governed sessions. |
-| `packages/session-*` | `docs/typescript-reference.md`, `docs/architecture.md`, public Self-hosting | Hermetic sessions, Vercel Sandbox sessions, AI SDK harness sessions, transcript recording, and auth helpers. |
+| `packages/adapter-ai-sdk` | `docs/typescript-reference.md`, public Adapters | Product-local AI SDK utilities, worktree agents, and MLX server helpers. |
+| `legacy/packages/plane` | `legacy/docs/concepts.md`, `legacy/docs/architecture.md`, `docs/typescript-reference.md`, public Core Concepts | Control plane, policy, approvals, principals, secrets, contracts, receipts, metrics, retention, and UI. |
+| `legacy/packages/runner` | `legacy/docs/concepts.md`, `legacy/docs/architecture.md`, `docs/typescript-reference.md`, public Self-hosting | Claim loop, execution preparation, session backend lifecycle, egress integration, and runner receipts. |
+| `legacy/packages/sdk` | `docs/typescript-reference.md`, public Plane SDK | Plane client and offline receipt verification helpers. |
+| `legacy/packages/handoff` | `legacy/docs/handoff-sdk.md`, `docs/typescript-reference.md`, public Handoff SDK | Continuations, checkpoints, `continueIn`, review, pull, tools, routing, triggers, and policies. |
+| `legacy/packages/adapter-compute` | `docs/typescript-reference.md`, public Adapters | ComputeSDK-shaped sandbox surface backed by governed sessions. |
+| `legacy/packages/session-*` | `docs/typescript-reference.md`, `legacy/docs/architecture.md`, public Self-hosting | Hermetic sessions, Vercel Sandbox sessions, AI SDK harness sessions, transcript recording, and auth helpers. |
 | `packages/testkit` and `packages/example-utils` | `docs/typescript-reference.md`, `docs/apps-and-examples.md` | Test fixtures, in-process stacks, git fixtures, example manifests, narration, and mock models. |
 | `python/fusionkit-core` | `docs/python-reference.md`, `docs/generated/code-api.md`, `docs/specs-and-apis.md` | Config, clients, fusion engine, judge, run manager, contracts, run store, providers, prompts, traces, artifacts, metrics, and producers. |
 | `python/fusionkit-server` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Inference endpoint, public API Reference | FastAPI app, OpenAI-compatible routes, trajectory fusion route, and native run endpoints. |
@@ -32,7 +32,7 @@ This map ties every major repository area to the documentation that owns it. Use
 | `apps/scope` | `docs/apps-and-examples.md`, public Observability | Trace dashboard, local install, tests, trace and session correlation, and observability workflow. |
 | `examples/*` | `docs/apps-and-examples.md`, public Examples | Every runnable example, scope, command, expected behavior, and maintenance rules. |
 | `spec/model-fusion-contract` | `docs/specs-and-apis.md`, public API Reference | Schemas, fixtures, OpenAPI, generated bindings, contract records, and code generation workflow. |
-| `spec/fusion-trace` | `docs/specs-and-apis.md`, public Observability | Trace event schema, fixtures, payload shape, and producer expectations. |
+| `spec/fusion-trace` | `docs/specs-and-apis.md`, public Observability | OpenTelemetry semantic-conventions registry (span names, attribute keys, sensitivity classes) and generated bindings. |
 | `spec/*.md` | `docs/documentation-taxonomy.md` | Design archive material that should not be treated as current product truth unless promoted. |
 | `scripts/*` | `docs/operations-and-scripts.md` | Checks, demos, releases, code generation, e2e harnesses, local servers, and monorepo helpers. |
 | `release/*` | `docs/operations-and-scripts.md`, `docs/releasing.md`, `docs/release-publishing.md` | Release state, package lists, dependency graph, desired state, and publish metadata. |

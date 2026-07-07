@@ -10,8 +10,10 @@ import {
 } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
+import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
+import { PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";
 import type { Backend } from "./backend.js";
 import {
   buildModelCallRecord,
@@ -91,6 +93,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
+    // Cursor may probe the models list relative to its BYOK base URL
+    // (`.../v1/cursor`); mirror /v1/models there.
+    if (method === "GET" && path === "/v1/cursor/models") {
+      await pipeUpstream(res, await backend.models());
+      return;
+    }
+
     // Anthropic single-model retrieve (`GET /v1/models/{id}`): Claude Code probes
     // this to validate a selected model before its first turn. Echo the id back
     // so any advertised/aliased id validates; routing is decided at chat time.
@@ -105,6 +114,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
+    // Depth of the caller inside the fusion panel tree (0 = a user request).
+    // Carried by panel-member capture gateways so a member's fused sub-agent
+    // turn never re-provisions fused access one level further down.
+    const panelDepth = parsePanelDepth(req.headers[PANEL_DEPTH_HEADER]);
+
     if (method === "POST" && (path === "/v1/chat/completions" || path === "/chat/completions")) {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
@@ -113,7 +127,34 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) => backend.chat(body, signal, { modelCallId: callId })
+        invoke: (callId, signal) => backend.chat(body, signal, { modelCallId: callId, panelDepth })
+      });
+      return;
+    }
+
+    // Cursor's BYOK base-URL override POSTs a Responses-API-shaped body to
+    // `{base_url}/chat/completions` while expecting Chat Completions back (a
+    // known Cursor hybrid). Translate it, then delegate to the exact code path
+    // the plain /v1/chat/completions route uses. Plain Chat Completions bodies
+    // (Cursor Ask mode) pass through untranslated.
+    if (method === "POST" && path === "/v1/cursor/chat/completions") {
+      const raw = await readJson(req, res);
+      if (raw === NO_BODY) return;
+      if (!isCursorChatBody(raw)) {
+        writeJson(res, 400, {
+          error: {
+            message: 'request body must be a JSON object with "messages" or "input"',
+            type: "invalid_request_error"
+          }
+        });
+        return;
+      }
+      const body = withDefaultModel(translateCursorRequest(raw), backend.defaultModel);
+      await handleModelCall(res, provenance, {
+        dialect: "openai-chat",
+        body,
+        defaultModel: backend.defaultModel,
+        invoke: (callId, signal) => backend.chat(body, signal, { modelCallId: callId, panelDepth })
       });
       return;
     }
@@ -140,7 +181,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "anthropic-messages",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) => handleAnthropicMessages(backend, body, callId, signal)
+        invoke: (callId, signal) => handleAnthropicMessages(backend, body, callId, signal, panelDepth)
       });
       return;
     }
@@ -153,7 +194,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-responses",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) => handleResponses(backend, body, callId, signal)
+        invoke: (callId, signal) => handleResponses(backend, body, callId, signal, panelDepth)
       });
       return;
     }

@@ -113,8 +113,18 @@ export function definedEnv(env: EnvInput): Record<string, string> {
   return result;
 }
 
+/**
+ * Strip trailing "/" characters in linear time (a `/\/+$/` regex backtracks
+ * polynomially on adversarial input, which code scanning rightly flags).
+ */
+export function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 0x2f) end -= 1;
+  return value.slice(0, end);
+}
+
 export function normalizeApiBaseUrl(baseUrl: string): string {
-  const trimmed = baseUrl.replace(/\/+$/, "");
+  const trimmed = trimTrailingSlashes(baseUrl);
   return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
 }
 
@@ -569,7 +579,9 @@ export function terminate(child: ChildProcess, graceMs = 5000): void {
 }
 
 export function escapeMarkdownCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
+  // Backslashes must be escaped first so pre-existing "\|" sequences in the
+  // input cannot smuggle an unescaped cell delimiter through.
+  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, "<br>");
 }
 
 export function markdownTable(headers: readonly string[], rows: readonly (readonly string[])[]): string[] {

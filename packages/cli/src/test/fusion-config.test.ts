@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 
 import {
+  DEFAULT_ENSEMBLE_NAME,
   FUSION_CONFIG_VERSION,
   FusionConfigError,
   fusionConfigPath,
@@ -17,6 +18,11 @@ import {
   writeFusionPrompts
 } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
+
+/** The default ensemble a flat/legacy `panel`/`judgeModel` upgrades into. */
+function defaultEnsemble(config: FusionConfig | undefined) {
+  return config?.ensembles?.[DEFAULT_ENSEMBLE_NAME];
+}
 
 const tmpRoots: string[] = [];
 function freshDir(): string {
@@ -41,10 +47,101 @@ test("parseFusionConfig accepts a valid config", () => {
   };
   const config = parseFusionConfig(raw, "test");
   assert.equal(config.tool, "codex");
-  assert.equal(config.panel?.length, 1);
-  assert.equal(config.panel?.[0]?.provider, "openai");
+  assert.equal(defaultEnsemble(config)?.panel?.length, 1);
+  assert.equal(defaultEnsemble(config)?.panel?.[0]?.provider, "openai");
+  assert.equal(defaultEnsemble(config)?.judgeModel, "gpt-5.5");
   assert.equal(config.observe, true);
   assert.equal(config.port, 1234);
+});
+
+test("parseFusionConfig accepts a v3 ensembles map", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      defaultEnsemble: "deep",
+      ensembles: {
+        default: { panel: [{ id: "gpt", model: "gpt-5.5", provider: "openai" }] },
+        deep: {
+          panel: [{ id: "opus", model: "claude-opus-4-8", provider: "anthropic" }],
+          judgeModel: "claude-opus-4-8",
+          synthesizerModel: "claude-opus-4-8"
+        }
+      }
+    },
+    "test"
+  );
+  assert.deepEqual(Object.keys(config.ensembles ?? {}), ["default", "deep"]);
+  assert.equal(config.defaultEnsemble, "deep");
+  assert.equal(config.ensembles?.deep?.judgeModel, "claude-opus-4-8");
+  assert.equal(config.ensembles?.deep?.synthesizerModel, "claude-opus-4-8");
+});
+
+test("parseFusionConfig validates ensemble names", () => {
+  const panel = [{ id: "gpt", model: "gpt-5.5", provider: "openai" }];
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        { version: FUSION_CONFIG_VERSION, ensembles: { "Bad Name": { panel } } },
+        "test"
+      ),
+    /ensemble name/
+  );
+  // "panel" is reserved: it would collide with the default's `fusion-panel` id.
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        { version: FUSION_CONFIG_VERSION, ensembles: { panel: { panel } } },
+        "test"
+      ),
+    /reserved/
+  );
+});
+
+test("parseFusionConfig requires a non-empty panel on non-default ensembles", () => {
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        { version: FUSION_CONFIG_VERSION, ensembles: { deep: { judgeModel: "gpt-5.5" } } },
+        "test"
+      ),
+    /ensembles\.deep\.panel/
+  );
+  // The default ensemble may omit the panel (built-in trio applies).
+  const config = parseFusionConfig(
+    { version: FUSION_CONFIG_VERSION, ensembles: { default: { judgeModel: "gpt-5.5" } } },
+    "test"
+  );
+  assert.equal(defaultEnsemble(config)?.judgeModel, "gpt-5.5");
+});
+
+test("parseFusionConfig validates defaultEnsemble names a defined ensemble", () => {
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        {
+          version: FUSION_CONFIG_VERSION,
+          defaultEnsemble: "nope",
+          ensembles: { default: { panel: [{ id: "gpt", model: "gpt-5.5" }] } }
+        },
+        "test"
+      ),
+    /defaultEnsemble/
+  );
+});
+
+test("parseFusionConfig rejects flat panel combined with ensembles", () => {
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        {
+          version: FUSION_CONFIG_VERSION,
+          panel: [{ id: "gpt", model: "gpt-5.5" }],
+          ensembles: { default: { panel: [{ id: "gpt", model: "gpt-5.5" }] } }
+        },
+        "test"
+      ),
+    /cannot be combined/
+  );
 });
 
 test("parseFusionConfig accepts panelTrust levels and rejects unknown ones", () => {
@@ -57,6 +154,18 @@ test("parseFusionConfig accepts panelTrust levels and rejects unknown ones", () 
   assert.equal(unset.panelTrust, undefined);
   assert.throws(
     () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, panelTrust: "yolo" }, "test"),
+    FusionConfigError
+  );
+});
+
+test("parseFusionConfig accepts the subagents opt-out and rejects bad values", () => {
+  const off = parseFusionConfig({ version: FUSION_CONFIG_VERSION, subagents: false }, "test");
+  assert.equal(off.subagents, false);
+  // Unset stays undefined (defaults to on downstream).
+  const unset = parseFusionConfig({ version: FUSION_CONFIG_VERSION }, "test");
+  assert.equal(unset.subagents, undefined);
+  assert.throws(
+    () => parseFusionConfig({ version: FUSION_CONFIG_VERSION, subagents: "yes" }, "test"),
     FusionConfigError
   );
 });
@@ -93,8 +202,8 @@ test("parseFusionConfig accepts subscription panel entries with auth", () => {
     },
     "test"
   );
-  assert.equal(config.panel?.[0]?.auth, "claude-code");
-  assert.equal(config.panel?.[1]?.auth, "codex");
+  assert.equal(defaultEnsemble(config)?.panel?.[0]?.auth, "claude-code");
+  assert.equal(defaultEnsemble(config)?.panel?.[1]?.auth, "codex");
 });
 
 test("parseFusionConfig accepts panel pricing and local compute metadata", () => {
@@ -113,8 +222,8 @@ test("parseFusionConfig accepts panel pricing and local compute metadata", () =>
     },
     "test"
   );
-  assert.equal(config.panel?.[0]?.pricing?.outputPer1mTokens, 0);
-  assert.equal(config.panel?.[0]?.localCompute?.usdPerDeviceHour, 0.36);
+  assert.equal(defaultEnsemble(config)?.panel?.[0]?.pricing?.outputPer1mTokens, 0);
+  assert.equal(defaultEnsemble(config)?.panel?.[0]?.localCompute?.usdPerDeviceHour, 0.36);
   assert.throws(
     () =>
       parseFusionConfig(
@@ -167,9 +276,9 @@ test("parseFusionConfig accepts an openrouter panel entry", () => {
     },
     "test"
   );
-  assert.equal(config.panel?.[0]?.provider, "openrouter");
-  assert.equal(config.panel?.[0]?.model, "anthropic/claude-sonnet-4.5");
-  assert.equal(config.panel?.[0]?.keyEnv, "OPENROUTER_API_KEY");
+  assert.equal(defaultEnsemble(config)?.panel?.[0]?.provider, "openrouter");
+  assert.equal(defaultEnsemble(config)?.panel?.[0]?.model, "anthropic/claude-sonnet-4.5");
+  assert.equal(defaultEnsemble(config)?.panel?.[0]?.keyEnv, "OPENROUTER_API_KEY");
 });
 
 test("parseFusionConfig rejects an unknown panel provider", () => {
@@ -203,11 +312,15 @@ test("write then load round-trips the config through .fusionkit/fusion.json", ()
   const config: FusionConfig = {
     version: FUSION_CONFIG_VERSION,
     tool: "claude",
-    panel: [
-      { id: "gpt", model: "gpt-5.5", provider: "openai", keyEnv: "OPENAI_API_KEY" },
-      { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic", keyEnv: "ANTHROPIC_API_KEY" }
-    ],
-    judgeModel: "gpt-5.5",
+    ensembles: {
+      [DEFAULT_ENSEMBLE_NAME]: {
+        panel: [
+          { id: "gpt", model: "gpt-5.5", provider: "openai", keyEnv: "OPENAI_API_KEY" },
+          { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic", keyEnv: "ANTHROPIC_API_KEY" }
+        ],
+        judgeModel: "gpt-5.5"
+      }
+    },
     local: false,
     observe: false
   };
@@ -286,6 +399,46 @@ test("loadFusionConfig auto-migrates a legacy fusionkit.json into .fusionkit/", 
   assert.match(notices[0] ?? "", /migrated/);
 });
 
+test("per-ensemble prompts override the flat files per id, flat files are the fallback", () => {
+  const dir = freshDir();
+  writeFusionConfig(dir, {
+    version: FUSION_CONFIG_VERSION,
+    ensembles: {
+      default: { panel: [{ id: "gpt", model: "gpt-5.5", provider: "openai" }] },
+      deep: { panel: [{ id: "opus", model: "claude-opus-4-8", provider: "anthropic" }] }
+    }
+  });
+  writeFusionPrompts(dir, { judge: "FLAT JUDGE", synthesizer: "FLAT SYNTH" });
+  writeFusionPrompts(dir, { judge: "DEEP JUDGE" }, { ensemble: "deep" });
+  const loaded = loadFusionConfig(dir);
+  // The default ensemble uses the flat files verbatim.
+  assert.deepEqual(loaded?.ensembles?.default?.prompts, {
+    judge: "FLAT JUDGE",
+    synthesizer: "FLAT SYNTH"
+  });
+  // A named ensemble's own file wins per id; missing ids fall back to flat.
+  assert.deepEqual(loaded?.ensembles?.deep?.prompts, {
+    judge: "DEEP JUDGE",
+    synthesizer: "FLAT SYNTH"
+  });
+  // The top-level prompts stay the flat (default-ensemble) overrides.
+  assert.deepEqual(loaded?.prompts, { judge: "FLAT JUDGE", synthesizer: "FLAT SYNTH" });
+});
+
+test("a legacy flat panel upgrades into ensembles.default in memory", () => {
+  const config = parseFusionConfig(
+    {
+      version: "fusionkit.fusion.v2",
+      panel: [{ id: "gpt", model: "gpt-5.5", provider: "openai" }],
+      judgeModel: "gpt-5.5"
+    },
+    "test"
+  );
+  assert.equal(config.version, FUSION_CONFIG_VERSION);
+  assert.equal(defaultEnsemble(config)?.panel?.[0]?.id, "gpt");
+  assert.equal(defaultEnsemble(config)?.judgeModel, "gpt-5.5");
+});
+
 test("loadFusionConfig migrates a legacy v1 file and upgrades the version", () => {
   const dir = freshDir();
   writeFileSync(
@@ -296,4 +449,37 @@ test("loadFusionConfig migrates a legacy v1 file and upgrades the version", () =
   assert.equal(loaded?.version, FUSION_CONFIG_VERSION);
   const migrated = JSON.parse(readFileSync(fusionConfigPath(dir), "utf8")) as { version: string };
   assert.equal(migrated.version, FUSION_CONFIG_VERSION);
+});
+
+test("k parses per ensemble and at the top level", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      k: 4,
+      ensembles: {
+        step: { panel: [{ id: "gpt", model: "gpt-5.5" }], k: 1 },
+        deep: { panel: [{ id: "gpt", model: "gpt-5.5" }] }
+      }
+    },
+    "test"
+  );
+  assert.equal(config.k, 4);
+  assert.equal(config.ensembles?.step?.k, 1);
+  assert.equal(config.ensembles?.deep?.k, undefined);
+});
+
+test("k rejects non-positive and non-integer values", () => {
+  for (const bad of [0, -1, 1.5, "2"]) {
+    assert.throws(
+      () =>
+        parseFusionConfig(
+          {
+            version: FUSION_CONFIG_VERSION,
+            ensembles: { step: { panel: [{ id: "gpt", model: "gpt-5.5" }], k: bad } }
+          },
+          "test"
+        ),
+      /k must be a positive integer/
+    );
+  }
 });

@@ -1,5 +1,8 @@
 # Coding Capability Index — Critical Analysis and Unified Methodology
 
+> **Internal - not product documentation:** Design archive for maintainers; do not treat this as current user-facing product guidance.
+
+
 **Subject:** full critical analysis of the *Coding Model Router Benchmark Plan*
 (`coding_model_router_benchmark_plan(1).md`, 2026-07-03 revision) versus
 [handoffkit PR #52](https://github.com/velum-labs/handoffkit/pull/52)

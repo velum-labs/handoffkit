@@ -504,7 +504,8 @@ function liveSmokeRuns(options: {
   for (const tool of options.tools) {
     const live = tool.liveSmoke;
     if (live === undefined) continue;
-    const harness = options.harnesses?.[tool.id] ?? live.makeHarness(options.env);
+    const injectedHarness = options.harnesses?.[tool.id];
+    const harness = injectedHarness ?? live.makeHarness(options.env);
     runs.push({
       taskId: live.taskId,
       harnessId: tool.id,
@@ -517,7 +518,7 @@ function liveSmokeRuns(options: {
       allowedTools: ["read_file"],
       capabilities: tool.capabilities,
       prompt: live.prompt,
-      preflightFailureReason: tool.credentialSkipReason(options.env)
+      preflightFailureReason: injectedHarness === undefined ? tool.credentialSkipReason(options.env) : undefined
     });
   }
   return runs;

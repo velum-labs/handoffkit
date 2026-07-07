@@ -12,6 +12,9 @@ import { cursorBridgeEnv } from "./bridge-config.js";
 export async function startCursorBridge(input: {
   fusionUrl: string;
   modelLabel: string;
+  /** Every fused ensemble model id (session default first). */
+  fusedModels?: readonly string[];
+  nativeModels?: readonly string[];
   logFile?: string;
   caCertPath?: string;
   log: (line: string) => void;
@@ -22,6 +25,8 @@ export async function startCursorBridge(input: {
     gatewayUrl: input.fusionUrl,
     modelName: input.modelLabel,
     providerModel: input.modelLabel,
+    ...(input.fusedModels !== undefined ? { fusedModels: input.fusedModels } : {}),
+    ...(input.nativeModels !== undefined ? { nativeModels: input.nativeModels } : {}),
     ...(input.caCertPath !== undefined ? { caCertPath: input.caCertPath } : {})
   });
   const { serveCli } = resolveCursorkitCli();

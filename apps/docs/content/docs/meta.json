@@ -7,8 +7,9 @@
     "cli",
     "concepts",
     "sdks",
-    "operations",
+    "privacy",
     "examples",
+    "changelog",
     "api"
   ]
 }

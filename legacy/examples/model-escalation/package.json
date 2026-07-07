@@ -1,0 +1,15 @@
+{
+  "name": "@fusionkit/example-model-escalation",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: deterministic local-to-cloud model escalation.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@ai-sdk/provider": "4.0.2",
+    "@fusionkit/example-utils": "workspace:*",
+    "@fusionkit/handoff": "workspace:*",
+    "@fusionkit/testkit": "workspace:*",
+    "ai": "6.0.200"
+  }
+}

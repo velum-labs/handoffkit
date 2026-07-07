@@ -77,7 +77,13 @@ function resolveEnv(context: DriverContext | undefined): Record<string, string |
   return context?.env ?? process.env;
 }
 
-/** The canonical approval request type for a claude tool name. */
+/**
+ * The canonical approval request type for a claude tool name. Note `Task`
+ * (Claude's sub-agent tool) deliberately lands in the generic `tool_approval`
+ * bucket: under the panel default policy (`autoApprove: "all"`) it is
+ * auto-accepted, so panel members can parallelize with same-model sub-agents,
+ * while stricter policies (`edits`/`none`) still surface it like any tool.
+ */
 function requestTypeForTool(toolName: string): HarnessRequestType {
   const lower = toolName.toLowerCase();
   if (lower.includes("bash") || lower.includes("execute")) return "exec_command_approval";

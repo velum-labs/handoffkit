@@ -1,12 +1,12 @@
 import { bus } from "@/lib/db";
-import type { FusionTraceEvent } from "@/lib/types";
+import type { StoredSpan } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Server-Sent Events stream of newly ingested trace events. Clients use this
- * to live-update the sessions list and an open session detail without polling.
+ * Server-Sent Events stream of newly ingested spans. Clients use this to
+ * live-update the sessions list and an open session detail without polling.
  */
 export async function GET(request: Request): Promise<Response> {
   const encoder = new TextEncoder();
@@ -15,16 +15,16 @@ export async function GET(request: Request): Promise<Response> {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
-      const send = (event: FusionTraceEvent): void => {
+      const send = (span: StoredSpan): void => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(span)}\n\n`));
         } catch {
           closed = true;
         }
       };
-      const onEvent = (event: FusionTraceEvent): void => send(event);
-      emitter.on("event", onEvent);
+      const onSpan = (span: StoredSpan): void => send(span);
+      emitter.on("span", onSpan);
 
       controller.enqueue(encoder.encode(`: connected\n\n`));
       const heartbeat = setInterval(() => {
@@ -40,7 +40,7 @@ export async function GET(request: Request): Promise<Response> {
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
-        emitter.off("event", onEvent);
+        emitter.off("span", onSpan);
         try {
           controller.close();
         } catch {

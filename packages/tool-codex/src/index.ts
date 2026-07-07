@@ -42,10 +42,11 @@ export const codexTool: ToolIntegration = {
     harnessDriversEnabled() ? codexDriverHarness(options) : createCodexHarness({
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
-      ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+      ...(options.trace !== undefined ? { trace: options.trace } : {}),
       ...(options.turn !== undefined ? { turn: options.turn } : {}),
       ...(options.panelIdentity !== undefined ? { panelIdentity: options.panelIdentity } : {}),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+      ...(options.fusedSubagents !== undefined ? { fusedSubagents: options.fusedSubagents } : {}),
       // Panel candidates run unattended in disposable worktrees, so default to
       // maximum autonomy. `guarded` falls back to the side-effects-derived
       // sandbox (workspace-write), which `sandboxModeFor` picks when unset.
@@ -114,8 +115,7 @@ function codexDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter 
     driver: createCodexDriver(),
     fusionBackendUrl: options.fusionBackendUrl,
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
-    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),
     configForModel: (route) =>
@@ -138,8 +138,10 @@ export {
   codexEndReason,
   codexHarness,
   codexHarnessCredentialSkipReason,
+  codexMemberCatalogJson,
   createCodexHarness,
-  defaultCodexRunner
+  defaultCodexRunner,
+  memberChatBackend
 } from "./harness.js";
 export type {
   CodexAmbientProvider,
@@ -156,10 +158,14 @@ export type {
   CodexSandboxMode
 } from "./harness.js";
 export {
+  codexAgentRoles,
+  codexAgentRoleToml,
   codexLaunchConfigToml,
   codexModelCatalogJson,
+  codexRoleDescription,
   launchCodex,
   readCodexCatalogTemplate
 } from "./launch.js";
+export type { CodexAgentRole } from "./launch.js";
 export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 export type { CodexDriverConfig } from "./driver.js";

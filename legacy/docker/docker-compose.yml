@@ -1,0 +1,85 @@
+# Warrant demo deployment: control plane + control panel, one outbound-only
+# runner, and a seeder that fills the panel with showcase runs.
+#
+#   docker compose -f legacy/docker/docker-compose.yml up --build
+#   open http://localhost:7172/ui/
+#
+#   With portless installed on the host (containers can't share the host route
+#   table), register the published port for a clean URL:
+#     portless alias warrant 7172   # -> https://warrant.localhost/ui/
+#
+#   docker compose -f legacy/docker/docker-compose.yml exec plane warrant ui
+#   docker compose -f legacy/docker/docker-compose.yml exec plane warrant runs
+#
+# WARRANT_MASTER_KEY seals the org signing key and the secret store at rest.
+# A dev default is provided so the demo runs out of the box; set a real
+# 32-byte key (e.g. `openssl rand -hex 32`) in production:
+#
+#   WARRANT_MASTER_KEY=$(openssl rand -hex 32) docker compose -f legacy/docker/docker-compose.yml up
+x-app-build: &app-build
+  context: ../..
+  dockerfile: legacy/docker/Dockerfile
+  args:
+    PACKAGES_READ_TOKEN: ${PACKAGES_READ_TOKEN:-}
+
+services:
+  plane:
+    build: *app-build
+    init: true
+    environment:
+      # Dev-only fallback so `docker compose up` works out of the box; any
+      # real deployment sets WARRANT_MASTER_KEY in the environment (the
+      # value name says so out loud).
+      WARRANT_MASTER_KEY: "${WARRANT_MASTER_KEY:-dev-master-key-change-me-in-production-00000000}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+    command:
+      - sh
+      - -c
+      - |
+        test -f /data/warrant/config.json || warrant init --host 0.0.0.0 --plane-url http://plane:7172
+        exec warrant plane start
+    ports:
+      # 7172 is Warrant's canonical port (docs, demos, and CI all use it);
+      # remap the host side here if it collides locally.
+      - "7172:7172"
+    volumes:
+      # Persists config, master key, the SQLite database, and blobs.
+      - warrant-home:/data/warrant
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7172/v1/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  runner:
+    build: *app-build
+    init: true
+    depends_on:
+      plane:
+        condition: service_healthy
+    environment:
+      WARRANT_MASTER_KEY: "${WARRANT_MASTER_KEY:-dev-master-key-change-me-in-production-00000000}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+    command: warrant runner start --pool default --plane http://plane:7172 --data-dir /data/runner
+    volumes:
+      # The runner reads only the enroll token from the shared home; its own
+      # identity and keys live in its private volume.
+      - warrant-home:/data/warrant
+      - runner-home:/data/runner
+
+  seed:
+    build: *app-build
+    init: true
+    restart: "no"
+    depends_on:
+      plane:
+        condition: service_healthy
+      runner:
+        condition: service_started
+    command: node /app/legacy/examples/seed/dist/run.js --dir /data/warrant
+    volumes:
+      - warrant-home:/data/warrant
+
+volumes:
+  warrant-home:
+  runner-home:

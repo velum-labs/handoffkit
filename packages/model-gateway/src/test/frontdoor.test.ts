@@ -22,6 +22,7 @@ function jsonResponse(content: string): Response {
 /** A default services stub; every method is overridable per test. */
 function makeServices(overrides: Partial<FrontdoorServices> = {}): FrontdoorServices {
   return {
+    logger: { warn: () => undefined, error: () => undefined },
     budgetUsd: undefined,
     costTotalUsd: () => 0,
     budgetStopResponse: () => new Response("", { status: 402 }),
@@ -46,7 +47,6 @@ function makeReq(overrides: Partial<FrontdoorRequestValue> = {}): FrontdoorReque
     chat: { messages: [] },
     sessionKey: "session",
     turn: 1,
-    judgeSpanId: "judge-span",
     streaming: false,
     ...overrides
   };

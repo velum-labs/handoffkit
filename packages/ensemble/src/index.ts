@@ -24,14 +24,22 @@ export {
 export {
   buildPanelPrompt,
   createFusionKitJudgeSynthesizer,
+  harnessSupportsFiniteK,
+  panelCandidateContract,
   runFusionPanelWorkflow,
   runFusionPanels,
   runUnifiedHarnessE2E,
   setToolHarnessProvider
 } from "./unified.js";
+export { runPanelRound } from "./panel-round.js";
+export type { PanelRoundOptions } from "./panel-round.js";
+export { runProposalPanels } from "./panel-propose.js";
+export type { ProposalPanelOptions } from "./panel-propose.js";
 export type {
   CursorHarnessRunnerInput,
   CursorHarnessRunnerResult,
+  FusedSubagentAccess,
+  FusedSubagentEnsemble,
   FusionPanelOptions,
   PanelTrust,
   ToolHarnessProvider,
@@ -41,24 +49,7 @@ export type {
   UnifiedHarnessKind,
   UnifiedHarnessMatrixResult
 } from "./unified.js";
-export {
-  ambientTraceId,
-  emitTrace,
-  getTraceEmitter,
-  newSpanId,
-  newTraceId,
-  TRACE_CANDIDATE_HEADER,
-  TRACE_ID_HEADER,
-  TRACE_PARENT_SPAN_HEADER,
-  TRACE_SPAN_HEADER,
-  TraceEmitter
-} from "./trace.js";
-export type {
-  EmitInput,
-  FusionTraceComponent,
-  FusionTraceEvent,
-  FusionTraceEventType
-} from "./trace.js";
+export type { FusionTraceCarrier } from "@fusionkit/tracing";
 export { runJudgeSynthesis } from "./synthesis.js";
 export type {
   RunSynthesisInput,

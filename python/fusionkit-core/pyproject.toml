@@ -2,16 +2,43 @@
 name = "fusionkit-core"
 version = "0.8.0"
 description = "Core local model fusion primitives."
+readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
+authors = [{ name = "Velum Labs" }]
+keywords = [
+  "fusionkit",
+  "model-fusion",
+  "llm",
+  "ensemble",
+  "routing",
+  "providers",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+]
 dependencies = [
-  "anthropic>=0.40.0",
+  "anthropic>=0.116.0",
   "google-genai>=1.0.0",
   "openai>=2.13.0",
+  "opentelemetry-api>=1.43.0",
+  "opentelemetry-exporter-otlp-proto-http>=1.43.0",
+  "opentelemetry-sdk>=1.43.0",
   "pydantic>=2.12.5",
   "pyyaml>=6.0.3",
 ]
+
+[project.urls]
+Homepage = "https://fusionkit.velum-labs.com"
+Repository = "https://github.com/velum-labs/handoffkit"
+Documentation = "https://fusionkit.velum-labs.com"
+
 
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12.0"]

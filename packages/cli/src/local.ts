@@ -1,13 +1,16 @@
+import { bold, box, cyan, dim, glyph, green, isInteractive, uiStream } from "@fusionkit/cli-ui";
 import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
 import type { BackendConfig } from "@fusionkit/model-gateway";
 import { KernelBackend } from "@fusionkit/ensemble";
 import { LOCAL_MODEL_LABEL, readEnv } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
+import { generateSessionToken, startPublicTunnel } from "./shared/tunnel.js";
+import type { PublicTunnel, StartPublicTunnelOptions } from "./shared/tunnel.js";
 import { toolRegistry } from "./tools.js";
 
 /**
- * `warrant local <tool>` — back a vendor agent harness with a locally running
+ * `fusionkit local <tool>` — back a vendor agent harness with a locally running
  * model, with no change to how the tool is invoked. Each launcher ensures the
  * model gateway is up, applies the tool's native configuration shim
  * (environment, config file, or — for Cursor — IDE settings + a public
@@ -61,6 +64,8 @@ export type RunLocalOptions = {
   authToken?: string;
   /** Override the resolved backend (tests). */
   config?: BackendConfig;
+  /** Override the tunnel provisioner (tests). */
+  startTunnel?: (options: StartPublicTunnelOptions) => Promise<PublicTunnel>;
   log?: (line: string) => void;
 };
 
@@ -73,20 +78,62 @@ export async function runLocal(
   toolArgs: string[],
   options: RunLocalOptions = {}
 ): Promise<number> {
-  const log = options.log ?? ((line: string) => console.error(line));
+  const log = options.log ?? ((line: string) => uiStream().write(`${line}\n`));
   const config = options.config ?? resolveBackendConfig();
   const model = backendModel(config);
-  const publicUrl = options.publicUrl ?? readEnv(process.env, "FUSIONKIT_PUBLIC_URL");
-  const gateway = await startLocalGateway(config, options.authToken);
-  log(`fusionkit local: gateway on ${gateway.url} (model: ${model})`);
+  let publicUrl = options.publicUrl ?? readEnv(process.env, "FUSIONKIT_PUBLIC_URL");
+  // Cursor's BYOK plan-panel flow needs a public HTTPS URL (Cursor's backend
+  // proxies BYOK traffic and blocks loopback). When the user did not bring
+  // their own tunnel, provision a Quick Tunnel — and since that URL is public,
+  // always enforce a gateway bearer token (auto-generated when unset).
+  const needsTunnel = tool === "cursor" && options.ide !== true && publicUrl === undefined;
+  const authToken = options.authToken ?? (needsTunnel ? generateSessionToken() : undefined);
+  const gateway = await startLocalGateway(config, authToken);
+  // The framed summary renders only on the default interactive surface;
+  // injected log sinks (tests, programmatic callers) keep plain lines.
+  const styled = options.log === undefined && isInteractive();
+  if (!styled || tool !== "serve") {
+    log(`${green(glyph.tick())} ${bold("local gateway")} ${cyan(gateway.url)} ${dim(`(model: ${model})`)}`);
+  }
 
   const disposers: Array<() => Promise<void> | void> = [];
   try {
+    if (needsTunnel) {
+      try {
+        const tunnel = await (options.startTunnel ?? startPublicTunnel)({
+          gatewayUrl: gateway.url,
+          log
+        });
+        disposers.push(() => tunnel.close());
+        publicUrl = tunnel.url;
+      } catch (error) {
+        // Degrade to the manual-tunnel instructions the launcher prints when
+        // no public URL is available, instead of failing the whole launch.
+        const first = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+        log(`fusionkit local: automatic tunnel unavailable (${first})`);
+      }
+    }
     if (tool === "serve") {
-      log(`OpenAI:    ${gateway.url}/v1`);
-      log(`Anthropic: ${gateway.url}/v1/messages`);
-      log(`Responses: ${gateway.url}/v1/responses`);
-      log("Press Ctrl+C to stop.");
+      const label = (text: string): string => dim(text.padEnd("anthropic".length));
+      const rows = [
+        `${label("openai")}  ${cyan(`${gateway.url}/v1`)}`,
+        `${label("anthropic")}  ${cyan(`${gateway.url}/v1/messages`)}`,
+        `${label("responses")}  ${cyan(`${gateway.url}/v1/responses`)}`,
+        `${label("model")}  ${model}`
+      ];
+      if (styled) {
+        uiStream().write(`\n${box("local gateway", rows)}\n`);
+        uiStream().write(
+          `${green(glyph.tick())} ${bold("gateway is running")} ${dim("— point any tool at it, or Ctrl+C to stop")}\n`
+        );
+        process.once("SIGINT", () => {
+          uiStream().write(`\n${green(glyph.tick())} ${bold("gateway stopped")}\n`);
+          process.exit(130);
+        });
+      } else {
+        for (const row of rows) log(row);
+        log(dim("Press Ctrl+C to stop."));
+      }
       await new Promise<void>(() => {
         /* run until interrupted */
       });
@@ -102,7 +149,7 @@ export async function runLocal(
       modelLabel: model,
       toolArgs,
       ...(options.ide === true ? { ide: true } : {}),
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(authToken !== undefined ? { authToken } : {}),
       ...(publicUrl !== undefined ? { publicUrl } : {}),
       log,
       prepareForPassthrough: () => undefined,

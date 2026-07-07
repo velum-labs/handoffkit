@@ -4,13 +4,30 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../ensemble" },
-    { "path": "../harness-core" },
-    { "path": "../model-gateway" },
-    { "path": "../protocol" },
-    { "path": "../registry" },
-    { "path": "../tools" }
+    {
+      "path": "../ensemble"
+    },
+    {
+      "path": "../harness-core"
+    },
+    {
+      "path": "../model-gateway"
+    },
+    {
+      "path": "../protocol"
+    },
+    {
+      "path": "../registry"
+    },
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../tracing"
+    }
   ]
 }

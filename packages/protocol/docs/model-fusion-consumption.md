@@ -82,14 +82,13 @@ installed protocol package and local compatibility snapshot:
   bundle hash, and OpenAPI source hash;
 - this document must retain the intended npm and Python publishing paths.
 
-CI needs `PACKAGES_READ_TOKEN` with GitHub Packages read access so `pnpm install
---frozen-lockfile` can fetch the private `@velum-labs/model-fusion-protocol`
-package from `npm.pkg.github.com`; when that secret is not configured, CI falls
-back to `github.token` with `packages: read`. Docker builds receive the same
-value through the `PACKAGES_READ_TOKEN` build argument. `.npmrc` keeps the token
-as an environment placeholder and excludes this first-party package from the
-24-hour minimum release-age quarantine so same-day protocol releases can be
-consumed deliberately.
+`@velum-labs/model-fusion-protocol` is published to the public npm registry, so
+`pnpm install --frozen-lockfile` needs no registry token. (The legacy
+`legacy/docker` stack still accepts a `PACKAGES_READ_TOKEN` build argument from
+the era when the package lived on GitHub Packages; it is unused for public npm
+installs.) `.npmrc` excludes this first-party package from the 24-hour minimum
+release-age quarantine so same-day protocol releases can be consumed
+deliberately.
 
 Follow-up work belongs in FusionKit/openclaw-shared: publish the canonical JSON
 Schema bundle, OpenAPI 3.1 service contracts, and generated TypeScript/Python
