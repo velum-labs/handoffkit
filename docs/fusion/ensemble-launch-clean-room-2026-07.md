@@ -3,8 +3,10 @@
 **Status:** working plan, adopted 2026-07-07.
 **Reader:** anyone assembling the first FusionKit ensemble configs. No prior
 documents are required; everything needed to start is in this report.
-**Scope:** how to go from zero to a small portfolio of **ensemble
-hypotheses** using only public information and zero billed benchmark runs.
+**Scope:** the full path from zero to a shippable named ensemble — Phase A
+(hypothesis formation, $0) through Phase D (launch-grade measurement and
+packaging). Each phase has explicit inputs, outputs, cost, and definition of
+done.
 **Explicit stance:** this plan **starts from scratch**. Earlier internal
 docs, model shortlists, aggregate scores, and panel recommendations are
 **not inputs**. Only process discipline and publicly verifiable facts are
@@ -29,16 +31,25 @@ concrete panel configs (which models, how arranged, which judge) that we
 those hypotheses honestly, cheaply, and without running our own benchmarks
 yet.
 
-### Two phases of the same problem
+### The four phases (overview)
 
-| Phase | Question | Rigor | Cost |
+| Phase | Question | Rigor | Typical cost |
 |---|---|---|---|
-| **Now (this report)** | What panels should we *try first*? | Low — public data only | $0 |
-| **Later (lab loop)** | Which panel can we *claim* and ship? | High — own task banks, sealed holdouts, evidence cards | ~$1–3k/cycle |
+| **A — Hypothesis formation** | What panels should we *try*? | Public data only; no runs | $0 |
+| **B — Config materialization** | Do the configs actually run? | Engineering + smoke tests | ~$0–1 |
+| **C — First measurement** | Which hypotheses survive on *our* harness? | Own calibration bank; no sealed holdout yet | ~$25–75 |
+| **D — Launch measurement** | Which config can we *claim* and ship? | Task banks, sealed Confirm, evidence cards | ~$1–3k/cycle |
 
-This report covers **only the first phase**. The rigorous successor process
-(build task banks, Screen/Select/Confirm, publish dated evidence cards) is a
-separate, later program. Nothing in this report produces launch claims.
+Phases A–C produce **internal** numbers only. Phase D produces **publishable**
+evidence cards. Do not skip phases: each gates the next.
+
+```
+Phase A ($0)          Phase B (~$0)         Phase C (~$25–75)      Phase D (~$1–3k)
+─────────────         ─────────────         ─────────────────      ──────────────────
+catalog snapshot  →   fusion configs    →   candidate bank     →   task banks + graders
+hypothesis cards  →   smoke tests       →   hypothesis verdict →   Confirm run
+registry          →   prereg (lite)     →   kill / promote     →   evidence card + ship
+```
 
 ### Why "clean room"
 
@@ -99,6 +110,17 @@ Terms used throughout this report:
 - **Aggregate score.** A leaderboard summary (one number per model per
   benchmark), not per-task outcomes. Useful for shortlisting; insufficient
   for final panel ranking.
+- **Candidate bank.** Saved table of every model's answers to every task,
+  with pass/fail, tokens, cost, and truncation flags. Expensive to fill once;
+  cheap to replay many ensemble configs against.
+- **Calibration sweep.** Single-shot run of every shortlisted model on a fixed
+  task manifest; produces the candidate bank and truncation audit.
+- **Capture rate.** Fraction of panel headroom the fused pipeline actually
+  realizes. If headroom is +10 pp and fusion scores +5 pp over best-single,
+  capture is 50%.
+- **Evidence card.** Dated public one-pager: measured score, cost, vs
+  best-single and vs frontier anchor, with links to artifacts. Only Phase D
+  produces these.
 
 ---
 
@@ -443,36 +465,397 @@ Phase A is complete when all of the following are true:
 
 ---
 
-## Part VI — What happens after Phase A (context only)
+## Part VI — Phase B: config materialization and smoke ($0 engineering)
 
-Phase A does not run anything. The following phases are listed so readers
-know where this plan ends and the next work begins. **Do not start these
-until Phase A definition of done is met.**
+**Prerequisite:** Phase A definition of done met. Hypothesis cards marked
+`ready` (or `deferred` for H3 only).
 
-### Phase B — Convert cards to runnable configs ($0, engineering)
+**Question answered:** Do our hypothesis configs resolve in the real FusionKit
+stack, and do the pinned model IDs actually respond?
 
-- Emit FusionKit fusion configs from hypothesis cards (panel endpoints,
-  judge, sampling) in the shape the engine already consumes.
-- Smoke-test each config with 1–2 trivial requests: model IDs resolve, keys
-  work, streaming succeeds. Cost: cents.
+Phase B spends no meaningful benchmark money — only optional cent-scale smoke
+calls.
 
-### Phase C — First real measurement (~$25–75, first billed spend)
+### Step B1 — Extend the model registry
 
-- **Calibration sweep:** run every shortlisted model single-shot on ~60
-  algorithmic tasks (LiveCodeBench-style manifest); truncation audit per
-  model; build a candidate bank (saved answers + pass/fail).
-- **Hypothesis replay:** run H1/H2/H5 judge synthesis against the bank; H4
-  from bank samples for free; compare all against best-single.
-- **Verdict:** which hypotheses survive to the rigorous lab loop; which get
-  `killed` per their card kill conditions.
+Copy every pinned member and judge from hypothesis cards into
+`python/fusionkit-lab/registry/<cycle>.yaml` as `ModelIdentity` records:
+endpoint_id, provider, model slug, base_url, api_key_env, prices,
+max_completion_tokens, escalated_completion_tokens, lineage, generation.
 
-Phase C produces the first numbers anyone on the team trusts — but still not
-external launch claims. External claims require the full lab loop (sealed
-Confirm, evidence cards, dated expiry).
+Run `fklab models list` and `fklab models show <id>` to verify parsing. Record
+identity hashes on the cards — if a card hash and registry hash diverge, the
+config drifted.
+
+### Step B2 — Emit FusionKit fusion configs
+
+For each non-deferred hypothesis, produce a fusion config file the engine
+already consumes (same shape as `.fusionkit/fusion.json`):
+
+| Field | Source |
+|---|---|
+| `endpoints[]` | Registry entries for panel members + judge |
+| `panel_models` | Ordered list of panel endpoint_ids |
+| `judge_model` | Judge endpoint_id |
+| `sampling` | From hypothesis card (temperature, max_tokens per role) |
+| `topology` | Metadata field or separate manifest — parallel / cascade / exec_select |
+
+**Location:** `labruns/<cycle>/configs/h1-backbone.fusion.json` (or YAML if
+the product loader prefers it — match whatever `fusionkit serve -c` accepts).
+
+**H4 (Self-MoA):** one endpoint, K=3 in sampling config, topology
+`exec_select` — selection uses public tests then grades on private tests via
+the existing execution-guided selection path.
+
+**H3 (cascade):** if cascade wrapper does not exist yet, emit a stub config
+marked `deferred` and skip B3 smoke for H3. Do not block H1/H2/H4/H5 on H3.
+
+### Step B3 — Config validation (no API)
+
+Mechanical checks before spending money:
+
+- Every endpoint_id in the config exists in the registry.
+- No two panel members share a lineage tag (re-run lineage veto).
+- Judge is documented; panel-member overlap flagged on the card.
+- Token budgets match card (32k default, 64k for thinking hypotheses).
+- Config hash recorded on the hypothesis card (`config_sha256`).
+
+### Step B4 — Smoke tests (optional but recommended, ~$0–1)
+
+Per config, one trivial non-benchmark request through the real path:
+
+```
+fusionkit serve -c <config>   # or FusionEngine directly
+POST a single "write hello world" or one tiny algorithmic fixture task
+```
+
+**Pass criteria:**
+
+- Model IDs resolve (no 404 / model-not-found).
+- Streaming completes without malformed JSON mid-stream.
+- Response returns within timeout.
+- Spend ledger records the call.
+
+**Fail actions:** fix slug, provider pin, or api_key_env; update catalog
+snapshot + registry + card; re-hash. Do not proceed to Phase C with a config
+that failed smoke on identity grounds.
+
+### Step B5 — Measurement preregistration (lite)
+
+Before Phase C, append to each hypothesis card (or add
+`labruns/<cycle>/prereg-measurement.md`):
+
+- Exact task manifest path and task count (e.g. ~60 LiveCodeBench-style tasks,
+  date window, stdin-only filter).
+- Default completion budget (32k) and escalation rung (64k) per model.
+- Hard spend cap for the whole Phase C run (recommend **$75** first pass).
+- Metrics: pass@1 per model, fused pass rate per hypothesis, best-single × K,
+  truncation rate, $/task.
+- Verdict rules copied from hypothesis card kill conditions.
+
+This is not the sealed Confirm prereg of Phase D — it is a team-facing
+commitment before the first billed sweep.
+
+### Phase B deliverables
+
+| Artifact | Path |
+|---|---|
+| Registry (complete) | `python/fusionkit-lab/registry/<cycle>.yaml` |
+| Fusion configs | `labruns/<cycle>/configs/h*.fusion.json` |
+| Smoke log | `labruns/<cycle>/smoke-results.md` |
+| Measurement prereg | `labruns/<cycle>/prereg-measurement.md` |
+| Updated cards | `status: ready` → `status: smoke_passed` |
+
+### Phase B definition of done
+
+1. Every non-deferred hypothesis has a committed fusion config.
+2. Registry and configs agree on identity hashes.
+3. Smoke passed for all non-deferred configs (or documented blocker with
+   owner).
+4. Measurement prereg committed with spend cap before any Phase C API call.
+5. Still no publishable claims.
 
 ---
 
-## Part VII — What this plan does and does not claim
+## Part VII — Phase C: first measurement and hypothesis adjudication (~$25–75)
+
+**Prerequisite:** Phase B definition of done met.
+
+**Question answered:** On tasks **we grade ourselves**, which hypotheses beat
+the backbone, beat best-single × K, and justify promotion to Phase D?
+
+**Domain for v0:** algorithmic only (LiveCodeBench-style tasks, deterministic
+stdin/stdout grading). Repo bugfix and other domains require graders not yet
+built — do not expand scope mid-Phase-C.
+
+### Step C1 — Fix the task manifest
+
+Use a committed, dated task list — not ad-hoc task IDs at run time.
+
+**Requirements:**
+
+- ~60 tasks (enough for directional signal; not launch-grade precision).
+- Rolling date window: prefer tasks published in the last 6–12 months to reduce
+  contamination risk.
+- Stdin/stdout or harness-compatible format (loadable by existing
+  `livecodebench_data.py` / `CandidateBank` path).
+- Manifest committed before the run: `labruns/<cycle>/manifest-algorithmic.jsonl`
+  with task_id, prompt hash, test count, difficulty if known.
+
+**Do not** tune the manifest after seeing results. If the manifest is wrong,
+abort, fix, and re-run as a new preregistered cycle — do not cherry-pick tasks.
+
+### Step C2 — Calibration sweep (fill the candidate bank)
+
+**Run:** every model in the **shortlist** (not just panel members — the full
+8–12) answers every manifest task **once** at default budget (32k), with a
+**64k escalation rerun** for any model flagged `thinking` in the catalog or
+with >10% truncated rows at 32k.
+
+**Mechanics:**
+
+- Single-shot generation per model per task (no judge yet).
+- Grade inline with the existing sandbox + stdout checkers.
+- Persist incrementally: each row flushed as it completes (resumable on crash).
+- Spend ledger: one JSONL row per API call; **hard stop at preregistered cap**.
+- Retry provider mid-stream failures; log failures, never silently drop rows.
+
+**Output artifacts:**
+
+```
+labdata/runs/<cycle>/calibration/
+  sample_bank.jsonl          # or CandidateBank JSON — all models × tasks
+  outcomes.csv               # flat per-row outcomes
+  spend_ledger.jsonl
+  truncation_audit.md        # per-model truncated %; >10% → refuse number
+  run_manifest.json          # provenance, caps, git sha, manifest hash
+```
+
+**Cost model (order of magnitude):** 10 models × 60 tasks × ~$0.05–0.15/task
+≈ **$30–90** depending on model prices and output length. First pass cap at
+$75 is intentional friction.
+
+### Step C3 — Truncation audit (gate before interpretation)
+
+Per model, compute truncated-row percentage on the sweep.
+
+**Standing rule:** if >~10% of rows are truncated at the practical budget, that
+model's pass rate is **refused** for this cycle — not caveated, refused. Either
+re-run at 64k escalation or exclude from panel interpretation.
+
+Update hypothesis cards if a panel member fails truncation audit (swap to
+next shortlist rank from a different lineage, or kill the hypothesis).
+
+### Step C4 — Hypothesis replay (cheap — mostly judge calls)
+
+The candidate bank is frozen. Replaying ensembles does **not** re-call panel
+models except for H3 cascade if implemented end-to-end.
+
+| Hypothesis | Replay method | New API spend |
+|---|---|---|
+| **H1, H2, H5** | Judge reads saved panel answers; synthesizes; grade fused output | Judge calls only (~$5–20) |
+| **H4** | Best-of-N over saved K samples (or generate K samples in C2 for the one model) | $0 if K samples already in bank |
+| **H3** | End-to-end cascade if wrapper exists; else skip | Variable |
+
+**Baselines computed on the same tasks (mandatory):**
+
+1. Each panel member alone (pass@1).
+2. **Best single × K at matched cost** (Self-MoA) — strongest shortlist
+   member, K samples, execution-guided selection.
+3. **Oracle ceiling** per panel (diagnostic only — not a launch claim).
+
+**Comparison metrics:**
+
+- Fused pass rate vs best-single pass rate (absolute pp difference).
+- Fused $/solved task vs best-single $/solved (using ledger costs).
+- Capture rate: (fused − best_single) / (oracle − best_single) when oracle >
+  best_single.
+
+Record Wilson confidence intervals if reporting internally, but do not treat
+~60 tasks as launch-grade precision — Phase C is **directional**.
+
+### Step C5 — Apply kill conditions; promote survivors
+
+For each hypothesis card, evaluate preregistered kill conditions against C4
+results. Update card status:
+
+| Status | Meaning |
+|---|---|
+| `killed` | Kill condition met; do not promote |
+| `survived` | Beat kill threshold; eligible for Phase D |
+| `inconclusive` | Too few tasks or CI too wide; may re-run with larger manifest in a new cycle |
+| `routing_wins` | H4 or best-single beat all panels — shippable *routing* verdict, not fusion |
+
+**Promotion rule to Phase D:** at most **1–2 hypotheses per domain** advance.
+If H4 wins, Phase D for that domain becomes "ship routing preset" not "ship
+fusion panel" — still a valid product outcome.
+
+Write `labruns/<cycle>/phase-c-report.md`: tables per hypothesis, ledger
+totals, truncation audit, kill/promote decisions with one paragraph each.
+
+### Phase C deliverables
+
+| Artifact | Path |
+|---|---|
+| Task manifest | `labruns/<cycle>/manifest-algorithmic.jsonl` |
+| Candidate bank + outcomes | `labdata/runs/<cycle>/calibration/` |
+| Phase C report | `labruns/<cycle>/phase-c-report.md` |
+| Updated hypothesis cards | statuses: killed / survived / routing_wins |
+
+### Phase C definition of done
+
+1. Sweep completed under preregistered spend cap with full ledger.
+2. Truncation audit applied; refused models excluded from interpretation.
+3. Every non-deferred hypothesis scored against mandatory baselines on the
+   same task set.
+4. Kill conditions evaluated; promotion list (≤2) documented.
+5. Still **no external launch claims** — internal directional numbers only.
+
+---
+
+## Part VIII — Phase D: launch-grade measurement and packaging (~$1–3k/cycle)
+
+**Prerequisite:** Phase C promoted ≤2 hypotheses per domain.
+
+**Question answered:** Can we publish a dated evidence card for a named
+ensemble (or routing preset) on a benchmark we name?
+
+Phase D is the **rigorous lab loop** in full: own task banks, train/validation
+discipline inside Select, sealed Confirm holdout, one-shot Confirm runs,
+evidence cards, and frozen product configs. It replaces guesswork with claims.
+
+### Why Phase D is separate from Phase C
+
+| | Phase C | Phase D |
+|---|---|---|
+| Tasks | ~60 public-manifest tasks | 120–300+ tasks per bucket, many harvested |
+| Holdout | None (directional only) | Sealed Confirm set, never used in search |
+| Claims | Internal only | Publishable evidence cards |
+| Cost | ~$25–75 | ~$1–3k per domain cycle |
+| Grader trust | Existing LCB sandbox | Grader audit (~50 verdicts, ≥95% accuracy) |
+
+Skipping Phase D and marketing Phase C numbers would violate the standing
+rule: test execution in the lab is an instrument, not a customer contract —
+but **published** numbers require Confirm discipline.
+
+### Phase D steps (summary)
+
+Phase D follows the same step numbering as the full lab loop. Each step below
+is self-contained; tooling target is `fklab` (see lab-loop implementation spec).
+
+**D0 — Lock launch domain and promoted hypothesis**
+
+- One domain per evidence card (start with algorithmic if repo bugfix grader
+  is not ready).
+- Freeze the promoted config from Phase C as the **starting finalist** — not
+  re-opened with public complementarity search.
+
+**D1 — Build task banks and audit graders**
+
+Three buckets per domain:
+
+| Bucket | Size | Use |
+|---|---:|---|
+| Screen | ~40–60 | Cheap model filtering (optional if Phase C shortlist suffices) |
+| Select | ~120–200 | Candidate bank + offline topology/judge search |
+| Confirm | ~150–300 | **Sealed** — one preregistered run for launch number |
+
+Tasks harvested from real sources (recent commits, rolling LCB windows) — not
+hand-written exam questions. Grader audit: human checks ~50 random verdicts;
+≥95% accuracy before bank counts.
+
+**D2 — Screen sweep (optional if Phase C already qualified pool)**
+
+~$50–150: every candidate model on Screen set; truncation audit; qualified
+pool 6–10 models. Skip if Phase C shortlist already satisfies this.
+
+**D3 — Fill Select candidate bank**
+
+~$300–800: qualified models × Select tasks × **K=3 samples** (K=5 for two
+cheapest models). This is the main API spend. Incremental persistence,
+spend ledger, budget cap.
+
+**D4 — Offline ensemble search**
+
+~$50–200 judge spend: replay saved answers; search panels × topologies × judge
+prompts against the bank. **Mandatory baselines:** each member alone, best-single
+× K at matched cost, frontier anchor for context.
+
+**Selection discipline:** train/validation split *inside* Select; finalist cap
+1–2 before looking at Confirm. Do not use public matrices for panel picks.
+
+**D5 — Confirm run (the launch number)**
+
+Per finalist (~$100–300 each):
+
+1. Freeze config; hash everything.
+2. Preregister: config, Confirm bank sha256, metrics, pass rule — **committed
+   before the run**.
+3. Run **once**, end-to-end, fresh — no bank reuse — on sealed Confirm tasks.
+4. Compute pass rate + CI, vs best-single, vs best-of-N, vs frontier on $/solve.
+5. **Pass rule:** fused ≥ best single **and** beats frontier on $/solve for
+   the cost story.
+
+**Confirm discipline:** if finalist fails, return to D4 on Select data — never
+"tweak and re-run Confirm." Max 2 Confirm attempts per domain per cycle.
+
+**D6 — Package and ship**
+
+For each confirmed winner:
+
+- **Named model id** (e.g. `fusionkit/algorithmic-v1`) bound to frozen config
+  in `.fusionkit/`.
+- **Evidence card** — dated, with expiry (~4 months / one model generation).
+- **Kill-ledger entries** for failed hypotheses (publish negative results with
+  links).
+- Archive outcome matrices for future router training.
+
+### Phase D deliverables
+
+| Artifact | Path |
+|---|---|
+| Task banks (Select committed; Confirm manifest only) | `labdata/banks/…` + external Confirm storage |
+| Confirm preregistrations | `labruns/<cycle>/<domain>/prereg-confirm-*.md` |
+| Confirm run manifests | `labruns/<cycle>/<domain>/manifest-confirm-*.json` |
+| Evidence cards | `docs/fusion/cards/<model-id>-YYYY-MM-DD.md` |
+| Product config | `.fusionkit/<model-id>.json` |
+| Card index (expiry tracking) | `docs/fusion/cards/index.json` |
+
+### Phase D definition of done
+
+1. At least one Confirm run passed preregistered pass rule on sealed tasks.
+2. Evidence card published with expiry date and artifact links.
+3. Frozen config loadable by `fusionkit serve`.
+4. Failed hypotheses recorded in kill ledger.
+5. **This is the first phase that may produce external claims.**
+
+### Phase D failure modes (acceptable outcomes)
+
+- **Routing wins:** best-single × K beats all panels on Confirm — ship a
+  routing preset, not fusion. Document honestly on the card.
+- **Domain deferred:** two failed Confirm finalists — domain does not launch
+  this cycle. The system worked.
+- **Grader blocked:** Confirm refused until grader audit passes — fix grader,
+  re-bank, re-cycle.
+
+---
+
+## Part IX — End-to-end timeline and cost summary
+
+| Phase | Duration (engineering order, not calendar) | API cost | Publishable? |
+|---|---|---|---|
+| A | Catalog + cards | $0 | No |
+| B | Configs + smoke | ~$0–1 | No |
+| C | Sweep + replay | ~$25–75 | No (internal only) |
+| D | Full lab loop per domain | ~$1–3k | Yes (evidence cards) |
+
+**Parallelism note:** Phase A–B can proceed for multiple domains on paper, but
+Phase C should stay **one domain** until the algorithmic path is proven end-to-end.
+Phase D repo-bugfix waits on docker patch-test grader (lab-loop Stage 8).
+
+---
+
+## Part X — What this plan does and does not claim
 
 ### Claims
 
@@ -487,7 +870,7 @@ Confirm, evidence cards, dated expiry).
 
 - No hypothesis is asserted to beat any other before measurement.
 - No hypothesis is asserted to beat the best single model before measurement.
-- No score, pass rate, or $/solve figure from this phase is publishable.
+- No score, pass rate, or $/solve figure from Phases A–C is publishable.
 - No model name in a hypothesis card is guaranteed to exist until Step 2
   verifies it.
 
@@ -507,9 +890,9 @@ Confirm, evidence cards, dated expiry).
 
 ---
 
-## Part VIII — Quick reference checklist
+## Part XI — Quick reference checklists
 
-Use this when executing Phase A:
+### Phase A checklist ($0)
 
 ```
 [ ] Part III rules written and frozen (before any catalog pull)
@@ -530,15 +913,66 @@ Use this when executing Phase A:
 [ ] No external claims made
 ```
 
+### Phase B checklist (~$0–1)
+
+```
+[ ] Phase A definition of done met
+[ ] All pinned members + judge copied to registry/<cycle>.yaml
+[ ] fklab models list/show passes; card hashes match registry hashes
+[ ] Fusion config emitted per non-deferred hypothesis (labruns/<cycle>/configs/)
+[ ] H4 uses exec_select topology; H3 stub marked deferred if no cascade wrapper
+[ ] Mechanical validation: endpoint_ids, lineage veto, token budgets, config_sha256
+[ ] Smoke test passed for each non-deferred config (or blocker documented)
+[ ] prereg-measurement.md committed with manifest path, cap ($75), metrics, verdict rules
+[ ] Cards updated to smoke_passed (or deferred with owner)
+[ ] Still no publishable claims
+```
+
+### Phase C checklist (~$25–75)
+
+```
+[ ] Phase B definition of done met
+[ ] manifest-algorithmic.jsonl committed before any API call
+[ ] Calibration sweep: full shortlist × manifest, single-shot + 64k escalation
+[ ] Incremental persistence + spend ledger; hard stop at preregistered cap
+[ ] truncation_audit.md complete; >10% models refused (not caveated)
+[ ] Hypothesis replay on frozen bank: H1/H2/H5 judge-only; H4 best-of-N
+[ ] Mandatory baselines: each member, best-single × K, oracle (diagnostic)
+[ ] Kill conditions evaluated; cards updated (killed / survived / routing_wins)
+[ ] phase-c-report.md with promotion list (≤2 hypotheses)
+[ ] Still no external launch claims
+```
+
+### Phase D checklist (~$1–3k per domain)
+
+```
+[ ] Phase C promoted ≤2 hypotheses; domain frozen (algorithmic first)
+[ ] Task banks built: Screen / Select / Confirm; grader audit ≥95% on ~50 verdicts
+[ ] Confirm manifest sealed externally; sha256 in prereg before run
+[ ] Select candidate bank filled (K=3 samples; K=5 for two cheapest)
+[ ] Offline search on Select with train/val split; finalist cap 1–2
+[ ] Confirm prereg committed: config hash, Confirm bank hash, pass rule
+[ ] Confirm run once per finalist — no bank reuse, no tweak-and-rerun
+[ ] Pass rule: fused ≥ best single AND beats frontier on $/solve
+[ ] Evidence card + frozen .fusionkit config + kill-ledger entries
+[ ] cards/index.json updated with expiry (~4 months)
+```
+
 ---
 
 ## Appendix — Relationship to other documents
 
-This report is **self-contained** for Phase A execution. Other documents in
+This report is **self-contained** for the full A→D path. Other documents in
 `docs/fusion/` describe adjacent work (rigorous lab loop, company strategy,
-prior internal experiments). None of them are required reading for Phase A,
-and none of their model lists or scores should be used as inputs.
+prior internal experiments). None of them are required reading, and none of
+their model lists or scores should be used as inputs.
 
-When Phase A completes, hypothesis cards become the input to Phase B/C.
-When Phase C completes, surviving configs enter the rigorous lab loop for
-launch-grade measurement and evidence cards.
+| Phase completes | Input to next phase |
+|---|---|
+| A | Hypothesis cards → Phase B config materialization |
+| B | Fusion configs + prereg → Phase C calibration sweep |
+| C | Surviving configs (≤2) → Phase D Confirm discipline |
+| D | Evidence cards + product configs → ship |
+
+For tooling details beyond this report (schemas, `fklab` commands, bank
+storage), see `docs/fusion/lab-loop-implementation-spec-2026-07.md`.
