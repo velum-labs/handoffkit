@@ -9,6 +9,7 @@ Release notes for the FusionKit monorepo: `@fusionkit/*` npm packages, the `@vel
 
 ## Unreleased
 
+- Reworded the panel sandbox (`panelTrust`) prompts in `fusionkit init` and `fusionkit config edit`: the picker now explains what `full` and `guarded` actually allow (any command/file vs. each model's own draft worktree) instead of the jargony "panel candidate autonomy" copy, and shows an inline explainer with the recommended default.
 - Replaced the hand-rolled fusion trace spine with OpenTelemetry end to end: native spans with W3C `traceparent`/`baggage` propagation, a new `@fusionkit/tracing` package, a semantic-conventions registry in `spec/fusion-trace/`, and standard `OTEL_*` configuration (PostHog/Jaeger/Tempo interop for free).
 - Rewrote the scope dashboard as a native OTLP span store (spans in SQLite, OTLP/HTTP JSON ingest, live SSE), replacing the custom `fusion-trace-event.v1` wire format, headers, and JSONL replay.
 - Added strictly opt-in anonymous product telemetry (`fusionkit telemetry on|off|status|inspect`, PostHog, allow-listed fields, `DO_NOT_TRACK` honored) and documented the complete field list in `docs/privacy.md`.
