@@ -723,7 +723,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
           const body = (await response.json()) as { data?: Array<{ id?: string }> };
           return (body.data ?? [])
             .map((entry) => entry.id)
-            .filter((id): id is string => typeof id === "string" && id !== "fusionkit/router")
+            .filter((id): id is string => typeof id === "string" && id !== "fusionkit/heuristic")
             .sort()
             .join(",");
         } catch {

@@ -107,7 +107,7 @@ async def test_panel_reasoning_flows_into_trajectory_items() -> None:
 
 @pytest.mark.asyncio
 async def test_fusion_engine_runs_router_to_panel() -> None:
-    config = _config(default_mode="router")
+    config = _config(default_mode="heuristic")
     clients = {
         "fast": FakeModelClient("fast", ["fast answer with evidence"]),
         "judge": FakeModelClient(

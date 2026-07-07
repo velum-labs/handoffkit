@@ -53,7 +53,7 @@ class FusionEngine:
     ) -> FusionResult:
         selected_mode = mode or self.config.default_mode
         selected_sampling = merge_sampling(sampling, self.config.sampling)
-        if selected_mode == "router":
+        if selected_mode == "heuristic":
             decision = self.router.route(messages)
             result = await self.run(
                 messages,
@@ -157,6 +157,7 @@ class FusionEngine:
                 terminal=not response.tool_calls,
                 analysis=FusionAnalysis(),
                 trajectory=None,
+                panel_trajectory_count=1,
             )
         trajectories = await self._generate_trajectories(
             mode=selected_mode,
@@ -311,7 +312,7 @@ class FusionEngine:
         mode: FusionMode | None,
     ) -> FusionMode:
         selected_mode = mode or self.config.default_mode
-        if selected_mode == "router":
+        if selected_mode == "heuristic":
             return self.router.route(messages).route
         return selected_mode
 

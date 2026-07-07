@@ -285,7 +285,7 @@ def test_chat_completions_passthrough_by_endpoint_id(tmp_path) -> None:
             ModelEndpoint(id="sonnet", model="fake-sonnet", base_url="http://localhost:8102"),
         ],
         default_model="gpt",
-        default_mode="router",
+        default_mode="heuristic",
     )
     app = create_app(
         config,
@@ -326,7 +326,7 @@ def test_subscription_endpoint_is_first_class_in_unified_server(tmp_path) -> Non
             ),
         ],
         default_model="fast",
-        default_mode="router",
+        default_mode="heuristic",
     )
     app = create_app(
         config,
@@ -361,7 +361,7 @@ def test_chat_completions_passthrough_accepts_tool_loop_messages(tmp_path) -> No
             ModelEndpoint(id="gpt", model="fake-gpt", base_url="http://localhost:8101"),
         ],
         default_model="gpt",
-        default_mode="router",
+        default_mode="heuristic",
     )
     app = create_app(
         config,
@@ -428,7 +428,7 @@ def test_passthrough_provider_error_surfaces_machine_readable_error_category(tmp
     config = FusionConfig(
         endpoints=[ModelEndpoint(id="gpt", model="fake-gpt", base_url="http://localhost:8101")],
         default_model="gpt",
-        default_mode="router",
+        default_mode="heuristic",
     )
     error = ProviderCallError(
         "You exceeded your current quota",
@@ -464,7 +464,7 @@ def test_passthrough_auth_error_maps_to_401_with_error_category(tmp_path) -> Non
     config = FusionConfig(
         endpoints=[ModelEndpoint(id="gpt", model="fake-gpt", base_url="http://localhost:8101")],
         default_model="gpt",
-        default_mode="router",
+        default_mode="heuristic",
     )
     error = ProviderCallError(
         "invalid api key", category="auth_permanent", provider="openai", status_code=401

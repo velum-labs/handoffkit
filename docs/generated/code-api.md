@@ -311,7 +311,7 @@ it without cycles.
 - `export const FUSION_MODEL_ALIASES: readonly string[] ...`
   Reserved fusion aliases the Python server's chat front door understands.
 - `export const FUSION_DEFAULT_ALIAS: string ...`
-  The Python server's default (router) fusion alias.
+  The Python server's default (heuristic) fusion alias.
 - `export const FUSION_PANEL_ALIAS: string ...`
   The panel-mode fusion alias external benchmark runners target.
 - `export const FUSION_GATEWAY_DEFAULT_BASE_URL: string ...`

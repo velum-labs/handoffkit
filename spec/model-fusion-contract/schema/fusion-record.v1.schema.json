@@ -35,7 +35,7 @@
             "single",
             "self",
             "panel",
-            "router"
+            "heuristic"
           ]
         },
         "status": {

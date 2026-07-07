@@ -106,6 +106,11 @@ class FuseResult(BaseModel):
     #: candidate answer) — run accounting must not ledger a call that never
     #: spent anything.
     synthesizer_called: bool = True
+    #: Combined token usage of panel candidate trajectories when a panel/self
+    #: step ran; absent for single-mode or passthrough steps.
+    panel_usage: Usage | None = None
+    #: Number of candidate trajectories generated in the panel/self step.
+    panel_trajectory_count: int = 0
 
     def turn_usage(self) -> Usage:
         """Combined token usage of this fuse step (judge + synthesizer)."""
@@ -736,6 +741,8 @@ class JudgeSynthesizer:
             synthesis_empty=synthesis_empty,
             judge_response=diagnostics.analysis_response if diagnostics is not None else None,
             synthesizer_called=synthesizer_called,
+            panel_usage=panel_usage_from_trajectories(trajectories),
+            panel_trajectory_count=len(trajectories),
         )
 
     async def analyze(
@@ -1344,6 +1351,15 @@ def _usage_payload(response: Any) -> dict[str, Any]:
     return out
 
 
+def panel_usage_from_trajectories(trajectories: Sequence[Trajectory]) -> Usage | None:
+    usages: list[Usage] = []
+    for trajectory in trajectories:
+        raw = trajectory.metadata.get("usage")
+        if isinstance(raw, dict):
+            usages.append(Usage.model_validate(raw))
+    return sum_usages(usages) if usages else None
+
+
 def sum_usages(usages: Sequence[Usage]) -> Usage:
     """Sum token usage across model turns, preserving unknowns.
 
@@ -1370,6 +1386,7 @@ __all__ = [
     "JudgeSynthesizer",
     "accumulate_tool_call",
     "parse_analysis",
+    "panel_usage_from_trajectories",
     "sum_usages",
     "warn_malformed_tool_calls",
 ]

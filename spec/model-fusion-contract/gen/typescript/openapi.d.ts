@@ -299,7 +299,7 @@ export interface components {
             run_id: string;
             request_id: string;
             /** @enum {string} */
-            mode: "single" | "self" | "panel" | "router";
+            mode: "single" | "self" | "panel" | "heuristic";
             status: components["schemas"]["status"];
             trajectory_ids: string[];
             model_call_ids: string[];

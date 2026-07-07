@@ -82,7 +82,7 @@ _MODE_BY_SUFFIX = cast(dict[str, str], _FUSION["modeBySuffix"])
 
 
 def fusion_mode_for_model(model: str) -> str:
-    """Map a fusion alias's suffix to its FusionMode (defaults to the router mode)."""
+    """Map a fusion alias's suffix to its FusionMode (defaults to the heuristic mode)."""
     suffix = model.rsplit("/", maxsplit=1)[-1]
     return _MODE_BY_SUFFIX.get(suffix, FUSION_DEFAULT_MODE)
 

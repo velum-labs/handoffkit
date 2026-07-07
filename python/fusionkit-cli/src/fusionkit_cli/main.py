@@ -219,12 +219,12 @@ def init(
 
     choices = [endpoint.id for endpoint in endpoints]
     default_model = choices[0]
-    mode: str = "router"
+    mode: str = "heuristic"
     if not yes:
         default_model = typer.prompt("Default model id", default=default_model)
         if default_model not in choices:
             raise typer.BadParameter(f"default model must be one of {choices}")
-        mode = typer.prompt("Default mode (single/self/panel/router)", default="router")
+        mode = typer.prompt("Default mode (single/self/panel/heuristic)", default="heuristic")
 
     try:
         config = FusionConfig(
@@ -406,8 +406,12 @@ def serve_endpoint(
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
 ) -> None:
     """Front a single provider model as an OpenAI Chat Completions endpoint."""
-    from fusionkit_server.openai_endpoint import build_endpoint, serve_single_endpoint
+    import uvicorn
+    from fusionkit_core.trace import setup_fusion_tracing
+    from fusionkit_server.app import create_app
+    from fusionkit_server.openai_endpoint import build_endpoint
 
+    setup_fusion_tracing("fusionkit-panel-model")
     endpoint = build_endpoint(
         id=id,
         model=model,
@@ -418,7 +422,21 @@ def serve_endpoint(
         auth_mode=auth_mode,
         credentials_path=credentials_path,
     )
-    serve_single_endpoint(endpoint, host=host, port=port)
+    print(
+        json.dumps(
+            {
+                "event": "starting",
+                "id": endpoint.id,
+                "provider": endpoint.provider,
+                "model": endpoint.model,
+            }
+        ),
+        flush=True,
+    )
+    fusion_config = FusionConfig(endpoints=[endpoint], default_model=endpoint.id)
+    api = create_app(fusion_config)
+    print(json.dumps({"event": "listening", "host": host, "port": port}), flush=True)
+    uvicorn.run(api, host=host, port=port)
 
 
 register_bench_commands(app)

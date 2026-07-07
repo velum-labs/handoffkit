@@ -23,8 +23,6 @@ from fusionkit_core.run_models import RunUsage
 class FileSystemRunStore:
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
-        (self.root / "_idempotency").mkdir(parents=True, exist_ok=True)
 
     def get_idempotency(self, idempotency_key: str) -> IdempotencyRecord | None:
         path = self._idempotency_path(idempotency_key)

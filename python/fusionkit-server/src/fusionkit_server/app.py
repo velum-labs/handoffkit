@@ -34,7 +34,7 @@ from fusionkit_core.contracts import (
     contract_metadata,
 )
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import FuseResult
+from fusionkit_core.judge import FuseResult, sum_usages
 from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.producers import PanelExhaustedError, trajectory_from_contract
 from fusionkit_core.registry import (
@@ -264,11 +264,13 @@ def create_app(
 
     async def _handle_chat_completions(
         request: FusionRequest,
+        *,
+        record_run: bool = False,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         # Per-model passthrough: when `model` names a configured endpoint, call
         # that model directly (no fusion run) so a single `fusionkit serve` can
         # front every panel model by id for an external coding harness. The
-        # reserved `fusionkit/{router,panel,single,self}` names keep the fusion
+        # reserved `fusionkit/{heuristic,panel,single,self}` names keep the fusion
         # path below.
         if _is_endpoint_model(config, request.model):
             return await _passthrough_chat(kernel, config, request)
@@ -295,17 +297,21 @@ def create_app(
         # the caller posts `tool` results back on the next request.
         if request.tools:
             return await _fusion_tool_step(kernel, config, request)
-        resolved = await _resolve_native_chat(kernel, request, config)
-        if isinstance(resolved, JSONResponse):
-            return resolved
-        inspection, metadata = resolved
-        return _openai_chat_response(request.model, inspection, metadata)
+        if record_run:
+            resolved = await _resolve_native_chat(kernel, request, config)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            inspection, metadata = resolved
+            return _openai_chat_response(request.model, inspection, metadata)
+        return await _lightweight_fusion_chat(kernel, config, request)
 
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(
         request: FusionRequest,
+        http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
-        return await _handle_chat_completions(request)
+        record_run = http_request.headers.get("x-fusionkit-record") == "1"
+        return await _handle_chat_completions(request, record_run=record_run)
 
     @app.post("/v1/cursor/chat/completions", response_model=None)
     async def cursor_chat_completions(
@@ -341,7 +347,10 @@ def create_app(
                 "request body could not be validated as a chat completion request",
                 status_code=400,
             )
-        return await _handle_chat_completions(request)
+        return await _handle_chat_completions(
+            request,
+            record_run=raw_request.headers.get("x-fusionkit-record") == "1",
+        )
 
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
     async def fuse_trajectories(
@@ -421,7 +430,7 @@ def create_app(
             request.model,
             result.response,
             _fusion_extension(result),
-            usage=result.turn_usage(),
+            usage=_fuse_step_usage(result),
             provider_cost=result.turn_provider_cost(),
         )
 
@@ -484,6 +493,44 @@ async def _passthrough_chat(
     return _openai_step_response(request.model, response)
 
 
+async def _lightweight_fusion_chat(
+    kernel: FusionKernel,
+    config: FusionConfig,
+    request: FusionRequest,
+) -> dict[str, Any] | JSONResponse:
+    """Non-streaming fused chat without event-sourced run recording."""
+    try:
+        result = await kernel.run_step(
+            request.messages,
+            mode=_mode_from_request(request),
+            sampling=_request_sampling(config, request),
+            panel_models=request.fusion.panel_models,
+            sample_count=request.fusion.sample_count,
+        )
+    except ProviderCallError as exc:
+        return _provider_error_response(exc)
+    except PanelExhaustedError:
+        traceback.print_exc()
+        return _openai_error_response(
+            "all_models_failed",
+            "fusion step failed: every panel model failed; see the server logs for details",
+            status_code=502,
+        )
+    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
+        traceback.print_exc()
+        return _openai_error_response(
+            "internal_error", "fusion step failed; see the server logs for details", status_code=502
+        )
+    return _openai_step_response(
+        request.model,
+        result.response,
+        _fusion_extension(result),
+        usage=_fuse_step_usage(result),
+        provider_cost=result.turn_provider_cost(),
+        fusionkit=_lightweight_fusion_metadata(result),
+    )
+
+
 async def _fusion_tool_step(
     kernel: FusionKernel,
     config: FusionConfig,
@@ -527,7 +574,7 @@ async def _fusion_tool_step(
         request.model,
         result.response,
         _fusion_extension(result),
-        usage=result.turn_usage(),
+        usage=_fuse_step_usage(result),
         provider_cost=result.turn_provider_cost(),
     )
 
@@ -783,6 +830,10 @@ def _tool_execution_policy_from_options(options: FusionToolExecutionOptions) -> 
     )
 
 
+def _lightweight_fusion_metadata(result: FuseResult) -> dict[str, Any]:
+    return {"trajectory_count": result.panel_trajectory_count}
+
+
 def _chat_fusion_metadata(inspection: RunInspection) -> dict[str, Any]:
     return {
         "run_id": inspection.run_id,
@@ -989,6 +1040,14 @@ def _tool_calls_payload(response: ModelResponse) -> list[dict[str, Any]]:
     ]
 
 
+def _fuse_step_usage(result: FuseResult) -> Usage:
+    usages: list[Usage] = []
+    if result.panel_usage is not None:
+        usages.append(result.panel_usage)
+    usages.append(result.turn_usage())
+    return sum_usages(usages)
+
+
 def _usage_payload(usage: Usage) -> dict[str, Any]:
     return {
         "prompt_tokens": usage.prompt_tokens,
@@ -1034,6 +1093,7 @@ def _openai_step_response(
     *,
     usage: Usage | None = None,
     provider_cost: ProviderCost | None = None,
+    fusionkit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
     if response.reasoning:
@@ -1057,6 +1117,8 @@ def _openai_step_response(
         payload["provider_cost"] = resolved_cost.model_dump(mode="json", exclude_none=True)
     if fusion is not None:
         payload["fusion"] = fusion
+    if fusionkit is not None:
+        payload["fusionkit"] = fusionkit
     return payload
 
 

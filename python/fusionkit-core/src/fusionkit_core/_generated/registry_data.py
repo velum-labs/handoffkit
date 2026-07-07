@@ -174,12 +174,12 @@ REGISTRY: Final[dict[str, Any]] = {
         "bridgeModelName": "local-fusion",
         "localModelLabel": "fusionkit-local",
         "aliases": [
-            "fusionkit/router",
+            "fusionkit/heuristic",
             "fusionkit/panel",
             "fusionkit/self",
             "fusionkit/single",
         ],
-        "defaultAlias": "fusionkit/router",
+        "defaultAlias": "fusionkit/heuristic",
         "panelAlias": "fusionkit/panel",
         "gatewayDefaultBaseUrl": "http://127.0.0.1:8080",
         "gatewayApiKeyEnv": "FUSIONKIT_GATEWAY_API_KEY",
@@ -187,9 +187,9 @@ REGISTRY: Final[dict[str, Any]] = {
             "single": "single",
             "self": "self",
             "panel": "panel",
-            "router": "router",
+            "heuristic": "heuristic",
         },
-        "defaultMode": "router",
+        "defaultMode": "heuristic",
     },
     "modelCatalog": {
         "defaultCloudPanel": [

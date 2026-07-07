@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -178,7 +179,9 @@ class FusionRunManager:
         *,
         idempotency_key: str | None = None,
     ) -> RunInspection | CreateRunResult:
-        created = self.create_run(request, idempotency_key=idempotency_key)
+        created = await asyncio.to_thread(
+            self.create_run, request, idempotency_key=idempotency_key
+        )
         if created.idempotency_outcome != "created":
             return created
         if created.run_id is None:
@@ -186,29 +189,30 @@ class FusionRunManager:
         return await self.execute_run(created.run_id)
 
     async def execute_run(self, run_id: str) -> RunInspection:
-        summary = self.store.read_summary(run_id)
+        summary = await asyncio.to_thread(self.store.read_summary, run_id)
         if summary.state in ("cancelled", "completed", "failed", "expired"):
-            return self.store.inspect_run(run_id)
+            return await asyncio.to_thread(self.store.inspect_run, run_id)
 
-        events = self.store.list_events(run_id)
+        events = await asyncio.to_thread(self.store.list_events, run_id)
         request = _request_from_events(events)
         started = time.perf_counter()
-        self._append_state(summary, "generating")
+        await asyncio.to_thread(self._append_state, summary, "generating")
         try:
             selected_mode: FusionMode = request.mode
-            if selected_mode == "router":
+            if selected_mode == "heuristic":
                 decision = self.engine.router.route(_runtime_messages(request.messages))
                 selected_mode = decision.route
 
             sampling = merge_sampling(_sampling_from_request(request), self.engine.config.sampling)
             budget_error = self._check_candidate_budget(request, selected_mode)
             if budget_error is not None:
-                return self._fail_run(summary, budget_error)
+                return await asyncio.to_thread(self._fail_run, summary, budget_error)
             budget_error = self._check_wall_clock_budget(started)
             if budget_error is not None:
-                return self._fail_run(summary, budget_error)
+                return await asyncio.to_thread(self._fail_run, summary, budget_error)
             trajectories = await self._generate_trajectories(request, selected_mode, sampling)
-            trajectory_infos, model_call_ids, trajectory_artifacts = self._record_trajectories(
+            trajectory_infos, model_call_ids, trajectory_artifacts = await asyncio.to_thread(
+                self._record_trajectories,
                 run_id,
                 summary.trace_id,
                 request,
@@ -220,7 +224,7 @@ class FusionRunManager:
                 started
             )
             if budget_error is not None:
-                return self._fail_run(summary, budget_error)
+                return await asyncio.to_thread(self._fail_run, summary, budget_error)
 
             analysis: FusionAnalysis | None = None
             answer: str
@@ -239,7 +243,7 @@ class FusionRunManager:
                     selected_trajectory_id = _trajectory_id_for_source(
                         trajectory_infos, first_succeeded.id
                     )
-                self._append_state(summary, "judging")
+                await asyncio.to_thread(self._append_state, summary, "judging")
 
                 def after_judge(judge_response: ModelResponse | None) -> None:
                     # Phase boundary: judge done, synthesizer not yet called.
@@ -261,7 +265,7 @@ class FusionRunManager:
                     if error is not None:
                         raise _BudgetExceededSignal(error)
 
-                self._append_state(summary, "synthesizing")
+                await asyncio.to_thread(self._append_state, summary, "synthesizing")
                 try:
                     fused = await self.engine._judge_synthesize(
                         _runtime_messages(request.messages),
@@ -270,7 +274,7 @@ class FusionRunManager:
                         after_judge=after_judge,
                     )
                 except _BudgetExceededSignal as signal:
-                    return self._fail_run(summary, signal.error)
+                    return await asyncio.to_thread(self._fail_run, summary, signal.error)
                 if fused.synthesizer_called:
                     model_call_ids.append(
                         self._record_response_call(
@@ -288,13 +292,20 @@ class FusionRunManager:
                     fused.trajectory.synthesis if fused.trajectory is not None else None
                 )
 
-            final_artifact = self.artifacts.write_text(
+            final_artifact = await asyncio.to_thread(
+                self.artifacts.write_text,
                 run_id,
                 make_id("artifact_final"),
                 "transcript",
                 answer,
             )
-            self._append_artifact_event(run_id, summary.trace_id, "synthesizing", final_artifact)
+            await asyncio.to_thread(
+                self._append_artifact_event,
+                run_id,
+                summary.trace_id,
+                "synthesizing",
+                final_artifact,
+            )
             artifacts = [*trajectory_artifacts, final_artifact]
             synthesis_record: dict[str, Any] | None = None
             if fused_synthesis is not None and fused_synthesis.input_trajectory_ids:
@@ -316,7 +327,8 @@ class FusionRunManager:
                         "final_output_artifact_id": final_artifact.artifact_id,
                     },
                 }
-                self.store.append_event(
+                await asyncio.to_thread(
+                    self.store.append_event,
                     FusionRunEvent(
                         event_seq=1,
                         run_id=run_id,
@@ -325,9 +337,10 @@ class FusionRunManager:
                         status=status_for_run_state("synthesizing"),
                         event_type="judge_synthesis_recorded",
                         payload={"judge_synthesis_record": synthesis_record},
-                    )
+                    ),
                 )
 
+            run_events = await asyncio.to_thread(self.store.list_events, run_id)
             fusion_record = FusionRecordV1.model_validate(
                 {
                     **contract_metadata("fusion-record.v1"),
@@ -348,12 +361,13 @@ class FusionRunManager:
                     "finished_at": datetime.now(UTC),
                     "metrics": {
                         **_run_metrics(trajectories, selected_mode, analysis),
-                        "cost_estimate": _run_cost_estimate(self.store.list_events(run_id)),
+                        "cost_estimate": _run_cost_estimate(run_events),
                     },
                     "artifacts": [artifact.model_dump(mode="json") for artifact in artifacts],
                 }
             )
-            event = self.store.append_event(
+            event = await asyncio.to_thread(
+                self.store.append_event,
                 FusionRunEvent(
                     event_seq=1,
                     run_id=run_id,
@@ -362,9 +376,10 @@ class FusionRunManager:
                     status=status_for_run_state("completed"),
                     event_type="fusion_recorded",
                     payload={"fusion_record": fusion_record.model_dump(mode="json")},
-                )
+                ),
             )
-            self.store.write_summary(
+            await asyncio.to_thread(
+                self.store.write_summary,
                 RunStateSummary(
                     run_id=run_id,
                     trace_id=summary.trace_id,
@@ -374,9 +389,9 @@ class FusionRunManager:
                     idempotency_key=summary.idempotency_key,
                     request_hash=summary.request_hash,
                     final_output=answer,
-                )
+                ),
             )
-            return self.store.inspect_run(run_id)
+            return await asyncio.to_thread(self.store.inspect_run, run_id)
         except PanelExhaustedError as exc:
             error = NativeRunError(
                 error_kind="provider_error",
@@ -386,7 +401,7 @@ class FusionRunManager:
                 terminal_reason="all_models_failed",
                 message=str(exc),
             )
-            return self._fail_run(summary, error)
+            return await asyncio.to_thread(self._fail_run, summary, error)
         except Exception as exc:
             error = NativeRunError(
                 error_kind="internal_error",
@@ -396,7 +411,8 @@ class FusionRunManager:
                 terminal_reason="run_execution_failed",
                 message=str(exc),
             )
-            event = self.store.append_event(
+            event = await asyncio.to_thread(
+                self.store.append_event,
                 FusionRunEvent(
                     event_seq=1,
                     run_id=run_id,
@@ -405,9 +421,10 @@ class FusionRunManager:
                     status=status_for_run_state("failed"),
                     event_type="error_recorded",
                     payload={"error": error.model_dump(mode="json")},
-                )
+                ),
             )
-            self.store.write_summary(
+            await asyncio.to_thread(
+                self.store.write_summary,
                 RunStateSummary(
                     run_id=run_id,
                     trace_id=summary.trace_id,
@@ -418,9 +435,9 @@ class FusionRunManager:
                     request_hash=summary.request_hash,
                     terminal_error=error,
                     terminal_reason=error.terminal_reason,
-                )
+                ),
             )
-            return self.store.inspect_run(run_id)
+            return await asyncio.to_thread(self.store.inspect_run, run_id)
 
     def cancel_run(self, run_id: str, *, reason: str = "cancelled_by_caller") -> RunStateSummary:
         summary = self.store.read_summary(run_id)

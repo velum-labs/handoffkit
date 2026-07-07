@@ -77,7 +77,7 @@ ArtifactKind: TypeAlias = Literal[
     "other",
 ]
 CapabilityStatus: TypeAlias = Literal["supported", "unsupported", "degraded", "unknown"]
-FusionMode: TypeAlias = Literal["single", "self", "panel", "router"]
+FusionMode: TypeAlias = Literal["single", "self", "panel", "heuristic"]
 ChatRole: TypeAlias = Literal["system", "user", "assistant", "tool"]
 ApiCompatibility: TypeAlias = Literal[
     "openai-chat-completions",

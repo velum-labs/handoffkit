@@ -137,10 +137,10 @@ export function descriptorFor(
     runtime: { id: "unified-local" },
     judge: {
       id: "fusionkit-judge",
-      model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/router",
+      model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/heuristic",
       synthesizer: createFusionKitJudgeSynthesizer({
         fusionBackendUrl: options.fusionBackendUrl,
-        model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/router",
+        model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/heuristic",
         apiKey: options.fusionApiKey,
         responseShape: responseShapeFor(kind),
         ...(options.trace !== undefined ? { trace: options.trace } : {}),

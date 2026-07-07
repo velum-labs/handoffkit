@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from fusionkit_core.registry import sampling_overrides_for_model
 
-FusionMode = Literal["single", "self", "panel", "router"]
+FusionMode = Literal["single", "self", "panel", "heuristic"]
 ProviderKind = Literal[
     "openai", "anthropic", "google", "openrouter", "openai-compatible", "mlx-lm", "custom", "codex"
 ]
@@ -155,7 +155,7 @@ class FusionConfig(BaseModel):
     default_model: str
     judge_model: str | None = None
     synthesizer_model: str | None = None
-    default_mode: FusionMode = "router"
+    default_mode: FusionMode = "heuristic"
     sample_count: int = 4
     self_temperatures: list[float] = Field(default_factory=lambda: [0.2, 0.4, 0.6, 0.8])
     panel_models: list[str] = Field(default_factory=list)

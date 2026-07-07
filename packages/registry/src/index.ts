@@ -142,7 +142,7 @@ export const LOCAL_MODEL_LABEL: string = REGISTRY.fusion.localModelLabel;
 /** Reserved fusion aliases the Python server's chat front door understands. */
 export const FUSION_MODEL_ALIASES: readonly string[] = REGISTRY.fusion.aliases;
 
-/** The Python server's default (router) fusion alias. */
+/** The Python server's default (heuristic) fusion alias. */
 export const FUSION_DEFAULT_ALIAS: string = REGISTRY.fusion.defaultAlias;
 
 /** The panel-mode fusion alias external benchmark runners target. */
