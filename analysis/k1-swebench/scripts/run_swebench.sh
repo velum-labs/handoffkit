@@ -49,6 +49,13 @@ fi
 git -C "$REPO_ROOT" rev-parse HEAD > "$RUNS_DIR/git_sha.txt"
 mini --help 2>&1 | rg -o 'version [0-9.]+' > "$RUNS_DIR/mini_version.txt" || true
 
+# litellm's built-in registry doesn't price these OpenRouter ids; without
+# this, mini's cost tracking hard-fails on the first solo call. Prices are
+# pinned from the OpenRouter models endpoint (2026-07-07) in the committed
+# registry file, keeping stock cost display + the $3/instance cost_limit
+# live for the solo rows.
+export LITELLM_MODEL_REGISTRY_PATH="$ROUND_DIR/config/litellm_registry.json"
+
 run_mini() { # run_mini <run-name> <litellm-model> [extra -c overrides...]
   local name="$1" model="$2"; shift 2
   echo "=== $name ($model) ==="
@@ -58,7 +65,7 @@ run_mini() { # run_mini <run-name> <litellm-model> [extra -c overrides...]
     -m "$model" \
     -c swebench.yaml "$@" \
     -o "$RUNS_DIR/$name" \
-    -w 2 2>&1 | tee "$RUNS_DIR/$name.log"
+    -w "${WORKERS:-2}" 2>&1 | tee -a "$RUNS_DIR/$name.log"
 }
 
 if [[ "$PHASE" == "solo" || "$PHASE" == "all" ]]; then

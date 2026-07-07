@@ -123,4 +123,20 @@ pre-registered as such. No public claims follow from it.
 
 ## Deviations
 
-None at preregistration time.
+1. (2026-07-07, first solo launch) mini's stock cost tracking hard-failed
+   on the first call: litellm's built-in registry has no prices for
+   `openrouter/deepseek/deepseek-v3.1-terminus` / `openrouter/qwen/qwen3-coder`.
+   Fix: `config/litellm_registry.json` (prices pinned from the OpenRouter
+   models endpoint, 2026-07-07: terminus $0.27/$0.95 per M, qwen3-coder
+   $0.22/$1.80 per M) exported via `LITELLM_MODEL_REGISTRY_PATH` in the
+   runner. This keeps the stock $3/instance cost_limit live for the solo
+   rows, as pre-registered. The aborted partial run (a handful of opening
+   member calls, ~cents) was deleted and the solo phase restarted clean;
+   no instance had produced a submission.
+2. (2026-07-07, mid fused row) Harness worker count raised 2 -> 4 for the
+   remaining 6 fused instances (wall-clock only; workers parallelize
+   instances and change nothing about the system under test — measured
+   fused critical path is ~17-33s/step over 28-55 steps/instance, i.e.
+   members in parallel + judge + synthesizer sequentially). The 4 instances
+   completed at w=2 are kept; the in-flight partial (no submission) was
+   discarded and is rerun.
