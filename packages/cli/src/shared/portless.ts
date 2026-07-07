@@ -25,13 +25,13 @@ import { join } from "node:path";
 const PROJECT = "fusion";
 
 /** Minimal view of the bits of the `portless` library we use. */
-type RouteMapping = { hostname: string; port: number; pid: number };
-type RouteStoreLike = {
+export type RouteMapping = { hostname: string; port: number; pid: number };
+export type RouteStoreLike = {
   addRoute(hostname: string, port: number, pid: number, force?: boolean): number | undefined;
   removeRoute(hostname: string, ownerPid?: number): void;
   loadRoutes(persistCleanup?: boolean): RouteMapping[];
 };
-type PortlessModule = {
+export type PortlessModule = {
   RouteStore: new (dir: string, options?: { onWarning?: (message: string) => void }) => RouteStoreLike;
   parseHostname: (input: string, tld?: string) => string;
   formatUrl: (hostname: string, proxyPort: number, tls?: boolean) => string;
@@ -231,7 +231,20 @@ export async function createPortlessSession(input: CreateSessionInput): Promise<
     );
     return disabledSession();
   }
+  return activeSession(portless, proxy, input);
+}
 
+/**
+ * Build an active session against a portless module + detected proxy. Split
+ * from {@link createPortlessSession} so the discover/reuse/stale-replace logic
+ * is testable with a fake module (the real one needs Node >= 24 and a running
+ * proxy daemon).
+ */
+export function activeSession(
+  portless: PortlessModule,
+  proxy: DetectedProxy,
+  input: CreateSessionInput
+): PortlessSession {
   const store = new portless.RouteStore(stateDir(), {
     onWarning: (message) => input.log?.(`fusion: portless: ${message}`)
   });
