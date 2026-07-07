@@ -22,7 +22,11 @@ def test_committed_registry_round_trips() -> None:
     registry = load_registry(REGISTRY_PATH)
 
     assert registry.cycle_id == "2026-q3"
-    assert [model.endpoint_id for model in registry.models] == ["r1", "terminus", "qwen3t"]
+    endpoint_ids = [model.endpoint_id for model in registry.models]
+    # Bridge models from Stage 0 stay first; Phase A appends current-generation
+    # shortlist identities after them.
+    assert endpoint_ids[:3] == ["r1", "terminus", "qwen3t"]
+    assert {"ds32", "nemotron3s", "dsv4pro", "glm52", "qwen37max"}.issubset(endpoint_ids)
 
     dumped = registry.model_dump(mode="json")
     assert ModelRegistry.model_validate(dumped) == registry
