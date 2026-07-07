@@ -1,6 +1,6 @@
 import { ATTR } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
-import { emitFusionMarker, jsonAttr } from "@fusionkit/tracing";
+import { emitFusionEvent, jsonAttr } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
 import { decodeBufferedSse } from "./sse/parse.js";
@@ -287,7 +287,7 @@ export class FusionCostMeter {
     }
     const line = turnCostLine(entry, total.totalUsd);
     this.#logger.error(`fusion: ${input.stage} ${line}`);
-    emitFusionMarker("gateway", "fusion.cost", trace, {
+    emitFusionEvent("gateway", "fusion.cost", trace, {
       [ATTR.FUSION_SESSION_ID]: sessionId,
       [ATTR.FUSION_TURN]: input.turn,
       [ATTR.FUSION_COST_STAGE]: input.stage,

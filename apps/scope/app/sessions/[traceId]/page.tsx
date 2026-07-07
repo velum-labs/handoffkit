@@ -27,7 +27,8 @@ import type { SessionSummary } from "@/lib/api";
 import { tokensOf } from "@/lib/rollups";
 import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative, fmtUsd, shortTraceId } from "@/lib/format";
 import type { SessionDetail } from "@/lib/sessions";
-import type { StoredSpan } from "@/lib/types";
+import { signalKey } from "@/lib/types";
+import type { StoredSignal } from "@/lib/types";
 import { replaceSearchParams } from "@/lib/url-state";
 
 /** One-shot fetch of the session list to compute prev/next neighbors. */
@@ -106,14 +107,14 @@ function SessionDetailBody() {
   const searchParams = useSearchParams();
   const { session, loading, error, live } = useSessionDetail(traceId);
   const neighbors = useNeighbors(traceId);
-  const [inspected, setInspected] = useState<StoredSpan[] | undefined>(undefined);
+  const [inspected, setInspected] = useState<StoredSignal[] | undefined>(undefined);
 
-  // The inspected span mirrors into the URL (?span=<id>) so "look at this
-  // span" links are shareable and survive reloads.
-  const inspect = useCallback((spans: StoredSpan[]) => {
-    setInspected(spans);
-    if (spans.length > 0) {
-      replaceSearchParams({ span: spans[0].span_id });
+  // The inspected signal mirrors into the URL (?span=<id>) so "look at this
+  // span/event" links are shareable and survive reloads.
+  const inspect = useCallback((signals: StoredSignal[]) => {
+    setInspected(signals);
+    if (signals.length > 0) {
+      replaceSearchParams({ span: signalKey(signals[0]) });
     }
   }, []);
 
@@ -127,9 +128,12 @@ function SessionDetailBody() {
   useEffect(() => {
     if (restoredInspector.current || session === undefined) return;
     restoredInspector.current = true;
-    const spanId = searchParams.get("span");
-    if (spanId !== null) {
-      const matches = session.spans.filter((span) => span.span_id === spanId);
+    const key = searchParams.get("span");
+    if (key !== null) {
+      const matches: StoredSignal[] = [
+        ...session.spans.map((span): StoredSignal => ({ kind: "span", ...span })),
+        ...session.events.map((event): StoredSignal => ({ kind: "event", ...event }))
+      ].filter((signal) => signalKey(signal) === key);
       if (matches.length > 0) setInspected(matches);
     }
   }, [session, searchParams]);
@@ -218,7 +222,8 @@ function SessionDetailBody() {
                       : undefined,
                   mono: true
                 },
-                { label: "Spans", value: fmtNumber(session.spans.length), mono: true }
+                { label: "Spans", value: fmtNumber(session.spans.length), mono: true },
+                { label: "Events", value: fmtNumber(session.events.length), mono: true }
               ]}
             />
 
@@ -267,9 +272,13 @@ function SessionDetailBody() {
               )}
             </Section>
 
-            <Section title="Timeline" count={`${session.spans.length} spans`}>
+            <Section
+              title="Timeline"
+              count={`${session.spans.length} spans · ${session.events.length} events`}
+            >
               <Timeline
                 spans={session.spans}
+                events={session.events}
                 startedAt={session.startedAt}
                 durationMs={session.durationMs}
                 live={session.status === "running"}
@@ -338,24 +347,25 @@ function SessionDetailBody() {
             ) : null}
 
             <Section
-              title="Raw spans"
+              title="Raw signals"
               defaultOpen={false}
-              summary={Object.entries(session.spanCounts)
+              summary={Object.entries({ ...session.spanCounts, ...session.eventCounts })
                 .sort(([, a], [, b]) => b - a)
                 .slice(0, 4)
                 .map(([type, count]) => `${count} ${type}`)
                 .join(" · ")}
-              count={fmtNumber(session.spans.length)}
+              count={fmtNumber(session.spans.length + session.events.length)}
             >
               <EventTable
                 spans={session.spans}
+                events={session.events}
                 startedAt={session.startedAt}
                 onInspect={inspect}
               />
             </Section>
 
             <EventInspector
-              spans={inspected}
+              signals={inspected}
               startedAt={session.startedAt}
               onClose={closeInspector}
             />

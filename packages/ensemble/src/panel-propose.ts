@@ -154,7 +154,7 @@ async function proposeOne(
     options.trace !== undefined
       ? startFusionSpan("panel-model", "fusion.candidate", options.trace, identity)
       : undefined;
-  candidateSpan?.marker("panel-model", "fusion.candidate.started", identity);
+  candidateSpan?.event("panel-model", "fusion.candidate.started", identity);
   let wire: WireTrajectory;
   try {
     const response = await fetch(chatCompletionsUrl(baseUrl), {

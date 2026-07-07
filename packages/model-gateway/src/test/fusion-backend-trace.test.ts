@@ -7,12 +7,18 @@ import {
   attrJson,
   attrNum,
   attrStr,
+  eventNameOf,
+  eventSpanId,
+  eventTimeMs,
+  eventTraceId,
   initFusionTracing,
+  InMemoryLogRecordExporter,
   InMemorySpanExporter,
+  SimpleLogRecordProcessor,
   SimpleSpanProcessor,
   spanEndMs
 } from "@fusionkit/tracing";
-import type { ReadableSpan } from "@fusionkit/tracing";
+import type { ReadableFusionEvent, ReadableSpan } from "@fusionkit/tracing";
 
 import { FusionBackend } from "../fusion-backend.js";
 import type { WireTrajectory } from "../fusion-backend.js";
@@ -20,7 +26,12 @@ import type { WireTrajectory } from "../fusion-backend.js";
 // node:test isolates each file in its own process, so installing the tracer
 // provider here does not affect other suites.
 const exporter = new InMemorySpanExporter();
-initFusionTracing({ serviceName: "fusion-backend-trace-test", spanProcessors: [new SimpleSpanProcessor(exporter)] });
+const eventExporter = new InMemoryLogRecordExporter();
+initFusionTracing({
+  serviceName: "fusion-backend-trace-test",
+  spanProcessors: [new SimpleSpanProcessor(exporter)],
+  logRecordProcessors: [new SimpleLogRecordProcessor({ exporter: eventExporter })]
+});
 
 function candidate(id: string): WireTrajectory {
   return { trajectory_id: id, model_id: id, status: "succeeded", final_output: "ok", items: [] };
@@ -28,6 +39,10 @@ function candidate(id: string): WireTrajectory {
 
 function spans(): ReadableSpan[] {
   return exporter.getFinishedSpans() as ReadableSpan[];
+}
+
+function events(): ReadableFusionEvent[] {
+  return eventExporter.getFinishedLogRecords();
 }
 
 async function startStepServer(
@@ -48,8 +63,9 @@ async function startStepServer(
   };
 }
 
-test("FusionBackend traces the judge phase: request marker, judge span, traceparent to the fuse step", async () => {
+test("FusionBackend traces the judge phase: request event, judge span, traceparent to the fuse step", async () => {
   exporter.reset();
+  eventExporter.reset();
   const step = await startStepServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(
@@ -70,8 +86,8 @@ test("FusionBackend traces the judge phase: request marker, judge span, tracepar
     // The judge span ends from a cloned response asynchronously.
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const request = spans().find((span) => span.name === "fusion.judge.request");
-    assert.ok(request, "expected a fusion.judge.request marker");
+    const request = events().find((event) => eventNameOf(event) === "fusion.judge.request");
+    assert.ok(request, "expected a fusion.judge.request event");
     assert.equal(attrStr(request, "fusion.judge.model"), "judge-x");
     assert.equal(attrNum(request, "fusion.turn"), 1, "first user message is turn 1");
     assert.deepEqual(request.attributes["fusion.trajectory_ids"], ["c1", "c2"]);
@@ -83,14 +99,14 @@ test("FusionBackend traces the judge phase: request marker, judge span, tracepar
     assert.equal(attrStr(judge, "fusion.final_output"), "FUSED ANSWER");
     assert.equal(attrStr(judge, "fusion.status"), "succeeded");
     assert.equal(
-      request.parentSpanContext?.spanId,
+      eventSpanId(request),
       judge.spanContext().spanId,
-      "the request marker nests under the judge span"
+      "the request event correlates to the judge span"
     );
     assert.equal(
-      request.spanContext().traceId,
+      eventTraceId(request),
       judge.spanContext().traceId,
-      "marker and span share the session trace"
+      "event and span share the session trace"
     );
 
     // The fuse step HTTP call carries the judge span's W3C trace context.
@@ -109,6 +125,7 @@ test("FusionBackend traces the judge phase: request marker, judge span, tracepar
 
 test("an intermediate tool-call turn emits fusion.judge.thinking and keeps the judge span open", async () => {
   exporter.reset();
+  eventExporter.reset();
   const step = await startStepServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(
@@ -139,9 +156,11 @@ test("an intermediate tool-call turn emits fusion.judge.thinking and keeps the j
       false,
       "an intermediate tool-call turn must not end the judge span"
     );
-    const thinking = recent.find((span) => span.name === "fusion.judge.thinking");
-    assert.ok(thinking, "expected a fusion.judge.thinking marker for the intermediate step");
-    assert.ok(attrJson(thinking, "fusion.tool_calls"), "the marker carries the intermediate tool calls");
+    const thinking = events().find(
+      (event) => eventNameOf(event) === "fusion.judge.thinking" && eventTimeMs(event) >= since
+    );
+    assert.ok(thinking, "expected a fusion.judge.thinking event for the intermediate step");
+    assert.ok(attrJson(thinking, "fusion.tool_calls"), "the event carries the intermediate tool calls");
   } finally {
     await step.close();
   }

@@ -358,7 +358,7 @@ export class FusionTurnAssembler {
   ): void {
     if (!isFusionTracingActive()) return;
     const judgeModel = this.#judgeModelNameFor(req);
-    this.#judgeSpan(req, session).marker("judge", "fusion.judge.request", {
+    this.#judgeSpan(req, session).event("judge", "fusion.judge.request", {
       [ATTR.FUSION_JUDGE_MODEL]: judgeModel,
       [ATTR.FUSION_TURN]: req.turn,
       [ATTR.FUSION_MESSAGES]: jsonAttr(req.chat.messages ?? []),
@@ -415,7 +415,7 @@ export class FusionTurnAssembler {
       input.content !== undefined && input.content.length > 0
         ? input.content
         : `judge requested ${toolCallCount} tool call(s)`;
-    this.#judgeSpan(req, session).marker("judge", "fusion.judge.thinking", {
+    this.#judgeSpan(req, session).event("judge", "fusion.judge.thinking", {
       [ATTR.FUSION_TURN]: req.turn,
       [ATTR.FUSION_RAW_ANALYSIS]: rawAnalysis,
       [ATTR.FUSION_CONTENT]: input.content,

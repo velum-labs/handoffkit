@@ -33,7 +33,7 @@ from fusionkit_core.trace import (
     Span,
     TraceContext,
     context_of_span,
-    emit_marker,
+    emit_event,
     end_fusion_span,
     fusion_span,
     json_attr,
@@ -871,7 +871,7 @@ class JudgeSynthesizer:
             )
         if terminal:
             # Terminal facts land on the fuse span itself; scope and any OTLP
-            # backend read the step outcome from the span, not a marker.
+            # backend read the step outcome from the span, not an event.
             if fuse_span_handle is not None:
                 attrs: dict[str, Any] = {
                     ATTR.FUSION_TERMINAL: True,
@@ -1272,7 +1272,7 @@ def _extract_json(content: str) -> str:
     return stripped
 
 
-# payload key -> registry attribute for judge markers. Structured values are
+# payload key -> registry attribute for judge events. Structured values are
 # JSON-stringified (OTel attributes are primitives / primitive arrays).
 _JUDGE_ATTR_MAP: dict[str, tuple[str, bool]] = {
     "fusion_unit": (ATTR.FUSION_FUSION_UNIT, False),
@@ -1298,7 +1298,7 @@ def _emit_judge(
     *,
     payload: dict[str, Any],
 ) -> None:
-    """Emit one judge signal as a `fusion.<event_type>` marker.
+    """Emit one judge signal as a `fusion.<event_type>` event.
 
     Tests monkeypatch this seam to capture the engine's judge activity.
     """
@@ -1309,7 +1309,7 @@ def _emit_judge(
             continue
         attr, as_json = mapped
         attributes[attr] = json_attr(value) if as_json else value
-    emit_marker("judge", f"fusion.{event_type}", trace, attributes)
+    emit_event("judge", f"fusion.{event_type}", trace, attributes)
 
 
 def _start_fuse_span(

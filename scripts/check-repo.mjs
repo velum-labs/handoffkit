@@ -398,13 +398,16 @@ const TRUSTED_THIRD_PARTY = new Map([
   // runtime (no install scripts).
   ["untun", "0.1.3"],
   ["@openai/codex-sdk", "0.142.5"],
-  // OpenTelemetry: the tracing engine behind @fusionkit/tracing (spans, W3C
-  // propagation, batching, OTLP export). The exporter line is 0.x upstream;
-  // both lines are pinned exactly and bumped only as reviewed allowlist
-  // changes.
+  // OpenTelemetry: the tracing engine behind @fusionkit/tracing (spans + log
+  // events, W3C propagation, batching, OTLP export). The exporter/logs line is
+  // 0.x upstream; both lines are pinned exactly and bumped only as reviewed
+  // allowlist changes.
   ["@opentelemetry/api", "1.9.1"],
+  ["@opentelemetry/api-logs", "0.220.0"],
+  ["@opentelemetry/exporter-logs-otlp-http", "0.220.0"],
   ["@opentelemetry/exporter-trace-otlp-http", "0.220.0"],
   ["@opentelemetry/resources", "2.9.0"],
+  ["@opentelemetry/sdk-logs", "0.220.0"],
   ["@opentelemetry/sdk-trace-base", "2.9.0"],
   ["@opentelemetry/sdk-trace-node", "2.9.0"],
   ["@opencode-ai/sdk", "1.17.13"],
