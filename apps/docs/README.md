@@ -1,10 +1,9 @@
 # fusionkit docs
 
 The production documentation site for fusionkit, built with
-[Fumadocs](https://fumadocs.dev) (Next.js App Router). It covers both the
-`@fusionkit/cli` product and the governed execution platform underneath it
-(plane, runner, SDKs, handoff, protocol). It is published at
-`fusionkit.velum-labs.com`.
+[Fumadocs](https://fumadocs.dev) (Next.js App Router). It covers the
+`@fusionkit/cli` product and the Python fusion engine behind it. It is
+published at `fusionkit.velum-labs.com`.
 
 This is a **standalone app**: like `apps/scope`, it is not part of the root
 `packages/*` + `examples/*` pnpm workspace, so its UI dependency tree stays out
@@ -31,22 +30,25 @@ pnpm start
 ## Content
 
 Docs live in `content/docs/**/*.mdx`, grouped into folder-based sidebar sections,
-each ordered by its own `meta.json` (and the root `content/docs/meta.json`):
+each ordered by its own `meta.json` (and the root `content/docs/meta.json`).
+The sidebar is organized by reader intent:
 
-- **Documentation taxonomy**: the reader-intent model for the site and the reason
-  each section exists.
-- **Get Started**: task guides for installation, quickstart, configuration,
-  inference endpoint usage, and rate-limit handoff.
-- **fusionkit CLI**: reference and task guidance for commands, cost, panels,
-  observability, and troubleshooting.
-- **Concepts**: mental models for product scope, architecture, model fusion, and
-  the runtime kernel.
-- **SDKs & Packages**: reference material for builders using SDKs, adapters, and
-  package surfaces.
-- **Self-Hosting**: operations guidance for the plane, runners, and release
-  publishing.
-- **Examples**: scenario-based task guidance.
-- **API Reference**: runtime route overview plus generated contract reference.
+- **Get started**: installation and the quickstart.
+- **Tools**: one page per supported coding agent (Codex, Claude Code, Cursor).
+- **Guides**: workflow guides for the inference endpoint, rate-limit handoff,
+  cost control, observability, troubleshooting, and examples.
+- **Concepts**: mental models for model fusion, the runtime kernel, product
+  scope, and privacy.
+- **Reference**: the command reference, `.fusionkit/` configuration, models and
+  panels, and the package map.
+- **API reference**: runtime route overview plus generated contract reference.
+- **Changelog**: release notes, generated from the repo-root `CHANGELOG.md` by
+  `scripts/sync-docs-changelog.mjs` (runs on every dev/build; the release
+  coordinator regenerates it in each release commit, and `pnpm check` at the
+  repo root fails when it drifts).
+
+When a page moves between sections, add a permanent redirect in
+`next.config.mjs` so deployed URLs keep working.
 
 Mermaid code blocks render as diagrams (via `remarkMdxMermaid` plus the
 client-side `components/mermaid.tsx`).

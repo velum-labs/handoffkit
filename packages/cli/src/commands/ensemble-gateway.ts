@@ -4,6 +4,8 @@ import { Command } from "commander";
 
 import { bold, cyan, dim } from "@fusionkit/cli-ui";
 
+import { logServing } from "../fusion/gateway-log.js";
+
 import {
   codexConfigSnippet,
   gatewaySetupSnippets,
@@ -100,6 +102,8 @@ export function buildGatewayCommand(): Command {
       ctx.presenter.success(`${bold("fusion harness gateway")} ${cyan(instance.url())}`);
       ctx.presenter.blank();
       ctx.presenter.line(gatewaySetupSnippets(instance.url(), "http://127.0.0.1:<cursorkit-port>"));
+      ctx.presenter.blank();
+      logServing();
     });
   gateway.addCommand(serve, { isDefault: true });
 

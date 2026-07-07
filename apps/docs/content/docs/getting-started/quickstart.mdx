@@ -47,9 +47,13 @@ fusionkit init
 ```
 
 This writes a committed `.fusionkit/` folder (settings plus editable prompts).
-See [Configuration](/docs/getting-started/configuration).
+See [Configuration](/docs/reference/configuration).
 
 ## Per-tool quickstarts
+
+Each supported tool has its own page covering wiring, the model picker,
+sub-agents, and caveats: [Codex](/docs/tools/codex),
+[Claude Code](/docs/tools/claude-code), and [Cursor](/docs/tools/cursor).
 
 <Tabs items={["Codex", "Claude Code", "Cursor", "Just the gateway"]}>
   <Tab value="Codex">
@@ -59,6 +63,7 @@ fusionkit codex
 
 Codex talks to the gateway through the OpenAI Responses dialect. FusionKit writes
 a temporary provider config so Codex sees `fusion-panel` as a normal model.
+See [Codex](/docs/tools/codex).
   </Tab>
   <Tab value="Claude Code">
 ```bash
@@ -67,6 +72,7 @@ fusionkit claude
 
 Claude Code talks to the gateway through the Anthropic Messages dialect.
 FusionKit sets the base URL and auth token for the launched process.
+See [Claude Code](/docs/tools/claude-code).
   </Tab>
   <Tab value="Cursor">
 ```bash
@@ -76,6 +82,7 @@ fusionkit cursor
 Cursorkit ships bundled with the npm package; you only need a logged-in
 `cursor-agent` CLI. Use `fusionkit cursor --ide` to wire the Cursor IDE through
 the local desktop proxy without creating a public tunnel.
+See [Cursor](/docs/tools/cursor).
   </Tab>
   <Tab value="Just the gateway">
 Run the gateway and call it from curl, an SDK, or another OpenAI-compatible
@@ -85,7 +92,7 @@ client:
 fusionkit serve
 ```
 
-See [Inference endpoint](/docs/getting-started/inference-endpoint) for streaming
+See [Inference endpoint](/docs/guides/inference-endpoint) for streaming
 and tool-calling examples.
   </Tab>
 </Tabs>
@@ -101,8 +108,11 @@ and tool-calling examples.
 - `--observe`: boot the local trace dashboard.
 - `--yes`: skip the cloud-panel cost confirmation.
 
-fusionkit's own flags go after the tool name and must precede any arguments
-forwarded to the tool. See the full [command reference](/docs/cli/commands).
+fusionkit's own flags must come before anything you forward to the tool.
+`fusionkit codex --local` sets a fusionkit flag; everything after the first
+forwarded argument (or after `--`) goes to the tool itself, as in
+`fusionkit codex --yes -- "fix the build"`. See the full
+[command reference](/docs/reference/commands).
 
 For non-interactive environments, combine `--yes` with a fixed port or disabled
 portless registration:
@@ -127,7 +137,7 @@ The gateway exposes `fusion-panel` as the fused model. It also exposes panel
 member ids such as `gpt`, `sonnet`, and `gemini` as passthrough models. Choose
 `fusion-panel` when you want synthesis. Choose a member id when you want to
 compare the ensemble against one provider or use
-[rate-limit handoff](/docs/getting-started/rate-limit-handoff) as a fallback.
+[rate-limit handoff](/docs/guides/rate-limit-handoff) as a fallback.
 
 Run `fusionkit models list` to inspect local MLX models, and use
 `fusionkit config show` to see the effective cloud panel that will be launched

@@ -74,6 +74,9 @@ export function buildProgram(): Command {
       "  FUSIONKIT_SESSIONS_DIR         durable session store (default: ~/.fusionkit/sessions)",
       "  FUSIONKIT_CONSENT_PATH         cloud-panel cost consent file override",
       "  FUSIONKIT_SKIP_KEY_VALIDATION  skip live provider-key validation when set to 1",
+      "  FUSIONKIT_TELEMETRY            1/0 overrides stored product-telemetry consent",
+      "  DO_NOT_TRACK                   force-disables product telemetry (beats everything)",
+      "  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT  export trace spans to your own OTLP collector",
       "  PORTLESS                       set to 0 to disable portless routing by default",
       "  PORTLESS_STATE_DIR/TLD         portless proxy state directory and local domain",
       "  FUSIONKIT_*                    canonical environment variable prefix"

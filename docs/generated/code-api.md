@@ -193,6 +193,8 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export type { PersistedSession, SessionMeta, SessionStore, SessionSummary, SessionTurnRecord } from "./session-store.js";`
 - `export { addTurnCost, DEFAULT_MODEL_PRICING, emptySessionCost, estimateCost, formatUsd, lookupPricing, meterTurn, parseUsage, parseUsageFromSse, turnCostLine } from "./cost.js";`
 - `export type { CostLedgerEntry, CostStage, LocalComputePricing, LocalComputeUsage, ModelPricing, ProviderCostMetadata, SessionCost, TokenUsage, TurnCost } from "./cost.js";`
+- `export { defaultFusionGatewayLogger } from "./logger.js";`
+- `export type { FusionGatewayLogger } from "./logger.js";`
 - `export { MlxBackend } from "./mlx-backend.js";`
 - `export type { MlxBackendOptions } from "./mlx-backend.js";`
 - `export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";`

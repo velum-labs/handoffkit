@@ -237,6 +237,10 @@ export class FileSystemSessionStore implements SessionStore {
     await this.#locks.withLock(id, this.#dir(id), () => {
       this.#updateMeta(id, (meta) => {
         meta.cost = cost;
+        // Cost accrual is session activity: a resumed session that replays
+        // stored candidates never re-appends turns, so without this bump it
+        // would look idle to `sessions list` and the end-of-run receipt.
+        meta.updatedAt = Date.now();
       });
     });
   }
@@ -380,7 +384,7 @@ export class InMemorySessionStore implements SessionStore {
   async recordCost(id: string, cost: SessionCost): Promise<void> {
     const existing = this.#sessions.get(id);
     if (existing === undefined) return;
-    existing.meta = { ...existing.meta, cost };
+    existing.meta = { ...existing.meta, cost, updatedAt: Date.now() };
   }
 
   async recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): Promise<void> {

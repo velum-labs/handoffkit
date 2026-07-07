@@ -101,9 +101,15 @@ test("concurrent mutators from separate store instances never lose meta fields",
   assert.ok(loaded !== undefined);
   // The read-modify-write interleave hazard: without locking, an updatedAt
   // bump routinely erases the cost rollup (or vice versa). Both must survive.
+  // recordCost also counts as activity (it stamps wall-clock time), so the
+  // final updatedAt is at least the last turn's stamp — never an older value
+  // resurrected by a lost update.
   assert.equal(loaded.turns.length, 8, "every appended turn survived");
   assert.ok(loaded.meta.cost !== undefined, "the cost rollup survived concurrent meta bumps");
-  assert.equal(loaded.meta.updatedAt, 1008, "the last-activity bump survived concurrent cost writes");
+  assert.ok(
+    loaded.meta.updatedAt >= 1008,
+    "the last-activity bump survived concurrent cost writes"
+  );
 });
 
 test("in-process mutations of one session are serialized (no torn meta)", async () => {

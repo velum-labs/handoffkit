@@ -1,5 +1,5 @@
 ---
-title: API Reference
+title: Overview
 description: The model-fusion HTTP/service contract.
 ---
 
@@ -67,8 +67,8 @@ for generated pages in this section.
 
 ## Trace and evidence contracts
 
-Runtime observability uses `fusion-trace-event.v1`. Events include session
-start, candidate start and finish, trajectory steps, model-call start and finish,
-tool execution, judge thinking, and judge final output. See
-[Observability](/docs/cli/observability) for the user workflow and the protocol
-schemas in the repository for the durable event shape.
+Runtime observability is OpenTelemetry-native: components emit real spans over
+OTLP/HTTP, correlated by W3C `traceparent`/`baggage`, using the fusion
+semantic conventions in `spec/fusion-trace/registry.json` (candidate spans and
+step markers, GenAI `chat` spans, tool execution, judge thinking, cost). See
+[Observability](/docs/guides/observability) for the user workflow.

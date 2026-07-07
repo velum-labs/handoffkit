@@ -16,10 +16,12 @@ const features = [
 ];
 
 const sections = [
-  { title: "Get Started", href: "/docs/getting-started/installation", body: "Install the CLI and run your first fused session." },
-  { title: "CLI Reference", href: "/docs/cli/commands", body: "Every command, flag, and cost control." },
-  { title: "Concepts", href: "/docs/concepts/overview", body: "Panels, judges, synthesizers, fused models, and passthrough models." },
-  { title: "Privacy", href: "/docs/privacy", body: "Local storage, provider egress, and no-telemetry behavior." }
+  { title: "Get started", href: "/docs/getting-started/installation", body: "Install the CLI and run your first fused session." },
+  { title: "Tools", href: "/docs/tools", body: "Per-tool guides for Codex, Claude Code, and Cursor." },
+  { title: "Guides", href: "/docs/guides/inference-endpoint", body: "Endpoint usage, rate-limit handoff, cost control, observability, and troubleshooting." },
+  { title: "Concepts", href: "/docs/concepts/overview", body: "Panels, judges, model fusion, product scope, and privacy." },
+  { title: "Reference", href: "/docs/reference/commands", body: "Every command, flag, configuration field, and package." },
+  { title: "API reference", href: "/docs/api", body: "Gateway routes and the generated harness-executor contract." }
 ];
 
 export default function HomePage() {
@@ -33,8 +35,8 @@ export default function HomePage() {
           Real model fusion behind your coding agent
         </h1>
         <p className="max-w-2xl text-lg text-fd-muted-foreground">
-          fusionkit spins up a panel of models, has each produce a real candidate, and lets a judge
-          synthesize the answer Codex, Claude Code, or Cursor actually runs - from one command.
+          One command spins up a panel of models, has each produce a real candidate, and lets a
+          judge synthesize the answer Codex, Claude Code, or Cursor actually runs.
         </p>
         <pre className="rounded-lg bg-fd-secondary px-4 py-3 text-sm">
           npm install -g @fusionkit/cli && fusionkit setup && fusionkit codex
@@ -66,7 +68,7 @@ export default function HomePage() {
 
       <section className="mx-auto w-full max-w-5xl px-4 pb-24">
         <h2 className="mb-6 text-center text-2xl font-semibold">Explore the docs</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sections.map((section) => (
             <Link
               key={section.href}

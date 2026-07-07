@@ -30,7 +30,7 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `generated/code-api.md` | Reference | Generated API reference; do not edit by hand. |
 | `typescript-reference.md` | Reference | TypeScript package ownership, public symbols, and examples. |
 | `python-reference.md` | Reference | Python packages, modules, symbols, CLI ownership, and examples. |
-| `specs-and-apis.md` | Reference | Protocol schemas, generated bindings, routes, trace events, and schema workflow. |
+| `specs-and-apis.md` | Reference | Protocol schemas, generated bindings, routes, trace conventions, and schema workflow. |
 | `apps-and-examples.md` | Reference | Apps and product/legacy example map. |
 | `operations-and-scripts.md` | Operations | Root scripts, release files, CI mapping, dependency policy, and verification strategy. |
 | `getting-started.md` | Task guide | Contributor setup, local verification, portless behavior, demos, and Python workspace setup. |
@@ -42,7 +42,7 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `privacy.md` | Privacy and policy | Local session storage, consent, retention, provider egress, failover expansion, and no telemetry. |
 | `model-catalog.md` | Reference | Provider matrix, default panels, local MLX, mixed panels, pricing, and budgets. |
 | `fusion-harness-gateway.md` | Concepts and architecture | Product gateway architecture, dialects, streaming, wiring, and front-door behavior. |
-| `fusion-judge-trajectory.md` | Concepts and architecture | Trajectory fusion model, judge synthesis, trace events, and e2e drivers. |
+| `fusion-judge-trajectory.md` | Concepts and architecture | Trajectory fusion model, judge synthesis, OTel trace spans, and e2e drivers. |
 | `scope.md` | Orientation | Product package boundary versus retained legacy governance and VM packages. |
 | `packages.md` | Reference | Short package guide for readers who do not need full package references. |
 | `release-publishing.md` | Operations | npm publishing workflow and trusted publishing setup. |

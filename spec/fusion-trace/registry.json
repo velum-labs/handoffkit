@@ -1,5 +1,4 @@
 {
-  "$schema": "./registry.schema.json",
   "name": "fusion-trace-conventions",
   "version": "1.0.0",
   "description": "Semantic conventions for the fusion stack's OpenTelemetry traces. Spans named here are the only spans fusion components emit; attributes named here are the only fusion attributes they carry. Where the OTel GenAI semantic conventions define an attribute (gen_ai.*), it is used instead of a fusion.* invention so model-call spans render natively in GenAI-aware backends (e.g. PostHog LLM analytics). Sensitivity classes drive redaction at sink boundaries: 'local' attributes never leave the machine through the product-telemetry pipeline; 'exportable' attributes may.",
