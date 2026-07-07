@@ -1,0 +1,59 @@
+# k=1 round-1 fused panel (see ../preregistration.md before changing anything).
+#
+# Members are the validated-OSS choices from the seed-audit / Phase-0 record:
+#   - terminus: deepseek-v3.1-terminus — VALID at 32k (0/60 truncated,
+#     analysis/seed-audit-32k/report.md)
+#   - qwen3: qwen3-coder — non-thinking, measured cleanly in Phase 0
+#     (analysis/phase0/c3_transfer_report.md)
+# kimi-k2-thinking (the product default) is deliberately excluded: declared
+# not measurable at practical budgets (truncation through 64k).
+#
+# Judge/synthesizer = terminus (strongest validated member). Family overlap
+# with one panel member is a recorded limitation in the preregistration;
+# candidates are anonymized and order-randomized by the engine, so the
+# exposure is stylistic self-preference only.
+#
+# Boot:
+#   uv run --package fusionkit fusionkit serve \
+#     -c analysis/k1-round1/config/panel.yaml --host 127.0.0.1 --port 8080
+#
+# The fused system is the OpenAI-compatible model id `fusionkit/panel`.
+# Per-endpoint ids (`terminus`, `qwen3`) are passthrough, not fused.
+endpoints:
+  - id: terminus
+    provider: openrouter
+    model: deepseek/deepseek-v3.1-terminus
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities:
+      structured_output: false
+      tool_calls: true
+      streaming: true
+    tags: [cloud, oss, peer]
+    timeout_s: 600
+  - id: qwen3
+    provider: openrouter
+    model: qwen/qwen3-coder
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities:
+      structured_output: false
+      tool_calls: true
+      streaming: true
+    tags: [cloud, oss, peer]
+    timeout_s: 600
+default_model: terminus
+judge_model: terminus
+synthesizer_model: terminus
+default_mode: panel
+panel_models: [terminus, qwen3]
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  # Per-step completion cap. Steps are single proposals (a command batch or a
+  # final answer), not whole solutions; the truncation audit in the
+  # preregistration counts rows that hit this cap.
+  max_tokens: 8192
+budget:
+  max_candidates: 2
+  wall_clock_s: 1800
