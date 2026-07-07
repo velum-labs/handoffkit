@@ -10,13 +10,14 @@ ARM_DIR="$(cd "$ROUND_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$ARM_DIR/../.." && pwd)"
 export PATH="$HOME/.nvm/versions/node/v22.22.2/bin:$HOME/.local/bin:$PATH"
 
-VARIANTS=("$@")
 CONFIRM=0
 CLEAN=()
-for a in "${VARIANTS[@]:-}"; do
-  [[ "$a" == "--confirm" ]] && CONFIRM=1 || CLEAN+=("$a")
+for a in "$@"; do
+  if [[ "$a" == "--confirm" ]]; then CONFIRM=1; else CLEAN+=("$a"); fi
 done
-[[ ${#CLEAN[@]} -eq 0 ]] && CLEAN=(v0-baseline v1-wide-evidence v2-strict-commit v3-judge-discipline)
+if [[ ${#CLEAN[@]} -eq 0 ]]; then
+  CLEAN=(v0-baseline v1-wide-evidence v2-strict-commit v3-judge-discipline)
+fi
 
 mapfile -t INSTANCES < <(rg -v '^#' "$ARM_DIR/instance_manifest.txt")
 FILTER="^($(IFS='|'; echo "${INSTANCES[*]}"))\$"
