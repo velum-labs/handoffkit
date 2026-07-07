@@ -167,6 +167,148 @@ def collect_source_urls(candidates: list[dict[str, Any]], snap: dict[str, Any]) 
     return rows
 
 
+def family_swatch_legend(candidates: list[dict[str, Any]]) -> str:
+    """HTML legend for lineage family dot colors used in charts."""
+    families = sorted({c["lineage"]["base_family"] for c in candidates})
+    items = []
+    for fam in families:
+        color = family_color(fam)
+        items.append(
+            f'<span class="swatch-item"><span class="fam lg" style="background:{color}"></span>'
+            f"<code>{esc(fam)}</code></span>"
+        )
+    return (
+        '<div class="keybox"><h4>Dot colors = lineage family</h4>'
+        '<p class="keynote">Same-colored models share a base family. Panels may include '
+        "<b>at most one</b> model per family (lineage veto).</p>"
+        f'<div class="swatch-grid">{"".join(items)}</div></div>'
+    )
+
+
+def global_visual_key(judge_slug: str) -> str:
+    judge_label = judge_slug or "judge model"
+    return f"""
+<div class="card" id="visual-key">
+  <h3>Visual key — tags, colors, and symbols used throughout</h3>
+  <p class="keynote">Every table and chart on this page uses the same vocabulary. Refer back here if a color or tag is unclear.</p>
+  <div class="keygrid">
+    <div class="keycol">
+      <h4>Status tags (hypothesis cards)</h4>
+      <p><span class="tag pass">ready</span> Config is complete and can proceed to Phase B smoke tests.</p>
+      <p><span class="tag warn">deferred</span> Card is written but cannot run yet (e.g. H3 cascade wrapper missing).</p>
+      <p><span class="tag info">parallel_judge</span> All panel members answer; judge merges (H1, H2, H5).</p>
+      <p><span class="tag info">cascade</span> Cheap model first; escalate to full panel on failure (H3).</p>
+      <p><span class="tag info">exec_select</span> Best-of-N by grading samples; no judge (H4).</p>
+      <p><span class="tag dir">K=N</span> Number of samples per task (1 for panels; 3 for Self-MoA baseline).</p>
+    </div>
+    <div class="keycol">
+      <h4>Role tags (shortlist table)</h4>
+      <p><span class="tag pass">panel</span> Model appears as a panel member in at least one hypothesis.</p>
+      <p><span class="tag warn">judge</span> Model is the synthesizer judge (not a panel member in that card).</p>
+      <p><span class="tag pass">N benches</span> (green) Mean uses ≥2 third-party benchmarks — stronger rank.</p>
+      <p><span class="tag warn">1 bench</span> (amber) Mean rests on a single benchmark — treat rank with caution.</p>
+      <p class="row-hl"><span class="row-sample inuse"></span> <b>Blue row highlight</b> — shortlist model used in a hypothesis.</p>
+    </div>
+    <div class="keycol">
+      <h4>Evidence cell colors (coverage matrix)</h4>
+      <p><span class="cov tp demo">72.4</span> <b>Green</b> — third-party leaderboard score; <b>counts</b> toward ranking mean. Click to open source.</p>
+      <p><span class="cov vendor demo">65.0</span> <b>Amber</b> — vendor-claimed only; recorded but <b>excluded</b> from mean.</p>
+      <p><span class="cov sat demo">91.2</span> <b>Violet</b> — benchmark saturated (top models bunched &gt;85%); <b>excluded</b> from mean.</p>
+      <p><span class="cov none demo">-</span> <b>Gray dash</b> — no public score found for this model on that benchmark.</p>
+      <p class="keynote">Hover any colored cell for harness text and retrieval date. <code>Mean</code> column = simple average of green cells only.</p>
+    </div>
+    <div class="keycol">
+      <h4>Scatter chart symbols (section 2)</h4>
+      <p><span class="dot-sample panel"></span> <b>Black ring</b> — panel member in H1–H5.</p>
+      <p><span class="dot-sample judge"></span> <b>Amber/orange ring</b> — judge model (<code>{esc(judge_label)}</code>).</p>
+      <p><span class="dot-sample plain"></span> <b>Plain dot</b> — candidate with a mean but not on a panel/judge.</p>
+      <p class="keynote"><b>Up + left</b> = better value (higher public mean, lower $/request). X-axis is log scale.</p>
+    </div>
+  </div>
+</div>"""
+
+
+def funnel_key() -> str:
+    return """
+<div class="keybox">
+  <h4>How to read the funnel table</h4>
+  <ul class="tight">
+    <li><b>Filter</b> — mechanical rule applied in order. No benchmark scores involved.</li>
+    <li><b>Removed</b> — rows eliminated by that single filter (not cumulative).</li>
+    <li><b>Remaining</b> — rows left after this filter; input to the next filter.</li>
+  </ul>
+  <p class="keynote">Example: 343 open-weights → 191 after dropping closed models → … → 34 final candidates.
+  Models are <b>not</b> ranked or dropped for low scores at this stage.</p>
+</div>"""
+
+
+def scatter_key() -> str:
+    return """
+<div class="keybox">
+  <h4>Chart axes and markers</h4>
+  <table class="keytable">
+    <tr><td class="pklab">Y-axis</td><td><b>Aggregate mean</b> (0–100) — simple average of green (third-party, unsaturated) benchmark cells from section 3. <b>Not</b> a Phase C measurement.</td></tr>
+    <tr><td class="pklab">X-axis</td><td><b>$/request</b> at 2k input + 8k output tokens, using OpenRouter snapshot prices. Log scale so cheap and expensive models both fit.</td></tr>
+    <tr><td class="pklab">Dot fill</td><td>Lineage family color (see family swatch legend below chart).</td></tr>
+    <tr><td class="pklab">Rings</td><td>Black = on a hypothesis panel. Amber = judge. No ring = shortlisted/candidate only.</td></tr>
+    <tr><td class="pklab">Tooltip</td><td>Hover a dot for exact slug, mean, and $/request.</td></tr>
+  </table>
+</div>"""
+
+
+def coverage_key() -> str:
+    return """
+<div class="keybox">
+  <h4>Matrix columns and cells</h4>
+  <table class="keytable">
+    <tr><td class="pklab">Model</td><td>OpenRouter slug. Amber <span class="tag warn">aging</span> or other flags from catalog snapshot when applicable.</td></tr>
+    <tr><td class="pklab">Family</td><td>Colored square + lineage tag (e.g. <code>deepseek-v3</code>). Used for lineage veto in panels.</td></tr>
+    <tr><td class="pklab">LCB / SWE / Aider / AA</td><td>Score on that benchmark, or <code>-</code> if missing. Cell color = trust/saturation (see visual key). Click score to open leaderboard URL.</td></tr>
+    <tr><td class="pklab">Mean</td><td>Ranking mean for shortlist only. Blank if no qualifying green cells.</td></tr>
+  </table>
+</div>"""
+
+
+def shortlist_key() -> str:
+    return """
+<div class="keybox">
+  <h4>Shortlist columns</h4>
+  <table class="keytable">
+    <tr><td class="pklab">#</td><td>Rank by aggregate mean (highest first). Tie-breaking not applied — exact order follows YAML.</td></tr>
+    <tr><td class="pklab">Model</td><td>OpenRouter slug. Tags: <span class="tag pass">panel</span> / <span class="tag warn">judge</span> if used in hypotheses.</td></tr>
+    <tr><td class="pklab">Mean</td><td>Simple unweighted mean of green evidence cells (section 3). Not comparable across models with different benchmark counts.</td></tr>
+    <tr><td class="pklab">Benchmarks in mean</td><td>Count tag: green ≥2 is stronger; amber = 1 is weak. Gray text lists which benchmarks contributed.</td></tr>
+    <tr><td class="pklab">Lineage family</td><td>Base model family for veto checks.</td></tr>
+    <tr><td class="pklab">$/request</td><td>Planning cost at 2k in + 8k out (same formula as scatter chart).</td></tr>
+  </table>
+</div>"""
+
+
+def hypothesis_key() -> str:
+    return """
+<div class="keybox">
+  <h4>Hypothesis card fields</h4>
+  <table class="keytable">
+    <tr><td class="pklab">Member chips</td><td>Border color = lineage family. <code>Nk cap</code> = max completion tokens (32k default; 64k for thinking hypotheses).</td></tr>
+    <tr><td class="pklab">Blue bar</td><td>Estimated Phase C sweep cost for 60 tasks at this config (panel + judge tokens). Bar width is relative to the most expensive hypothesis (H5).</td></tr>
+    <tr><td class="pklab">$/request</td><td>Estimated single fused request cost (right of bar).</td></tr>
+    <tr><td class="pklab">predicts</td><td>What we expect if fusion helps — stated before any run.</td></tr>
+    <tr><td class="pklab">killed if</td><td>Falsification rule. If true after Phase C, this hypothesis is not promoted.</td></tr>
+  </table>
+</div>"""
+
+
+def hero_chip_key() -> str:
+    return """
+<p class="keynote" style="margin-top:14px"><b>Header chips:</b>
+<b>OpenRouter rows</b> = raw API count &nbsp;|&nbsp;
+<b>candidates</b> = after mechanical filters &nbsp;|&nbsp;
+<b>shortlist</b> = top 12 by public mean &nbsp;|&nbsp;
+<b>hypotheses</b> = H1–H5 cards &nbsp;|&nbsp;
+<b>API spend</b> = $0 for Phase A &nbsp;|&nbsp;
+<b>retrieved</b> = catalog pull timestamp (UTC).</p>"""
+
+
 def scatter_svg(candidates: list[dict[str, Any]], panel_slugs: set[str], judge_slug: str) -> str:
     """Price-vs-score scatter: x = log blended request cost, y = aggregate mean."""
     points = [c for c in candidates if c.get("aggregate_mean") is not None]
@@ -268,7 +410,10 @@ def coverage_matrix(candidates: list[dict[str, Any]]) -> str:
             f'<td><span class="fam" style="background:{family_color(cand["lineage"]["base_family"])}"></span>'
             f'{esc(cand["lineage"]["base_family"])}</td>{"".join(cells)}<td class="num">{mean_txt}</td></tr>'
         )
-    heads = "".join(f"<th>{label}</th>" for _key, label in BENCHMARKS)
+    heads = "".join(
+        f'<th title="{esc(BENCHMARK_META[key]["what"])}">{label}</th>'
+        for key, label in BENCHMARKS
+    )
     return (
         f'<table><thead><tr><th>Model</th><th>Family</th>{heads}<th>Mean</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
@@ -496,7 +641,26 @@ def build() -> None:
   dl.glossary dd{{margin:4px 0 0 0;color:var(--muted);font-size:14px;line-height:1.55}}
   .toc{{columns:2;gap:24px;font-size:14px}}
   .toc a{{display:block;margin:4px 0}}
-  @media(max-width:700px){{.toc{{columns:1}}}}
+  @media(max-width:700px){{.toc{{columns:1}}; .keygrid{{grid-template-columns:1fr}}}}
+  .keybox{{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin:0 0 14px}}
+  .keybox h4{{margin:0 0 8px;font-size:14px;color:var(--ink)}}
+  .keynote{{margin:8px 0 0;font-size:13px;color:var(--muted);line-height:1.55}}
+  .keygrid{{display:grid;grid-template-columns:1fr 1fr;gap:20px 28px}}
+  .keycol p{{margin:6px 0;font-size:13px;line-height:1.5}}
+  .keycol h4{{margin:0 0 8px;font-size:13.5px;color:var(--ink);border-bottom:1px solid var(--line);padding-bottom:4px}}
+  .keytable{{font-size:13px;margin:0}}
+  .keytable td{{padding:5px 8px;border-bottom:1px solid #eef1f6}}
+  .keytable tr:last-child td{{border-bottom:none}}
+  .swatch-grid{{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px}}
+  .swatch-item{{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}}
+  .fam.lg{{width:14px;height:14px;border-radius:4px}}
+  .cov.demo{{display:inline-block;min-width:42px;text-align:center;padding:2px 8px;border-radius:5px;margin-right:6px}}
+  .dot-sample{{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:8px;vertical-align:-2px}}
+  .dot-sample.panel{{background:#2563eb;border:2.5px solid #0f172a}}
+  .dot-sample.judge{{background:#7c3aed;border:2.5px solid #d97706}}
+  .dot-sample.plain{{background:#94a3b8;border:2px solid #fff;box-shadow:0 0 0 1px #cbd5e1}}
+  .row-sample{{display:inline-block;width:28px;height:14px;border-radius:3px;margin-right:8px;vertical-align:-2px}}
+  .row-sample.inuse{{background:#f0f6ff;border:1px solid #bfdbfe}}
 </style>
 </head>
 <body><div class="wrap">
@@ -514,11 +678,13 @@ def build() -> None:
     <span class="chip">API spend <b>$0</b></span>
     <span class="chip">retrieved <b>{esc(snap["retrieved_at"])}</b></span>
   </div>
+  {hero_chip_key()}
 </header>
 
 <div class="card">
   <h3>Table of contents</h3>
   <div class="toc">
+    <a href="#visual-key">★ Visual key (start here if charts are confusing)</a>
     <a href="#start">0 — What is Phase A?</a>
     <a href="#funnel">1 — Catalog funnel (343 → 34)</a>
     <a href="#value">2 — Value map (price vs score)</a>
@@ -530,6 +696,8 @@ def build() -> None:
     <a href="#glossary">8 — Glossary</a>
   </div>
 </div>
+
+{global_visual_key(judge_slug)}
 
 <h2 id="start"><span class="num">0</span>What is Phase A?</h2>
 <p class="sub">Phase A is the <b>hypothesis formation</b> step of the clean-room ensemble launch plan
@@ -564,8 +732,9 @@ happens later, in Step 4 (shortlist), using rules written in advance.</p>
 <p class="prose"><b>Primary data source:</b> {link(snap["source_url"], snap["source_url"])} — pulled at
 <code>{esc(snap["retrieved_at"])}</code>. Filtered raw rows for surviving candidates are archived at
 <code>labruns/2026-q3/catalog/openrouter-rows-2026-07-07.json</code>.</p>
+{funnel_key()}
 <div class="card">
-<table><thead><tr><th>Filter (rule)</th><th class="num">Removed</th><th class="num">Remaining</th></tr></thead>
+<table><thead><tr><th>Filter (rule)</th><th class="num" title="Rows removed by this filter only">Removed</th><th class="num" title="Rows surviving after this filter">Remaining</th></tr></thead>
 <tbody>{"".join(ledger_rows)}</tbody></table>
 </div>
 <p class="sub">Judgment calls for borderline rows (e.g. which variant slugs count as duplicates,
@@ -584,11 +753,9 @@ benchmark scores (0–100 scale). The X axis is <b>blended request cost</b> at a
   This is a <i>planning estimate</i> for comparing models — actual Phase C spend depends on
   real output lengths per task.
 </div>
-<p class="prose"><b>How to read the chart:</b> up-and-left is better (higher public mean, lower
-cost). <b>Black-ring dots</b> are panel members in at least one hypothesis.
-<b>Amber-ring dot</b> is the judge (<code>{esc(judge_slug)}</code>). Family color matches the
-lineage legend in section 3. Hover any dot for exact mean and $/request.</p>
+{scatter_key()}
 <div class="card">{scatter_svg(candidates, panel_slugs, judge_slug)}</div>
+{family_swatch_legend(candidates)}
 <p class="sub"><b>Frontier price envelope:</b> GPT-5.5-class closed model pricing is
 ${ANCHOR_IN_PER_M}/M input and ${ANCHOR_OUT_PER_M}/M output
 (source: {link(ANCHOR_PRICE_URL, "aicost.tools GPT-5.5 page")}, retrieved 2026-07-07).
@@ -610,12 +777,13 @@ full harness description and retrieval date.</p>
 </div>
 <p class="prose"><b>Benchmarks used for ranking (Step 4):</b></p>
 {benchmark_explainer()}
+{coverage_key()}
 <div class="card" style="max-height:560px;overflow-y:auto">{coverage_matrix(candidates)}</div>
-<div class="legend">
-  <span class="cov tp">third-party — counts toward mean</span>
-  <span class="cov vendor">vendor-claimed — excluded</span>
-  <span class="cov sat">saturated — excluded</span>
-  <span class="cov none" style="background:#eef1f6">- no data</span>
+<div class="legend" role="list" aria-label="Coverage matrix cell color legend">
+  <span class="cov tp" role="listitem">Green = third-party, counts toward mean</span>
+  <span class="cov vendor" role="listitem">Amber = vendor-claimed, excluded from mean</span>
+  <span class="cov sat" role="listitem">Violet = saturated benchmark, excluded from mean</span>
+  <span class="cov none" style="background:#eef1f6" role="listitem">Dash = no score on this benchmark</span>
 </div>
 <p class="sub"><b>Ranking mean formula:</b> for each model, take the simple arithmetic mean of all
 <code>coding_evidence</code> entries where <code>trust: third-party</code> and
@@ -626,9 +794,10 @@ Vendor-claimed and saturated rows are ignored. Models with no qualifying scores 
 <h2 id="shortlist"><span class="num">4</span>The shortlist: 12 models by simple unweighted mean</h2>
 <p class="sub">Step 4 of Phase A. Highlighted rows are used in at least one hypothesis card
 (panel member or judge). The "Evidence" column lists which benchmarks contributed to the mean.</p>
+{shortlist_key()}
 <div class="card">
-<table><thead><tr><th class="num">#</th><th>Model (OpenRouter slug)</th><th class="num">Mean</th>
-<th>Benchmarks in mean</th><th>Lineage family</th><th class="num">$/request</th></tr></thead>
+<table><thead><tr><th class="num" title="Rank by aggregate mean">#</th><th>Model (OpenRouter slug)</th><th class="num" title="Simple mean of green evidence cells">Mean</th>
+<th title="How many benchmarks contributed; see visual key">Benchmarks in mean</th><th title="Lineage family for veto checks">Family</th><th class="num" title="2k in + 8k out at snapshot prices">$/request</th></tr></thead>
 <tbody>{"".join(shortlist_rows)}</tbody></table>
 </div>
 <p class="sub">Mechanical filters also applied: at least one model ≤ $0.20/M input for cascade
@@ -647,6 +816,7 @@ Pinned model identities and hashes live in
   request: ~15k input tokens (all panel answers) + ~4k output ≈ $0.034 at snapshot prices.
   <b>H4 has no judge</b> — it is the Self-MoA routing baseline.
 </div>
+{hypothesis_key()}
 {hypothesis_section(cards, slug_meta)}
 
 <h2 id="read"><span class="num">6</span>How to read all of this</h2>
@@ -706,6 +876,14 @@ cells in section 3 link directly to the leaderboard row's page.</p>
   <dd>If &gt;10% of a model's answers are cut off mid-stream at the practical budget, its score is refused (Phase C rule).</dd>
   <dt>Evidence card</dt>
   <dd>Publishable one-pager with measured score + cost — only Phase D produces these.</dd>
+  <dt>Green evidence cell</dt>
+  <dd>Third-party leaderboard score that counts toward the shortlist mean. Click the number to open the source page.</dd>
+  <dt>Amber evidence cell</dt>
+  <dd>Vendor-claimed score — recorded for transparency but excluded from the ranking mean.</dd>
+  <dt>Violet evidence cell</dt>
+  <dd>Score from a saturated benchmark (top models bunched above ~85%) — excluded from the ranking mean.</dd>
+  <dt>Blue shortlist row</dt>
+  <dd>Model is used as a panel member or judge in at least one hypothesis card.</dd>
 </dl>
 </div>
 
