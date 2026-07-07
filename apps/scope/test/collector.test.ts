@@ -53,6 +53,32 @@ test("ingest + query round-trips a full session and derives detail", () => {
   assert.equal(gpt.completionTokens, 120);
 });
 
+test("an in-progress session (no terminal span yet) registers and lists as running", () => {
+  // The --observe dashboard must show a session while the run is still in
+  // flight: the first non-terminal spans alone create a `running` session row,
+  // and the turn-info marker fills in the identity metadata.
+  const traceId = "22222222222222222222222222220009";
+  const spans = syntheticSession(traceId);
+  const inFlight = spans.filter(
+    (span) => span.name === "fusion.turn.info" || span.name === "fusion.candidate.started"
+  );
+  assert.ok(inFlight.length >= 2);
+  for (const span of inFlight) assert.ok(ingestSpan(span));
+
+  const session = getSession(traceId);
+  assert.ok(session);
+  assert.equal(session.status, "running");
+  assert.equal(session.repo, "/tmp/fusion-sample");
+  assert.equal(session.prompt_preview, "Fix the add() sign bug so npm test passes.");
+  assert.ok(listSessions().some((row) => row.trace_id === traceId && row.status === "running"));
+
+  // The terminal run span later settles the same session to its final status.
+  const terminal = spans.find((span) => span.name === "fusion.run");
+  assert.ok(terminal);
+  assert.ok(ingestSpan(terminal));
+  assert.equal(getSession(traceId)?.status, "succeeded");
+});
+
 test("parseOtlpExport decodes spec-shaped OTLP JSON (hex ids, int enums)", () => {
   const traceId = "22222222222222222222222222220002";
   const spans = syntheticSession(traceId);

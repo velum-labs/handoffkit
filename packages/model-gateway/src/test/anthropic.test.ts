@@ -140,6 +140,26 @@ test("anthropicToChat maps system, tools, and tool results", () => {
   assert.equal(tools[0]?.function.name, "search");
 });
 
+test("anthropicToChat treats explicit null optional fields as absent", () => {
+  // Some clients encode "unset" as an explicit JSON null (Codex does on the
+  // Responses wire); a null `thinking`/`tool_choice`/`system` must translate
+  // like an absent field instead of crashing the turn.
+  const chat = anthropicToChat(
+    {
+      model: "claude-x",
+      system: null,
+      messages: [{ role: "user", content: "hi" }],
+      thinking: null,
+      metadata: null,
+      tool_choice: null
+    },
+    "local-model"
+  );
+  assert.deepEqual(chat.messages, [{ role: "user", content: "hi" }]);
+  assert.equal(chat.reasoning_effort, undefined);
+  assert.equal(chat.tool_choice, undefined);
+});
+
 test("anthropicToChat projects typed client tools but excludes server-executed tools", () => {
   const chat = anthropicToChat(
     {
