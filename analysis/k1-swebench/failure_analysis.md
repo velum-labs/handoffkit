@@ -4,6 +4,14 @@ Companion to `report.md`. Every claim below is recomputed from committed run
 artifacts (`runs/*/preds.json`, trajectories, official grading reports) —
 patch hashes and test bodies were verified directly.
 
+Provenance note (2026-07-07, after deviation 3 in `preregistration.md`): a
+zombie runner later overwrote 5 fused trajectories (including
+pylint-7080's) in the shared output dir. All patch-level claims here were
+re-verified against the official grading logs' immutable `patch.diff`
+copies (hashes in `graded_patch_hashes.txt`); trajectory-level claims for
+pylint (step counts, test commands) came from the legitimate run's
+trajectory read before the overwrite and can no longer be regenerated.
+
 Expectation being analyzed: with `select`-style step fusion, fused should be
 at least as good as its best member wherever a member can solve the task.
 It wasn't, twice. The two failures have different mechanisms.
@@ -62,21 +70,23 @@ failed grading on a single regression out of 174 passing tests:
    plumbing did its job; the losses happened in *what got committed* and
    *what got verified* — consistent with the Phase-0 lead that fusion
    value concentrates in judge/synthesis design.
-2. **Zero-headroom slices make fusion downside-only.** With qwen3's solves
-   a strict subset of terminus's, every judge mistake is a pure loss and
-   there is no complementarity upside to pay for it. The fused row's one
-   win (`django__django-12125`, solved by neither member) came from step
-   path construction, not selection — the upside and downside of k=1 are
-   the same mechanism: committing steps neither member would follow alone.
-3. **Actionable levers, in priority order:**
-   - **Panel quality:** members with measured repo-bugfix complementarity
-     and no dead weight (qwen3 contributed an empty patch on one of ten
-     instances). This is the binding constraint before judge tuning.
-   - **Verification pressure:** the judge/synthesizer prompts can prefer
-     candidates whose next step broadens test coverage before submission
-     (config-level; the scaffold stays untouched). Both losses would
-     plausibly have been caught by one wider test run.
-   - **Traced rerun** of these two instances (pre-registered path) to see
-     whether the qwen3-path commits were near-ties or confident picks —
-     that distinguishes "judge needs a better prompt" from "judge needs a
-     better model."
+2. **The upside and downside of k=1 are the same mechanism** — committing
+   steps neither member would follow alone. The fused-only win
+   (`django__django-12125`) and both losses all came from step path
+   construction/selection, not from whole-trajectory choice.
+3. **[AMENDED 2026-07-07] Actionable levers, reprioritized.** The original
+   version of this list put panel quality first, on the strength of the
+   "zero headroom" reading now amended in `report.md` (selection oracle is
+   a lower frame for k=1; the subset relation at n=10 is noise-compatible).
+   Since both losses were winnable with this exact panel, the nearest
+   gradient is aggregation:
+   - **Traced autopsy first** (pre-registered path): were the fatal
+     commits near-ties (prompt-fixable) or confident wrong picks
+     (judge-model problem)? Diagnose before tuning.
+   - **Aggregation variants on the fixed panel + dev slice:** e.g.
+     verification pressure (prefer candidates whose next step broadens
+     test coverage before submission — both losses were plausibly
+     catchable by one wider test run), regression-risk weighting in the
+     judge contract, panel-external judge.
+   - **Panel quality** stays real (qwen3 contributed an empty patch on one
+     instance) but is a later, separate round — untested, not falsified.

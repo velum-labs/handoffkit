@@ -140,3 +140,19 @@ pre-registered as such. No public claims follow from it.
    members in parallel + judge + synthesizer sequentially). The 4 instances
    completed at w=2 are kept; the in-flight partial (no submission) was
    discarded and is rerun.
+3. (2026-07-07, post-grading) **Zombie double-execution.** The first fused
+   launch's `mini-extra` process survived the deviation-2 abort, silently
+   kept executing the manifest against the shared output dir, and
+   overwrote `preds.json` entries + trajectories for 5 instances *after*
+   grading (also ~$0.5-1 unplanned spend, within cap). **Committed results
+   are unaffected:** the official harness grades from its own immutable
+   `patch.diff` copies; the results table was re-verified to regenerate
+   byte-identically from the grading reports, and the graded patches'
+   sha256 are snapshotted in `graded_patch_hashes.txt` (the pylint
+   byte-identity finding re-verified against the graded artifact).
+   Losses: the round-1 fused *trajectories* for the 5 overwritten
+   instances (including pylint-7080) were replaced by the zombie's
+   rerolls; astropy-14508 and django-12125 trajectories are intact.
+   Root cause: process cleanup by fragile ps-grep in the abort, plus a
+   shared output dir. Rule going forward: every executor records its own
+   PID file and kills by PID; reruns write to fresh output dirs.

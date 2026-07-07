@@ -33,13 +33,19 @@ Per-instance grid: see `scripts/analyze_swebench.py` output; key rows:
 
 ## Findings
 
-1. **The slice has zero selection headroom — the panel was not
-   complementary here.** Every qwen3 solve is a subset of terminus's
-   solves. The lineage veto (different families) did not produce
-   complementary errors on this slice. Per the pre-registered
-   interpretation, this slice cannot evidence fusion value regardless of
-   capture; a redraw (larger slice and/or a panel with measured
-   complementarity on repo-bugfix) is required before further fused spend.
+1. **The slice has zero *selection* headroom** — every qwen3 solve is a
+   subset of terminus's solves on these 10 instances.
+   **[AMENDED 2026-07-07]** The original conclusion drawn here ("this
+   slice cannot evidence fusion value; redraw required") overclaimed, two
+   ways: (a) the solo-selection oracle is the ceiling for
+   *whole-trajectory selection*, not for k=1 — step fusion composes paths
+   neither member walks alone, and finding 2 (`django-12125`, fused-only
+   solve) exceeds that oracle on this very slice; it is a diagnostic
+   lower frame only. (b) At n=10 (4 vs 6 solves) the subset relation is
+   compatible with noise and licenses no claim about the panel. The
+   direct measure of composition value is the **fused-only-solve rate**,
+   to be estimated at larger n. Panel complementarity remains untested,
+   not falsified.
 2. **Step fusion created a solve that selection could not have produced.**
    `django__django-12125` was resolved by the fused run only — with zero
    solo headroom, any pure per-trajectory selector is capped at the best
@@ -77,12 +83,13 @@ count 2→4 mid-fused-row, wall-clock only). No others.
 
 ## What this means for the program
 
-- The k=1 regime is measurable cheaply and the machinery is sound; the
-  binding problem is now **panel complementarity on repo-bugfix**, which
-  must be established before capture can mean anything (the C1-style
-  public evidence did not transfer to this 10-instance slice).
-- The `django-12125` fused-only solve is the single most valuable
-  observation: it suggests per-step fusion can beat the trajectory-level
-  oracle. Confirming or refuting it at n>1 is the highest-information next
-  round: same pipeline, larger slice, and a panel picked for measured
-  complementarity.
+- The k=1 regime is measurable cheaply and the machinery is sound.
+- **[AMENDED 2026-07-07]** The binding hypothesis is **aggregation
+  quality, not panel composition**: both losses are judge/verification
+  failures (see `failure_analysis.md`) that were winnable with this exact
+  panel, and the fused-only solve shows composition value exists even at
+  zero selection headroom. Next rounds: traced judge autopsy on the dev
+  instances, then judge/synthesis variants on the fixed panel + dev
+  slice, then confirmation of a frozen winner on a fresh disjoint slice.
+  This 10-instance slice is hereafter a **dev set** (its failures have
+  been analyzed; it can no longer confirm anything).
