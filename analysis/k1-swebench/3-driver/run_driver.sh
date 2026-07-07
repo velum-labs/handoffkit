@@ -39,7 +39,7 @@ MSWEA_COST_TRACKING=ignore_errors mini-extra swebench \
   --subset verified --split test --filter "$FILTER" \
   -m openai/fusionkit/panel \
   -c swebench.yaml -c model.model_kwargs.api_base=http://127.0.0.1:8080/v1 \
-  -o "$out/mini" -w 4 2>&1 | tee "$out/mini.log"
+  -o "$out/mini" -w "${WORKERS:-8}" 2>&1 | tee -a "$out/mini.log"
 
 kill -- "-$SERVE_PGID" "-$PROXY_PGID" 2>/dev/null || true
 sleep 2
