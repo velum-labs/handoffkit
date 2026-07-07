@@ -1,0 +1,66 @@
+# H2 style-diverse — near-tie GLM swap vs H1 backbone.
+#
+#   FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.h2-style-diverse.yaml \
+#     uv run fusionkit public-bench --suite livecodebench --subset 5 \
+#       --runner-command "uv run python python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py"
+#
+# Requires OPENROUTER_API_KEY.
+endpoints:
+  - id: ds32
+    provider: openrouter
+    model: deepseek/deepseek-v3.2
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.2288
+      output_per_1m_tokens: 0.3432
+      currency: USD
+    tags: [oss, panel]
+  - id: nemotron3s
+    provider: openrouter
+    model: nvidia/nemotron-3-super-120b-a12b
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.08
+      output_per_1m_tokens: 0.45
+      currency: USD
+    tags: [oss, panel]
+  - id: glm52
+    provider: openrouter
+    model: z-ai/glm-5.2
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.9086
+      output_per_1m_tokens: 2.8556
+      currency: USD
+    tags: [oss, panel]
+default_model: ds32
+judge_model: ds32
+synthesizer_model: ds32
+default_mode: panel
+panel_models: [ds32, nemotron3s, glm52]
+harness_prompt_passthrough: true
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 8192
+budget:
+  max_candidates: 3
+  wall_clock_s: 1800
+  max_cost: null
+  max_tool_rounds: 24
+  max_tool_calls: 200
