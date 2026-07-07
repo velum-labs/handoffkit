@@ -81,6 +81,15 @@ Per-instance grid: see `scripts/analyze_swebench.py` output; key rows:
 The two recorded in `preregistration.md` (litellm price registry; worker
 count 2→4 mid-fused-row, wall-clock only). No others.
 
+## Program status (updated 2026-07-07, after rounds 2B/2C/2A')
+
+This report was round 1. The full arc is: `autopsy/report.md` (2B: judge
+abstention 41-58%, synthesizer verbatim compliance ~20-30%, both
+prompt-resistant), `2c/report.md` (2C: strict-commit prompt wins weakly;
+judge-discipline prompt backfires), `2a/report.md` (2A': frozen winner on
+a fresh n=30 slice — **fused 18/30 vs best solo 20/30, fused-only solves
+0/9, verdict: route-don't-fuse for this configuration**).
+
 ## What this means for the program
 
 - The k=1 regime is measurable cheaply and the machinery is sound.
