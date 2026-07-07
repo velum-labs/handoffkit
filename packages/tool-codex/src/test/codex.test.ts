@@ -733,6 +733,70 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
   }
 });
 
+test("panel member gateway accepts Codex's reasoning: null for custom slugs (ENG-615)", async () => {
+  // Regression for the grok-4/deepseek panel exit_error: Codex resolves a
+  // custom-provider member slug (the router endpoint id, e.g. `grok-4`) to its
+  // fallback model metadata and serializes `reasoning: null` on every
+  // /v1/responses request. The member capture gateway used to crash
+  // translating it (502 "Cannot read properties of null (reading 'effort')"),
+  // so codex retried, gave up, and the candidate failed with `exit_error` —
+  // while the same model kept working as the judge (the judge path never
+  // touches this adapter).
+  const { outputRoot, cleanup } = tempOutputRoot();
+  const upstream = await startOpenAiCompatibleServer();
+  const memberResponses: Array<{ status: number; body: string }> = [];
+  const runner: CodexExecRunner = async (input) => {
+    const codexHome = input.env.CODEX_HOME;
+    assert.ok(codexHome);
+    const config = readFileSync(join(codexHome, "config.toml"), "utf8");
+    // The member requests the endpoint id as its model, like real codex does.
+    assert.ok(config.includes('model = "grok-4"'));
+    const match = /base_url = "([^"]+)"/.exec(config);
+    assert.ok(match);
+    const response = await fetch(`${match[1]}/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "grok-4",
+        instructions: "You are codex.",
+        input: [{ type: "message", role: "user", content: "say OK" }],
+        reasoning: null,
+        include: [],
+        store: false,
+        stream: false
+      })
+    });
+    memberResponses.push({ status: response.status, body: await response.text() });
+    return response.status === 200
+      ? { stdout: '{"type":"turn.completed"}\n', stderr: "", exitCode: 0 }
+      : { stdout: "", stderr: `unexpected status ${response.status}`, exitCode: 1 };
+  };
+
+  try {
+    const result = await ensemble.run(
+      descriptor(outputRoot, {
+        models: [{ id: "grok-4", model: "x-ai/grok-4" }],
+        harness: codexHarness({
+          env: {},
+          provider: { kind: "openai-compatible", baseUrl: "http://127.0.0.1:1" },
+          modelEndpoints: { "grok-4": upstream.url },
+          runner
+        })
+      })
+    );
+
+    assert.equal(memberResponses[0]?.status, 200, memberResponses[0]?.body);
+    assert.equal(result.candidates[0]?.status, "succeeded");
+    assert.equal(result.harnessRunResult.status, "succeeded");
+    // The upstream chat body must not have inherited a fabricated effort.
+    assert.equal(upstream.requests[0]?.reasoning_effort, undefined);
+    assert.equal(upstream.requests[0]?.model, "grok-4");
+  } finally {
+    await upstream.close();
+    cleanup();
+  }
+});
+
 test("Codex Responses provider is wrapped for provenance and provider cost capture", async () => {
   const { outputRoot, cleanup } = tempOutputRoot();
   const upstream = await startOpenAiCompatibleServer();

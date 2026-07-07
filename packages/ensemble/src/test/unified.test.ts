@@ -158,6 +158,44 @@ test("unified runner routes each command candidate through FusionKit and synthes
   }
 });
 
+test("a model doubles as panel member and judge in the same run (ENG-615)", async () => {
+  // Regression coverage for the grok-4+deepseek panel with grok-4 as judge:
+  // the same model/provider must work both as a parallel panel participant
+  // (via its member endpoint) and as the judge on the fuse step.
+  const fixture = makeRepo();
+  const backend = await startFusionBackend();
+  try {
+    const result = await runUnifiedHarnessE2E({
+      id: "unified_shared_judge",
+      fusionBackendUrl: backend.url,
+      repo: fixture.repo,
+      outputRoot: fixture.outputRoot,
+      prompt: "Run the candidate script and synthesize the result.",
+      harnesses: ["command"],
+      models: [
+        { id: "grok-4", model: "x-ai/grok-4" },
+        { id: "deepseek", model: "deepseek/deepseek-chat" }
+      ],
+      // The judge is one of the panel members' models, not a third model.
+      judgeModel: "x-ai/grok-4",
+      command: "node candidate.js",
+      timeoutMs: 10_000
+    });
+
+    const row = result.results[0];
+    assert.equal(row?.status, "succeeded");
+    assert.equal(row?.ensemble?.candidates.length, 2);
+    assert.ok(row?.ensemble?.candidates.every((candidate) => candidate.status === "succeeded"));
+    assert.equal(row?.ensemble?.judgeSynthesisRecord?.final_output, "JUDGE_FINAL:x-ai/grok-4");
+    // Both member calls AND the judge call reached the backend: the shared
+    // model is called once as a panel member and once as the judge.
+    assert.deepEqual(backend.models.sort(), ["deepseek/deepseek-chat", "x-ai/grok-4", "x-ai/grok-4"]);
+  } finally {
+    await backend.close();
+    fixture.cleanup();
+  }
+});
+
 test("runFusionPanels surfaces candidates that produced no trajectory as failed wires", async () => {
   // The mock harness emits candidate outputs without a trajectory (like a real
   // harness whose model call failed before producing any output). The panel must

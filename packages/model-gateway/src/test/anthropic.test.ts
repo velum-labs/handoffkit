@@ -44,6 +44,14 @@ test("anthropicModelsResponse aliases every model past Claude Code's claude/anth
   assert.equal(claudeModelAlias("claude-opus-4-8"), "claude-opus-4-8");
 });
 
+test("anthropicToChat tolerates thinking: null (same failure class as Responses reasoning: null)", () => {
+  const chat = anthropicToChat(
+    { model: "claude-x", messages: [{ role: "user", content: "hi" }], thinking: null },
+    "claude-x"
+  );
+  assert.equal(chat.reasoning_effort, undefined);
+});
+
 type Mock = {
   url: string;
   lastChatBody: () => Record<string, unknown> | undefined;

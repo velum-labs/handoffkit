@@ -50,7 +50,7 @@ export type AnthropicRequest = {
   temperature?: number;
   top_p?: number;
   top_k?: number;
-  thinking?: AnthropicThinking;
+  thinking?: AnthropicThinking | null;
   metadata?: Record<string, unknown>;
   stop_sequences?: string[];
   stream?: boolean;
@@ -231,7 +231,9 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (typeof body.top_k === "number") chat.top_k = body.top_k;
   if (body.metadata !== undefined) droppedField("anthropic", "metadata");
-  if (body.thinking !== undefined) {
+  // `thinking: null` means "no extended thinking" — skip, never dereference
+  // (same failure class as the Responses adapter's `reasoning: null`).
+  if (body.thinking !== undefined && body.thinking !== null) {
     const reasoningEffort = mapThinking(body.thinking);
     if (reasoningEffort !== undefined) chat.reasoning_effort = reasoningEffort;
   }

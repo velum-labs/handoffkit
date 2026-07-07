@@ -194,6 +194,64 @@ test("responsesToChat does not fold function calls into a non-adjacent assistant
   assert.equal(toolCalls[0]?.id, "call_2");
 });
 
+test("responsesToChat tolerates reasoning: null and text: null (Codex custom-provider slugs)", () => {
+  // Regression (ENG-615): Codex serializes `reasoning: null` for any model
+  // slug it cannot resolve to reasoning metadata — which is every panel member
+  // routed through the FusionKit member gateway (e.g. `grok-4`, `deepseek`).
+  // The adapter used to dereference it (`Cannot read properties of null
+  // (reading 'effort')`), turning EVERY member request into a 502 and the
+  // whole codex panel candidate into an `exit_error`.
+  const chat = responsesToChat(
+    { model: "grok-4", input: "say OK", reasoning: null, text: null, stream: true },
+    "grok-4"
+  );
+  assert.equal(chat.model, "grok-4");
+  assert.equal(chat.reasoning_effort, undefined);
+  assert.equal(chat.response_format, undefined);
+});
+
+test("responsesToChat still maps a real reasoning effort", () => {
+  const chat = responsesToChat(
+    { model: "gpt-5.5", input: "say OK", reasoning: { effort: "medium" } },
+    "gpt-5.5"
+  );
+  assert.equal(chat.reasoning_effort, "medium");
+});
+
+test("serves a Responses request carrying reasoning: null end to end (codex panel member)", async () => {
+  // The member capture gateway path: codex exec -> /v1/responses with
+  // `reasoning: null` -> chat completion upstream. Must be a 200, never a 502.
+  const mock = await startMock();
+  const gateway = await startGateway({
+    backend: new OpenAiBackend({ baseUrl: `${mock.url}/v1`, defaultModel: "grok-4" })
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "grok-4",
+        input: "say OK",
+        reasoning: null,
+        include: [],
+        store: false,
+        stream: false
+      })
+    });
+    assert.equal(response.status, 200);
+    const json = (await response.json()) as {
+      status: string;
+      output: Array<{ type: string; content?: Array<{ text?: string }> }>;
+    };
+    assert.equal(json.status, "completed");
+    assert.equal(json.output[0]?.content?.[0]?.text, "Final answer");
+    assert.equal(mock.lastChatBody()?.reasoning_effort, undefined);
+  } finally {
+    await gateway.close();
+    await mock.close();
+  }
+});
+
 test("serves a non-streaming Responses object end to end", async () => {
   const mock = await startMock();
   const gateway = await startGateway({
