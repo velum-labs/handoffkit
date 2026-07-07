@@ -307,6 +307,16 @@ async def test_panel_fuses_from_survivor_when_one_model_fails() -> None:
     assert result.metrics["failed_trajectory_count"] == 1
 
 
+def test_default_mode_is_named_heuristic() -> None:
+    # Honesty rename (WS8.5): the default mode is keyword-matching routing, so
+    # it is called "heuristic" — "router" oversold 63 lines of substring rules.
+    config = FusionConfig(
+        endpoints=[ModelEndpoint(id="m", model="x", base_url="http://localhost:1")],
+        default_model="m",
+    )
+    assert config.default_mode == "heuristic"
+
+
 def _config(default_mode: FusionMode = "single") -> FusionConfig:
     return FusionConfig(
         endpoints=[

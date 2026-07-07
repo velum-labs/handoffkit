@@ -8,11 +8,13 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
+import pytest
 from fusionkit_core.clients import (
     AnthropicModelClient,
     CodexResponsesClient,
     GoogleModelClient,
     OpenAICompatibleClient,
+    ProviderCallError,
     _anthropic_messages,
     _anthropic_tools,
     _codex_input,
@@ -714,6 +716,66 @@ async def test_codex_client_streams_and_sets_headers(monkeypatch) -> None:
     assert kwargs["instructions"]
     assert kwargs["store"] is False
     assert "max_output_tokens" not in kwargs
+
+
+async def test_codex_response_failed_raises_classified_provider_error(monkeypatch) -> None:
+    # Acceptance (WS8.3): a terminal `response.failed` event surfaces as a
+    # classified ProviderCallError (here auth_permanent), not a bare
+    # RuntimeError that bypasses the error taxonomy.
+    clear_credential_cache()
+    token = _jwt(
+        {
+            "exp": time.time() + 3600,
+            "https://api.openai.com/auth": {"chatgpt_account_id": "acct_x"},
+        }
+    )
+    monkeypatch.setenv("FK_CODEX_OAUTH", token)
+    endpoint = ModelEndpoint(
+        id="codex-sub",
+        provider="codex",
+        model="gpt-5.5-codex",
+        auth=EndpointAuth(mode="codex", token_env="FK_CODEX_OAUTH"),
+    )
+    client = CodexResponsesClient(endpoint)
+    events = [
+        SimpleNamespace(type="response.output_text.delta", delta="par"),
+        SimpleNamespace(
+            type="response.failed",
+            response=SimpleNamespace(
+                error=SimpleNamespace(
+                    code="invalid_api_key", message="Incorrect API key provided"
+                )
+            ),
+        ),
+    ]
+    client._client.responses.create = AsyncMock(return_value=_aiter(events))
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert excinfo.value.category == "auth_permanent"
+    assert excinfo.value.provider == "codex"
+
+
+def test_google_client_forwards_endpoint_timeout(monkeypatch) -> None:
+    # Acceptance (WS8.3): endpoint.timeout_s reaches the google-genai client
+    # (http_options timeout is in milliseconds) so a hung Gemini call cannot
+    # stall the whole asyncio.gather panel forever.
+    captured: dict[str, Any] = {}
+
+    class _FakeGenaiClient:
+        def __init__(self, **kwargs: Any) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr("fusionkit_core.client_google.genai.Client", _FakeGenaiClient)
+    endpoint = _endpoint("google").model_copy(update={"timeout_s": 30.0})
+
+    GoogleModelClient(endpoint)
+
+    http_options = captured.get("http_options")
+    assert http_options is not None
+    assert http_options["timeout"] == 30_000
+    assert http_options["base_url"] == "https://example.test"
 
 
 def test_codex_input_round_trips_tool_calls_and_results() -> None:

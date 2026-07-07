@@ -26,6 +26,9 @@ def test_chat_completions_single_mode(tmp_path) -> None:
 
     response = client.post(
         "/v1/chat/completions",
+        # Run recording is opt-in (WS8.4); this test exercises the recorded
+        # path end-to-end, including the runs API lookup below.
+        headers={"x-fusionkit-record": "1"},
         json={
             "model": "fusionkit/single",
             "messages": [{"role": "user", "content": "hello"}],
@@ -96,6 +99,82 @@ def test_chat_completions_fused_response_sums_usage_across_all_roles(tmp_path) -
     assert body["usage"]["completion_tokens"] == 3 + 1 + 3
 
 
+def _panel_app(tmp_path) -> TestClient:
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="m1", model="fake-m1", base_url="http://localhost:8101"),
+            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8201"),
+        ],
+        default_model="m1",
+        judge_model="judge",
+        synthesizer_model="judge",
+        default_mode="panel",
+        panel_models=["m1"],
+    )
+    app = create_app(
+        config,
+        clients={
+            "m1": FakeModelClient("m1", ["candidate answer"]),
+            "judge": FakeModelClient(
+                "judge",
+                [
+                    '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
+                    '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
+                    "fused final answer",
+                ],
+            ),
+        },
+        run_store_path=tmp_path / "runs",
+    )
+    return TestClient(app)
+
+
+def test_plain_chat_completions_does_not_record_a_run(tmp_path) -> None:
+    # Acceptance (WS8.4): a plain chat completion is a lightweight in-memory
+    # turn — no event-sourced run machinery, no permanent run directory, no
+    # fcntl file locking on the event loop. Run recording is opt-in.
+    client = _panel_app(tmp_path)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "compare"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["choices"][0]["message"]["content"] == "fused final answer"
+    runs_dir = tmp_path / "runs"
+    assert not runs_dir.exists() or list(runs_dir.iterdir()) == []
+
+
+def test_chat_completions_records_a_run_when_opted_in(tmp_path) -> None:
+    # Acceptance (WS8.4): the x-fusionkit-record header opts back into the
+    # event-sourced run path — the response carries a run id that the runs API
+    # can inspect.
+    client = _panel_app(tmp_path)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"x-fusionkit-record": "1"},
+        json={
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "compare"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    run_id = body["fusionkit"]["run_id"]
+    assert run_id
+    run_response = client.get(f"/v1/fusion/runs/{run_id}")
+    assert run_response.status_code == 200
+    assert run_response.json()["state"] == "completed"
+    assert list((tmp_path / "runs").iterdir())
+
+
 def test_models_endpoint_remains_openai_compatible(tmp_path) -> None:
     app = create_app(_config(), run_store_path=tmp_path / "runs")
     client = TestClient(app)
@@ -105,7 +184,9 @@ def test_models_endpoint_remains_openai_compatible(tmp_path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["object"] == "list"
-    assert {"id": "fusionkit/router", "object": "model"} in body["data"]
+    # Honesty rename (WS8.5): the keyword-matching mode is "heuristic", not
+    # "router" — a real learned router is explicitly post-launch.
+    assert {"id": "fusionkit/heuristic", "object": "model"} in body["data"]
 
 
 def test_chat_completions_streaming_returns_sse_chunks(tmp_path) -> None:
