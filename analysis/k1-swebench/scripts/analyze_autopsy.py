@@ -73,11 +73,43 @@ def batch_fingerprint(step: dict[str, Any]) -> str:
     return json.dumps(normalized)
 
 
+def instance_key(record: dict) -> str:
+    """Stable per-task key: the first user message (the PR description)."""
+    msgs = (record.get("request") or {}).get("messages") or []
+    for m in msgs:
+        if m.get("role") == "user":
+            content = m.get("content")
+            text = content if isinstance(content, str) else json.dumps(content)
+            # Judge requests wrap the same task text in "Original request:".
+            text = text.removeprefix("Original request:").lstrip()
+            return text[:300]
+    return "?"
+
+
 def main() -> int:
     path = sys.argv[1]
     with open(path, encoding="utf-8") as f:
         records = sorted((json.loads(line) for line in f), key=lambda r: r["ts"])
 
+    # Parallel workers interleave instances; within one instance the engine
+    # is sequential, so reconstruct per instance key.
+    by_instance: dict[str, list[dict]] = {}
+    for record in records:
+        by_instance.setdefault(instance_key(record), []).append(record)
+
+    steps: list[dict[str, Any]] = []
+    for _key, group in by_instance.items():
+        steps.extend(reconstruct(group))
+
+    report(steps)
+    if len(sys.argv) > 2:
+        with open(sys.argv[2], "w", encoding="utf-8") as f:
+            json.dump(steps, f, indent=1)
+        print("wrote", sys.argv[2])
+    return 0
+
+
+def reconstruct(records: list[dict]) -> list[dict[str, Any]]:
     steps: list[dict[str, Any]] = []
     pending_members: list[dict[str, Any]] = []
     pending_judge: dict[str, Any] | None = None
@@ -121,7 +153,10 @@ def main() -> int:
             )
             pending_members = []
             pending_judge = None
+    return steps
 
+
+def report(steps: list[dict[str, Any]]) -> None:
     print(f"steps reconstructed: {len(steps)}")
     differ = [s for s in steps if s["proposals_differ"]]
     print(f"steps where members disagreed: {len(differ)}")
@@ -133,12 +168,14 @@ def main() -> int:
     print("judge picks:", picks)
     verbatim = sum(1 for s in steps if s["adopted_member_verbatim"])
     print(f"committed batches matching a member verbatim: {verbatim}/{len(steps)}")
-
-    if len(sys.argv) > 2:
-        with open(sys.argv[2], "w", encoding="utf-8") as f:
-            json.dump(steps, f, indent=1)
-        print("wrote", sys.argv[2])
-    return 0
+    named_differ = [s for s in steps if s.get("judge_best") and s["proposals_differ"]]
+    follow = sum(
+        1
+        for s in named_differ
+        if s["adopted_member_verbatim"]
+        and (("terminus" in str(s["judge_best"])) == ("terminus" in s["adopted_member_verbatim"]))
+    )
+    print(f"contested steps (named pick + differing proposals): {len(named_differ)}; verbatim-followed: {follow}")
 
 
 if __name__ == "__main__":
