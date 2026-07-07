@@ -9,9 +9,12 @@ Release notes for the FusionKit monorepo: `@fusionkit/*` npm packages, the `@vel
 
 ## Unreleased
 
+- Added gateway-executed web search with server-tool parity for Codex and Claude Code: the gateway projects the caller's `web_search` / `web_search_20250305` tool to the fused panel, executes calls by delegating to the dialect's own provider (cross-provider fallback with one key), and renders native `web_search_call` / `server_tool_use` + `web_search_tool_result` items in buffered and streaming responses. Configured via `FUSIONKIT_WEB_SEARCH*` env vars, reported by `fusionkit doctor`, documented in `docs/configuration.md`.
+- Fixed the Anthropic dialect forwarding legacy `max_tokens` (rejected by OpenAI reasoning models) — it now emits `max_completion_tokens` like the other adapters — and taught the fusion router to accept `max_completion_tokens` instead of silently dropping the caller's output cap.
+- Fixed the Responses streaming egress crashing on the `"usage": null` chunks real OpenAI streams emit.
 - Reworded the panel sandbox (`panelTrust`) prompts in `fusionkit init` and `fusionkit config edit`: the picker now explains what `full` and `guarded` actually allow (any command/file vs. each model's own draft worktree) instead of the jargony "panel candidate autonomy" copy, and shows an inline explainer with the recommended default.
-- Replaced the hand-rolled fusion trace spine with OpenTelemetry end to end: native spans with W3C `traceparent`/`baggage` propagation, a new `@fusionkit/tracing` package, a semantic-conventions registry in `spec/fusion-trace/`, and standard `OTEL_*` configuration (PostHog/Jaeger/Tempo interop for free).
-- Rewrote the scope dashboard as a native OTLP span store (spans in SQLite, OTLP/HTTP JSON ingest, live SSE), replacing the custom `fusion-trace-event.v1` wire format, headers, and JSONL replay.
+- Replaced the hand-rolled fusion trace spine with OpenTelemetry end to end: native spans with W3C `traceparent`/`baggage` propagation, real OTel events (log records over OTLP/HTTP logs) for live point-in-time signals like trajectory steps and judge thinking, a new `@fusionkit/tracing` package, a semantic-conventions registry in `spec/fusion-trace/`, and standard `OTEL_*` configuration (PostHog/Jaeger/Tempo interop for free).
+- Rewrote the scope dashboard as a native OTLP store (spans and events in SQLite, split OTLP/HTTP JSON ingest at `/api/ingest/v1/traces` and `/v1/logs`, live SSE), replacing the custom `fusion-trace-event.v1` wire format, headers, and JSONL replay.
 - Added strictly opt-in anonymous product telemetry (`fusionkit telemetry on|off|status|inspect`, PostHog, allow-listed fields, `DO_NOT_TRACK` honored) and documented the complete field list in `docs/privacy.md`.
 
 ## 0.8.0 - 2026-06-29
