@@ -1,0 +1,52 @@
+# k=1 SWE-bench arm fused panel (see ../preregistration.md).
+#
+# Same validated members as the Terminal-Bench arm (terminus + qwen3), but
+# UNLIKE that arm this config pins nothing beyond the panel itself: the
+# driving scaffold (mini-SWE-agent v2) sends native `tools`, so the engine
+# takes its step-mode path with the PRODUCT's built-in step prompts —
+# that unmodified path is the point of this arm.
+#
+# CRITICAL bootnote: serve this config from a working directory that does
+# NOT contain .fusionkit/prompts (i.e. not the repo root). The config
+# loader applies those committed files by CWD to unset prompt fields, and
+# committed overrides beat the built-in step prompts. The runner serves
+# from /tmp with `uv run --project`.
+#
+#   cd /tmp && uv run --project /workspace --package fusionkit fusionkit \
+#     serve -c /workspace/analysis/k1-swebench/config/panel.yaml \
+#     --host 127.0.0.1 --port 8080
+endpoints:
+  - id: terminus
+    provider: openrouter
+    model: deepseek/deepseek-v3.1-terminus
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities:
+      structured_output: false
+      tool_calls: true
+      streaming: true
+    tags: [cloud, oss, peer]
+    timeout_s: 600
+  - id: qwen3
+    provider: openrouter
+    model: qwen/qwen3-coder
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities:
+      structured_output: false
+      tool_calls: true
+      streaming: true
+    tags: [cloud, oss, peer]
+    timeout_s: 600
+default_model: terminus
+judge_model: terminus
+synthesizer_model: terminus
+default_mode: panel
+panel_models: [terminus, qwen3]
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 8192
+budget:
+  max_candidates: 2
+  wall_clock_s: 1800

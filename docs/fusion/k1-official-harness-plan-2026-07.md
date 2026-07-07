@@ -113,6 +113,14 @@ plan closes:
    the oss-scan shortlists + lineage veto, judge, spend cap, pass rules),
    frozen before billed calls, in `analysis/k1-round1/preregistration.md`.
 
+**Execution-order amendment (2026-07-07):** the SWE-bench arm
+(`analysis/k1-swebench/`, mini-SWE-agent v2) is the **primary** arm and
+runs first: its scaffold sends native `tools`, so it measures the shipped
+step-mode path (built-in step prompts, verbatim tool-batch adoption) with
+no prompt adaptation. The Terminal-Bench arm (`analysis/k1-round1/`) is
+the secondary/robustness arm for text-protocol harnesses; its pinned
+prompts are recorded as preregistration amendments there.
+
 ## 6. What this plan does NOT do
 
 - No custom grading, no candidate banks, no offline judge-replay search —
