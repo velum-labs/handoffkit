@@ -6,8 +6,22 @@ import type {
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
 import type { ModelFusionHarnessKind, ModelFusionSideEffects } from "@fusionkit/protocol";
+import type { SubscriptionMode } from "@fusionkit/registry";
 
 type ToolEnv = Record<string, string | undefined>;
+
+/**
+ * One of the launched tool's own stock models (from its local catalog cache),
+ * preserved in fusion launches so the tool's model picker is augmented rather
+ * than replaced: the host registers a gateway passthrough per entry, served
+ * through the named subscription login (the tool's own auth).
+ */
+export type ToolSubscriptionModel = {
+  /** The model slug the tool's own catalog advertises (e.g. "gpt-5.3-codex"). */
+  model: string;
+  /** The subscription auth mode whose login serves it through the gateway. */
+  auth: SubscriptionMode;
+};
 
 export type ToolDashboardHarnessInput = {
   env: ToolEnv;
@@ -80,6 +94,14 @@ export type ToolLaunchContext = {
    * {@link modelLabel} stays the default. Empty in single-model/local launches.
    */
   nativeModels?: readonly string[];
+  /**
+   * The tool's own stock model ids (see {@link ToolIntegration.subscriptionModels})
+   * the gateway registered as subscription-served passthroughs. The launcher
+   * lists them behind the fused/native entries so its model picker keeps the
+   * tool's normal catalog instead of replacing it. Absent when the tool has no
+   * local login/catalog or in single-model/local launches.
+   */
+  subscriptionModels?: readonly string[];
   /** Arguments forwarded verbatim to the tool binary. */
   toolArgs: string[];
   /** The repository the tool runs in (defaults to the process cwd). */
@@ -205,6 +227,15 @@ export type ToolIntegration = {
   acpAdapterId?: string;
   /** Launch modes this tool supports. */
   modes: readonly ToolLaunchMode[];
+  /**
+   * The tool's own stock model list (read from its local catalog cache), so a
+   * fusion launch can preserve the tool's normal model picker: the host
+   * registers one gateway passthrough per entry (served via the tool's
+   * subscription login) and hands the ids back through
+   * {@link ToolLaunchContext.subscriptionModels}. Empty when the tool has no
+   * local login or catalog cache.
+   */
+  subscriptionModels?: () => ToolSubscriptionModel[];
   /** The unified harness kinds this tool's adapter answers for. */
   harnessKinds: readonly UnifiedHarnessKind[];
   /**

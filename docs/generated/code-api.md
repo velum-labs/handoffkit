@@ -422,8 +422,8 @@ Codex tool integration entry point. It exposes the Codex launcher and ensemble h
 - `export const codexTool: ToolIntegration ...`
 - `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, codexMemberCatalogJson, createCodexHarness, defaultCodexRunner, memberChatBackend } from "./harness.js";`
 - `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
-- `export { codexAgentRoles, codexAgentRoleToml, codexLaunchConfigToml, codexModelCatalogJson, codexRoleDescription, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate } from "./launch.js";`
-- `export type { CodexAgentRole } from "./launch.js";`
+- `export { codexAgentRoles, codexAgentRoleToml, codexLaunchConfigToml, codexModelCatalogJson, codexRoleDescription, codexSubscriptionModels, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate, readCodexModelsCache } from "./launch.js";`
+- `export type { CodexAgentRole, CodexModelPreset } from "./launch.js";`
 - `export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";`
 - `export type { CodexDriverConfig } from "./driver.js";`
 
@@ -458,7 +458,7 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, registerCleanup, reservePort, runCleanups, runCliCapture, sleep, spawnLogged, spawnTool, superviseSpawn, terminate, terminateGroup, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
 - `export type { CliCaptureOptions, CliCaptureResult, ExitInfo, LoggedChild, LoggedSpawnOptions, ReservedPort, Spawned, SuperviseSpawnOptions } from "./proc.js";`
 - `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS, trimTrailingSlashes } from "@fusionkit/runtime-utils";`
-- `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
+- `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode, ToolSubscriptionModel } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
 - `export { CURSOR_BRIDGE_MODEL_NAME, DEFAULT_ENSEMBLE_NAME, FUSION_PANEL_MODEL, fusionModelId, LOCAL_MODEL_LABEL } from "./constants.js";`

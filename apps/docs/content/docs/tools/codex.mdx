@@ -58,8 +58,18 @@ or a temporary `CODEX_HOME`.
 
 Codex's `/model` picker lists the fused model first, then every other named
 ensemble (`fusion-<name>`), then each native panel member proxied through the
-gateway. Switching models mid-session works: pick a member id such as `gpt` for
-direct passthrough, or a `fusion-*` id for synthesis.
+gateway, then everything Codex normally offers on its own. Switching models
+mid-session works: pick a member id such as `gpt` for direct passthrough, a
+`fusion-*` id for synthesis, or a stock Codex model.
+
+Codex applies a custom model catalog as a full replacement, so FusionKit
+merges Codex's own model list (from `~/.codex/models_cache.json`) back into
+the catalog it generates. Each preserved stock model is registered as a
+gateway passthrough served through your own `codex login` — the same auth
+plain Codex would use — so picking one runs that model directly, never the
+fused panel. If you are not logged in to Codex (or the models cache is
+absent), the stock models cannot be served and only the fusion/panel entries
+are listed.
 
 Each model also gets a `[profiles.*]` entry, so you can start Codex on a
 different ensemble directly:

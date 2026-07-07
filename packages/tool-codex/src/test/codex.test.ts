@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -19,9 +19,11 @@ import {
   codexLaunchConfigToml,
   codexMemberCatalogJson,
   codexModelCatalogJson,
+  codexSubscriptionModels,
   defaultCodexRunner,
   isCodexConfigFailure,
-  memberChatBackend
+  memberChatBackend,
+  readCodexModelsCache
 } from "../index.js";
 import type { CodexExecRunner } from "../index.js";
 import { OpenAiBackend } from "@fusionkit/model-gateway";
@@ -275,6 +277,138 @@ test("codexModelCatalogJson lists every fused ensemble as a fusion entry", () =>
   assert.equal(catalog.models[1]?.display_name, "fusion-deep (fusion)");
   assert.equal(catalog.models[2]?.display_name, "gpt-5.5");
   assert.match(String(catalog.models[1]?.description), /ensemble/);
+});
+
+// Regression (ENG-620): `model_catalog_json` REPLACES Codex's own catalog, so
+// the launcher must merge the stock model list back in — fusion augments the
+// picker instead of replacing it.
+test("codexModelCatalogJson preserves the stock Codex catalog behind the fusion entries", () => {
+  const stock = [
+    {
+      slug: "gpt-5.3-codex",
+      display_name: "GPT-5.3 Codex",
+      description: "Fast agentic coding model",
+      context_window: 272000,
+      visibility: "list",
+      priority: 0
+    },
+    {
+      slug: "gpt-5.5",
+      display_name: "GPT-5.5",
+      description: "Flagship model",
+      context_window: 400000,
+      visibility: "list",
+      priority: 1
+    }
+  ];
+  const catalog = JSON.parse(
+    codexModelCatalogJson("fusion-panel", [], stock[0] as Record<string, unknown>, ["fusion-panel"], stock)
+  ) as { models: Array<Record<string, unknown>> };
+  // Nothing from the stock catalog disappears: fused first, then every stock model.
+  assert.deepEqual(
+    catalog.models.map((entry) => entry.slug),
+    ["fusion-panel", "gpt-5.3-codex", "gpt-5.5"]
+  );
+  // Stock entries keep their own identity/metadata (not overwritten by the
+  // fusion template) and are renumbered behind the fusion entries.
+  assert.equal(catalog.models[1]?.display_name, "GPT-5.3 Codex");
+  assert.equal(catalog.models[1]?.context_window, 272000);
+  assert.equal(catalog.models[1]?.priority, 1);
+  assert.equal(catalog.models[2]?.display_name, "GPT-5.5");
+  assert.equal(catalog.models[2]?.context_window, 400000);
+  assert.equal(catalog.models[2]?.priority, 2);
+  // The description names the actual route, so the source is disambiguated.
+  assert.match(String(catalog.models[1]?.description), /Fast agentic coding model/);
+  assert.match(String(catalog.models[1]?.description), /Codex login through the FusionKit gateway/);
+});
+
+test("codexModelCatalogJson dedupes a native panel model against its stock twin without losing either source", () => {
+  const stock = [
+    {
+      slug: "gpt-5.3-codex",
+      display_name: "GPT-5.3 Codex",
+      description: "Fast agentic coding model",
+      context_window: 272000,
+      visibility: "list",
+      priority: 0
+    },
+    {
+      slug: "gpt-5.5",
+      display_name: "GPT-5.5",
+      description: "Flagship model",
+      context_window: 400000,
+      supported_reasoning_levels: [{ effort: "high", description: "High" }],
+      visibility: "list",
+      priority: 1
+    }
+  ];
+  // gpt-5.5 is BOTH a panel native (API-key endpoint) and a stock Codex model.
+  const catalog = JSON.parse(
+    codexModelCatalogJson(
+      "fusion-panel",
+      ["gpt-5.5"],
+      stock[0] as Record<string, unknown>,
+      ["fusion-panel"],
+      stock
+    )
+  ) as { models: Array<Record<string, unknown>> };
+  // One entry per slug — no duplicate rows in the picker.
+  assert.deepEqual(
+    catalog.models.map((entry) => entry.slug),
+    ["fusion-panel", "gpt-5.5", "gpt-5.3-codex"]
+  );
+  // The merged native entry keeps the stock schema metadata (same model)...
+  const native = catalog.models[1];
+  assert.equal(native?.context_window, 400000);
+  assert.deepEqual(native?.supported_reasoning_levels, [{ effort: "high", description: "High" }]);
+  // ...while its description names the gateway route (the panel source).
+  assert.match(String(native?.description), /FusionKit gateway/);
+});
+
+test("readCodexModelsCache + codexSubscriptionModels read the stock catalog behind a Codex login", () => {
+  const home = mkdtempSync(join(tmpdir(), "codex-stock-home-"));
+  try {
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    writeFileSync(
+      join(home, ".codex", "models_cache.json"),
+      JSON.stringify({
+        models: [
+          { slug: "gpt-5.3-codex", display_name: "GPT-5.3 Codex", visibility: "list" },
+          { slug: "gpt-5.5", display_name: "GPT-5.5", visibility: "list" },
+          // Hidden entries never reach the subscription list.
+          { slug: "gpt-internal", display_name: "internal", visibility: "hide" },
+          // Duplicates and malformed entries are dropped, not crashed on.
+          { slug: "gpt-5.5", display_name: "dupe", visibility: "list" },
+          { display_name: "no slug" },
+          null
+        ]
+      })
+    );
+    // No login yet: the models cannot be served, so none are advertised.
+    assert.deepEqual(codexSubscriptionModels(home), []);
+    writeFileSync(join(home, ".codex", "auth.json"), '{"tokens":{"access_token":"redacted"}}');
+    assert.equal(readCodexModelsCache(home).length, 5);
+    assert.deepEqual(codexSubscriptionModels(home), [
+      { model: "gpt-5.3-codex", auth: "codex" },
+      { model: "gpt-5.5", auth: "codex" }
+    ]);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("readCodexModelsCache returns [] for a missing or malformed cache", () => {
+  const home = mkdtempSync(join(tmpdir(), "codex-no-cache-home-"));
+  try {
+    assert.deepEqual(readCodexModelsCache(home), []);
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    writeFileSync(join(home, ".codex", "models_cache.json"), "not json");
+    assert.deepEqual(readCodexModelsCache(home), []);
+    writeFileSync(join(home, ".codex", "models_cache.json"), '{"models": "nope"}');
+    assert.deepEqual(readCodexModelsCache(home), []);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test("codexLaunchConfigToml pins multi_agent and emits one role per ensemble", () => {

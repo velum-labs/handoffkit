@@ -103,6 +103,13 @@ export type GatewayRunnerConfig = {
    * the one implicit ensemble behind the default fused model.
    */
   ensembles?: GatewayEnsembleConfig[];
+  /**
+   * Extra passthrough-only models (e.g. the launched tool's own stock models,
+   * served via its subscription login): each registers as a vendor passthrough
+   * routed to its router endpoint (`modelEndpoints[id]`), but never joins the
+   * panel, judge candidacy, or fused routing.
+   */
+  extraPassthrough?: EnsembleModel[];
   command?: string;
   timeoutMs?: number;
   /**
@@ -586,11 +593,13 @@ export async function startFusionStepGateway(input: {
   // Expose every panel model as a native passthrough alongside the fused model,
   // so the tool's picker can switch to a vendor model (and back to fusion). Each
   // routes to its `fusionkit serve` router endpoint, which already calls the
-  // real provider with the reused subscription/API credentials.
+  // real provider with the reused subscription/API credentials. Extra
+  // passthrough-only models (a launched tool's preserved stock catalog) ride
+  // the same mechanism without ever joining the panel.
   const passthrough: PassthroughModel[] =
     config.modelEndpoints === undefined
       ? []
-      : config.models.flatMap((model) => {
+      : [...config.models, ...(config.extraPassthrough ?? [])].flatMap((model) => {
           const endpointUrl = config.modelEndpoints?.[model.id];
           return endpointUrl === undefined
             ? []

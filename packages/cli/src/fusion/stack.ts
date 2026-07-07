@@ -683,6 +683,14 @@ export type StartFusionStackOptions = {
    */
   harness?: UnifiedHarnessKind;
   endpoints?: Record<string, string>;
+  /**
+   * Extra passthrough-only endpoints (e.g. the launched tool's own stock
+   * models, served via its subscription login). Each joins the router config
+   * and the gateway's vendor passthrough routing, but never the panel: no
+   * judge candidacy, no fused fanout. Ignored with pre-running `endpoints`
+   * (there is no managed router to host them).
+   */
+  extraPassthroughSpecs?: PanelModelSpec[];
   fusionkitDir?: string;
   /** System-prompt overrides emitted into the router's synthesizer config. */
   prompts?: PromptOverrides;
@@ -754,6 +762,15 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
   const narratorSpec =
     narratorResolution?.kind === "extra-endpoint" ? narratorResolution.spec : undefined;
 
+  // Passthrough-only extras (the launched tool's preserved stock models) join
+  // the managed router alongside the narrator endpoint; with pre-running
+  // endpoints there is no router to host them.
+  const extraPassthroughSpecs = override ? [] : (options.extraPassthroughSpecs ?? []);
+  const routerExtraSpecs = [
+    ...(narratorSpec !== undefined ? [narratorSpec] : []),
+    ...extraPassthroughSpecs
+  ];
+
   let modelEndpoints: Record<string, string>;
   let fusionBackendUrl: string;
   let reusedRouter = false;
@@ -780,7 +797,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     }
     const expectedIdentity = routerDiscoverIdentity({
       specs: options.models,
-      extraSpecs: narratorSpec !== undefined ? [narratorSpec] : undefined,
+      extraSpecs: routerExtraSpecs.length > 0 ? routerExtraSpecs : undefined,
       judgeId: judgeSpec.id,
       prompts: options.prompts,
       mlxUrls: {},
@@ -803,7 +820,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
         if (report) report({ kind: "server.start", id: "router", label: "router" });
         const router = await startRouter({
           specs: options.models,
-          ...(narratorSpec !== undefined ? { extraSpecs: [narratorSpec] } : {}),
+          ...(routerExtraSpecs.length > 0 ? { extraSpecs: routerExtraSpecs } : {}),
           ...(options.judgeModel !== undefined ? { judgeModel: options.judgeModel } : {}),
           ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
           ...(options.prompts !== undefined ? { prompts: options.prompts } : {}),
@@ -821,7 +838,11 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     });
     // The harness + the in-process step call reach the router over loopback (the
     // portless name is for humans); see the CA-at-startup note in portless.ts.
-    modelEndpoints = Object.fromEntries(options.models.map((spec) => [spec.id, resolved.loopbackUrl]));
+    // Passthrough-only extras route through the same router, so their ids join
+    // the endpoint map (which the gateway's passthrough registration reads).
+    modelEndpoints = Object.fromEntries(
+      [...options.models, ...extraPassthroughSpecs].map((spec) => [spec.id, resolved.loopbackUrl])
+    );
     fusionBackendUrl = resolved.loopbackUrl;
     reusedRouter = !resolved.owned;
     routerClose = resolved.close;
@@ -927,6 +948,9 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       models,
       judgeModel: judgeModelName,
       ...(ensembleConfigs !== undefined ? { ensembles: ensembleConfigs } : {}),
+      ...(extraPassthroughSpecs.length > 0
+        ? { extraPassthrough: extraPassthroughSpecs.map((spec) => ({ id: spec.id, model: spec.model })) }
+        : {}),
       modelEndpoints,
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(Object.keys(pricing).length > 0 ? { pricing } : {}),

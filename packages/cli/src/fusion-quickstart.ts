@@ -27,7 +27,7 @@ import {
   fusionModelId,
   registerCleanup
 } from "@fusionkit/tools";
-import type { ToolLaunchContext } from "@fusionkit/tools";
+import type { ToolIntegration, ToolLaunchContext } from "@fusionkit/tools";
 import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
 import { isLookaheadK } from "@fusionkit/protocol";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
@@ -246,6 +246,35 @@ export function styledPreambleLines(lines: readonly string[]): string[] {
   return out;
 }
 
+/**
+ * The launched tool's own stock models (see `ToolIntegration.subscriptionModels`),
+ * lowered to passthrough-only router endpoints served via the tool's
+ * subscription login. Preserving them keeps the tool's model picker intact
+ * when it launches behind fusion: the fused models come first, but nothing the
+ * tool normally offers disappears. Ids that collide with a fused ensemble id
+ * or a panel member (already served) are skipped, as are pre-running-endpoint
+ * runs (no managed router to host the extras).
+ */
+export function subscriptionPassthroughSpecs(
+  integration: ToolIntegration | undefined,
+  ensembles: readonly EnsembleRunSpec[],
+  unionModels: readonly PanelModelSpec[],
+  options: Pick<RunFusionOptions, "endpoints">
+): PanelModelSpec[] {
+  if (integration?.subscriptionModels === undefined || options.endpoints !== undefined) return [];
+  const taken = new Set<string>([
+    ...ensembles.map((ensemble) => fusionModelId(ensemble.name)),
+    ...unionModels.flatMap((spec) => [spec.id, spec.model])
+  ]);
+  const specs: PanelModelSpec[] = [];
+  for (const entry of integration.subscriptionModels()) {
+    if (entry.model.length === 0 || taken.has(entry.model)) continue;
+    taken.add(entry.model);
+    specs.push({ id: entry.model, model: entry.model, auth: entry.auth });
+  }
+  return specs;
+}
+
 export async function runFusion(
   tool: FusionTool,
   toolArgs: string[],
@@ -386,6 +415,12 @@ export async function runFusion(
   // probes, memory sizing, consent, and the stack itself).
   const models = selected.models;
   const unionModels = unionPanelSpecs(ensembles);
+
+  // Resolved up front (not just at launch time): the launched tool's own stock
+  // models join the stack below as subscription-served passthroughs, so its
+  // model picker is augmented with fusion instead of replaced by it.
+  const integration = tool === "serve" ? undefined : toolRegistry.get(tool);
+  const subscriptionSpecs = subscriptionPassthroughSpecs(integration, ensembles, unionModels, options);
 
   // Cross-platform gating (WS8): a local MLX panel only runs on Apple Silicon.
   // Fail early with a pointer at the cross-platform cloud path instead of
@@ -690,6 +725,7 @@ export async function runFusion(
       ...(panelHarness !== undefined ? { harness: panelHarness } : {}),
       ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
+      ...(subscriptionSpecs.length > 0 ? { extraPassthroughSpecs: subscriptionSpecs } : {}),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
       ...(stackPrompts !== undefined ? { prompts: stackPrompts } : {}),
       ...(stackJudgeModel !== undefined ? { judgeModel: stackJudgeModel } : {}),
@@ -960,7 +996,6 @@ export async function runFusion(
       });
       return 0;
     }
-    const integration = toolRegistry.get(tool);
     if (integration === undefined || !integration.modes.includes("fusion")) {
       throw new Error(`unknown fusion tool: ${String(tool)}`);
     }
@@ -979,6 +1014,12 @@ export async function runFusion(
       })),
       ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
       nativeModels: [...new Set(unionModels.map((spec) => spec.model))],
+      // The tool's own stock models the gateway registered as subscription
+      // passthroughs — the launcher keeps them in its picker so the tool's
+      // normal model list is augmented, never replaced.
+      ...(subscriptionSpecs.length > 0
+        ? { subscriptionModels: subscriptionSpecs.map((spec) => spec.model) }
+        : {}),
       toolArgs,
       repo,
       ...(options.ide === true ? { ide: true } : {}),

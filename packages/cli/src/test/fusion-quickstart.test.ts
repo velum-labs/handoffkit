@@ -7,13 +7,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 
+import type { ToolIntegration } from "@fusionkit/tools";
+
+import { startFusionStepGateway } from "../gateway.js";
 import {
   defaultKeyEnv,
   fusionPreambleLines,
   loadEnvFileInto,
   panelMemberSummary,
   sessionReceiptLines,
-  startFusionStack
+  startFusionStack,
+  subscriptionPassthroughSpecs
 } from "../fusion-quickstart.js";
 
 const SENTINEL = "FUSION_OK";
@@ -324,6 +328,145 @@ test("agent front door: panel produces a trajectory the judge step consumes", as
     await stack.close();
     await model.close();
     await closeServer(synth);
+  }
+});
+
+/** A minimal fake tool integration exposing a stock model list. */
+function fakeTool(stock: Array<{ model: string; auth: "codex" | "claude-code" }>): ToolIntegration {
+  return {
+    id: "fake-tool",
+    displayName: "Fake",
+    pickerHint: "fake",
+    modes: ["fusion"],
+    harnessKinds: [],
+    subscriptionModels: () => stock,
+    launch: () => Promise.resolve(0)
+  };
+}
+
+// Regression (ENG-620): the launched tool's own stock models must survive a
+// fusion launch as subscription-served passthroughs — augment, don't replace.
+test("subscriptionPassthroughSpecs preserves the tool's stock models minus panel/fused collisions", () => {
+  const ensembles = [
+    { name: "default", models: [{ id: "gpt", model: "gpt-5.5", provider: "openai" as const }] },
+    { name: "deep", models: [{ id: "gpt", model: "gpt-5.5", provider: "openai" as const }] }
+  ];
+  const unionModels = ensembles[0]?.models ?? [];
+  const specs = subscriptionPassthroughSpecs(
+    fakeTool([
+      { model: "gpt-5.3-codex", auth: "codex" },
+      // Collides with a panel member's model: already served via its endpoint.
+      { model: "gpt-5.5", auth: "codex" },
+      // Collides with a fused ensemble id: fusion always wins.
+      { model: "fusion-deep", auth: "codex" },
+      { model: "gpt-5.5-mini", auth: "codex" },
+      // Duplicates and empty ids are dropped.
+      { model: "gpt-5.3-codex", auth: "codex" },
+      { model: "", auth: "codex" }
+    ]),
+    ensembles,
+    unionModels,
+    {}
+  );
+  assert.deepEqual(specs, [
+    { id: "gpt-5.3-codex", model: "gpt-5.3-codex", auth: "codex" },
+    { id: "gpt-5.5-mini", model: "gpt-5.5-mini", auth: "codex" }
+  ]);
+});
+
+test("subscriptionPassthroughSpecs is empty without a hook or with pre-running endpoints", () => {
+  const ensembles = [{ name: "default", models: [] }];
+  assert.deepEqual(subscriptionPassthroughSpecs(undefined, ensembles, [], {}), []);
+  const bare = fakeTool([]);
+  delete (bare as { subscriptionModels?: unknown }).subscriptionModels;
+  assert.deepEqual(subscriptionPassthroughSpecs(bare, ensembles, [], {}), []);
+  // Pre-running endpoints: there is no managed router to host the extras.
+  assert.deepEqual(
+    subscriptionPassthroughSpecs(
+      fakeTool([{ model: "gpt-5.3-codex", auth: "codex" }]),
+      ensembles,
+      [],
+      { endpoints: { alpha: "http://127.0.0.1:1" } }
+    ),
+    []
+  );
+});
+
+// Regression (ENG-620): a preserved stock model picked in the tool must route
+// to its router endpoint (vendor passthrough), never silently fuse.
+test("gateway routes an extra passthrough model to its endpoint instead of the fused panel", async () => {
+  const repo = materializeSampleRepo(join(freshDir("fusion-extra-"), "repo"));
+  // A stub `fusionkit serve` router recording which endpoint id each
+  // passthrough call requests.
+  const seenModels: string[] = [];
+  const router = createServer((req, res) => {
+    void (async () => {
+      const path = new URL(req.url ?? "/", "http://localhost").pathname;
+      if (req.method === "POST" && path === "/v1/chat/completions") {
+        const body = JSON.parse(await readBody(req)) as { model?: string };
+        seenModels.push(body.model ?? "");
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            id: "chatcmpl_stock",
+            object: "chat.completion",
+            created: 0,
+            model: body.model,
+            choices: [
+              { index: 0, message: { role: "assistant", content: "STOCK_OK" }, finish_reason: "stop" }
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+          })
+        );
+        return;
+      }
+      res.writeHead(404).end();
+    })().catch((error: unknown) => res.writeHead(500).end(String(error)));
+  });
+  await new Promise<void>((resolve) => router.listen(0, "127.0.0.1", resolve));
+  const routerAddress = router.address();
+  assert.ok(typeof routerAddress === "object" && routerAddress !== null);
+  const routerUrl = `http://127.0.0.1:${routerAddress.port}`;
+
+  const gateway = await startFusionStepGateway({
+    config: {
+      fusionBackendUrl: routerUrl,
+      repo,
+      outputRoot: freshDir("fusion-extra-runs-"),
+      harnesses: ["command"],
+      models: [{ id: "alpha", model: "panel-model" }],
+      extraPassthrough: [{ id: "gpt-5.3-codex", model: "gpt-5.3-codex" }],
+      modelEndpoints: { alpha: routerUrl, "gpt-5.3-codex": routerUrl }
+    },
+    host: "127.0.0.1",
+    port: 0
+  });
+  try {
+    // The preserved stock model is advertised alongside the fused + panel models.
+    const models = (await (await fetch(`${gateway.url()}/v1/models`)).json()) as {
+      data: Array<{ id: string }>;
+    };
+    const ids = models.data.map((entry) => entry.id);
+    assert.ok(ids.includes("fusion-panel"), `fused model missing from ${ids.join(", ")}`);
+    assert.ok(ids.includes("panel-model"), `panel native missing from ${ids.join(", ")}`);
+    assert.ok(ids.includes("gpt-5.3-codex"), `stock model missing from ${ids.join(", ")}`);
+
+    // Picking the stock model proxies to its router endpoint — no fusion run.
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-5.3-codex",
+        messages: [{ role: "user", content: "hello" }]
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
+    assert.equal(body.choices[0]?.message.content, "STOCK_OK");
+    assert.deepEqual(seenModels, ["gpt-5.3-codex"], "the router must receive the stock endpoint id");
+  } finally {
+    await gateway.close();
+    await closeServer(router);
   }
 });
 
