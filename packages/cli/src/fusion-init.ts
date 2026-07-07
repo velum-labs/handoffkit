@@ -6,7 +6,7 @@
  *
  * The wizard covers the whole config surface: the default tool, the panel
  * (member-by-member, mixing subscriptions / API keys / local MLX), the judge,
- * an optional extras step (budget, rate-limit policy, panel trust, reasoning),
+ * an optional extras step (budget, rate-limit policy, panel sandbox, reasoning),
  * and optional named ensembles — so nothing requires hand-editing JSON after.
  */
 import { existsSync } from "node:fs";
@@ -54,7 +54,12 @@ import type { HostInfo } from "./fusion/local-catalog.js";
 import { ownedMlxEnv } from "./fusion/mlx.js";
 import { buildPanel, isAllLocal, judgeOptions, withKeyEnv } from "./fusion/panel-builder.js";
 import { fetchDefaultPrompts } from "./fusion/prompts.js";
-import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "./shared/options.js";
+import {
+  ON_RATE_LIMIT_OPTIONS,
+  PANEL_TRUST_HELP,
+  PANEL_TRUST_MESSAGE,
+  PANEL_TRUST_OPTIONS
+} from "./shared/options.js";
 import { disableTelemetry, enableTelemetry, resolveTelemetry } from "./telemetry/consent.js";
 
 export { defaultMemberId, judgeOptions } from "./fusion/panel-builder.js";
@@ -230,11 +235,11 @@ export async function resolveInitOverwrite(opts: {
   return { action: "refuse" };
 }
 
-/** Interactive extras: budget / rate-limit / trust / reasoning. Defaults skip it. */
+/** Interactive extras: budget / rate-limit / sandbox / reasoning. Defaults skip it. */
 async function promptExtras(config: FusionConfig): Promise<void> {
   if (!canPromptInteractively()) return;
   const wantsExtras = await confirm({
-    message: "Configure extras (budget, rate-limit policy, panel trust, reasoning)?",
+    message: "Configure extras (budget, rate-limit policy, panel sandbox, reasoning)?",
     defaultValue: false
   });
   if (!wantsExtras) return;
@@ -254,8 +259,9 @@ async function promptExtras(config: FusionConfig): Promise<void> {
     defaultIndex: 0
   });
 
+  note(PANEL_TRUST_HELP);
   const trust = await select({
-    message: "Panel candidate autonomy",
+    message: PANEL_TRUST_MESSAGE,
     options: PANEL_TRUST_OPTIONS,
     defaultIndex: 0
   });
@@ -494,7 +500,7 @@ export async function runFusionInit(input: {
       (name) => `ensemble ${name}: ${(namedEnsembles[name]?.panel ?? []).map((spec) => spec.id).join(", ")}`
     ),
     ...(config.budgetUsd !== undefined ? [`budget: $${config.budgetUsd}`] : []),
-    ...(config.panelTrust !== undefined ? [`trust: ${config.panelTrust}`] : []),
+    ...(config.panelTrust !== undefined ? [`panel sandbox: ${config.panelTrust}`] : []),
     dim(`tune later: fusionkit config edit · fusionkit ensemble list`)
   ];
   presenter.blank();
