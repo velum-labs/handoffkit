@@ -4,7 +4,8 @@
  */
 export {
   FusionBackend,
-  InMemoryFusionBackendKernelStateStore
+  InMemoryFusionBackendKernelStateStore,
+  PendingSessionWrites
 } from "./fusion-proxy.js";
 export type {
   ChatMessageLike,

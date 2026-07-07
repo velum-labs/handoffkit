@@ -38,6 +38,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import { homedir } from "node:os";
@@ -45,6 +46,7 @@ import { join } from "node:path";
 
 import type { CostLedgerEntry, SessionCost } from "./cost.js";
 import type { ChatMessageLike, WireTrajectory } from "./fusion-backend.js";
+import { SessionLockManager } from "./session-lock.js";
 
 /** One persisted user turn: the messages that drove the panel + its candidates. */
 export type SessionTurnRecord = {
@@ -60,8 +62,16 @@ export type SessionTurnRecord = {
 
 /** The fast-read session header persisted to `meta.json`. */
 export type SessionMeta = {
-  /** Stable session id (the gateway's session-key derivation is the seed). */
+  /** Stable random session id (WS10 — no longer a conversation content hash). */
   id: string;
+  /**
+   * The conversation content hash (system + first user message + scope) —
+   * a resume *hint* only, never the identity. Two conversations with the same
+   * opener share a hint but keep separate ids, budgets, and caches; the hint
+   * lets a restarted gateway reattach a continuing conversation to its
+   * persisted session.
+   */
+  contentHint?: string;
   /** The launched coding harness (codex/claude/cursor/...), if known. */
   tool?: string;
   /** The coding workspace the panel fused over, if known. */
@@ -103,18 +113,24 @@ export type SessionSummary = SessionMeta & { turnCount: number };
  * A durable, process-independent store for gateway sessions. The in-memory
  * session map in {@link FusionBackend} is a hot cache *in front of* this; the
  * store itself has no TTL (sessions persist until `sessions rm`).
+ *
+ * Mutations are async and serialized per session (in-process mutex +
+ * cross-process lockfile, see {@link SessionLockManager}): `meta.json` updates
+ * are read-modify-write, so unserialized writers lose fields. Reads stay
+ * synchronous — headers are written atomically (temp + rename) and JSONL
+ * appends are line-atomic, so a reader never needs the lock.
  */
 export interface SessionStore {
   /** Load a session (header + turns), or `undefined` if it does not exist. */
   load(id: string): PersistedSession | undefined;
   /** Create or overwrite a session's header. */
-  saveMeta(meta: SessionMeta): void;
+  saveMeta(meta: SessionMeta): Promise<void>;
   /** Append a turn record and bump the session's last-activity timestamp. */
-  appendTurn(id: string, turn: SessionTurnRecord): void;
+  appendTurn(id: string, turn: SessionTurnRecord): Promise<void>;
   /** Persist the session's running token + cost accounting (WS7). No-op if absent. */
-  recordCost(id: string, cost: SessionCost): void;
+  recordCost(id: string, cost: SessionCost): Promise<void>;
   /** Append one stage-aware cost ledger entry and persist the updated rollup. */
-  recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): void;
+  recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): Promise<void>;
   /** Summaries of every stored session, most-recently-active first. */
   list(): SessionSummary[];
   /** Remove a session and all its data. Returns whether anything was removed. */
@@ -128,12 +144,28 @@ export function defaultSessionsDir(): string {
   return join(homedir(), ".fusionkit", "sessions");
 }
 
+/**
+ * Compaction threshold: when `turns.jsonl` accumulates this many raw lines,
+ * an append rewrites it as the deduped last-write-wins snapshot. Every
+ * finite-k re-fuse appends a full conversation + all candidates for the same
+ * turn index, so unbounded growth is the norm, not the exception.
+ */
+const DEFAULT_COMPACT_AFTER_LINES = 256;
+
+export type FileSystemSessionStoreOptions = {
+  /** Override the turns.jsonl compaction threshold (tests). */
+  compactAfterLines?: number;
+};
+
 /** A filesystem-backed {@link SessionStore} (JSONL event log; Node built-ins only). */
 export class FileSystemSessionStore implements SessionStore {
   readonly #root: string;
+  readonly #locks = new SessionLockManager();
+  readonly #compactAfterLines: number;
 
-  constructor(root: string = defaultSessionsDir()) {
+  constructor(root: string = defaultSessionsDir(), options: FileSystemSessionStoreOptions = {}) {
     this.#root = root;
+    this.#compactAfterLines = options.compactAfterLines ?? DEFAULT_COMPACT_AFTER_LINES;
   }
 
   /** The on-disk root this store reads/writes. */
@@ -182,43 +214,40 @@ export class FileSystemSessionStore implements SessionStore {
     return { meta, turns, costLedger };
   }
 
-  saveMeta(meta: SessionMeta): void {
-    mkdirSync(this.#dir(meta.id), { recursive: true });
-    this.#writeJsonAtomic(this.#metaPath(meta.id), meta);
+  async saveMeta(meta: SessionMeta): Promise<void> {
+    await this.#locks.withLock(meta.id, this.#dir(meta.id), () => {
+      this.#writeJsonAtomic(this.#metaPath(meta.id), meta);
+    });
   }
 
-  appendTurn(id: string, turn: SessionTurnRecord): void {
-    mkdirSync(this.#dir(id), { recursive: true });
-    appendFileSync(this.#turnsPath(id), `${JSON.stringify(turn)}\n`, "utf8");
-    // Bump the header's last-activity stamp so `sessions list` ordering tracks
-    // real use (best-effort: the header should already exist from creation).
-    const metaPath = this.#metaPath(id);
-    if (!existsSync(metaPath)) return;
-    try {
-      const meta = JSON.parse(readFileSync(metaPath, "utf8")) as SessionMeta;
-      meta.updatedAt = turn.recordedAt;
-      this.#writeJsonAtomic(metaPath, meta);
-    } catch {
-      // A corrupt header should not block turn persistence.
-    }
+  async appendTurn(id: string, turn: SessionTurnRecord): Promise<void> {
+    await this.#locks.withLock(id, this.#dir(id), () => {
+      appendFileSync(this.#turnsPath(id), `${JSON.stringify(turn)}\n`, "utf8");
+      this.#compactTurnsIfOversized(id);
+      // Bump the header's last-activity stamp so `sessions list` ordering
+      // tracks real use, preserving whatever other writers stored meanwhile
+      // (the fresh read happens under the lock).
+      this.#updateMeta(id, (meta) => {
+        meta.updatedAt = turn.recordedAt;
+      });
+    });
   }
 
-  recordCost(id: string, cost: SessionCost): void {
-    const metaPath = this.#metaPath(id);
-    if (!existsSync(metaPath)) return;
-    try {
-      const meta = JSON.parse(readFileSync(metaPath, "utf8")) as SessionMeta;
-      meta.cost = cost;
-      this.#writeJsonAtomic(metaPath, meta);
-    } catch {
-      // A corrupt header should not block the turn; cost is best-effort.
-    }
+  async recordCost(id: string, cost: SessionCost): Promise<void> {
+    await this.#locks.withLock(id, this.#dir(id), () => {
+      this.#updateMeta(id, (meta) => {
+        meta.cost = cost;
+      });
+    });
   }
 
-  recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): void {
-    mkdirSync(this.#dir(id), { recursive: true });
-    appendFileSync(this.#costPath(id), `${JSON.stringify(entry)}\n`, "utf8");
-    this.recordCost(id, cost);
+  async recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): Promise<void> {
+    await this.#locks.withLock(id, this.#dir(id), () => {
+      appendFileSync(this.#costPath(id), `${JSON.stringify(entry)}\n`, "utf8");
+      this.#updateMeta(id, (meta) => {
+        meta.cost = cost;
+      });
+    });
   }
 
   list(): SessionSummary[] {
@@ -257,6 +286,57 @@ export class FileSystemSessionStore implements SessionStore {
     return join(this.#dir(id), "costs.jsonl");
   }
 
+  /**
+   * Read-modify-write the header under the caller-held lock. Best-effort: a
+   * missing or corrupt header must not block turn/cost persistence.
+   */
+  #updateMeta(id: string, mutate: (meta: SessionMeta) => void): void {
+    const metaPath = this.#metaPath(id);
+    if (!existsSync(metaPath)) return;
+    try {
+      const meta = JSON.parse(readFileSync(metaPath, "utf8")) as SessionMeta;
+      mutate(meta);
+      this.#writeJsonAtomic(metaPath, meta);
+    } catch {
+      // A corrupt header should not block the write that triggered the bump.
+    }
+  }
+
+  /**
+   * Rewrite `turns.jsonl` as its deduped last-write-wins snapshot once the
+   * raw line count crosses the threshold. Runs under the caller-held session
+   * lock; the rewrite is atomic (temp + rename) so readers never see a torn
+   * file.
+   */
+  #compactTurnsIfOversized(id: string): void {
+    const path = this.#turnsPath(id);
+    let size: number;
+    try {
+      size = statSync(path).size;
+    } catch {
+      return;
+    }
+    // Cheap gate: skip the full read for small files (assume >= 2 bytes/line).
+    if (size < this.#compactAfterLines * 2) return;
+    const lines = readFileSync(path, "utf8").split("\n").filter((line) => line.trim().length > 0);
+    if (lines.length < this.#compactAfterLines) return;
+    const byTurn = new Map<number, string>();
+    for (const line of lines) {
+      try {
+        const record = JSON.parse(line) as SessionTurnRecord;
+        byTurn.set(record.turn, line);
+      } catch {
+        // Drop torn lines during compaction; load skips them anyway.
+      }
+    }
+    const snapshot = [...byTurn.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map((entry) => entry[1]);
+    const tmp = `${path}.tmp`;
+    writeFileSync(tmp, snapshot.length > 0 ? `${snapshot.join("\n")}\n` : "", "utf8");
+    renameSync(tmp, path);
+  }
+
   /** Write JSON via a temp file + rename so a reader never sees a half-written header. */
   #writeJsonAtomic(path: string, value: unknown): void {
     const tmp = `${path}.tmp`;
@@ -279,7 +359,7 @@ export class InMemorySessionStore implements SessionStore {
     };
   }
 
-  saveMeta(meta: SessionMeta): void {
+  async saveMeta(meta: SessionMeta): Promise<void> {
     const existing = this.#sessions.get(meta.id);
     this.#sessions.set(meta.id, {
       meta: { ...meta },
@@ -288,7 +368,7 @@ export class InMemorySessionStore implements SessionStore {
     });
   }
 
-  appendTurn(id: string, turn: SessionTurnRecord): void {
+  async appendTurn(id: string, turn: SessionTurnRecord): Promise<void> {
     const existing = this.#sessions.get(id);
     if (existing === undefined) return;
     existing.turns = [...existing.turns.filter((entry) => entry.turn !== turn.turn), turn].sort(
@@ -297,13 +377,13 @@ export class InMemorySessionStore implements SessionStore {
     existing.meta = { ...existing.meta, updatedAt: turn.recordedAt };
   }
 
-  recordCost(id: string, cost: SessionCost): void {
+  async recordCost(id: string, cost: SessionCost): Promise<void> {
     const existing = this.#sessions.get(id);
     if (existing === undefined) return;
     existing.meta = { ...existing.meta, cost };
   }
 
-  recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): void {
+  async recordCostEntry(id: string, entry: CostLedgerEntry, cost: SessionCost): Promise<void> {
     const existing = this.#sessions.get(id);
     if (existing === undefined) return;
     existing.costLedger = [...existing.costLedger, entry];

@@ -29,7 +29,7 @@ import { errorEvent, sseResponse } from "./sse-wire.js";
 import type { FusionGatewayLogger } from "./logger.js";
 import type { SessionStore } from "./session-store.js";
 import type { FusionBackendKernelStateStore } from "./fusion-types.js";
-import { errorText } from "./fusion-session.js";
+import { errorText, PendingSessionWrites } from "./fusion-session.js";
 
 function recordOf(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -156,6 +156,8 @@ export type FusionCostMeterOptions = {
   kernelStateStore: FusionBackendKernelStateStore;
   store?: SessionStore;
   logger: FusionGatewayLogger;
+  /** Shared in-flight write tracker (one per gateway; awaited on shutdown). */
+  pendingWrites?: PendingSessionWrites;
 };
 
 export class FusionCostMeter {
@@ -166,6 +168,7 @@ export class FusionCostMeter {
   readonly #kernelStateStore: FusionBackendKernelStateStore;
   readonly #store: SessionStore | undefined;
   readonly #logger: FusionGatewayLogger;
+  readonly #pendingWrites: PendingSessionWrites;
 
   constructor(options: FusionCostMeterOptions) {
     this.#budgetUsd = options.budgetUsd;
@@ -175,6 +178,7 @@ export class FusionCostMeter {
     this.#kernelStateStore = options.kernelStateStore;
     this.#store = options.store;
     this.#logger = options.logger;
+    this.#pendingWrites = options.pendingWrites ?? new PendingSessionWrites();
   }
 
   get budgetUsd(): number | undefined {
@@ -274,10 +278,12 @@ export class FusionCostMeter {
     });
     const total = addLedgerEntry(this.costFor(sessionId), entry);
     this.#kernelStateStore.setCost(sessionId, total);
-    try {
-      this.#store?.recordCostEntry(sessionId, entry, total);
-    } catch (error) {
-      this.#logger.error(`fusion: could not persist cost for session ${sessionId}: ${errorText(error)}`);
+    if (this.#store !== undefined) {
+      this.#pendingWrites.track(
+        this.#store.recordCostEntry(sessionId, entry, total).catch((error: unknown) => {
+          this.#logger.error(`fusion: could not persist cost for session ${sessionId}: ${errorText(error)}`);
+        })
+      );
     }
     const line = turnCostLine(entry, total.totalUsd);
     this.#logger.error(`fusion: ${input.stage} ${line}`);

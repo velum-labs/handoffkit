@@ -16,7 +16,8 @@ import {
   FusionSessionManager,
   hasUsableCandidates,
   InMemoryFusionBackendKernelStateStore,
-  isHarnessNotification
+  isHarnessNotification,
+  PendingSessionWrites
 } from "./fusion-session.js";
 import { FusionCostMeter } from "./fusion-cost-meter.js";
 import { FusionTurnAssembler } from "./fusion-turn.js";
@@ -30,7 +31,7 @@ import type {
 } from "./fusion-types.js";
 import { defaultFusionGatewayLogger } from "./logger.js";
 
-export { InMemoryFusionBackendKernelStateStore } from "./fusion-session.js";
+export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-session.js";
 export type {
   ChatMessageLike,
   FusedModelRoute,
@@ -72,6 +73,7 @@ export class FusionBackend implements Backend {
   readonly #turns: FusionTurnAssembler;
   readonly #vendor: FusionVendorProxy;
   readonly #services: FrontdoorServices;
+  readonly #pendingWrites = new PendingSessionWrites();
 
   constructor(options: FusionBackendOptions) {
     this.defaultModel = options.defaultModel;
@@ -99,7 +101,8 @@ export class FusionBackend implements Backend {
       resumeId: options.resumeId,
       sessionMeta: options.sessionMeta ?? {},
       defaultModel: this.defaultModel,
-      logger
+      logger,
+      pendingWrites: this.#pendingWrites
     });
     this.#cost = new FusionCostMeter({
       budgetUsd: options.budgetUsd,
@@ -108,7 +111,8 @@ export class FusionBackend implements Backend {
       localModels: new Set(options.localModels ?? []),
       kernelStateStore,
       store: options.store,
-      logger
+      logger,
+      pendingWrites: this.#pendingWrites
     });
     this.#turns = new FusionTurnAssembler({
       stepUrl: options.stepUrl,
@@ -134,6 +138,15 @@ export class FusionBackend implements Backend {
       signalFor: (req) => this.#signalFor(req)
     });
     this.#services = this.#buildServices(logger);
+  }
+
+  /**
+   * Await every session/turn/cost write still in flight. Persistence is
+   * detached from the request path, so hosts must call this on shutdown or
+   * the tail of the session store is silently dropped.
+   */
+  flush(): Promise<void> {
+    return this.#pendingWrites.flush();
   }
 
   listModelIds(): readonly string[] {
@@ -162,7 +175,7 @@ export class FusionBackend implements Backend {
     const req: FrontdoorRequestValue = {
       requestId: newSpanId(),
       chat,
-      sessionKey: this.#sessions.sessionKey(messages, this.#sessionScope(chat.model)),
+      sessionKey: this.#sessions.resolveSessionId(messages, this.#sessionScope(chat.model)),
       turn: messages.filter(
         (message: ChatMessageLike) => message.role === "user" && !isHarnessNotification(message)
       ).length,

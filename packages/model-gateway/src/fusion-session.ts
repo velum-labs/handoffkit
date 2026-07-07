@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { isFiniteK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import { randomId } from "@fusionkit/runtime-utils";
 import { newSpanId, sessionCarrier } from "@fusionkit/tracing";
 
 import type { SessionCost } from "./cost.js";
@@ -18,6 +19,31 @@ import type {
 export const DEFAULT_SESSION_TTL_MS = 60 * 60 * 1000;
 export const DEFAULT_PANEL_TIMEOUT_MS = 15 * 60 * 1000;
 export const DEFAULT_STEP_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * Tracks in-flight store writes so shutdown can await them (WS10). Session
+ * persistence is deliberately detached from the request path (a slow disk
+ * must not stall a turn), but detached writes used to be silently dropped on
+ * process exit — turns and cost entries vanished. Writers register every
+ * store promise here; the gateway registers `flush()` with the cleanup
+ * registry so exit waits for the tail.
+ */
+export class PendingSessionWrites {
+  readonly #pending = new Set<Promise<unknown>>();
+
+  /** Track a write; the caller keeps ownership of error handling. */
+  track(work: Promise<unknown>): void {
+    const tracked = work.catch(() => {}).finally(() => this.#pending.delete(tracked));
+    this.#pending.add(tracked);
+  }
+
+  /** Resolve once every write in flight at call time (and any queued behind it) settles. */
+  async flush(): Promise<void> {
+    while (this.#pending.size > 0) {
+      await Promise.allSettled([...this.#pending]);
+    }
+  }
+}
 
 export class InMemoryFusionBackendKernelStateStore implements FusionBackendKernelStateStore {
   readonly #sessions = new Map<string, FusionBackendKernelSessionState>();
@@ -87,6 +113,8 @@ export type FusionSessionManagerOptions = {
   sessionMeta: SessionMetaInput;
   defaultModel?: string;
   logger: FusionGatewayLogger;
+  /** Shared in-flight write tracker (one per gateway; awaited on shutdown). */
+  pendingWrites?: PendingSessionWrites;
 };
 
 export class FusionSessionManager {
@@ -98,6 +126,7 @@ export class FusionSessionManager {
   readonly #sessionMeta: SessionMetaInput;
   readonly #defaultModel: string | undefined;
   readonly #logger: FusionGatewayLogger;
+  readonly #pendingWrites: PendingSessionWrites;
   #resumeId: string | undefined;
   /**
    * Fuse rounds per `${sessionKey}#${turn}` — narration bookkeeping only
@@ -105,6 +134,10 @@ export class FusionSessionManager {
    * exist for every k: unbounded turns simply stay at 1. Pruned with sessions.
    */
   readonly #narrationRounds = new Map<string, number>();
+  /** Live content-hint -> session-id resolutions (see {@link resolveSessionId}). */
+  readonly #hintToId = new Map<string, string>();
+  /** Reverse map so persisted headers carry their resume hint. */
+  readonly #idToHint = new Map<string, string>();
 
   constructor(options: FusionSessionManagerOptions) {
     this.#ttlMs = options.ttlMs;
@@ -116,10 +149,16 @@ export class FusionSessionManager {
     this.#sessionMeta = options.sessionMeta;
     this.#defaultModel = options.defaultModel;
     this.#logger = options.logger;
+    this.#pendingWrites = options.pendingWrites ?? new PendingSessionWrites();
   }
 
   get store(): SessionStore | undefined {
     return this.#store;
+  }
+
+  /** Await every session/turn/cost write still in flight (shutdown path). */
+  flush(): Promise<void> {
+    return this.#pendingWrites.flush();
   }
 
   sessionKey(messages: readonly ChatMessageLike[], scope?: string): string {
@@ -134,6 +173,45 @@ export class FusionSessionManager {
       ...(scope !== undefined ? [scope] : [])
     ]);
     return createHash("sha256").update(seed).digest("hex").slice(0, 16);
+  }
+
+  /**
+   * Resolve the conversation to a real session id (WS10). The identity is a
+   * random id; the content hash is only a *hint* for reattachment:
+   *
+   *  1. a hint this process already resolved keeps its id (turn N of a live
+   *     conversation, client retries of the same request);
+   *  2. a *continuing* conversation (it carries assistant turns) with no live
+   *     resolution reattaches to the most recent persisted session sharing
+   *     the hint — a restarted gateway resumes mid-conversation work;
+   *  3. anything else — in particular a fresh opener, even one identical to a
+   *     past conversation's — mints a new id, so two conversations with the
+   *     same first message never share budget, cost, or candidate caches.
+   */
+  resolveSessionId(messages: readonly ChatMessageLike[], scope?: string): string {
+    const hint = this.sessionKey(messages, scope);
+    const live = this.#hintToId.get(hint);
+    if (live !== undefined) return live;
+
+    const continuing = messages.some((message) => message.role === "assistant");
+    if (continuing && this.#store !== undefined) {
+      const persisted = this.#store
+        .list()
+        .find((summary) => summary.contentHint === hint);
+      if (persisted !== undefined) {
+        this.#remember(hint, persisted.id);
+        return persisted.id;
+      }
+    }
+
+    const id = randomId(16);
+    this.#remember(hint, id);
+    return id;
+  }
+
+  #remember(hint: string, id: string): void {
+    this.#hintToId.set(hint, id);
+    this.#idToHint.set(id, hint);
   }
 
   task(messages: readonly ChatMessageLike[]): string {
@@ -163,7 +241,14 @@ export class FusionSessionManager {
         const persisted = this.#store.load(resumeId);
         if (persisted !== undefined) {
           const session = this.#hydrate(persisted, now);
+          // The resumed conversation keeps the persisted session's identity:
+          // remap the fresh conversation's content hint (resolved before we
+          // knew about --resume) onto the persisted id so subsequent turns
+          // and a future restart reattach to it.
+          const hint = this.#idToHint.get(sessionKey);
+          if (hint !== undefined) this.#remember(hint, session.id);
           this.#kernelStateStore.set(sessionKey, session);
+          this.#kernelStateStore.set(session.id, session);
           return session;
         }
         this.#logger.error(`fusion: --resume target ${resumeId} not found; starting a fresh session.`);
@@ -307,23 +392,27 @@ export class FusionSessionManager {
 
   #persistMeta(session: FusionBackendKernelSessionState): void {
     if (this.#store === undefined) return;
-    try {
-      const now = Date.now();
-      this.#store.saveMeta({
-        id: session.id,
-        traceId: session.traceId,
-        sessionSpan: session.sessionSpan,
-        createdAt: session.createdAt,
-        updatedAt: now,
-        ...(this.#defaultModel !== undefined ? { defaultModel: this.#defaultModel } : {}),
-        ...(this.#sessionMeta.tool !== undefined ? { tool: this.#sessionMeta.tool } : {}),
-        ...(this.#sessionMeta.repo !== undefined ? { repo: this.#sessionMeta.repo } : {}),
-        ...(this.#sessionMeta.models !== undefined ? { models: this.#sessionMeta.models } : {}),
-        ...(this.#sessionMeta.judgeModel !== undefined ? { judgeModel: this.#sessionMeta.judgeModel } : {})
-      });
-    } catch (error) {
-      this.#logger.error(`fusion: could not persist session ${session.id}: ${errorText(error)}`);
-    }
+    const hint = this.#idToHint.get(session.id);
+    const now = Date.now();
+    this.#pendingWrites.track(
+      this.#store
+        .saveMeta({
+          id: session.id,
+          ...(hint !== undefined ? { contentHint: hint } : {}),
+          traceId: session.traceId,
+          sessionSpan: session.sessionSpan,
+          createdAt: session.createdAt,
+          updatedAt: now,
+          ...(this.#defaultModel !== undefined ? { defaultModel: this.#defaultModel } : {}),
+          ...(this.#sessionMeta.tool !== undefined ? { tool: this.#sessionMeta.tool } : {}),
+          ...(this.#sessionMeta.repo !== undefined ? { repo: this.#sessionMeta.repo } : {}),
+          ...(this.#sessionMeta.models !== undefined ? { models: this.#sessionMeta.models } : {}),
+          ...(this.#sessionMeta.judgeModel !== undefined ? { judgeModel: this.#sessionMeta.judgeModel } : {})
+        })
+        .catch((error: unknown) => {
+          this.#logger.error(`fusion: could not persist session ${session.id}: ${errorText(error)}`);
+        })
+    );
   }
 
   #persistTurn(
@@ -333,10 +422,12 @@ export class FusionSessionManager {
     candidates: WireTrajectory[]
   ): void {
     if (this.#store === undefined) return;
-    try {
-      this.#store.appendTurn(session.id, { turn, messages, candidates, recordedAt: Date.now() });
-    } catch (error) {
-      this.#logger.error(`fusion: could not persist turn ${turn} of session ${session.id}: ${errorText(error)}`);
-    }
+    this.#pendingWrites.track(
+      this.#store
+        .appendTurn(session.id, { turn, messages, candidates, recordedAt: Date.now() })
+        .catch((error: unknown) => {
+          this.#logger.error(`fusion: could not persist turn ${turn} of session ${session.id}: ${errorText(error)}`);
+        })
+    );
   }
 }

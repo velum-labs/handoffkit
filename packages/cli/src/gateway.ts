@@ -50,6 +50,7 @@ import type {
   WireTrajectory
 } from "@fusionkit/model-gateway";
 import { bold, cyan, gray, uiStream } from "@fusionkit/cli-ui";
+import { registerCleanup } from "@fusionkit/runtime-utils";
 import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
 import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
@@ -646,6 +647,9 @@ export async function startFusionStepGateway(input: {
     // config.resolved_judge_model, so omitting this keeps routing correct while
     // the judge gap-analysis still runs on the configured judge.
   });
+  // Session persistence is detached from the request path; make sure the tail
+  // of turn/cost writes lands before the process exits (WS10).
+  registerCleanup(() => backend.flush());
   const gateway = await startGateway({
     backend,
     host: input.host,

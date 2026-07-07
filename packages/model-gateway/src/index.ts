@@ -26,7 +26,7 @@ export type {
   OpenAiBackendOptions
 } from "./backend.js";
 export { FusionBackend } from "./fusion-backend.js";
-export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";
+export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-backend.js";
 export {
   FrontdoorArtifactTypes,
   FrontdoorFuseError,
