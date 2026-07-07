@@ -68,16 +68,20 @@ if [[ "$PHASE" == "solo" || "$PHASE" == "all" ]]; then
 fi
 
 if [[ "$PHASE" == "fused" || "$PHASE" == "all" ]]; then
-  # Boot the fused endpoint unless one is already serving.
-  SERVE_PID=""
+  # Boot the fused endpoint unless one is already serving. setsid gives the
+  # server its own process group so teardown kills the whole tree (uv +
+  # uvicorn), not just the launcher.
+  SERVE_PGID=""
   if ! curl -sf "$SERVE_URL/v1/models" >/dev/null 2>&1; then
     echo "starting fusionkit serve..."
-    (cd "$REPO_ROOT" && uv run --package fusionkit fusionkit serve \
+    pushd "$REPO_ROOT" >/dev/null
+    setsid uv run --package fusionkit fusionkit serve \
       -c "$ROUND_DIR/config/panel.yaml" \
       --host 127.0.0.1 --port "$SERVE_PORT" \
-      > "$RUNS_DIR/serve.log" 2>&1) &
-    SERVE_PID=$!
-    for _ in $(seq 1 30); do
+      > "$RUNS_DIR/serve.log" 2>&1 &
+    SERVE_PGID=$!
+    popd >/dev/null
+    for _ in $(seq 1 60); do
       curl -sf "$SERVE_URL/v1/models" >/dev/null 2>&1 && break
       sleep 1
     done
@@ -86,8 +90,8 @@ if [[ "$PHASE" == "fused" || "$PHASE" == "all" ]]; then
   # litellm's `openai/` prefix -> OpenAI-compatible endpoint at api_base; the
   # server receives model id `fusionkit/panel` (panel fanout + fusion).
   run_tb fused "openai/fusionkit/panel" --agent-kwarg "api_base=$SERVE_URL/v1"
-  if [[ -n "$SERVE_PID" ]]; then
-    kill "$SERVE_PID" 2>/dev/null || true
+  if [[ -n "$SERVE_PGID" ]]; then
+    kill -- "-$SERVE_PGID" 2>/dev/null || true
   fi
 fi
 

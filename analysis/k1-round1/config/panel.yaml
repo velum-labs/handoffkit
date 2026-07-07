@@ -47,6 +47,13 @@ judge_model: terminus
 synthesizer_model: terminus
 default_mode: panel
 panel_models: [terminus, qwen3]
+# k=1 commit semantics on the text-protocol (tools-absent) path: the judge
+# names one candidate and its content is returned VERBATIM (no synthesizer
+# rewrite). terminus-2 speaks structured JSON in plain text, so a rewrite
+# could merge command batches across candidates — exactly what step mode
+# forbids for tool batches. If the judge names no best candidate (null), the
+# engine falls back to composition; those steps are counted from traces.
+synthesis_select_best: true
 sampling:
   temperature: 0.2
   top_p: 0.95

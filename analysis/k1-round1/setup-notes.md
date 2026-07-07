@@ -37,6 +37,19 @@ preregistration; no task from the frozen manifest was run.
   panel. `hello-world` is not in the frozen 12-task manifest, so the round-1
   slice is uncontaminated.
 
+## Re-validation after the pre-run amendments (2026-07-07)
+
+After pinning `synthesis_select_best: true` (verbatim k=1 commit semantics —
+see preregistration amendment 1) and fixing the serve process-group teardown
+in `run_round1.sh`:
+
+- Text smoke against the updated config returned clean, parseable
+  terminus-2 JSON (single candidate committed verbatim).
+- Integration smoke re-run: `tb run --agent terminus-2 --model
+  openai/fusionkit/panel … --task-id hello-world` → **1/1 resolved**, ~98s
+  vs ~137s under the synthesis config (consistent with the synthesizer call
+  being skipped on select-verbatim steps).
+
 ## Known quirks recorded for the run
 
 - The server does not return `usage` token counts on the text path

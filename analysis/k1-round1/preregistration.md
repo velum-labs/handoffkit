@@ -113,6 +113,29 @@ outcome (the plan's Step-5 rule).
 - headroom == 0 on this slice: the slice cannot evidence fusion value
   regardless of capture; report and re-draw a larger slice in round 2.
 
+## Amendments before first billed manifest run (2026-07-07)
+
+Recorded openly; no manifest task had been run when these were made.
+
+1. **Fused commit semantics pinned to verbatim selection**
+   (`synthesis_select_best: true` in `config/panel.yaml`). As originally
+   drafted, the tools-absent path would have used full synthesis — an LLM
+   rewrite of the candidates each step — which can merge command batches
+   across candidates, exactly what the product's k=1 step mode forbids for
+   tool batches. With select-best, the judge names one candidate and its
+   content is committed verbatim, matching step-mode commit semantics on a
+   text-protocol harness. When the judge names no best candidate (null),
+   the engine composes; such steps are a recorded diagnostic, not a
+   deviation.
+2. **Known asymmetry recorded — harness context bookkeeping.** terminus-2
+   sizes its context-management (proactive summarization) from litellm's
+   model registry. For the solo rows it knows the real model limits; for
+   `fusionkit/panel` (unknown id) it falls back to a 1M-token limit, so
+   harness-side summarization effectively never triggers for the fused row
+   and very long tasks may instead hit the members' real context limits as
+   provider errors. Reported per-trial via `results.json` failure modes;
+   biases against the fused row if it biases anything.
+
 ## Deviations
 
 None at preregistration time.
