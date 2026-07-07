@@ -256,7 +256,14 @@ def _score_result(
 
 async def main() -> None:
     request = json.load(sys.stdin)
-    subset = int(request.get("subset") or 10)
+    manifest = load_manifest(os.environ.get("LCB_MANIFEST"))
+    manifest_ids = list(manifest.get("question_ids") or []) if manifest is not None else []
+    if request.get("subset") is not None:
+        subset = int(request["subset"])
+    elif manifest_ids:
+        subset = len(manifest_ids)
+    else:
+        subset = 10
     max_tests = int(os.environ.get("LCB_MAX_TESTS", "0"))  # 0 = full official test set
     test_timeout = float(os.environ.get("LCB_TEST_TIMEOUT_S", "8"))
     concurrency = max(1, int(os.environ.get("LCB_CONCURRENCY", "4")))
@@ -278,7 +285,7 @@ async def main() -> None:
         version=os.environ.get("LCB_VERSION", "release_v6"),
         min_date=os.environ.get("LCB_MIN_DATE", "2025-01-01"),
         difficulties=difficulties,
-        manifest=load_manifest(os.environ.get("LCB_MANIFEST")),
+        manifest=manifest,
     )
     signature = panel_signature(engine, max_tests)
     semaphore = asyncio.Semaphore(concurrency)

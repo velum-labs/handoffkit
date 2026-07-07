@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""Run Phase C panel benchmarks with a preregistered spend cap.
+
+Sequentially runs `fusionkit public-bench` for H1/H2/H5 using the frozen
+manifest. Stops when the cumulative reported cost reaches the cap.
+
+Usage:
+  uv run --with 'datasets<4' python labruns/2026-q3/scripts/run_phase_c.py preflight
+  uv run --with 'datasets<4' python labruns/2026-q3/scripts/run_phase_c.py run --hypothesis h1
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shlex
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[3]
+MANIFEST = REPO / "labruns" / "2026-q3" / "manifest-algorithmic.json"
+ADAPTER = (
+    REPO / "python" / "fusionkit-evals" / "src" / "fusionkit_evals" / "adapters" / "livecodebench_adapter.py"
+)
+OUT_DIR = REPO / "labdata" / "runs" / "2026-q3" / "phase-c"
+SPEND_LEDGER = OUT_DIR / "spend_ledger.jsonl"
+RUNNER_PREFIX = ["uv", "run", "--with", "datasets<4"]
+
+PANELS: dict[str, str] = {
+    "h1": "configs/benchmark-panel.h1-backbone.yaml",
+    "h2": "configs/benchmark-panel.h2-style-diverse.yaml",
+    "h5": "configs/benchmark-panel.h5-thinking-heavy.yaml",
+}
+SPEND_CAP_USD = 75.0
+
+
+@dataclass
+class RunResult:
+    hypothesis: str
+    config: str
+    subset: int | None
+    output_path: Path
+    fusion_score: float | None
+    passed_tasks: int | None
+    resolved_tasks: int | None
+    cost_usd: float
+    availability: str
+    raw: dict[str, object]
+
+
+def _require_openrouter() -> None:
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        print("OPENROUTER_API_KEY is required", file=sys.stderr)
+        raise SystemExit(2)
+
+
+def _require_manifest() -> None:
+    if not MANIFEST.is_file():
+        print(f"missing manifest: {MANIFEST} (run build_manifest.py first)", file=sys.stderr)
+        raise SystemExit(2)
+
+
+def _ledger_total() -> float:
+    if not SPEND_LEDGER.is_file():
+        return 0.0
+    total = 0.0
+    for line in SPEND_LEDGER.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        total += float(json.loads(line).get("cost_usd") or 0.0)
+    return total
+
+
+def _append_ledger(entry: dict[str, object]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    with SPEND_LEDGER.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
+def _adapter_command() -> list[str]:
+    return [
+        *RUNNER_PREFIX,
+        "python",
+        str(ADAPTER),
+    ]
+
+
+def _public_bench(
+    *,
+    config_rel: str,
+    subset: int | None,
+    output: Path,
+    report: Path,
+) -> RunResult:
+    env = os.environ.copy()
+    env["FUSIONKIT_BENCH_CONFIG"] = str(REPO / config_rel)
+    env["LCB_MANIFEST"] = str(MANIFEST)
+    env["BENCH_SANDBOX"] = env.get("BENCH_SANDBOX", "local")
+    env["LCB_CONCURRENCY"] = env.get("LCB_CONCURRENCY", "2")
+
+    cmd = [
+        *RUNNER_PREFIX,
+        "fusionkit",
+        "public-bench",
+        "--suite",
+        "livecodebench",
+        *(["--subset", str(subset)] if subset is not None else []),
+        "--runner-command",
+        shlex.join(_adapter_command()),
+        "-o",
+        str(output),
+        "--report",
+        str(report),
+    ]
+    proc = subprocess.run(
+        cmd,
+        cwd=REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        print(proc.stdout, file=sys.stderr)
+        print(proc.stderr, file=sys.stderr)
+        raise SystemExit(proc.returncode)
+
+    summary = json.loads(proc.stdout.strip().splitlines()[-1])
+    run_line = output.read_text(encoding="utf-8").strip().splitlines()[-1]
+    run_data = json.loads(run_line)
+    cost = float(run_data.get("cost_total_usd") or 0.0)
+    return RunResult(
+        hypothesis="",
+        config=config_rel,
+        subset=subset,
+        output_path=output,
+        fusion_score=_as_float(summary.get("fusion_score")),
+        passed_tasks=_as_int(run_data.get("passed_tasks")),
+        resolved_tasks=_as_int(run_data.get("resolved_tasks")),
+        cost_usd=cost,
+        availability=str(summary.get("availability") or "unknown"),
+        raw={"summary": summary, "run": run_data},
+    )
+
+
+def _as_float(value: object) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _as_int(value: object) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _summarize_member_pass_rates(run_data: dict[str, object]) -> dict[str, float]:
+    tasks = run_data.get("tasks")
+    if not isinstance(tasks, list):
+        return {}
+    scores: dict[str, list[float]] = {}
+    for row in tasks:
+        if not isinstance(row, dict) or row.get("outcome") != "scored":
+            continue
+        candidate_scores = row.get("candidate_scores")
+        if not isinstance(candidate_scores, dict):
+            continue
+        for model_id, score in candidate_scores.items():
+            scores.setdefault(str(model_id), []).append(float(score or 0.0))
+    return {
+        model_id: (sum(vals) / len(vals) if vals else 0.0) for model_id, vals in scores.items()
+    }
+
+
+def run_preflight(hypothesis: str = "h1") -> RunResult:
+    _require_openrouter()
+    _require_manifest()
+    config = PANELS[hypothesis]
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    output = OUT_DIR / f"preflight-{hypothesis}-{stamp}.jsonl"
+    report = OUT_DIR / f"preflight-{hypothesis}-{stamp}.md"
+    result = _public_bench(config_rel=config, subset=5, output=output, report=report)
+    result.hypothesis = hypothesis
+    _append_ledger(
+        {
+            "phase": "preflight",
+            "hypothesis": hypothesis,
+            "config": config,
+            "subset": 5,
+            "cost_usd": result.cost_usd,
+            "output": str(output),
+            "at": datetime.now(UTC).isoformat(),
+        }
+    )
+    print(json.dumps(result.__dict__, indent=2, default=str))
+    return result
+
+
+def run_panel(hypothesis: str) -> RunResult:
+    _require_openrouter()
+    _require_manifest()
+    if hypothesis not in PANELS:
+        raise SystemExit(f"unknown hypothesis {hypothesis!r}; expected one of {sorted(PANELS)}")
+    spent = _ledger_total()
+    if spent >= SPEND_CAP_USD:
+        raise SystemExit(f"spend cap ${SPEND_CAP_USD:.2f} already reached (${spent:.2f} logged)")
+
+    config = PANELS[hypothesis]
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    output = OUT_DIR / f"{hypothesis}-{stamp}.jsonl"
+    report = OUT_DIR / f"{hypothesis}-{stamp}.md"
+    result = _public_bench(config_rel=config, subset=None, output=output, report=report)
+    result.hypothesis = hypothesis
+    member_rates = _summarize_member_pass_rates(result.raw["run"])  # type: ignore[arg-type]
+    best_single = max(member_rates.values()) if member_rates else None
+    _append_ledger(
+        {
+            "phase": "panel",
+            "hypothesis": hypothesis,
+            "config": config,
+            "cost_usd": result.cost_usd,
+            "fusion_score": result.fusion_score,
+            "passed_tasks": result.passed_tasks,
+            "resolved_tasks": result.resolved_tasks,
+            "member_pass_rates": member_rates,
+            "best_single_pass_rate": best_single,
+            "output": str(output),
+            "report": str(report),
+            "at": datetime.now(UTC).isoformat(),
+        }
+    )
+    print(
+        json.dumps(
+            {
+                "hypothesis": hypothesis,
+                "fusion_score": result.fusion_score,
+                "passed_tasks": result.passed_tasks,
+                "resolved_tasks": result.resolved_tasks,
+                "cost_usd": result.cost_usd,
+                "member_pass_rates": member_rates,
+                "best_single_pass_rate": best_single,
+                "ledger_total_usd": _ledger_total(),
+                "output": str(output),
+                "report": str(report),
+            },
+            indent=2,
+        )
+    )
+    if _ledger_total() >= SPEND_CAP_USD:
+        print(f"warning: spend cap ${SPEND_CAP_USD:.2f} reached", file=sys.stderr)
+    return result
+
+
+def run_all() -> None:
+    for hypothesis in ("h1", "h2", "h5"):
+        if _ledger_total() >= SPEND_CAP_USD:
+            print(f"stopping before {hypothesis}: spend cap reached", file=sys.stderr)
+            break
+        run_panel(hypothesis)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Phase C benchmark runner")
+    sub = parser.add_subparsers(dest="command", required=True)
+    pre = sub.add_parser("preflight", help="run 5-task preflight on one panel")
+    pre.add_argument("--hypothesis", choices=sorted(PANELS), default="h1")
+    run = sub.add_parser("run", help="run full manifest for one panel")
+    run.add_argument("--hypothesis", choices=sorted(PANELS), required=True)
+    sub.add_parser("run-all", help="run H1, H2, H5 sequentially until spend cap")
+    args = parser.parse_args()
+
+    if args.command == "preflight":
+        run_preflight(args.hypothesis)
+    elif args.command == "run":
+        run_panel(args.hypothesis)
+    elif args.command == "run-all":
+        run_all()
+
+
+if __name__ == "__main__":
+    main()
