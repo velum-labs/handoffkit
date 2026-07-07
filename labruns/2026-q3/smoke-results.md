@@ -50,3 +50,30 @@ identity smoke.
 - [x] No publishable claims
 
 **Phase B complete.** Ready for Phase C subject to `manifest-algorithmic.jsonl` fix.
+
+## Node `fusionkit-dev` gateway path (2026-07-07 retest)
+
+**Runner:** `labruns/2026-q3/scripts/smoke_gateway.py`  
+**Artifact:** `.fusionkit/fusion-bench/phase-b-gateway-smoke-20260707T150700Z.json`
+
+### Method
+
+Per config, the gateway smoke script:
+
+1. Spawns `node scripts/fusionkit-dev.mjs serve` with `--model ID=openrouter:SLUG` flags derived from the benchmark YAML (`FUSIONKIT_DIR` points at this checkout; `FUSIONKIT_DEV_SKIP_BUILD=1` after `pnpm build:cli`)
+2. Waits for `GET /health` on the gateway port (`--no-portless --no-observe`)
+3. POSTs one `fusion-panel` chat completion through the Node gateway → Python router → panel fanout → in-panel judge/synthesizer
+4. Verifies HTTP 200, three input trajectories, and expected member `model_id`s in synthesis metadata
+
+This exercises the **full product path** (Node CLI orchestration + gateway + local Python engine), distinct from the in-process `smoke_panels.py` path.
+
+### Results
+
+| Hypothesis | Config | Gateway fusion | Member trajectories | Verdict |
+|---|---|---|---|---|
+| H1 backbone | `configs/benchmark-panel.h1-backbone.yaml` | fused output OK | ds32, nemotron3s, dsv4pro | **PASS** |
+| H2 style-diverse | `configs/benchmark-panel.h2-style-diverse.yaml` | fused output OK | ds32, nemotron3s, glm52 | **PASS** |
+| H5 thinking-heavy | `configs/benchmark-panel.h5-thinking-heavy.yaml` | fused output OK | ds32_64k, kimi26_64k, nemotron3s_64k | **PASS** |
+
+**Exit code:** 0  
+**Wall time:** ~139s for all three configs sequentially.
