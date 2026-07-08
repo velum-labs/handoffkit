@@ -12,6 +12,8 @@
  */
 export { startGateway } from "./server.js";
 export type { Gateway, GatewayOptions } from "./server.js";
+export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";
+export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions } from "./codex-relay.js";
 export {
   joinPath,
   ModelRoutedBackend,

@@ -47,8 +47,7 @@ export type {
   ToolHarnessMetadata,
   ToolIntegration,
   ToolLaunchContext,
-  ToolLaunchMode,
-  ToolSubscriptionModel
+  ToolLaunchMode
 } from "./types.js";
 export { createToolRegistry } from "./registry.js";
 export type { ToolRegistry } from "./registry.js";

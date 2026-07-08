@@ -169,6 +169,15 @@ export class FusionBackend implements Backend {
     return this.defaultModel;
   }
 
+  /** Exact-id serve check: a fused route or a registered passthrough (no default fold). */
+  servesModel(model: string): boolean {
+    if (this.#fusedFor(model) !== undefined || this.#passthroughFor(model) !== undefined) return true;
+    // Single/implicit-ensemble configs register no explicit fused routes; the
+    // advertised default fused id (and its Claude alias) is still served here.
+    const fusionDefault = this.defaultModel ?? this.#defaultRoute()?.modelId ?? FUSION_PANEL_MODEL;
+    return model === fusionDefault || model === `${CLAUDE_ALIAS_PREFIX}${fusionDefault}`;
+  }
+
   async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
     const chat = (body ?? {}) as ChatBody;
     const messages = Array.isArray(chat.messages) ? chat.messages : [];

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,7 +10,7 @@ import {
   fusedSubagentDeveloperInstructions,
   LOCAL_MODEL_LABEL
 } from "@fusionkit/tools";
-import type { FusedEnsembleInfo, ToolLaunchContext, ToolSubscriptionModel } from "@fusionkit/tools";
+import type { FusedEnsembleInfo, ToolLaunchContext } from "@fusionkit/tools";
 
 const CATALOG_FILE = "model-catalog.json";
 /**
@@ -49,7 +49,7 @@ export function isCodexConfigFailure(code: number, stderr: string): boolean {
 }
 
 /** A TOML table key: bare when it is a simple identifier, else quoted. */
-function tomlKey(name: string): string {
+export function tomlKey(name: string): string {
   return /^[A-Za-z0-9_-]+$/.test(name) ? name : JSON.stringify(name);
 }
 
@@ -128,22 +128,29 @@ function presetListed(entry: CodexModelPreset): boolean {
   return true;
 }
 
+/** The Codex login credential path (registry subscription metadata) for a home. */
+export function codexAuthPath(home: string = homedir()): string {
+  return codexStatePath(SUBSCRIPTIONS.codex.credentialsPath, home);
+}
+
+/** Whether a Codex login exists to relay/serve the stock models with. */
+export function hasCodexLogin(home: string = homedir()): boolean {
+  return existsSync(codexAuthPath(home));
+}
+
 /**
- * The stock models the installed Codex would offer on its own, as
- * subscription-served passthrough candidates: every picker-listed entry from
- * the local models cache, provided a Codex login exists to serve them with
- * (the gateway proxies each through the user's own `codex login`, exactly the
- * auth plain Codex would use). Empty without a login or cache, so a fusion
- * launch never advertises models it cannot serve.
+ * The picker-listed stock model slugs from the local models cache, in catalog
+ * order and deduped. Used for the launch config's `[profiles.*]` entries when
+ * the session can actually serve them (a Codex login exists for the gateway
+ * relay); the picker itself is driven by the gateway's live merged catalog.
  */
-export function codexSubscriptionModels(home: string = homedir()): ToolSubscriptionModel[] {
-  if (!existsSync(codexStatePath(SUBSCRIPTIONS.codex.credentialsPath, home))) return [];
+export function codexListedStockSlugs(home: string = homedir()): string[] {
   const seen = new Set<string>();
   return readCodexModelsCache(home).flatMap((entry) => {
     const slug = presetSlug(entry);
     if (slug === undefined || !presetListed(entry) || seen.has(slug)) return [];
     seen.add(slug);
-    return [{ model: slug, auth: "codex" as const }];
+    return [slug];
   });
 }
 
@@ -182,6 +189,26 @@ export function codexModelCatalogJson(
   fusedModels: readonly string[] = [],
   stockModels: readonly CodexModelPreset[] = []
 ): string {
+  return JSON.stringify(
+    { models: codexCatalogEntries(model, nativeModels, template, fusedModels, stockModels) },
+    null,
+    2
+  );
+}
+
+/**
+ * The merged catalog entry list behind {@link codexModelCatalogJson}, also
+ * served live by the gateway's Codex backend relay (`GET /v1/models` merges
+ * the client's live stock catalog through this same builder, so the static
+ * file and the live response can never disagree on merge semantics).
+ */
+export function codexCatalogEntries(
+  model: string,
+  nativeModels: readonly string[],
+  template: CodexModelPreset,
+  fusedModels: readonly string[] = [],
+  stockModels: readonly CodexModelPreset[] = []
+): Record<string, unknown>[] {
   const fused = new Set([model, ...fusedModels]);
   const stockBySlug = new Map<string, CodexModelPreset>();
   for (const entry of stockModels) {
@@ -219,7 +246,7 @@ export function codexModelCatalogJson(
       priority: models.length
     });
   }
-  return JSON.stringify({ models }, null, 2);
+  return models;
 }
 
 /**
@@ -388,34 +415,37 @@ export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   }
   const nativeModels = ctx.nativeModels ?? [];
   const fusedModels = ctx.fusedModels ?? [];
-  // The stock models the host registered as subscription-served passthroughs
-  // (see codexSubscriptionModels): they stay in the picker/profiles so fusion
-  // augments Codex's own model list instead of replacing it.
-  const subscriptionModels = ctx.subscriptionModels ?? [];
-  // Picker/profile model list: fused first, panel natives, then the preserved
-  // stock models — every id is routable through the gateway.
-  const pickerNatives = [...nativeModels, ...subscriptionModels];
   const configPath = join(home, "config.toml");
 
-  // The catalog only adds value when there are extra models to surface (other
-  // fused ensembles, natives, and/or preserved stock models), and it is built
-  // from the installed Codex's own catalog entries so it matches that
-  // version's schema. Without that template we skip it and rely on profiles.
-  const stockCatalog = readCodexModelsCache();
-  const template = stockCatalog[0];
-  const subscriptionSet = new Set(subscriptionModels);
-  const stockEntries = stockCatalog.filter((entry) => {
-    const slug = typeof entry.slug === "string" ? entry.slug : undefined;
-    return slug !== undefined && subscriptionSet.has(slug);
-  });
-  const extraModels = pickerNatives.length > 0 || fusedModels.some((id) => id !== ctx.modelLabel);
+  // Live picker mode: when the user has a Codex login (and the gateway needs
+  // no bearer token of its own), reuse it in the ephemeral home. Codex then
+  // attaches that login to every gateway request, which (a) lets it fetch the
+  // gateway's LIVE merged model catalog from `GET /v1/models` — fusion +
+  // panel + Codex's own current models — and (b) lets the gateway relay a
+  // stock-model pick verbatim to the Codex backend, exactly like plain Codex.
+  // No static `model_catalog_json` is written in this mode: writing one would
+  // switch Codex to an authoritative static catalog and disable the live
+  // fetch entirely.
+  const live = ctx.mode === "fusion" && ctx.authToken === undefined && hasCodexLogin();
+  if (live) {
+    copyFileSync(codexAuthPath(), join(home, "auth.json"));
+    ctx.log("fusion: reusing your Codex login — Codex's own models stay in the picker (served via the gateway)");
+  }
+  // Stock slugs for `[profiles.*]` (launch-time `--profile <model>` support):
+  // only when they are actually servable (login present for the relay).
+  const stockSlugs = live ? codexListedStockSlugs() : [];
+  const pickerNatives = [...nativeModels, ...stockSlugs.filter((slug) => !nativeModels.includes(slug))];
+
+  // Static catalog fallback (no login to relay with): the picker is driven by
+  // `model_catalog_json`, built from the installed Codex's own catalog entry
+  // so it matches that version's schema. Without that template we skip it and
+  // rely on profiles.
+  const template = readCodexCatalogTemplate();
+  const extraModels = nativeModels.length > 0 || fusedModels.some((id) => id !== ctx.modelLabel);
   let catalogPath: string | undefined;
-  if (extraModels && template !== undefined) {
+  if (!live && extraModels && template !== undefined) {
     catalogPath = join(home, CATALOG_FILE);
-    writeFileSync(
-      catalogPath,
-      codexModelCatalogJson(ctx.modelLabel, nativeModels, template, fusedModels, stockEntries)
-    );
+    writeFileSync(catalogPath, codexModelCatalogJson(ctx.modelLabel, nativeModels, template, fusedModels));
   }
 
   // OOTB sub-agents: one Codex role per fusion ensemble (spawn_agent delegates

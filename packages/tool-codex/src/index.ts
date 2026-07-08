@@ -10,7 +10,7 @@ import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensem
 import { codexHarness, codexHarnessCredentialSkipReason, createCodexHarness } from "./harness.js";
 import { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 
-import { codexLaunchConfigToml, codexSubscriptionModels, launchCodex } from "./launch.js";
+import { codexLaunchConfigToml, launchCodex } from "./launch.js";
 
 const LIVE_SMOKE_PROMPT =
   "Read README.md if present, then reply exactly CODEX_LIVE_SMOKE_OK. Do not modify files.";
@@ -35,10 +35,6 @@ export const codexTool: ToolIntegration = {
     ].join("\n"),
   acpAdapterId: "codex-cli",
   modes: ["fusion", "local"],
-  // Preserve Codex's own model list in fusion launches: the host registers a
-  // subscription-served gateway passthrough per stock model, so the picker is
-  // augmented (fusion + panel + stock) instead of replaced.
-  subscriptionModels: () => codexSubscriptionModels(),
   harnessKinds: ["codex"],
   panelHarnessKind: "codex",
   launch: launchCodex,
@@ -164,15 +160,27 @@ export type {
 export {
   codexAgentRoles,
   codexAgentRoleToml,
+  codexAuthPath,
+  codexCatalogEntries,
   codexLaunchConfigToml,
+  codexListedStockSlugs,
   codexModelCatalogJson,
   codexRoleDescription,
-  codexSubscriptionModels,
+  hasCodexLogin,
   isCodexConfigFailure,
   launchCodex,
   readCodexCatalogTemplate,
   readCodexModelsCache
 } from "./launch.js";
 export type { CodexAgentRole, CodexModelPreset } from "./launch.js";
+export {
+  CODEX_INSTALL_BEGIN,
+  CODEX_INSTALL_END,
+  CODEX_INSTALL_PROVIDER,
+  codexIntegrationBlock,
+  installCodexIntegration,
+  uninstallCodexIntegration
+} from "./install.js";
+export type { CodexInstallInput, CodexInstallProfile, CodexInstallResult } from "./install.js";
 export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 export type { CodexDriverConfig } from "./driver.js";

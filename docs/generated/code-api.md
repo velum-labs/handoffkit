@@ -170,6 +170,8 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 
 - `export { startGateway } from "./server.js";`
 - `export type { Gateway, GatewayOptions } from "./server.js";`
+- `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
+- `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions } from "./codex-relay.js";`
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend, PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";`
 - `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { FusionBackend } from "./fusion-backend.js";`
@@ -422,8 +424,10 @@ Codex tool integration entry point. It exposes the Codex launcher and ensemble h
 - `export const codexTool: ToolIntegration ...`
 - `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, codexMemberCatalogJson, createCodexHarness, defaultCodexRunner, memberChatBackend } from "./harness.js";`
 - `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
-- `export { codexAgentRoles, codexAgentRoleToml, codexLaunchConfigToml, codexModelCatalogJson, codexRoleDescription, codexSubscriptionModels, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate, readCodexModelsCache } from "./launch.js";`
+- `export { codexAgentRoles, codexAgentRoleToml, codexAuthPath, codexCatalogEntries, codexLaunchConfigToml, codexListedStockSlugs, codexModelCatalogJson, codexRoleDescription, hasCodexLogin, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate, readCodexModelsCache } from "./launch.js";`
 - `export type { CodexAgentRole, CodexModelPreset } from "./launch.js";`
+- `export { CODEX_INSTALL_BEGIN, CODEX_INSTALL_END, CODEX_INSTALL_PROVIDER, codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "./install.js";`
+- `export type { CodexInstallInput, CodexInstallProfile, CodexInstallResult } from "./install.js";`
 - `export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";`
 - `export type { CodexDriverConfig } from "./driver.js";`
 
@@ -458,7 +462,7 @@ Tool integration entry point. It exposes the launcher and harness integration co
 - `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, registerCleanup, reservePort, runCleanups, runCliCapture, sleep, spawnLogged, spawnTool, superviseSpawn, terminate, terminateGroup, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
 - `export type { CliCaptureOptions, CliCaptureResult, ExitInfo, LoggedChild, LoggedSpawnOptions, ReservedPort, Spawned, SuperviseSpawnOptions } from "./proc.js";`
 - `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS, trimTrailingSlashes } from "@fusionkit/runtime-utils";`
-- `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode, ToolSubscriptionModel } from "./types.js";`
+- `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
 - `export { CURSOR_BRIDGE_MODEL_NAME, DEFAULT_ENSEMBLE_NAME, FUSION_PANEL_MODEL, fusionModelId, LOCAL_MODEL_LABEL } from "./constants.js";`

@@ -25,6 +25,7 @@ import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionMarker, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
+  CodexBackendRelay,
   FusionBackend,
   installAcpAdapters,
   runAcpAgent,
@@ -35,6 +36,7 @@ import {
 import type {
   AcpRunner,
   ChatMessageLike,
+  CodexRelayOptions,
   FrontDoorRunner,
   FrontDoorRunnerResult,
   FusionGateway,
@@ -104,12 +106,13 @@ export type GatewayRunnerConfig = {
    */
   ensembles?: GatewayEnsembleConfig[];
   /**
-   * Extra passthrough-only models (e.g. the launched tool's own stock models,
-   * served via its subscription login): each registers as a vendor passthrough
-   * routed to its router endpoint (`modelEndpoints[id]`), but never joins the
-   * panel, judge candidacy, or fused routing.
+   * Codex backend relay config: keeps a Codex client's own stock models
+   * working through this gateway (live merged `/v1/models` catalog + verbatim
+   * Responses relay under the client's own ChatGPT auth). Inert for other
+   * clients; ignored when `authToken` is set (the Authorization header is then
+   * the gateway's own bearer, not a relayable ChatGPT token).
    */
-  extraPassthrough?: EnsembleModel[];
+  codexRelay?: CodexRelayOptions;
   command?: string;
   timeoutMs?: number;
   /**
@@ -593,13 +596,11 @@ export async function startFusionStepGateway(input: {
   // Expose every panel model as a native passthrough alongside the fused model,
   // so the tool's picker can switch to a vendor model (and back to fusion). Each
   // routes to its `fusionkit serve` router endpoint, which already calls the
-  // real provider with the reused subscription/API credentials. Extra
-  // passthrough-only models (a launched tool's preserved stock catalog) ride
-  // the same mechanism without ever joining the panel.
+  // real provider with the reused subscription/API credentials.
   const passthrough: PassthroughModel[] =
     config.modelEndpoints === undefined
       ? []
-      : [...config.models, ...(config.extraPassthrough ?? [])].flatMap((model) => {
+      : config.models.flatMap((model) => {
           const endpointUrl = config.modelEndpoints?.[model.id];
           return endpointUrl === undefined
             ? []
@@ -677,7 +678,10 @@ export async function startFusionStepGateway(input: {
     backend,
     host: input.host,
     port: input.port,
-    ...(input.authToken !== undefined ? { authToken: input.authToken } : {})
+    ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
+    ...(config.codexRelay !== undefined
+      ? { codexRelay: new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay }) }
+      : {})
   });
   selfGatewayUrl = gateway.url();
   return gateway;

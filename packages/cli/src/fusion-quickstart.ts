@@ -27,11 +27,12 @@ import {
   fusionModelId,
   registerCleanup
 } from "@fusionkit/tools";
-import type { ToolIntegration, ToolLaunchContext } from "@fusionkit/tools";
+import type { ToolLaunchContext } from "@fusionkit/tools";
 import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
 import { isLookaheadK } from "@fusionkit/protocol";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
-import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+import type { CodexRelayOptions, SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+import { codexCatalogEntries, readCodexModelsCache } from "@fusionkit/tool-codex";
 import { cursorInstructions } from "@fusionkit/tool-cursor";
 
 import {
@@ -247,32 +248,29 @@ export function styledPreambleLines(lines: readonly string[]): string[] {
 }
 
 /**
- * The launched tool's own stock models (see `ToolIntegration.subscriptionModels`),
- * lowered to passthrough-only router endpoints served via the tool's
- * subscription login. Preserving them keeps the tool's model picker intact
- * when it launches behind fusion: the fused models come first, but nothing the
- * tool normally offers disappears. Ids that collide with a fused ensemble id
- * or a panel member (already served) are skipped, as are pre-running-endpoint
- * runs (no managed router to host the extras).
+ * The gateway's Codex backend relay config: whatever Codex client points at
+ * this gateway with its own ChatGPT login (the `fusionkit codex` launcher's
+ * session, or a `codex --profile fusion-*` session after `fusionkit install
+ * codex`) keeps its full stock model list — `GET /v1/models` merges the
+ * client's live stock catalog behind the fusion/panel entries, and a
+ * stock-model pick is relayed verbatim to the Codex backend under the
+ * client's own auth. Inert for every other client.
  */
-export function subscriptionPassthroughSpecs(
-  integration: ToolIntegration | undefined,
+export function codexRelayConfig(
+  modelLabel: string,
   ensembles: readonly EnsembleRunSpec[],
-  unionModels: readonly PanelModelSpec[],
-  options: Pick<RunFusionOptions, "endpoints">
-): PanelModelSpec[] {
-  if (integration?.subscriptionModels === undefined || options.endpoints !== undefined) return [];
-  const taken = new Set<string>([
-    ...ensembles.map((ensemble) => fusionModelId(ensemble.name)),
-    ...unionModels.flatMap((spec) => [spec.id, spec.model])
-  ]);
-  const specs: PanelModelSpec[] = [];
-  for (const entry of integration.subscriptionModels()) {
-    if (entry.model.length === 0 || taken.has(entry.model)) continue;
-    taken.add(entry.model);
-    specs.push({ id: entry.model, model: entry.model, auth: entry.auth });
-  }
-  return specs;
+  unionModels: readonly PanelModelSpec[]
+): CodexRelayOptions {
+  const fusedIds = ensembles.map((ensemble) => fusionModelId(ensemble.name));
+  const nativeModels = [...new Set(unionModels.map((spec) => spec.model))];
+  // Test/self-hosted hook, mirroring the Python engine's
+  // FUSIONKIT_CODEX_RESPONSES_BASE_URL override.
+  const backendUrl = process.env.FUSIONKIT_CODEX_BACKEND_URL;
+  return {
+    ...(backendUrl !== undefined && backendUrl.length > 0 ? { backendUrl } : {}),
+    catalog: (template, stock) => codexCatalogEntries(modelLabel, nativeModels, template, fusedIds, stock),
+    fallbackStock: () => readCodexModelsCache()
+  };
 }
 
 export async function runFusion(
@@ -416,11 +414,8 @@ export async function runFusion(
   const models = selected.models;
   const unionModels = unionPanelSpecs(ensembles);
 
-  // Resolved up front (not just at launch time): the launched tool's own stock
-  // models join the stack below as subscription-served passthroughs, so its
-  // model picker is augmented with fusion instead of replaced by it.
+  // Resolved up front so an unknown tool fails before anything boots.
   const integration = tool === "serve" ? undefined : toolRegistry.get(tool);
-  const subscriptionSpecs = subscriptionPassthroughSpecs(integration, ensembles, unionModels, options);
 
   // Cross-platform gating (WS8): a local MLX panel only runs on Apple Silicon.
   // Fail early with a pointer at the cross-platform cloud path instead of
@@ -725,7 +720,7 @@ export async function runFusion(
       ...(panelHarness !== undefined ? { harness: panelHarness } : {}),
       ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
-      ...(subscriptionSpecs.length > 0 ? { extraPassthroughSpecs: subscriptionSpecs } : {}),
+      codexRelay: codexRelayConfig(modelLabel, ensembles, unionModels),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
       ...(stackPrompts !== undefined ? { prompts: stackPrompts } : {}),
       ...(stackJudgeModel !== undefined ? { judgeModel: stackJudgeModel } : {}),
@@ -1014,12 +1009,6 @@ export async function runFusion(
       })),
       ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
       nativeModels: [...new Set(unionModels.map((spec) => spec.model))],
-      // The tool's own stock models the gateway registered as subscription
-      // passthroughs — the launcher keeps them in its picker so the tool's
-      // normal model list is augmented, never replaced.
-      ...(subscriptionSpecs.length > 0
-        ? { subscriptionModels: subscriptionSpecs.map((spec) => spec.model) }
-        : {}),
       toolArgs,
       repo,
       ...(options.ide === true ? { ide: true } : {}),
