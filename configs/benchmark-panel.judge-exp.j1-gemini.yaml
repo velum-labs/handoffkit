@@ -10,6 +10,7 @@ endpoints:
     model: deepseek/deepseek-v4-pro
     base_url: https://openrouter.ai/api
     api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
     capabilities:
       structured_output: true
       tool_calls: true
@@ -24,6 +25,7 @@ endpoints:
     model: xiaomi/mimo-v2.5-pro
     base_url: https://openrouter.ai/api
     api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
     capabilities:
       structured_output: true
       tool_calls: true
@@ -38,6 +40,7 @@ endpoints:
     model: google/gemini-3.1-pro-preview
     base_url: https://openrouter.ai/api
     api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
     capabilities:
       structured_output: true
       tool_calls: true

@@ -1,49 +1,46 @@
 # Phase C status — 2026-q3 cycle
 
-**Updated:** 2026-07-07  
+**Updated:** 2026-07-08  
 **Spend cap:** $75 (preregistered)  
-**Manifest:** `labruns/2026-q3/manifest-algorithmic.json` (60 tasks, committed before API calls)
+**Manifest:** `labruns/2026-q3/manifest-algorithmic.json` (60 tasks)
 
-## Current focus: judge experiment
+## Judge experiment
 
-User-approved 3×2 matrix (see `prereg-judge-experiment.md`):
-
-| ID | Panel | Judge | Config |
+| ID | Panel | Judge | Status |
 |----|-------|-------|--------|
-| j1-g | dsv4pro, mimo, gemini | gemini | `benchmark-panel.judge-exp.j1-gemini.yaml` |
-| j1-m | dsv4pro, mimo, gemini | mimo | `benchmark-panel.judge-exp.j1-mimo.yaml` |
-| j2-g | minimax, mimo, gemini | gemini | `benchmark-panel.judge-exp.j2-gemini.yaml` |
-| j2-m | minimax, mimo, gemini | mimo | `benchmark-panel.judge-exp.j2-mimo.yaml` |
-| j3-g | kimi, mimo, gemini | gemini | `benchmark-panel.judge-exp.j3-gemini.yaml` |
-| j3-m | kimi, mimo, gemini | mimo | `benchmark-panel.judge-exp.j3-mimo.yaml` |
+| j1-g | dsv4pro, mimo, gemini | gemini | **paused** (1/60 in ~4h; hard tasks ~3.5h each; hung `arc196_c`) |
+| j1-m | dsv4pro, mimo, gemini | mimo | **running** (parallel) |
+| j2-g | minimax, mimo, gemini | gemini | pending (after MiMo trio) |
+| j2-m | minimax, mimo, gemini | mimo | **running** (parallel) |
+| j3-g | kimi, mimo, gemini | gemini | pending |
+| j3-m | kimi, mimo, gemini | mimo | **running** (parallel) |
 
-Gemini OpenRouter slug: `google/gemini-3.1-pro-preview`.
+### Changes (2026-07-08)
 
-## Panel runs (judge matrix)
+- Killed stuck **j1-g** sequential run.
+- Added **`timeout_s: 600`** on all judge-exp endpoints (was 120s default; hung for hours).
+- Restarted **MiMo-judge trio in parallel**: `run-judge-matrix --mimo-only --parallel`
+- tmux session: `phase-c-judge-mimo`
+- Log: `labdata/runs/2026-q3/phase-c/judge-mimo-parallel.log`
 
-| Hypothesis | Status | Output |
-|------------|--------|--------|
-| j1-g | **in progress** | `labdata/runs/2026-q3/phase-c/j1-g-20260707T212305Z.jsonl` |
-| j1-m | pending | — |
-| j2-g | pending | — |
-| j2-m | pending | — |
-| j3-g | pending | — |
-| j3-m | pending | — |
+### j1-g partial (before pause)
 
-Runner log: `labdata/runs/2026-q3/phase-c/judge-matrix-run.log` (tmux session `phase-c-judge-matrix`).
+5/60 cached; 1 pass (`abc400_e`). Hard `arc196_*` tasks: ~3.5h each, empty panel code, prose/LaTeX fused output.
 
-Legacy H1 backbone completed earlier: 23/60 fused pass, ledger ~$0.53.
+### Legacy H1
+
+Complete: **23/60** fused pass (38.3%); ledger ~$0.53.
 
 ## Commands
 
 ```bash
-export PATH="$HOME/.nvm/versions/node/v22.22.2/bin:$PATH"
-uv run python labruns/2026-q3/scripts/smoke_panels.py \
-  configs/benchmark-panel.judge-exp.j1-gemini.yaml
+# MiMo trio (current)
 LCB_CONCURRENCY=2 uv run --with 'datasets<4' \
-  python labruns/2026-q3/scripts/run_phase_c.py preflight --hypothesis j1-g
+  python labruns/2026-q3/scripts/run_phase_c.py run-judge-matrix --mimo-only --parallel
+
+# Gemini trio later (with timeouts)
 LCB_CONCURRENCY=2 uv run --with 'datasets<4' \
-  python labruns/2026-q3/scripts/run_phase_c.py run-judge-matrix
+  python labruns/2026-q3/scripts/run_phase_c.py run-judge-matrix --gemini-only --parallel
 ```
 
 Spend ledger: `labdata/runs/2026-q3/phase-c/spend_ledger.jsonl`

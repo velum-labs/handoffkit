@@ -45,6 +45,8 @@ JUDGE_EXP_PANELS: dict[str, str] = {
 }
 PANELS: dict[str, str] = {**LEGACY_PANELS, **JUDGE_EXP_PANELS}
 JUDGE_MATRIX_ORDER = ("j1-g", "j1-m", "j2-g", "j2-m", "j3-g", "j3-m")
+JUDGE_MIMO_ORDER = ("j1-m", "j2-m", "j3-m")
+JUDGE_GEMINI_ORDER = ("j1-g", "j2-g", "j3-g")
 SPEND_CAP_USD = 75.0
 PREFLIGHT_TIMEOUT_S = 7200.0
 PANEL_TIMEOUT_S = 21600.0
@@ -291,14 +293,28 @@ def run_all() -> None:
         run_panel(hypothesis)
 
 
-def run_judge_matrix(*, parallel: bool = False) -> None:
-    """Run the six preregistered judge-swap panels on the frozen manifest."""
+def run_judge_matrix(
+    *,
+    parallel: bool = False,
+    mimo_only: bool = False,
+    gemini_only: bool = False,
+) -> None:
+    """Run judge-swap panels on the frozen manifest."""
+    if mimo_only and gemini_only:
+        raise SystemExit("choose at most one of --mimo-only / --gemini-only")
+    if mimo_only:
+        order = JUDGE_MIMO_ORDER
+    elif gemini_only:
+        order = JUDGE_GEMINI_ORDER
+    else:
+        order = JUDGE_MATRIX_ORDER
+
     if parallel:
         import concurrent.futures
 
         pending = [
             hypothesis
-            for hypothesis in JUDGE_MATRIX_ORDER
+            for hypothesis in order
             if _ledger_total() < SPEND_CAP_USD
         ]
         if not pending:
@@ -314,7 +330,7 @@ def run_judge_matrix(*, parallel: bool = False) -> None:
                     print(f"{hypothesis} failed: {exc}", file=sys.stderr)
         return
 
-    for hypothesis in JUDGE_MATRIX_ORDER:
+    for hypothesis in order:
         if _ledger_total() >= SPEND_CAP_USD:
             print(f"stopping before {hypothesis}: spend cap reached", file=sys.stderr)
             break
@@ -338,6 +354,16 @@ def main() -> None:
         action="store_true",
         help="run all pending judge panels concurrently (separate cache signatures)",
     )
+    judge.add_argument(
+        "--mimo-only",
+        action="store_true",
+        help="run only MiMo-judge panels (j1-m, j2-m, j3-m)",
+    )
+    judge.add_argument(
+        "--gemini-only",
+        action="store_true",
+        help="run only Gemini-judge panels (j1-g, j2-g, j3-g)",
+    )
     args = parser.parse_args()
 
     if args.command == "preflight":
@@ -347,7 +373,11 @@ def main() -> None:
     elif args.command == "run-all":
         run_all()
     elif args.command == "run-judge-matrix":
-        run_judge_matrix(parallel=args.parallel)
+        run_judge_matrix(
+            parallel=args.parallel,
+            mimo_only=args.mimo_only,
+            gemini_only=args.gemini_only,
+        )
 
 
 if __name__ == "__main__":
