@@ -1,0 +1,12 @@
+{
+  "astropy__astropy-14096": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "astropy__astropy-14096",
+    "model_patch": "diff --git a/astropy/coordinates/sky_coordinate.py b/astropy/coordinates/sky_coordinate.py\nindex ab475f7d0..1e5a47989 100644\n--- a/astropy/coordinates/sky_coordinate.py\n+++ b/astropy/coordinates/sky_coordinate.py\n@@ -894,6 +894,16 @@ class SkyCoord(ShapedLikeNDArray):\n             if frame_cls is not None and self.frame.is_transformable_to(frame_cls):\n                 return self.transform_to(attr)\n \n+        # Check if this attribute is a property on the class\n+        # If it is, then we're likely being called as a fallback from a property error\n+        # In this case, we should not mask the original error from inside the property\n+        if isinstance(getattr(type(self), attr, None), property):\n+            # This attribute exists as a property, so the error likely comes from\n+            # inside the property's getter method. We raise a more informative error.\n+            raise AttributeError(\n+                f\"'{self.__class__.__name__}' object raised AttributeError inside property '{attr}'\"\n+            )\n+\n         # Fail\n         raise AttributeError(\n             f\"'{self.__class__.__name__}' object has no attribute '{attr}'\"\n"
+  },
+  "django__django-11603": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "django__django-11603",
+    "model_patch": "diff --git a/django/db/models/aggregates.py b/django/db/models/aggregates.py\nindex da4ff928aa..3effaa7533 100644\n--- a/django/db/models/aggregates.py\n+++ b/django/db/models/aggregates.py\n@@ -99,6 +99,7 @@ class Aggregate(Func):\n class Avg(FixDurationInputMixin, NumericOutputFieldMixin, Aggregate):\n     function = 'AVG'\n     name = 'Avg'\n+    allow_distinct = True\n \n \n class Count(Aggregate):\n@@ -121,11 +122,13 @@ class Count(Aggregate):\n class Max(Aggregate):\n     function = 'MAX'\n     name = 'Max'\n+    allow_distinct = True\n \n \n class Min(Aggregate):\n     function = 'MIN'\n     name = 'Min'\n+    allow_distinct = True\n \n \n class StdDev(NumericOutputFieldMixin, Aggregate):\n@@ -142,6 +145,7 @@ class StdDev(NumericOutputFieldMixin, Aggregate):\n class Sum(FixDurationInputMixin, Aggregate):\n     function = 'SUM'\n     name = 'Sum'\n+    allow_distinct = True\n \n \n class Variance(NumericOutputFieldMixin, Aggregate):\n"
+  }
+}
