@@ -18,5 +18,10 @@
     "model_name_or_path": "openai/fusionkit/panel",
     "instance_id": "django__django-11880",
     "model_patch": "diff --git a/django/forms/fields.py b/django/forms/fields.py\nindex 03cd8af8d7..18007accab 100644\n--- a/django/forms/fields.py\n+++ b/django/forms/fields.py\n@@ -199,6 +199,7 @@ class Field:\n         result = copy.copy(self)\n         memo[id(self)] = result\n         result.widget = copy.deepcopy(self.widget, memo)\n+        result.error_messages = copy.deepcopy(self.error_messages, memo)\n         result.validators = self.validators[:]\n         return result\n \n"
+  },
+  "django__django-12325": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "django__django-12325",
+    "model_patch": "diff --git a/django/db/models/base.py b/django/db/models/base.py\nindex 8ea6c05ef9..6aea61ea4e 100644\n--- a/django/db/models/base.py\n+++ b/django/db/models/base.py\n@@ -204,7 +204,15 @@ class ModelBase(type):\n             for field in base._meta.local_fields:\n                 if isinstance(field, OneToOneField):\n                     related = resolve_relation(new_class, field.remote_field.model)\n-                    parent_links[make_model_tuple(related)] = field\n+                    # Only set as parent link if it's explicitly marked as such, or if there's no existing parent link\n+                    # (but prefer explicit parent_link=True over implicit ones)\n+                    existing_field = parent_links.get(make_model_tuple(related))\n+                    if field.remote_field.parent_link:\n+                        # If we found a field with parent_link=True, use it\n+                        parent_links[make_model_tuple(related)] = field\n+                    elif existing_field is None:\n+                        # If no field has been set yet for this parent, use this one\n+                        parent_links[make_model_tuple(related)] = field\n \n         # Track fields inherited from base models.\n         inherited_attributes = set()\n"
   }
 }
