@@ -1,21 +1,21 @@
 /**
- * Typed span helpers over the fusion semantic conventions.
+ * Typed span/event helpers over the fusion semantic conventions.
  *
  * Two shapes cover every emit site:
  *
  * - **Unit spans** (`startFusionSpan`) are real units of work — a turn, a
  *   candidate, a judge phase, a model call. They carry terminal summary
- *   attributes and end when the work ends.
- * - **Markers** (`emitFusionMarker`) are zero-duration spans for live
- *   point-in-time signals — trajectory steps, judge thinking, cost beats.
- *   Because OTLP only exports ended spans, markers are what keep the scope
- *   dashboard live while a unit span is still open.
+ *   attributes and end when the work ends. They ride the traces signal.
+ * - **Events** (`emitFusionEvent`) are OTel events (log records with an
+ *   `event_name`) for live point-in-time signals — trajectory steps, judge
+ *   thinking, cost beats. They export immediately on the logs signal, which
+ *   is what keeps the scope dashboard live while a unit span is still open.
  *
  * Trace identity crosses boundaries as a {@link FusionTraceCarrier}: the W3C
  * `traceparent`/`baggage` pair as plain data. The same carrier threads
  * through in-process values (PanelRunInput), HTTP headers, and child-process
  * environments (`TRACEPARENT`/`BAGGAGE`), so there is exactly one propagation
- * shape everywhere.
+ * shape everywhere. Events emitted with a carrier inherit its trace/span ids.
  */
 import { randomBytes } from "node:crypto";
 
@@ -28,6 +28,8 @@ import {
   TraceFlags
 } from "@opentelemetry/api";
 import type { Attributes, AttributeValue, Context, Span } from "@opentelemetry/api";
+import { logs, SeverityNumber } from "@opentelemetry/api-logs";
+import type { LogAttributes } from "@opentelemetry/api-logs";
 import { FUSION_SCOPES } from "@fusionkit/protocol";
 
 export type FusionScope = keyof typeof FUSION_SCOPES;
@@ -43,6 +45,10 @@ export type FusionTraceCarrier = {
 
 function tracerFor(scope: FusionScope) {
   return trace.getTracer(FUSION_SCOPES[scope]);
+}
+
+function loggerFor(scope: FusionScope) {
+  return logs.getLogger(FUSION_SCOPES[scope]);
 }
 
 /** 32-hex OTel trace id. */
@@ -230,23 +236,25 @@ function compactAttributes(attributes: Record<string, AttributeValue | undefined
 export type FusionAttributes = Record<string, AttributeValue | undefined>;
 
 /**
- * Emit an instant marker span: started and ended at the same timestamp,
- * parented onto `carrier`. This is the live-signal primitive. A no-op when
- * there is no carrier — a signal with no trace identity has no consumer.
+ * Emit a fusion event: an OTel log record carrying `event_name`, the fusion
+ * attributes, and the trace/span ids of `carrier`. This is the live-signal
+ * primitive — events export immediately, independent of any open span. A
+ * no-op when there is no carrier — a signal with no trace identity has no
+ * consumer.
  */
-export function emitFusionMarker(
+export function emitFusionEvent(
   scope: FusionScope,
   name: string,
   carrier: FusionTraceCarrier | undefined,
   attributes: FusionAttributes
 ): void {
   if (carrier === undefined) return;
-  const span = tracerFor(scope).startSpan(
-    name,
-    { kind: SpanKind.INTERNAL, attributes: compactAttributes(attributes) },
-    contextOf(carrier)
-  );
-  span.end();
+  loggerFor(scope).emit({
+    eventName: name,
+    severityNumber: SeverityNumber.INFO,
+    attributes: compactAttributes(attributes) as LogAttributes,
+    context: contextOf(carrier)
+  });
 }
 
 /** A live unit-of-work span with its own carrier for parenting children. */
@@ -254,11 +262,11 @@ export type FusionSpan = {
   readonly span: Span;
   readonly traceId: string;
   readonly spanId: string;
-  /** Carrier that parents children (markers, child spans, HTTP calls) onto this span. */
+  /** Carrier that parents children (events, child spans, HTTP calls) onto this span. */
   readonly carrier: FusionTraceCarrier;
   setAttributes(attributes: FusionAttributes): void;
-  /** Emit a marker parented onto this span. */
-  marker(scope: FusionScope, name: string, attributes: FusionAttributes): void;
+  /** Emit a fusion event correlated to this span. */
+  event(scope: FusionScope, name: string, attributes: FusionAttributes): void;
   /** End the span with a status. `error` also records an exception message. */
   end(input?: { status?: "succeeded" | "failed" | "skipped"; error?: string; attributes?: FusionAttributes }): void;
 };
@@ -288,8 +296,8 @@ export function startFusionSpan(
     setAttributes(attrs: FusionAttributes): void {
       span.setAttributes(compactAttributes(attrs));
     },
-    marker(markerScope: FusionScope, markerName: string, attrs: FusionAttributes): void {
-      emitFusionMarker(markerScope, markerName, ownCarrier, attrs);
+    event(eventScope: FusionScope, eventName: string, attrs: FusionAttributes): void {
+      emitFusionEvent(eventScope, eventName, ownCarrier, attrs);
     },
     end(input): void {
       if (ended) return;

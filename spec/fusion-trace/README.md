@@ -1,18 +1,19 @@
 # fusion-trace semantic conventions
 
 The fusion stack traces with **OpenTelemetry**. There is no custom wire format:
-components emit real OTel spans over OTLP/HTTP, propagate context with W3C
-`traceparent`/`baggage`, and are configured with standard `OTEL_*` environment
-variables. What this directory owns is the **semantic conventions** — the
-vocabulary those spans use.
+components emit real OTel spans over OTLP/HTTP traces and real OTel events
+(log records with an `event_name`) over OTLP/HTTP logs, propagate context with
+W3C `traceparent`/`baggage`, and are configured with standard `OTEL_*`
+environment variables. What this directory owns is the **semantic
+conventions** — the vocabulary those signals use.
 
 [`registry.json`](registry.json) is the single source of truth for:
 
 - **Span names** (`fusion.turn`, `fusion.candidate`, `fusion.judge`, GenAI
-  `chat` spans, …) and whether each is a real unit-of-work span or an instant
-  **marker** (a zero-duration span used for live point-in-time signals such as
-  trajectory steps and judge thinking, so dashboards update before the
-  enclosing span ends).
+  `chat` spans, …) for real units of work, and **event names**
+  (`fusion.candidate.step`, `fusion.judge.thinking`, …) for live
+  point-in-time signals. Events ride the OTel logs signal and export
+  immediately, so dashboards update before the enclosing span ends.
 - **Attribute keys** and their types. Where the OTel GenAI semantic
   conventions already define an attribute (`gen_ai.provider.name`,
   `gen_ai.request.model`, `gen_ai.usage.*`), the registry uses it instead of a
@@ -46,18 +47,23 @@ vocabulary those spans use.
   sessions stay correlated without holding a long-lived span open.
 - **Units of work** (turn, candidate, judge, model call, passthrough, run) are
   real spans carrying the terminal summary attributes.
-- **Live signals** are markers: instant spans that export immediately, keeping
-  the scope dashboard live while a unit is still running.
+- **Live signals** are OTel events: log records carrying an `event_name`,
+  fusion attributes, and the trace/span ids of their owning unit. They export
+  immediately on the logs signal, keeping the scope dashboard live while a
+  unit is still running — without polluting trace waterfalls with
+  zero-duration spans.
 - Context crosses process boundaries via W3C `traceparent` (trace identity)
   and `baggage` (fusion correlation context: `fusion.candidate.id`,
   `fusion.trajectory.id`, `fusion.turn`).
 
 ## Sinks
 
-- `apps/scope` ingests OTLP/HTTP (JSON or protobuf) at `POST /api/ingest` and
-  stores spans natively in SQLite.
-- Any OTel backend works via `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` — e.g.
-  PostHog distributed tracing (`https://us.i.posthog.com/i/v1/traces` with an
-  `Authorization=Bearer <token>` header) or a local Jaeger.
+- `apps/scope` ingests OTLP/HTTP JSON at `POST /api/ingest/v1/traces` (spans)
+  and `POST /api/ingest/v1/logs` (events) and stores both natively in SQLite.
+- Any OTel backend works via `OTEL_EXPORTER_OTLP_ENDPOINT` (or the
+  signal-specific `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` /
+  `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`) — e.g. PostHog distributed tracing
+  (`https://us.i.posthog.com/i/v1/traces` with an `Authorization=Bearer
+  <token>` header) or a local Jaeger.
 - The CLI's opt-in product telemetry derives PostHog events from finished
   spans, copying only `exportable`-tagged attributes.

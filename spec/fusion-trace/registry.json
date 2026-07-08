@@ -1,7 +1,7 @@
 {
   "name": "fusion-trace-conventions",
-  "version": "1.0.0",
-  "description": "Semantic conventions for the fusion stack's OpenTelemetry traces. Spans named here are the only spans fusion components emit; attributes named here are the only fusion attributes they carry. Where the OTel GenAI semantic conventions define an attribute (gen_ai.*), it is used instead of a fusion.* invention so model-call spans render natively in GenAI-aware backends (e.g. PostHog LLM analytics). Sensitivity classes drive redaction at sink boundaries: 'local' attributes never leave the machine through the product-telemetry pipeline; 'exportable' attributes may.",
+  "version": "2.0.0",
+  "description": "Semantic conventions for the fusion stack's OpenTelemetry signals. Unit-of-work spans (kind 'span') ride the traces signal; live point-in-time events (kind 'event') ride the logs signal as OTel events (log records with an event_name and trace/span correlation). Names here are the only names fusion components emit; attributes named here are the only fusion attributes they carry. Where the OTel GenAI semantic conventions define an attribute (gen_ai.*), it is used instead of a fusion.* invention so model-call spans render natively in GenAI-aware backends (e.g. PostHog LLM analytics). Sensitivity classes drive redaction at sink boundaries: 'local' attributes never leave the machine through the product-telemetry pipeline; 'exportable' attributes may.",
   "components": {
     "gateway": "fusionkit.gateway",
     "ensemble": "fusionkit.ensemble",
@@ -130,75 +130,75 @@
       "attributes": ["fusion.dialect", "gen_ai.request.model", "fusion.model.id", "fusion.endpoint_id", "fusion.status", "http.response.status_code"]
     },
     "fusion.turn.info": {
-      "kind": "marker",
+      "kind": "event",
       "component": "gateway",
-      "description": "Instant marker at run/turn start carrying the environment snapshot and prompt preview, so dashboards can show the unit live before its span ends.",
+      "description": "Event at run/turn start carrying the environment snapshot and prompt preview, so dashboards can show the unit live before its span ends.",
       "attributes": ["fusion.dialect", "fusion.turn", "fusion.prompt_preview", "fusion.environment", "fusion.repo"]
     },
     "fusion.candidate.started": {
-      "kind": "marker",
+      "kind": "event",
       "component": "panel-model",
-      "description": "Instant marker at candidate start (live roster signal).",
+      "description": "Event at candidate start (live roster signal).",
       "attributes": ["fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "gen_ai.request.model", "fusion.turn", "fusion.branch_name", "fusion.worktree_path"]
     },
     "fusion.candidate.step": {
-      "kind": "marker",
+      "kind": "event",
       "component": "panel-model",
-      "description": "Instant marker for one trajectory step, streamed live as the candidate works.",
+      "description": "Event for one trajectory step, streamed live as the candidate works.",
       "attributes": ["fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.turn", "fusion.step", "fusion.step.index", "fusion.step.type"]
     },
     "fusion.model_call.started": {
-      "kind": "marker",
+      "kind": "event",
       "component": "panel-model",
-      "description": "Instant marker at model-call start carrying the prompts (live signal; terminal facts land on the chat span).",
+      "description": "Event at model-call start carrying the prompts (live signal; terminal facts land on the chat span).",
       "attributes": ["gen_ai.provider.name", "gen_ai.request.model", "fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.turn", "fusion.prompt", "fusion.system_prompt", "fusion.message_count", "fusion.tool_count"]
     },
     "fusion.judge.request": {
-      "kind": "marker",
+      "kind": "event",
       "component": "judge",
-      "description": "Instant marker when the judge is invoked, carrying the full judge input (live 'judging' signal).",
+      "description": "Event when the judge is invoked, carrying the full judge input (live 'judging' signal).",
       "attributes": ["fusion.judge.model", "fusion.turn", "fusion.messages", "fusion.trajectories", "fusion.tools", "fusion.trajectory_ids"]
     },
     "fusion.judge.thinking": {
-      "kind": "marker",
+      "kind": "event",
       "component": "judge",
-      "description": "Instant marker for the judge's raw analysis or an intermediate tool-calling step.",
+      "description": "Event carrying the judge's raw analysis or an intermediate tool-calling step.",
       "attributes": ["fusion.turn", "fusion.fusion_unit", "fusion.raw_analysis", "fusion.content", "fusion.tool_calls", "fusion.terminal", "fusion.judge.degraded", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "fusion.error"]
     },
     "fusion.judge.scored": {
-      "kind": "marker",
+      "kind": "event",
       "component": "judge",
-      "description": "Instant marker for the judge's structured analysis and per-candidate scoring.",
+      "description": "Event carrying the judge's structured analysis and per-candidate scoring.",
       "attributes": ["fusion.turn", "fusion.fusion_unit", "fusion.analysis", "fusion.metrics", "fusion.input_ids", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"]
     },
     "fusion.judge.synthesis": {
-      "kind": "marker",
+      "kind": "event",
       "component": "judge",
-      "description": "Instant marker for the synthesizer's raw output.",
+      "description": "Event carrying the synthesizer's raw output.",
       "attributes": ["fusion.turn", "fusion.raw_output", "fusion.synthesis_empty", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"]
     },
     "fusion.cost": {
-      "kind": "marker",
+      "kind": "event",
       "component": "gateway",
-      "description": "Instant marker for one metered cost entry.",
+      "description": "Event for one metered cost entry.",
       "attributes": ["fusion.session_id", "fusion.turn", "fusion.cost.stage", "fusion.cost.model", "fusion.usage", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "fusion.cost.turn_usd", "fusion.cost.provider_usd", "fusion.cost.local_compute_usd", "fusion.cost.session_total_usd", "fusion.cost.unknown", "fusion.cost.unknown_usage"]
     },
     "fusion.narration": {
-      "kind": "marker",
+      "kind": "event",
       "component": "gateway",
-      "description": "Instant marker mirroring one narration beat into the trace stream.",
+      "description": "Event mirroring one narration beat into the trace stream.",
       "attributes": ["fusion.turn", "fusion.headline", "fusion.prose"]
     },
     "fusion.tool.execution": {
-      "kind": "marker",
+      "kind": "event",
       "component": "ensemble",
-      "description": "Instant marker for one tool-execution-record outcome.",
+      "description": "Event for one tool-execution-record outcome.",
       "attributes": ["fusion.candidate.id", "fusion.turn", "fusion.execution_id", "fusion.plan_id", "fusion.status", "fusion.output_hash", "fusion.tool_call_count"]
     },
     "fusion.cursor.route": {
-      "kind": "marker",
+      "kind": "event",
       "component": "cursor-bridge",
-      "description": "Instant marker for a Cursor bridge route decision (emitted by cursorkit, registered here so consumers know the name).",
+      "description": "Event for a Cursor bridge route decision (emitted by cursorkit, registered here so consumers know the name).",
       "attributes": ["fusion.turn"]
     }
   }

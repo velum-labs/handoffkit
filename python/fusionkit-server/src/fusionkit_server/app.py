@@ -65,7 +65,7 @@ from fusionkit_core.types import (
     ToolCall,
     Usage,
 )
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from fusionkit_server.cursor_endpoint import translate_cursor_request
 
@@ -95,12 +95,21 @@ class FusionRequest(BaseModel):
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
+    # OpenAI's modern spelling of `max_tokens` (required by reasoning models);
+    # the Node gateway adapters emit it. Folded into `max_tokens` below.
+    max_completion_tokens: int | None = None
     stream: bool = False
     # Forwarded only on the per-model passthrough path (when `model` names a
     # configured endpoint); the fusion path ignores them.
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
     fusion: FusionOptions = Field(default_factory=FusionOptions)
+
+    @model_validator(mode="after")
+    def _fold_max_completion_tokens(self) -> FusionRequest:
+        if self.max_tokens is None and self.max_completion_tokens is not None:
+            self.max_tokens = self.max_completion_tokens
+        return self
 
 
 class TrajectoryItemInput(BaseModel):

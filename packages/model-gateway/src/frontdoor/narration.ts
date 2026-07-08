@@ -26,16 +26,26 @@
 
 import { ATTR, isProposalK } from "@fusionkit/protocol";
 import {
+  addFusionEventListener,
   addSpanListener,
   attrJson,
   attrNum,
   attrStr,
-  emitFusionMarker,
+  emitFusionEvent,
+  eventNameOf,
+  eventTimeMs,
+  eventTraceId,
+  removeFusionEventListener,
   removeSpanListener,
   spanEndMs,
   spanTraceId
 } from "@fusionkit/tracing";
-import type { FusionTraceCarrier, ReadableSpan } from "@fusionkit/tracing";
+import type {
+  AttributeSource,
+  FusionTraceCarrier,
+  ReadableFusionEvent,
+  ReadableSpan
+} from "@fusionkit/tracing";
 import type { RuntimeEvent } from "@fusionkit/kernel";
 
 /** A narration delta for the client stream (serialized as `delta.reasoning_content`). */
@@ -598,13 +608,13 @@ const DEFAULT_WRITER_TIMEOUT_MS = 400;
 /** Length cap for a writer-authored comparison sentence (longer than a gist). */
 const COMPARISON_MAX_LENGTH = 160;
 
-function candidateLabel(span: ReadableSpan): string | undefined {
-  return attrStr(span, ATTR.FUSION_MODEL_ID) ?? attrStr(span, ATTR.FUSION_CANDIDATE_ID);
+function candidateLabel(source: AttributeSource): string | undefined {
+  return attrStr(source, ATTR.FUSION_MODEL_ID) ?? attrStr(source, ATTR.FUSION_CANDIDATE_ID);
 }
 
-function rosterOf(span: ReadableSpan): Array<{ id: string; model?: string }> {
+function rosterOf(source: AttributeSource): Array<{ id: string; model?: string }> {
   const environment = attrJson<{ models?: Array<{ id?: unknown; model?: unknown }> }>(
-    span,
+    source,
     ATTR.FUSION_ENVIRONMENT
   );
   const models = Array.isArray(environment?.models) ? environment.models : [];
@@ -616,8 +626,8 @@ function rosterOf(span: ReadableSpan): Array<{ id: string; model?: string }> {
     }));
 }
 
-function judgeCandidatesOf(span: ReadableSpan): JudgeCandidate[] {
-  const parsed = attrJson<unknown[]>(span, ATTR.FUSION_TRAJECTORIES);
+function judgeCandidatesOf(source: AttributeSource): JudgeCandidate[] {
+  const parsed = attrJson<unknown[]>(source, ATTR.FUSION_TRAJECTORIES);
   const wires = Array.isArray(parsed) ? parsed : [];
   return wires
     .filter((wire): wire is Record<string, unknown> => wire !== null && typeof wire === "object")
@@ -642,8 +652,8 @@ function judgeCandidatesOf(span: ReadableSpan): JudgeCandidate[] {
 }
 
 /** Mine a candidate span's `fusion.proposed_calls` attribute into proposed calls. */
-function proposedCallsOf(span: ReadableSpan): ProposedCall[] {
-  const parsed = attrJson<unknown[]>(span, ATTR.FUSION_PROPOSED_CALLS);
+function proposedCallsOf(source: AttributeSource): ProposedCall[] {
+  const parsed = attrJson<unknown[]>(source, ATTR.FUSION_PROPOSED_CALLS);
   if (!Array.isArray(parsed)) return [];
   return parsed
     .filter((entry): entry is Record<string, unknown> => entry !== null && typeof entry === "object")
@@ -719,7 +729,7 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     queue.push(text);
     // Mirror the beat onto the trace stream so the observability dashboard
     // shows the narration alongside the run (fire-and-forget, never blocking).
-    emitFusionMarker("gateway", "fusion.narration", input.trace, {
+    emitFusionEvent("gateway", "fusion.narration", input.trace, {
       [ATTR.FUSION_TURN]: input.turn,
       [ATTR.FUSION_HEADLINE]: beat.headline,
       [ATTR.FUSION_PROSE]: beat.prose
@@ -729,18 +739,19 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     else state.quietStage = 0;
   };
 
-  const listener = (span: ReadableSpan): void => {
-    if (closed || spanTraceId(span) !== input.traceId) return;
-    // Narration mirrors would echo back into this listener; ignore them.
-    if (span.name === "fusion.narration") return;
-    const spanTurn = attrNum(span, ATTR.FUSION_TURN);
-    if (spanTurn !== undefined && spanTurn !== input.turn) return;
-    const at = spanEndMs(span);
-    switch (span.name) {
+  /**
+   * One handler for both signal shapes: unit spans arrive from the span
+   * listener at their natural end, fusion events from the event listener the
+   * instant they are emitted.
+   */
+  const handleSignal = (name: string, at: number, source: AttributeSource): void => {
+    const signalTurn = attrNum(source, ATTR.FUSION_TURN);
+    if (signalTurn !== undefined && signalTurn !== input.turn) return;
+    switch (name) {
       case "fusion.turn.info": {
         // The per-turn panel kickoff (emitted right before the fan-out).
-        if (attrStr(span, ATTR.FUSION_DIALECT) !== "fusion-step") return;
-        const roster = rosterOf(span);
+        if (attrStr(source, ATTR.FUSION_DIALECT) !== "fusion-step") return;
+        const roster = rosterOf(source);
         enqueue(() => emitBeat(narrationBeat(state, { kind: "fanout", roster, at }), at, false));
         return;
       }
@@ -748,7 +759,7 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
         // Silent: all members start together; the fan-out beat covers it. Only
         // the start time is recorded (for per-candidate elapsed). The sawPanel
         // mutation rides the chain so it cannot overtake a pending fan-out beat.
-        const candidateId = attrStr(span, ATTR.FUSION_CANDIDATE_ID);
+        const candidateId = attrStr(source, ATTR.FUSION_CANDIDATE_ID);
         if (candidateId !== undefined) candidateStartedAt.set(candidateId, at);
         enqueue(() => {
           state.sawPanel = true;
@@ -756,15 +767,15 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
         return;
       }
       case "fusion.candidate": {
-        const id = candidateLabel(span);
+        const id = candidateLabel(source);
         if (id === undefined) return;
-        const candidateId = attrStr(span, ATTR.FUSION_CANDIDATE_ID);
+        const candidateId = attrStr(source, ATTR.FUSION_CANDIDATE_ID);
         const began = candidateId !== undefined ? candidateStartedAt.get(candidateId) : undefined;
-        const preview = attrStr(span, ATTR.FUSION_FINAL_OUTPUT_PREVIEW);
-        const proposal = proposedCallsOf(span);
-        const ok = attrStr(span, ATTR.FUSION_STATUS) === "succeeded";
-        const finishReason = attrStr(span, ATTR.FUSION_FINISH_REASON);
-        const stepCount = attrNum(span, ATTR.FUSION_STEP_COUNT);
+        const preview = attrStr(source, ATTR.FUSION_FINAL_OUTPUT_PREVIEW);
+        const proposal = proposedCallsOf(source);
+        const ok = attrStr(source, ATTR.FUSION_STATUS) === "succeeded";
+        const finishReason = attrStr(source, ATTR.FUSION_FINISH_REASON);
+        const stepCount = attrNum(source, ATTR.FUSION_STEP_COUNT);
         enqueue(async () => {
           // The writer sees the raw preview; its sentence (and the fallback)
           // both pass through the sanitize gate before entering the channel.
@@ -797,7 +808,7 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
         return;
       }
       case "fusion.judge.request": {
-        const candidates = judgeCandidatesOf(span);
+        const candidates = judgeCandidatesOf(source);
         enqueue(async () => {
           const beat = narrationBeat(state, { kind: "judging", candidates, at });
           if (beat !== null && writer !== undefined && candidates.length > 0) {
@@ -829,6 +840,18 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     }
   };
 
+  const spanListener = (span: ReadableSpan): void => {
+    if (closed || spanTraceId(span) !== input.traceId) return;
+    handleSignal(span.name, spanEndMs(span), span);
+  };
+  const eventListener = (event: ReadableFusionEvent): void => {
+    if (closed || eventTraceId(event) !== input.traceId) return;
+    const name = eventNameOf(event);
+    // Narration mirrors would echo back into this listener; ignore them.
+    if (name === "fusion.narration") return;
+    handleSignal(name, eventTimeMs(event), event);
+  };
+
   // Quiet-beat ticker: when nothing has happened for the current escalation
   // delay, say so once (with fresh elapsed time), then back off further.
   const quietTimer = setInterval(() => {
@@ -841,12 +864,14 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
   }, Math.min(QUIET_POLL_MS, ...quietDelays.map((delay) => Math.max(50, Math.floor(delay / 2)))));
   quietTimer.unref();
 
-  addSpanListener(listener);
+  addSpanListener(spanListener);
+  addFusionEventListener(eventListener);
   const close = (): void => {
     if (closed) return;
     closed = true;
     clearInterval(quietTimer);
-    removeSpanListener(listener);
+    removeSpanListener(spanListener);
+    removeFusionEventListener(eventListener);
     // Abort any in-flight writer call so the chain settles promptly, flush the
     // already-enqueued beats (template fallback), then end the queue.
     closeController.abort();

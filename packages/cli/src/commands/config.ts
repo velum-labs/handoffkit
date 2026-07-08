@@ -35,7 +35,7 @@ import { exportRouterYaml } from "../fusion/stack.js";
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
-import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "../shared/options.js";
+import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_MESSAGE, PANEL_TRUST_OPTIONS } from "../shared/options.js";
 import { argOrPick, canPickInteractively } from "../shared/pickers.js";
 
 import { runConfigEdit } from "./config-edit.js";
@@ -290,7 +290,7 @@ const TOP_LEVEL_HINTS: Record<(typeof SETTABLE_TOP_LEVEL)[number], string> = {
   port: "fixed gateway port (default: ephemeral)",
   onRateLimit: "rate-limit handoff: fusion | passthrough | fail",
   budgetUsd: "per-session USD spend cap",
-  panelTrust: "candidate autonomy: full | guarded",
+  panelTrust: "panel sandbox: full (no sandbox) | guarded (own worktree only)",
   reasoning: "narrate panel/judge in the tool (on/off)",
   reasoningModel: "model that writes the narration prose"
 };
@@ -372,7 +372,7 @@ async function promptConfigValue(address: ConfigPath): Promise<string> {
         });
       case "panelTrust":
         return select<string>({
-          message: "panel trust",
+          message: PANEL_TRUST_MESSAGE,
           options: PANEL_TRUST_OPTIONS,
           defaultIndex: 0
         });
@@ -574,7 +574,7 @@ export function registerConfig(program: Command): void {
 
   config
     .command("edit")
-    .description("interactively edit every setting (tool, budget, trust, reasoning, ...)")
+    .description("interactively edit every setting (tool, budget, sandbox, reasoning, ...)")
     .option("--repo <dir>", "repo whose .fusionkit/ to edit (default: cwd's git root)")
     .action(async (opts: ConfigOpts, command: Command) => {
       process.exitCode = await runConfigEdit(opts, contextFor(command));

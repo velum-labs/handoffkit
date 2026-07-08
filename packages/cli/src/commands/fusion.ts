@@ -104,7 +104,8 @@ function applyFusionOptions(command: Command): Command {
     .option("--budget <usd>", "stop the session once it has spent this much (gateway-observed USD)")
     .option(
       "--panel-trust <level>",
-      "panel candidate autonomy: full (max, default) | guarded (harness-fenced to the worktree)"
+      "panel model sandbox: full = models may run any command and edit any file (default) | " +
+        "guarded = each model may only edit inside its own draft worktree"
     )
     .option(
       "--k <n>",

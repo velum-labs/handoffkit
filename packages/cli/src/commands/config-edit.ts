@@ -5,7 +5,7 @@
  * nothing touches disk until the user saves. Non-interactive runs are pointed
  * at the scriptable `fusionkit config set` instead.
  */
-import { bold, canPromptInteractively, confirm, cyan, dim, gray, select, text } from "@fusionkit/cli-ui";
+import { bold, canPromptInteractively, confirm, cyan, dim, gray, note, select, text } from "@fusionkit/cli-ui";
 
 import { fusionConfigPath, parseFusionConfig } from "../fusion-config.js";
 import { FUSION_TOOLS } from "../fusion-quickstart.js";
@@ -22,7 +22,13 @@ import {
   DEFAULT_REASONING,
   DEFAULT_TOOL
 } from "../fusion/effective-config.js";
-import { ON_RATE_LIMIT_POLICIES, PANEL_TRUST_LEVELS } from "../shared/options.js";
+import {
+  ON_RATE_LIMIT_POLICIES,
+  PANEL_TRUST_HELP,
+  PANEL_TRUST_LEVELS,
+  PANEL_TRUST_MESSAGE,
+  PANEL_TRUST_OPTIONS
+} from "../shared/options.js";
 import { fail } from "../shared/errors.js";
 import type { CommandContext } from "../shared/context.js";
 
@@ -166,15 +172,13 @@ function buildFields(ensembleNames: string[]): Field[] {
     },
     {
       key: "panelTrust",
-      label: "panel trust",
+      label: "panel sandbox",
       current: (shape) => valueLabel(shape.panelTrust, "full"),
       edit: async (shape) => {
+        note(PANEL_TRUST_HELP);
         shape.panelTrust = await select<string>({
-          message: "Panel candidate autonomy",
-          options: [
-            { value: "full", label: "full", hint: "maximum autonomy (default)" },
-            { value: "guarded", label: "guarded", hint: "harness-fenced to the worktree" }
-          ],
+          message: PANEL_TRUST_MESSAGE,
+          options: PANEL_TRUST_OPTIONS,
           defaultIndex: Math.max(
             0,
             PANEL_TRUST_LEVELS.indexOf((shape.panelTrust as (typeof PANEL_TRUST_LEVELS)[number] | undefined) ?? "full")

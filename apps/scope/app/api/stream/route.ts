@@ -1,12 +1,13 @@
 import { bus } from "@/lib/db";
-import type { StoredSpan } from "@/lib/types";
+import type { StoredEvent, StoredSpan } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Server-Sent Events stream of newly ingested spans. Clients use this to
- * live-update the sessions list and an open session detail without polling.
+ * Server-Sent Events stream of newly ingested signals, each frame tagged
+ * `kind: "span" | "event"`. Clients use this to live-update the sessions
+ * list and an open session detail without polling.
  */
 export async function GET(request: Request): Promise<Response> {
   const encoder = new TextEncoder();
@@ -15,16 +16,18 @@ export async function GET(request: Request): Promise<Response> {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
-      const send = (span: StoredSpan): void => {
+      const send = (kind: "span" | "event", signal: StoredSpan | StoredEvent): void => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(span)}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ kind, ...signal })}\n\n`));
         } catch {
           closed = true;
         }
       };
-      const onSpan = (span: StoredSpan): void => send(span);
+      const onSpan = (span: StoredSpan): void => send("span", span);
+      const onEvent = (event: StoredEvent): void => send("event", event);
       emitter.on("span", onSpan);
+      emitter.on("event", onEvent);
 
       controller.enqueue(encoder.encode(`: connected\n\n`));
       const heartbeat = setInterval(() => {
@@ -41,6 +44,7 @@ export async function GET(request: Request): Promise<Response> {
         closed = true;
         clearInterval(heartbeat);
         emitter.off("span", onSpan);
+        emitter.off("event", onEvent);
         try {
           controller.close();
         } catch {

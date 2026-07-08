@@ -8,30 +8,41 @@
  *   pnpm seed --url http://127.0.0.1:4317
  *
  * Every invocation uses fresh trace ids, so re-seeding adds new sessions
- * instead of corrupting earlier ones.
+ * instead of corrupting earlier ones. Spans post to the OTLP traces path and
+ * events to the logs path, exactly like real emitters.
  */
 import { randomBytes } from "node:crypto";
 
-import { syntheticSession, toOtlpExport } from "../test/fixture";
-import type { IncomingSpan } from "../lib/types";
+import { syntheticSession, toOtlpExport, toOtlpLogsExport } from "../test/fixture";
+import type { SyntheticSession } from "../test/fixture";
+import type { IncomingEvent, IncomingSpan } from "../lib/types";
 
 function freshTraceId(): string {
   return randomBytes(16).toString("hex");
 }
 
-function retime(spans: IncomingSpan[], endedAgoMs: number): IncomingSpan[] {
-  const lastTs = Math.max(...spans.map((span) => span.end_ms));
+function retime(session: SyntheticSession, endedAgoMs: number): SyntheticSession {
+  const lastTs = Math.max(
+    ...session.spans.map((span) => span.end_ms),
+    ...session.events.map((event) => event.ts_ms)
+  );
   const delta = Date.now() - endedAgoMs - lastTs;
-  return spans.map((span) => ({ ...span, start_ms: span.start_ms + delta, end_ms: span.end_ms + delta }));
+  return {
+    spans: session.spans.map(
+      (span): IncomingSpan => ({ ...span, start_ms: span.start_ms + delta, end_ms: span.end_ms + delta })
+    ),
+    events: session.events.map((event): IncomingEvent => ({ ...event, ts_ms: event.ts_ms + delta }))
+  };
 }
 
-function succeededSession(traceId: string): IncomingSpan[] {
+function succeededSession(traceId: string): SyntheticSession {
   return retime(syntheticSession(traceId), 8 * 60_000);
 }
 
 /** A failed session: the opus candidate fails and the run reports failed. */
-function failedSession(traceId: string): IncomingSpan[] {
-  const spans = syntheticSession(traceId).map((span): IncomingSpan => {
+function failedSession(traceId: string): SyntheticSession {
+  const session = syntheticSession(traceId);
+  const spans = session.spans.map((span): IncomingSpan => {
     if (span.name === "fusion.candidate" && span.attributes["fusion.candidate.id"] === "cand_opus") {
       return {
         ...span,
@@ -53,53 +64,62 @@ function failedSession(traceId: string): IncomingSpan[] {
     }
     return span;
   });
-  return retime(spans, 25 * 60_000);
+  return retime({ spans, events: session.events }, 25 * 60_000);
 }
 
 /**
  * A live session: everything up to (but excluding) the terminal spans,
  * ending seconds ago so the dashboard shows it as running.
  */
-function runningSession(traceId: string): IncomingSpan[] {
+function runningSession(traceId: string): SyntheticSession {
   const terminal = new Set(["fusion.run", "fusion.judge", "fusion.fuse"]);
-  const spans = syntheticSession(traceId).filter((span) => !terminal.has(span.name));
-  return retime(spans, 5_000);
+  const session = syntheticSession(traceId);
+  return retime(
+    { spans: session.spans.filter((span) => !terminal.has(span.name)), events: session.events },
+    5_000
+  );
 }
 
-/** A judge-selects-verbatim session (no synthesis marker, select decision). */
-function selectSession(traceId: string): IncomingSpan[] {
-  const spans = syntheticSession(traceId)
-    .filter((span) => span.name !== "fusion.judge.synthesis")
-    .map((span): IncomingSpan => {
-      if (span.name === "fusion.judge" || span.name === "fusion.fuse") {
-        return {
-          ...span,
-          attributes: {
-            ...span.attributes,
-            "fusion.decision": "select_trajectory",
-            "fusion.selected.trajectory_id": "cand_gpt",
-            "fusion.rationale": "gpt's patch is verified verbatim; no synthesis needed.",
-            "fusion.final_output": "Fixed add() to use left + right."
-          }
-        };
-      }
-      return span;
-    });
-  return retime(spans, 55 * 60_000);
+/** A judge-selects-verbatim session (no synthesis event, select decision). */
+function selectSession(traceId: string): SyntheticSession {
+  const session = syntheticSession(traceId);
+  const spans = session.spans.map((span): IncomingSpan => {
+    if (span.name === "fusion.judge" || span.name === "fusion.fuse") {
+      return {
+        ...span,
+        attributes: {
+          ...span.attributes,
+          "fusion.decision": "select_trajectory",
+          "fusion.selected.trajectory_id": "cand_gpt",
+          "fusion.rationale": "gpt's patch is verified verbatim; no synthesis needed.",
+          "fusion.final_output": "Fixed add() to use left + right."
+        }
+      };
+    }
+    return span;
+  });
+  const events = session.events.filter((event) => event.name !== "fusion.judge.synthesis");
+  return retime({ spans, events }, 55 * 60_000);
 }
 
-async function ingest(url: string, spans: IncomingSpan[]): Promise<void> {
-  const traceId = spans[0].trace_id;
-  const response = await fetch(`${url}/api/ingest`, {
+async function post(url: string, body: Record<string, unknown>): Promise<{ accepted?: number; error?: string }> {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(toOtlpExport(spans))
+    body: JSON.stringify(body)
   });
-  const body = (await response.json().catch(() => ({}))) as { accepted?: number; error?: string };
+  const payload = (await response.json().catch(() => ({}))) as { accepted?: number; error?: string };
   if (!response.ok) {
-    throw new Error(`${traceId}: HTTP ${response.status} ${body.error ?? ""}`.trim());
+    throw new Error(`HTTP ${response.status} ${payload.error ?? ""}`.trim());
   }
-  console.log(`${traceId}: accepted ${body.accepted ?? 0} spans`);
+  return payload;
+}
+
+async function ingest(url: string, session: SyntheticSession): Promise<void> {
+  const traceId = session.spans[0].trace_id;
+  const traces = await post(`${url}/api/ingest/v1/traces`, toOtlpExport(session.spans));
+  const logs = await post(`${url}/api/ingest/v1/logs`, toOtlpLogsExport(session.events));
+  console.log(`${traceId}: accepted ${traces.accepted ?? 0} spans + ${logs.accepted ?? 0} events`);
 }
 
 async function main(): Promise<void> {
@@ -111,7 +131,7 @@ async function main(): Promise<void> {
     runningSession(freshTraceId()),
     selectSession(freshTraceId())
   ];
-  for (const spans of sessions) await ingest(url, spans);
+  for (const session of sessions) await ingest(url, session);
   console.log(`seeded ${sessions.length} sessions into ${url}`);
 }
 
