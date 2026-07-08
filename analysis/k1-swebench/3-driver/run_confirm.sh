@@ -26,7 +26,7 @@ snapshot() { # persist tiny result artifacts so VM re-provisions can't erase the
 if [[ "$PHASE" == "solo" || "$PHASE" == "all" ]]; then
   MSWEA_COST_TRACKING=ignore_errors mini-extra swebench --subset verified --split test \
     --filter "$FILTER" -m openrouter/deepseek/deepseek-v3.1-terminus \
-    -c swebench.yaml -c "$ROUND_DIR/config/mem-cap.yaml" \
+    -c swebench.yaml \
     -o "$RUNS/solo-terminus" -w "${WORKERS:-2}" 2>&1 | tee -a "$RUNS/solo-terminus.log"
   snapshot solo
 fi
@@ -40,9 +40,9 @@ if [[ "$PHASE" == "driver" || "$PHASE" == "all" ]]; then
   curl -sf http://127.0.0.1:8080/v1/models >/dev/null
   MSWEA_COST_TRACKING=ignore_errors mini-extra swebench --subset verified --split test \
     --filter "$FILTER" -m openai/fusionkit/panel \
-    -c swebench.yaml -c "$ROUND_DIR/config/mem-cap.yaml" \
+    -c swebench.yaml \
     -c model.model_kwargs.api_base=http://127.0.0.1:8080/v1 \
-    -o "$out/mini" -w "${WORKERS:-2}" 2>&1 | tee -a "$out/mini.log"
+    -o "$out/mini" -w "${WORKERS:-1}" 2>&1 | tee -a "$out/mini.log"
   kill -- "-$SERVE_PGID" 2>/dev/null || true; sleep 2
   snapshot driver
 fi
