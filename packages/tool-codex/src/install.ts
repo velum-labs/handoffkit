@@ -14,13 +14,13 @@
  * fetches the gateway's live merged catalog (fusion + panel + the user's own
  * stock models) and stock picks are relayed verbatim to the Codex backend.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { SUBSCRIPTIONS } from "@fusionkit/registry";
 
-import { tomlKey } from "./launch.js";
+import { codexProfileFileToml, tomlKey } from "./launch.js";
 
 /** Managed-block markers; everything between them is FusionKit-owned. */
 export const CODEX_INSTALL_BEGIN = "# >>> fusionkit integration >>>";
@@ -60,38 +60,58 @@ function codexConfigPath(codexHome: string | undefined): string {
   return registryPath.startsWith("~/") ? join(homedir(), registryPath.slice(2)) : registryPath;
 }
 
-/** The managed config block content (markers included). */
+/** The comment prefix listing the profile files the managed block owns. */
+const PROFILE_FILES_COMMENT = "# fusionkit-profile-files:";
+
+/**
+ * The managed config block content (markers included). Profiles live in
+ * sibling `<model>.config.toml` PROFILE FILES, not `[profiles.*]` tables —
+ * Codex treats those tables as legacy config and rejects `--profile <name>`
+ * outright when one exists for that name. The block records which profile
+ * files it owns so uninstall/update can clean them up.
+ */
 export function codexIntegrationBlock(gatewayUrl: string, profiles: readonly CodexInstallProfile[]): string {
   const base = gatewayUrl.replace(/\/+$/, "");
   const lines = [
     CODEX_INSTALL_BEGIN,
     "# Managed by `fusionkit install codex` — do not edit between these markers;",
     "# rerun the command to update, `fusionkit uninstall codex` to remove.",
-    "# Adds the FusionKit fusion gateway as an EXTRA model provider and one",
-    "# launch profile per fusion ensemble. Your default model/provider and the",
-    "# rest of this file are untouched.",
+    "# Adds the FusionKit fusion gateway as an EXTRA model provider, plus one",
+    "# launch profile file per fusion ensemble (see the list below). Your",
+    "# default model/provider and the rest of this file are untouched.",
     "#",
     `# Start the gateway first:  fusionkit serve --port <the port in base_url>`,
-    `# Then launch fused:        codex --profile ${profiles[0] !== undefined ? tomlKey(profiles[0].modelId) : "fusion-panel"}`,
+    `# Then launch fused:        codex --profile ${profiles[0]?.modelId ?? "fusion-panel"}`,
+    ...profiles.map(
+      (profile) => `#   codex --profile ${profile.modelId}  (fused "${profile.ensembleName}" ensemble)`
+    ),
+    `${PROFILE_FILES_COMMENT} ${profiles.map((profile) => profileFileName(profile.modelId)).join(" ")}`,
     "",
     `[model_providers.${CODEX_INSTALL_PROVIDER}]`,
     `name = "FusionKit fusion gateway"`,
     `base_url = "${base}/v1"`,
     `wire_api = "responses"`,
     `requires_openai_auth = false`,
-    ""
+    "",
+    CODEX_INSTALL_END
   ];
-  for (const profile of profiles) {
-    lines.push(
-      `# Fused "${profile.ensembleName}" ensemble.`,
-      `[profiles.${tomlKey(profile.modelId)}]`,
-      `model = ${JSON.stringify(profile.modelId)}`,
-      `model_provider = "${CODEX_INSTALL_PROVIDER}"`,
-      ""
-    );
-  }
-  lines.push(CODEX_INSTALL_END);
   return lines.join("\n");
+}
+
+function profileFileName(modelId: string): string {
+  return `${modelId}.config.toml`;
+}
+
+/** The profile files a managed block declares (absolute paths under the home). */
+function ownedProfileFiles(managed: string | undefined, codexHome: string): string[] {
+  if (managed === undefined) return [];
+  const line = managed.split("\n").find((entry) => entry.startsWith(PROFILE_FILES_COMMENT));
+  if (line === undefined) return [];
+  return line
+    .slice(PROFILE_FILES_COMMENT.length)
+    .split(/\s+/)
+    .filter((name) => name.endsWith(".config.toml") && !name.includes("/") && !name.includes("\\"))
+    .map((name) => join(codexHome, name));
 }
 
 /** Split a config into (before, managed, after); managed is undefined when absent. */
@@ -115,12 +135,14 @@ function splitManagedBlock(content: string): { before: string; managed?: string;
 /**
  * Keys the managed block owns. If the user (or another tool) already defines
  * one of them OUTSIDE the block, appending ours would produce a duplicate TOML
- * table and Codex would reject the whole config — abort with the exact
- * conflicting key named instead.
+ * table (or a `--profile`-blocking legacy profile) and Codex would reject the
+ * config — abort with the exact conflicting key named instead.
  */
 function assertNoConflicts(outside: string, profiles: readonly CodexInstallProfile[]): void {
   const owned = [
     `[model_providers.${CODEX_INSTALL_PROVIDER}]`,
+    // A legacy [profiles.<name>] table anywhere makes Codex reject
+    // `--profile <name>`, so a user-owned one for a fused id is a conflict.
     ...profiles.map((profile) => `[profiles.${tomlKey(profile.modelId)}]`)
   ];
   for (const key of owned) {
@@ -139,14 +161,27 @@ function normalize(content: string): string {
   return trimmed.length === 0 ? "" : `${trimmed}\n`;
 }
 
+/** Delete a previously-owned profile file, but only if fusionkit wrote it. */
+function removeOwnedProfileFile(path: string): void {
+  try {
+    if (!existsSync(path)) return;
+    if (!readFileSync(path, "utf8").includes("Managed by fusionkit")) return;
+    rmSync(path);
+  } catch {
+    // best-effort cleanup; a leftover profile file is harmless
+  }
+}
+
 /**
- * Install (or update) the managed FusionKit block in the user's Codex config.
- * Idempotent: an existing block is replaced in place; everything outside it is
- * preserved byte-for-byte.
+ * Install (or update) the managed FusionKit block in the user's Codex config,
+ * plus one `<model>.config.toml` profile file per ensemble. Idempotent: an
+ * existing block is replaced in place (stale profile files it owned are
+ * removed); everything outside it is preserved byte-for-byte.
  */
 export function installCodexIntegration(input: CodexInstallInput): CodexInstallResult {
   if (input.profiles.length === 0) throw new Error("at least one fusion ensemble profile is required");
   const configPath = codexConfigPath(input.codexHome);
+  const codexHome = dirname(configPath);
   const existing = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
   const { before, managed, after } = splitManagedBlock(existing);
   assertNoConflicts(before + after, input.profiles);
@@ -154,8 +189,19 @@ export function installCodexIntegration(input: CodexInstallInput): CodexInstallR
   const head = normalize(before);
   const tail = normalize(after);
   const next = `${head}${head.length > 0 ? "\n" : ""}${block}\n${tail.length > 0 ? `\n${tail}` : ""}`;
-  mkdirSync(dirname(configPath), { recursive: true });
+  mkdirSync(codexHome, { recursive: true });
+  // Profile files dropped from the ensemble set are cleaned up on update.
+  const nextFiles = new Set(input.profiles.map((profile) => join(codexHome, profileFileName(profile.modelId))));
+  for (const stale of ownedProfileFiles(managed, codexHome)) {
+    if (!nextFiles.has(stale)) removeOwnedProfileFile(stale);
+  }
   writeFileSync(configPath, next);
+  for (const profile of input.profiles) {
+    writeFileSync(
+      join(codexHome, profileFileName(profile.modelId)),
+      codexProfileFileToml(profile.modelId, CODEX_INSTALL_PROVIDER)
+    );
+  }
   return {
     configPath,
     action: managed !== undefined ? "updated" : "installed",
@@ -164,9 +210,9 @@ export function installCodexIntegration(input: CodexInstallInput): CodexInstallR
 }
 
 /**
- * Remove the managed FusionKit block from the user's Codex config. Everything
- * outside the markers is preserved. Returns `removed: false` when there was
- * nothing to remove.
+ * Remove the managed FusionKit block and the profile files it owns from the
+ * user's Codex config. Everything outside the markers is preserved. Returns
+ * `removed: false` when there was nothing to remove.
  */
 export function uninstallCodexIntegration(input: { codexHome?: string } = {}): {
   configPath: string;
@@ -177,6 +223,9 @@ export function uninstallCodexIntegration(input: { codexHome?: string } = {}): {
   const existing = readFileSync(configPath, "utf8");
   const { before, managed, after } = splitManagedBlock(existing);
   if (managed === undefined) return { configPath, removed: false };
+  for (const owned of ownedProfileFiles(managed, dirname(configPath))) {
+    removeOwnedProfileFile(owned);
+  }
   const head = normalize(before);
   const tail = normalize(after);
   writeFileSync(configPath, `${head}${head.length > 0 && tail.length > 0 ? "\n" : ""}${tail}`);

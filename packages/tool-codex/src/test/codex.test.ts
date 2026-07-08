@@ -21,6 +21,8 @@ import {
   codexIntegrationBlock,
   codexListedStockSlugs,
   codexModelCatalogJson,
+  codexProfileFiles,
+  codexProfileFileToml,
   defaultCodexRunner,
   hasCodexLogin,
   installCodexIntegration,
@@ -196,26 +198,45 @@ test("full-trust codex harness writes danger-full-access; guarded falls back to 
   }
 });
 
-test("codexLaunchConfigToml pins fusion as default and adds a profile per native model", () => {
-  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", [
-    "gpt-5.5",
-    "mlx-community/Qwen3-1.7B-4bit"
-  ]);
+test("codexLaunchConfigToml pins fusion as default against the gateway provider", () => {
+  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel");
   // Default model + provider is fusion.
   assert.ok(toml.includes('model = "fusion-panel"'));
   assert.ok(toml.includes("[model_providers.fusionkit-local]"));
-  // Each model is a profile; fusion first (bare key), then the natives.
-  assert.ok(toml.includes("[profiles.fusion-panel]"));
-  // Model ids with non-bare-key characters (a dot or a slash) are quoted keys.
-  assert.ok(toml.includes('[profiles."gpt-5.5"]'));
-  assert.ok(toml.includes('[profiles."mlx-community/Qwen3-1.7B-4bit"]'));
+  assert.ok(toml.includes('base_url = "http://127.0.0.1:9999/v1"'));
+  // Launch profiles are separate `<model>.config.toml` FILES: Codex treats
+  // `[profiles.*]` tables as legacy config and rejects `--profile <name>`
+  // outright when one exists for that name.
+  assert.ok(!toml.includes("[profiles"));
   // No catalog is wired unless a path is passed.
   assert.ok(!toml.includes("model_catalog_json"));
 });
 
 test("codexLaunchConfigToml wires model_catalog_json when a catalog path is given", () => {
-  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", ["gpt-5.5"], "/tmp/cat.json");
+  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", "/tmp/cat.json");
   assert.ok(toml.includes('model_catalog_json = "/tmp/cat.json"'));
+});
+
+test("codexProfileFiles writes one profile config file per launchable model", () => {
+  const home = mkdtempSync(join(tmpdir(), "codex-profiles-"));
+  try {
+    const written = codexProfileFiles(home, [
+      "fusion-panel",
+      "fusion-deep",
+      "gpt-5.5",
+      // Path-shaped ids cannot name a file; they stay picker-only.
+      "mlx-community/Qwen3-1.7B-4bit",
+      // Duplicates collapse.
+      "fusion-panel"
+    ]);
+    assert.deepEqual(written, ["fusion-panel", "fusion-deep", "gpt-5.5"]);
+    const profile = readFileSync(join(home, "fusion-deep.config.toml"), "utf8");
+    assert.ok(profile.includes('model = "fusion-deep"'));
+    assert.ok(profile.includes('model_provider = "fusionkit-local"'));
+    assert.ok(!existsSync(join(home, "mlx-community")));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test("codexModelCatalogJson clones the installed template and overrides identity per model", () => {
@@ -249,23 +270,12 @@ test("codexModelCatalogJson clones the installed template and overrides identity
   assert.ok(catalog.models.every((entry) => Array.isArray(entry.supported_reasoning_levels)));
 });
 
-test("codexLaunchConfigToml adds a profile per fused ensemble model", () => {
-  const toml = codexLaunchConfigToml(
-    "http://127.0.0.1:9999",
-    "fusion-panel",
-    ["gpt-5.5"],
-    undefined,
-    ["fusion-panel", "fusion-deep", "fusion-cheap"]
-  );
-  // The session default stays the default model; every ensemble is a profile,
-  // so `codex --profile fusion-deep` spawns a session on another ensemble.
-  assert.ok(toml.includes('model = "fusion-panel"'));
-  assert.ok(toml.includes("[profiles.fusion-panel]"));
-  assert.ok(toml.includes("[profiles.fusion-deep]"));
-  assert.ok(toml.includes("[profiles.fusion-cheap]"));
-  assert.ok(toml.includes('[profiles."gpt-5.5"]'));
-  // Fused profiles come before the natives.
-  assert.ok(toml.indexOf("[profiles.fusion-deep]") < toml.indexOf('[profiles."gpt-5.5"]'));
+test("codexProfileFileToml pins one gateway model per profile file", () => {
+  // `codex --profile fusion-deep` spawns a session on another ensemble; each
+  // profile is its own <model>.config.toml file layered over the base config.
+  const toml = codexProfileFileToml("fusion-deep");
+  assert.ok(toml.includes('model = "fusion-deep"'));
+  assert.ok(toml.includes('model_provider = "fusionkit-local"'));
 });
 
 test("codexModelCatalogJson lists every fused ensemble as a fusion entry", () => {
@@ -421,13 +431,18 @@ test("installCodexIntegration appends a managed block and leaves the rest of the
     // The user's own config survives byte-for-byte (modulo trailing whitespace).
     assert.ok(written.startsWith('model = "gpt-5.5"'));
     assert.ok(written.includes("[mcp_servers.docs]"));
-    // The managed block registers the provider (trailing slash normalized away)
-    // and one profile per ensemble — and never rebinds the default model.
+    // The managed block registers the provider (trailing slash normalized
+    // away) and never rebinds the default model. Profiles are FILES, not
+    // legacy [profiles.*] tables (those block `codex --profile`).
     assert.ok(written.includes("[model_providers.fusionkit]"));
     assert.ok(written.includes('base_url = "http://127.0.0.1:4114/v1"'));
-    assert.ok(written.includes("[profiles.fusion-panel]"));
-    assert.ok(written.includes("[profiles.fusion-deep]"));
+    assert.ok(!written.includes("[profiles."));
     assert.equal(written.match(/^model = "gpt-5\.5"$/m)?.length, 1);
+    for (const name of ["fusion-panel", "fusion-deep"]) {
+      const profile = readFileSync(join(home, `${name}.config.toml`), "utf8");
+      assert.ok(profile.includes(`model = "${name}"`));
+      assert.ok(profile.includes('model_provider = "fusionkit"'));
+    }
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -450,11 +465,14 @@ test("installCodexIntegration is idempotent and uninstall restores the original 
     assert.equal(written.match(/\[model_providers\.fusionkit\]/g)?.length, 1);
     assert.ok(written.includes("http://127.0.0.1:5115/v1"));
     assert.ok(!written.includes("http://127.0.0.1:4114"));
-    assert.ok(!written.includes("[profiles.fusion-deep]"), "dropped ensembles leave the block");
-    // Uninstall removes exactly the managed block.
+    // Dropped ensembles lose their profile file on update.
+    assert.ok(existsSync(join(home, "fusion-panel.config.toml")));
+    assert.ok(!existsSync(join(home, "fusion-deep.config.toml")));
+    // Uninstall removes exactly the managed block and its profile files.
     const removed = uninstallCodexIntegration({ codexHome: home });
     assert.equal(removed.removed, true);
     assert.equal(readFileSync(join(home, "config.toml"), "utf8"), userConfig);
+    assert.ok(!existsSync(join(home, "fusion-panel.config.toml")));
     assert.equal(uninstallCodexIntegration({ codexHome: home }).removed, false);
   } finally {
     rmSync(home, { recursive: true, force: true });
@@ -496,11 +514,13 @@ test("installCodexIntegration refuses to shadow user-owned tables and creates a 
   }
 });
 
-test("codexIntegrationBlock quotes non-bare profile keys", () => {
+test("codexIntegrationBlock records the profile files it owns", () => {
   const block = codexIntegrationBlock("http://127.0.0.1:4114", [
-    { ensembleName: "weird name", modelId: "fusion-weird.name" }
+    { ensembleName: "default", modelId: "fusion-panel" },
+    { ensembleName: "deep", modelId: "fusion-deep" }
   ]);
-  assert.ok(block.includes('[profiles."fusion-weird.name"]'));
+  assert.ok(block.includes("# fusionkit-profile-files: fusion-panel.config.toml fusion-deep.config.toml"));
+  assert.ok(!block.includes("[profiles."), "no legacy profile tables");
 });
 
 test("readCodexModelsCache returns [] for a missing or malformed cache", () => {
@@ -534,14 +554,7 @@ test("codexLaunchConfigToml pins multi_agent and emits one role per ensemble", (
       configPath: "/tmp/home/agents/fusion-deep.toml"
     }
   ];
-  const toml = codexLaunchConfigToml(
-    "http://127.0.0.1:9999",
-    "fusion-panel",
-    ["gpt-5.5"],
-    undefined,
-    ["fusion-panel", "fusion-deep"],
-    roles
-  );
+  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", undefined, roles);
   // The feature pin makes sub-agents OOTB even under managed/older defaults.
   assert.ok(toml.includes("[features]"));
   assert.ok(toml.includes("multi_agent = true"));
@@ -556,7 +569,7 @@ test("codexLaunchConfigToml pins multi_agent and emits one role per ensemble", (
 });
 
 test("codexLaunchConfigToml omits features/agents sections without roles", () => {
-  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel", ["gpt-5.5"]);
+  const toml = codexLaunchConfigToml("http://127.0.0.1:9999", "fusion-panel");
   assert.ok(!toml.includes("[features]"));
   assert.ok(!toml.includes("[agents"));
 });

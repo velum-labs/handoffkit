@@ -316,11 +316,13 @@ export function codexAgentRoleToml(name: string, modelId: string, developerInstr
  *
  * The session-default fused model is the default. Every other fused ensemble
  * model and the native models are surfaced two ways so they are selectable from
- * Codex's own `/model` picker in-session: via `model_catalog_json` (the catalog
- * that drives the picker for a custom provider) and via a `[profiles.*]` entry
- * each (also usable at launch with `--profile <model>` — e.g.
- * `--profile fusion-deep` to spawn a Codex session/sub-agent on another
- * ensemble — and a fallback on Codex builds that derive the picker from config).
+ * Codex's own `/model` picker in-session: via the model catalog (static file or
+ * the gateway's live merged `/v1/models`) and via a per-model profile config
+ * FILE each (see {@link codexProfileFiles} — usable at launch with
+ * `--profile <model>`, e.g. `--profile fusion-deep` to spawn a Codex
+ * session/sub-agent on another ensemble). Profiles are deliberately NOT
+ * `[profiles.*]` tables: current Codex treats those as legacy config and
+ * rejects `--profile <name>` outright when one exists for that name.
  *
  * With `agentRoles`, Codex's multi-agent tools are pinned on (`[features]
  * multi_agent = true` — stable-on upstream, pinned so a managed/older default
@@ -331,9 +333,7 @@ export function codexAgentRoleToml(name: string, modelId: string, developerInstr
 export function codexLaunchConfigToml(
   gatewayUrl: string,
   model: string,
-  nativeModels: readonly string[] = [],
   modelCatalogPath?: string,
-  fusedModels: readonly string[] = [],
   agentRoles?: readonly CodexAgentRole[]
 ): string {
   const lines = [`model = "${model}"`, `model_provider = "${LOCAL_MODEL_LABEL}"`];
@@ -349,14 +349,6 @@ export function codexLaunchConfigToml(
     `requires_openai_auth = false`,
     ""
   );
-  for (const profile of modelList(model, fusedModels, nativeModels)) {
-    lines.push(
-      `[profiles.${tomlKey(profile)}]`,
-      `model = ${JSON.stringify(profile)}`,
-      `model_provider = "${LOCAL_MODEL_LABEL}"`,
-      ""
-    );
-  }
   if (agentRoles !== undefined && agentRoles.length > 0) {
     lines.push("[features]", "multi_agent = true", "");
     // Conservative fan-out: a fused sub-agent is itself a whole panel run, so
@@ -372,6 +364,48 @@ export function codexLaunchConfigToml(
     }
   }
   return lines.join("\n");
+}
+
+/** A model id that can safely name a `<name>.config.toml` profile file, or undefined. */
+function profileFileName(model: string): string | undefined {
+  if (model.length === 0 || model.includes("/") || model.includes("\\") || model.startsWith(".")) {
+    return undefined;
+  }
+  return `${model}.config.toml`;
+}
+
+/** The contents of one per-model profile config file (gateway-backed). */
+export function codexProfileFileToml(model: string, provider: string = LOCAL_MODEL_LABEL): string {
+  return [
+    "# Managed by fusionkit — a launch profile for one gateway model.",
+    `model = ${JSON.stringify(model)}`,
+    `model_provider = "${provider}"`,
+    ""
+  ].join("\n");
+}
+
+/**
+ * Write one `<model>.config.toml` profile file per gateway model into a
+ * CODEX_HOME, so `codex --profile <model>` starts a session on that model.
+ * Codex treats `[profiles.*]` tables in config.toml as legacy config and
+ * rejects `--profile <name>` when one exists for that name, so profile FILES
+ * are the supported layer. Ids that cannot name a file (e.g. MLX repo paths
+ * with a `/`) are skipped — they stay reachable via the in-session picker.
+ * Returns the profile names written.
+ */
+export function codexProfileFiles(
+  home: string,
+  models: readonly string[],
+  provider: string = LOCAL_MODEL_LABEL
+): string[] {
+  const written: string[] = [];
+  for (const model of models) {
+    const file = profileFileName(model);
+    if (file === undefined || written.includes(model)) continue;
+    writeFileSync(join(home, file), codexProfileFileToml(model, provider));
+    written.push(model);
+  }
+  return written;
 }
 
 /** Bounded stderr tail retained for exit classification. */
@@ -431,10 +465,11 @@ export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
     copyFileSync(codexAuthPath(), join(home, "auth.json"));
     ctx.log("fusion: reusing your Codex login — Codex's own models stay in the picker (served via the gateway)");
   }
-  // Stock slugs for `[profiles.*]` (launch-time `--profile <model>` support):
-  // only when they are actually servable (login present for the relay).
+  // Stock slugs for launch profiles (`--profile <model>` support): only when
+  // they are actually servable (login present for the relay).
   const stockSlugs = live ? codexListedStockSlugs() : [];
-  const pickerNatives = [...nativeModels, ...stockSlugs.filter((slug) => !nativeModels.includes(slug))];
+  const profileModels = modelList(ctx.modelLabel, fusedModels, [...nativeModels, ...stockSlugs]);
+  codexProfileFiles(home, profileModels);
 
   // Static catalog fallback (no login to relay with): the picker is driven by
   // `model_catalog_json`, built from the installed Codex's own catalog entry
@@ -461,10 +496,7 @@ export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   }
 
   const writeConfig = (catalog: string | undefined, roles: readonly CodexAgentRole[] | undefined): void => {
-    writeFileSync(
-      configPath,
-      codexLaunchConfigToml(ctx.gatewayUrl, ctx.modelLabel, pickerNatives, catalog, fusedModels, roles)
-    );
+    writeFileSync(configPath, codexLaunchConfigToml(ctx.gatewayUrl, ctx.modelLabel, catalog, roles));
   };
   writeConfig(catalogPath, agentRoles);
 

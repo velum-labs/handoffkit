@@ -165,6 +165,8 @@ export {
   codexLaunchConfigToml,
   codexListedStockSlugs,
   codexModelCatalogJson,
+  codexProfileFiles,
+  codexProfileFileToml,
   codexRoleDescription,
   hasCodexLogin,
   isCodexConfigFailure,
