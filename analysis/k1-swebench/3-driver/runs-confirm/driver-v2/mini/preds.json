@@ -38,5 +38,15 @@
     "model_name_or_path": "openai/fusionkit/panel",
     "instance_id": "django__django-14771",
     "model_patch": "diff --git a/django/utils/autoreload.py b/django/utils/autoreload.py\nindex cc65c043ab..375a9d790f 100644\n--- a/django/utils/autoreload.py\n+++ b/django/utils/autoreload.py\n@@ -219,7 +219,14 @@ def get_child_arguments():\n     import __main__\n     py_script = Path(sys.argv[0])\n \n-    args = [sys.executable] + ['-W%s' % o for o in sys.warnoptions]\n+    args = [sys.executable] + [\"-W%s\" % o for o in sys.warnoptions]\n+    # Add -X options for CPython implementation-specific options\n+    xoptions = getattr(sys, \"_xoptions\", {})\n+    for option, value in xoptions.items():\n+        if value is True:\n+            args.append(\"-X%s\" % option)\n+        else:\n+            args.append(\"-X%s=%s\" % (option, value))\n     # __spec__ is set when the server was started with the `-m` option,\n     # see https://docs.python.org/3/reference/import.html#main-spec\n     # __spec__ may not exist, e.g. when running in a Conda env.\n"
+  },
+  "django__django-15554": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "django__django-15554",
+    "model_patch": "diff --git a/django/db/models/sql/datastructures.py b/django/db/models/sql/datastructures.py\nindex 1edf040e82..7f4e3856cb 100644\n--- a/django/db/models/sql/datastructures.py\n+++ b/django/db/models/sql/datastructures.py\n@@ -162,8 +162,8 @@ class Join:\n         return hash(self.identity)\n \n     def equals(self, other):\n-        # Ignore filtered_relation in equality check.\n-        return self.identity[:-1] == other.identity[:-1]\n+        # Include filtered_relation in equality check to prevent JOIN reuse with different filters.\n+        return self.identity == other.identity\n \n     def demote(self):\n         new = self.relabeled_clone({})\n"
+  },
+  "django__django-16116": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "django__django-16116",
+    "model_patch": "diff --git a/django/core/management/commands/makemigrations.py b/django/core/management/commands/makemigrations.py\nindex 2e97d9064b..f257e947ba 100644\n--- a/django/core/management/commands/makemigrations.py\n+++ b/django/core/management/commands/makemigrations.py\n@@ -248,12 +248,12 @@ class Command(BaseCommand):\n                 else:\n                     self.log(\"No changes detected\")\n         else:\n+            if check_changes:\n+                sys.exit(1)\n             if self.update:\n                 self.write_to_last_migration_files(changes)\n             else:\n                 self.write_migration_files(changes)\n-            if check_changes:\n-                sys.exit(1)\n \n     def write_to_last_migration_files(self, changes):\n         loader = MigrationLoader(connections[DEFAULT_DB_ALIAS])\n"
   }
 }
