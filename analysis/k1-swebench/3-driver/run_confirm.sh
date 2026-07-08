@@ -15,10 +15,20 @@ RUNS="$ROUND_DIR/runs-confirm"; mkdir -p "$RUNS"
 : "${OPENROUTER_API_KEY:?}"
 export LITELLM_MODEL_REGISTRY_PATH="$ARM_DIR/config/litellm_registry.json"
 
+snapshot() { # persist tiny result artifacts so VM re-provisions can't erase them
+  git -C "$REPO_ROOT" add -f \
+    "$RUNS"/*/preds.json "$RUNS"/*/mini/preds.json \
+    "$RUNS"/*/*.json "$RUNS"/*/mini/*.json 2>/dev/null || true
+  git -C "$REPO_ROOT" commit -m "confirm-run artifact snapshot ($1)" >/dev/null 2>&1 || true
+  git -C "$REPO_ROOT" push -u origin HEAD >/dev/null 2>&1 || true
+}
+
 if [[ "$PHASE" == "solo" || "$PHASE" == "all" ]]; then
   MSWEA_COST_TRACKING=ignore_errors mini-extra swebench --subset verified --split test \
     --filter "$FILTER" -m openrouter/deepseek/deepseek-v3.1-terminus \
-    -c swebench.yaml -o "$RUNS/solo-terminus" -w "${WORKERS:-2}" 2>&1 | tee -a "$RUNS/solo-terminus.log"
+    -c swebench.yaml -c "$ROUND_DIR/config/mem-cap.yaml" \
+    -o "$RUNS/solo-terminus" -w "${WORKERS:-2}" 2>&1 | tee -a "$RUNS/solo-terminus.log"
+  snapshot solo
 fi
 if [[ "$PHASE" == "driver" || "$PHASE" == "all" ]]; then
   out="$RUNS/driver-v2"; mkdir -p "$out"
@@ -30,9 +40,11 @@ if [[ "$PHASE" == "driver" || "$PHASE" == "all" ]]; then
   curl -sf http://127.0.0.1:8080/v1/models >/dev/null
   MSWEA_COST_TRACKING=ignore_errors mini-extra swebench --subset verified --split test \
     --filter "$FILTER" -m openai/fusionkit/panel \
-    -c swebench.yaml -c model.model_kwargs.api_base=http://127.0.0.1:8080/v1 \
+    -c swebench.yaml -c "$ROUND_DIR/config/mem-cap.yaml" \
+    -c model.model_kwargs.api_base=http://127.0.0.1:8080/v1 \
     -o "$out/mini" -w "${WORKERS:-2}" 2>&1 | tee -a "$out/mini.log"
   kill -- "-$SERVE_PGID" 2>/dev/null || true; sleep 2
+  snapshot driver
 fi
 if [[ "$PHASE" == "grade" || "$PHASE" == "all" ]]; then
   for name in solo-terminus driver-v2; do
