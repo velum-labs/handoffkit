@@ -19,6 +19,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { SUBSCRIPTIONS } from "@fusionkit/registry";
+import { trimTrailingSlashes } from "@fusionkit/tools";
 
 import { codexProfileFileToml, tomlKey } from "./launch.js";
 
@@ -71,7 +72,7 @@ const PROFILE_FILES_COMMENT = "# fusionkit-profile-files:";
  * files it owns so uninstall/update can clean them up.
  */
 export function codexIntegrationBlock(gatewayUrl: string, profiles: readonly CodexInstallProfile[]): string {
-  const base = gatewayUrl.replace(/\/+$/, "");
+  const base = trimTrailingSlashes(gatewayUrl);
   const lines = [
     CODEX_INSTALL_BEGIN,
     "# Managed by `fusionkit install codex` — do not edit between these markers;",

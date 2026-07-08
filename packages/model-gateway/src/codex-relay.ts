@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 
 import { providerDefaultBaseUrl } from "@fusionkit/registry";
+import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
 
 import type { FusionGatewayLogger } from "./logger.js";
 import { defaultFusionGatewayLogger } from "./logger.js";
@@ -114,7 +115,7 @@ export class CodexBackendRelay {
   readonly #logger: FusionGatewayLogger;
 
   constructor(options: CodexRelayOptions) {
-    this.#backendUrl = (options.backendUrl ?? providerDefaultBaseUrl("codex") ?? "").replace(/\/+$/, "");
+    this.#backendUrl = trimTrailingSlashes(options.backendUrl ?? providerDefaultBaseUrl("codex") ?? "");
     this.#catalog = options.catalog;
     this.#fallbackStock = options.fallbackStock ?? (() => []);
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_RELAY_TIMEOUT_MS;

@@ -15,7 +15,7 @@
 import type { Command } from "commander";
 
 import { bold, cyan, dim, done, note, uiStream } from "@fusionkit/cli-ui";
-import { DEFAULT_ENSEMBLE_NAME, fusionModelId } from "@fusionkit/tools";
+import { DEFAULT_ENSEMBLE_NAME, fusionModelId, trimTrailingSlashes } from "@fusionkit/tools";
 import { installCodexIntegration, uninstallCodexIntegration } from "@fusionkit/tool-codex";
 import type { CodexInstallProfile } from "@fusionkit/tool-codex";
 
@@ -35,7 +35,7 @@ type InstallOpts = {
 
 /** Resolve the gateway URL the installed provider points at. */
 function resolveGatewayUrl(opts: InstallOpts): string {
-  if (opts.gatewayUrl !== undefined && opts.gatewayUrl.length > 0) return opts.gatewayUrl.replace(/\/+$/, "");
+  if (opts.gatewayUrl !== undefined && opts.gatewayUrl.length > 0) return trimTrailingSlashes(opts.gatewayUrl);
   if (opts.port !== undefined) return `http://127.0.0.1:${parsePort(opts.port, 0)}`;
   throw fail(
     "a gateway address is required: pass --port <n> (pair it with `fusionkit serve --port <n>`) or --gateway-url <url>"
