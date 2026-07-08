@@ -1,0 +1,39 @@
+# Experiment E1 — solo gpt-5.5 frontier baseline.
+#
+# Single-member panel: the fused answer is gpt-5.5 judging/synthesizing its own
+# candidate. Purpose: the first honest frontier reference on the frozen
+# Phase C manifest (published LCB numbers do not transfer to this hard subset).
+#
+# Requires OPENAI_API_KEY.
+endpoints:
+  - id: gpt55
+    provider: openai
+    model: gpt-5.5
+    base_url: https://api.openai.com
+    api_key_env: OPENAI_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 1.25
+      output_per_1m_tokens: 10.0
+      currency: USD
+    tags: [closed, frontier, solo]
+default_model: gpt55
+judge_model: gpt55
+synthesizer_model: gpt55
+default_mode: panel
+panel_models: [gpt55]
+harness_prompt_passthrough: true
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 8192
+budget:
+  max_candidates: 1
+  wall_clock_s: 1800
+  max_cost: null
+  max_tool_rounds: 24
+  max_tool_calls: 200

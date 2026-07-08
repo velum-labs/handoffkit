@@ -1,0 +1,101 @@
+# Experiment E2 — oracle-max five-family panel, Gemini judge.
+#
+# One member per model family (lineage veto), keeping the two strongest
+# measured members (gemini, kimi) and dsv4pro, and swapping the weak
+# mimo/minimax slots for untried mid-tier coders (qwen3-coder, glm-5.2).
+# Goal: raise the candidate oracle above the 23/60 plateau of the 3-member
+# judge-experiment panels.
+#
+# Requires OPENROUTER_API_KEY.
+endpoints:
+  - id: gemini
+    provider: openrouter
+    model: google/gemini-3.1-pro-preview
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 2.0
+      output_per_1m_tokens: 12.0
+      currency: USD
+    tags: [closed, panel]
+  - id: kimi
+    provider: openrouter
+    model: moonshotai/kimi-k2.7-code
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.74
+      output_per_1m_tokens: 3.5
+      currency: USD
+    tags: [oss, panel]
+  - id: dsv4pro
+    provider: openrouter
+    model: deepseek/deepseek-v4-pro
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.435
+      output_per_1m_tokens: 0.87
+      currency: USD
+    tags: [oss, panel]
+  - id: qwencoder
+    provider: openrouter
+    model: qwen/qwen3-coder
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.22
+      output_per_1m_tokens: 1.8
+      currency: USD
+    tags: [oss, panel]
+  - id: glm52
+    provider: openrouter
+    model: z-ai/glm-5.2
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.909
+      output_per_1m_tokens: 2.856
+      currency: USD
+    tags: [oss, panel]
+default_model: gemini
+judge_model: gemini
+synthesizer_model: gemini
+default_mode: panel
+panel_models: [gemini, kimi, dsv4pro, qwencoder, glm52]
+harness_prompt_passthrough: true
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 8192
+budget:
+  max_candidates: 5
+  wall_clock_s: 1800
+  max_cost: null
+  max_tool_rounds: 24
+  max_tool_calls: 200

@@ -43,10 +43,16 @@ JUDGE_EXP_PANELS: dict[str, str] = {
     "j3-g": "configs/benchmark-panel.judge-exp.j3-gemini.yaml",
     "j3-m": "configs/benchmark-panel.judge-exp.j3-mimo.yaml",
 }
-PANELS: dict[str, str] = {**LEGACY_PANELS, **JUDGE_EXP_PANELS}
+ORACLE_EXP_PANELS: dict[str, str] = {
+    "e1": "configs/benchmark-panel.exp.e1-gpt55-solo.yaml",
+    "e2": "configs/benchmark-panel.exp.e2-oracle5.yaml",
+    "e3": "configs/benchmark-panel.exp.e3-sample5.yaml",
+}
+PANELS: dict[str, str] = {**LEGACY_PANELS, **JUDGE_EXP_PANELS, **ORACLE_EXP_PANELS}
 JUDGE_MATRIX_ORDER = ("j1-g", "j1-m", "j2-g", "j2-m", "j3-g", "j3-m")
 JUDGE_MIMO_ORDER = ("j1-m", "j2-m", "j3-m")
 JUDGE_GEMINI_ORDER = ("j1-g", "j2-g", "j3-g")
+ORACLE_EXP_ORDER = ("e1", "e2", "e3")
 SPEND_CAP_USD = 75.0
 PREFLIGHT_TIMEOUT_S = 7200.0
 PANEL_TIMEOUT_S = 21600.0
@@ -337,6 +343,34 @@ def run_judge_matrix(
         run_panel(hypothesis)
 
 
+def run_oracle_exp(*, parallel: bool = False, only: str | None = None) -> None:
+    """Run the oracle-maximization experiments (e1 solo baseline, e2, e3)."""
+    order = (only,) if only else ORACLE_EXP_ORDER
+
+    if parallel:
+        import concurrent.futures
+
+        pending = [hypothesis for hypothesis in order if _ledger_total() < SPEND_CAP_USD]
+        if not pending:
+            print("spend cap reached before oracle experiments", file=sys.stderr)
+            return
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(pending)) as pool:
+            futures = {pool.submit(run_panel, hypothesis): hypothesis for hypothesis in pending}
+            for future in concurrent.futures.as_completed(futures):
+                hypothesis = futures[future]
+                try:
+                    future.result()
+                except SystemExit as exc:
+                    print(f"{hypothesis} failed: {exc}", file=sys.stderr)
+        return
+
+    for hypothesis in order:
+        if _ledger_total() >= SPEND_CAP_USD:
+            print(f"stopping before {hypothesis}: spend cap reached", file=sys.stderr)
+            break
+        run_panel(hypothesis)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Phase C benchmark runner")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -364,6 +398,21 @@ def main() -> None:
         action="store_true",
         help="run only Gemini-judge panels (j1-g, j2-g, j3-g)",
     )
+    oracle = sub.add_parser(
+        "run-oracle-exp",
+        help="run oracle-maximization experiments (e1 gpt-5.5 solo, e2 five-family, e3 multi-sample)",
+    )
+    oracle.add_argument(
+        "--parallel",
+        action="store_true",
+        help="run all pending oracle experiments concurrently",
+    )
+    oracle.add_argument(
+        "--only",
+        choices=sorted(ORACLE_EXP_PANELS),
+        default=None,
+        help="run a single oracle experiment",
+    )
     args = parser.parse_args()
 
     if args.command == "preflight":
@@ -378,6 +427,8 @@ def main() -> None:
             mimo_only=args.mimo_only,
             gemini_only=args.gemini_only,
         )
+    elif args.command == "run-oracle-exp":
+        run_oracle_exp(parallel=args.parallel, only=args.only)
 
 
 if __name__ == "__main__":
