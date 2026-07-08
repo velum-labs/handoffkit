@@ -3,12 +3,12 @@ import { test } from "node:test";
 
 import { rollupCost, rollupJudge, rollupModels } from "../lib/rollups";
 import { deriveSession } from "../lib/sessions";
-import type { StoredSpan } from "../lib/types";
-import { stored, syntheticSession } from "./fixture";
+import type { StoredEvent } from "../lib/types";
+import { stored, storedEvents, syntheticSession } from "./fixture";
 
-test("rollupCost sums fusion.cost markers per model and stage", () => {
-  const spans = stored(syntheticSession("11111111111111111111111111110011"));
-  const rollup = rollupCost(spans);
+test("rollupCost sums fusion.cost events per model and stage", () => {
+  const events = storedEvents(syntheticSession("11111111111111111111111111110011").events);
+  const rollup = rollupCost(events);
   assert.equal(rollup.entries, 3);
   assert.equal(rollup.unknownEntries, 0);
   assert.equal(rollup.sessionsWithCost, 1);
@@ -25,42 +25,44 @@ test("rollupCost sums fusion.cost markers per model and stage", () => {
 });
 
 test("rollupCost counts unpriced entries without adding dollars", () => {
-  const spans = stored(syntheticSession("11111111111111111111111111110012"));
-  const base = spans.find((span) => span.name === "fusion.cost");
+  const events = storedEvents(syntheticSession("11111111111111111111111111110012").events);
+  const base = events.find((event) => event.name === "fusion.cost");
   assert.ok(base);
-  const unpriced: StoredSpan = {
+  const unpriced: StoredEvent = {
     ...base,
     id: 999,
-    span_id: "eeeeeeeeeeeeee99",
     attributes: {
       "fusion.cost.stage": "panel",
       "fusion.cost.model": "mystery",
       "fusion.cost.unknown": true
     }
   };
-  const rollup = rollupCost([...spans, unpriced]);
+  const rollup = rollupCost([...events, unpriced]);
   assert.equal(rollup.entries, 4);
   assert.equal(rollup.unknownEntries, 1);
   assert.ok(Math.abs(rollup.totalUsd - 0.0193) < 1e-9, "unpriced entries add no dollars");
 });
 
 test("rollupJudge folds decisions, selections, and model standings", () => {
-  const synth = stored(syntheticSession("11111111111111111111111111110013"));
-  const select = stored(syntheticSession("11111111111111111111111111110014")).map(
-    (span): StoredSpan =>
-      span.name === "fusion.judge"
-        ? {
-            ...span,
-            attributes: {
-              ...span.attributes,
-              "fusion.decision": "select_trajectory",
-              "fusion.selected.trajectory_id": "cand_opus"
-            }
+  const synth = syntheticSession("11111111111111111111111111110013");
+  const select = syntheticSession("11111111111111111111111111110014");
+  const selectSpans = select.spans.map((span) =>
+    span.name === "fusion.judge"
+      ? {
+          ...span,
+          attributes: {
+            ...span.attributes,
+            "fusion.decision": "select_trajectory",
+            "fusion.selected.trajectory_id": "cand_opus"
           }
-        : span
+        }
+      : span
   );
 
-  const rollup = rollupJudge([...synth, ...select]);
+  const rollup = rollupJudge(
+    stored([...synth.spans, ...selectSpans]),
+    storedEvents([...synth.events, ...select.events])
+  );
   assert.equal(rollup.totalDecisions, 2);
   assert.equal(rollup.synthesizeCount, 1);
   assert.equal(rollup.selectCount, 1);
@@ -81,20 +83,22 @@ test("rollupJudge folds decisions, selections, and model standings", () => {
 });
 
 test("rollupJudge flags empty synthesis", () => {
-  const spans = stored(syntheticSession("11111111111111111111111111110015")).map(
-    (span): StoredSpan =>
-      span.name === "fusion.judge.synthesis"
-        ? { ...span, attributes: { ...span.attributes, "fusion.synthesis_empty": true } }
-        : span
+  const session = syntheticSession("11111111111111111111111111110015");
+  const events = storedEvents(
+    session.events.map((event) =>
+      event.name === "fusion.judge.synthesis"
+        ? { ...event, attributes: { ...event.attributes, "fusion.synthesis_empty": true } }
+        : event
+    )
   );
-  const rollup = rollupJudge(spans);
+  const rollup = rollupJudge(stored(session.spans), events);
   assert.equal(rollup.emptySynthesisCount, 1);
   assert.equal(rollup.decisions[0].synthesisEmpty, true);
 });
 
-test("rollupModels pairs start markers with chat spans and reads GenAI usage", () => {
-  const spans = stored(syntheticSession("11111111111111111111111111110016"));
-  const models = rollupModels(spans);
+test("rollupModels pairs start events with chat spans and reads GenAI usage", () => {
+  const session = syntheticSession("11111111111111111111111111110016");
+  const models = rollupModels(stored(session.spans), storedEvents(session.events));
   const gpt = models.find((row) => row.modelId === "gpt");
   assert.ok(gpt);
   assert.equal(gpt.calls, 1);
@@ -107,11 +111,10 @@ test("rollupModels pairs start markers with chat spans and reads GenAI usage", (
   assert.ok((gpt.avgLatencyS ?? 0) > 0, "latency comes from the span duration");
 });
 
-test("a start marker with no chat span counts as a running call", () => {
-  const spans = stored(
-    syntheticSession("11111111111111111111111111110017").filter((span) => !span.name.startsWith("chat"))
-  );
-  const models = rollupModels(spans);
+test("a start event with no chat span counts as a running call", () => {
+  const session = syntheticSession("11111111111111111111111111110017");
+  const spans = stored(session.spans.filter((span) => !span.name.startsWith("chat")));
+  const models = rollupModels(spans, storedEvents(session.events));
   const gpt = models.find((row) => row.modelId === "gpt");
   assert.equal(gpt?.calls, 1);
   assert.equal(gpt?.running, 1);
@@ -120,7 +123,8 @@ test("a start marker with no chat span counts as a running call", () => {
 
 test("deriveSession sums the session's resolved cost", () => {
   const traceId = "11111111111111111111111111110018";
-  const detail = deriveSession(traceId, stored(syntheticSession(traceId)));
+  const session = syntheticSession(traceId);
+  const detail = deriveSession(traceId, stored(session.spans), storedEvents(session.events));
   assert.ok(detail.costUsd !== undefined);
   assert.ok(Math.abs(detail.costUsd - 0.0193) < 1e-9);
   assert.equal(detail.costIncomplete, undefined);

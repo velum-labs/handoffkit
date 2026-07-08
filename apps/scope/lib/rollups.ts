@@ -1,10 +1,10 @@
 import { attrBool, attrNum, attrStr, candidateIdOf, modelIdOf } from "./types";
-import type { RawEnvironment, StoredSpan } from "./types";
+import type { RawEnvironment, StoredEvent, StoredSpan } from "./types";
 
 /**
  * Pure cross-session aggregations for the Models, Judge, and Environments
- * pages, folded from flat span lists. Kept dependency-free so they can be
- * unit tested directly.
+ * pages, folded from flat span and event lists. Kept dependency-free so they
+ * can be unit tested directly.
  */
 
 /** Total tokens carried by a usage blob (total, or prompt + completion). */
@@ -44,11 +44,11 @@ type ModelAcc = {
 };
 
 /**
- * Fold model-call spans (`chat …`, plus their live start markers) into
- * per-model stats. A start marker with no finished chat span is a running
- * call; the chat span carries GenAI usage, latency, and outcome.
+ * Fold model-call chat spans plus their live start events into per-model
+ * stats. A start event with no finished chat span is a running call; the
+ * chat span carries GenAI usage, latency, and outcome.
  */
-export function rollupModels(spans: StoredSpan[]): ModelRollup[] {
+export function rollupModels(spans: StoredSpan[], events: StoredEvent[] = []): ModelRollup[] {
   const byModel = new Map<string, ModelAcc>();
   const ensure = (modelId: string): ModelAcc => {
     let acc = byModel.get(modelId);
@@ -70,17 +70,22 @@ export function rollupModels(spans: StoredSpan[]): ModelRollup[] {
     return acc;
   };
 
+  for (const event of events) {
+    if (event.name !== "fusion.model_call.started") continue;
+    const modelId = modelIdOf(event);
+    if (modelId === undefined) continue;
+    const acc = ensure(modelId);
+    acc.lastTs = Math.max(acc.lastTs, event.ts_ms);
+    const provider = attrStr(event, "gen_ai.provider.name");
+    if (provider !== undefined) acc.provider = provider;
+    acc.started.add(event.span_id ?? `event-${event.id}`);
+  }
+
   for (const span of spans) {
     const modelId = modelIdOf(span);
     if (modelId === undefined) continue;
 
-    if (span.name === "fusion.model_call.started") {
-      const acc = ensure(modelId);
-      acc.lastTs = Math.max(acc.lastTs, span.end_ms);
-      const provider = attrStr(span, "gen_ai.provider.name");
-      if (provider !== undefined) acc.provider = provider;
-      acc.started.add(span.parent_span_id ?? span.span_id);
-    } else if (span.name.startsWith("chat")) {
+    if (span.name.startsWith("chat")) {
       const acc = ensure(modelId);
       acc.lastTs = Math.max(acc.lastTs, span.end_ms);
       const provider = attrStr(span, "gen_ai.provider.name");
@@ -144,11 +149,11 @@ export type CostRollup = {
 };
 
 /**
- * Fold the gateway cost meter's `fusion.cost` markers into spend rollups.
+ * Fold the gateway cost meter's `fusion.cost` events into spend rollups.
  * Costs are attributed to the priced model name and the metering stage
  * (panel, judge_synth, passthrough).
  */
-export function rollupCost(spans: StoredSpan[]): CostRollup {
+export function rollupCost(events: StoredEvent[]): CostRollup {
   const perModel = new Map<string, CostModelRow>();
   const perStage = new Map<string, { stage: string; entries: number; usd: number }>();
   const sessions = new Set<string>();
@@ -156,25 +161,25 @@ export function rollupCost(spans: StoredSpan[]): CostRollup {
   let entries = 0;
   let unknownEntries = 0;
 
-  for (const span of spans) {
-    if (span.name !== "fusion.cost") continue;
+  for (const event of events) {
+    if (event.name !== "fusion.cost") continue;
     entries += 1;
-    const stage = attrStr(span, "fusion.cost.stage") ?? "unknown";
-    const model = attrStr(span, "fusion.cost.model") ?? "unknown";
-    const usd = attrNum(span, "fusion.cost.turn_usd") ?? 0;
-    if (attrBool(span, "fusion.cost.unknown") === true) unknownEntries += 1;
+    const stage = attrStr(event, "fusion.cost.stage") ?? "unknown";
+    const model = attrStr(event, "fusion.cost.model") ?? "unknown";
+    const usd = attrNum(event, "fusion.cost.turn_usd") ?? 0;
+    if (attrBool(event, "fusion.cost.unknown") === true) unknownEntries += 1;
     totalUsd += usd;
-    if (usd > 0) sessions.add(span.trace_id);
+    if (usd > 0) sessions.add(event.trace_id);
 
-    const prompt = attrNum(span, "gen_ai.usage.input_tokens") ?? 0;
-    const completion = attrNum(span, "gen_ai.usage.output_tokens") ?? 0;
+    const prompt = attrNum(event, "gen_ai.usage.input_tokens") ?? 0;
+    const completion = attrNum(event, "gen_ai.usage.output_tokens") ?? 0;
 
     const key = `${model}\u0000${stage}`;
     const row = perModel.get(key) ?? { model, stage, entries: 0, usd: 0, tokens: 0, lastTs: 0 };
     row.entries += 1;
     row.usd += usd;
     row.tokens += prompt + completion;
-    row.lastTs = Math.max(row.lastTs, span.end_ms);
+    row.lastTs = Math.max(row.lastTs, event.ts_ms);
     perModel.set(key, row);
 
     const stageRow = perStage.get(stage) ?? { stage, entries: 0, usd: 0 };
@@ -235,12 +240,13 @@ type JudgeTraceAcc = {
 };
 
 /**
- * Fold terminal judge spans across sessions into decision stats: how often
- * the judge synthesizes vs selects a candidate verbatim, which panel models
- * win selections, and how often synthesis came back empty. One decision per
- * session (the last judge span that carries one).
+ * Fold terminal judge spans (plus candidate-started and synthesis events)
+ * across sessions into decision stats: how often the judge synthesizes vs
+ * selects a candidate verbatim, which panel models win selections, and how
+ * often synthesis came back empty. One decision per session (the last judge
+ * span that carries one).
  */
-export function rollupJudge(spans: StoredSpan[]): JudgeRollup {
+export function rollupJudge(spans: StoredSpan[], events: StoredEvent[] = []): JudgeRollup {
   const traces = new Map<string, JudgeTraceAcc>();
   const ensure = (traceId: string): JudgeTraceAcc => {
     let acc = traces.get(traceId);
@@ -257,19 +263,33 @@ export function rollupJudge(spans: StoredSpan[]): JudgeRollup {
     return acc;
   };
 
+  for (const event of events) {
+    const acc = ensure(event.trace_id);
+    acc.ts = Math.max(acc.ts, event.ts_ms);
+
+    if (event.name === "fusion.candidate.started") {
+      const candidateId = candidateIdOf(event);
+      const modelId = attrStr(event, "fusion.model.id");
+      if (candidateId !== undefined && modelId !== undefined) {
+        acc.candidateModels.set(candidateId, modelId);
+        acc.panelModels.add(modelId);
+      }
+    } else if (event.name === "fusion.judge.synthesis") {
+      if (attrBool(event, "fusion.synthesis_empty") === true) acc.synthesisEmpty = true;
+    }
+  }
+
   for (const span of spans) {
     const acc = ensure(span.trace_id);
     acc.ts = Math.max(acc.ts, span.end_ms);
 
-    if (span.name === "fusion.candidate.started" || span.name === "fusion.candidate") {
+    if (span.name === "fusion.candidate") {
       const candidateId = candidateIdOf(span);
       const modelId = attrStr(span, "fusion.model.id");
       if (candidateId !== undefined && modelId !== undefined) {
         acc.candidateModels.set(candidateId, modelId);
         acc.panelModels.add(modelId);
       }
-    } else if (span.name === "fusion.judge.synthesis") {
-      if (attrBool(span, "fusion.synthesis_empty") === true) acc.synthesisEmpty = true;
     } else if (span.name === "fusion.judge" || span.name === "fusion.fuse") {
       const decision = attrStr(span, "fusion.decision");
       if (decision !== undefined) {

@@ -1,12 +1,14 @@
 import { randomId } from "@fusionkit/runtime-utils";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
+import { serverToolMarkerOf } from "./server-tool-loop.js";
+import type { ServerToolMarker } from "./server-tool-loop.js";
 
 const ENCODER = new TextEncoder();
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
-type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; provider_cost?: unknown };
-type ResponsesToolKind = "function" | "custom" | "typed";
+type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage | null; provider_cost?: unknown };
+type ResponsesToolKind = "function" | "custom" | "typed" | "server";
 type ResponsesToolRegistry = ReadonlyMap<string, { kind: ResponsesToolKind; namespace?: string }>;
 
 function typedToolArguments(args: string): unknown {
@@ -96,11 +98,32 @@ function streamedToolItem(tool: ToolAccumulator): Record<string, unknown> {
         arguments: tool.args,
         status: "completed"
       };
+    case "server":
+      // Unreachable in practice: the server-tool loop intercepts these calls
+      // before they reach the translator. Render the native item shape so a
+      // stray call never surfaces as a function_call nobody dispatches.
+      return {
+        type: "web_search_call",
+        id: tool.itemId,
+        status: "completed",
+        action: { type: "search", query: webSearchQueryOf(tool.args) }
+      };
     default: {
       const exhaustive: never = tool.kind;
       throw new Error(`unknown tool kind: ${String(exhaustive)}`);
     }
   }
+}
+
+/** The `query` from a web_search call's JSON arguments (raw args as fallback). */
+function webSearchQueryOf(args: string): string {
+  try {
+    const parsed = JSON.parse(args) as { query?: unknown };
+    if (typeof parsed.query === "string") return parsed.query;
+  } catch {
+    // fall through to the raw argument string
+  }
+  return args;
 }
 
 export function openAiSseToResponses(
@@ -146,6 +169,11 @@ export function openAiSseToResponses(
   };
 
   type Controller = ReadableStreamDefaultController<Uint8Array>;
+
+  // Gateway-executed web searches (server-tool loop markers): open item per
+  // search, completed items collected for the terminal response payload.
+  const openSearches = new Map<string, { outputIndex: number }>();
+  const completedSearchItems: Record<string, unknown>[] = [];
 
   const baseResponse = (status: string, output: Record<string, unknown>[]): Record<string, unknown> => ({
     id: responseId,
@@ -291,11 +319,48 @@ export function openAiSseToResponses(
     );
   };
 
+  // The server-tool loop injects marker chunks around each gateway-executed
+  // web search; render them as the native web_search_call item lifecycle.
+  const handleServerToolMarker = (controller: Controller, marker: ServerToolMarker): void => {
+    if (marker.phase === "start") {
+      ensureCreated(controller);
+      closeReasoning(controller);
+      const outputIndex = nextOutputIndex++;
+      openSearches.set(marker.item_id, { outputIndex });
+      controller.enqueue(
+        emit("response.output_item.added", {
+          output_index: outputIndex,
+          item: {
+            type: "web_search_call",
+            id: marker.item_id,
+            status: "in_progress",
+            action: { type: "search", query: marker.query }
+          }
+        })
+      );
+      controller.enqueue(emit("response.web_search_call.in_progress", { output_index: outputIndex, item_id: marker.item_id }));
+      controller.enqueue(emit("response.web_search_call.searching", { output_index: outputIndex, item_id: marker.item_id }));
+      return;
+    }
+    const outputIndex = openSearches.get(marker.item_id)?.outputIndex ?? nextOutputIndex++;
+    openSearches.delete(marker.item_id);
+    const item = {
+      type: "web_search_call",
+      id: marker.item_id,
+      status: marker.status === "failed" ? "failed" : "completed",
+      action: { type: "search", query: marker.query }
+    };
+    completedSearchItems.push(item);
+    controller.enqueue(emit("response.web_search_call.completed", { output_index: outputIndex, item_id: marker.item_id }));
+    controller.enqueue(emit("response.output_item.done", { output_index: outputIndex, item }));
+  };
+
   const assembleOutput = (): Record<string, unknown>[] => {
     const output: Record<string, unknown>[] = [];
     if (reasoningParts.length > 0) {
       output.push({ type: "reasoning", id: reasoningItemId, summary: reasoningSummary() });
     }
+    output.push(...completedSearchItems);
     if (textOpen) {
       output.push({
         type: "message",
@@ -359,9 +424,10 @@ export function openAiSseToResponses(
         );
         continue;
       }
-      if (tool.kind === "typed") {
-        // A typed tool's native item carries its arguments as a completed JSON
-        // value, so it flushes whole in the item.done (no argument deltas).
+      if (tool.kind === "typed" || tool.kind === "server") {
+        // A typed/server tool's native item carries its arguments as a
+        // completed JSON value, so it flushes whole in the item.done (no
+        // argument deltas).
         controller.enqueue(
           emit("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
         );
@@ -390,10 +456,10 @@ export function openAiSseToResponses(
   };
 
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
-    if (chunk.usage !== undefined) {
-      inputTokens = chunk.usage.prompt_tokens ?? inputTokens;
-      outputTokens = chunk.usage.completion_tokens ?? outputTokens;
-    }
+    // Real OpenAI streams carry `"usage": null` on every chunk except the
+    // final usage chunk, so a null must read as "absent".
+    inputTokens = chunk.usage?.prompt_tokens ?? inputTokens;
+    outputTokens = chunk.usage?.completion_tokens ?? outputTokens;
     if (chunk.provider_cost !== undefined) providerCost = chunk.provider_cost;
     const choice = chunk.choices?.[0];
     if (choice === undefined) return;
@@ -438,7 +504,14 @@ export function openAiSseToResponses(
           const kind = entry.kind;
           tool = {
             outputIndex: nextOutputIndex++,
-            itemId: kind === "custom" ? `ctc_${randomId()}` : kind === "typed" ? `ttc_${randomId()}` : `fc_${randomId()}`,
+            itemId:
+              kind === "custom"
+                ? `ctc_${randomId()}`
+                : kind === "typed"
+                  ? `ttc_${randomId()}`
+                  : kind === "server"
+                    ? `ws_${randomId()}`
+                    : `fc_${randomId()}`,
             callId: call.id ?? `call_${randomId()}`,
             name,
             args: "",
@@ -454,14 +527,16 @@ export function openAiSseToResponses(
                   ? { type: "custom_tool_call", id: tool.itemId, call_id: tool.callId, name: tool.name, input: "" }
                   : kind === "typed"
                     ? { type: `${tool.name}_call`, id: tool.itemId, call_id: tool.callId, status: "in_progress", execution: "client", arguments: {} }
-                    : {
-                        type: "function_call",
-                        id: tool.itemId,
-                        call_id: tool.callId,
-                        name: tool.name,
-                        ...(tool.namespace !== undefined ? { namespace: tool.namespace } : {}),
-                        arguments: ""
-                      }
+                    : kind === "server"
+                      ? { type: "web_search_call", id: tool.itemId, status: "in_progress", action: { type: "search" } }
+                      : {
+                          type: "function_call",
+                          id: tool.itemId,
+                          call_id: tool.callId,
+                          name: tool.name,
+                          ...(tool.namespace !== undefined ? { namespace: tool.namespace } : {}),
+                          arguments: ""
+                        }
             })
           );
         }
@@ -516,6 +591,11 @@ export function openAiSseToResponses(
       // stream error, never silently skipped (WS5).
       const detail = error instanceof Error ? error.message : String(error);
       throw new SseParseError(`malformed OpenAI SSE payload in Responses translation: ${detail}`, data.slice(0, 200));
+    }
+    const marker = serverToolMarkerOf(chunk);
+    if (marker !== undefined) {
+      handleServerToolMarker(controller, marker);
+      return;
     }
     process(controller, chunk);
   };

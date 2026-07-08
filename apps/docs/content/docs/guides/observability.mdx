@@ -6,35 +6,39 @@ description: Watch sessions, trajectories, and the judge with --observe.
 ## The trace dashboard
 
 Pass `--observe` to boot a local dashboard (the **scope** app) that streams live
-fusion spans: sessions, environments, per-panel-model trajectories, and the
+fusion signals: sessions, environments, per-panel-model trajectories, and the
 judge's thinking-to-final flow:
 
 ```bash
 fusionkit codex --observe
 ```
 
-fusionkit exports the standard `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` into every
-spawned process, opens the dashboard in your browser, and tears it down on exit.
+fusionkit exports the standard `OTEL_EXPORTER_OTLP_ENDPOINT` base into every
+spawned process (spans post to `/v1/traces`, events to `/v1/logs`), opens the
+dashboard in your browser, and tears it down on exit.
 
 ## What gets traced
 
-Fusion traces with **OpenTelemetry**: every component emits real spans over
-OTLP/HTTP, correlated by one trace id and propagated with W3C
-`traceparent`/`baggage`. The vocabulary lives in the semantic-conventions
-registry (`spec/fusion-trace/registry.json`):
+Fusion traces with **OpenTelemetry**: every component emits real spans (units
+of work, on the traces signal) and events (live point-in-time signals, OTel
+log records with an `event_name`, on the logs signal) over OTLP/HTTP,
+correlated by one trace id and propagated with W3C `traceparent`/`baggage`.
+The vocabulary lives in the semantic-conventions registry
+(`spec/fusion-trace/registry.json`):
 
-- `fusion.turn.info` (an instant marker with the environment snapshot)
-- `fusion.candidate` spans with live `fusion.candidate.step` markers
+- `fusion.turn.info` (an event with the environment snapshot)
+- `fusion.candidate` spans with live `fusion.candidate.step` events
 - GenAI `chat` spans for model calls (`gen_ai.*` attributes)
-- `fusion.tool.execution` and `fusion.cost` markers
-- the judge's `fusion.judge.thinking` markers under the terminal `fusion.judge`
+- `fusion.tool.execution` and `fusion.cost` events
+- the judge's `fusion.judge.thinking` events under the terminal `fusion.judge`
   span, whose end carries the final answer and marks the session succeeded
 
-Because the pipeline is standard OTLP, the same spans can be exported to any
+Because the pipeline is standard OTLP, the same signals can be exported to any
 OTel backend instead (PostHog distributed tracing, Jaeger, Tempo) by setting
-`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (and `OTEL_EXPORTER_OTLP_TRACES_HEADERS`
-for auth) yourself; `--observe` only fills the default when the variable is
-unset.
+`OTEL_EXPORTER_OTLP_ENDPOINT` — or the signal-specific
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` (and
+`OTEL_EXPORTER_OTLP_HEADERS` for auth) — yourself; `--observe` only fills the
+default when the variables are unset.
 
 ## Availability
 

@@ -6,12 +6,13 @@ import { ChevronRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { componentColor, fmtDuration } from "@/lib/format";
-import { candidateIdOf, isMarker, modelIdOf, TRACE_COMPONENTS } from "@/lib/types";
-import type { StoredSpan } from "@/lib/types";
+import { candidateIdOf, modelIdOf, signalKey, TRACE_COMPONENTS } from "@/lib/types";
+import type { StoredEvent, StoredSignal, StoredSpan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Track = {
   key: string;
+  /** The signal's own identity (span id, or a synthetic event key). */
   spanId: string;
   parentSpanId?: string;
   component: string;
@@ -21,8 +22,8 @@ type Track = {
   endTs: number;
   isPoint: boolean;
   depth: number;
-  /** The underlying span, for inspection. */
-  spans: StoredSpan[];
+  /** The underlying signal, for inspection. */
+  signals: StoredSignal[];
 };
 
 // Grid column template + horizontal padding shared by the ruler and every row,
@@ -34,8 +35,8 @@ const BAR_COL_LEFT_PX = 8 + 56 + 12 + 260 + 12; // px-2 + col + gap + col + gap
 const BAR_COL_RIGHT_PX = 8 + 56 + 12; // px-2 + last col + gap
 const TICKS = [0, 0.25, 0.5, 0.75, 1];
 
-function detailOf(span: StoredSpan): string | undefined {
-  return candidateIdOf(span) ?? modelIdOf(span) ?? undefined;
+function detailOf(signal: StoredSignal): string | undefined {
+  return candidateIdOf(signal) ?? modelIdOf(signal) ?? undefined;
 }
 
 /** Walk parent_span_id chains to compute an indentation depth per span. */
@@ -62,26 +63,41 @@ function buildDepths(spans: StoredSpan[]): Map<string, number> {
   return depths;
 }
 
-/** Spans are already the waterfall: duration bars for units, markers for signals. */
-function buildTracks(spans: StoredSpan[]): Track[] {
+/** Unit spans render as duration bars; events as points on their owning span's subtree. */
+function buildTracks(spans: StoredSpan[], events: StoredEvent[]): Track[] {
   const depths = buildDepths(spans);
-  return spans
-    .map(
-      (span): Track => ({
-        key: `span-${span.id}`,
-        spanId: span.span_id,
-        parentSpanId: span.parent_span_id,
-        component: span.component,
-        label: span.name,
-        detail: detailOf(span),
-        startTs: span.start_ms,
-        endTs: span.end_ms,
-        isPoint: isMarker(span),
-        depth: depths.get(span.span_id) ?? 0,
-        spans: [span]
-      })
-    )
-    .sort((a, b) => a.startTs - b.startTs || a.endTs - b.endTs);
+  const spanTracks = spans.map(
+    (span): Track => ({
+      key: `span-${span.id}`,
+      spanId: span.span_id,
+      parentSpanId: span.parent_span_id,
+      component: span.component,
+      label: span.name,
+      detail: detailOf({ kind: "span", ...span }),
+      startTs: span.start_ms,
+      endTs: span.end_ms,
+      isPoint: false,
+      depth: depths.get(span.span_id) ?? 0,
+      signals: [{ kind: "span", ...span }]
+    })
+  );
+  const eventTracks = events.map((event): Track => {
+    const ownerDepth = event.span_id !== undefined ? depths.get(event.span_id) : undefined;
+    return {
+      key: `event-${event.id}`,
+      spanId: signalKey({ kind: "event", ...event }),
+      parentSpanId: event.span_id,
+      component: event.component,
+      label: event.name,
+      detail: detailOf({ kind: "event", ...event }),
+      startTs: event.ts_ms,
+      endTs: event.ts_ms,
+      isPoint: true,
+      depth: ownerDepth !== undefined ? ownerDepth + 1 : 0,
+      signals: [{ kind: "event", ...event }]
+    };
+  });
+  return [...spanTracks, ...eventTracks].sort((a, b) => a.startTs - b.startTs || a.endTs - b.endTs);
 }
 
 function Legend({ components }: { components: string[] }) {
@@ -99,25 +115,27 @@ function Legend({ components }: { components: string[] }) {
 }
 
 /**
- * The trace waterfall: unit spans render as bars, markers as points. Every
- * row is clickable and opens the span inspector.
+ * The trace waterfall: unit spans render as bars, events as points nested
+ * under their owning span. Every row is clickable and opens the inspector.
  */
 export function Timeline({
   spans,
+  events = [],
   startedAt,
   durationMs,
   live,
   onInspect
 }: {
   spans: StoredSpan[];
+  events?: StoredEvent[];
   startedAt: number;
   durationMs: number;
   /** True while the session is still running (draws the live cursor). */
   live?: boolean;
-  onInspect?: (spans: StoredSpan[]) => void;
+  onInspect?: (signals: StoredSignal[]) => void;
 }) {
   const span = Math.max(1, durationMs);
-  const tracks = useMemo(() => buildTracks(spans), [spans]);
+  const tracks = useMemo(() => buildTracks(spans, events), [spans, events]);
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -226,7 +244,7 @@ export function Timeline({
                     "hover:bg-accent/50 items-center rounded-md py-1",
                     onInspect !== undefined && "cursor-pointer"
                   )}
-                  onClick={onInspect !== undefined ? () => onInspect(track.spans) : undefined}
+                  onClick={onInspect !== undefined ? () => onInspect(track.signals) : undefined}
                 >
                   <span className="mono text-muted-foreground text-right text-xs">{fmtDuration(offset)}</span>
                   <div

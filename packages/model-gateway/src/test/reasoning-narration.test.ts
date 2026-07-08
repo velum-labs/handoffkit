@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { ATTR } from "@fusionkit/protocol";
 import {
-  emitFusionMarker,
+  emitFusionEvent,
   initFusionTracing,
   jsonAttr,
   newSessionCarrier,
@@ -54,13 +54,13 @@ async function streamText(stream: ReadableStream<Uint8Array>): Promise<string> {
   return await new Response(stream).text();
 }
 
-// The narrator listens to real in-process spans, so tests need a provider.
+// The narrator listens to real in-process spans/events, so tests need a provider.
 initFusionTracing({ serviceName: "narration-test" });
 
 type TestSession = { traceId: string; carrier: FusionTraceCarrier };
 
 function emitTurnInfo(session: TestSession, environment: unknown, turn = 1): void {
-  emitFusionMarker("gateway", "fusion.turn.info", session.carrier, {
+  emitFusionEvent("gateway", "fusion.turn.info", session.carrier, {
     [ATTR.FUSION_DIALECT]: "fusion-step",
     [ATTR.FUSION_TURN]: turn,
     [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment)
@@ -68,7 +68,7 @@ function emitTurnInfo(session: TestSession, environment: unknown, turn = 1): voi
 }
 
 function emitCandidateStarted(session: TestSession, candidateId: string, modelId: string, turn = 1): void {
-  emitFusionMarker("panel-model", "fusion.candidate.started", session.carrier, {
+  emitFusionEvent("panel-model", "fusion.candidate.started", session.carrier, {
     [ATTR.FUSION_CANDIDATE_ID]: candidateId,
     [ATTR.FUSION_MODEL_ID]: modelId,
     [ATTR.FUSION_TURN]: turn
@@ -101,7 +101,7 @@ function emitCandidateFinished(
 }
 
 function emitJudgeRequest(session: TestSession, trajectories: unknown[], turn = 1, judgeModel = "gpt-5.5"): void {
-  emitFusionMarker("judge", "fusion.judge.request", session.carrier, {
+  emitFusionEvent("judge", "fusion.judge.request", session.carrier, {
     [ATTR.FUSION_JUDGE_MODEL]: judgeModel,
     [ATTR.FUSION_TURN]: turn,
     [ATTR.FUSION_TRAJECTORIES]: jsonAttr(trajectories)

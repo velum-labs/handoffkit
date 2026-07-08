@@ -14,50 +14,65 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { componentColor, fmtDuration } from "@/lib/format";
-import { candidateIdOf, modelIdOf } from "@/lib/types";
-import type { StoredSpan } from "@/lib/types";
+import { candidateIdOf, modelIdOf, signalKey } from "@/lib/types";
+import type { StoredEvent, StoredSignal, StoredSpan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+function tsOf(signal: StoredSignal): number {
+  return signal.kind === "span" ? signal.start_ms : signal.ts_ms;
+}
+
 /**
- * The raw span backstop: every ingested span for a session, filterable by
- * component and free text, with row click opening the span inspector. Makes
- * span names with no dedicated view (fusion.tool.execution, fusion.cost, …)
- * reachable.
+ * The raw signal backstop: every ingested span and event for a session,
+ * filterable by component and free text, with row click opening the
+ * inspector. Makes signal names with no dedicated view
+ * (fusion.tool.execution, fusion.cost, …) reachable.
  */
 export function EventTable({
   spans,
+  events = [],
   startedAt,
   onInspect
 }: {
   spans: StoredSpan[];
+  events?: StoredEvent[];
   startedAt: number;
-  onInspect: (spans: StoredSpan[]) => void;
+  onInspect: (signals: StoredSignal[]) => void;
 }) {
   const [component, setComponent] = useState<string>("all");
   const [query, setQuery] = useState("");
 
+  const signals = useMemo(() => {
+    const merged: StoredSignal[] = [
+      ...spans.map((span): StoredSignal => ({ kind: "span", ...span })),
+      ...events.map((event): StoredSignal => ({ kind: "event", ...event }))
+    ];
+    return merged.sort((a, b) => tsOf(a) - tsOf(b));
+  }, [spans, events]);
+
   const components = useMemo(() => {
-    const present = new Set(spans.map((span) => span.component));
+    const present = new Set(signals.map((signal) => signal.component));
     return ["all", ...present];
-  }, [spans]);
+  }, [signals]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return spans.filter((span) => {
-      if (component !== "all" && span.component !== component) return false;
+    return signals.filter((signal) => {
+      if (component !== "all" && signal.component !== component) return false;
       if (q.length === 0) return true;
       const haystack = [
-        span.name,
-        span.component,
-        span.span_id,
-        candidateIdOf(span) ?? "",
-        modelIdOf(span) ?? ""
+        signal.name,
+        signal.kind,
+        signal.component,
+        signal.kind === "span" ? signal.span_id : (signal.span_id ?? ""),
+        candidateIdOf(signal) ?? "",
+        modelIdOf(signal) ?? ""
       ]
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [spans, component, query]);
+  }, [signals, component, query]);
 
   return (
     <div>
@@ -90,44 +105,46 @@ export function EventTable({
       </div>
 
       {visible.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No matching spans.</p>
+        <p className="text-muted-foreground text-sm">No matching signals.</p>
       ) : (
         <ScrollArea viewportClassName="max-h-[440px]">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-[72px] text-right">Offset</TableHead>
+                <TableHead className="w-[56px]">Kind</TableHead>
                 <TableHead className="w-[120px]">Component</TableHead>
-                <TableHead>Span</TableHead>
+                <TableHead>Name</TableHead>
                 <TableHead>Candidate / model</TableHead>
                 <TableHead className="w-[72px] text-right">Duration</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.map((span) => (
+              {visible.map((signal) => (
                 <TableRow
-                  key={span.id}
+                  key={signalKey(signal)}
                   className="cursor-pointer"
-                  onClick={() => onInspect([span])}
+                  onClick={() => onInspect([signal])}
                 >
                   <TableCell className="mono text-muted-foreground text-right text-xs">
-                    {fmtDuration(Math.max(0, span.start_ms - startedAt))}
+                    {fmtDuration(Math.max(0, tsOf(signal) - startedAt))}
                   </TableCell>
+                  <TableCell className="text-muted-foreground text-xs">{signal.kind}</TableCell>
                   <TableCell>
                     <span className="inline-flex items-center gap-1.5 text-xs">
                       <span
                         className="size-2 rounded-full"
-                        style={{ background: componentColor(span.component) }}
+                        style={{ background: componentColor(signal.component) }}
                       />
-                      {span.component}
+                      {signal.component}
                     </span>
                   </TableCell>
-                  <TableCell className={cn("mono text-xs")}>{span.name}</TableCell>
+                  <TableCell className={cn("mono text-xs")}>{signal.name}</TableCell>
                   <TableCell className="mono text-muted-foreground max-w-[200px] truncate text-xs">
-                    {candidateIdOf(span) ?? modelIdOf(span) ?? "—"}
+                    {candidateIdOf(signal) ?? modelIdOf(signal) ?? "—"}
                   </TableCell>
                   <TableCell className="mono text-muted-foreground text-right text-xs">
-                    {span.end_ms - span.start_ms > 0 ? fmtDuration(span.end_ms - span.start_ms) : "—"}
+                    {signal.kind === "span" ? fmtDuration(signal.end_ms - signal.start_ms) : "—"}
                   </TableCell>
                 </TableRow>
               ))}

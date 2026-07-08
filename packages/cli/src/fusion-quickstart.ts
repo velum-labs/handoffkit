@@ -628,8 +628,8 @@ export async function runFusion(
   // When --observe is set, boot the dashboard and export the standard OTLP env
   // BEFORE anything starts, so the in-process gateway/ensemble/agent tracers
   // and every spawned child (panel servers, synthesis serve, cursor bridge)
-  // export spans to it. Without the flag (and without a user-provided
-  // OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) nothing is exported.
+  // export spans and events to it. Without the flag (and without a
+  // user-provided OTEL_EXPORTER_OTLP_* endpoint) nothing is exported.
   let observability: Observability | undefined;
   let stack: FusionStack;
   try {
@@ -647,11 +647,12 @@ export async function runFusion(
         });
         disposers.push(() => observability?.close() ?? Promise.resolve());
         // A user-configured endpoint (e.g. PostHog) wins; --observe fills the
-        // default so the local dashboard receives the spans.
-        process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ??= observability.otlpUrl;
+        // base default so both OTLP signals (spans on /v1/traces, events on
+        // /v1/logs) land on the local dashboard.
+        process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??= observability.otlpUrl;
         if (boot === undefined) {
           log(`fusion: observability dashboard at ${observability.url}`);
-          log(`fusion: spans -> ${observability.otlpUrl} (OTLP/HTTP)`);
+          log(`fusion: spans + events -> ${observability.otlpUrl} (OTLP/HTTP)`);
         }
         openUrl(observability.url);
       } catch (error) {

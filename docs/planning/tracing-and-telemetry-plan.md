@@ -1,5 +1,12 @@
 # Tracing and telemetry plan
 
+> **Update (registry v2.0.0):** the "zero-duration marker span" approach this
+> plan shipped with has since been replaced. Live point-in-time signals are now
+> OTel **log-based events** (`emitFusionEvent` / `emit_event`, `event.name` +
+> trace/span correlation) exported over OTLP `/v1/logs`, and scope ingests
+> traces and logs on separate endpoints. `OTEL_EXPORTER_OTLP_ENDPOINT` is the
+> base export variable. Details in `spec/fusion-trace/README.md`.
+
 A comprehensive plan to replace the fusion trace spine with a proper tracing
 system that serves two consumers with very different trust models:
 

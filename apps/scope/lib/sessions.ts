@@ -1,11 +1,11 @@
-import { attrBool, attrJson, attrNum, attrStr, attrStrArray, candidateIdOf, isMarker, modelIdOf } from "./types";
-import type { RawEnvironment, StoredSpan } from "./types";
+import { attrBool, attrJson, attrNum, attrStr, attrStrArray, candidateIdOf, modelIdOf } from "./types";
+import type { AttributeSource, RawEnvironment, StoredEvent, StoredSpan } from "./types";
 
 /**
- * Pure aggregation: fold a session's spans into the structured view the
- * dashboard renders (environment, per-candidate trajectories, the judge's
- * thinking-to-final flow, and panel-model calls). Kept dependency-free so it
- * can be unit tested directly.
+ * Pure aggregation: fold a session's spans and events into the structured
+ * view the dashboard renders (environment, per-candidate trajectories, the
+ * judge's thinking-to-final flow, and panel-model calls). Kept
+ * dependency-free so it can be unit tested directly.
  */
 
 export type TrajectoryStepView = {
@@ -30,9 +30,9 @@ export type CandidateView = {
   finishReason?: string;
   verificationStatus?: string;
   finalOutputPreview?: string;
-  /** Full system prompt the panel model ran under (model-call started marker). */
+  /** Full system prompt the panel model ran under (model-call started event). */
   systemPrompt?: string;
-  /** Full task prompt sent to the panel model (model-call started marker). */
+  /** Full task prompt sent to the panel model (model-call started event). */
   prompt?: string;
   /** Full final output of the panel model (the chat span). */
   finalOutput?: string;
@@ -59,7 +59,7 @@ export type ModelCallView = {
 };
 
 export type JudgeView = {
-  /** The full input handed to the judge (the fusion.judge.request marker). */
+  /** The full input handed to the judge (the fusion.judge.request event). */
   prompt?: {
     judgeModel?: string;
     messages?: unknown;
@@ -83,7 +83,7 @@ export type JudgeView = {
 
 /**
  * One judge step = one `fusion.judge` span (one gateway fuse phase): the input
- * marker plus its outcome (an intermediate tool-calling turn or the terminal
+ * event plus its outcome (an intermediate tool-calling turn or the terminal
  * answer). Multiple steps share a `turn` when they belong to the same user
  * message; a follow-up user message is a new `turn`.
  */
@@ -138,7 +138,7 @@ export type SessionDetail = {
   judgeSteps: JudgeStepView[];
   /** The reasoning-trace narration, in the order the coding agent saw it. */
   narration: NarrationBeatView[];
-  /** Total resolved spend for the session (fusion.cost markers). */
+  /** Total resolved spend for the session (fusion.cost events). */
   costUsd?: number;
   /** True when at least one cost entry could not be priced. */
   costIncomplete?: boolean;
@@ -146,7 +146,9 @@ export type SessionDetail = {
   evidence?: string[];
   durationMs: number;
   spanCounts: Record<string, number>;
+  eventCounts: Record<string, number>;
   spans: StoredSpan[];
+  events: StoredEvent[];
 };
 
 function obj(value: unknown): Record<string, unknown> {
@@ -173,8 +175,8 @@ function firstUserMessage(messages: unknown): string | undefined {
   return undefined;
 }
 
-function usageOf(span: StoredSpan): Record<string, unknown> | undefined {
-  return attrJson<Record<string, unknown>>(span, "fusion.usage");
+function usageOf(source: AttributeSource): Record<string, unknown> | undefined {
+  return attrJson<Record<string, unknown>>(source, "fusion.usage");
 }
 
 /** Group name for span counters: chat spans collapse onto "chat". */
@@ -182,22 +184,24 @@ function countName(name: string): string {
   return name.startsWith("chat ") ? "chat" : name;
 }
 
-export function deriveSession(traceId: string, spans: StoredSpan[]): SessionDetail {
+export function deriveSession(traceId: string, spans: StoredSpan[], events: StoredEvent[] = []): SessionDetail {
   const sorted = [...spans].sort((a, b) => a.start_ms - b.start_ms || a.id - b.id);
+  const sortedEvents = [...events].sort((a, b) => a.ts_ms - b.ts_ms || a.id - b.id);
   const candidates = new Map<string, CandidateView>();
   const modelCalls = new Map<string, ModelCallView>();
   const judge: JudgeView = {};
   const judgeStepMap = new Map<string, JudgeStepView>();
   const narration: NarrationBeatView[] = [];
   const spanCounts: Record<string, number> = {};
+  const eventCounts: Record<string, number> = {};
 
-  // Ancestor resolution: markers attach judge activity to their enclosing
-  // fusion.judge span (the Python engine's markers sit one level deeper,
-  // under its fusion.fuse span).
+  // Ancestor resolution: events attach judge activity to their enclosing
+  // fusion.judge span, starting from the event's owning span (the Python
+  // engine's events sit one level deeper, under its fusion.fuse span).
   const byId = new Map<string, StoredSpan>();
   for (const span of sorted) byId.set(span.span_id, span);
-  const enclosingJudgeSpan = (span: StoredSpan): string => {
-    let current: StoredSpan | undefined = span;
+  const enclosingJudgeSpan = (spanId: string | undefined): string => {
+    let current: StoredSpan | undefined = spanId !== undefined ? byId.get(spanId) : undefined;
     const seen = new Set<string>();
     while (current !== undefined && !seen.has(current.span_id)) {
       if (current.name === "fusion.judge") return current.span_id;
@@ -205,13 +209,13 @@ export function deriveSession(traceId: string, spans: StoredSpan[]): SessionDeta
       current = current.parent_span_id !== undefined ? byId.get(current.parent_span_id) : undefined;
     }
     // No gateway judge span in scope (e.g. a directly-driven fuse step): fall
-    // back to the nearest fuse span, else the marker's own span.
-    current = span;
+    // back to the nearest fuse span, else the event's own span.
+    current = spanId !== undefined ? byId.get(spanId) : undefined;
     while (current !== undefined) {
       if (current.name === "fusion.fuse") return current.span_id;
       current = current.parent_span_id !== undefined ? byId.get(current.parent_span_id) : undefined;
     }
-    return span.parent_span_id ?? span.span_id;
+    return spanId ?? "";
   };
 
   const ensureStep = (spanId: string, ts: number): JudgeStepView => {
@@ -243,10 +247,10 @@ export function deriveSession(traceId: string, spans: StoredSpan[]): SessionDeta
     return candidate;
   };
 
-  const applyEnvironment = (span: StoredSpan): void => {
-    dialect = attrStr(span, "fusion.dialect") ?? dialect;
-    promptPreview = attrStr(span, "fusion.prompt_preview") ?? promptPreview;
-    const env = attrJson<RawEnvironment>(span, "fusion.environment");
+  const applyEnvironment = (source: AttributeSource): void => {
+    dialect = attrStr(source, "fusion.dialect") ?? dialect;
+    promptPreview = attrStr(source, "fusion.prompt_preview") ?? promptPreview;
+    const env = attrJson<RawEnvironment>(source, "fusion.environment");
     if (env !== undefined) {
       environment = {
         repo: env.repo,
@@ -279,28 +283,17 @@ export function deriveSession(traceId: string, spans: StoredSpan[]): SessionDeta
     step.final = final;
   };
 
-  for (const span of sorted) {
+  const foldSpan = (span: StoredSpan): void => {
     const key = countName(span.name);
     spanCounts[key] = (spanCounts[key] ?? 0) + 1;
     const candidateId = candidateIdOf(span);
 
-    if (span.name === "fusion.turn.info") {
-      applyEnvironment(span);
-    } else if (span.name === "fusion.run" || span.name === "fusion.passthrough") {
+    if (span.name === "fusion.run" || span.name === "fusion.passthrough") {
       applyEnvironment(span);
       status = attrStr(span, "fusion.status") ?? status;
       finalOutput = attrStr(span, "fusion.final_output_preview") ?? finalOutput;
       const runEvidence = attrJson<string[]>(span, "fusion.evidence");
       if (Array.isArray(runEvidence)) evidence = runEvidence;
-    } else if (span.name === "fusion.candidate.started") {
-      if (candidateId !== undefined) {
-        const candidate = ensureCandidate(candidateId);
-        candidate.modelId = attrStr(span, "fusion.model.id") ?? candidate.modelId;
-        candidate.model = attrStr(span, "gen_ai.request.model") ?? candidate.model;
-        candidate.turn = attrNum(span, "fusion.turn") ?? candidate.turn;
-        candidate.branchName = attrStr(span, "fusion.branch_name") ?? candidate.branchName;
-        candidate.worktreePath = attrStr(span, "fusion.worktree_path") ?? candidate.worktreePath;
-      }
     } else if (span.name === "fusion.candidate") {
       if (candidateId !== undefined) {
         const candidate = ensureCandidate(candidateId);
@@ -315,58 +308,11 @@ export function deriveSession(traceId: string, spans: StoredSpan[]): SessionDeta
         candidate.branchName = attrStr(span, "fusion.branch_name") ?? candidate.branchName;
         candidate.worktreePath = attrStr(span, "fusion.worktree_path") ?? candidate.worktreePath;
       }
-    } else if (span.name === "fusion.candidate.step") {
-      if (candidateId !== undefined) {
-        const candidate = ensureCandidate(candidateId);
-        candidate.modelId = candidate.modelId ?? attrStr(span, "fusion.model.id");
-        const step = attrJson<TrajectoryStepView>(span, "fusion.step");
-        if (step !== undefined && typeof step.index === "number" && typeof step.type === "string") {
-          candidate.steps.push(step);
-        }
-      }
-    } else if (span.name === "fusion.model_call.started") {
-      // The live start marker: prompts + a running call keyed by the parent
-      // chat span (which arrives when the call finishes).
-      const callSpanId = span.parent_span_id ?? span.span_id;
-      const existing = modelCalls.get(callSpanId);
-      const base: ModelCallView = {
-        spanId: callSpanId,
-        modelId: modelIdOf(span),
-        ...(candidateId !== undefined ? { candidateId } : {}),
-        provider: attrStr(span, "gen_ai.provider.name"),
-        model: attrStr(span, "gen_ai.request.model"),
-        status: "running",
-        ts: span.start_ms,
-        turn: attrNum(span, "fusion.turn")
-      };
-      if (existing === undefined) {
-        modelCalls.set(callSpanId, base);
-      } else {
-        modelCalls.set(callSpanId, {
-          ...existing,
-          modelId: existing.modelId ?? base.modelId,
-          candidateId: existing.candidateId ?? base.candidateId,
-          provider: existing.provider ?? base.provider,
-          model: existing.model ?? base.model,
-          turn: existing.turn ?? base.turn,
-          ts: Math.min(existing.ts, base.ts)
-        });
-      }
-      if (prompt === undefined) prompt = attrStr(span, "fusion.prompt");
-      if (candidateId !== undefined) {
-        const candidate = ensureCandidate(candidateId);
-        candidate.systemPrompt = attrStr(span, "fusion.system_prompt") ?? candidate.systemPrompt;
-        candidate.prompt = attrStr(span, "fusion.prompt") ?? candidate.prompt;
-      }
     } else if (span.name.startsWith("chat")) {
       const usage = usageOf(span);
       const existing = modelCalls.get(span.span_id);
       const latency =
-        typeof usage?.latency_s === "number"
-          ? usage.latency_s
-          : isMarker(span)
-            ? undefined
-            : (span.end_ms - span.start_ms) / 1000;
+        typeof usage?.latency_s === "number" ? usage.latency_s : (span.end_ms - span.start_ms) / 1000;
       modelCalls.set(span.span_id, {
         spanId: span.span_id,
         modelId: modelIdOf(span) ?? existing?.modelId,
@@ -387,47 +333,6 @@ export function deriveSession(traceId: string, spans: StoredSpan[]): SessionDeta
         candidate.finalOutput = attrStr(span, "fusion.final_output") ?? candidate.finalOutput;
         if (usage !== undefined) candidate.usage = usage;
       }
-    } else if (span.name === "fusion.judge.request") {
-      const messages = attrJson<unknown>(span, "fusion.messages");
-      if (prompt === undefined) prompt = firstUserMessage(messages);
-      judge.prompt = {
-        judgeModel: attrStr(span, "fusion.judge.model"),
-        messages,
-        trajectories: attrJson<unknown>(span, "fusion.trajectories"),
-        tools: attrJson<unknown>(span, "fusion.tools"),
-        trajectoryIds: attrStrArray(span, "fusion.trajectory_ids")
-      };
-      const step = ensureStep(enclosingJudgeSpan(span), span.end_ms);
-      step.prompt = judge.prompt;
-      step.turn = attrNum(span, "fusion.turn") ?? step.turn;
-    } else if (span.name === "fusion.judge.thinking") {
-      const raw = attrStr(span, "fusion.raw_analysis");
-      judge.thinking = {
-        fusionUnit: attrStr(span, "fusion.fusion_unit"),
-        raw,
-        usage: usageOf(span)
-      };
-      const step = ensureStep(enclosingJudgeSpan(span), span.end_ms);
-      if (step.kind === "pending") step.kind = "intermediate";
-      step.turn = attrNum(span, "fusion.turn") ?? step.turn;
-      step.thinking = {
-        raw,
-        toolCalls: attrJson<unknown>(span, "fusion.tool_calls"),
-        usage: usageOf(span)
-      };
-    } else if (span.name === "fusion.judge.scored") {
-      judge.scored = {
-        fusionUnit: attrStr(span, "fusion.fusion_unit"),
-        analysis: attrJson<Record<string, unknown>>(span, "fusion.analysis"),
-        metrics: attrJson<Record<string, unknown>>(span, "fusion.metrics"),
-        inputIds: attrStrArray(span, "fusion.input_ids")
-      };
-    } else if (span.name === "fusion.judge.synthesis") {
-      judge.synthesis = {
-        raw: attrStr(span, "fusion.raw_output"),
-        empty: attrBool(span, "fusion.synthesis_empty") === true,
-        usage: usageOf(span)
-      };
     } else if (span.name === "fusion.judge") {
       sawGatewayJudge = true;
       applyJudgeFinal(span);
@@ -437,28 +342,143 @@ export function deriveSession(traceId: string, spans: StoredSpan[]): SessionDeta
       if (!sawGatewayJudge && attrBool(span, "fusion.terminal") === true) {
         applyJudgeFinal(span);
       }
-    } else if (span.name === "fusion.narration") {
-      const headline = attrStr(span, "fusion.headline");
-      if (headline !== undefined) {
-        narration.push({
-          ts: span.end_ms,
-          headline,
-          ...(attrNum(span, "fusion.turn") !== undefined ? { turn: attrNum(span, "fusion.turn") } : {}),
-          ...(attrStr(span, "fusion.prose") !== undefined ? { prose: attrStr(span, "fusion.prose") } : {})
+    }
+  };
+
+  const foldEvent = (event: StoredEvent): void => {
+    eventCounts[event.name] = (eventCounts[event.name] ?? 0) + 1;
+    const candidateId = candidateIdOf(event);
+
+    if (event.name === "fusion.turn.info") {
+      applyEnvironment(event);
+    } else if (event.name === "fusion.candidate.started") {
+      if (candidateId !== undefined) {
+        const candidate = ensureCandidate(candidateId);
+        candidate.modelId = attrStr(event, "fusion.model.id") ?? candidate.modelId;
+        candidate.model = attrStr(event, "gen_ai.request.model") ?? candidate.model;
+        candidate.turn = attrNum(event, "fusion.turn") ?? candidate.turn;
+        candidate.branchName = attrStr(event, "fusion.branch_name") ?? candidate.branchName;
+        candidate.worktreePath = attrStr(event, "fusion.worktree_path") ?? candidate.worktreePath;
+      }
+    } else if (event.name === "fusion.candidate.step") {
+      if (candidateId !== undefined) {
+        const candidate = ensureCandidate(candidateId);
+        candidate.modelId = candidate.modelId ?? attrStr(event, "fusion.model.id");
+        const step = attrJson<TrajectoryStepView>(event, "fusion.step");
+        if (step !== undefined && typeof step.index === "number" && typeof step.type === "string") {
+          candidate.steps.push(step);
+        }
+      }
+    } else if (event.name === "fusion.model_call.started") {
+      // The live start event: prompts + a running call keyed by its owning
+      // chat span (which arrives when the call finishes).
+      const callSpanId = event.span_id ?? `event-${event.id}`;
+      const existing = modelCalls.get(callSpanId);
+      const base: ModelCallView = {
+        spanId: callSpanId,
+        modelId: modelIdOf(event),
+        ...(candidateId !== undefined ? { candidateId } : {}),
+        provider: attrStr(event, "gen_ai.provider.name"),
+        model: attrStr(event, "gen_ai.request.model"),
+        status: "running",
+        ts: event.ts_ms,
+        turn: attrNum(event, "fusion.turn")
+      };
+      if (existing === undefined) {
+        modelCalls.set(callSpanId, base);
+      } else {
+        modelCalls.set(callSpanId, {
+          ...existing,
+          modelId: existing.modelId ?? base.modelId,
+          candidateId: existing.candidateId ?? base.candidateId,
+          provider: existing.provider ?? base.provider,
+          model: existing.model ?? base.model,
+          turn: existing.turn ?? base.turn,
+          ts: Math.min(existing.ts, base.ts)
         });
       }
-    } else if (span.name === "fusion.cost") {
-      costUsd = (costUsd ?? 0) + (attrNum(span, "fusion.cost.turn_usd") ?? 0);
-      if (attrBool(span, "fusion.cost.unknown") === true) costIncomplete = true;
+      if (prompt === undefined) prompt = attrStr(event, "fusion.prompt");
+      if (candidateId !== undefined) {
+        const candidate = ensureCandidate(candidateId);
+        candidate.systemPrompt = attrStr(event, "fusion.system_prompt") ?? candidate.systemPrompt;
+        candidate.prompt = attrStr(event, "fusion.prompt") ?? candidate.prompt;
+      }
+    } else if (event.name === "fusion.judge.request") {
+      const messages = attrJson<unknown>(event, "fusion.messages");
+      if (prompt === undefined) prompt = firstUserMessage(messages);
+      judge.prompt = {
+        judgeModel: attrStr(event, "fusion.judge.model"),
+        messages,
+        trajectories: attrJson<unknown>(event, "fusion.trajectories"),
+        tools: attrJson<unknown>(event, "fusion.tools"),
+        trajectoryIds: attrStrArray(event, "fusion.trajectory_ids")
+      };
+      const step = ensureStep(enclosingJudgeSpan(event.span_id), event.ts_ms);
+      step.prompt = judge.prompt;
+      step.turn = attrNum(event, "fusion.turn") ?? step.turn;
+    } else if (event.name === "fusion.judge.thinking") {
+      const raw = attrStr(event, "fusion.raw_analysis");
+      judge.thinking = {
+        fusionUnit: attrStr(event, "fusion.fusion_unit"),
+        raw,
+        usage: usageOf(event)
+      };
+      const step = ensureStep(enclosingJudgeSpan(event.span_id), event.ts_ms);
+      if (step.kind === "pending") step.kind = "intermediate";
+      step.turn = attrNum(event, "fusion.turn") ?? step.turn;
+      step.thinking = {
+        raw,
+        toolCalls: attrJson<unknown>(event, "fusion.tool_calls"),
+        usage: usageOf(event)
+      };
+    } else if (event.name === "fusion.judge.scored") {
+      judge.scored = {
+        fusionUnit: attrStr(event, "fusion.fusion_unit"),
+        analysis: attrJson<Record<string, unknown>>(event, "fusion.analysis"),
+        metrics: attrJson<Record<string, unknown>>(event, "fusion.metrics"),
+        inputIds: attrStrArray(event, "fusion.input_ids")
+      };
+    } else if (event.name === "fusion.judge.synthesis") {
+      judge.synthesis = {
+        raw: attrStr(event, "fusion.raw_output"),
+        empty: attrBool(event, "fusion.synthesis_empty") === true,
+        usage: usageOf(event)
+      };
+    } else if (event.name === "fusion.narration") {
+      const headline = attrStr(event, "fusion.headline");
+      if (headline !== undefined) {
+        narration.push({
+          ts: event.ts_ms,
+          headline,
+          ...(attrNum(event, "fusion.turn") !== undefined ? { turn: attrNum(event, "fusion.turn") } : {}),
+          ...(attrStr(event, "fusion.prose") !== undefined ? { prose: attrStr(event, "fusion.prose") } : {})
+        });
+      }
+    } else if (event.name === "fusion.cost") {
+      costUsd = (costUsd ?? 0) + (attrNum(event, "fusion.cost.turn_usd") ?? 0);
+      if (attrBool(event, "fusion.cost.unknown") === true) costIncomplete = true;
     }
+  };
+
+  // Fold spans and events as one time-ordered sequence, so order-dependent
+  // derivations (status transitions, first-wins prompts) see the same
+  // interleaving the run produced.
+  const signals: Array<{ ts: number; span?: StoredSpan; event?: StoredEvent }> = [
+    ...sorted.map((span) => ({ ts: span.start_ms, span })),
+    ...sortedEvents.map((event) => ({ ts: event.ts_ms, event }))
+  ].sort((a, b) => a.ts - b.ts);
+  for (const signal of signals) {
+    if (signal.span !== undefined) foldSpan(signal.span);
+    else if (signal.event !== undefined) foldEvent(signal.event);
   }
 
   for (const candidate of candidates.values()) {
     candidate.steps.sort((a, b) => a.index - b.index);
   }
 
-  const startedAt = sorted.length > 0 ? sorted[0].start_ms : 0;
-  const lastTs = sorted.reduce((max, span) => Math.max(max, span.end_ms), startedAt);
+  const firstSignalTs = signals.length > 0 ? signals[0].ts : 0;
+  const startedAt = sorted.length > 0 ? Math.min(sorted[0].start_ms, firstSignalTs) : firstSignalTs;
+  const lastTs = signals.reduce((max, signal) => Math.max(max, signal.span?.end_ms ?? signal.ts), startedAt);
 
   return {
     traceId,
@@ -480,6 +500,8 @@ export function deriveSession(traceId: string, spans: StoredSpan[]): SessionDeta
     ...(evidence !== undefined ? { evidence } : {}),
     durationMs: Math.max(0, lastTs - startedAt),
     spanCounts,
-    spans: sorted
+    eventCounts,
+    spans: sorted,
+    events: sortedEvents
   };
 }

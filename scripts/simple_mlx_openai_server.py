@@ -123,7 +123,7 @@ def make_handler(model_id: str, model: Any, tokenizer: Any) -> type[BaseHTTPRequ
                 temperature = float(raw_temperature if raw_temperature is not None else 0.2)
                 top_p = float(raw_top_p if raw_top_p is not None else 0.95)
                 if fusion_trace is not None:
-                    fusion_trace.emit_marker(
+                    fusion_trace.emit_event(
                         "panel-model",
                         "fusion.model_call.started",
                         call_ctx,

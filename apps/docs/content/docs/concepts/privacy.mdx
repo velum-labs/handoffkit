@@ -30,7 +30,7 @@ FusionKit sends no telemetry unless you explicitly turn it on with `fusionkit te
 
 `fusionkit telemetry status` prints the effective state and the complete field list; `DO_NOT_TRACK=1` or `FUSIONKIT_TELEMETRY=0` force it off above any stored consent. The only identifier is a random install UUID, deleted by `fusionkit telemetry off`.
 
-Tracing is OpenTelemetry-based and exports nowhere by default: `--observe` points spans at the local scope dashboard over loopback, and only a user-configured `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` sends them anywhere else.
+Tracing is OpenTelemetry-based and exports nowhere by default: `--observe` points spans and events at the local scope dashboard over loopback, and only a user-configured `OTEL_EXPORTER_OTLP_ENDPOINT` (or the signal-specific traces/logs variants) sends them anywhere else.
 
 ## Where code travels
 

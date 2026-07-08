@@ -11,6 +11,7 @@ import type { Command } from "commander";
 
 import { bold, cyan, dim, formatBytes, gray, green, red } from "@fusionkit/cli-ui";
 import type { Presenter, StatusKind } from "@fusionkit/cli-ui";
+import { resolveWebSearchExecutor } from "@fusionkit/model-gateway";
 
 import {
   DEFAULT_CLOUD_PANEL,
@@ -323,6 +324,33 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   const anyCredentials = acceptedKeyEnvs.some((name) => keyPresent(name));
   const missingDefaultKeys = defaultCredentialChecks.filter((check) => !check.present);
   const presentDefaultKeys = defaultCredentialChecks.filter((check) => check.present);
+
+  // Gateway-executed web search: which provider serves each caller dialect.
+  presenter.blank();
+  presenter.heading("web search (gateway-executed, server-tool parity)");
+  for (const dialect of ["responses", "anthropic"] as const) {
+    const label = dialect === "responses" ? "codex (responses)" : "claude code (anthropic)";
+    const executor = resolveWebSearchExecutor(dialect);
+    const disabled = process.env.FUSIONKIT_WEB_SEARCH === "0";
+    const detail =
+      executor !== undefined
+        ? `via ${executor.provider} (${executor.model})`
+        : disabled
+          ? "disabled (FUSIONKIT_WEB_SEARCH=0)"
+          : "no provider key";
+    const hint =
+      executor !== undefined || disabled
+        ? undefined
+        : "set OPENAI_API_KEY or ANTHROPIC_API_KEY to enable web search";
+    presenter.status(executor !== undefined ? "ok" : disabled ? "pending" : "fail", label, detail, hint);
+    report.push({
+      section: "web-search",
+      label,
+      ok: executor !== undefined,
+      detail,
+      ...(hint !== undefined ? { hint } : {})
+    });
+  }
 
   // Per-platform capability: cloud everywhere; local MLX on Apple Silicon only.
   presenter.blank();
