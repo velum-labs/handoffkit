@@ -50,22 +50,29 @@ type ResponsesTool = {
   execution?: string;
 };
 
+/**
+ * Codex encodes "unset" as an explicit JSON `null` for several optional fields
+ * (e.g. `"reasoning": null` whenever the selected model's metadata advertises
+ * no reasoning levels — the default for a custom-provider model like the fused
+ * panel). Every nullable field below must be read with a null-tolerant guard;
+ * reading `.effort` off a null `reasoning` 502'd every fused Codex turn.
+ */
 export type ResponsesRequest = {
   model?: string;
   instructions?: string;
   input?: string | ResponsesInputItem[];
   tools?: ResponsesTool[];
-  tool_choice?: "auto" | "none" | "required" | { type: string; name?: string };
+  tool_choice?: "auto" | "none" | "required" | { type: string; name?: string } | null;
   max_output_tokens?: number;
   temperature?: number;
   top_p?: number;
   parallel_tool_calls?: boolean;
-  reasoning?: { effort?: string; [key: string]: unknown };
-  text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } };
-  previous_response_id?: string;
+  reasoning?: { effort?: string; [key: string]: unknown } | null;
+  text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } } | null;
+  previous_response_id?: string | null;
   truncation?: string | unknown;
-  metadata?: Record<string, unknown>;
-  include?: unknown[];
+  metadata?: Record<string, unknown> | null;
+  include?: unknown[] | null;
   stream?: boolean;
 };
 
@@ -528,7 +535,8 @@ export function responsesToChat(
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (typeof body.parallel_tool_calls === "boolean") chat.parallel_tool_calls = body.parallel_tool_calls;
-  if (body.reasoning !== undefined) {
+  // Explicit nulls mean "unset" on the Codex wire (see ResponsesRequest).
+  if (body.reasoning != null) {
     const effort = body.reasoning.effort;
     if (effort === "low" || effort === "medium" || effort === "high") {
       chat.reasoning_effort = effort;
@@ -536,14 +544,14 @@ export function responsesToChat(
       droppedField("responses", "reasoning");
     }
   }
-  if (body.text !== undefined) {
+  if (body.text != null) {
     const responseFormat = mapTextFormat(body.text);
     if (responseFormat !== undefined) chat.response_format = responseFormat;
   }
-  if (body.previous_response_id !== undefined) droppedField("responses", "previous_response_id");
-  if (body.truncation !== undefined) droppedField("responses", "truncation");
-  if (body.metadata !== undefined) droppedField("responses", "metadata");
-  if (body.include !== undefined) droppedField("responses", "include");
+  if (body.previous_response_id != null) droppedField("responses", "previous_response_id");
+  if (body.truncation != null) droppedField("responses", "truncation");
+  if (body.metadata != null) droppedField("responses", "metadata");
+  if (body.include != null && body.include.length > 0) droppedField("responses", "include");
   {
     // Every callable tool is forwarded as a chat function tool (Chat
     // Completions only speaks JSON function tools):
@@ -635,7 +643,7 @@ export function responsesToChat(
     }
     if (tools.length > 0) chat.tools = tools;
   }
-  if (body.tool_choice !== undefined) {
+  if (body.tool_choice != null) {
     const choice = mapToolChoice(body.tool_choice);
     if (choice !== undefined) chat.tool_choice = choice;
   }

@@ -59,8 +59,11 @@ test("ingest + query round-trips a full session and derives detail", () => {
 });
 
 test("events alone create a live session row (before any span finishes)", () => {
+  // The --observe dashboard must show a session while the run is still in
+  // flight: the first fusion events alone create a `running` session row, and
+  // the turn-info event fills in the identity metadata.
   const traceId = "22222222222222222222222222220005";
-  const { events } = syntheticSession(traceId);
+  const { spans, events } = syntheticSession(traceId);
   const turnInfo = events.find((event) => event.name === "fusion.turn.info");
   assert.ok(turnInfo);
   ingestEvent(turnInfo);
@@ -69,7 +72,15 @@ test("events alone create a live session row (before any span finishes)", () => 
   assert.ok(session);
   assert.equal(session.status, "running");
   assert.equal(session.dialect, "codex");
+  assert.equal(session.repo, "/tmp/fusion-sample");
   assert.equal(session.prompt_preview, "Fix the add() sign bug so npm test passes.");
+  assert.ok(listSessions().some((row) => row.trace_id === traceId && row.status === "running"));
+
+  // The terminal run span later settles the same session to its final status.
+  const terminal = spans.find((span) => span.name === "fusion.run");
+  assert.ok(terminal);
+  assert.ok(ingestSpan(terminal));
+  assert.equal(getSession(traceId)?.status, "succeeded");
 });
 
 test("parseOtlpExport decodes spec-shaped OTLP JSON (hex ids, int enums)", () => {

@@ -45,16 +45,21 @@ type AnthropicThinking = { type?: string; budget_tokens?: number; effort?: strin
 
 type AnthropicMessage = { role: "user" | "assistant"; content: string | AnthropicContentBlock[] };
 
+/**
+ * Optional object fields tolerate an explicit JSON `null` (some clients encode
+ * "unset" that way — Codex does on the Responses wire); reads must use
+ * null-tolerant guards so a null never crashes the turn.
+ */
 export type AnthropicRequest = {
   model?: string;
-  system?: string | AnthropicTextBlock[];
+  system?: string | AnthropicTextBlock[] | null;
   messages: AnthropicMessage[];
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
   top_k?: number;
-  thinking?: AnthropicThinking;
-  metadata?: Record<string, unknown>;
+  thinking?: AnthropicThinking | null;
+  metadata?: Record<string, unknown> | null;
   stop_sequences?: string[];
   stream?: boolean;
   tools?: Array<{ type?: string; name: string; description?: string; input_schema?: unknown }>;
@@ -62,7 +67,7 @@ export type AnthropicRequest = {
     type: "auto" | "any" | "tool" | "none";
     name?: string;
     disable_parallel_tool_use?: boolean;
-  };
+  } | null;
 };
 
 /**
@@ -127,7 +132,7 @@ type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsa
 // ---- request translation ----
 
 function systemText(system: AnthropicRequest["system"]): string {
-  if (system === undefined) return "";
+  if (system == null) return "";
   if (typeof system === "string") return system;
   return system.map((block) => block.text).join("\n");
 }
@@ -317,8 +322,9 @@ export function anthropicToChat(
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (typeof body.top_k === "number") chat.top_k = body.top_k;
-  if (body.metadata !== undefined) droppedField("anthropic", "metadata");
-  if (body.thinking !== undefined) {
+  // Explicit nulls mean "unset" (see AnthropicRequest).
+  if (body.metadata != null) droppedField("anthropic", "metadata");
+  if (body.thinking != null) {
     const reasoningEffort = mapThinking(body.thinking);
     if (reasoningEffort !== undefined) chat.reasoning_effort = reasoningEffort;
   }
@@ -369,7 +375,7 @@ export function anthropicToChat(
     }
     if (tools.length > 0) chat.tools = tools;
   }
-  if (body.tool_choice !== undefined) {
+  if (body.tool_choice != null) {
     chat.tool_choice = mapToolChoice(body.tool_choice);
     if (body.tool_choice.disable_parallel_tool_use === true) chat.parallel_tool_calls = false;
   }
