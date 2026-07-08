@@ -18,7 +18,7 @@ export LITELLM_MODEL_REGISTRY_PATH="$ARM_DIR/config/litellm_registry.json"
 if [[ "$PHASE" == "solo" || "$PHASE" == "all" ]]; then
   MSWEA_COST_TRACKING=ignore_errors mini-extra swebench --subset verified --split test \
     --filter "$FILTER" -m openrouter/deepseek/deepseek-v3.1-terminus \
-    -c swebench.yaml -o "$RUNS/solo-terminus" -w 4 2>&1 | tee -a "$RUNS/solo-terminus.log"
+    -c swebench.yaml -o "$RUNS/solo-terminus" -w "${WORKERS:-2}" 2>&1 | tee -a "$RUNS/solo-terminus.log"
 fi
 if [[ "$PHASE" == "driver" || "$PHASE" == "all" ]]; then
   out="$RUNS/driver-v2"; mkdir -p "$out"
@@ -31,7 +31,7 @@ if [[ "$PHASE" == "driver" || "$PHASE" == "all" ]]; then
   MSWEA_COST_TRACKING=ignore_errors mini-extra swebench --subset verified --split test \
     --filter "$FILTER" -m openai/fusionkit/panel \
     -c swebench.yaml -c model.model_kwargs.api_base=http://127.0.0.1:8080/v1 \
-    -o "$out/mini" -w 4 2>&1 | tee -a "$out/mini.log"
+    -o "$out/mini" -w "${WORKERS:-2}" 2>&1 | tee -a "$out/mini.log"
   kill -- "-$SERVE_PGID" 2>/dev/null || true; sleep 2
 fi
 if [[ "$PHASE" == "grade" || "$PHASE" == "all" ]]; then
