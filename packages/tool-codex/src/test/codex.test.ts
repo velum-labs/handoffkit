@@ -8,8 +8,18 @@ import { test } from "node:test";
 
 import { createMockHarness, ensemble } from "@fusionkit/ensemble";
 import type { EnsembleDescriptor } from "@fusionkit/ensemble";
-import { addSpanListener, initFusionTracing, newSessionCarrier, removeSpanListener, spanTraceId } from "@fusionkit/tracing";
-import type { ReadableSpan } from "@fusionkit/tracing";
+import {
+  addFusionEventListener,
+  addSpanListener,
+  eventNameOf,
+  eventTraceId,
+  initFusionTracing,
+  newSessionCarrier,
+  removeFusionEventListener,
+  removeSpanListener,
+  spanTraceId
+} from "@fusionkit/tracing";
+import type { ReadableFusionEvent, ReadableSpan } from "@fusionkit/tracing";
 
 import {
   codexAgentRoles,
@@ -922,11 +932,16 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
   const upstream = await startOpenAiCompatibleServer();
   initFusionTracing({ serviceName: "codex-test" });
   const session = newSessionCarrier();
-  const traceSpans: ReadableSpan[] = [];
+  // Spans and events interleave in emit order; assertions check the sequence.
+  const signalNames: string[] = [];
   const listener = (span: ReadableSpan): void => {
-    if (spanTraceId(span) === session.traceId) traceSpans.push(span);
+    if (spanTraceId(span) === session.traceId) signalNames.push(span.name);
+  };
+  const eventListener = (event: ReadableFusionEvent): void => {
+    if (eventTraceId(event) === session.traceId) signalNames.push(eventNameOf(event));
   };
   addSpanListener(listener);
+  addFusionEventListener(eventListener);
   let gatewayBaseUrl: string | undefined;
   const runner: CodexExecRunner = async (input) => {
     const codexHome = input.env.CODEX_HOME;
@@ -947,7 +962,7 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
     assert.equal(response.status, 200);
     await response.text();
     assert.ok(
-      traceSpans.some((span) => span.name === "fusion.candidate.step"),
+      signalNames.includes("fusion.candidate.step"),
       "gateway capture emits a live trajectory step before Codex exits"
     );
     return { stdout: "codex gateway ok", stderr: "", exitCode: 0 };
@@ -976,11 +991,12 @@ test("Codex OpenAI-compatible provider goes through Responses gateway records", 
     assert.equal(result.modelCallRecords[0]?.metadata?.dialect, "openai-responses");
     assert.equal(result.modelCallRecords[0]?.model, "local-model");
     assert.equal(result.candidates[0]?.metadata?.model_call_count, 1);
-    const stepIndex = traceSpans.findIndex((span) => span.name === "fusion.candidate.step");
-    const finishedIndex = traceSpans.findIndex((span) => span.name === "fusion.candidate");
+    const stepIndex = signalNames.indexOf("fusion.candidate.step");
+    const finishedIndex = signalNames.indexOf("fusion.candidate");
     assert.ok(stepIndex >= 0 && finishedIndex >= 0 && stepIndex < finishedIndex);
   } finally {
     removeSpanListener(listener);
+    removeFusionEventListener(eventListener);
     await upstream.close();
     cleanup();
   }

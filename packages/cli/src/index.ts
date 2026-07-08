@@ -7,7 +7,7 @@ import { PolicyDeniedError } from "@fusionkit/protocol";
 // Importing the cleanup registry installs the process-wide SIGINT/SIGTERM/exit
 // handlers once, so anything registered during a run (worktrees, supervised
 // process groups) is torn down on interrupt or normal exit.
-import { runCleanups } from "@fusionkit/tools";
+import { registerCleanup, runCleanups } from "@fusionkit/tools";
 
 import { uiStream } from "@fusionkit/cli-ui";
 import { CommanderError, type Command } from "commander";
@@ -99,6 +99,33 @@ async function main(): Promise<void> {
   let invokedCommand: string | undefined;
   let caughtError: unknown;
 
+  // The telemetry epilogue must run on BOTH exit paths: the normal return path
+  // (main's finally) and the SIGINT/SIGTERM path, where the cleanup registry
+  // calls process.exit() directly and main's finally never resumes. Interactive
+  // fusion sessions end with Ctrl+C, so without this wiring those runs would
+  // ship no events at all. Single-flight: whichever path fires first wins.
+  let telemetrySettling: Promise<void> | undefined;
+  const settleTelemetry = (exitKind: string): Promise<void> => {
+    telemetrySettling ??= (async () => {
+      const command = invokedCommand ?? (argv.length === 0 ? "palette" : inferCommandFromArgv());
+      captureCommand({
+        command,
+        cliVersion: readPackageVersion(import.meta.url),
+        startedAt,
+        exitKind,
+        observe: argv.includes("--observe"),
+        local: argv.includes("--local")
+      });
+      await shutdownTelemetry();
+    })();
+    return telemetrySettling;
+  };
+  // Registered first so LIFO ordering runs it last, after the fusion stack's
+  // own teardown has ended its spans. If the normal path already settled (or
+  // is mid-flush when a signal lands), this returns the same single-flight
+  // promise, so the registry waits for the flush instead of racing it.
+  registerCleanup(() => settleTelemetry("interrupted"));
+
   const program = buildProgram();
   program.exitOverride();
   program.hook("preAction", (_thisCommand, actionCommand) => {
@@ -122,16 +149,7 @@ async function main(): Promise<void> {
       process.exitCode = classifyAndRenderError(error);
     }
   } finally {
-    const command = invokedCommand ?? (argv.length === 0 ? "palette" : inferCommandFromArgv());
-    captureCommand({
-      command,
-      cliVersion: readPackageVersion(import.meta.url),
-      startedAt,
-      exitKind: exitKindFor(caughtError),
-      observe: argv.includes("--observe"),
-      local: argv.includes("--local")
-    });
-    await shutdownTelemetry();
+    await settleTelemetry(exitKindFor(caughtError));
     await runCleanups();
   }
   process.exit(process.exitCode ?? 0);

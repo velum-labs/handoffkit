@@ -156,14 +156,13 @@ export {
   ATTR,
   EXPORTABLE_ATTRIBUTES,
   FUSION_CONVENTIONS_VERSION,
-  FUSION_MARKER_NAMES,
+  FUSION_EVENT_NAMES,
   FUSION_SCOPES,
-  FUSION_SPAN_NAMES,
-  FUSION_UNIT_SPAN_NAMES
+  FUSION_SPAN_NAMES
 } from "./generated/trace-conventions.js";
 export type {
   FusionAttributeKey,
-  FusionMarkerName,
+  FusionEventName,
   FusionSpanName
 } from "./generated/trace-conventions.js";
 export { PolicyDeniedError } from "./types.js";

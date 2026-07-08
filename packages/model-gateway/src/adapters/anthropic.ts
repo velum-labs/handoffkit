@@ -14,6 +14,9 @@ import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
+import { composeServerToolStream, runBufferedServerToolLoop, serverToolMarkerOf } from "./server-tool-loop.js";
+import type { ExecutedSearch, ServerToolMarker } from "./server-tool-loop.js";
+import { resolveWebSearchExecutor } from "./web-search.js";
 
 const ENCODER = new TextEncoder();
 
@@ -42,16 +45,21 @@ type AnthropicThinking = { type?: string; budget_tokens?: number; effort?: strin
 
 type AnthropicMessage = { role: "user" | "assistant"; content: string | AnthropicContentBlock[] };
 
+/**
+ * Optional object fields tolerate an explicit JSON `null` (some clients encode
+ * "unset" that way — Codex does on the Responses wire); reads must use
+ * null-tolerant guards so a null never crashes the turn.
+ */
 export type AnthropicRequest = {
   model?: string;
-  system?: string | AnthropicTextBlock[];
+  system?: string | AnthropicTextBlock[] | null;
   messages: AnthropicMessage[];
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
   top_k?: number;
-  thinking?: AnthropicThinking;
-  metadata?: Record<string, unknown>;
+  thinking?: AnthropicThinking | null;
+  metadata?: Record<string, unknown> | null;
   stop_sequences?: string[];
   stream?: boolean;
   tools?: Array<{ type?: string; name: string; description?: string; input_schema?: unknown }>;
@@ -59,7 +67,7 @@ export type AnthropicRequest = {
     type: "auto" | "any" | "tool" | "none";
     name?: string;
     disable_parallel_tool_use?: boolean;
-  };
+  } | null;
 };
 
 /**
@@ -76,6 +84,45 @@ function isAnthropicServerTool(tool: { type?: string }): boolean {
   return type.startsWith("web_search") || type.startsWith("code_execution");
 }
 
+/** A server web search tool declaration (`web_search_20250305` et al.) — the
+ *  one server tool the gateway can honor via its own web-search executor. */
+function isAnthropicWebSearchTool(tool: { type?: string }): boolean {
+  return (tool.type ?? "").startsWith("web_search");
+}
+
+/** The name the gateway-executed web search tool is projected under chat-side. */
+const WEB_SEARCH_TOOL_NAME = "web_search";
+
+const WEB_SEARCH_TOOL_DESCRIPTION =
+  "Search the web for current, factual information. The search runs server-side and " +
+  "returns result text with source URLs. Use it when the answer depends on information " +
+  "that may have changed since your training data.";
+
+const WEB_SEARCH_TOOL_PARAMETERS = {
+  type: "object",
+  properties: {
+    query: { type: "string", description: "The web search query." }
+  },
+  required: ["query"],
+  additionalProperties: false
+} as const;
+
+/** Options gating server-executed tool projection (on iff an executor exists). */
+export type AnthropicTranslationOptions = { serverTools?: boolean };
+
+/** Render an echoed `web_search_tool_result`'s content as a chat tool message.
+ *  Bulky opaque fields (`encrypted_content`) are stripped; the fused model
+ *  only needs the urls/titles to remember what the search found. */
+function webSearchResultText(content: unknown): string {
+  if (!Array.isArray(content)) return JSON.stringify(content ?? null);
+  const results = content.map((entry) => {
+    if (entry === null || typeof entry !== "object") return entry as unknown;
+    const { encrypted_content: _encrypted, ...rest } = entry as Record<string, unknown>;
+    return rest;
+  });
+  return JSON.stringify(results);
+}
+
 // ---- OpenAI shapes we read back ----
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
@@ -85,7 +132,7 @@ type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsa
 // ---- request translation ----
 
 function systemText(system: AnthropicRequest["system"]): string {
-  if (system === undefined) return "";
+  if (system == null) return "";
   if (typeof system === "string") return system;
   return system.map((block) => block.text).join("\n");
 }
@@ -142,7 +189,11 @@ function toolResultContent(result: AnthropicToolResultBlock): string {
  * `claude-*` id the local server would not recognise); the requested id is
  * only echoed back in the response.
  */
-export function anthropicToChat(body: AnthropicRequest, backendModel: string | undefined): Record<string, unknown> {
+export function anthropicToChat(
+  body: AnthropicRequest,
+  backendModel: string | undefined,
+  options: AnthropicTranslationOptions = {}
+): Record<string, unknown> {
   const messages: Record<string, unknown>[] = [];
   const system = systemText(body.system);
   if (system.length > 0) messages.push({ role: "system", content: system });
@@ -157,6 +208,11 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
     const imageParts: Record<string, unknown>[] = [];
     const toolCalls: Record<string, unknown>[] = [];
     const toolResults: { id: string; content: string }[] = [];
+    // Echoed gateway-executed (or genuinely provider-executed, in a resumed
+    // session) web searches: `server_tool_use` + `web_search_tool_result`
+    // blocks ride in the assistant message and round-trip losslessly.
+    const serverToolUses: Record<string, unknown>[] = [];
+    const serverToolResults: { id: string; content: string }[] = [];
 
     for (const block of message.content) {
       switch (block.type) {
@@ -185,6 +241,23 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
           toolResults.push({ id: result.tool_use_id, content: toolResultContent(result) });
           break;
         }
+        case "server_tool_use": {
+          const tool = block as unknown as AnthropicToolUseBlock;
+          serverToolUses.push({
+            id: tool.id,
+            type: "function",
+            function: { name: tool.name, arguments: JSON.stringify(tool.input ?? {}) }
+          });
+          break;
+        }
+        case "web_search_tool_result": {
+          const result = block as { tool_use_id?: string; content?: unknown };
+          serverToolResults.push({
+            id: result.tool_use_id ?? "",
+            content: webSearchResultText(result.content)
+          });
+          break;
+        }
         case "thinking":
           droppedField("anthropic", "thinking", "message");
           break;
@@ -199,9 +272,25 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
       if (imageParts.length > 0) {
         droppedField("anthropic", "image", "assistant_message");
       }
-      const assistant: Record<string, unknown> = { role: "assistant", content: text.length > 0 ? text : null };
-      if (toolCalls.length > 0) assistant.tool_calls = toolCalls;
-      messages.push(assistant);
+      // Replay echoed server web searches as a chat tool exchange preceding
+      // the assistant's answer, so the fused model remembers what was
+      // searched and found rather than blindly repeating it.
+      if (serverToolUses.length > 0) {
+        messages.push({ role: "assistant", content: null, tool_calls: serverToolUses });
+        for (const use of serverToolUses) {
+          const result = serverToolResults.find((entry) => entry.id === use.id);
+          messages.push({
+            role: "tool",
+            tool_call_id: (use.id as string | undefined) ?? "",
+            content: result?.content ?? "[web search results not retained]"
+          });
+        }
+      }
+      if (text.length > 0 || toolCalls.length > 0 || serverToolUses.length === 0) {
+        const assistant: Record<string, unknown> = { role: "assistant", content: text.length > 0 ? text : null };
+        if (toolCalls.length > 0) assistant.tool_calls = toolCalls;
+        messages.push(assistant);
+      }
       continue;
     }
 
@@ -226,12 +315,16 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
     messages,
     stream: body.stream === true
   };
-  if (typeof body.max_tokens === "number") chat.max_tokens = body.max_tokens;
+  // `max_completion_tokens`, not legacy `max_tokens`: OpenAI reasoning models
+  // reject the latter, and the other dialect adapters already emit the modern
+  // field (Claude Code always sends `max_tokens`, so this path is always hit).
+  if (typeof body.max_tokens === "number") chat.max_completion_tokens = body.max_tokens;
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (typeof body.top_k === "number") chat.top_k = body.top_k;
-  if (body.metadata !== undefined) droppedField("anthropic", "metadata");
-  if (body.thinking !== undefined) {
+  // Explicit nulls mean "unset" (see AnthropicRequest).
+  if (body.metadata != null) droppedField("anthropic", "metadata");
+  if (body.thinking != null) {
     const reasoningEffort = mapThinking(body.thinking);
     if (reasoningEffort !== undefined) chat.reasoning_effort = reasoningEffort;
   }
@@ -239,7 +332,12 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
     chat.stop = body.stop_sequences;
   }
   if (Array.isArray(body.tools) && body.tools.length > 0) {
-    const excluded = body.tools.filter(isAnthropicServerTool);
+    // Web search is honorable when an executor exists (the server-tool loop
+    // runs it); other server tools (`code_execution_*`) stay excluded.
+    const honorWebSearch = options.serverTools === true;
+    const excluded = body.tools.filter(
+      (tool) => isAnthropicServerTool(tool) && !(honorWebSearch && isAnthropicWebSearchTool(tool))
+    );
     if (excluded.length > 0) {
       for (const tool of excluded) {
         droppedField("anthropic", tool.name ?? tool.type ?? "server_tool", "tools");
@@ -261,9 +359,23 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
           parameters: tool.input_schema ?? { type: "object", properties: {} }
         }
       }));
+    if (
+      honorWebSearch &&
+      body.tools.some(isAnthropicWebSearchTool) &&
+      !tools.some((tool) => tool.function.name === WEB_SEARCH_TOOL_NAME)
+    ) {
+      tools.push({
+        type: "function",
+        function: {
+          name: WEB_SEARCH_TOOL_NAME,
+          description: WEB_SEARCH_TOOL_DESCRIPTION,
+          parameters: WEB_SEARCH_TOOL_PARAMETERS
+        }
+      });
+    }
     if (tools.length > 0) chat.tools = tools;
   }
-  if (body.tool_choice !== undefined) {
+  if (body.tool_choice != null) {
     chat.tool_choice = mapToolChoice(body.tool_choice);
     if (body.tool_choice.disable_parallel_tool_use === true) chat.parallel_tool_calls = false;
   }
@@ -290,7 +402,31 @@ export function mapStopReason(finishReason: string | null | undefined): string {
   }
 }
 
-export function chatToAnthropicMessage(openai: OpenAiResponse, model: string): Record<string, unknown> {
+/** The native Anthropic blocks for one gateway-executed web search: the
+ *  `server_tool_use` and its `web_search_tool_result`. Anthropic-executor
+ *  results pass through verbatim; other executors synthesize result blocks
+ *  from their citations. */
+function executedSearchBlocks(search: ExecutedSearch): Record<string, unknown>[] {
+  const resultContent: unknown =
+    search.status !== "completed"
+      ? { type: "web_search_tool_result_error", error_code: "unavailable" }
+      : (search.outcome?.anthropicResultBlocks ??
+        (search.outcome?.citations ?? []).map((citation) => ({
+          type: "web_search_result",
+          url: citation.url,
+          ...(citation.title !== undefined ? { title: citation.title } : {})
+        })));
+  return [
+    { type: "server_tool_use", id: search.itemId, name: WEB_SEARCH_TOOL_NAME, input: { query: search.query } },
+    { type: "web_search_tool_result", tool_use_id: search.itemId, content: resultContent }
+  ];
+}
+
+export function chatToAnthropicMessage(
+  openai: OpenAiResponse,
+  model: string,
+  searches: readonly ExecutedSearch[] = []
+): Record<string, unknown> {
   const choice = openai.choices?.[0];
   const message = choice?.message;
   const content: Record<string, unknown>[] = [];
@@ -302,6 +438,9 @@ export function chatToAnthropicMessage(openai: OpenAiResponse, model: string): R
         ? message.reasoning_content
         : "";
   if (reasoning.length > 0) content.push({ type: "thinking", thinking: reasoning, signature: "" });
+
+  // Gateway-executed searches happened before the terminal step's output.
+  for (const search of searches) content.push(...executedSearchBlocks(search));
 
   const text = typeof message?.content === "string" ? message.content : "";
   if (text.length > 0) content.push({ type: "text", text });
@@ -510,6 +649,47 @@ export function openAiSseToAnthropic(
     );
   };
 
+  // The server-tool loop injects marker chunks around each gateway-executed
+  // web search; render them as native `server_tool_use` /
+  // `web_search_tool_result` blocks (each opened and closed immediately —
+  // their content is complete when the marker arrives).
+  const handleServerToolMarker = (controller: Controller, marker: ServerToolMarker): void => {
+    ensureStarted(controller);
+    closeThinking(controller);
+    if (marker.phase === "start") {
+      const index = state.nextIndex++;
+      controller.enqueue(
+        sse("content_block_start", {
+          type: "content_block_start",
+          index,
+          content_block: { type: "server_tool_use", id: marker.item_id, name: "web_search", input: {} }
+        })
+      );
+      controller.enqueue(
+        sse("content_block_delta", {
+          type: "content_block_delta",
+          index,
+          delta: { type: "input_json_delta", partial_json: JSON.stringify({ query: marker.query }) }
+        })
+      );
+      controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
+      return;
+    }
+    const index = state.nextIndex++;
+    const content: unknown =
+      marker.status === "failed"
+        ? { type: "web_search_tool_result_error", error_code: "unavailable" }
+        : (marker.result_blocks ?? []);
+    controller.enqueue(
+      sse("content_block_start", {
+        type: "content_block_start",
+        index,
+        content_block: { type: "web_search_tool_result", tool_use_id: marker.item_id, content }
+      })
+    );
+    controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
+  };
+
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
     const choice = chunk.choices?.[0];
     if (choice === undefined) {
@@ -634,6 +814,11 @@ export function openAiSseToAnthropic(
       const detail = error instanceof Error ? error.message : String(error);
       throw new SseParseError(`malformed OpenAI SSE payload in Anthropic translation: ${detail}`, data.slice(0, 200));
     }
+    const marker = serverToolMarkerOf(chunk);
+    if (marker !== undefined) {
+      handleServerToolMarker(controller, marker);
+      return;
+    }
     process(controller, chunk);
   };
 
@@ -719,14 +904,24 @@ export async function handleAnthropicMessages(
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
-  const chat = anthropicToChat(body, upstreamModel);
-  const upstream = await backend.chat(chat, signal, {
+  // Server-executed web search is honored when the caller declared the server
+  // tool, an executor is available, and no *client* tool already owns the
+  // projected name (a client `web_search` must keep round-tripping untouched).
+  const declaresWebSearch = body.tools?.some(isAnthropicWebSearchTool) === true;
+  const clientNameCollision =
+    body.tools?.some((tool) => !isAnthropicServerTool(tool) && tool.name === WEB_SEARCH_TOOL_NAME) === true;
+  const executor =
+    declaresWebSearch && !clientNameCollision ? resolveWebSearchExecutor("anthropic") : undefined;
+  const serverTools = executor !== undefined;
+  const chat = anthropicToChat(body, upstreamModel, { serverTools });
+  const requestOptions = {
     modelCallId,
     ...(panelDepth !== undefined ? { panelDepth } : {}),
     // The streamed response is translated to Anthropic SSE by
     // openAiSseToAnthropic, which emits its own `ping` keepalive.
     ...(body.stream === true ? { translated: true } : {})
-  });
+  };
+  const upstream = await backend.chat(chat, signal, requestOptions);
 
   if (!upstream.ok) {
     const detail = await upstream.text();
@@ -734,6 +929,34 @@ export async function handleAnthropicMessages(
       type: "error",
       error: { type: "api_error", message: detail.slice(0, 2000) }
     });
+  }
+
+  if (executor !== undefined) {
+    const loopOptions = {
+      chat,
+      runStep: (stepChat: Record<string, unknown>) => backend.chat(stepChat, signal, requestOptions),
+      serverToolNames: new Set([WEB_SEARCH_TOOL_NAME]),
+      executor,
+      ...(signal !== undefined ? { signal } : {})
+    };
+    if (body.stream === true) {
+      const source = upstream.body;
+      if (source === null) return jsonResponse(502, { type: "error", error: { type: "api_error", message: "no upstream stream" } });
+      const composed = composeServerToolStream({ ...loopOptions, firstStep: upstream });
+      return new Response(openAiSseToAnthropic(composed, requestedModel), {
+        status: 200,
+        headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
+      });
+    }
+    const outcome = await runBufferedServerToolLoop({ ...loopOptions, firstStep: upstream });
+    if (outcome.kind === "upstream_error") {
+      const detail = await outcome.response.text();
+      return jsonResponse(outcome.response.status, {
+        type: "error",
+        error: { type: "api_error", message: detail.slice(0, 2000) }
+      });
+    }
+    return jsonResponse(200, chatToAnthropicMessage(outcome.openai as OpenAiResponse, requestedModel, outcome.searches));
   }
 
   if (body.stream === true) {

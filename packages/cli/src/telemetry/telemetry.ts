@@ -19,8 +19,18 @@
 import { arch, platform } from "node:os";
 
 import { PostHog } from "posthog-node";
-import { addSpanListener, attrJson, attrNum, attrStr, spanTraceId } from "@fusionkit/tracing";
-import type { ReadableSpan } from "@fusionkit/tracing";
+import {
+  addFusionEventListener,
+  addSpanListener,
+  attrJson,
+  attrNum,
+  attrStr,
+  eventNameOf,
+  eventTimeMs,
+  eventTraceId,
+  spanTraceId
+} from "@fusionkit/tracing";
+import type { ReadableFusionEvent, ReadableSpan } from "@fusionkit/tracing";
 
 import { resolveTelemetry } from "./consent.js";
 import type { TelemetryDecision } from "./consent.js";
@@ -28,13 +38,17 @@ import type { TelemetryDecision } from "./consent.js";
 export const TELEMETRY_DEFAULT_HOST = "https://us.i.posthog.com";
 
 /**
- * The PostHog project key telemetry reports to. Empty by default in source:
- * release builds (and self-hosters) provide it via FUSIONKIT_POSTHOG_KEY.
- * Without a key, telemetry stays inert even when a user opts in.
+ * Publishable PostHog project token baked into the CLI so opt-in telemetry
+ * works out of the box. This is a client token (the same class as posthog-js
+ * browser keys), not a secret. FUSIONKIT_POSTHOG_KEY overrides it, and setting
+ * it to an empty string disables telemetry entirely (self-hosters, packagers).
  */
+export const TELEMETRY_DEFAULT_PROJECT_KEY = "phc_BsGALorQ4vbJqiofM2uY8fNfmRZrPmp3fZxrbVFZgj7J";
+
+/** The PostHog project key telemetry reports to (env override wins). */
 export function telemetryProjectKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const key = env.FUSIONKIT_POSTHOG_KEY;
-  return key !== undefined && key.length > 0 ? key : undefined;
+  const key = env.FUSIONKIT_POSTHOG_KEY ?? TELEMETRY_DEFAULT_PROJECT_KEY;
+  return key.length > 0 ? key : undefined;
 }
 
 export function telemetryHost(env: NodeJS.ProcessEnv = process.env): string {
@@ -107,9 +121,7 @@ function spanStartMsOf(span: ReadableSpan): number {
   return seconds * 1000 + nanos / 1e6;
 }
 
-/** Fold one finished span into its session aggregate (allow-listed reads only). */
-function fold(span: ReadableSpan): FusionSessionEvent | undefined {
-  const traceId = spanTraceId(span);
+function sessionAcc(traceId: string, firstMs: number, lastMs: number): SessionAcc {
   let acc = sessions.get(traceId);
   if (acc === undefined) {
     acc = {
@@ -119,26 +131,37 @@ function fold(span: ReadableSpan): FusionSessionEvent | undefined {
       inputTokens: 0,
       outputTokens: 0,
       candidateFailures: 0,
-      firstMs: spanStartMsOf(span),
-      lastMs: spanEndMsOf(span)
+      firstMs,
+      lastMs
     };
     sessions.set(traceId, acc);
   }
-  acc.firstMs = Math.min(acc.firstMs, spanStartMsOf(span));
-  acc.lastMs = Math.max(acc.lastMs, spanEndMsOf(span));
+  acc.firstMs = Math.min(acc.firstMs, firstMs);
+  acc.lastMs = Math.max(acc.lastMs, lastMs);
+  return acc;
+}
+
+/** The environment snapshot fold shared by fusion.turn.info and fusion.run. */
+function foldEnvironment(acc: SessionAcc, source: { attributes: Record<string, unknown> }): void {
+  const environment = attrJson<{ harnesses?: string[]; models?: Array<{ provider?: string }> }>(
+    source,
+    "fusion.environment"
+  );
+  acc.harness = environment?.harnesses?.[0] ?? acc.harness;
+  for (const model of environment?.models ?? []) {
+    if (typeof model.provider === "string") acc.providers.add(model.provider);
+  }
+}
+
+/** Fold one finished span into its session aggregate (allow-listed reads only). */
+function fold(span: ReadableSpan): FusionSessionEvent | undefined {
+  const acc = sessionAcc(spanTraceId(span), spanStartMsOf(span), spanEndMsOf(span));
   const turn = attrNum(span, "fusion.turn");
   if (turn !== undefined) acc.turns.add(turn);
 
-  if (span.name === "fusion.turn.info" || span.name === "fusion.run") {
-    const environment = attrJson<{ harnesses?: string[]; models?: Array<{ provider?: string }> }>(
-      span,
-      "fusion.environment"
-    );
-    acc.harness = environment?.harnesses?.[0] ?? acc.harness;
-    for (const model of environment?.models ?? []) {
-      if (typeof model.provider === "string") acc.providers.add(model.provider);
-    }
-    if (span.name === "fusion.run" && attrStr(span, "fusion.status") === "failed") {
+  if (span.name === "fusion.run") {
+    foldEnvironment(acc, span);
+    if (attrStr(span, "fusion.status") === "failed") {
       acc.errorKind = "run_failed";
     }
   } else if (span.name === "fusion.candidate") {
@@ -155,6 +178,17 @@ function fold(span: ReadableSpan): FusionSessionEvent | undefined {
     if (span.status.code === 2) acc.errorKind = "judge_failed";
   }
   return undefined;
+}
+
+/** Fold one fusion event into its session aggregate (allow-listed reads only). */
+function foldEvent(event: ReadableFusionEvent): void {
+  const traceId = eventTraceId(event);
+  if (traceId === undefined) return;
+  const at = eventTimeMs(event);
+  const acc = sessionAcc(traceId, at, at);
+  const turn = attrNum(event, "fusion.turn");
+  if (turn !== undefined) acc.turns.add(turn);
+  if (eventNameOf(event) === "fusion.turn.info") foldEnvironment(acc, event);
 }
 
 function sessionEvent(acc: SessionAcc): FusionSessionEvent {
@@ -181,8 +215,8 @@ let injectedCapture: InitTelemetryOptions["capture"];
 
 /**
  * Initialize telemetry if (and only if) the user opted in and a project key
- * is configured. Also attaches the span listener that folds fused sessions
- * into allow-listed aggregates. Safe to call more than once.
+ * is configured. Also attaches the span/event listeners that fold fused
+ * sessions into allow-listed aggregates. Safe to call more than once.
  */
 export function initTelemetry(options: InitTelemetryOptions = {}): TelemetryDecision {
   const decision = resolveTelemetry();
@@ -201,6 +235,7 @@ export function initTelemetry(options: InitTelemetryOptions = {}): TelemetryDeci
   if (!listenerAttached && (client !== undefined || injectedCapture !== undefined)) {
     listenerAttached = true;
     addSpanListener(fold);
+    addFusionEventListener(foldEvent);
   }
   return decision;
 }

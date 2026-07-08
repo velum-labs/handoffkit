@@ -207,6 +207,8 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export type { AnthropicRequest } from "./adapters/anthropic.js";`
 - `export { chatToResponses, customToolNames, handleResponses, openAiSseToResponses, responsesToChat, responsesToolRegistry } from "./adapters/responses.js";`
 - `export type { ResponsesRequest, ResponsesToolKind, ResponsesToolRegistry } from "./adapters/responses.js";`
+- `export { MAX_WEB_SEARCHES_PER_TURN, resolveWebSearchExecutor } from "./adapters/web-search.js";`
+- `export type { WebSearchDialect, WebSearchExecutor, WebSearchOutcome } from "./adapters/web-search.js";`
 - `export { FUSION_EVIDENCE_HEADER, FUSION_REPORT_HEADER, FUSION_RUN_ID_HEADER, FUSION_STATUS_HEADER, formatAnthropic, formatChat, formatResponses, promptFromAnthropic, promptFromChat, promptFromResponses, startFusionGateway } from "./fusion-gateway.js";`
 - `export type { ChatRequest, FrontDoorDialect, FrontDoorRunner, FrontDoorRunnerInput, FrontDoorRunnerResult, FusionGateway, FusionGatewayOptions } from "./fusion-gateway.js";`
 - `export { ACP_PROTOCOL_VERSION, runAcpAgent } from "./acp-agent.js";`
@@ -258,8 +260,8 @@ interfaces instead of recreating local string lists or proof logic.
 - `export type { BundleVerification } from "./receipt.js";`
 - `export { buildReceiptStory, summarizeRunEvent } from "./receipt-story.js";`
 - `export type { EventSummary, ReceiptStory } from "./receipt-story.js";`
-- `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_MARKER_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES, FUSION_UNIT_SPAN_NAMES } from "./generated/trace-conventions.js";`
-- `export type { FusionAttributeKey, FusionMarkerName, FusionSpanName } from "./generated/trace-conventions.js";`
+- `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_EVENT_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES } from "./generated/trace-conventions.js";`
+- `export type { FusionAttributeKey, FusionEventName, FusionSpanName } from "./generated/trace-conventions.js";`
 - `export { PolicyDeniedError } from "./types.js";`
 - `export type { ActorRef, AgentKind, AgentSpec, ArtifactKind, AttestationTier, BudgetSpec, ChainedEvent, Checkpoint, CheckpointTier, ConsentRule, ContinuationRef, DataClassRule, DisclosureMode, DisclosureRecord, FailureClass, HandoffEnvelope, HandoffSource, HandoffTargetRef, KeyRef, ManifestFile, ModelUsageRecord, NetworkAccessRecord, NetworkPolicy, Policy, Receipt, ReceiptBundle, RetentionPolicy, RunContract, RunEvent, RunnerIdentity, RunnerSelector, RunStatus, SecretClaim, SecretReleaseRecord, SecretScopeRule, SemanticState, SessionIsolation, Signature, TaskSpec, ToolCallRecord, ToolJournal, WorkspaceManifest } from "./types.js";`
 - `export type { ClaimResult, DisclosureReport, PolicyDecision, RunnerSummary, RunRequest, RunRequestInput, RunSummary, RunView } from "./api.js";`
@@ -478,26 +480,29 @@ Tool integration entry point. It exposes the launcher and harness integration co
 @fusionkit/tracing — OpenTelemetry-based tracing for the fusion stack.
 
 The engine is the OTel SDK (ids, W3C propagation, batching, flush, OTLP
-export); this package owns the thin domain layer: typed span helpers over
-the fusion semantic conventions (spec/fusion-trace/registry.json), the
-serializable trace carrier that threads context through values, HTTP
-headers, and child environments, and the in-process span listener the
-narrator and product telemetry subscribe to.
+export); this package owns the thin domain layer: typed span and event
+helpers over the fusion semantic conventions
+(spec/fusion-trace/registry.json), the serializable trace carrier that
+threads context through values, HTTP headers, and child environments, and
+the in-process span/event listeners the narrator and product telemetry
+subscribe to.
 
-- `export { flushFusionTracing, fusionTracingServiceName, initFusionTracing, isFusionTracingActive, isTraceExportConfigured, resetFusionTracingForTest, shutdownFusionTracing } from "./provider.js";`
+- `export { flushFusionTracing, fusionTracingServiceName, initFusionTracing, isEventExportConfigured, isFusionTracingActive, isTraceExportConfigured, resetFusionTracingForTest, shutdownFusionTracing } from "./provider.js";`
 - `export type { InitFusionTracingOptions } from "./provider.js";`
-- `export { addSpanListener, hasSpanListeners, listenerSpanProcessor, removeSpanListener } from "./listener.js";`
-- `export type { SpanListener } from "./listener.js";`
-- `export { appendSpanListAttribute, carrierFromEnv, carrierFromHeaders, carrierOf, contextOf, emitFusionMarker, envOf, fusionBaggageOf, headersOf, jsonAttr, newSessionCarrier, newSpanId, newTraceId, sessionCarrier, startFusionSpan, traceIdOf, withFusionBaggage } from "./spans.js";`
+- `export { addFusionEventListener, addSpanListener, hasFusionEventListeners, hasSpanListeners, listenerLogRecordProcessor, listenerSpanProcessor, removeFusionEventListener, removeSpanListener } from "./listener.js";`
+- `export type { FusionEventListener, SpanListener } from "./listener.js";`
+- `export { appendSpanListAttribute, carrierFromEnv, carrierFromHeaders, carrierOf, contextOf, emitFusionEvent, envOf, fusionBaggageOf, headersOf, jsonAttr, newSessionCarrier, newSpanId, newTraceId, sessionCarrier, startFusionSpan, traceIdOf, withFusionBaggage } from "./spans.js";`
 - `export type { FusionAttributes, FusionBaggage, FusionScope, FusionSpan, FusionTraceCarrier } from "./spans.js";`
-- `export { AllowlistSpanExporter, isLoopbackOtlpEndpoint, toExportable, TRACE_REDACTED_ATTRIBUTE } from "./exportable.js";`
-- `export type { AllowlistSpanExporterOptions } from "./exportable.js";`
-- `export { attrBool, attrJson, attrNum, attrStr, spanEndMs, spanId, spanTraceId } from "./readable.js";`
-- `export type { ReadableSpan } from "./readable.js";`
+- `export { AllowlistLogExporter, AllowlistSpanExporter, isLoopbackOtlpEndpoint, toExportable, toExportableEvent, TRACE_REDACTED_ATTRIBUTE } from "./exportable.js";`
+- `export type { AllowlistLogExporterOptions, AllowlistSpanExporterOptions } from "./exportable.js";`
+- `export { attrBool, attrJson, attrNum, attrStr, eventNameOf, eventSpanId, eventTimeMs, eventTraceId, spanEndMs, spanId, spanTraceId } from "./readable.js";`
+- `export type { AttributeSource, ReadableFusionEvent, ReadableSpan } from "./readable.js";`
 - `export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";`
 - `export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";`
-- `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_MARKER_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES, FUSION_UNIT_SPAN_NAMES } from "@fusionkit/protocol";`
-- `export type { FusionAttributeKey, FusionMarkerName, FusionSpanName } from "@fusionkit/protocol";`
+- `export { InMemoryLogRecordExporter, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";`
+- `export type { LogRecordProcessor } from "@opentelemetry/sdk-logs";`
+- `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_EVENT_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES } from "@fusionkit/protocol";`
+- `export type { FusionAttributeKey, FusionEventName, FusionSpanName } from "@fusionkit/protocol";`
 
 ### `packages/workspace/src/index.ts`
 
@@ -614,7 +619,7 @@ Public exports:
 - `context_from_headers`
 - `contract_metadata`
 - `contract_model_for_schema`
-- `emit_marker`
+- `emit_event`
 - `endpoint_to_contract`
 - `estimate_cost`
 - `estimate_messages_tokens`

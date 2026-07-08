@@ -1,7 +1,7 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
 import { artifactHash, ATTR } from "@fusionkit/protocol";
 import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
-import { emitFusionMarker } from "@fusionkit/tracing";
+import { emitFusionEvent } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
 import { traceCandidate } from "./candidate-trace.js";
@@ -176,7 +176,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
 
       const transcript = JSON.stringify(steps, null, 2);
       const outputHash = artifactHash(transcript);
-      emitFusionMarker("ensemble", "fusion.tool.execution", tracer.carrier, {
+      emitFusionEvent("ensemble", "fusion.tool.execution", tracer.carrier, {
         [ATTR.FUSION_CANDIDATE_ID]: candidateId,
         [ATTR.FUSION_MODEL_ID]: model.id,
         [ATTR.FUSION_TURN]: options.turn,

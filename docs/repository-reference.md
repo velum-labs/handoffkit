@@ -155,7 +155,7 @@ Validation and normalization exports include `parseHostAllowlistEntry`, `parsePo
 
 Cryptographic and provenance exports include `canonicalize`, `sha256Hex`, `sha256PrefixedHex`, `hashCanonical`, `hashCanonicalSha256`, `requestHash`, `responseHash`, `artifactHash`, `schemaBundleHash`, `generateEd25519KeyPair`, `keyIdFromPublicPem`, `signData`, `verifyData`, `contractHash`, `signContract`, `appendEvent`, `verifyChain`, `signReceipt`, `verifyRunnerReceipt`, and `verifyReceiptBundle`.
 
-Trace exports are the generated fusion semantic-convention constants (`ATTR`, span/marker name lists, `EXPORTABLE_ATTRIBUTES`); the OpenTelemetry-backed span helpers live in `@fusionkit/tracing`.
+Trace exports are the generated fusion semantic-convention constants (`ATTR`, span/event name lists, `EXPORTABLE_ATTRIBUTES`); the OpenTelemetry-backed span and event helpers live in `@fusionkit/tracing`.
 
 Example:
 
@@ -339,7 +339,7 @@ console.log(Boolean(plane), Boolean(runner));
 
 `fusionkit_core.run_store` defines `FileSystemRunStore`, which persists run state, events, artifacts, tool pauses, idempotency records, and inspections to the local filesystem.
 
-`fusionkit_core.trace` defines `setup_fusion_tracing()`, `fusion_span()`, `start_fusion_span()`, `end_fusion_span()`, `emit_marker()`, `context_from_headers()`, and `candidate_baggage_of()` over the OpenTelemetry SDK.
+`fusionkit_core.trace` defines `setup_fusion_tracing()`, `fusion_span()`, `start_fusion_span()`, `end_fusion_span()`, `emit_event()`, `context_from_headers()`, and `candidate_baggage_of()` over the OpenTelemetry SDK.
 
 `fusionkit_core.artifacts` defines `hash_bytes()`, `hash_text()`, and `LocalArtifactStore`.
 

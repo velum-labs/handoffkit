@@ -66,7 +66,7 @@ async function main() {
 
   log("building + starting scope dashboard...");
   const obs = await startObservability({ log });
-  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = obs.otlpUrl;
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = obs.otlpUrl;
   initFusionTracing({ serviceName: "fusion-observe-verify" });
   log(`dashboard: ${obs.url}`);
 
@@ -127,6 +127,7 @@ async function main() {
     log(`  judge: thinking=${detail.judge.thinking !== undefined} final=${detail.judge.final !== undefined}`);
     log(`  finalOutput=${(detail.finalOutput ?? "").slice(0, 120)}`);
     log(`  spanCounts=${JSON.stringify(detail.spanCounts)}`);
+    log(`  eventCounts=${JSON.stringify(detail.eventCounts)}`);
   }
 
   log(`\nRESULT: ${test.status === 0 ? "GREEN" : "RED"} — dashboard at ${obs.url} (trace ${session?.traceId ?? "none"})`);

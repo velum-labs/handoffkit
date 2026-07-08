@@ -263,18 +263,18 @@ print(prompt[:200])
 
 ### `fusionkit_core.trace`, `metrics`, `kernel`, `router`, and `artifacts`
 
-`setup_fusion_tracing()`, `fusion_span()`, `start_fusion_span()`/`end_fusion_span()`, `emit_marker()`, `context_from_headers()`, and `candidate_baggage_of()` provide OpenTelemetry-backed spans that follow the fusion semantic conventions (`spec/fusion-trace/registry.json`). Export is configured with the standard `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
+`setup_fusion_tracing()`, `fusion_span()`, `start_fusion_span()`/`end_fusion_span()`, `emit_event()`, `context_from_headers()`, and `candidate_baggage_of()` provide OpenTelemetry-backed spans and events that follow the fusion semantic conventions (`spec/fusion-trace/registry.json`). Export is configured with the standard `OTEL_EXPORTER_OTLP_ENDPOINT` base (spans post to `/v1/traces`, events to `/v1/logs`; the signal-specific variables win).
 
 `RunRecord` and `JsonlRunLogger` write lightweight metrics records. `FusionKernel` is the Python-side kernel abstraction. `RouterDecision` and `HeuristicRouter` support simple routing decisions. `hash_bytes()`, `hash_text()`, and `LocalArtifactStore` support content-addressed artifact storage.
 
 Example:
 
 ```python
-from fusionkit_core.trace import context_from_headers, emit_marker, fusion_span
+from fusionkit_core.trace import context_from_headers, emit_event, fusion_span
 
 ctx = context_from_headers({"traceparent": incoming_traceparent})
 with fusion_span("synthesis", "fusion.fuse", ctx) as span:
-    emit_marker("judge", "fusion.judge.thinking", ctx, {"fusion.raw_analysis": "..."})
+    emit_event("judge", "fusion.judge.thinking", ctx, {"fusion.raw_analysis": "..."})
 ```
 
 ## `fusionkit-server`

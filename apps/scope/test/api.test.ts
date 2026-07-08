@@ -9,26 +9,37 @@ import type { SessionDetail } from "../lib/sessions";
 // Isolated DB for the handler-level e2e.
 process.env.SCOPEKIT_DB = join(mkdtempSync(join(tmpdir(), "scope-api-")), "scope.db");
 
-const { POST: ingest } = await import("../app/api/ingest/route");
+const { POST: ingestTraces } = await import("../app/api/ingest/v1/traces/route");
+const { POST: ingestLogs } = await import("../app/api/ingest/v1/logs/route");
 const { GET: listSessionsRoute } = await import("../app/api/sessions/route");
 const { GET: getSessionRoute } = await import("../app/api/sessions/[traceId]/route");
 const { GET: modelsRoute } = await import("../app/api/models/route");
 const { GET: environmentsRoute } = await import("../app/api/environments/route");
-const { syntheticSession, toOtlpExport } = await import("./fixture");
+const { syntheticSession, toOtlpExport, toOtlpLogsExport } = await import("./fixture");
 
-test("POST /api/ingest (OTLP) then GET /api/sessions/[id] renders structured detail", async () => {
+test("POST OTLP traces + logs then GET /api/sessions/[id] renders structured detail", async () => {
   const traceId = "33333333333333333333333333330001";
-  const spans = syntheticSession(traceId);
+  const { spans, events } = syntheticSession(traceId);
 
-  const ingestResponse = await ingest(
-    new Request("http://localhost/api/ingest", {
+  const tracesResponse = await ingestTraces(
+    new Request("http://localhost/api/ingest/v1/traces", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(toOtlpExport(spans))
     })
   );
-  const ingestBody = (await ingestResponse.json()) as { accepted: number };
-  assert.equal(ingestBody.accepted, spans.length);
+  const tracesBody = (await tracesResponse.json()) as { accepted: number };
+  assert.equal(tracesBody.accepted, spans.length);
+
+  const logsResponse = await ingestLogs(
+    new Request("http://localhost/api/ingest/v1/logs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(toOtlpLogsExport(events))
+    })
+  );
+  const logsBody = (await logsResponse.json()) as { accepted: number };
+  assert.equal(logsBody.accepted, events.length);
 
   // Sessions list includes the new session (with its prompt preview).
   const listResponse = await listSessionsRoute();
@@ -40,7 +51,7 @@ test("POST /api/ingest (OTLP) then GET /api/sessions/[id] renders structured det
   assert.equal(summary.status, "succeeded");
   assert.equal(summary.promptPreview, "Fix the add() sign bug so npm test passes.");
 
-  // Detail derives candidates, judge, and final output.
+  // Detail derives candidates, judge, and final output from spans + events.
   const detailResponse = await getSessionRoute(new Request(`http://localhost/api/sessions/${traceId}`), {
     params: Promise.resolve({ traceId })
   });
@@ -50,10 +61,15 @@ test("POST /api/ingest (OTLP) then GET /api/sessions/[id] renders structured det
   assert.equal(detail.candidates.find((c) => c.candidateId === "cand_gpt")?.steps.length, 3);
   assert.equal(detail.judge.final?.decision, "synthesize");
   assert.match(detail.finalOutput ?? "", /left \+ right/);
+  assert.equal(detail.events.length, events.length);
 
   // Models + environments rollups reflect the session.
-  const modelsBody = (await (await modelsRoute()).json()) as { models: Array<{ modelId: string }> };
+  const modelsBody = (await (await modelsRoute()).json()) as {
+    models: Array<{ modelId: string }>;
+    costs: { entries: number };
+  };
   assert.ok(modelsBody.models.some((model) => model.modelId === "gpt"));
+  assert.equal(modelsBody.costs.entries, 3);
 
   const envBody = (await (await environmentsRoute()).json()) as {
     environments: Array<{ repo?: string; models: unknown[] }>;

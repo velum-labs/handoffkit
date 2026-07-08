@@ -1,50 +1,7 @@
 // GENERATED FILE - DO NOT EDIT. Source of truth: spec/fusion-trace/registry.json. Regenerate with `node scripts/generate-trace-conventions.mjs`.
 
-/** Every span name a fusion component may emit. */
+/** Unit-of-work span names (the traces signal). */
 export const FUSION_SPAN_NAMES = [
-  "fusion.run",
-  "fusion.turn",
-  "fusion.candidate",
-  "fusion.judge",
-  "fusion.fuse",
-  "chat",
-  "fusion.passthrough",
-  "fusion.turn.info",
-  "fusion.candidate.started",
-  "fusion.candidate.step",
-  "fusion.model_call.started",
-  "fusion.judge.request",
-  "fusion.judge.thinking",
-  "fusion.judge.scored",
-  "fusion.judge.synthesis",
-  "fusion.cost",
-  "fusion.narration",
-  "fusion.tool.execution",
-  "fusion.cursor.route"
-] as const;
-
-export type FusionSpanName = (typeof FUSION_SPAN_NAMES)[number];
-
-/** Zero-duration marker spans: live point-in-time signals. */
-export const FUSION_MARKER_NAMES = [
-  "fusion.turn.info",
-  "fusion.candidate.started",
-  "fusion.candidate.step",
-  "fusion.model_call.started",
-  "fusion.judge.request",
-  "fusion.judge.thinking",
-  "fusion.judge.scored",
-  "fusion.judge.synthesis",
-  "fusion.cost",
-  "fusion.narration",
-  "fusion.tool.execution",
-  "fusion.cursor.route"
-] as const;
-
-export type FusionMarkerName = (typeof FUSION_MARKER_NAMES)[number];
-
-/** Real spans: units of work with duration. */
-export const FUSION_UNIT_SPAN_NAMES = [
   "fusion.run",
   "fusion.turn",
   "fusion.candidate",
@@ -53,6 +10,26 @@ export const FUSION_UNIT_SPAN_NAMES = [
   "chat",
   "fusion.passthrough"
 ] as const;
+
+export type FusionSpanName = (typeof FUSION_SPAN_NAMES)[number];
+
+/** Live point-in-time event names (OTel events on the logs signal). */
+export const FUSION_EVENT_NAMES = [
+  "fusion.turn.info",
+  "fusion.candidate.started",
+  "fusion.candidate.step",
+  "fusion.model_call.started",
+  "fusion.judge.request",
+  "fusion.judge.thinking",
+  "fusion.judge.scored",
+  "fusion.judge.synthesis",
+  "fusion.cost",
+  "fusion.narration",
+  "fusion.tool.execution",
+  "fusion.cursor.route"
+] as const;
+
+export type FusionEventName = (typeof FUSION_EVENT_NAMES)[number];
 
 /** Attribute keys, one constant per registry attribute. */
 export const ATTR = {
@@ -194,4 +171,4 @@ export const FUSION_SCOPES = {
   "cursor-bridge": "fusionkit.cursor-bridge"
 } as const;
 
-export const FUSION_CONVENTIONS_VERSION = "1.0.0";
+export const FUSION_CONVENTIONS_VERSION = "2.0.0";

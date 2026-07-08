@@ -9,7 +9,8 @@ import {
   ArrowUpDown,
   Boxes,
   ChevronRight,
-  Search
+  Search,
+  Unplug
 } from "lucide-react";
 
 import { EmptyState } from "@/components/scope/empty-state";
@@ -200,7 +201,10 @@ function SessionsPageBody() {
       </PageHeader>
 
       <div className="space-y-4 px-8 py-6">
-        <ErrorBanner error={error} />
+        {/* When the list is empty AND the collector fetch failed, the dedicated
+            connection empty state below carries the error; the banner would
+            only duplicate it. It still shows alongside stale-but-present rows. */}
+        <ErrorBanner error={sessions.length === 0 ? undefined : error} />
 
         {loading ? (
           <div className="space-y-4">
@@ -211,16 +215,32 @@ function SessionsPageBody() {
             <TableSkeleton rows={5} />
           </div>
         ) : sessions.length === 0 ? (
-          <EmptyState
-            icon={<Boxes className="size-8" />}
-            title="No sessions yet"
-            hint={
-              <>
-                Run <code className="mono">fusionkit codex --observe</code> (or point any emitter at{" "}
-                <code className="mono">FUSION_TRACE_URL</code>) and live sessions will appear here.
-              </>
-            }
-          />
+          error !== undefined ? (
+            // "No sessions yet" would be a lie here: the dashboard simply
+            // cannot reach its own collector, so say that instead.
+            <EmptyState
+              icon={<Unplug className="size-8" />}
+              title="Cannot reach the session collector"
+              hint={
+                <>
+                  Loading sessions failed ({error}). The dashboard retries automatically and live
+                  sessions will appear as soon as the collector is reachable again.
+                </>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={<Boxes className="size-8" />}
+              title="No sessions yet"
+              hint={
+                <>
+                  Run <code className="mono">fusionkit codex --observe</code> (or point any OTLP
+                  emitter at <code className="mono">OTEL_EXPORTER_OTLP_TRACES_ENDPOINT</code>) and
+                  live sessions will appear here.
+                </>
+              }
+            />
+          )
         ) : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-3">

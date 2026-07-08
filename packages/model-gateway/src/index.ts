@@ -158,6 +158,8 @@ export type {
   ResponsesToolKind,
   ResponsesToolRegistry
 } from "./adapters/responses.js";
+export { MAX_WEB_SEARCHES_PER_TURN, resolveWebSearchExecutor } from "./adapters/web-search.js";
+export type { WebSearchDialect, WebSearchExecutor, WebSearchOutcome } from "./adapters/web-search.js";
 export {
   FUSION_EVIDENCE_HEADER,
   FUSION_REPORT_HEADER,

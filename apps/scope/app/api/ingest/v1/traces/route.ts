@@ -7,11 +7,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * The OTLP/HTTP traces receiver. Fusion components point their standard
- * OTLP exporters here (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`); the endpoint
- * accepts `ExportTraceServiceRequest` JSON (spec-conformant hex-id encoding
- * or the protobuf-JSON mapping) and replies with the standard export
- * response shape.
+ * The OTLP/HTTP traces receiver. Fusion components point their standard OTLP
+ * exporters at the `/api/ingest` base (`OTEL_EXPORTER_OTLP_ENDPOINT`), whose
+ * exporters append the spec path `/v1/traces`. Accepts
+ * `ExportTraceServiceRequest` JSON (spec-conformant hex-id encoding or the
+ * protobuf-JSON mapping) and replies with the standard export response shape.
  */
 export async function POST(request: Request): Promise<NextResponse> {
   let body: unknown;

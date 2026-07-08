@@ -339,7 +339,7 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
     input.k !== undefined
       ? withProposalBoundary(rawTools, input.k, () => generation)
       : rawTools;
-  callSpan?.marker("panel-model", "fusion.model_call.started", {
+  callSpan?.event("panel-model", "fusion.model_call.started", {
     ...identity,
     [ATTR.FUSION_SYSTEM_PROMPT]: AGENT_SYSTEM_PROMPT,
     [ATTR.FUSION_PROMPT]: input.prompt,
