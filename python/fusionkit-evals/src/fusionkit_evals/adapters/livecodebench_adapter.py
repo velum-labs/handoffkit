@@ -22,9 +22,9 @@ hard task is never silently dropped.
 Optional env overrides: LCB_VERSION (default release_v6), LCB_MIN_DATE
 (ISO date, default 2025-01-01), LCB_DIFFICULTY (comma list, default medium,hard),
 LCB_MAX_TESTS (per problem, default 0 = full official set), LCB_TEST_TIMEOUT_S
-(default 8), LCB_CONCURRENCY (default 4), LCB_RETRIES (default 3), LCB_CHECKER
-(exact|token|float|case_insensitive, default exact), LCB_CACHE_DIR,
-LCB_ARTIFACTS_DIR, BENCH_SANDBOX (local|docker).
+(default 8), LCB_TASK_TIMEOUT_S (default 2400), LCB_CONCURRENCY (default 4),
+LCB_RETRIES (default 3), LCB_CHECKER (exact|token|float|case_insensitive,
+default exact), LCB_CACHE_DIR, LCB_ARTIFACTS_DIR, BENCH_SANDBOX (local|docker).
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ from fusionkit_core.providers import estimate_cost
 from fusionkit_core.registry import FUSION_PANEL_ALIAS
 from fusionkit_core.types import ChatMessage
 
-from fusionkit_evals.bench_runtime import classify_exception, retry_async
+from fusionkit_evals.bench_runtime import classify_exception, is_transient, retry_async
 from fusionkit_evals.bench_verify import verify_solution
 from fusionkit_evals.checkers import CheckerMode
 from fusionkit_evals.code_extract import extract_code
@@ -63,6 +63,10 @@ from fusionkit_evals.sandbox import Sandbox, SandboxConfig, build_sandbox
 SCORING_VERSION = "2"
 
 PROMPT_SUFFIX = LCB_PROMPT_SUFFIX
+
+
+class LiveCodeBenchTaskTimeoutError(TimeoutError):
+    """Raised when a whole fused LiveCodeBench task exceeds its wall clock."""
 
 
 def log(message: str) -> None:
@@ -127,6 +131,30 @@ def artifacts_dir() -> Path:
     return path
 
 
+def should_retry_panel_error(exc: BaseException) -> bool:
+    if isinstance(exc, LiveCodeBenchTaskTimeoutError):
+        return False
+    return is_transient(exc)
+
+
+async def run_engine_with_task_timeout(
+    engine: FusionEngine,
+    prompt: str,
+    task_timeout_s: float,
+) -> Any:
+    task = asyncio.create_task(
+        engine.run([ChatMessage(role="user", content=prompt)], mode="panel")
+    )
+    try:
+        return await asyncio.wait_for(task, timeout=task_timeout_s)
+    except TimeoutError as exc:
+        if task.done() and not task.cancelled():
+            raise
+        raise LiveCodeBenchTaskTimeoutError(
+            f"LiveCodeBench task exceeded {task_timeout_s:g}s wall clock"
+        ) from exc
+
+
 def _write_artifacts(signature: str, task_id: str, payload: dict[str, Any]) -> None:
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", f"{task_id}__{signature}")
     (artifacts_dir() / f"{safe}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -156,10 +184,12 @@ async def evaluate_problem(
     prompt = (problem.get("question_content") or "") + PROMPT_SUFFIX
     async with semaphore:
         started = time.monotonic()
+        task_timeout_s = float(os.environ.get("LCB_TASK_TIMEOUT_S", "2400"))
         try:
             result = await retry_async(
-                lambda: engine.run([ChatMessage(role="user", content=prompt)], mode="panel"),
+                lambda: run_engine_with_task_timeout(engine, prompt, task_timeout_s),
                 attempts=int(os.environ.get("LCB_RETRIES", "3")),
+                retry_on=should_retry_panel_error,
             )
         except Exception as exc:  # noqa: BLE001 - classify rather than abort the batch
             outcome = classify_exception(exc)

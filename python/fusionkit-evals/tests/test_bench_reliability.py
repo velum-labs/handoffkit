@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
+from fusionkit_evals.adapters.livecodebench_adapter import (
+    LiveCodeBenchTaskTimeoutError,
+    run_engine_with_task_timeout,
+    should_retry_panel_error,
+)
 from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous, load_runs
 from fusionkit_evals.bench_runtime import classify_exception, is_transient, retry_async
 from fusionkit_evals.bench_stats import (
@@ -230,6 +236,30 @@ async def test_retry_async_reraises_non_transient_immediately() -> None:
 
     with pytest.raises(ValueError, match="not retryable"):
         await retry_async(hard, attempts=5)
+    assert calls["n"] == 1
+
+
+async def test_livecodebench_task_wall_timeout_is_not_retried() -> None:
+    calls = {"n": 0}
+    assert should_retry_panel_error(TimeoutError("provider timed out"))
+    assert classify_exception(LiveCodeBenchTaskTimeoutError("wall timeout")) == "infra_error"
+
+    class HangingEngine:
+        async def run(self, *_args: object, **_kwargs: object) -> object:
+            calls["n"] += 1
+            await asyncio.sleep(1)
+            return object()
+
+    async def _no_sleep(_: float) -> None:
+        return None
+
+    with pytest.raises(LiveCodeBenchTaskTimeoutError):
+        await retry_async(
+            lambda: run_engine_with_task_timeout(HangingEngine(), "prompt", 0.001),
+            attempts=3,
+            retry_on=should_retry_panel_error,
+            sleep=_no_sleep,
+        )
     assert calls["n"] == 1
 
 

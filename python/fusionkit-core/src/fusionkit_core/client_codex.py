@@ -51,6 +51,7 @@ class CodexResponsesClient:
             api_key="placeholder-oauth-token",
             default_headers=CODEX_DEFAULT_HEADERS,
             timeout=endpoint.timeout_s,
+            max_retries=0,
         )
 
     def _request_kwargs(

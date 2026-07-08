@@ -46,12 +46,14 @@ class AnthropicModelClient:
                 auth_token="placeholder-oauth-token",
                 default_headers={"anthropic-beta": ANTHROPIC_OAUTH_BETA},
                 timeout=endpoint.timeout_s,
+                max_retries=0,
             )
         else:
             self._client = AsyncAnthropic(
                 base_url=endpoint.base_url,
                 api_key=resolve_api_key(endpoint),
                 timeout=endpoint.timeout_s,
+                max_retries=0,
             )
 
     def _system_param(self, system_text: str) -> str | list[dict[str, Any]] | None:

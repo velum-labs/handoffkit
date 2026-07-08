@@ -15,6 +15,7 @@ members = [
     "fusionkit",
     "fusionkit-core",
     "fusionkit-evals",
+    "fusionkit-lab",
     "fusionkit-mlx",
     "fusionkit-server",
     "uniroute",
@@ -831,6 +832,21 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.5" },
 ]
 provides-extras = ["evals", "livecodebench"]
+
+[[package]]
+name = "fusionkit-lab"
+version = "0.1.0"
+source = { editable = "python/fusionkit-lab" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
 
 [[package]]
 name = "fusionkit-mlx"

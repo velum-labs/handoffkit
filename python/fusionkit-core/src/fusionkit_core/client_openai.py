@@ -50,6 +50,7 @@ class OpenAICompatibleClient:
             api_key=resolve_api_key(endpoint),
             timeout=endpoint.timeout_s,
             default_headers=default_headers,
+            max_retries=0,
         )
         self._openrouter_http: httpx.AsyncClient | None = None
 
