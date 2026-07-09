@@ -34,6 +34,8 @@ type MockBackend = {
   modelsRequests: Array<{ headers: Record<string, string | string[] | undefined>; search: string }>;
   responsesRequests: Array<{ headers: Record<string, string | string[] | undefined>; body: unknown }>;
   failModels: boolean;
+  /** Override the `/models` response body (default `{ models: STOCK }`). */
+  modelsPayload?: unknown;
   close: () => Promise<void>;
 };
 
@@ -67,7 +69,7 @@ async function startMockCodexBackend(): Promise<MockBackend> {
           return;
         }
         res.writeHead(200, { "content-type": "application/json", etag: 'W/"models-v1"' });
-        res.end(JSON.stringify({ models: STOCK }));
+        res.end(JSON.stringify(state.modelsPayload ?? { models: STOCK }));
         return;
       }
       if (req.method === "POST" && url.pathname === "/responses") {
@@ -222,6 +224,38 @@ test("GET /v1/models falls back to the stock snapshot without auth or when upstr
     assert.deepEqual(
       degraded.models.map((entry) => entry.slug),
       ["fusion-panel", "gpt-5.5-cached"]
+    );
+  } finally {
+    await gateway.close();
+    await upstream.close();
+  }
+});
+
+test("GET /v1/models validates the upstream shape: bad envelopes fall back, bad entries are dropped", async () => {
+  const upstream = await startMockCodexBackend();
+  const { gateway } = await startRelayGateway(upstream.url);
+  try {
+    // An unexpected envelope (no `models` array) degrades to the snapshot
+    // merge instead of trusting an arbitrary shape.
+    upstream.modelsPayload = { data: [{ id: "not-the-codex-shape" }] };
+    const degraded = (await (
+      await fetch(`${gateway.url()}/v1/models`, { headers: CHATGPT_HEADERS })
+    ).json()) as { models: Array<Record<string, unknown>> };
+    assert.deepEqual(
+      degraded.models.map((entry) => entry.slug),
+      ["fusion-panel", "gpt-5.5-cached"]
+    );
+    // Per-entry salvage: malformed entries (no string slug, non-objects) are
+    // dropped without costing the rest of the live catalog.
+    upstream.modelsPayload = {
+      models: [STOCK[0], { display_name: "no slug" }, null, "nope", { slug: "" }, STOCK[1]]
+    };
+    const salvaged = (await (
+      await fetch(`${gateway.url()}/v1/models`, { headers: CHATGPT_HEADERS })
+    ).json()) as { models: Array<Record<string, unknown>> };
+    assert.deepEqual(
+      salvaged.models.map((entry) => entry.slug),
+      ["fusion-panel", "gpt-5.5", "gpt-5.3-codex"]
     );
   } finally {
     await gateway.close();

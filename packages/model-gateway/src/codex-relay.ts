@@ -1,5 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 
+import { z } from "zod";
+
 import { providerDefaultBaseUrl } from "@fusionkit/registry";
 import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
 
@@ -31,6 +33,24 @@ import { defaultFusionGatewayLogger } from "./logger.js";
 
 /** One model catalog entry in Codex's own `ModelInfo` wire shape. */
 export type CodexCatalogEntry = Record<string, unknown>;
+
+/**
+ * The upstream `/models` wire contract, validated structurally. There is no
+ * official OpenAPI document or published SDK type for the private ChatGPT
+ * Codex backend: the authoritative schema is codex-rs's `ModelInfo`
+ * (`codex-rs/protocol/src/openai_models.rs`, serde + ts-rs bindings that are
+ * not published to npm — `@openai/codex-sdk` only ships the Threads API), and
+ * it deliberately drifts across Codex releases. So validation pins exactly
+ * what the relay relies on — the `{ models: [...] }` envelope and each
+ * entry's identity (`slug`) — while every other field passes through verbatim
+ * (`looseObject`), which is what keeps newer/unknown fields alive on the way
+ * to the Codex client that DOES validate the full schema for its own version.
+ */
+const upstreamModelsEnvelope = z.object({ models: z.array(z.unknown()) });
+const stockEntrySchema = z.looseObject({ slug: z.string().min(1) });
+
+/** A validated upstream stock entry: a known `slug`, everything else opaque. */
+export type CodexStockEntry = z.infer<typeof stockEntrySchema>;
 
 export type CodexRelayOptions = {
   /**
@@ -137,8 +157,8 @@ export class CodexBackendRelay {
     if (auth !== undefined) {
       try {
         const upstream = await this.#fetchUpstreamModels(headers, search);
-        const template = upstream?.models[0];
-        if (upstream !== undefined && template !== undefined) {
+        const template = upstream.models[0];
+        if (template !== undefined) {
           const merged = this.#catalog(template, upstream.models);
           return { models: merged, ...(upstream.etag !== undefined ? { etag: upstream.etag } : {}) };
         }
@@ -157,7 +177,7 @@ export class CodexBackendRelay {
   async #fetchUpstreamModels(
     headers: IncomingHttpHeaders,
     search: string
-  ): Promise<{ models: CodexCatalogEntry[]; etag?: string } | undefined> {
+  ): Promise<{ models: CodexStockEntry[]; etag?: string }> {
     const response = await fetch(`${this.#backendUrl}/models${search}`, {
       method: "GET",
       headers: forwardHeaders(headers),
@@ -166,11 +186,16 @@ export class CodexBackendRelay {
     if (!response.ok) {
       throw new Error(`upstream /models returned ${response.status}`);
     }
-    const parsed = (await response.json()) as { models?: unknown };
-    if (!Array.isArray(parsed.models)) return undefined;
-    const models = parsed.models.filter(
-      (entry): entry is CodexCatalogEntry => entry !== null && typeof entry === "object"
-    );
+    const envelope = upstreamModelsEnvelope.safeParse(await response.json());
+    if (!envelope.success) {
+      throw new Error("upstream /models returned an unexpected shape (no models array)");
+    }
+    // Per-entry salvage: one malformed entry must not cost the whole live
+    // catalog, so invalid entries are dropped instead of failing the fetch.
+    const models = envelope.data.models.flatMap((entry) => {
+      const parsed = stockEntrySchema.safeParse(entry);
+      return parsed.success ? [parsed.data] : [];
+    });
     const etag = response.headers.get("etag");
     return { models, ...(etag !== null ? { etag } : {}) };
   }

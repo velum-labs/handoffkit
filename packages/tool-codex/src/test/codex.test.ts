@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { parse as parseToml } from "smol-toml";
+
 import { createMockHarness, ensemble } from "@fusionkit/ensemble";
 import type { EnsembleDescriptor } from "@fusionkit/ensemble";
 import {
@@ -519,6 +521,46 @@ test("installCodexIntegration refuses to shadow user-owned tables and creates a 
     // i.e. after the first table header.
     const beforeFirstTable = written.slice(0, written.indexOf("["));
     assert.doesNotMatch(beforeFirstTable, /^model(_provider)? = /m);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("installCodexIntegration parses the config instead of substring-matching, and always writes valid TOML", () => {
+  const home = mkdtempSync(join(tmpdir(), "codex-install-toml-"));
+  try {
+    // A COMMENT mentioning our table is not a conflict (no substring false
+    // positives): the config is parsed, not grepped.
+    writeFileSync(
+      join(home, "config.toml"),
+      ['# I once considered adding [model_providers.fusionkit] here', 'model = "gpt-5.5"', ""].join("\n")
+    );
+    const result = installCodexIntegration({
+      // Hostile URL: the quote must be escaped by the TOML serializer.
+      gatewayUrl: 'http://127.0.0.1:4114/a"b',
+      profiles: INSTALL_PROFILES,
+      codexHome: home
+    });
+    assert.equal(result.action, "installed");
+    // The written document is real, parseable TOML with the provider intact.
+    const parsed = parseToml(readFileSync(join(home, "config.toml"), "utf8")) as {
+      model_providers?: { fusionkit?: { base_url?: string } };
+      model?: string;
+    };
+    assert.equal(parsed.model, "gpt-5.5");
+    assert.equal(parsed.model_providers?.fusionkit?.base_url, 'http://127.0.0.1:4114/a"b/v1');
+    // Invalid user TOML aborts with the file named instead of appending to a
+    // config Codex would reject wholesale.
+    writeFileSync(join(home, "config.toml"), "model = unclosed [");
+    assert.throws(
+      () =>
+        installCodexIntegration({
+          gatewayUrl: "http://127.0.0.1:4114",
+          profiles: INSTALL_PROFILES,
+          codexHome: home
+        }),
+      /your Codex config .* is not valid TOML/
+    );
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

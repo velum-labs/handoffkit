@@ -18,10 +18,12 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { parse as tomlParse, stringify as tomlStringify } from "smol-toml";
+
 import { SUBSCRIPTIONS } from "@fusionkit/registry";
 import { trimTrailingSlashes } from "@fusionkit/tools";
 
-import { codexProfileFileToml, tomlKey } from "./launch.js";
+import { codexProfileFileToml } from "./launch.js";
 
 /** Managed-block markers; everything between them is FusionKit-owned. */
 export const CODEX_INSTALL_BEGIN = "# >>> fusionkit integration >>>";
@@ -65,14 +67,27 @@ function codexConfigPath(codexHome: string | undefined): string {
 const PROFILE_FILES_COMMENT = "# fusionkit-profile-files:";
 
 /**
- * The managed config block content (markers included). Profiles live in
- * sibling `<model>.config.toml` PROFILE FILES, not `[profiles.*]` tables —
- * Codex treats those tables as legacy config and rejects `--profile <name>`
- * outright when one exists for that name. The block records which profile
- * files it owns so uninstall/update can clean them up.
+ * The managed config block content (markers included). The TOML body is
+ * produced by a real TOML serializer (`smol-toml`), so a hostile/unusual
+ * gateway URL can never corrupt the document; the surrounding comments carry
+ * the human instructions. Profiles live in sibling `<model>.config.toml`
+ * PROFILE FILES, not `[profiles.*]` tables — Codex treats those tables as
+ * legacy config and rejects `--profile <name>` outright when one exists for
+ * that name. The block records which profile files it owns so
+ * uninstall/update can clean them up.
  */
 export function codexIntegrationBlock(gatewayUrl: string, profiles: readonly CodexInstallProfile[]): string {
   const base = trimTrailingSlashes(gatewayUrl);
+  const body = tomlStringify({
+    model_providers: {
+      [CODEX_INSTALL_PROVIDER]: {
+        name: "FusionKit fusion gateway",
+        base_url: `${base}/v1`,
+        wire_api: "responses",
+        requires_openai_auth: false
+      }
+    }
+  });
   const lines = [
     CODEX_INSTALL_BEGIN,
     "# Managed by `fusionkit install codex` — do not edit between these markers;",
@@ -88,11 +103,7 @@ export function codexIntegrationBlock(gatewayUrl: string, profiles: readonly Cod
     ),
     `${PROFILE_FILES_COMMENT} ${profiles.map((profile) => profileFileName(profile.modelId)).join(" ")}`,
     "",
-    `[model_providers.${CODEX_INSTALL_PROVIDER}]`,
-    `name = "FusionKit fusion gateway"`,
-    `base_url = "${base}/v1"`,
-    `wire_api = "responses"`,
-    `requires_openai_auth = false`,
+    body.trimEnd(),
     "",
     CODEX_INSTALL_END
   ];
@@ -133,24 +144,44 @@ function splitManagedBlock(content: string): { before: string; managed?: string;
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Parse a TOML document, failing with a caller-supplied context message. */
+function parseTomlOrThrow(content: string, what: string): Record<string, unknown> {
+  try {
+    return tomlParse(content);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message.split("\n")[0] : String(error);
+    throw new Error(`${what} is not valid TOML (${detail}); fix it, then rerun the command`);
+  }
+}
+
 /**
- * Keys the managed block owns. If the user (or another tool) already defines
- * one of them OUTSIDE the block, appending ours would produce a duplicate TOML
- * table (or a `--profile`-blocking legacy profile) and Codex would reject the
- * config — abort with the exact conflicting key named instead.
+ * Keys the managed block owns, checked against the PARSED user config (not
+ * substrings, so a mention inside a comment or string never false-positives).
+ * If the user (or another tool) already defines one of them OUTSIDE the
+ * block, appending ours would produce a duplicate TOML table (or a
+ * `--profile`-blocking legacy profile) and Codex would reject the config —
+ * abort with the exact conflicting key named instead.
  */
-function assertNoConflicts(outside: string, profiles: readonly CodexInstallProfile[]): void {
-  const owned = [
-    `[model_providers.${CODEX_INSTALL_PROVIDER}]`,
-    // A legacy [profiles.<name>] table anywhere makes Codex reject
-    // `--profile <name>`, so a user-owned one for a fused id is a conflict.
-    ...profiles.map((profile) => `[profiles.${tomlKey(profile.modelId)}]`)
-  ];
-  for (const key of owned) {
-    if (outside.includes(key)) {
+function assertNoConflicts(outside: Record<string, unknown>, profiles: readonly CodexInstallProfile[]): void {
+  const providers = outside.model_providers;
+  if (isRecord(providers) && providers[CODEX_INSTALL_PROVIDER] !== undefined) {
+    throw new Error(
+      `your Codex config already defines [model_providers.${CODEX_INSTALL_PROVIDER}] outside the ` +
+        `fusionkit-managed block; remove or rename it, then rerun \`fusionkit install codex\``
+    );
+  }
+  // A legacy [profiles.<name>] table anywhere makes Codex reject
+  // `--profile <name>`, so a user-owned one for a fused id is a conflict.
+  const legacyProfiles = outside.profiles;
+  for (const profile of profiles) {
+    if (isRecord(legacyProfiles) && legacyProfiles[profile.modelId] !== undefined) {
       throw new Error(
-        `your Codex config already defines ${key} outside the fusionkit-managed block; ` +
-          `remove or rename it, then rerun \`fusionkit install codex\``
+        `your Codex config already defines [profiles.${profile.modelId}] outside the ` +
+          `fusionkit-managed block; remove or rename it, then rerun \`fusionkit install codex\``
       );
     }
   }
@@ -185,11 +216,21 @@ export function installCodexIntegration(input: CodexInstallInput): CodexInstallR
   const codexHome = dirname(configPath);
   const existing = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
   const { before, managed, after } = splitManagedBlock(existing);
-  assertNoConflicts(before + after, input.profiles);
+  // The user-owned remainder must be valid TOML (a broken config would make
+  // Codex reject everything anyway) and must not already claim our keys.
+  const outside = parseTomlOrThrow(`${normalize(before)}\n${normalize(after)}`, `your Codex config (${configPath})`);
+  assertNoConflicts(outside, input.profiles);
   const block = codexIntegrationBlock(input.gatewayUrl, input.profiles);
   const head = normalize(before);
   const tail = normalize(after);
   const next = `${head}${head.length > 0 ? "\n" : ""}${block}\n${tail.length > 0 ? `\n${tail}` : ""}`;
+  // Never write a config Codex would reject: the assembled document must
+  // parse and must actually carry the provider the block registers.
+  const assembled = parseTomlOrThrow(next, "the updated Codex config fusionkit assembled");
+  const assembledProviders = assembled.model_providers;
+  if (!isRecord(assembledProviders) || assembledProviders[CODEX_INSTALL_PROVIDER] === undefined) {
+    throw new Error("internal error: the assembled Codex config lost the fusionkit provider block");
+  }
   mkdirSync(codexHome, { recursive: true });
   // Profile files dropped from the ensemble set are cleaned up on update.
   const nextFiles = new Set(input.profiles.map((profile) => join(codexHome, profileFileName(profile.modelId))));

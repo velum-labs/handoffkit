@@ -3,6 +3,8 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { stringify as tomlStringify } from "smol-toml";
+
 import { SUBSCRIPTIONS } from "@fusionkit/registry";
 import {
   deriveFusedSubagents,
@@ -376,12 +378,10 @@ function profileFileName(model: string): string | undefined {
 
 /** The contents of one per-model profile config file (gateway-backed). */
 export function codexProfileFileToml(model: string, provider: string = LOCAL_MODEL_LABEL): string {
-  return [
-    "# Managed by fusionkit — a launch profile for one gateway model.",
-    `model = ${JSON.stringify(model)}`,
-    `model_provider = "${provider}"`,
-    ""
-  ].join("\n");
+  // Serialized with a real TOML writer so hostile model ids (quotes,
+  // backslashes, control characters) can never corrupt the document.
+  const body = tomlStringify({ model, model_provider: provider });
+  return `# Managed by fusionkit — a launch profile for one gateway model.\n${body.trimEnd()}\n`;
 }
 
 /**
