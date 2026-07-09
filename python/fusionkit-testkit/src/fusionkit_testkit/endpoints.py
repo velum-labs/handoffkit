@@ -9,9 +9,22 @@ the problem this testkit exists to fix.
 
 from __future__ import annotations
 
-from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, ProviderKind
+import os
+
+from fusionkit_core.config import (
+    EndpointAuth,
+    FusionConfig,
+    FusionMode,
+    ModelEndpoint,
+    ProviderKind,
+)
 
 from fusionkit_testkit.server import ProviderSimulator
+
+# The codex provider authenticates from a subscription token; endpoints built
+# here read it from this env var (sim_endpoint seeds a fake value) so no real
+# ChatGPT login is ever touched by tests.
+CODEX_TEST_TOKEN_ENV = "FUSIONKIT_TESTKIT_CODEX_TOKEN"
 
 
 def sim_endpoint(
@@ -24,16 +37,25 @@ def sim_endpoint(
 ) -> ModelEndpoint:
     """A real ``ModelEndpoint`` whose provider client will call the simulator.
 
-    ``provider`` selects the real wire client (``openai`` -> OpenAI SDK against
-    ``/v1/chat/completions``, ``anthropic`` -> Anthropic SDK against
-    ``/v1/messages``, ``openai-compatible`` -> the generic OpenAI-wire client).
+    ``provider`` selects the real wire client and simulator dialect:
+    ``openai`` / ``openrouter`` / ``openai-compatible`` -> OpenAI SDK against
+    ``/v1/chat/completions``; ``anthropic`` -> Anthropic SDK against
+    ``/v1/messages``; ``google`` -> google-genai against
+    ``/v1beta/models/...:generateContent``; ``codex`` -> the stream-only
+    OpenAI Responses client against ``/responses`` (with a fake subscription
+    token seeded into :data:`CODEX_TEST_TOKEN_ENV`).
     """
+    auth = EndpointAuth()
+    if provider == "codex":
+        os.environ.setdefault(CODEX_TEST_TOKEN_ENV, "sim-codex-token")
+        auth = EndpointAuth(mode="codex", token_env=CODEX_TEST_TOKEN_ENV)
     return ModelEndpoint(
         id=id,
         model=model,
         base_url=sim.url,
         provider=provider,
         api_key=f"sk-test-{id}",
+        auth=auth,
         timeout_s=timeout_s,
     )
 

@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import { freePort, spawnCaptured, waitForHttpReady } from "./proc.js";
 import { uvRunArgv } from "./python.js";
+import { CODEX_TEST_TOKEN_ENV } from "./router-config.js";
 
 export type EngineHandle = {
   /** Base URL of the engine's OpenAI-compatible surface (`/v1/...`). */
@@ -41,10 +42,15 @@ export async function startEngine(options: {
     "--port",
     String(port)
   ]);
-  const proc = spawnCaptured({
-    ...runner,
-    ...(options.env !== undefined ? { env: options.env } : {})
-  });
+  // Seed the fake codex subscription token so sim-backed `codex` endpoints
+  // authenticate without a real ChatGPT login (harmless for other providers).
+  // env-spread-allowed: the engine is a trusted test child of this harness
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    [CODEX_TEST_TOKEN_ENV]: process.env[CODEX_TEST_TOKEN_ENV] ?? "sim-codex-token",
+    ...options.env
+  };
+  const proc = spawnCaptured({ ...runner, env });
   const url = `http://127.0.0.1:${port}`;
   try {
     await waitForHttpReady(`${url}/v1/models`, proc, {

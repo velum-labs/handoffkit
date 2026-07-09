@@ -20,6 +20,11 @@ dependencies = ["fusionkit-core==0.8.0"]
 [project.scripts]
 fusionkit-sim = "fusionkit_testkit.cli:main"
 
+# Workspace-wide pytest fixtures (provider_sim, sim_stack): any member's tests
+# can use them with zero conftest wiring.
+[project.entry-points.pytest11]
+fusionkit_testkit = "fusionkit_testkit.pytest_plugin"
+
 [dependency-groups]
 dev = [
   "pytest>=9.1.1",

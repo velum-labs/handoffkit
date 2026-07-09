@@ -7,14 +7,24 @@
 
 import { stringify } from "yaml";
 
+/**
+ * The env var the codex provider's subscription token is read from in tests
+ * (mirrors `fusionkit_testkit.endpoints.CODEX_TEST_TOKEN_ENV`); `startEngine`
+ * seeds a fake value so no real ChatGPT login is ever touched.
+ */
+export const CODEX_TEST_TOKEN_ENV = "FUSIONKIT_TESTKIT_CODEX_TOKEN";
+
 /** One simulator-backed router endpoint. */
 export type SimEndpointSpec = {
   /** Router endpoint id (what requests name in `model`). */
   id: string;
   /** Provider model name (what the simulator journal records). */
   model: string;
-  /** Which real wire client the engine uses for it. Defaults to `openai`. */
-  provider?: "openai" | "anthropic" | "openai-compatible" | "openrouter";
+  /**
+   * Which real wire client (and simulator dialect) the engine uses for it.
+   * Defaults to `openai`. `codex` authenticates from {@link CODEX_TEST_TOKEN_ENV}.
+   */
+  provider?: "openai" | "anthropic" | "google" | "codex" | "openai-compatible" | "openrouter";
   timeoutS?: number;
 };
 
@@ -50,7 +60,10 @@ export function simRouterConfigYaml(input: {
         provider: member.provider ?? "openai",
         base_url: input.simUrl,
         api_key: `sk-test-${member.id}`,
-        timeout_s: member.timeoutS ?? 30
+        timeout_s: member.timeoutS ?? 30,
+        ...(member.provider === "codex"
+          ? { auth: { mode: "codex", token_env: CODEX_TEST_TOKEN_ENV } }
+          : {})
       })),
       default_model: judgeId,
       judge_model: judgeId,

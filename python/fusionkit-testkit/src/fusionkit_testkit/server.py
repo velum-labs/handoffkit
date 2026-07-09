@@ -22,17 +22,24 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import threading
 import time
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, cast
+from urllib.parse import urlsplit
 
-from fusionkit_testkit import wire_anthropic, wire_openai
+from fusionkit_testkit import wire_anthropic, wire_google, wire_openai, wire_responses
 from fusionkit_testkit.behaviors import Behavior
 
 _JSON_TYPE = "application/json"
 _SSE_TYPE = "text/event-stream"
+
+# google-genai builds `{base_url}/{api_version}/models/{model}:{method}`.
+_GOOGLE_ROUTE = re.compile(
+    r"^/(?:v1beta|v1)/models/(?P<model>[^:]+):(?P<method>generateContent|streamGenerateContent)$"
+)
 
 
 class _SimulatorState:
@@ -196,18 +203,30 @@ class _Handler(BaseHTTPRequestHandler):
         if body is None:
             self._send_json({"error": {"message": "invalid JSON body"}}, status=400)
             return
-        if self.path == "/__sim/behaviors":
+        path = urlsplit(self.path).path
+        if path == "/__sim/behaviors":
             self._control_behaviors(body)
             return
-        if self.path == "/__sim/reset":
+        if path == "/__sim/reset":
             self._state.reset()
             self._send_json({"status": "reset"})
             return
-        if self.path in ("/v1/chat/completions", "/chat/completions"):
+        if path in ("/v1/chat/completions", "/chat/completions"):
             self._openai_chat(body)
             return
-        if self.path in ("/v1/messages", "/messages"):
+        if path in ("/v1/messages", "/messages"):
             self._anthropic_messages(body)
+            return
+        if path in ("/v1/responses", "/responses"):
+            self._openai_responses(body)
+            return
+        google = _GOOGLE_ROUTE.match(path)
+        if google is not None:
+            self._google_generate(
+                body,
+                model=google.group("model"),
+                stream=google.group("method") == "streamGenerateContent",
+            )
             return
         self._send_json({"error": {"message": f"no route {self.path}"}}, status=404)
 
@@ -253,6 +272,8 @@ class _Handler(BaseHTTPRequestHandler):
                 "auth": {
                     "authorization": self.headers.get("Authorization"),
                     "x_api_key": self.headers.get("x-api-key"),
+                    "x_goog_api_key": self.headers.get("x-goog-api-key"),
+                    "chatgpt_account_id": self.headers.get("chatgpt-account-id"),
                 },
                 "request": body,
                 "reply_preview": (behavior.reply or "")[:200],
@@ -260,31 +281,64 @@ class _Handler(BaseHTTPRequestHandler):
             }
         )
 
+    # -- shared dialect plumbing --------------------------------------------
+
+    def _resolve(
+        self, *, dialect: str, model: str, stream: bool, last_user: str, body: dict[str, Any]
+    ) -> Behavior:
+        """Pop the next behavior, journal the call, and apply latency injection."""
+        behavior, source = self._state.next_behavior(model, last_user)
+        self._record(
+            dialect=dialect, model=model, stream=stream,
+            source=source, behavior=behavior, body=body,
+        )
+        if behavior.delay_s > 0:
+            time.sleep(behavior.delay_s)
+        return behavior
+
+    def _send_error(self, behavior: Behavior, error_json: dict[str, Any]) -> None:
+        assert behavior.error is not None
+        headers = (
+            {"retry-after": str(behavior.error.retry_after)}
+            if behavior.error.retry_after is not None
+            else None
+        )
+        self._send_json(error_json, status=behavior.error.status, headers=headers)
+
+    def _stream_sse(
+        self, blocks: list[bytes], behavior: Behavior, *, done: bytes | None = None
+    ) -> None:
+        """Emit pre-rendered SSE blocks, honoring pacing and broken-stream injection."""
+        self._start_sse()
+        cutoff = max(1, len(blocks) // 2) if behavior.broken_stream is not None else None
+        for index, block in enumerate(blocks):
+            if cutoff is not None and index >= cutoff:
+                if behavior.broken_stream == "garbage":
+                    self._write_chunk(b"data: {this is not json\n\n")
+                    self.wfile.flush()
+                self._abort_stream()
+                return
+            self._write_chunk(block)
+            self.wfile.flush()
+            if behavior.chunk_delay_s > 0:
+                time.sleep(behavior.chunk_delay_s)
+        if done is not None:
+            self._write_chunk(done)
+        self._end_chunks()
+
     # -- OpenAI Chat Completions -------------------------------------------
 
     def _openai_chat(self, body: dict[str, Any]) -> None:
         model = str(body.get("model", "unknown"))
         stream = body.get("stream") is True
         messages = body.get("messages") if isinstance(body.get("messages"), list) else []
-        behavior, source = self._state.next_behavior(
-            model, _last_user_text_openai(messages or [])
-        )
-        self._record(
+        behavior = self._resolve(
             dialect="openai-chat", model=model, stream=stream,
-            source=source, behavior=behavior, body=body,
+            last_user=_last_user_text_openai(messages or []), body=body,
         )
-        if behavior.delay_s > 0:
-            time.sleep(behavior.delay_s)
         response_id = f"chatcmpl-sim{int(time.time() * 1000) % 1_000_000}"
         if behavior.error is not None:
-            headers = (
-                {"retry-after": str(behavior.error.retry_after)}
-                if behavior.error.retry_after is not None
-                else None
-            )
-            self._send_json(
-                wire_openai.error_body(behavior), status=behavior.error.status, headers=headers
-            )
+            self._send_error(behavior, wire_openai.error_body(behavior))
             return
         if not stream:
             self._send_json(wire_openai.completion_body(model, behavior, response_id))
@@ -293,22 +347,11 @@ class _Handler(BaseHTTPRequestHandler):
         include_usage = (
             isinstance(stream_options, dict) and stream_options.get("include_usage") is True
         )
-        self._start_sse()
-        frames = list(wire_openai.stream_frames(model, behavior, response_id, include_usage))
-        cutoff = max(1, len(frames) // 2) if behavior.broken_stream is not None else None
-        for index, frame in enumerate(frames):
-            if cutoff is not None and index >= cutoff:
-                if behavior.broken_stream == "garbage":
-                    self._write_chunk(b"data: {this is not json\n\n")
-                    self.wfile.flush()
-                self._abort_stream()
-                return
-            self._write_chunk(f"data: {frame}\n\n".encode())
-            self.wfile.flush()
-            if behavior.chunk_delay_s > 0:
-                time.sleep(behavior.chunk_delay_s)
-        self._write_chunk(b"data: [DONE]\n\n")
-        self._end_chunks()
+        blocks = [
+            f"data: {frame}\n\n".encode()
+            for frame in wire_openai.stream_frames(model, behavior, response_id, include_usage)
+        ]
+        self._stream_sse(blocks, behavior, done=b"data: [DONE]\n\n")
 
     # -- Anthropic Messages -------------------------------------------------
 
@@ -316,44 +359,63 @@ class _Handler(BaseHTTPRequestHandler):
         model = str(body.get("model", "unknown"))
         stream = body.get("stream") is True
         messages = body.get("messages") if isinstance(body.get("messages"), list) else []
-        behavior, source = self._state.next_behavior(
-            model, _last_user_text_anthropic(messages or [])
-        )
-        self._record(
+        behavior = self._resolve(
             dialect="anthropic-messages", model=model, stream=stream,
-            source=source, behavior=behavior, body=body,
+            last_user=_last_user_text_anthropic(messages or []), body=body,
         )
-        if behavior.delay_s > 0:
-            time.sleep(behavior.delay_s)
         message_id = f"msg_sim{int(time.time() * 1000) % 1_000_000}"
         if behavior.error is not None:
-            headers = (
-                {"retry-after": str(behavior.error.retry_after)}
-                if behavior.error.retry_after is not None
-                else None
-            )
-            self._send_json(
-                wire_anthropic.error_body(behavior), status=behavior.error.status, headers=headers
-            )
+            self._send_error(behavior, wire_anthropic.error_body(behavior))
             return
         if not stream:
             self._send_json(wire_anthropic.message_body(model, behavior, message_id))
             return
-        self._start_sse()
-        events = list(wire_anthropic.stream_events(model, behavior, message_id))
-        cutoff = max(1, len(events) // 2) if behavior.broken_stream is not None else None
-        for index, (name, payload) in enumerate(events):
-            if cutoff is not None and index >= cutoff:
-                if behavior.broken_stream == "garbage":
-                    self._write_chunk(b"event: message_delta\ndata: {broken\n\n")
-                    self.wfile.flush()
-                self._abort_stream()
-                return
-            self._write_chunk(f"event: {name}\ndata: {payload}\n\n".encode())
-            self.wfile.flush()
-            if behavior.chunk_delay_s > 0:
-                time.sleep(behavior.chunk_delay_s)
-        self._end_chunks()
+        blocks = [
+            f"event: {name}\ndata: {payload}\n\n".encode()
+            for name, payload in wire_anthropic.stream_events(model, behavior, message_id)
+        ]
+        self._stream_sse(blocks, behavior)
+
+    # -- OpenAI Responses (the codex provider dialect) -----------------------
+
+    def _openai_responses(self, body: dict[str, Any]) -> None:
+        model = str(body.get("model", "unknown"))
+        # The codex client is stream-only; honor an explicit stream=false anyway.
+        stream = body.get("stream") is not False
+        behavior = self._resolve(
+            dialect="openai-responses", model=model, stream=stream,
+            last_user=wire_responses.last_user_text(body), body=body,
+        )
+        response_id = f"resp_sim{int(time.time() * 1000) % 1_000_000}"
+        if behavior.error is not None:
+            self._send_error(behavior, wire_responses.error_body(behavior))
+            return
+        if not stream:
+            self._send_json(
+                wire_responses.response_snapshot(model, behavior, response_id, status="completed")
+            )
+            return
+        blocks = [
+            f"event: {name}\ndata: {payload}\n\n".encode()
+            for name, payload in wire_responses.stream_events(model, behavior, response_id)
+        ]
+        self._stream_sse(blocks, behavior)
+
+    # -- Google Gemini (GenAI API) -------------------------------------------
+
+    def _google_generate(self, body: dict[str, Any], *, model: str, stream: bool) -> None:
+        behavior = self._resolve(
+            dialect="google-generate", model=model, stream=stream,
+            last_user=wire_google.last_user_text(body), body=body,
+        )
+        if behavior.error is not None:
+            self._send_error(behavior, wire_google.error_body(behavior))
+            return
+        if not stream:
+            self._send_json(wire_google.generate_content_body(behavior))
+            return
+        blocks = [f"data: {frame}\n\n".encode() for frame in wire_google.stream_frames(behavior)]
+        self._stream_sse(blocks, behavior)
 
 
 class _SimulatorServer(ThreadingHTTPServer):
@@ -418,14 +480,52 @@ class ProviderSimulator:
 
     # -- control plane (in-process) ----------------------------------------
 
-    def queue(self, model: str, *behaviors: Behavior) -> None:
-        self._state.queue(model, *behaviors)
+    def queue(self, model: str, *behaviors: Behavior | str) -> None:
+        """Queue behaviors for a model (FIFO). Plain strings become text replies."""
+        self._state.queue(
+            model,
+            *(
+                behavior if isinstance(behavior, Behavior) else Behavior(reply=behavior)
+                for behavior in behaviors
+            ),
+        )
+
+    # -- observation plane ---------------------------------------------------
 
     def journal(self) -> list[dict[str, Any]]:
+        """Every request served so far, in order (see the journal entry shape)."""
         return self._state.journal()
 
     def journal_for(self, model: str) -> list[dict[str, Any]]:
-        return [entry for entry in self._state.journal() if entry["model"] == model]
+        return self.calls(model=model)
+
+    def calls(
+        self,
+        *,
+        model: str | None = None,
+        dialect: str | None = None,
+        status: int | None = None,
+        source: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Journal entries matching every given filter, in wire order."""
+        return [
+            entry
+            for entry in self._state.journal()
+            if (model is None or entry["model"] == model)
+            and (dialect is None or entry["dialect"] == dialect)
+            and (status is None or entry["status"] == status)
+            and (source is None or entry["source"] == source)
+        ]
+
+    def describe_journal(self) -> str:
+        """One line per wire call — designed for assertion failure messages."""
+        lines = [
+            f"#{entry['seq']} {entry['dialect']} model={entry['model']} "
+            f"status={entry['status']} kind={entry['kind']} source={entry['source']} "
+            f"stream={entry['stream']} reply={entry['reply_preview']!r}"
+            for entry in self._state.journal()
+        ]
+        return "\n".join(lines) if lines else "(no provider calls journaled)"
 
     def reset(self) -> None:
         self._state.reset()

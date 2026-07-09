@@ -31,15 +31,28 @@ the provider wire, and make it a first-class, instrumentable tool.
 ### 1. Provider simulator — `python/fusionkit-testkit`
 
 `ProviderSimulator` is a real HTTP server (stdlib-only, no framework) that
-speaks the provider dialects FusionKit's clients use:
+speaks **every provider dialect FusionKit ships a client for** — one per
+`build_client` family:
 
-- **OpenAI Chat Completions** (`POST /v1/chat/completions`): JSON and SSE
-  streaming with realistic chunking — role frame, token-level content deltas,
-  index-keyed tool-call argument fragments, finish frame, and the
+- **OpenAI Chat Completions** (`POST /v1/chat/completions` — the `openai` /
+  `openrouter` / `openai-compatible` / `mlx-lm` / `custom` providers): JSON and
+  SSE streaming with realistic chunking — role frame, token-level content
+  deltas, index-keyed tool-call argument fragments, finish frame, and the
   `stream_options.include_usage` usage frame, exactly like the real API.
-- **Anthropic Messages** (`POST /v1/messages`): JSON content blocks (`text` /
-  `thinking` / `tool_use`) and the full named-event SSE sequence
-  (`message_start` … `input_json_delta` … `message_delta` … `message_stop`).
+- **Anthropic Messages** (`POST /v1/messages` — the `anthropic` provider):
+  JSON content blocks (`text` / `thinking` / `tool_use`) and the full
+  named-event SSE sequence (`message_start` … `input_json_delta` …
+  `message_delta` … `message_stop`).
+- **OpenAI Responses** (`POST /responses` — the `codex` subscription
+  provider): the stream-only typed-event sequence the `openai` SDK validates
+  (`response.created` … reasoning-summary / output-text /
+  function-call-argument deltas … `response.completed` with a full terminal
+  `Response` snapshot), plus fake subscription-token auth via
+  `CODEX_TEST_TOKEN_ENV` so no real ChatGPT login is touched.
+- **Google GenAI** (`POST /v1beta/models/{model}:generateContent` and
+  `:streamGenerateContent` — the `google` provider): typed candidate parts
+  (`text` / `thought` / `functionCall`), camelCase `usageMetadata`, and the
+  Google RPC error envelope.
 
 **Control plane** (scriptable): behaviors are queued per model name, FIFO;
 an unqueued call gets a deterministic echo default. A `Behavior` can carry a
@@ -67,7 +80,23 @@ spawnable anywhere and gives byte-level wire control.
 `sim_endpoint(...)` / `panel_config(...)` return the *production*
 `ModelEndpoint` / `FusionConfig` objects pointed at the simulator, so a test
 composes its topology explicitly and the real `build_clients` factory
-constructs real SDK clients against it.
+constructs real SDK clients against it. Every provider kind is supported
+(`codex` endpoints get their fake subscription token seeded automatically).
+
+### 2b. Scenario scripting + pytest fixtures (the DX layer)
+
+- `script_fused_turn(sim, candidates={...}, judge_model=..., answer=...)`
+  scripts a whole fused turn in one call (it encodes the panel → judge
+  analysis → synthesizer ordering, including the shared judge/synth endpoint
+  FIFO). `judge_analysis(...)` builds well-formed judge JSON. Plain strings
+  are accepted anywhere a `Behavior` is (they become text replies).
+- Journal queries: `sim.calls(model=..., dialect=..., status=..., source=...)`
+  filters the journal; `sim.describe_journal()` renders one line per wire call
+  for assertion failure messages.
+- **Pytest fixtures, zero wiring**: the testkit registers a `pytest11` entry
+  point, so any test in the uv workspace can just take `provider_sim` (a fresh
+  simulator per test) or `sim_stack` (a factory that boots the real engine
+  process over it) as a fixture argument.
 
 ### 3. Real engine process — `fusionkit_testkit.engine.EngineProcess`
 
@@ -82,19 +111,23 @@ at any time.
 The same tooling from the Node side, for cross-process tests:
 
 - `startProviderSim()` — spawns the simulator, returns a handle that scripts
-  it over the control plane and reads the journal (`queue` / `journal` /
-  `journalFor` / `reset`), with the child's log for diagnostics.
+  it over the control plane (`queue` accepts plain strings or behaviors) and
+  reads the journal (`journal` / `journalFor` / `calls(filter)` /
+  `describeJournal` / `reset`), with the child's log for diagnostics.
+- `scriptFusedTurn(sim, {...})` / `judgeAnalysis(...)` — one-call fused-turn
+  scripting (mirrors the Python scenario helpers).
 - `simRouterConfigYaml(...)` — real `fusionkit serve` router YAML (the same
   document shape `routerConfigYaml` emits in production) with all endpoints
-  simulator-backed.
+  simulator-backed; supports every provider kind including `google` and
+  `codex` (subscription auth wired to the fake test token).
 - `startEngine(...)` — the real Python engine as a child process via
   `uv run --package fusionkit`, readiness-probed, log-captured.
 - `parseSse` / `sseText` / `sseReasoning` / `sseDone` — structured SSE
   observation (mirrors `fusionkit_testkit.sse`), replacing per-file inline
   SSE splitters.
-- `detectStackTooling()` — honest skip-gating: suites that need the Python
-  toolchain self-skip (with the reason) where `uv` is unavailable, and can be
-  force-disabled with `FUSIONKIT_E2E_STACK=0`.
+- `stackToolingSkip()` / `detectStackTooling()` — honest skip-gating: suites
+  that need the Python toolchain self-skip (with the reason) where `uv` is
+  unavailable, and can be force-disabled with `FUSIONKIT_E2E_STACK=0`.
 - `spawnCaptured` / `waitForHttpReady` / `freePort` — observable process
   plumbing shared by the above.
 
@@ -104,19 +137,40 @@ The same tooling from the Node side, for cross-process tests:
 provider simulator → real Python engine → **real Node fusion gateway**
 (`startFusionStepGateway`, the production front door). Defaults to `k=1`
 proposal panels so the entire chain runs without external coding-agent
-binaries. Returns the sim handle (script/observe), the engine handle, and the
-gateway URL a "coding tool" can hit on any supported dialect.
+binaries. The returned stack carries:
+
+- `sim` / `engine` / `gatewayUrl` — the composed processes;
+- `door.*` — a typed fetch helper per gateway surface (`chat`, `messages`,
+  `countTokens`, `responses`, `cursorChat`, `embeddings`, `models`, `model`,
+  `cursorModels`), so tests read as "hit this door";
+- `scriptFusedTurn({candidates, answer})` — reset + script a fused turn
+  against this stack's judge in one call.
 
 ## The test pyramid, by layer
 
 | Layer | What runs for real | What is simulated | Where |
 |---|---|---|---|
 | Unit / component | one module | everything around it | `packages/*/src/test`, `python/*/tests` (existing suites, incl. `FakeModelClient`-based server tests) |
-| Wire-client | real SDK clients + retry/classification | provider (simulator) | `python/fusionkit-testkit/tests/test_simulator.py` |
+| Wire-client | real SDK clients + retry/classification, all four dialects | provider (simulator) | `python/fusionkit-testkit/tests/test_simulator.py`, `test_simulator_google_codex.py` |
 | Engine e2e | `create_app` + real clients + kernel | provider | `python/fusionkit-testkit/tests/test_engine_e2e.py` |
+| Engine surface matrix | every engine HTTP door + fusion mode, four-provider panel | provider | `python/fusionkit-testkit/tests/test_engine_surfaces.py` |
 | Process e2e | real `fusionkit serve` child process | provider | `python/fusionkit-testkit/tests/test_engine_process.py` |
-| Cross-stack e2e | Node gateway + Python engine, all processes & dialects | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
+| Cross-stack e2e | Node gateway (every front door) + Python engine, all processes & dialects | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
 | Live (env-gated) | everything incl. real providers/tools | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
+
+**Surface coverage** at the two e2e layers:
+
+- Engine doors: `/v1/chat/completions` (fused aliases `panel` / `single` /
+  `self` / `heuristic` + per-endpoint passthrough, JSON and SSE, tool loops),
+  `/v1/cursor/chat/completions` (hybrid + plain), `/v1/fusion/trajectories:fuse`
+  (JSON and SSE), `/v1/fusion/runs` + `/inspect` + `/events` (via
+  `x-fusionkit-record`), `/v1/models`, `/v1/cursor/models`, `/health`.
+- Gateway doors: `/v1/chat/completions` (JSON + SSE), `/v1/messages` (+
+  streaming, + `count_tokens`), `/v1/responses` (JSON + SSE), 
+  `/v1/cursor/chat/completions`, `/v1/models` (OpenAI + Anthropic shapes),
+  `/v1/models/{id}`, `/v1/cursor/models`, `/v1/embeddings` (documented
+  unsupported contract) — each fused turn fanning out across all four
+  provider dialects at once.
 
 ## Running
 
@@ -154,11 +208,14 @@ the dedicated `stack-e2e` job (Node + uv toolchains installed together).
    gate on `detectStackTooling()`; live-provider tests stay behind explicit
    `FUSIONKIT_*_LIVE_*` env flags.
 
-## Known simulator gaps (extend here first)
+## Known gaps (extend here first)
 
-- Provider dialects: `google` (GenAI SDK wire) and `codex` (subscription
-  Responses API) endpoints are not yet simulated; panel configs cover them
-  today via the OpenAI/Anthropic members. Adding a dialect = one new
-  `wire_*.py` module + a route in `server.py`.
 - Harness rollouts (`k>1`) drive real coding-agent binaries and stay in the
   env-gated live tests; the cross-stack harness covers `k=1` proposal panels.
+- The generic ACP door and the unified-harness front door run real worktree
+  harnesses; they are covered by `packages/cli/src/test/gateway-e2e.test.ts`
+  (command harness) rather than the sim stack.
+- The `serve-endpoint` single-model shim shares `create_app` with `serve`;
+  it has no dedicated process-level suite.
+- Adding a provider dialect = one new `wire_*.py` module + a route in
+  `server.py` + a self-test proving the real client parses it.

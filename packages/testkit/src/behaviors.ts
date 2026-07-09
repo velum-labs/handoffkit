@@ -43,22 +43,38 @@ export type SimBehavior = {
   broken_stream?: "truncate" | "garbage" | null;
 };
 
+/** The provider wire dialects the simulator speaks (one per FusionKit client family). */
+export type SimDialect = "openai-chat" | "anthropic-messages" | "openai-responses" | "google-generate";
+
 /** One journal entry: what actually crossed the provider wire. */
 export type SimJournalEntry = {
   seq: number;
   ts: number;
-  dialect: "openai-chat" | "anthropic-messages";
+  dialect: SimDialect;
   path: string;
   model: string;
   stream: boolean;
   source: "queued" | "default";
   kind: "reply" | "tool_calls" | "error";
   status: number;
-  auth: { authorization: string | null; x_api_key: string | null };
+  auth: {
+    authorization: string | null;
+    x_api_key: string | null;
+    x_goog_api_key: string | null;
+    chatgpt_account_id: string | null;
+  };
   request: Record<string, unknown>;
   reply_preview: string;
   tool_call_names: string[];
 };
+
+/** What `queue` accepts: a full behavior, or a plain string as a text reply. */
+export type SimBehaviorInput = SimBehavior | string;
+
+/** Coerce a scripted reply into the behavior JSON contract. */
+export function asBehavior(input: SimBehaviorInput): SimBehavior {
+  return typeof input === "string" ? { reply: input } : input;
+}
 
 /** Canned provider failures matching the real wire spellings FusionKit classifies. */
 export const simErrors = {

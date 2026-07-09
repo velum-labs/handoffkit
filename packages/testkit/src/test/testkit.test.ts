@@ -13,19 +13,18 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import {
-  detectStackTooling,
   parseSse,
   simErrors,
   simRouterConfigYaml,
   sseDone,
   sseText,
+  stackToolingSkip,
   startEngine,
   startProviderSim
 } from "../index.js";
 import type { EngineHandle, ProviderSimHandle } from "../index.js";
 
-const tooling = detectStackTooling();
-const SKIP = tooling.available ? false : `stack tooling unavailable: ${tooling.available === false ? tooling.reason : ""}`;
+const SKIP = stackToolingSkip();
 
 const JUDGE_ANALYSIS = JSON.stringify({
   consensus: ["agreement"],
@@ -63,7 +62,7 @@ after(async () => {
 
 test("provider simulator is scriptable and observable from Node", { skip: SKIP }, async () => {
   await sim.reset();
-  await sim.queue("gpt-panel-a", [{ reply: "scripted from node" }]);
+  await sim.queue("gpt-panel-a", ["scripted from node"]);
   const response = await fetch(`${sim.url}/v1/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: "Bearer sk-node" },

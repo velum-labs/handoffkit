@@ -15,6 +15,7 @@ Three composable layers (see ``docs/testing.md``):
 from fusionkit_testkit.behaviors import Behavior, SimError, SimToolCall
 from fusionkit_testkit.endpoints import panel_config, sim_endpoint
 from fusionkit_testkit.engine import EngineProcess, EngineProcessError, free_port
+from fusionkit_testkit.scenarios import as_behavior, judge_analysis, script_fused_turn
 from fusionkit_testkit.server import ProviderSimulator
 from fusionkit_testkit.sse import parse_sse, sse_done, sse_reasoning, sse_text
 
@@ -25,9 +26,12 @@ __all__ = [
     "ProviderSimulator",
     "SimError",
     "SimToolCall",
+    "as_behavior",
     "free_port",
+    "judge_analysis",
     "panel_config",
     "parse_sse",
+    "script_fused_turn",
     "sim_endpoint",
     "sse_done",
     "sse_reasoning",

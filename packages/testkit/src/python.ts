@@ -36,6 +36,16 @@ export function detectStackTooling(): StackTooling {
   return { available: true };
 }
 
+/**
+ * `node:test` skip-gating sugar: `test("...", { skip: stackToolingSkip() }, ...)`
+ * runs where the Python toolchain is available and skips with the honest
+ * reason everywhere else.
+ */
+export function stackToolingSkip(): false | string {
+  const tooling = detectStackTooling();
+  return tooling.available ? false : `stack tooling unavailable: ${tooling.reason}`;
+}
+
 /** argv for `uv run --package <pkg> <entrypoint> ...args`, run from the repo root. */
 export function uvRunArgv(pkg: string, entrypoint: string, args: readonly string[]): {
   command: string;
