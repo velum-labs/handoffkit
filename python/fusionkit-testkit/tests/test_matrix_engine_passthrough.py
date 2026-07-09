@@ -67,7 +67,7 @@ def test_passthrough_json(
     )
     assert response.status_code == 200, response.text
     assert response.json()["choices"][0]["message"]["content"] == "matrix passthrough answer"
-    (entry,) = provider_sim.calls(model=profile.model("door"))
+    (entry,) = provider_sim.calls(model=profile.model("door"), dialect=profile.dialect)
     assert entry["dialect"] == profile.dialect
 
 
@@ -136,7 +136,8 @@ def test_passthrough_tool_loop_round_trips_the_provider_dialect(
     )
     assert second.status_code == 200, second.text
     assert second.json()["choices"][0]["message"]["content"] == "x contains 42"
-    turn2 = provider_sim.calls(model=profile.model("door"))[1]["request"]
+    door_calls = provider_sim.calls(model=profile.model("door"), dialect=profile.dialect)
+    turn2 = door_calls[1]["request"]
     wire = json.dumps(turn2)
     expected_marker = {
         "openai-chat": '"role": "tool"',
@@ -161,4 +162,4 @@ def test_passthrough_surfaces_provider_auth_errors(
     assert response.status_code == 401, response.text
     assert response.json()["error"]["error_category"] == "auth_permanent"
     # Permanent failures are never retried on any wire.
-    assert len(provider_sim.calls(model=profile.model("door"))) == 1
+    assert len(provider_sim.calls(model=profile.model("door"), dialect=profile.dialect)) == 1

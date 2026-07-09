@@ -1,0 +1,208 @@
+/**
+ * Gateway policy suite through the whole real stack: WS5 rate-limit /
+ * failover policies, WS7 budget caps, and WS4 session turn-caching — each on
+ * its own configured stack (real gateway -> real Python engine -> scripted
+ * provider), asserted through responses, the wire journal, and the durable
+ * session store.
+ */
+
+import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
+import { test } from "node:test";
+
+import { InMemorySessionStore } from "@fusionkit/model-gateway";
+import { judgeAnalysis, simErrors, stackToolingSkip } from "@fusionkit/testkit";
+
+import { startSimFusionStack } from "./sim-stack.js";
+import type { SimFusionStack } from "./sim-stack.js";
+
+const SKIP = stackToolingSkip();
+
+const MEMBERS = [
+  { id: "alpha", model: "gpt-panel-a", provider: "openai" },
+  { id: "beta", model: "claude-panel-b", provider: "anthropic" },
+  { id: "judge", model: "gpt-judge", provider: "openai" }
+] as const;
+
+type ChatBody = { choices: Array<{ message: { content: string } }> };
+
+async function withStack(
+  options: Parameters<typeof startSimFusionStack>[0],
+  body: (stack: SimFusionStack) => Promise<void>
+): Promise<void> {
+  const stack = await startSimFusionStack(options);
+  try {
+    await body(stack);
+  } finally {
+    await stack.close();
+  }
+}
+
+/** Queue a persistent 429 storm for one provider model (SDK x engine retries). */
+async function queueRateLimitStorm(stack: SimFusionStack, model: string): Promise<void> {
+  await stack.sim.queue(
+    model,
+    Array.from({ length: 12 }, () => ({ error: simErrors.rateLimited(0) }))
+  );
+}
+
+// --- WS5: rate-limit failover policies ------------------------------------------------
+
+test("onRateLimit=fusion: a throttled vendor passthrough fails over to the fused panel", { skip: SKIP }, async () => {
+  await withStack({ members: [...MEMBERS], judgeId: "judge", onRateLimit: "fusion" }, async (stack) => {
+    // The vendor (alpha's provider model) is persistently rate-limited; the
+    // surviving members + judge serve the failover fusion.
+    await queueRateLimitStorm(stack, "gpt-panel-a");
+    await stack.sim.queue("claude-panel-b", ["the healthy candidate"]);
+    await stack.sim.queue("gpt-judge", [
+      { reply: judgeAnalysis() },
+      { reply: "FUSION_FAILOVER: fused answer instead of a vendor 429" }
+    ]);
+
+    const response = await stack.door.chat({
+      model: "gpt-panel-a",
+      messages: [{ role: "user", content: "vendor turn that gets throttled" }]
+    });
+    assert.equal(response.status, 200, await stack.sim.describeJournal());
+    const body = (await response.json()) as ChatBody;
+    assert.match(body.choices[0]?.message.content ?? "", /FUSION_FAILOVER/);
+
+    // The wire shows the storm on the throttled vendor, and the failover
+    // panel excluded it (WS5): only the healthy member fanned out.
+    const throttled = await stack.sim.calls({ model: "gpt-panel-a", status: 429 });
+    assert.ok(throttled.length >= 3, "the vendor was really retried before failover");
+    assert.equal((await stack.sim.calls({ model: "gpt-panel-a", status: 200 })).length, 0);
+    assert.equal((await stack.sim.calls({ model: "claude-panel-b" })).length, 1);
+    assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 2);
+  });
+});
+
+test("onRateLimit=passthrough: the engine's classified vendor failure surfaces verbatim", { skip: SKIP }, async () => {
+  await withStack({ members: [...MEMBERS], judgeId: "judge", onRateLimit: "passthrough" }, async (stack) => {
+    await queueRateLimitStorm(stack, "gpt-panel-a");
+    const response = await stack.door.chat({
+      model: "gpt-panel-a",
+      messages: [{ role: "user", content: "vendor turn that gets throttled" }]
+    });
+    // The engine's documented mapping: exhausted `transient` retries become a
+    // 503 with the canonical error_category; passthrough returns it verbatim.
+    assert.equal(response.status, 503, await stack.sim.describeJournal());
+    const body = (await response.json()) as { error?: { error_category?: string } };
+    assert.equal(body.error?.error_category, "transient");
+    // The full retry storm hit the wire (SDK budget x engine retries), and no
+    // fusion ran: the judge was never called.
+    assert.ok((await stack.sim.calls({ model: "gpt-panel-a", status: 429 })).length >= 9);
+    assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 0);
+  });
+});
+
+test("fused-turn member throttling degrades to the surviving members (no failover needed)", { skip: SKIP }, async () => {
+  await withStack({ members: [...MEMBERS], judgeId: "judge", onRateLimit: "fusion" }, async (stack) => {
+    await queueRateLimitStorm(stack, "gpt-panel-a");
+    await stack.sim.queue("claude-panel-b", ["the survivor's candidate"]);
+    await stack.sim.queue("gpt-judge", [
+      { reply: judgeAnalysis() },
+      { reply: "fused from the survivor under throttling" }
+    ]);
+    const response = await stack.door.chat({
+      model: "fusion-panel",
+      messages: [{ role: "user", content: "fuse under member throttling" }]
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as ChatBody;
+    assert.match(body.choices[0]?.message.content ?? "", /fused from the survivor/);
+  });
+});
+
+// --- WS7: budget caps ---------------------------------------------------------------
+
+test("budgetUsd: an over-budget session is refused before any model call runs", { skip: SKIP }, async () => {
+  const store = new InMemorySessionStore();
+  await withStack(
+    {
+      members: [...MEMBERS],
+      judgeId: "judge",
+      sessionStore: store,
+      // The judge's fuse-step usage is priced; a tiny budget trips after turn 1.
+      pricing: { "gpt-judge": { inputPer1mTokens: 1_000_000, outputPer1mTokens: 1_000_000 } },
+      budgetUsd: 0.5
+    },
+    async (stack) => {
+      await stack.scriptFusedTurn({
+        candidates: { "gpt-panel-a": "a", "claude-panel-b": "b" },
+        answer: { reply: "expensive first answer", prompt_tokens: 400_000, completion_tokens: 400_000 }
+      });
+      const first = await stack.door.chat({
+        model: "fusion-panel",
+        messages: [{ role: "user", content: "first (expensive) turn" }]
+      });
+      assert.equal(first.status, 200);
+      await delay(300); // detached cost persistence
+
+      await stack.sim.reset();
+      const second = await stack.door.chat({
+        model: "fusion-panel",
+        messages: [
+          { role: "user", content: "first (expensive) turn" },
+          { role: "assistant", content: "expensive first answer" },
+          { role: "user", content: "second turn that must be refused" }
+        ]
+      });
+      // The documented budget-stop contract: HTTP 402 with a fusion_error
+      // naming the spend and the cap, refused BEFORE any provider spend.
+      assert.equal(second.status, 402);
+      const refusal = (await second.json()) as { error?: { message?: string; type?: string } };
+      assert.match(refusal.error?.message ?? "", /budget cap reached/i);
+      assert.equal(refusal.error?.type, "fusion_error");
+      assert.equal((await stack.sim.journal()).length, 0, await stack.sim.describeJournal());
+    }
+  );
+});
+
+// --- WS4: session semantics for finite-k rounds -----------------------------------------
+
+test("finite-k rounds are memoryless: a replayed turn re-runs the panel (documented contract)", { skip: SKIP }, async () => {
+  // The per-user-turn candidate cache applies to unbounded rollouts only
+  // (members already rolled out to completion); k=1 proposal rounds are
+  // receding-horizon and MUST re-fan out on every request — including
+  // tool-result continuations — over the updated messages.
+  const store = new InMemorySessionStore();
+  await withStack(
+    { members: [...MEMBERS], judgeId: "judge", sessionStore: store },
+    async (stack) => {
+      const turn = {
+        model: "fusion-panel",
+        messages: [{ role: "user", content: "the exact same turn" }]
+      };
+      await stack.scriptFusedTurn({
+        candidates: { "gpt-panel-a": "candidate one", "claude-panel-b": "candidate two" },
+        answer: "first fused answer"
+      });
+      const first = await stack.door.chat(turn);
+      assert.equal(first.status, 200);
+      assert.equal((await stack.sim.calls({ model: "gpt-panel-a" })).length, 1);
+
+      await stack.sim.queue("gpt-panel-a", ["candidate one again"]);
+      await stack.sim.queue("claude-panel-b", ["candidate two again"]);
+      await stack.sim.queue("gpt-judge", [
+        { reply: judgeAnalysis() },
+        { reply: "second fused answer from a fresh round" }
+      ]);
+      const second = await stack.door.chat(turn);
+      assert.equal(second.status, 200);
+      const body = (await second.json()) as ChatBody;
+      assert.match(body.choices[0]?.message.content ?? "", /second fused answer/);
+      assert.equal(
+        (await stack.sim.calls({ model: "gpt-panel-a" })).length,
+        2,
+        `finite-k rounds must re-fan out: ${await stack.sim.describeJournal()}`
+      );
+
+      await delay(300);
+      const sessions = store.list();
+      assert.ok(sessions.length >= 1, "the conversation must persist as one session");
+      const detail = store.load(sessions[0]?.id ?? "");
+      assert.ok((detail?.turns.length ?? 0) >= 1, "panel candidates must be persisted per turn");
+    }
+  );
+});

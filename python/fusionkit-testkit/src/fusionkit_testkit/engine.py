@@ -78,13 +78,23 @@ class EngineProcess:
 
     def __init__(
         self,
-        config: FusionConfig,
+        config: FusionConfig | None,
         *,
         host: str = "127.0.0.1",
         env: dict[str, str] | None = None,
         startup_timeout_s: float = _STARTUP_TIMEOUT_S,
+        command_args: list[str] | None = None,
     ) -> None:
+        """``config`` drives the default ``serve --config <yaml>`` invocation.
+
+        ``command_args`` overrides the subcommand entirely (e.g.
+        ``["serve-endpoint", "--id", "solo", ...]``); ``--host``/``--port`` are
+        still appended by the harness. Exactly one of the two must be given.
+        """
+        if (config is None) == (command_args is None):
+            raise ValueError("provide exactly one of `config` or `command_args`")
         self._config = config
+        self._command_args = command_args
         self._host = host
         self._extra_env = env or {}
         self._startup_timeout_s = startup_timeout_s
@@ -100,17 +110,19 @@ class EngineProcess:
     def start(self) -> EngineProcess:
         if self._proc is not None:
             return self
-        self._config_dir = tempfile.TemporaryDirectory(prefix="fusionkit-testkit-engine-")
-        config_path = Path(self._config_dir.name) / "config.yaml"
-        config_path.write_text(
-            yaml.safe_dump(self._config.model_dump(mode="json", exclude_defaults=True))
-        )
         self.port = free_port(self._host)
+        if self._config is not None:
+            self._config_dir = tempfile.TemporaryDirectory(prefix="fusionkit-testkit-engine-")
+            config_path = Path(self._config_dir.name) / "config.yaml"
+            config_path.write_text(
+                yaml.safe_dump(self._config.model_dump(mode="json", exclude_defaults=True))
+            )
+            subcommand = ["serve", "--config", str(config_path)]
+        else:
+            subcommand = list(self._command_args or [])
         argv = [
             *_engine_argv(),
-            "serve",
-            "--config",
-            str(config_path),
+            *subcommand,
             "--host",
             self._host,
             "--port",

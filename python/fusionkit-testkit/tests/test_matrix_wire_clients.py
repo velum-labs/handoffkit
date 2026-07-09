@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 from fusionkit_core.clients import ProviderCallError, build_client
 from fusionkit_core.types import ChatMessage, ToolCall
-from fusionkit_testkit import Behavior, ProviderSimulator, SimError, SimToolCall
+from fusionkit_testkit import Behavior, ProviderSimulator, SimError, SimToolCall, sim_endpoint
 from fusionkit_testkit.matrix import ProviderProfile, provider_params
 
 TOOLS = [{"name": "run_tool", "parameters": {"type": "object"}}]
@@ -56,7 +56,7 @@ async def test_chat_roundtrip(profile: ProviderProfile, provider_sim: ProviderSi
     assert response.usage.prompt_tokens == 17
     assert response.usage.completion_tokens == 5
 
-    (entry,) = provider_sim.calls(model=profile.model("chat"))
+    (entry,) = provider_sim.calls(model=profile.model("chat"), dialect=profile.dialect)
     assert entry["dialect"] == profile.dialect
     assert entry["auth"][profile.auth_field] == profile.expected_auth(endpoint)
 
@@ -85,7 +85,8 @@ async def test_stream_reassembles_text_and_usage(
         await client.aclose()
     assert "".join(text) == "alpha beta gamma delta"
     assert usage_prompt_tokens == 9
-    assert provider_sim.calls(model=profile.model("stream"))[0]["stream"] is True
+    stream_calls = provider_sim.calls(model=profile.model("stream"), dialect=profile.dialect)
+    assert stream_calls[0]["stream"] is True
 
 
 # --- tool calls, both modes --------------------------------------------------------------
@@ -172,7 +173,7 @@ async def test_error_classification(
         await client.aclose()
     assert excinfo.value.category == expected
 
-    attempts = provider_sim.calls(model=profile.model("err"))
+    attempts = provider_sim.calls(model=profile.model("err"), dialect=profile.dialect)
     if expected in ("auth_permanent", "context_overflow"):
         # Hard failures are never retried by any layer.
         assert len(attempts) == 1, provider_sim.describe_journal()
@@ -198,8 +199,56 @@ async def test_transient_rate_limit_recovers(
     finally:
         await client.aclose()
     assert response.content == "recovered"
-    statuses = [entry["status"] for entry in provider_sim.calls(model=profile.model("rl"))]
+    rl_calls = provider_sim.calls(model=profile.model("rl"), dialect=profile.dialect)
+    statuses = [entry["status"] for entry in rl_calls]
     assert statuses == [429, 200], provider_sim.describe_journal()
+
+
+# --- OpenRouter's post-response cost accounting (provider_cost wire) ----------------
+
+
+async def test_openrouter_provider_cost_lookup_round_trips(
+    provider_sim: ProviderSimulator,
+) -> None:
+    endpoint = sim_endpoint(provider_sim, id="or-cost", model="or-model", provider="openrouter")
+    provider_sim.queue(
+        "or-model",
+        Behavior(reply="costed answer", provider_cost_usd=0.00321, prompt_tokens=50),
+    )
+    client = build_client(endpoint)
+    try:
+        response = await client.chat([ChatMessage(role="user", content="how much?")])
+    finally:
+        await client.aclose()
+    assert response.content == "costed answer"
+    # The client fetched /v1/generation and attached the provider-reported cost.
+    assert response.provider_cost is not None
+    assert response.provider_cost.lookup_status == "ok"
+    assert response.provider_cost.cost_usd == 0.00321
+    assert response.provider_cost.tokens_prompt == 50
+    lookups = provider_sim.calls(dialect="openrouter-generation")
+    assert len(lookups) == 1
+    assert lookups[0]["auth"]["authorization"] == "Bearer sk-test-or-cost"
+
+
+async def test_openrouter_streaming_terminal_chunk_carries_provider_cost(
+    provider_sim: ProviderSimulator,
+) -> None:
+    endpoint = sim_endpoint(provider_sim, id="or-scost", model="or-smodel", provider="openrouter")
+    provider_sim.queue(
+        "or-smodel", Behavior(reply="streamed costed answer", provider_cost_usd=0.007)
+    )
+    client = build_client(endpoint)
+    terminal_cost = None
+    try:
+        async for chunk in client.stream_chat([ChatMessage(role="user", content="stream cost")]):
+            if chunk.provider_cost is not None:
+                terminal_cost = chunk.provider_cost
+    finally:
+        await client.aclose()
+    assert terminal_cost is not None
+    assert terminal_cost.cost_usd == 0.007
+    assert terminal_cost.lookup_status == "ok"
 
 
 @pytest.mark.parametrize("profile", provider_params())

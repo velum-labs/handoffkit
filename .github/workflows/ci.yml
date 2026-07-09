@@ -148,6 +148,12 @@ jobs:
       - name: Full-stack depth suite
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js
 
+      - name: Gateway policy suite (failover / budget / sessions)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-policies-e2e.test.js
+
+      - name: Real product CLI suite (fusionkit serve boots its own stack)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-npm-cli-e2e.test.js
+
       - name: Real coding-agent CLI suite (claude + codex binaries)
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js
 

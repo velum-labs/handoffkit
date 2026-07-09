@@ -219,8 +219,15 @@ suites.
 | Process e2e | real `fusionkit serve` child process | provider | `test_engine_process.py` |
 | Cross-stack door matrix | door × {fused JSON, fused SSE, tool loop} through the whole stack | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
 | Cross-stack depth | multi-ensemble routing + prompts, session/cost accounting, narration | provider | `packages/cli/src/test/stack-depth-e2e.test.ts` |
+| Gateway policies | WS5 failover (`fusion`/`passthrough`), WS7 budget-stop (402 before spend), WS4 finite-k round semantics + persistence | provider | `packages/cli/src/test/stack-policies-e2e.test.ts` |
+| Engine runs & processes | native runs API (create/inspect/events/idempotency) over the real wire, `serve-endpoint` child process, router identity handshake | provider | `python/fusionkit-testkit/tests/test_engine_runs_and_processes.py` |
+| **Real product CLI** | the ACTUAL `fusionkit serve` entrypoint booting its production stack: fusion.json loading, preflight probes, `uv run` router spawn, gateway + setup snippets | provider only | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` |
 | **Real-CLI e2e** | the ACTUAL `claude` / `codex` binaries: their production wire, their real toolsets, real local tool execution | provider only | `packages/cli/src/test/stack-cli-e2e.test.ts` |
 | Live (env-gated) | everything incl. real provider accounts | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
+
+The provider axis also covers **OpenRouter** including its post-response cost
+accounting: the simulator serves `GET /v1/generation`, and the wire tests
+assert `provider_cost` propagation (JSON + streaming terminal chunks).
 
 **Surface coverage** at the two e2e layers:
 

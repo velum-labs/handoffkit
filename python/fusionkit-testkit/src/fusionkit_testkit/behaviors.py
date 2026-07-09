@@ -150,6 +150,10 @@ class Behavior:
     prompt_tokens: int = 7
     completion_tokens: int | None = None
     broken_stream: BrokenStream | None = None
+    #: When set, the OpenRouter generation-cost lookup (`GET /v1/generation`)
+    #: for this response's id reports this exact USD cost (the openrouter
+    #: provider's post-response accounting wire).
+    provider_cost_usd: float | None = None
 
     def finish_reason(self) -> str:
         return "tool_calls" if self.tool_calls else "stop"
@@ -173,6 +177,7 @@ class Behavior:
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "broken_stream": self.broken_stream,
+            "provider_cost_usd": self.provider_cost_usd,
         }
 
     @staticmethod
@@ -181,6 +186,7 @@ class Behavior:
         raw_calls = data.get("tool_calls") or []
         completion_tokens = data.get("completion_tokens")
         broken = data.get("broken_stream")
+        provider_cost_usd = data.get("provider_cost_usd")
         return Behavior(
             reply=data.get("reply"),
             tool_calls=[SimToolCall.from_json(call) for call in raw_calls],
@@ -191,4 +197,5 @@ class Behavior:
             prompt_tokens=int(data.get("prompt_tokens", 7)),
             completion_tokens=int(completion_tokens) if completion_tokens is not None else None,
             broken_stream=broken if broken in ("truncate", "garbage") else None,
+            provider_cost_usd=float(provider_cost_usd) if provider_cost_usd is not None else None,
         )

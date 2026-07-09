@@ -83,6 +83,18 @@ PROVIDER_PROFILES: tuple[ProviderProfile, ...] = (
         tool_finish_reason="tool_calls",
     ),
     ProviderProfile(
+        provider="openrouter",
+        dialect="openai-chat",
+        auth_field="authorization",
+        auth_value_template="Bearer sk-test-{id}",
+        sdk_internal_retries=True,
+        # OpenRouter has no registry request-shape overrides: generic sampling
+        # (temperature/top_p/max_tokens) reaches the wire.
+        forwards_temperature=True,
+        text_finish_reason="stop",
+        tool_finish_reason="tool_calls",
+    ),
+    ProviderProfile(
         provider="anthropic",
         dialect="anthropic-messages",
         auth_field="x_api_key",

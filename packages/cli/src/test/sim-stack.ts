@@ -16,7 +16,7 @@ import { join } from "node:path";
 
 import { scriptFusedTurn, simRouterConfigYaml, startEngine, startProviderSim } from "@fusionkit/testkit";
 import type { EngineHandle, FusedTurnScript, ProviderSimHandle, SimEndpointSpec } from "@fusionkit/testkit";
-import type { Gateway, ModelPricing, SessionStore } from "@fusionkit/model-gateway";
+import type { Gateway, ModelPricing, OnRateLimitPolicy, SessionStore } from "@fusionkit/model-gateway";
 
 import { fusionModelId } from "@fusionkit/registry";
 
@@ -128,6 +128,10 @@ export async function startSimFusionStack(options: {
   sessionStore?: SessionStore;
   /** Per-model token pricing overrides (WS7 cost accounting). */
   pricing?: Readonly<Record<string, ModelPricing>>;
+  /** WS5 rate-limit / credit failover policy for vendor passthrough models. */
+  onRateLimit?: OnRateLimitPolicy;
+  /** WS7 budget cap (USD) for the session's gateway-observed cost. */
+  budgetUsd?: number;
 }): Promise<SimFusionStack> {
   const first = options.members[0];
   if (first === undefined) throw new Error("at least one member is required");
@@ -195,7 +199,9 @@ export async function startSimFusionStack(options: {
         modelEndpoints: endpoints,
         timeoutMs: 120_000,
         ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),
-        ...(options.pricing !== undefined ? { pricing: options.pricing } : {})
+        ...(options.pricing !== undefined ? { pricing: options.pricing } : {}),
+        ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
+        ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {})
       },
       host: "127.0.0.1",
       port: 0

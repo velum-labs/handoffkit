@@ -28,7 +28,7 @@ import time
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from fusionkit_testkit import wire_anthropic, wire_google, wire_openai, wire_responses
 from fusionkit_testkit.behaviors import Behavior, SimError
@@ -51,6 +51,10 @@ class _SimulatorState:
         self._journal: list[dict[str, Any]] = []
         self._default_counts: dict[str, int] = defaultdict(int)
         self._seq = 0
+        self._response_seq = 0
+        # OpenRouter post-response accounting: response id -> generation data
+        # served on GET /v1/generation (recorded for every OpenAI-chat reply).
+        self._generations: dict[str, dict[str, Any]] = {}
 
     def queue(self, model: str, *behaviors: Behavior) -> None:
         with self._lock:
@@ -82,11 +86,36 @@ class _SimulatorState:
         with self._lock:
             return sorted(set(self._queues) | set(self._default_counts))
 
+    def next_response_id(self, prefix: str) -> str:
+        with self._lock:
+            self._response_seq += 1
+            return f"{prefix}{self._response_seq}"
+
+    def record_generation(self, response_id: str, model: str, behavior: Behavior) -> None:
+        completion = behavior.resolved_completion_tokens()
+        with self._lock:
+            self._generations[response_id] = {
+                "id": response_id,
+                "model": model,
+                "total_cost": behavior.provider_cost_usd,
+                "provider_name": "simulated",
+                "tokens_prompt": behavior.prompt_tokens,
+                "tokens_completion": completion,
+                "native_tokens_prompt": behavior.prompt_tokens,
+                "native_tokens_completion": completion,
+            }
+
+    def generation(self, response_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            data = self._generations.get(response_id)
+            return dict(data) if data is not None else None
+
     def reset(self) -> None:
         with self._lock:
             self._queues.clear()
             self._journal.clear()
             self._default_counts.clear()
+            self._generations.clear()
             self._seq = 0
 
 
@@ -184,6 +213,41 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if self.path.startswith("/__sim/journal"):
             self._send_json({"entries": self._state.journal()})
+            return
+        parts = urlsplit(self.path)
+        if parts.path == "/v1/generation":
+            # OpenRouter's post-response accounting endpoint: served for every
+            # OpenAI-chat response id the simulator produced.
+            generation_id = parse_qs(parts.query).get("id", [""])[0]
+            data = self._state.generation(generation_id)
+            if data is None:
+                self._send_json(
+                    {"error": {"message": f"generation {generation_id!r} not found"}}, status=404
+                )
+                return
+            self._state.record(
+                {
+                    "ts": time.time(),
+                    "dialect": "openrouter-generation",
+                    "path": self.path,
+                    "model": str(data.get("model", "")),
+                    "stream": False,
+                    "source": "generation",
+                    "kind": "reply",
+                    "status": 200,
+                    "auth": {
+                        "authorization": self.headers.get("Authorization"),
+                        "x_api_key": self.headers.get("x-api-key"),
+                        "x_goog_api_key": self.headers.get("x-goog-api-key"),
+                        "chatgpt_account_id": self.headers.get("chatgpt-account-id"),
+                    },
+                    "request": {"id": generation_id},
+                    "reply_preview": "",
+                    "tool_call_names": [],
+                    "error_code": None,
+                }
+            )
+            self._send_json({"data": data})
             return
         if self.path in ("/v1/models", "/models"):
             self._send_json(
@@ -358,10 +422,11 @@ class _Handler(BaseHTTPRequestHandler):
             dialect="openai-chat", model=model, stream=stream,
             last_user=_last_user_text_openai(messages or []), body=body,
         )
-        response_id = f"chatcmpl-sim{int(time.time() * 1000) % 1_000_000}"
+        response_id = self._state.next_response_id("chatcmpl-sim")
         if behavior.error is not None:
             self._send_error(behavior, wire_openai.error_body(behavior))
             return
+        self._state.record_generation(response_id, model, behavior)
         if not stream:
             self._send_json(wire_openai.completion_body(model, behavior, response_id))
             return
