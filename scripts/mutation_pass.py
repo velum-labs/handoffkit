@@ -167,8 +167,8 @@ MUTATIONS = [
     Mutation(
         id="M13",
         what=(
-            "the gateway's Anthropic adapter renders fused tool calls with empty "
-            "input (the real claude binary would execute the wrong command)"
+            "the Anthropic adapter's non-streaming JSON path renders fused tool "
+            "calls with empty input (caught by the door matrix's tool loop)"
         ),
         file="packages/model-gateway/src/adapters/anthropic.ts",
         old=(
@@ -187,6 +187,18 @@ MUTATIONS = [
             "        input: {}\n"
             "      });"
         ),
+        build=True,
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js",
+    ),
+    Mutation(
+        id="M14",
+        what=(
+            "the Anthropic adapter's STREAMING path drops tool-call argument "
+            "deltas (the real claude binary executes the wrong command)"
+        ),
+        file="packages/model-gateway/src/adapters/anthropic.ts",
+        old='delta: { type: "input_json_delta", partial_json: args }',
+        new='delta: { type: "input_json_delta", partial_json: "{}" }',
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js",
     ),
