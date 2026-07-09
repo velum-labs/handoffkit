@@ -171,8 +171,22 @@ MUTATIONS = [
             "input (the real claude binary would execute the wrong command)"
         ),
         file="packages/model-gateway/src/adapters/anthropic.ts",
-        old='      content.push({\n        type: "tool_use",\n        id: call.id ?? `toolu_${randomId()}`,\n        name: call.function?.name ?? "",\n        input\n      });',
-        new='      content.push({\n        type: "tool_use",\n        id: call.id ?? `toolu_${randomId()}`,\n        name: call.function?.name ?? "",\n        input: {}\n      });',
+        old=(
+            "      content.push({\n"
+            '        type: "tool_use",\n'
+            "        id: call.id ?? `toolu_${randomId()}`,\n"
+            '        name: call.function?.name ?? "",\n'
+            "        input\n"
+            "      });"
+        ),
+        new=(
+            "      content.push({\n"
+            '        type: "tool_use",\n'
+            "        id: call.id ?? `toolu_${randomId()}`,\n"
+            '        name: call.function?.name ?? "",\n'
+            "        input: {}\n"
+            "      });"
+        ),
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js",
     ),
