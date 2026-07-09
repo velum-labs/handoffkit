@@ -133,20 +133,22 @@ The same tooling from the Node side, for cross-process tests:
 
 ### 4b. Real coding-agent CLI harnesses — `@fusionkit/testkit` `clis.ts`
 
-`runClaudeCode(...)` / `runCodexExec(...)` spawn the ACTUAL `claude` and
-`codex` binaries against a gateway URL — no mocked tool clients. Claude Code
+`runClaudeCode(...)` / `runCodexExec(...)` / `runOpenCode(...)` spawn the
+ACTUAL `claude`, `codex`, and `opencode` binaries against a gateway URL — no
+mocked tool clients. Claude Code
 is pointed via `ANTHROPIC_BASE_URL` (+ an inert token; background traffic,
 telemetry, and auto-update disabled for determinism); Codex gets a generated
 `CODEX_HOME` registering the gateway as a Responses-wire provider with
 `requires_openai_auth = false`. No real provider account is ever touched.
 `cliAvailable` / `cliSkip` gate suites where the binaries are missing; the
 `stack-e2e` CI job installs them (`npm i -g @openai/codex
-@anthropic-ai/claude-code`).
+@anthropic-ai/claude-code opencode-ai`). It also installs the official
+`cursor-agent` binary; model turns remain login-gated.
 
 The real-CLI suite (`stack-cli-e2e.test.ts`) drives each binary through the
 whole stack: plain fused turns (asserting the CLI's own toolset and prompt
 reached the panel wire verbatim), and **real tool loops** — the fused step
-commits a `Bash` / `exec_command` call, the binary executes it on the local
+commits a `Bash` / `exec_command` / OpenCode `bash` call, the binary executes it on the local
 machine (proven by the file the command creates), posts the result back, and
 the loop closes on a second fused turn. The cursor-agent CLI still requires a
 real Cursor login and stays behind the env-gated live tests.
@@ -171,7 +173,8 @@ binaries. The returned stack carries:
 Coverage is a **product of declared axes**, not hand-written per-tool tests:
 
 - **Provider axis** — `fusionkit_testkit.matrix.PROVIDER_PROFILES`: one
-  `ProviderProfile` per client family (OpenAI, Anthropic, Google, Codex) with
+  `ProviderProfile` per client family (OpenAI, OpenRouter, Anthropic, Google,
+  Codex) with
   its wire dialect, auth journal field, and *declared* capability quirks
   (SDK-internal retries, sampling forwarding, finish-reason vocabulary, quota
   classification). Suites `pytest.mark.parametrize` over `provider_params()`
@@ -190,9 +193,10 @@ Matrix suites (generated tests = product of axes):
 
 - `test_matrix_wire_clients.py` — provider × {roundtrip, streaming
   reassembly, tool calls ×2 modes, error taxonomy ×3, transient recovery,
-  truncated stream} = 36 tests over the real SDK clients.
+  truncated stream} plus OpenRouter generation-cost accounting = 47 tests
+  over the real SDK clients.
 - `test_matrix_engine_passthrough.py` — provider × {JSON, SSE, multi-turn
-  tool loop with per-dialect tool-result wire markers, auth error} = 16 tests
+  tool loop with per-dialect tool-result wire markers, auth error} = 20 tests
   through the real engine.
 - `stack-e2e.test.ts` — door × {fused JSON, fused SSE with native close
   markers, multi-turn fused tool loop with native tool dialects} = 12
@@ -219,10 +223,16 @@ suites.
 | Process e2e | real `fusionkit serve` child process | provider | `test_engine_process.py` |
 | Cross-stack door matrix | door × {fused JSON, fused SSE, tool loop} through the whole stack | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
 | Cross-stack depth | multi-ensemble routing + prompts, session/cost accounting, narration | provider | `packages/cli/src/test/stack-depth-e2e.test.ts` |
-| Gateway policies | WS5 failover (`fusion`/`passthrough`), WS7 budget-stop (402 before spend), WS4 finite-k round semantics + persistence | provider | `packages/cli/src/test/stack-policies-e2e.test.ts` |
+| Gateway policies | WS5 failover (`fusion`/`passthrough`/`fail`), WS7 budget-stop (402 before spend), WS4 finite-k round semantics + persistence | provider | `packages/cli/src/test/stack-policies-e2e.test.ts` |
+| Managed harness k | real AI SDK agents + git worktrees: k=2 executed/proposed boundaries, unbounded completion, path traversal rejection | provider | `packages/cli/src/test/stack-harness-k-e2e.test.ts` |
+| Chaos/lifecycle | k=1 straggler abandonment, hard panel timeout, caller cancellation + post-failure recovery | provider | `packages/cli/src/test/stack-chaos-e2e.test.ts` |
+| Durable resume | unbounded candidate cache persisted in FileSystemSessionStore and restored after gateway restart with zero re-fanout | provider | `packages/cli/src/test/stack-resume-e2e.test.ts` |
+| Driver cutover | `FUSIONKIT_HARNESS_DRIVERS=1`: real Claude Agent SDK + Codex SDK, native dialect gateways, stale-cursor fallback | provider | `packages/cli/src/test/stack-drivers-e2e.test.ts` |
+| Auth boundary | every door rejects missing/wrong bearer credentials before any provider call | provider | `packages/cli/src/test/stack-auth-e2e.test.ts` |
 | Engine runs & processes | native runs API (create/inspect/events/idempotency) over the real wire, `serve-endpoint` child process, router identity handshake | provider | `python/fusionkit-testkit/tests/test_engine_runs_and_processes.py` |
 | **Real product CLI** | the ACTUAL `fusionkit serve` entrypoint booting its production stack: fusion.json loading, preflight probes, `uv run` router spawn, gateway + setup snippets | provider only | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` |
-| **Real-CLI e2e** | the ACTUAL `claude` / `codex` binaries: their production wire, their real toolsets, real local tool execution | provider only | `packages/cli/src/test/stack-cli-e2e.test.ts` |
+| Real command CLI | actual built entrypoint: version/completions/runtime, config CRUD/export, prompts, install/uninstall, telemetry, setup, doctor | provider only for doctor probes | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` |
+| **Real-CLI e2e** | the ACTUAL `claude` / `codex` / `opencode` binaries: production wire/toolsets and real local tool execution | provider only | `packages/cli/src/test/stack-cli-e2e.test.ts` |
 | Live (env-gated) | everything incl. real provider accounts | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
 
 The provider axis also covers **OpenRouter** including its post-response cost
