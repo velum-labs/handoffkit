@@ -1,0 +1,67 @@
+diff --git a/lib/matplotlib/figure.py b/lib/matplotlib/figure.py
+index 10a4072328..48ba0bd12e 100644
+--- a/lib/matplotlib/figure.py
++++ b/lib/matplotlib/figure.py
+@@ -3190,6 +3190,18 @@ None}, default: None
+         # re-initialise some of the unstored state information
+         FigureCanvasBase(self)  # Set self.canvas.
+ 
++        # Restore draggable state for legends after canvas is set
++        for ax in self.axes:
++            # Only check axes that have a legend_ attribute
++            if hasattr(ax, 'legend_') and ax.legend_ is not None:
++                legend = ax.legend_
++                if hasattr(legend, '_restore_draggable'):
++                    legend._restore_draggable()
++        # Also check for figure legends
++        if hasattr(self, '_legend') and self._legend is not None:
++            if hasattr(self._legend, '_restore_draggable'):
++                self._legend._restore_draggable()
++        
+         if restore_to_pylab:
+             # lazy import to avoid circularity
+             import matplotlib.pyplot as plt
+diff --git a/lib/matplotlib/legend.py b/lib/matplotlib/legend.py
+index ff6abdb958..6fd09a4293 100644
+--- a/lib/matplotlib/legend.py
++++ b/lib/matplotlib/legend.py
+@@ -1209,6 +1209,39 @@ class Legend(Artist):
+         return self._draggable is not None
+ 
+ 
++    def __getstate__(self):
++        state = self.__dict__.copy()
++        # The DraggableLegend object contains a reference to the canvas which is not pickleable.
++        # We need to remove it and recreate it when unpickling.
++        if '_draggable' in state and state['_draggable'] is not None:
++            # Store the draggable state information separately
++            draggable_obj = state['_draggable']
++            state['_draggable_state'] = {
++                'use_blit': draggable_obj._use_blit,
++                'update': getattr(draggable_obj, '_update', 'loc')
++            }
++            state['_draggable'] = None
++        return state
++    def __setstate__(self, state):
++        # Restore the draggable state if it was set before pickling
++        draggable_state = state.pop('_draggable_state', None)
++        self.__dict__.update(state)
++        if draggable_state is not None:
++            # Only recreate the draggable legend if the figure has a canvas
++            # The canvas will be set later during the figure's __setstate__
++            self._draggable_state = draggable_state
++
++    def _restore_draggable(self):
++        """Restore draggable state after figure canvas is available."""
++        if hasattr(self, '_draggable_state') and self._draggable_state is not None:
++            draggable_state = self._draggable_state
++            self.set_draggable(True, 
++                             use_blit=draggable_state['use_blit'],
++                             update=draggable_state['update'])
++            del self._draggable_state
++
++
++
+ # Helper functions to parse legend arguments for both `figure.legend` and
+ # `axes.legend`:
+ def _get_legend_handles(axs, legend_handler_map=None):

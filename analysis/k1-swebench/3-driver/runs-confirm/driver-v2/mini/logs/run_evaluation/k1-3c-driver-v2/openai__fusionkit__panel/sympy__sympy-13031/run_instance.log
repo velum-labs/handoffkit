@@ -1,0 +1,3159 @@
+2026-07-09 05:04:07,932 - INFO - Creating container for sympy__sympy-13031...
+2026-07-09 05:04:07,944 - INFO - Container for sympy__sympy-13031 created: a87235b8eae0d4ddbc19c18b5b77400d7f7660aa3144df435d6005412a6dcb1c
+2026-07-09 05:04:08,026 - INFO - Container for sympy__sympy-13031 started: a87235b8eae0d4ddbc19c18b5b77400d7f7660aa3144df435d6005412a6dcb1c
+2026-07-09 05:04:08,026 - INFO - Intermediate patch for sympy__sympy-13031 written to logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/patch.diff, now applying to container...
+2026-07-09 05:04:08,106 - INFO - Failed to apply patch to container: git apply --verbose
+2026-07-09 05:04:08,144 - INFO - Failed to apply patch to container: git apply --verbose --reject
+2026-07-09 05:04:08,185 - INFO - Failed to apply patch to container: patch --batch --fuzz=5 -p1 -i
+2026-07-09 05:04:08,185 - INFO - >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: <exception str() failed>
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,197 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,198 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,199 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,200 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,201 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,202 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: <exception str() failed>
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,213 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,214 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,215 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,216 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,217 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,218 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,218 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,218 - INFO - Traceback (most recent call last):
+  File "/home/ubuntu/.venvs/swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", line 182, in run_instance
+    raise EvaluationError(
+swebench.harness.utils.EvaluationError: sympy__sympy-13031: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/sympy__sympy-13031/run_instance.log) for more information.
+
+2026-07-09 05:04:08,218 - INFO - Attempting to stop container sweb.eval.sympy__sympy-13031.k1-3c-driver-v2...
+2026-07-09 05:04:23,298 - INFO - Attempting to remove container sweb.eval.sympy__sympy-13031.k1-3c-driver-v2...
+2026-07-09 05:04:23,302 - INFO - Container sweb.eval.sympy__sympy-13031.k1-3c-driver-v2 removed.
