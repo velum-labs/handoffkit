@@ -186,7 +186,7 @@ def collect_source_urls(candidates: list[dict[str, Any]], snap: dict[str, Any]) 
 
 
 def reading_guide(judge_slug: str) -> str:
-    judge = judge_slug or "judge"
+    del judge_slug
     return f"""
 <aside class="guide" id="visual-key">
   {section_kicker("Reading guide")}

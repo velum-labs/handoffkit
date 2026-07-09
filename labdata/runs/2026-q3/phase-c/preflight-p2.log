@@ -1,0 +1,150 @@
+{
+  "hypothesis": "p2",
+  "config": "configs/benchmark-panel.exp.p2-qwen-glm.yaml",
+  "subset": 5,
+  "output_path": "/workspace/labdata/runs/2026-q3/phase-c/preflight-p2-20260709T005415Z.jsonl",
+  "fusion_score": 0.0,
+  "passed_tasks": 0,
+  "resolved_tasks": 5,
+  "cost_usd": 0.635149,
+  "availability": "ran",
+  "raw": {
+    "summary": {
+      "suite": "livecodebench",
+      "panel": "decorrelated-peers",
+      "availability": "ran",
+      "fusion_score": 0.0,
+      "fusion_ci": "[0.0000, 0.4345]",
+      "measured_oracle": 0.0,
+      "measured_regret": 0.0,
+      "oracle_headroom": null,
+      "lopsided_panel": 0,
+      "infra_error_tasks": 0,
+      "excluded_tasks": 0,
+      "output": "/workspace/labdata/runs/2026-q3/phase-c/preflight-p2-20260709T005415Z.jsonl",
+      "report": "/workspace/labdata/runs/2026-q3/phase-c/preflight-p2-20260709T005415Z.md"
+    },
+    "run": {
+      "suite": "livecodebench",
+      "mount_mode": "fusion_behind_agent",
+      "availability": "ran",
+      "panel_id": "decorrelated-peers",
+      "gateway_model": "fusionkit/panel",
+      "harness": "livecodebench-code_generation_lite",
+      "harness_version": "release_v6",
+      "resolved_tasks": 5,
+      "total_tasks": 5,
+      "passed_tasks": 0,
+      "model_failed_tasks": 0,
+      "infra_error_tasks": 0,
+      "excluded_tasks": 0,
+      "score": 0.0,
+      "cost_total_usd": 0.635149,
+      "cost_per_task_usd": 0.1270298,
+      "tasks": [
+        {
+          "task_id": "arc196_d",
+          "outcome": "scored",
+          "passed": false,
+          "score": 0.0,
+          "cost_usd": 0.131968,
+          "latency_s": 213.97,
+          "candidate_scores": {
+            "gemini": 0.0,
+            "qwencoder": 0.0,
+            "glm52": 0.0
+          },
+          "error_reason": null
+        },
+        {
+          "task_id": "arc196_c",
+          "outcome": "scored",
+          "passed": false,
+          "score": 0.0,
+          "cost_usd": 0.126782,
+          "latency_s": 207.14,
+          "candidate_scores": {
+            "gemini": 0.0,
+            "qwencoder": 0.0,
+            "glm52": 0.0
+          },
+          "error_reason": null
+        },
+        {
+          "task_id": "arc196_b",
+          "outcome": "scored",
+          "passed": false,
+          "score": 0.0,
+          "cost_usd": 0.126466,
+          "latency_s": 270.92,
+          "candidate_scores": {
+            "gemini": 0.0,
+            "qwencoder": 0.0,
+            "glm52": 0.0
+          },
+          "error_reason": null
+        },
+        {
+          "task_id": "arc196_a",
+          "outcome": "scored",
+          "passed": false,
+          "score": 0.0,
+          "cost_usd": 0.123856,
+          "latency_s": 1075.92,
+          "candidate_scores": {
+            "gemini": 0.0,
+            "qwencoder": 0.0,
+            "glm52": 0.0
+          },
+          "error_reason": null
+        },
+        {
+          "task_id": "abc400_g",
+          "outcome": "scored",
+          "passed": false,
+          "score": 0.0,
+          "cost_usd": 0.126077,
+          "latency_s": 931.64,
+          "candidate_scores": {
+            "gemini": 0.0,
+            "qwencoder": 0.0,
+            "glm52": 0.0
+          },
+          "error_reason": null
+        }
+      ],
+      "unavailable_reason": null,
+      "provenance": {
+        "generated_at": "2026-07-09T01:21:26.713455+00:00",
+        "repo_sha": "9e113de5dbe0dbcf74f69e5f283ccc1cc4dd1f93",
+        "python_version": "3.12.3",
+        "platform": "Linux-6.12.58+-x86_64-with-glibc2.39",
+        "package_versions": {
+          "fusionkit-core": "0.8.0",
+          "fusionkit-evals": "0.8.0",
+          "datasets": "3.6.0",
+          "pydantic": "2.13.4"
+        },
+        "model_versions": {
+          "gemini": "google/gemini-3.1-pro-preview",
+          "qwencoder": "qwen/qwen3-coder",
+          "glm52": "z-ai/glm-5.2"
+        },
+        "prompt_template_hash": "sha256:3ad49b97e76854d43cf5c974cf1a4cacb6e32aad49003208f229a1c2a3530010",
+        "dataset_revision": "release_v6",
+        "checker_mode": "exact",
+        "sandbox_backend": "local",
+        "scoring_version": "2",
+        "contamination_window_min_date": "2025-01-01",
+        "manifest": "/workspace/labruns/2026-q3/manifest-algorithmic.json",
+        "cost_scope": "solver_candidates_only"
+      },
+      "raw_metadata": {
+        "difficulty": "medium,hard",
+        "concurrency": 2,
+        "cache_signature": "728a43f201abde66"
+      }
+    }
+  }
+}
+DONE_p2

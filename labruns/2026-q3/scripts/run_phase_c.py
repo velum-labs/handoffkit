@@ -24,7 +24,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 MANIFEST = REPO / "labruns" / "2026-q3" / "manifest-algorithmic.json"
 ADAPTER = (
-    REPO / "python" / "fusionkit-evals" / "src" / "fusionkit_evals" / "adapters" / "livecodebench_adapter.py"
+    REPO / "python" / "fusionkit-evals" / "src" / "fusionkit_evals"
+    / "adapters" / "livecodebench_adapter.py"
 )
 OUT_DIR = REPO / "labdata" / "runs" / "2026-q3" / "phase-c"
 SPEND_LEDGER = OUT_DIR / "spend_ledger.jsonl"

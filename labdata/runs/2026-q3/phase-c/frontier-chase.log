@@ -1,0 +1,12 @@
+
+warning: `VIRTUAL_ENV=/home/ubuntu/.cache/uv/builds-v0/.tmp5aeAKG` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+
+
+warning: `VIRTUAL_ENV=/home/ubuntu/.cache/uv/builds-v0/.tmp5aeAKG` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+
+p2 failed: 143
+p1 failed: 143
+
+warning: `VIRTUAL_ENV=/home/ubuntu/.cache/uv/builds-v0/.tmp5aeAKG` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+
+p3 failed: 143

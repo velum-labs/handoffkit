@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import cast
 
 import pytest
+from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.adapters.livecodebench_adapter import (
     LiveCodeBenchTaskTimeoutError,
     run_engine_with_task_timeout,
@@ -255,7 +257,9 @@ async def test_livecodebench_task_wall_timeout_is_not_retried() -> None:
 
     with pytest.raises(LiveCodeBenchTaskTimeoutError):
         await retry_async(
-            lambda: run_engine_with_task_timeout(HangingEngine(), "prompt", 0.001),
+            lambda: run_engine_with_task_timeout(
+                cast(FusionEngine, HangingEngine()), "prompt", 0.001
+            ),
             attempts=3,
             retry_on=should_retry_panel_error,
             sleep=_no_sleep,

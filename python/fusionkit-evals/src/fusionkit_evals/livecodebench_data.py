@@ -68,9 +68,7 @@ def _row_matches_filters(
         return False
     if any(tc.get("testtype") != "stdin" for tc in public):
         return False
-    if row.get("starter_code"):
-        return False
-    return True
+    return not row.get("starter_code")
 
 
 def load_problems(
@@ -97,7 +95,10 @@ def load_problems(
     )
 
 
-def _select_from_manifest(ds: Iterable[dict[str, Any]], manifest: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _select_from_manifest(
+    ds: Iterable[dict[str, Any]],
+    manifest: Mapping[str, Any],
+) -> list[dict[str, Any]]:
     wanted = list(manifest.get("question_ids") or [])
     wanted_set = set(wanted)
     by_id: dict[str, dict[str, Any]] = {}
@@ -123,19 +124,24 @@ def _select_recent(
     min_date: str,
     difficulties: set[str],
 ) -> list[dict[str, Any]]:
-    # Min-heap of (contest_date, row) capped at `subset` keeps only the newest matches.
-    heap: list[tuple[str, dict[str, Any]]] = []
+    # Min-heap of (contest_date, qid) capped at `subset` keeps only the newest
+    # matches; rows live in a side table so heap items stay comparable.
+    heap: list[tuple[str, str]] = []
+    rows_by_qid: dict[str, dict[str, Any]] = {}
     for row in ds:
         if not _row_matches_filters(row, min_date=min_date, difficulties=difficulties):
             continue
         contest_date = str(row.get("contest_date") or "")
         qid = str(row.get("question_id"))
-        item = (contest_date, qid, dict(row))
+        key = (contest_date, qid)
         if len(heap) < subset:
-            heapq.heappush(heap, item)
-        elif (contest_date, qid) > (heap[0][0], heap[0][1]):
-            heapq.heapreplace(heap, item)
-    chosen = [row for _, _, row in sorted(heap, key=lambda pair: (pair[0], pair[1]), reverse=True)]
+            heapq.heappush(heap, key)
+            rows_by_qid[qid] = dict(row)
+        elif key > heap[0]:
+            _, evicted_qid = heapq.heapreplace(heap, key)
+            del rows_by_qid[evicted_qid]
+            rows_by_qid[qid] = dict(row)
+    chosen = [rows_by_qid[qid] for _, qid in sorted(heap, reverse=True)]
     _log(f"selected {len(chosen)} problems (difficulty={sorted(difficulties)}, >= {min_date})")
     return chosen
 
@@ -150,7 +156,8 @@ def scan_matching_question_ids(
     """Stream the dataset and return metadata for the newest `count` matching tasks."""
 
     resolved_difficulties = difficulties or {"medium", "hard"}
-    heap: list[tuple[str, dict[str, Any]]] = []
+    heap: list[tuple[str, str]] = []
+    meta_by_qid: dict[str, dict[str, Any]] = {}
     for row in _open_lcb_stream(version=version):
         if not _row_matches_filters(row, min_date=min_date, difficulties=resolved_difficulties):
             continue
@@ -169,12 +176,15 @@ def scan_matching_question_ids(
             "public_test_count": public_test_count,
             "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
         }
-        item = (contest_date, qid, meta)
+        key = (contest_date, qid)
         if len(heap) < count:
-            heapq.heappush(heap, item)
-        elif (contest_date, qid) > (heap[0][0], heap[0][1]):
-            heapq.heapreplace(heap, item)
-    return [meta for _, _, meta in sorted(heap, key=lambda pair: (pair[0], pair[1]), reverse=True)]
+            heapq.heappush(heap, key)
+            meta_by_qid[qid] = meta
+        elif key > heap[0]:
+            _, evicted_qid = heapq.heapreplace(heap, key)
+            del meta_by_qid[evicted_qid]
+            meta_by_qid[qid] = meta
+    return [meta_by_qid[qid] for _, qid in sorted(heap, reverse=True)]
 
 
 def iter_manifest_question_ids(manifest: Mapping[str, Any]) -> Iterator[str]:

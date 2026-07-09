@@ -76,7 +76,7 @@ def serve_argv(cfg_path: Path, *, port: int, repo: Path) -> list[str]:
     models: list[str] = []
     for ep_id in panel_ids:
         ep = endpoints[ep_id]
-        models.append(f"--model")
+        models.append("--model")
         models.append(f"{ep.id}=openrouter:{ep.model}")
     judge = cfg.judge_model or panel_ids[0]
     return [
@@ -167,7 +167,9 @@ def smoke_config(cfg_path: Path, *, repo: Path) -> dict[str, object]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Smoke-test benchmark panels via fusionkit-dev gateway")
+    parser = argparse.ArgumentParser(
+        description="Smoke-test benchmark panels via fusionkit-dev gateway"
+    )
     parser.add_argument("configs", nargs="+", type=Path)
     args = parser.parse_args()
     if not os.environ.get("OPENROUTER_API_KEY"):
