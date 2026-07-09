@@ -154,8 +154,11 @@ binaries. The returned stack carries:
 | Wire-client | real SDK clients + retry/classification, all four dialects | provider (simulator) | `python/fusionkit-testkit/tests/test_simulator.py`, `test_simulator_google_codex.py` |
 | Engine e2e | `create_app` + real clients + kernel | provider | `python/fusionkit-testkit/tests/test_engine_e2e.py` |
 | Engine surface matrix | every engine HTTP door + fusion mode, four-provider panel | provider | `python/fusionkit-testkit/tests/test_engine_surfaces.py` |
+| Engine depth | multi-turn fused tool loops, wire-shape matrix, storms/quota, overflow ladder, prompt overrides, exact usage, concurrency | provider | `python/fusionkit-testkit/tests/test_engine_depth.py` |
+| Adversarial | broken/garbage streams, multi-slot parallel tool calls, latency | provider | `python/fusionkit-testkit/tests/test_adversarial.py` |
 | Process e2e | real `fusionkit serve` child process | provider | `python/fusionkit-testkit/tests/test_engine_process.py` |
 | Cross-stack e2e | Node gateway (every front door) + Python engine, all processes & dialects | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
+| Cross-stack depth | multi-turn fused tool loops on both doors, multi-ensemble routing + prompts, session/cost accounting, narration | provider | `packages/cli/src/test/stack-depth-e2e.test.ts` |
 | Live (env-gated) | everything incl. real providers/tools | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
 
 **Surface coverage** at the two e2e layers:
@@ -204,7 +207,16 @@ clients, or the engine/gateway wire paths:
 uv run python scripts/mutation_pass.py   # clean tree + built workspace required
 ```
 
-Current score: **8/8 killed**. The first pass scored 6/8, and both survivors
+Current score: **12/12 killed** (the depth mutations M9–M12 pin per-request
+prompt forwarding, the context-overflow candidate fallback, the
+judge-doubles-as-synthesizer request resolution, and the gateway's ensemble
+prompt forwarding). The depth suites also caught a real product bug on first
+run: a fuse request pinning `judge_model` without `synthesizer_model` fell
+back to the *config* synthesizer instead of the pinned judge, silently
+synthesizing a named ensemble's turns on the default ensemble's judge
+endpoint (fixed in `app.py`, guarded by M11).
+
+The first pass scored 6/8, and both survivors
 were real test weaknesses that got fixed:
 
 - the retry test queued one 500, which the openai SDK's *internal* retry
