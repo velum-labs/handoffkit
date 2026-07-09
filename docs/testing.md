@@ -131,6 +131,26 @@ The same tooling from the Node side, for cross-process tests:
 - `spawnCaptured` / `waitForHttpReady` / `freePort` — observable process
   plumbing shared by the above.
 
+### 4b. Real coding-agent CLI harnesses — `@fusionkit/testkit` `clis.ts`
+
+`runClaudeCode(...)` / `runCodexExec(...)` spawn the ACTUAL `claude` and
+`codex` binaries against a gateway URL — no mocked tool clients. Claude Code
+is pointed via `ANTHROPIC_BASE_URL` (+ an inert token; background traffic,
+telemetry, and auto-update disabled for determinism); Codex gets a generated
+`CODEX_HOME` registering the gateway as a Responses-wire provider with
+`requires_openai_auth = false`. No real provider account is ever touched.
+`cliAvailable` / `cliSkip` gate suites where the binaries are missing; the
+`stack-e2e` CI job installs them (`npm i -g @openai/codex
+@anthropic-ai/claude-code`).
+
+The real-CLI suite (`stack-cli-e2e.test.ts`) drives each binary through the
+whole stack: plain fused turns (asserting the CLI's own toolset and prompt
+reached the panel wire verbatim), and **real tool loops** — the fused step
+commits a `Bash` / `exec_command` call, the binary executes it on the local
+machine (proven by the file the command creates), posts the result back, and
+the loop closes on a second fused turn. The cursor-agent CLI still requires a
+real Cursor login and stays behind the env-gated live tests.
+
 ### 5. Full-stack harness — `packages/cli/src/test/sim-stack.ts`
 
 `startSimFusionStack(...)` is the composition root for whole-product tests:
@@ -199,7 +219,8 @@ suites.
 | Process e2e | real `fusionkit serve` child process | provider | `test_engine_process.py` |
 | Cross-stack door matrix | door × {fused JSON, fused SSE, tool loop} through the whole stack | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
 | Cross-stack depth | multi-ensemble routing + prompts, session/cost accounting, narration | provider | `packages/cli/src/test/stack-depth-e2e.test.ts` |
-| Live (env-gated) | everything incl. real providers/tools | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
+| **Real-CLI e2e** | the ACTUAL `claude` / `codex` binaries: their production wire, their real toolsets, real local tool execution | provider only | `packages/cli/src/test/stack-cli-e2e.test.ts` |
+| Live (env-gated) | everything incl. real provider accounts | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
 
 **Surface coverage** at the two e2e layers:
 

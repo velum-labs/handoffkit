@@ -164,6 +164,18 @@ MUTATIONS = [
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js",
     ),
+    Mutation(
+        id="M13",
+        what=(
+            "the gateway's Anthropic adapter renders fused tool calls with empty "
+            "input (the real claude binary would execute the wrong command)"
+        ),
+        file="packages/model-gateway/src/adapters/anthropic.ts",
+        old='      content.push({\n        type: "tool_use",\n        id: call.id ?? `toolu_${randomId()}`,\n        name: call.function?.name ?? "",\n        input\n      });',
+        new='      content.push({\n        type: "tool_use",\n        id: call.id ?? `toolu_${randomId()}`,\n        name: call.function?.name ?? "",\n        input: {}\n      });',
+        build=True,
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js",
+    ),
 ]
 
 
