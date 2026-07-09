@@ -285,12 +285,18 @@ clients, or the engine/gateway wire paths:
 uv run python scripts/mutation_pass.py   # clean tree + built workspace required
 ```
 
-Current score: **14/14 killed** (the depth mutations M9–M12 pin per-request
+Current score: **25/25 killed**. The newer mutations pin finite-k terminal
+proposal summaries, k=1 straggler grace, native driver dialect routing,
+stale-session fallback, OpenRouter generation-cost association, configured
+provider base URLs in the real product CLI, budget gating, failed-tool
+observations, durable unbounded resume, and bearer authentication.
+
+The earlier depth mutations M9–M12 pin per-request
 prompt forwarding, the context-overflow candidate fallback, the
 judge-doubles-as-synthesizer request resolution, and the gateway's ensemble
 prompt forwarding; M13/M14 pin the Anthropic adapter's tool-call rendering on
 its JSON and streaming paths — M14 is killed by the REAL claude binary
-executing the wrong command). A lesson from M13's first run: it survived when
+executing the wrong command. A lesson from M13's first run: it survived when
 aimed at the real-CLI suite because Claude Code consumes the *streaming*
 path — the suites and mutations must target the code path the client actually
 exercises. The depth suites also caught a real product bug on first
@@ -335,14 +341,19 @@ it here rather than trusting a green run.
    gate on `detectStackTooling()`; live-provider tests stay behind explicit
    `FUSIONKIT_*_LIVE_*` env flags.
 
-## Known gaps (extend here first)
+## Known gaps (environment- or platform-gated)
 
-- Harness rollouts (`k>1`) drive real coding-agent binaries and stay in the
-  env-gated live tests; the cross-stack harness covers `k=1` proposal panels.
-- The generic ACP door and the unified-harness front door run real worktree
-  harnesses; they are covered by `packages/cli/src/test/gateway-e2e.test.ts`
-  (command harness) rather than the sim stack.
-- The `serve-endpoint` single-model shim shares `create_app` with `serve`;
-  it has no dedicated process-level suite.
-- Adding a provider dialect = one new `wire_*.py` module + a route in
-  `server.py` + a self-test proving the real client parses it.
+- `cursor-agent` is installed and version-checked in CI, and its bridge/ACP
+  protocol has fake-peer tests, but a real model turn requires a genuine
+  Cursor login. The real-binary turn therefore stays behind
+  `FUSIONKIT_GATEWAY_LIVE_CURSOR=1`.
+- Local MLX model lifecycle, memory pressure, and OOM restart behavior require
+  Apple Silicon. Linux CI covers the gateway/process orchestration but cannot
+  load MLX models.
+- Real billed provider-account behavior (provider-side schema drift, actual
+  rate limits, quality) remains in the explicitly env-gated live/public
+  benchmarks. Deterministic CI covers the provider wire and product behavior.
+- Generic ACP and unified command-harness worktree flows are covered by
+  `packages/cli/src/test/gateway-e2e.test.ts`; native Claude/Codex SDK driver
+  cutover is covered by `stack-drivers-e2e.test.ts`. OpenCode has no panel
+  harness kind yet, so only its real tool-facing CLI is exercised.
