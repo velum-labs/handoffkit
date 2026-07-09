@@ -10,6 +10,7 @@
  * ships, but is shared by any suite that wants the whole stack.
  */
 
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,10 +20,13 @@ import type { EngineHandle, FusedTurnScript, ProviderSimHandle, SimEndpointSpec 
 import type { Gateway, ModelPricing, OnRateLimitPolicy, SessionStore } from "@fusionkit/model-gateway";
 
 import { fusionModelId } from "@fusionkit/registry";
+import { harnessDriversEnabled } from "@fusionkit/tools";
 
 import { startFusionStepGateway } from "../gateway.js";
 import type { GatewayEnsembleConfig } from "../gateway.js";
 import type { PromptOverrides } from "../fusion-config.js";
+import { startDriverEndpointGateways } from "../fusion/stack.js";
+import type { UnifiedHarnessKind } from "@fusionkit/ensemble";
 
 export type SimStackMember = SimEndpointSpec;
 
@@ -126,12 +130,24 @@ export async function startSimFusionStack(options: {
   ensembles?: readonly SimStackEnsemble[];
   /** WS4 durable session store (e.g. `InMemorySessionStore` for assertions). */
   sessionStore?: SessionStore;
+  /** WS4 persisted session id to bind to the first conversation after restart. */
+  resumeId?: string;
   /** Per-model token pricing overrides (WS7 cost accounting). */
   pricing?: Readonly<Record<string, ModelPricing>>;
   /** WS5 rate-limit / credit failover policy for vendor passthrough models. */
   onRateLimit?: OnRateLimitPolicy;
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
+  /** Optional bearer token protecting every gateway route. */
+  authToken?: string;
+  /** Hard wall-clock budget for one panel phase. */
+  panelTimeoutMs?: number;
+  /** Grace after the first successful candidate before aborting stragglers. */
+  stragglerGraceMs?: number;
+  /** Harness used for managed panel rollouts (default `agent`). */
+  harness?: UnifiedHarnessKind;
+  /** Omit the ensemble k boundary (managed unbounded rollout). */
+  unbounded?: boolean;
 }): Promise<SimFusionStack> {
   const first = options.members[0];
   if (first === undefined) throw new Error("at least one member is required");
@@ -155,7 +171,11 @@ export async function startSimFusionStack(options: {
       judgeEndpointId: ensembleJudgeId,
       judgeModelName: ensembleJudge?.model ?? judgeModel,
       ...(ensemble.synthesizerId !== undefined ? { synthesizerEndpointId: ensemble.synthesizerId } : {}),
-      k: ensemble.k ?? options.k ?? 1,
+      ...(ensemble.k !== undefined
+        ? { k: ensemble.k }
+        : options.unbounded === true
+          ? {}
+          : { k: options.k ?? 1 }),
       ...(ensemble.prompts !== undefined ? { prompts: ensemble.prompts } : {})
     };
   };
@@ -169,16 +189,37 @@ export async function startSimFusionStack(options: {
             models: panel.map((member) => ({ id: member.id, model: member.model })),
             judgeEndpointId: judgeId,
             judgeModelName: judgeModel,
-            k: options.k ?? 1
+            ...(options.unbounded === true ? {} : { k: options.k ?? 1 })
           }
         ];
 
   const sim = await startProviderSim();
   let engine: EngineHandle | undefined;
   let gateway: Gateway | undefined;
+  let driverEndpointClose: () => Promise<void> = async () => {};
   const outputRoot = mkdtempSync(join(tmpdir(), "sim-stack-out-"));
+  // Managed harnesses require a real source repository so each candidate can
+  // receive its own disposable worktree. Initializing it for every stack is
+  // cheap and keeps switching k/harness axes a configuration-only change.
+  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: outputRoot });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.email=e2e@fusionkit.local",
+      "-c",
+      "user.name=fusionkit-e2e",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "sim stack fixture"
+    ],
+    { cwd: outputRoot }
+  );
   const close = async (): Promise<void> => {
     await gateway?.close();
+    await driverEndpointClose();
     await engine?.close();
     await sim.close();
     rmSync(outputRoot, { recursive: true, force: true });
@@ -187,24 +228,45 @@ export async function startSimFusionStack(options: {
     engine = await startEngine({
       configYaml: simRouterConfigYaml({ simUrl: sim.url, members: options.members, judgeId })
     });
-    const endpoints = Object.fromEntries(options.members.map((member) => [member.id, engine?.url ?? ""]));
+    let endpoints = Object.fromEntries(
+      options.members.map((member) => [member.id, engine?.url ?? ""])
+    );
+    const driverHarness =
+      options.harness === "codex" ||
+      options.harness === "claude-code" ||
+      options.harness === "cursor-acp" ||
+      options.harness === "cursor-desktop";
+    if (driverHarness && harnessDriversEnabled()) {
+      const driverEndpoints = await startDriverEndpointGateways({
+        models: panel.map((member) => ({ id: member.id, model: member.model })),
+        modelEndpoints: endpoints
+      });
+      endpoints = driverEndpoints.endpoints;
+      driverEndpointClose = driverEndpoints.close;
+    }
     gateway = await startFusionStepGateway({
       config: {
         fusionBackendUrl: engine.url,
         repo: outputRoot,
         outputRoot,
-        harnesses: ["agent"],
+        harnesses: [options.harness ?? "agent"],
         models: panel.map((member) => ({ id: member.id, model: member.model })),
         ensembles,
         modelEndpoints: endpoints,
         timeoutMs: 120_000,
         ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),
+        ...(options.resumeId !== undefined ? { resumeId: options.resumeId } : {}),
         ...(options.pricing !== undefined ? { pricing: options.pricing } : {}),
         ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
-        ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {})
+        ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
+        ...(options.panelTimeoutMs !== undefined ? { panelTimeoutMs: options.panelTimeoutMs } : {}),
+        ...(options.stragglerGraceMs !== undefined
+          ? { stragglerGraceMs: options.stragglerGraceMs }
+          : {})
       },
       host: "127.0.0.1",
-      port: 0
+      port: 0,
+      ...(options.authToken !== undefined ? { authToken: options.authToken } : {})
     });
     const gatewayUrl = gateway.url();
     return {

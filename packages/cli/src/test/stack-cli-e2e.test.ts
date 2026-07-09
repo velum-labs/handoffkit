@@ -20,7 +20,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
-import { cliSkip, judgeAnalysis, runClaudeCode, runCodexExec, stackToolingSkip } from "@fusionkit/testkit";
+import {
+  cliSkip,
+  judgeAnalysis,
+  runClaudeCode,
+  runCodexExec,
+  runOpenCode,
+  stackToolingSkip
+} from "@fusionkit/testkit";
 
 import { startSimFusionStack } from "./sim-stack.js";
 import type { SimFusionStack } from "./sim-stack.js";
@@ -28,6 +35,7 @@ import type { SimFusionStack } from "./sim-stack.js";
 const STACK_SKIP = stackToolingSkip();
 const CLAUDE_SKIP = STACK_SKIP !== false ? STACK_SKIP : cliSkip("claude");
 const CODEX_SKIP = STACK_SKIP !== false ? STACK_SKIP : cliSkip("codex");
+const OPENCODE_SKIP = STACK_SKIP !== false ? STACK_SKIP : cliSkip("opencode");
 
 const MEMBERS = [
   { id: "alpha", model: "gpt-panel-a", provider: "openai" },
@@ -58,6 +66,10 @@ async function queueFusedTurn(answer: string | { tool_calls: Array<{ id: string;
     { reply: judgeAnalysis() },
     typeof answer === "string" ? { reply: answer } : answer
   ]);
+}
+
+async function queueOpenCodeTitleTurn(): Promise<void> {
+  await queueFusedTurn("FusionKit CLI test");
 }
 
 // --- Claude Code (the real binary) ----------------------------------------------------
@@ -174,3 +186,76 @@ test("real Codex CLI executes a fused exec_command locally and closes the loop",
   assert.match(readFileSync(proofPath, "utf8"), /FUSION_TOOL_RAN/);
   assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 4, await stack.sim.describeJournal());
 });
+
+// --- OpenCode (the real binary) ------------------------------------------------------
+
+test(
+  "real OpenCode CLI completes a fused turn through the whole stack",
+  { skip: OPENCODE_SKIP },
+  async () => {
+    await stack.sim.reset();
+    // OpenCode makes a title-generation turn before the main agent turn; both
+    // go through the same real gateway and are deliberately scripted.
+    await queueOpenCodeTitleTurn();
+    await queueFusedTurn("FUSION_OK: fused answer delivered to the real opencode binary");
+
+    const cwd = mkdtempSync(join(workRoot, "opencode-plain-"));
+    const result = await runOpenCode({
+      gatewayUrl: stack.gatewayUrl,
+      prompt: "Report the fused answer verbatim.",
+      cwd
+    });
+    assert.equal(result.timedOut, false, result.stderr);
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(
+      result.stdout,
+      /FUSION_OK: fused answer delivered to the real opencode binary/
+    );
+
+    const memberCalls = await stack.sim.calls({ model: "gpt-panel-a" });
+    assert.equal(memberCalls.length, 2, await stack.sim.describeJournal());
+    const mainWire = JSON.stringify(memberCalls[1]?.request);
+    assert.ok(mainWire.includes("Report the fused answer verbatim."));
+    assert.ok(mainWire.includes('"bash"'), "OpenCode's real toolset must reach the panel wire");
+  }
+);
+
+test(
+  "real OpenCode CLI executes a fused bash tool locally and closes the loop",
+  { skip: OPENCODE_SKIP },
+  async () => {
+    await stack.sim.reset();
+    const cwd = mkdtempSync(join(workRoot, "opencode-tools-"));
+    const proofPath = join(cwd, "fusion_proof.txt");
+    await queueOpenCodeTitleTurn();
+    await queueFusedTurn({
+      tool_calls: [
+        {
+          id: "call_opencode_bash",
+          name: "bash",
+          arguments: JSON.stringify({
+            command: "echo FUSION_TOOL_RAN > fusion_proof.txt",
+            workdir: cwd
+          })
+        }
+      ]
+    });
+    await queueFusedTurn("FUSION_OK: opencode bash tool loop complete");
+
+    const result = await runOpenCode({
+      gatewayUrl: stack.gatewayUrl,
+      prompt: "Create the proof file the way you see fit, then report.",
+      cwd
+    });
+    assert.equal(result.timedOut, false, result.stderr);
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /FUSION_OK: opencode bash tool loop complete/);
+    assert.ok(existsSync(proofPath), "opencode must have executed the fused bash call");
+    assert.match(readFileSync(proofPath, "utf8"), /FUSION_TOOL_RAN/);
+    assert.equal(
+      (await stack.sim.calls({ model: "gpt-judge" })).length,
+      6,
+      await stack.sim.describeJournal()
+    );
+  }
+);

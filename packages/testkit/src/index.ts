@@ -15,7 +15,13 @@
  *   the Python toolchain.
  */
 
-export { cliAvailable, cliSkip, runClaudeCode, runCodexExec } from "./clis.js";
+export {
+  cliAvailable,
+  cliSkip,
+  runClaudeCode,
+  runCodexExec,
+  runOpenCode
+} from "./clis.js";
 export type { CliRunResult } from "./clis.js";
 export { DOOR_PROFILES, callDoor, doorFrames } from "./doors.js";
 export type { DoorProfile, DoorRequestInput, DoorToolCall, DoorToolExchange } from "./doors.js";

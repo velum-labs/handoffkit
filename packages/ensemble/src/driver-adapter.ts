@@ -200,6 +200,13 @@ function foldEvents(events: readonly HarnessEvent[]): FoldedTurn {
   };
 }
 
+function staleResume(folded: FoldedTurn): boolean {
+  if (folded.status !== "failed" || folded.error === undefined) return false;
+  const stale =
+    /(?:no (?:conversation|session|thread) found|(?:conversation|session|thread).*(?:not found|does not exist))/i;
+  return stale.test(folded.error.message);
+}
+
 export function createDriverHarness<Config>(
   options: DriverHarnessOptions<Config>
 ): HarnessAdapter {
@@ -261,31 +268,44 @@ export function createDriverHarness<Config>(
         options.context
       );
       const resume = options.resumeCursors?.get(model.id);
-      const events: HarnessEvent[] = [];
+      let folded: FoldedTurn;
       try {
-        const session = await instance.startSession({
-          cwd,
-          approvalPolicy,
-          model: route.model,
-          ...(resume !== undefined ? { resume } : {})
-        });
-        try {
-          for await (const event of session.sendTurn({
-            prompt: descriptor.prompt,
-            ...(signal !== undefined ? { signal } : {})
-          })) {
-            events.push(event);
+        const runSession = async (cursor: ResumeCursor | undefined): Promise<FoldedTurn> => {
+          const events: HarnessEvent[] = [];
+          const session = await instance.startSession({
+            cwd,
+            approvalPolicy,
+            model: route.model,
+            ...(cursor !== undefined ? { resume: cursor } : {})
+          });
+          try {
+            for await (const event of session.sendTurn({
+              prompt: descriptor.prompt,
+              ...(signal !== undefined ? { signal } : {})
+            })) {
+              events.push(event);
+            }
+          } finally {
+            const nextCursor = session.resumeCursor();
+            if (nextCursor !== undefined) options.resumeCursors?.set(model.id, nextCursor);
+            await session.stop().catch(() => undefined);
           }
-        } finally {
-          const cursor = session.resumeCursor();
-          if (cursor !== undefined) options.resumeCursors?.set(model.id, cursor);
-          await session.stop().catch(() => undefined);
+          return foldEvents(events);
+        };
+        folded = await runSession(resume);
+        if (resume !== undefined && staleResume(folded)) {
+          // Managed panel worktrees are disposable. Some native CLIs scope
+          // persisted sessions to the original worktree and reject the cursor
+          // after cleanup. The front door already supplied the full
+          // conversation in descriptor.prompt, so fall back to a fresh native
+          // session instead of failing an otherwise valid follow-up turn.
+          options.resumeCursors?.delete(model.id);
+          folded = await runSession(undefined);
         }
       } finally {
         await instance.dispose().catch(() => undefined);
       }
 
-      const folded = foldEvents(events);
       // Add-then-diff against the base so untracked/new files count; `has_diff`
       // no longer reports a false negative for a candidate that only created
       // files. Empty diff normalizes back to undefined for the callers below.

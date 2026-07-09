@@ -145,3 +145,65 @@ export async function runCodexExec(input: {
     rmSync(codexHome, { recursive: true, force: true });
   }
 }
+
+/**
+ * Run the real OpenCode CLI (`opencode run`) against a gateway through an
+ * ephemeral OpenAI-compatible provider config. OpenCode may make an internal
+ * title-generation turn before the main agent turn; tests intentionally
+ * observe and script both through the provider journal.
+ */
+export async function runOpenCode(input: {
+  gatewayUrl: string;
+  prompt: string;
+  cwd: string;
+  model?: string;
+  timeoutMs?: number;
+}): Promise<CliRunResult> {
+  const configDir = mkdtempSync(join(tmpdir(), "fusionkit-testkit-opencode-"));
+  const configPath = join(configDir, "opencode.json");
+  const model = input.model ?? "fusion-panel";
+  writeFileSync(
+    configPath,
+    JSON.stringify(
+      {
+        $schema: "https://opencode.ai/config.json",
+        provider: {
+          "fusionkit-local": {
+            npm: "@ai-sdk/openai-compatible",
+            name: "FusionKit local",
+            options: { baseURL: `${input.gatewayUrl}/v1` },
+            models: { [model]: { name: model } }
+          }
+        }
+      },
+      null,
+      2
+    )
+  );
+  try {
+    // env-spread-allowed: the real CLI needs a normal PATH/HOME; its only model provider is the ephemeral local gateway config
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      OPENCODE_CONFIG: configPath
+    };
+    return await run(
+      "opencode",
+      [
+        "run",
+        "--model",
+        `fusionkit-local/${model}`,
+        "--format",
+        "json",
+        "--auto",
+        input.prompt
+      ],
+      {
+        cwd: input.cwd,
+        env,
+        timeoutMs: input.timeoutMs ?? 120_000
+      }
+    );
+  } finally {
+    rmSync(configDir, { recursive: true, force: true });
+  }
+}
