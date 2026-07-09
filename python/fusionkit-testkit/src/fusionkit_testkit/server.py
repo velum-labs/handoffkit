@@ -1,0 +1,431 @@
+"""The provider simulator HTTP server.
+
+A stdlib-only threaded HTTP server that speaks the OpenAI Chat Completions and
+Anthropic Messages wire dialects, plus a control plane (behavior queueing /
+journal / reset) under ``/__sim/*``. Stdlib on purpose: no web framework in
+the test trust surface, and byte-level control of the wire (chunked SSE
+pacing, deliberately truncated streams) that a framework would abstract away.
+
+Usage (in-process)::
+
+    with ProviderSimulator() as sim:
+        sim.queue("gpt-test", Behavior(reply="hello"))
+        ... point an endpoint's base_url at sim.url ...
+        assert sim.journal()[0]["model"] == "gpt-test"
+
+Usage (standalone, e.g. from the Node test suite)::
+
+    uv run --package fusionkit-testkit fusionkit-sim --port 0
+"""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import threading
+import time
+from collections import defaultdict, deque
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, cast
+
+from fusionkit_testkit import wire_anthropic, wire_openai
+from fusionkit_testkit.behaviors import Behavior
+
+_JSON_TYPE = "application/json"
+_SSE_TYPE = "text/event-stream"
+
+
+class _SimulatorState:
+    """Thread-safe behavior queues + request journal."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._queues: dict[str, deque[Behavior]] = defaultdict(deque)
+        self._journal: list[dict[str, Any]] = []
+        self._default_counts: dict[str, int] = defaultdict(int)
+        self._seq = 0
+
+    def queue(self, model: str, *behaviors: Behavior) -> None:
+        with self._lock:
+            self._queues[model].extend(behaviors)
+
+    def next_behavior(self, model: str, last_user_text: str) -> tuple[Behavior, str]:
+        with self._lock:
+            queued = self._queues.get(model)
+            if queued:
+                return queued.popleft(), "queued"
+            self._default_counts[model] += 1
+            count = self._default_counts[model]
+        return (
+            Behavior(reply=f"{model} default reply #{count}: {last_user_text}".strip()),
+            "default",
+        )
+
+    def record(self, entry: dict[str, Any]) -> None:
+        with self._lock:
+            self._seq += 1
+            entry["seq"] = self._seq
+            self._journal.append(entry)
+
+    def journal(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(entry) for entry in self._journal]
+
+    def known_models(self) -> list[str]:
+        with self._lock:
+            return sorted(set(self._queues) | set(self._default_counts))
+
+    def reset(self) -> None:
+        with self._lock:
+            self._queues.clear()
+            self._journal.clear()
+            self._default_counts.clear()
+            self._seq = 0
+
+
+def _last_user_text_openai(messages: list[Any]) -> str:
+    for message in reversed(messages):
+        if isinstance(message, dict) and message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                return "".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict) and isinstance(part.get("text"), str)
+                )
+    return ""
+
+
+def _last_user_text_anthropic(messages: list[Any]) -> str:
+    for message in reversed(messages):
+        if isinstance(message, dict) and message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                return "".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+    return ""
+
+
+class _Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    @property
+    def _state(self) -> _SimulatorState:
+        return cast("_SimulatorServer", self.server).state
+
+    # -- plumbing ---------------------------------------------------------
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - stdlib signature
+        # Quiet by default; the journal is the observation surface.
+        del format, args
+
+    def _read_body(self) -> dict[str, Any] | None:
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length) if length > 0 else b""
+        if not raw:
+            return {}
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return None
+        return body if isinstance(body, dict) else None
+
+    def _send_json(
+        self, payload: dict[str, Any], status: int = 200, headers: dict[str, str] | None = None
+    ) -> None:
+        raw = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", _JSON_TYPE)
+        self.send_header("Content-Length", str(len(raw)))
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _start_sse(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", _SSE_TYPE)
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+
+    def _write_chunk(self, data: bytes) -> None:
+        self.wfile.write(f"{len(data):X}\r\n".encode("ascii") + data + b"\r\n")
+
+    def _end_chunks(self) -> None:
+        self.wfile.write(b"0\r\n\r\n")
+
+    def _abort_stream(self) -> None:
+        """Deliberately break the stream: no terminal chunk, close the socket."""
+        self.wfile.flush()
+        self.close_connection = True
+        with contextlib.suppress(OSError):
+            self.connection.shutdown(1)  # SHUT_WR: the peer sees an early EOF
+
+    # -- routing ----------------------------------------------------------
+
+    def do_GET(self) -> None:  # noqa: N802 - stdlib naming
+        if self.path == "/health":
+            self._send_json({"status": "ok", "simulator": True})
+            return
+        if self.path.startswith("/__sim/journal"):
+            self._send_json({"entries": self._state.journal()})
+            return
+        if self.path in ("/v1/models", "/models"):
+            self._send_json(
+                {
+                    "object": "list",
+                    "data": [
+                        {"id": model, "object": "model"}
+                        for model in self._state.known_models()
+                    ],
+                }
+            )
+            return
+        self._send_json({"error": {"message": f"no route {self.path}"}}, status=404)
+
+    def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+        body = self._read_body()
+        if body is None:
+            self._send_json({"error": {"message": "invalid JSON body"}}, status=400)
+            return
+        if self.path == "/__sim/behaviors":
+            self._control_behaviors(body)
+            return
+        if self.path == "/__sim/reset":
+            self._state.reset()
+            self._send_json({"status": "reset"})
+            return
+        if self.path in ("/v1/chat/completions", "/chat/completions"):
+            self._openai_chat(body)
+            return
+        if self.path in ("/v1/messages", "/messages"):
+            self._anthropic_messages(body)
+            return
+        self._send_json({"error": {"message": f"no route {self.path}"}}, status=404)
+
+    # -- control plane ----------------------------------------------------
+
+    def _control_behaviors(self, body: dict[str, Any]) -> None:
+        model = body.get("model")
+        behaviors = body.get("behaviors")
+        if not isinstance(model, str) or not isinstance(behaviors, list):
+            self._send_json(
+                {"error": {"message": "expected {model: str, behaviors: [...]}"}}, status=400
+            )
+            return
+        parsed = [Behavior.from_json(item) for item in behaviors if isinstance(item, dict)]
+        self._state.queue(model, *parsed)
+        self._send_json({"status": "queued", "model": model, "count": len(parsed)})
+
+    # -- journal helper ---------------------------------------------------
+
+    def _record(
+        self,
+        *,
+        dialect: str,
+        model: str,
+        stream: bool,
+        source: str,
+        behavior: Behavior,
+        body: dict[str, Any],
+    ) -> None:
+        kind = "error" if behavior.error is not None else (
+            "tool_calls" if behavior.tool_calls else "reply"
+        )
+        self._state.record(
+            {
+                "ts": time.time(),
+                "dialect": dialect,
+                "path": self.path,
+                "model": model,
+                "stream": stream,
+                "source": source,
+                "kind": kind,
+                "status": behavior.error.status if behavior.error is not None else 200,
+                "auth": {
+                    "authorization": self.headers.get("Authorization"),
+                    "x_api_key": self.headers.get("x-api-key"),
+                },
+                "request": body,
+                "reply_preview": (behavior.reply or "")[:200],
+                "tool_call_names": [call.name for call in behavior.tool_calls],
+            }
+        )
+
+    # -- OpenAI Chat Completions -------------------------------------------
+
+    def _openai_chat(self, body: dict[str, Any]) -> None:
+        model = str(body.get("model", "unknown"))
+        stream = body.get("stream") is True
+        messages = body.get("messages") if isinstance(body.get("messages"), list) else []
+        behavior, source = self._state.next_behavior(
+            model, _last_user_text_openai(messages or [])
+        )
+        self._record(
+            dialect="openai-chat", model=model, stream=stream,
+            source=source, behavior=behavior, body=body,
+        )
+        if behavior.delay_s > 0:
+            time.sleep(behavior.delay_s)
+        response_id = f"chatcmpl-sim{int(time.time() * 1000) % 1_000_000}"
+        if behavior.error is not None:
+            headers = (
+                {"retry-after": str(behavior.error.retry_after)}
+                if behavior.error.retry_after is not None
+                else None
+            )
+            self._send_json(
+                wire_openai.error_body(behavior), status=behavior.error.status, headers=headers
+            )
+            return
+        if not stream:
+            self._send_json(wire_openai.completion_body(model, behavior, response_id))
+            return
+        stream_options = body.get("stream_options")
+        include_usage = (
+            isinstance(stream_options, dict) and stream_options.get("include_usage") is True
+        )
+        self._start_sse()
+        frames = list(wire_openai.stream_frames(model, behavior, response_id, include_usage))
+        cutoff = max(1, len(frames) // 2) if behavior.broken_stream is not None else None
+        for index, frame in enumerate(frames):
+            if cutoff is not None and index >= cutoff:
+                if behavior.broken_stream == "garbage":
+                    self._write_chunk(b"data: {this is not json\n\n")
+                    self.wfile.flush()
+                self._abort_stream()
+                return
+            self._write_chunk(f"data: {frame}\n\n".encode())
+            self.wfile.flush()
+            if behavior.chunk_delay_s > 0:
+                time.sleep(behavior.chunk_delay_s)
+        self._write_chunk(b"data: [DONE]\n\n")
+        self._end_chunks()
+
+    # -- Anthropic Messages -------------------------------------------------
+
+    def _anthropic_messages(self, body: dict[str, Any]) -> None:
+        model = str(body.get("model", "unknown"))
+        stream = body.get("stream") is True
+        messages = body.get("messages") if isinstance(body.get("messages"), list) else []
+        behavior, source = self._state.next_behavior(
+            model, _last_user_text_anthropic(messages or [])
+        )
+        self._record(
+            dialect="anthropic-messages", model=model, stream=stream,
+            source=source, behavior=behavior, body=body,
+        )
+        if behavior.delay_s > 0:
+            time.sleep(behavior.delay_s)
+        message_id = f"msg_sim{int(time.time() * 1000) % 1_000_000}"
+        if behavior.error is not None:
+            headers = (
+                {"retry-after": str(behavior.error.retry_after)}
+                if behavior.error.retry_after is not None
+                else None
+            )
+            self._send_json(
+                wire_anthropic.error_body(behavior), status=behavior.error.status, headers=headers
+            )
+            return
+        if not stream:
+            self._send_json(wire_anthropic.message_body(model, behavior, message_id))
+            return
+        self._start_sse()
+        events = list(wire_anthropic.stream_events(model, behavior, message_id))
+        cutoff = max(1, len(events) // 2) if behavior.broken_stream is not None else None
+        for index, (name, payload) in enumerate(events):
+            if cutoff is not None and index >= cutoff:
+                if behavior.broken_stream == "garbage":
+                    self._write_chunk(b"event: message_delta\ndata: {broken\n\n")
+                    self.wfile.flush()
+                self._abort_stream()
+                return
+            self._write_chunk(f"event: {name}\ndata: {payload}\n\n".encode())
+            self.wfile.flush()
+            if behavior.chunk_delay_s > 0:
+                time.sleep(behavior.chunk_delay_s)
+        self._end_chunks()
+
+
+class _SimulatorServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, address: tuple[str, int], state: _SimulatorState) -> None:
+        super().__init__(address, _Handler)
+        self.state = state
+
+
+class ProviderSimulator:
+    """A running provider simulator bound to a loopback port.
+
+    Context-manager friendly; ``start()``/``stop()`` for manual lifecycles.
+    """
+
+    def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
+        self._host = host
+        self._requested_port = port
+        self._state = _SimulatorState()
+        self._server: _SimulatorServer | None = None
+        self._thread: threading.Thread | None = None
+
+    # -- lifecycle --------------------------------------------------------
+
+    def start(self) -> ProviderSimulator:
+        if self._server is not None:
+            return self
+        self._server = _SimulatorServer((self._host, self._requested_port), self._state)
+        self._thread = threading.Thread(
+            target=self._server.serve_forever, name="fusionkit-sim", daemon=True
+        )
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        if self._server is None:
+            return
+        self._server.shutdown()
+        self._server.server_close()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        self._server = None
+        self._thread = None
+
+    def __enter__(self) -> ProviderSimulator:
+        return self.start()
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.stop()
+
+    # -- addressing -------------------------------------------------------
+
+    @property
+    def port(self) -> int:
+        assert self._server is not None, "simulator is not started"
+        return self._server.server_address[1]
+
+    @property
+    def url(self) -> str:
+        return f"http://{self._host}:{self.port}"
+
+    # -- control plane (in-process) ----------------------------------------
+
+    def queue(self, model: str, *behaviors: Behavior) -> None:
+        self._state.queue(model, *behaviors)
+
+    def journal(self) -> list[dict[str, Any]]:
+        return self._state.journal()
+
+    def journal_for(self, model: str) -> list[dict[str, Any]]:
+        return [entry for entry in self._state.journal() if entry["model"] == model]
+
+    def reset(self) -> None:
+        self._state.reset()

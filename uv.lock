@@ -17,6 +17,7 @@ members = [
     "fusionkit-evals",
     "fusionkit-mlx",
     "fusionkit-server",
+    "fusionkit-testkit",
     "uniroute",
     "uniroute-mlx",
 ]
@@ -875,6 +876,35 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.38.0" },
 ]
 provides-extras = ["server"]
+
+[[package]]
+name = "fusionkit-testkit"
+version = "0.8.0"
+source = { editable = "python/fusionkit-testkit" }
+dependencies = [
+    { name = "fusionkit-core" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "fusionkit" },
+    { name = "fusionkit-server" },
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "fusionkit-core", editable = "python/fusionkit-core" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "fusionkit", editable = "python/fusionkit-cli" },
+    { name = "fusionkit-server", editable = "python/fusionkit-server" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+]
 
 [[package]]
 name = "google-auth"

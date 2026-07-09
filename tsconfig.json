@@ -32,6 +32,9 @@
       "path": "packages/harness-core"
     },
     {
+      "path": "packages/testkit"
+    },
+    {
       "path": "packages/tools"
     },
     {

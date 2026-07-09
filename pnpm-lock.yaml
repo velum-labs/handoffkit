@@ -126,6 +126,9 @@ importers:
         specifier: 2.9.0
         version: 2.9.0
     devDependencies:
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../testkit
       '@types/figlet':
         specifier: 1.7.0
         version: 1.7.0
@@ -250,6 +253,12 @@ importers:
   packages/registry: {}
 
   packages/runtime-utils: {}
+
+  packages/testkit:
+    dependencies:
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
 
   packages/tool-claude:
     dependencies:
