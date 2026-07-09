@@ -98,7 +98,7 @@ jobs:
   stack-e2e:
     name: cross-stack e2e (Node gateway + real Python engine + provider simulator)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -123,10 +123,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # The real coding-agent CLIs: the stack-cli suite spawns the actual
-      # `claude` and `codex` binaries against the sim-backed gateway (inert
-      # tokens; no real provider accounts are touched).
+      # `claude`, `codex`, and `opencode` binaries against the sim-backed
+      # gateway (inert tokens; no real provider accounts are touched).
       - name: Install real coding-agent CLIs
-        run: npm install -g @openai/codex @anthropic-ai/claude-code
+        run: npm install -g @openai/codex @anthropic-ai/claude-code opencode-ai
+
+      # Cursor Agent cannot run model turns without a real Cursor login, but
+      # install/verify the official binary so its env-gated live suite can run
+      # unchanged on authenticated runners.
+      - name: Install Cursor Agent CLI
+        run: |
+          curl https://cursor.com/install -fsS | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cursor-agent" --version
 
       - name: Sync uv workspace
         run: uv sync --all-packages
@@ -151,11 +160,29 @@ jobs:
       - name: Gateway policy suite (failover / budget / sessions)
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-policies-e2e.test.js
 
+      - name: Managed harness k suite (finite + unbounded worktrees)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-harness-k-e2e.test.js
+
+      - name: Chaos suite (stragglers / timeout / cancellation)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-chaos-e2e.test.js
+
+      - name: Harness-core real SDK driver cutover suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-drivers-e2e.test.js
+
+      - name: Durable unbounded resume suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-resume-e2e.test.js
+
+      - name: Gateway authentication boundary suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-auth-e2e.test.js
+
       - name: Real product CLI suite (fusionkit serve boots its own stack)
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-npm-cli-e2e.test.js
 
-      - name: Real coding-agent CLI suite (claude + codex binaries)
+      - name: Real coding-agent CLI suite (claude + codex + opencode binaries)
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js
+
+      - name: Real CLI command-surface suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/cli-command-surfaces-e2e.test.js
 
   python:
     name: uv workspace (python/*)

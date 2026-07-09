@@ -202,6 +202,134 @@ MUTATIONS = [
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js",
     ),
+    Mutation(
+        id="M15",
+        what=(
+            "finite-k terminal proposals lose their required textual wire summary "
+            "(valid bounded rollouts are rejected)"
+        ),
+        file="packages/ensemble/src/panel-orchestration.ts",
+        old="    final_output: finalOutput,",
+        new="    final_output: trajectory.finalOutput,",
+        build=True,
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-harness-k-e2e.test.js",
+    ),
+    Mutation(
+        id="M16",
+        what="k=1 proposal panels ignore straggler grace and wait for the slowest member",
+        file="packages/ensemble/src/panel-propose.ts",
+        old="        graceMs: options.stragglerGraceMs,",
+        new="        graceMs: undefined,",
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern straggler "
+            "packages/cli/dist/test/stack-chaos-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M17",
+        what="Claude's harness-core driver bypasses the native per-member dialect gateway",
+        file="packages/tool-claude/src/index.ts",
+        old=(
+            "    ...(options.modelEndpoints !== undefined "
+            "? { modelEndpoints: options.modelEndpoints } : {}),"
+        ),
+        new="    ...{},",
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
+            "packages/cli/dist/test/stack-drivers-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M18",
+        what="a stale native session cursor makes every follow-up driver turn fail",
+        file="packages/ensemble/src/driver-adapter.ts",
+        old="  return stale.test(folded.error.message);",
+        new="  return false;",
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
+            "packages/cli/dist/test/stack-drivers-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M19",
+        what="OpenRouter's post-response generation cost is no longer associated with the response",
+        file="python/fusionkit-testkit/src/fusionkit_testkit/server.py",
+        old="        self._state.record_generation(response_id, model, behavior)",
+        new="        self._state.record_generation(response_id, model, Behavior())",
+        cmd=(
+            "uv run pytest python/fusionkit-testkit/tests/test_matrix_wire_clients.py "
+            "-q -x -k openrouter_provider_cost"
+        ),
+    ),
+    Mutation(
+        id="M20",
+        what="the product CLI's router ignores configured provider base URLs",
+        file="packages/cli/src/fusion/stack.ts",
+        old="      entry.base_url = baseUrl;",
+        new='      entry.base_url = "http://127.0.0.1:1";',
+        build=True,
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-npm-cli-e2e.test.js",
+    ),
+    Mutation(
+        id="M21",
+        what="the gateway budget gate never stops an over-budget session",
+        file="packages/model-gateway/src/frontdoor/operators.ts",
+        old=(
+            "        services.budgetUsd !== undefined && "
+            "services.costTotalUsd(req.sessionKey) >= services.budgetUsd;"
+        ),
+        new="        false;",
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern budgetUsd "
+            "packages/cli/dist/test/stack-policies-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M22",
+        what="AI SDK tool execution failures disappear from managed trajectories",
+        file="packages/adapter-ai-sdk/src/worktree-agent.ts",
+        old='    } else if (part.type === "tool-error") {',
+        new="    } else if (false) {",
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern 'path traversal' "
+            "packages/cli/dist/test/stack-harness-k-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M23",
+        what="driver cutover skips the per-member native dialect gateways",
+        file="packages/cli/src/test/sim-stack.ts",
+        old="    if (driverHarness && harnessDriversEnabled()) {",
+        new="    if (false) {",
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
+            "packages/cli/dist/test/stack-drivers-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M24",
+        what="unbounded completed candidates are never restored from the durable turn cache",
+        file="packages/model-gateway/src/fusion-session.ts",
+        old="    const cacheable = !isFiniteK(input.k);",
+        new="    const cacheable = false;",
+        build=True,
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-resume-e2e.test.js",
+    ),
+    Mutation(
+        id="M25",
+        what="gateway bearer authentication is bypassed on every front door",
+        file="packages/model-gateway/src/server.ts",
+        old="    if (authToken !== undefined && !authorizedRequest(req, authToken)) {",
+        new="    if (false) {",
+        build=True,
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-auth-e2e.test.js",
+    ),
 ]
 
 
