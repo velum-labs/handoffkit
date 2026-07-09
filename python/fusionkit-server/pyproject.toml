@@ -35,7 +35,7 @@ Repository = "https://github.com/velum-labs/handoffkit"
 Documentation = "https://fusionkit.velum-labs.com"
 
 [project.optional-dependencies]
-server = ["uvicorn[standard]>=0.38.0"]
+server = ["uvicorn[standard]>=0.51.0"]
 
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12.0"]
