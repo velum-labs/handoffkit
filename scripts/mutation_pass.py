@@ -231,10 +231,11 @@ MUTATIONS = [
         what="Claude's harness-core driver bypasses the native per-member dialect gateway",
         file="packages/tool-claude/src/index.ts",
         old=(
+            "    fusionBackendUrl: options.fusionBackendUrl,\n"
             "    ...(options.modelEndpoints !== undefined "
             "? { modelEndpoints: options.modelEndpoints } : {}),"
         ),
-        new="    ...{},",
+        new="    fusionBackendUrl: options.fusionBackendUrl,\n    ...{},",
         build=True,
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
@@ -356,15 +357,23 @@ def _require_clean_tree() -> None:
 
 def main() -> None:
     _require_clean_tree()
-    results: list[tuple[Mutation, str]] = []
+    # Validate every mechanical target before running an expensive suite, so a
+    # stale/non-unique pattern fails immediately rather than halfway through.
+    originals: dict[str, str] = {}
     for mutation in MUTATIONS:
-        path = ROOT / mutation.file
-        original = path.read_text()
+        original = originals.setdefault(
+            mutation.file, (ROOT / mutation.file).read_text()
+        )
         occurrences = original.count(mutation.old)
         if occurrences < 1:
             raise SystemExit(f"{mutation.id}: pattern not found in {mutation.file}")
         if not mutation.replace_all and occurrences != 1:
             raise SystemExit(f"{mutation.id}: pattern is not unique ({occurrences}x)")
+
+    results: list[tuple[Mutation, str]] = []
+    for mutation in MUTATIONS:
+        path = ROOT / mutation.file
+        original = originals[mutation.file]
         try:
             path.write_text(original.replace(mutation.old, mutation.new))
             if mutation.build:
