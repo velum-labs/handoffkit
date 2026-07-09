@@ -170,6 +170,8 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 
 - `export { startGateway } from "./server.js";`
 - `export type { Gateway, GatewayOptions } from "./server.js";`
+- `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
+- `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions, CodexStockEntry } from "./codex-relay.js";`
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend, PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";`
 - `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { FusionBackend } from "./fusion-backend.js";`
@@ -424,8 +426,10 @@ Codex tool integration entry point. It exposes the Codex launcher and ensemble h
 - `export const codexTool: ToolIntegration ...`
 - `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, codexMemberCatalogJson, createCodexHarness, defaultCodexRunner, memberChatBackend } from "./harness.js";`
 - `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
-- `export { codexAgentRoles, codexAgentRoleToml, codexLaunchConfigToml, codexModelCatalogJson, codexRoleDescription, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate } from "./launch.js";`
-- `export type { CodexAgentRole } from "./launch.js";`
+- `export { codexAgentRoles, codexAgentRoleToml, codexAuthPath, codexCatalogEntries, codexLaunchConfigToml, codexListedStockSlugs, codexModelCatalogJson, codexProfileFiles, codexProfileFileToml, codexRoleDescription, hasCodexLogin, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate, readCodexModelsCache } from "./launch.js";`
+- `export type { CodexAgentRole, CodexModelPreset } from "./launch.js";`
+- `export { CODEX_INSTALL_BEGIN, CODEX_INSTALL_END, CODEX_INSTALL_PROVIDER, codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "./install.js";`
+- `export type { CodexInstallInput, CodexInstallProfile, CodexInstallResult } from "./install.js";`
 - `export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";`
 - `export type { CodexDriverConfig } from "./driver.js";`
 

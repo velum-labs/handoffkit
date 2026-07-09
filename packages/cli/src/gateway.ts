@@ -25,6 +25,7 @@ import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
+  CodexBackendRelay,
   FusionBackend,
   installAcpAdapters,
   runAcpAgent,
@@ -35,6 +36,7 @@ import {
 import type {
   AcpRunner,
   ChatMessageLike,
+  CodexRelayOptions,
   FrontDoorRunner,
   FrontDoorRunnerResult,
   FusionGateway,
@@ -103,6 +105,14 @@ export type GatewayRunnerConfig = {
    * the one implicit ensemble behind the default fused model.
    */
   ensembles?: GatewayEnsembleConfig[];
+  /**
+   * Codex backend relay config: keeps a Codex client's own stock models
+   * working through this gateway (live merged `/v1/models` catalog + verbatim
+   * Responses relay under the client's own ChatGPT auth). Inert for other
+   * clients; ignored when `authToken` is set (the Authorization header is then
+   * the gateway's own bearer, not a relayable ChatGPT token).
+   */
+  codexRelay?: CodexRelayOptions;
   command?: string;
   timeoutMs?: number;
   /**
@@ -668,7 +678,10 @@ export async function startFusionStepGateway(input: {
     backend,
     host: input.host,
     port: input.port,
-    ...(input.authToken !== undefined ? { authToken: input.authToken } : {})
+    ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
+    ...(config.codexRelay !== undefined
+      ? { codexRelay: new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay }) }
+      : {})
   });
   selfGatewayUrl = gateway.url();
   return gateway;

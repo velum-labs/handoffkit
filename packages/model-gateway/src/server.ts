@@ -10,6 +10,7 @@ import {
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
+import type { CodexBackendRelay } from "./codex-relay.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
@@ -43,6 +44,15 @@ export type GatewayOptions = {
   authToken?: string;
   /** Optional observation sink for model calls. */
   provenance?: ProvenanceSink;
+  /**
+   * Codex backend relay: merges the client's live stock model catalog into
+   * `/v1/models` and forwards Responses requests for models the backend does
+   * not serve locally to the ChatGPT Codex backend, using the auth material
+   * the Codex client itself attached. Inert for clients without that auth.
+   * Incompatible with `authToken` (the client's Authorization header is the
+   * relayed ChatGPT token), so it is ignored when a gateway token is set.
+   */
+  codexRelay?: CodexBackendRelay;
 };
 
 export type Gateway = {
@@ -55,6 +65,9 @@ export type Gateway = {
 export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const host = options.host ?? "127.0.0.1";
   const { backend, authToken, provenance } = options;
+  // With a gateway auth token, the Authorization header is the gateway's own
+  // bearer, never a relayable ChatGPT token — the relay cannot work.
+  const codexRelay = authToken === undefined ? options.codexRelay : undefined;
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -69,7 +82,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const method = req.method ?? "GET";
-    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const path = url.pathname;
 
     if (path === "/health") {
       writeJson(res, 200, { status: "ok" });
@@ -87,6 +101,24 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       if (req.headers["anthropic-version"] !== undefined) {
         await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel, backend.listModelIds?.()));
         return;
+      }
+      if (codexRelay !== undefined) {
+        // Codex parses the `models` key (its ModelInfo catalog — this is what
+        // drives its /model picker); OpenAI-shape clients read `data`. Serving
+        // both keys on one response keeps every client working.
+        const merged = await codexRelay.mergedCatalog(req.headers, url.search);
+        if (merged !== undefined) {
+          const base = (await (await backend.models()).json()) as {
+            data?: Array<{ id: string } & Record<string, unknown>>;
+          };
+          if (merged.etag !== undefined) res.setHeader("etag", merged.etag);
+          writeJson(res, 200, {
+            object: "list",
+            data: codexRelay.mergeDataIds(base.data ?? [], merged.models),
+            models: merged.models
+          });
+          return;
+        }
       }
       await pipeUpstream(res, await backend.models());
       return;
@@ -189,6 +221,26 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       const body = raw as ResponsesRequest;
+      // A stock-model pick from a Codex client: the gateway does not serve
+      // this model itself, and the request carries the client's own ChatGPT
+      // auth — forward it verbatim to the Codex backend instead of silently
+      // folding it into the fused default.
+      const requestedModel = typeof body.model === "string" ? body.model : undefined;
+      if (
+        codexRelay !== undefined &&
+        backend.servesModel !== undefined &&
+        codexRelay.shouldRelayResponses(req.headers, requestedModel, (model) =>
+          backend.servesModel?.(model) ?? true
+        )
+      ) {
+        await handleModelCall(res, provenance, {
+          dialect: "openai-responses",
+          body,
+          defaultModel: backend.defaultModel,
+          invoke: (_callId, signal) => codexRelay.relayResponses(req.headers, body, signal)
+        });
+        return;
+      }
       await handleModelCall(res, provenance, {
         dialect: "openai-responses",
         body,

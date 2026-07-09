@@ -31,6 +31,8 @@ fusionkit codex --yes -- "fix the build"
 | `fusionkit doctor` | Check uv/uvx, agent binaries, provider keys, git, PATH collisions, and platform capability. It exits nonzero with "almost ready" when no usable credentials are present. |
 | `fusionkit status` | Show the effective config and a dry-run preview of what a run will do. |
 | `fusionkit init` | Scaffold a committed `.fusionkit/` folder for this repo. |
+| `fusionkit install codex` | Add FusionKit to your real `~/.codex/config.toml` (managed block: gateway provider + one profile per ensemble); pair with `fusionkit serve --port <n>` and launch via `codex --profile fusion-panel`. |
+| `fusionkit uninstall codex` | Remove the managed FusionKit block from `~/.codex/config.toml`. |
 | `fusionkit fusion stop` | Reap persistent portless singleton services left by prior runs. |
 | `fusionkit telemetry <status\|on\|off\|inspect>` | Inspect and control anonymous, opt-in product telemetry (off by default). `inspect` prints exactly what a session event would contain. |
 | `fusionkit version` | Print the npm CLI and pinned PyPI synthesizer versions. |

@@ -438,6 +438,11 @@ const TRUSTED_THIRD_PARTY = new Map([
   // Product telemetry engine: official PostHog server SDK (batched, async,
   // shutdown flush). Only the CLI's opt-in telemetry module uses it.
   ["posthog-node", "5.39.4"],
+  // TOML parser/serializer behind `fusionkit install codex` and the Codex
+  // launch profile files: real serialization (hostile values can never corrupt
+  // the document) plus parse-level conflict detection and validation of the
+  // user's ~/.codex/config.toml. Zero dependencies, pinned exactly.
+  ["smol-toml", "1.7.0"],
   ["string-width", "8.2.1"],
   ["typescript", "6.0.3"],
   ["ws", "8.21.0"],

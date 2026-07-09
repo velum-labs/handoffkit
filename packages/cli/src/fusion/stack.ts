@@ -15,6 +15,7 @@ import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/e
 import { fusionModelId, providerForAuthMode } from "@fusionkit/registry";
 import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
+  CodexRelayOptions,
   Gateway,
   LocalComputePricing,
   ModelPricing,
@@ -683,6 +684,12 @@ export type StartFusionStackOptions = {
    */
   harness?: UnifiedHarnessKind;
   endpoints?: Record<string, string>;
+  /**
+   * Codex backend relay config for the gateway (see `GatewayRunnerConfig`):
+   * keeps a Codex client's own stock models in the picker and working, using
+   * the auth the client itself attaches. Inert for non-Codex clients.
+   */
+  codexRelay?: CodexRelayOptions;
   fusionkitDir?: string;
   /** System-prompt overrides emitted into the router's synthesizer config. */
   prompts?: PromptOverrides;
@@ -927,6 +934,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       models,
       judgeModel: judgeModelName,
       ...(ensembleConfigs !== undefined ? { ensembles: ensembleConfigs } : {}),
+      ...(options.codexRelay !== undefined ? { codexRelay: options.codexRelay } : {}),
       modelEndpoints,
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(Object.keys(pricing).length > 0 ? { pricing } : {}),
