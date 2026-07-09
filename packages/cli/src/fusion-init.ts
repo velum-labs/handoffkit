@@ -57,6 +57,7 @@ import { ownedMlxEnv } from "./fusion/mlx.js";
 import { buildPanel, isAllLocal, judgeOptions, withKeyEnv } from "./fusion/panel-builder.js";
 import { fetchDefaultPrompts } from "./fusion/prompts.js";
 import {
+  ON_RATE_LIMIT_MESSAGE,
   ON_RATE_LIMIT_OPTIONS,
   PANEL_TRUST_HELP,
   PANEL_TRUST_MESSAGE,
@@ -256,7 +257,7 @@ async function promptExtras(config: FusionConfig): Promise<void> {
   }
 
   config.onRateLimit = await select({
-    message: "When a vendor passthrough model hits a rate limit / credit wall",
+    message: ON_RATE_LIMIT_MESSAGE,
     options: ON_RATE_LIMIT_OPTIONS,
     defaultIndex: 0
   });

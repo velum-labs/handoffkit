@@ -107,18 +107,34 @@ export function isolationFlag(value: string | undefined): SessionIsolation | und
 export { PANEL_AUTH_MODES, PANEL_PROVIDERS };
 
 /**
+ * WS5 rate-limit / credit handoff picker prompt, shared by every interactive
+ * surface (`fusionkit init` extras, `fusionkit config edit`).
+ */
+export const ON_RATE_LIMIT_MESSAGE = "When a vendor passthrough model hits a rate limit / credit wall";
+
+/**
  * WS5 rate-limit / credit handoff picker options — the one description of each
- * policy, shared by every interactive surface (`config set onRateLimit`, the
- * init extras step). The flag-validation list below derives from it.
+ * policy, shared by every interactive surface (`config edit`, the init extras
+ * step). Each label is the exact value written to `.fusionkit/fusion.json`
+ * (`onRateLimit`), and each hint describes the runtime behavior in
+ * `FusionVendorProxy`. The flag-validation list below derives from it.
  */
 export const ON_RATE_LIMIT_OPTIONS: ReadonlyArray<{
   value: OnRateLimitPolicy;
   label: string;
   hint: string;
 }> = [
-  { value: "fusion", label: "fusion", hint: "continue on the ensemble (default)" },
-  { value: "passthrough", label: "passthrough", hint: "surface the vendor error to the tool" },
-  { value: "fail", label: "fail", hint: "stop the session" }
+  {
+    value: "fusion",
+    label: "fusion",
+    hint: "rerun the turn on the fusion ensemble (minus the throttled vendor) and answer from there (default)"
+  },
+  {
+    value: "passthrough",
+    label: "passthrough",
+    hint: "return the vendor's error to the coding agent as-is (no fallback)"
+  },
+  { value: "fail", label: "fail", hint: "stop the session with a gateway error" }
 ];
 
 /** WS5 rate-limit / credit handoff policies (`--on-rate-limit`). */
