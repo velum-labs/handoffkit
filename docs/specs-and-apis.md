@@ -131,9 +131,9 @@ The plane API owns contracts, claims, approvals, principal auth, secrets, receip
 
 ## Fusion tracing (OpenTelemetry)
 
-Fusion traces with OpenTelemetry: real spans over OTLP/HTTP, W3C `traceparent`/`baggage` propagation, and standard `OTEL_*` configuration. The semantic conventions — span names, attribute keys, and per-attribute sensitivity classes — live in `spec/fusion-trace/registry.json`; `node scripts/generate-trace-conventions.mjs` regenerates the TypeScript, Python, and scope bindings, and `pnpm check` fails when they drift.
+Fusion traces with OpenTelemetry: real spans and log-based events over OTLP/HTTP, W3C `traceparent`/`baggage` propagation, and standard `OTEL_*` configuration. The semantic conventions — span/event names, attribute keys, and per-attribute sensitivity classes — live in `spec/fusion-trace/registry.json`; `node scripts/generate-trace-conventions.mjs` regenerates the TypeScript, Python, and scope bindings, and `pnpm check` fails when they drift.
 
-TypeScript span helpers live in `@fusionkit/tracing` (the OTel-backed engine; `@fusionkit/protocol` re-exports only the generated constants). Python helpers live in `fusionkit_core.trace`. Units of work (turn, candidate, judge, model call) are real spans; live point-in-time signals (steps, judge thinking, cost beats) are zero-duration markers so the scope dashboard updates while a unit is still running.
+TypeScript span helpers live in `@fusionkit/tracing` (the OTel-backed engine; `@fusionkit/protocol` re-exports only the generated constants). Python helpers live in `fusionkit_core.trace`. Units of work (turn, candidate, judge, model call) are real spans on the traces signal; live point-in-time signals (steps, judge thinking, cost beats) are OTel events — log records with an `event.name` and trace/span correlation on the logs signal — so the scope dashboard updates while a unit is still running.
 
 Example:
 
@@ -146,7 +146,7 @@ const session = newSessionCarrier();
 const judge = startFusionSpan("judge", "fusion.judge", session.carrier, {
   [ATTR.FUSION_JUDGE_MODEL]: "gpt-5.5"
 });
-judge.marker("judge", "fusion.judge.thinking", { [ATTR.FUSION_RAW_ANALYSIS]: "..." });
+judge.event("judge", "fusion.judge.thinking", { [ATTR.FUSION_RAW_ANALYSIS]: "..." });
 judge.end({ status: "succeeded", attributes: { [ATTR.FUSION_DECISION]: "synthesize" } });
 ```
 

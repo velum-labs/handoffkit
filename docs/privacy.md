@@ -47,7 +47,7 @@ fusionkit telemetry inspect  # print what would be sent, sending nothing
 
 ## Tracing
 
-Fusion runs are instrumented with OpenTelemetry. By default spans go nowhere: without an `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` no exporter is installed and nothing leaves the process. `--observe` points the exporter at the local scope dashboard (loopback only). You may point it at any OTLP backend yourself — that is your egress choice, and span attributes classified `local` in `spec/fusion-trace/registry.json` (prompts, code, outputs, paths) are only ever consumed locally by the product's own pipelines.
+Fusion runs are instrumented with OpenTelemetry. By default nothing is exported: without an `OTEL_EXPORTER_OTLP_ENDPOINT` (or the signal-specific traces/logs variants) no exporter is installed and nothing leaves the process. `--observe` points the exporters at the local scope dashboard (loopback only). You may point them at any OTLP backend yourself — that is your egress choice, and span/event attributes classified `local` in `spec/fusion-trace/registry.json` (prompts, code, outputs, paths) are only ever consumed locally by the product's own pipelines.
 
 ## Provider egress
 

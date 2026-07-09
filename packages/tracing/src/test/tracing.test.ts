@@ -2,36 +2,48 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { InMemoryLogRecordExporter, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";
 
 import {
+  addFusionEventListener,
   addSpanListener,
   attrJson,
   attrNum,
   attrStr,
   carrierFromEnv,
   carrierFromHeaders,
-  emitFusionMarker,
+  emitFusionEvent,
   envOf,
+  eventNameOf,
+  eventSpanId,
+  eventTraceId,
   fusionBaggageOf,
   headersOf,
   initFusionTracing,
   jsonAttr,
   newSessionCarrier,
+  removeFusionEventListener,
   removeSpanListener,
   startFusionSpan,
   traceIdOf,
   withFusionBaggage
 } from "../index.js";
-import type { ReadableSpan } from "../index.js";
+import type { ReadableFusionEvent, ReadableSpan } from "../index.js";
 
 const exporter = new InMemorySpanExporter();
+const eventExporter = new InMemoryLogRecordExporter();
 initFusionTracing({
   serviceName: "tracing-test",
-  spanProcessors: [new SimpleSpanProcessor(exporter)]
+  spanProcessors: [new SimpleSpanProcessor(exporter)],
+  logRecordProcessors: [new SimpleLogRecordProcessor({ exporter: eventExporter })]
 });
 
 function finished(): ReadableSpan[] {
   return exporter.getFinishedSpans() as ReadableSpan[];
+}
+
+function emitted(): ReadableFusionEvent[] {
+  return eventExporter.getFinishedLogRecords();
 }
 
 test("session carrier mints a W3C traceparent and unit spans parent onto it", () => {
@@ -53,24 +65,25 @@ test("session carrier mints a W3C traceparent and unit spans parent onto it", ()
   assert.equal(attrStr(span, "fusion.status"), "succeeded");
 });
 
-test("markers are zero-duration children of their unit span", () => {
+test("events correlate to their unit span and carry fusion attributes", () => {
   exporter.reset();
+  eventExporter.reset();
   const session = newSessionCarrier();
   const candidate = startFusionSpan("panel-model", "fusion.candidate", session.carrier, {
     "fusion.candidate.id": "cand_gpt"
   });
-  candidate.marker("panel-model", "fusion.candidate.step", {
+  candidate.event("panel-model", "fusion.candidate.step", {
     "fusion.step": jsonAttr({ index: 0, type: "reasoning", text: "thinking" }),
     "fusion.step.index": 0
   });
   candidate.end({ status: "succeeded", attributes: { "fusion.step_count": 1 } });
 
-  const spans = finished();
-  const step = spans.find((s) => s.name === "fusion.candidate.step");
-  const cand = spans.find((s) => s.name === "fusion.candidate");
-  assert.ok(step && cand);
-  assert.equal(step.parentSpanContext?.spanId, cand.spanContext().spanId);
-  assert.equal(step.spanContext().traceId, session.traceId);
+  const cand = finished().find((s) => s.name === "fusion.candidate");
+  const [step] = emitted();
+  assert.ok(step !== undefined && cand !== undefined);
+  assert.equal(eventNameOf(step), "fusion.candidate.step");
+  assert.equal(eventSpanId(step), cand.spanContext().spanId);
+  assert.equal(eventTraceId(step), session.traceId);
   assert.deepEqual(attrJson(step, "fusion.step"), { index: 0, type: "reasoning", text: "thinking" });
   assert.equal(attrNum(cand, "fusion.step_count"), 1);
 });
@@ -115,18 +128,39 @@ test("in-process listeners see finished spans synchronously and survive throwing
   addSpanListener(bad);
   addSpanListener(good);
   try {
-    emitFusionMarker("judge", "fusion.judge.thinking", newSessionCarrier().carrier, {
-      "fusion.raw_analysis": "hmm"
-    });
-    assert.deepEqual(seen, ["fusion.judge.thinking"]);
+    const span = startFusionSpan("judge", "fusion.judge", newSessionCarrier().carrier, {});
+    span.end({ status: "succeeded" });
+    assert.deepEqual(seen, ["fusion.judge"]);
   } finally {
     removeSpanListener(bad);
     removeSpanListener(good);
   }
 });
 
-test("markers without a carrier are dropped (no trace identity, no consumer)", () => {
-  exporter.reset();
-  emitFusionMarker("gateway", "fusion.cost", undefined, { "fusion.cost.turn_usd": 0.01 });
-  assert.equal(finished().length, 0);
+test("in-process event listeners see events synchronously and survive throwing listeners", () => {
+  eventExporter.reset();
+  const seen: string[] = [];
+  const bad = () => {
+    throw new Error("broken listener");
+  };
+  const good = (event: ReadableFusionEvent) => {
+    seen.push(eventNameOf(event));
+  };
+  addFusionEventListener(bad);
+  addFusionEventListener(good);
+  try {
+    emitFusionEvent("judge", "fusion.judge.thinking", newSessionCarrier().carrier, {
+      "fusion.raw_analysis": "hmm"
+    });
+    assert.deepEqual(seen, ["fusion.judge.thinking"]);
+  } finally {
+    removeFusionEventListener(bad);
+    removeFusionEventListener(good);
+  }
+});
+
+test("events without a carrier are dropped (no trace identity, no consumer)", () => {
+  eventExporter.reset();
+  emitFusionEvent("gateway", "fusion.cost", undefined, { "fusion.cost.turn_usd": 0.01 });
+  assert.equal(emitted().length, 0);
 });

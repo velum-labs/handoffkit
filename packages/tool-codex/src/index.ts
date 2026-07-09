@@ -160,13 +160,29 @@ export type {
 export {
   codexAgentRoles,
   codexAgentRoleToml,
+  codexAuthPath,
+  codexCatalogEntries,
   codexLaunchConfigToml,
+  codexListedStockSlugs,
   codexModelCatalogJson,
+  codexProfileFiles,
+  codexProfileFileToml,
   codexRoleDescription,
+  hasCodexLogin,
   isCodexConfigFailure,
   launchCodex,
-  readCodexCatalogTemplate
+  readCodexCatalogTemplate,
+  readCodexModelsCache
 } from "./launch.js";
-export type { CodexAgentRole } from "./launch.js";
+export type { CodexAgentRole, CodexModelPreset } from "./launch.js";
+export {
+  CODEX_INSTALL_BEGIN,
+  CODEX_INSTALL_END,
+  CODEX_INSTALL_PROVIDER,
+  codexIntegrationBlock,
+  installCodexIntegration,
+  uninstallCodexIntegration
+} from "./install.js";
+export type { CodexInstallInput, CodexInstallProfile, CodexInstallResult } from "./install.js";
 export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 export type { CodexDriverConfig } from "./driver.js";

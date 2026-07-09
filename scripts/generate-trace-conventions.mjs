@@ -2,8 +2,9 @@
  * Generate the fusion trace semantic-convention bindings from
  * spec/fusion-trace/registry.json.
  *
- * The registry is the single source of truth for fusion span names, attribute
- * keys, and per-attribute sensitivity classes. This script embeds it into:
+ * The registry is the single source of truth for fusion span names, event
+ * names, attribute keys, and per-attribute sensitivity classes. This script
+ * embeds it into:
  *
  *   - packages/protocol/src/generated/trace-conventions.ts  (dependency-free constants)
  *   - python/fusionkit-core/src/fusionkit_core/_generated/trace_conventions.py
@@ -32,9 +33,9 @@ const HEADER_NOTE =
   "GENERATED FILE - DO NOT EDIT. Source of truth: spec/fusion-trace/registry.json. " +
   "Regenerate with `node scripts/generate-trace-conventions.mjs`.";
 
-const spanNames = Object.keys(spans);
-const markerNames = spanNames.filter((name) => spans[name].kind === "marker");
-const realSpanNames = spanNames.filter((name) => spans[name].kind === "span");
+const allNames = Object.keys(spans);
+const eventNames = allNames.filter((name) => spans[name].kind === "event");
+const spanNames = allNames.filter((name) => spans[name].kind === "span");
 const exportableAttrs = Object.entries(attributes)
   .filter(([, def]) => def.sensitivity === "exportable")
   .map(([key]) => key);
@@ -47,18 +48,15 @@ function renderTs() {
   const lines = [
     `// ${HEADER_NOTE}`,
     "",
-    "/** Every span name a fusion component may emit. */",
+    "/** Unit-of-work span names (the traces signal). */",
     `export const FUSION_SPAN_NAMES = ${JSON.stringify(spanNames, null, 2)} as const;`,
     "",
     "export type FusionSpanName = (typeof FUSION_SPAN_NAMES)[number];",
     "",
-    "/** Zero-duration marker spans: live point-in-time signals. */",
-    `export const FUSION_MARKER_NAMES = ${JSON.stringify(markerNames, null, 2)} as const;`,
+    "/** Live point-in-time event names (OTel events on the logs signal). */",
+    `export const FUSION_EVENT_NAMES = ${JSON.stringify(eventNames, null, 2)} as const;`,
     "",
-    "export type FusionMarkerName = (typeof FUSION_MARKER_NAMES)[number];",
-    "",
-    "/** Real spans: units of work with duration. */",
-    `export const FUSION_UNIT_SPAN_NAMES = ${JSON.stringify(realSpanNames, null, 2)} as const;`,
+    "export type FusionEventName = (typeof FUSION_EVENT_NAMES)[number];",
     "",
     "/** Attribute keys, one constant per registry attribute. */",
     "export const ATTR = {"
@@ -93,7 +91,7 @@ function renderPy() {
     "",
     `FUSION_SPAN_NAMES: Final[tuple[str, ...]] = (${spanNames.map((n) => JSON.stringify(n)).join(", ")},)`,
     "",
-    `FUSION_MARKER_NAMES: Final[tuple[str, ...]] = (${markerNames.map((n) => JSON.stringify(n)).join(", ")},)`,
+    `FUSION_EVENT_NAMES: Final[tuple[str, ...]] = (${eventNames.map((n) => JSON.stringify(n)).join(", ")},)`,
     "",
     ""
   ];

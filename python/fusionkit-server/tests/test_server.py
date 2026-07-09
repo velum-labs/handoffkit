@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient, ProviderCallError
 from fusionkit_core.config import EndpointAuth, FusionConfig, FusionMode, ModelEndpoint
 from fusionkit_server import create_app
+from fusionkit_server.app import FusionRequest
 
 
 def test_chat_completions_single_mode(tmp_path) -> None:
@@ -509,6 +510,29 @@ def test_passthrough_auth_error_maps_to_401_with_error_category(tmp_path) -> Non
 
     assert response.status_code == 401
     assert response.json()["error"]["error_category"] == "auth_permanent"
+
+
+def test_fusion_request_accepts_max_completion_tokens() -> None:
+    # The Node gateway adapters emit OpenAI's modern `max_completion_tokens`
+    # spelling; the router must fold it into `max_tokens` rather than silently
+    # dropping the caller's output cap.
+    modern = FusionRequest.model_validate(
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_completion_tokens": 321,
+        }
+    )
+    assert modern.max_tokens == 321
+
+    # An explicit legacy value wins over the modern spelling.
+    both = FusionRequest.model_validate(
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 100,
+            "max_completion_tokens": 321,
+        }
+    )
+    assert both.max_tokens == 100
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:

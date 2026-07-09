@@ -8,6 +8,7 @@ import { registerConfig } from "./commands/config.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerEnsemble } from "./commands/ensemble.js";
 import { registerFusion } from "./commands/fusion.js";
+import { registerInstall } from "./commands/install.js";
 import { registerLocal } from "./commands/local.js";
 import { registerModels } from "./commands/models.js";
 import { registerPrompts } from "./commands/prompts.js";
@@ -50,6 +51,7 @@ export function buildProgram(): Command {
   registerSessions(program);
   registerModels(program);
   registerEnsemble(program);
+  registerInstall(program);
   registerLocal(program);
   registerCompletion(program);
   registerComplete(program);
@@ -76,7 +78,7 @@ export function buildProgram(): Command {
       "  FUSIONKIT_SKIP_KEY_VALIDATION  skip live provider-key validation when set to 1",
       "  FUSIONKIT_TELEMETRY            1/0 overrides stored product-telemetry consent",
       "  DO_NOT_TRACK                   force-disables product telemetry (beats everything)",
-      "  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT  export trace spans to your own OTLP collector",
+      "  OTEL_EXPORTER_OTLP_ENDPOINT    export spans + events to your own OTLP collector",
       "  PORTLESS                       set to 0 to disable portless routing by default",
       "  PORTLESS_STATE_DIR/TLD         portless proxy state directory and local domain",
       "  FUSIONKIT_*                    canonical environment variable prefix"

@@ -218,6 +218,32 @@ test("responsesToChat still maps a real reasoning effort", () => {
   assert.equal(chat.reasoning_effort, "medium");
 });
 
+test("responsesToChat treats Codex's explicit null fields as absent", () => {
+  // Codex sends `"reasoning": null` (and can null other optional fields) when
+  // the selected model's metadata advertises no reasoning levels — the default
+  // for a custom-provider model like the fused panel. Reading `.effort` off
+  // that null used to throw, turning EVERY fused Codex turn into a 502 (and
+  // leaving the --observe dashboard empty because no turn ever ran).
+  const chat = responsesToChat(
+    {
+      model: "fusion-panel",
+      input: "say hi",
+      reasoning: null,
+      text: null,
+      tool_choice: null,
+      metadata: null,
+      previous_response_id: null,
+      include: []
+    },
+    "local-model"
+  );
+  assert.equal(chat.model, "local-model");
+  assert.deepEqual(chat.messages, [{ role: "user", content: "say hi" }]);
+  assert.equal(chat.reasoning_effort, undefined);
+  assert.equal(chat.response_format, undefined);
+  assert.equal(chat.tool_choice, undefined);
+});
+
 test("serves a Responses request carrying reasoning: null end to end (codex panel member)", async () => {
   // The member capture gateway path: codex exec -> /v1/responses with
   // `reasoning: null` -> chat completion upstream. Must be a 200, never a 502.
@@ -246,6 +272,36 @@ test("serves a Responses request carrying reasoning: null end to end (codex pane
     assert.equal(json.status, "completed");
     assert.equal(json.output[0]?.content?.[0]?.text, "Final answer");
     assert.equal(mock.lastChatBody()?.reasoning_effort, undefined);
+  } finally {
+    await gateway.close();
+    await mock.close();
+  }
+});
+
+test("serves a Responses request with null optional fields end to end", async () => {
+  const mock = await startMock();
+  const gateway = await startGateway({
+    backend: new OpenAiBackend({ baseUrl: `${mock.url}/v1`, defaultModel: "local-model" })
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "fusion-panel",
+        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }],
+        reasoning: null,
+        text: null,
+        tool_choice: "auto",
+        parallel_tool_calls: false,
+        store: false,
+        include: []
+      })
+    });
+    assert.equal(response.status, 200);
+    const json = (await response.json()) as { object: string; status: string };
+    assert.equal(json.object, "response");
+    assert.equal(json.status, "completed");
   } finally {
     await gateway.close();
     await mock.close();

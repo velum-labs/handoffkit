@@ -233,7 +233,7 @@ export function createFusionKitJudgeSynthesizer(input: {
               [ATTR.FUSION_TURN]: input.turn
             })
           : undefined;
-      judgeSpan?.marker("judge", "fusion.judge.request", {
+      judgeSpan?.event("judge", "fusion.judge.request", {
         [ATTR.FUSION_JUDGE_MODEL]: input.model,
         [ATTR.FUSION_TURN]: input.turn,
         [ATTR.FUSION_MESSAGES]: jsonAttr(messages),

@@ -94,6 +94,21 @@ test("resolveModel keeps a native id but folds fusion/unknown ids to the default
   assert.equal(backend.resolveModel(undefined), "fusion-panel");
 });
 
+test("servesModel distinguishes gateway-served ids from unknown ids (no default fold)", () => {
+  const backend = new FusionBackend({
+    stepUrl: UNREACHABLE_STEP,
+    runPanels: async () => [candidate("a")],
+    defaultModel: "fusion-panel",
+    passthrough: [{ modelId: "gpt-5.5", endpointId: "codex", endpointUrl: "http://127.0.0.1:1" }]
+  });
+  assert.equal(backend.servesModel("fusion-panel"), true);
+  assert.equal(backend.servesModel("gpt-5.5"), true);
+  assert.equal(backend.servesModel("codex"), true, "the endpoint id is served too");
+  // Unknown ids are NOT claimed: the gateway can relay them (e.g. a Codex
+  // client's stock model pick) instead of silently fusing.
+  assert.equal(backend.servesModel("gpt-5.3-codex"), false);
+});
+
 test("a claude-aliased native model proxies to its provider (Claude picker path)", async () => {
   const chat = await startChatServer();
   try {

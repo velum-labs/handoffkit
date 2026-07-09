@@ -329,7 +329,7 @@ test(
       }
       writeFileSync(
         join(home, "config.toml"),
-        codexLaunchConfigToml(stack.gatewayUrl, "fusion-panel", [], catalogPath, ["fusion-panel", "fusion-kimi"], roles)
+        codexLaunchConfigToml(stack.gatewayUrl, "fusion-panel", catalogPath, roles)
       );
 
       const result = await runCli({

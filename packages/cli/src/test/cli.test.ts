@@ -545,6 +545,87 @@ test("init scaffolds a .fusionkit/fusion.json and refuses to clobber without --f
   }
 });
 
+type InitConfig = {
+  ensembles?: Record<string, { panel?: Array<{ id: string }>; judgeModel?: string }>;
+  defaultEnsemble?: string;
+};
+
+function initScripted(
+  repo: string,
+  input: string
+): { status: number; stdout: string; stderr: string; config: InitConfig } {
+  const result = fusionkit(["init", "--repo", repo], {
+    input,
+    // Skip the telemetry step (and never touch the real consent file) so the
+    // scripted answers line up with the remaining prompts deterministically.
+    env: { DO_NOT_TRACK: "1" }
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const config = JSON.parse(
+    readFileSync(join(repo, ".fusionkit", "fusion.json"), "utf8")
+  ) as InitConfig;
+  return { ...result, config };
+}
+
+test("init keeps the first ensemble named default on empty input", () => {
+  const fixture = makeRepo();
+  try {
+    // Answers: tool, judge, ensemble name (default), observe, add-ensemble.
+    const { config, stderr } = initScripted(fixture.repo, "\n\n\n\n\n");
+    assert.match(stderr, /Ensemble name/);
+    assert.match(stderr, /keeps the canonical/);
+    assert.deepEqual(Object.keys(config.ensembles ?? {}), ["default"]);
+    assert.equal(config.defaultEnsemble, undefined);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("init lets the user name the first ensemble and records it as the session default", () => {
+  const fixture = makeRepo();
+  try {
+    // Answers: tool, judge, ensemble name ("fast"), observe, add-ensemble.
+    const { config } = initScripted(fixture.repo, "\n\nfast\n\n\n");
+    assert.deepEqual(Object.keys(config.ensembles ?? {}), ["fast"]);
+    assert.equal(config.defaultEnsemble, "fast");
+    assert.ok((config.ensembles?.fast?.panel?.length ?? 0) > 0);
+    assert.equal(config.ensembles?.fast?.judgeModel, "gpt-5.5");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("init re-prompts on reserved or invalid first-ensemble names", () => {
+  const fixture = makeRepo();
+  try {
+    // Answers: tool, judge, name ("panel" is reserved, "My_Bad" is invalid,
+    // exhausted input falls back to "default"), observe, add-ensemble.
+    const { config, stderr } = initScripted(fixture.repo, "\n\npanel\nMy_Bad\n\n\n");
+    assert.match(stderr, /"panel" is reserved/);
+    assert.match(stderr, /"My_Bad" must match/);
+    assert.deepEqual(Object.keys(config.ensembles ?? {}), ["default"]);
+    assert.equal(config.defaultEnsemble, undefined);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("init creates additional named ensembles with the same naming semantics", () => {
+  const fixture = makeRepo();
+  try {
+    // Answers: tool, judge, first name ("main"), observe, add-ensemble (yes),
+    // extra name ("main" is taken, then "deep"), extra judge, add-another (no).
+    const { config, stderr } = initScripted(fixture.repo, "\n\nmain\n\ny\nmain\ny\ndeep\n\n\n");
+    assert.match(stderr, /"main" is taken/);
+    assert.deepEqual(Object.keys(config.ensembles ?? {}).sort(), ["deep", "main"]);
+    assert.equal(config.defaultEnsemble, "main");
+    assert.ok((config.ensembles?.deep?.panel?.length ?? 0) > 0);
+    assert.equal(config.ensembles?.deep?.judgeModel, "gpt-5.5");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("unknown commands fail with guidance", () => {
   const unknown = fusionkit(["frobnicate"]);
   assert.equal(unknown.status, 1);

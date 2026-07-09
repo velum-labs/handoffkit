@@ -23,8 +23,9 @@ import type {
 } from "@fusionkit/ensemble";
 import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
-import { emitFusionMarker, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
+import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
+  CodexBackendRelay,
   FusionBackend,
   installAcpAdapters,
   runAcpAgent,
@@ -35,6 +36,7 @@ import {
 import type {
   AcpRunner,
   ChatMessageLike,
+  CodexRelayOptions,
   FrontDoorRunner,
   FrontDoorRunnerResult,
   FusionGateway,
@@ -103,6 +105,14 @@ export type GatewayRunnerConfig = {
    * the one implicit ensemble behind the default fused model.
    */
   ensembles?: GatewayEnsembleConfig[];
+  /**
+   * Codex backend relay config: keeps a Codex client's own stock models
+   * working through this gateway (live merged `/v1/models` catalog + verbatim
+   * Responses relay under the client's own ChatGPT auth). Inert for other
+   * clients; ignored when `authToken` is set (the Authorization header is then
+   * the gateway's own bearer, not a relayable ChatGPT token).
+   */
+  codexRelay?: CodexRelayOptions;
   command?: string;
   timeoutMs?: number;
   /**
@@ -287,7 +297,7 @@ export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunn
       [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
       [ATTR.FUSION_REPO]: config.repo
     });
-    run.marker("gateway", "fusion.turn.info", {
+    run.event("gateway", "fusion.turn.info", {
       [ATTR.FUSION_DIALECT]: input.dialect,
       [ATTR.FUSION_PROMPT_PREVIEW]: input.prompt.slice(0, 600),
       [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
@@ -506,7 +516,7 @@ export async function startFusionStepGateway(input: {
       ensembleModelId !== undefined
         ? ensemblesByModelId.get(ensembleModelId)?.judgeModelName
         : undefined;
-    emitFusionMarker("gateway", "fusion.turn.info", trace, {
+    emitFusionEvent("gateway", "fusion.turn.info", trace, {
       [ATTR.FUSION_DIALECT]: "fusion-step",
       [ATTR.FUSION_TURN]: turn,
       [ATTR.FUSION_PROMPT_PREVIEW]: task.slice(0, 600),
@@ -680,7 +690,10 @@ export async function startFusionStepGateway(input: {
     backend,
     host: input.host,
     port: input.port,
-    ...(input.authToken !== undefined ? { authToken: input.authToken } : {})
+    ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
+    ...(config.codexRelay !== undefined
+      ? { codexRelay: new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay }) }
+      : {})
   });
   selfGatewayUrl = gateway.url();
   return gateway;

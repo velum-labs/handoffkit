@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 
 import {
+  codexRelayConfig,
   defaultKeyEnv,
   fusionPreambleLines,
   loadEnvFileInto,
@@ -324,6 +325,44 @@ test("agent front door: panel produces a trajectory the judge step consumes", as
     await stack.close();
     await model.close();
     await closeServer(synth);
+  }
+});
+
+// Regression (ENG-620): fusion must augment Codex's model list, not replace
+// it. The gateway's Codex backend relay serves the merged catalog; this config
+// builder is what wires the fusion/panel entries into it.
+test("codexRelayConfig merges fusion + panel entries ahead of the client's stock catalog", () => {
+  const ensembles = [
+    { name: "default", models: [{ id: "gpt", model: "gpt-5.5", provider: "openai" as const }] },
+    { name: "deep", models: [{ id: "gpt", model: "gpt-5.5", provider: "openai" as const }] }
+  ];
+  const relay = codexRelayConfig("fusion-panel", ensembles, ensembles[0]?.models ?? []);
+  const stock = [
+    { slug: "gpt-5.5", display_name: "GPT-5.5", description: "Flagship", visibility: "list" },
+    { slug: "gpt-5.3-codex", display_name: "gpt-5.3-codex", description: "Coding", visibility: "list" }
+  ];
+  const merged = relay.catalog(stock[0] as Record<string, unknown>, stock);
+  assert.deepEqual(
+    merged.map((entry) => entry.slug),
+    ["fusion-panel", "fusion-deep", "gpt-5.5", "gpt-5.3-codex"]
+  );
+  // Fusion first, panel native deduped against its stock twin, stock preserved.
+  assert.equal(merged[0]?.display_name, "fusion-panel (fusion)");
+  assert.match(String(merged[3]?.description), /Coding/);
+});
+
+test("codexRelayConfig honors the FUSIONKIT_CODEX_BACKEND_URL override", () => {
+  const previous = process.env.FUSIONKIT_CODEX_BACKEND_URL;
+  try {
+    process.env.FUSIONKIT_CODEX_BACKEND_URL = "http://127.0.0.1:9999/backend";
+    const relay = codexRelayConfig("fusion-panel", [{ name: "default", models: [] }], []);
+    assert.equal(relay.backendUrl, "http://127.0.0.1:9999/backend");
+    delete process.env.FUSIONKIT_CODEX_BACKEND_URL;
+    const bare = codexRelayConfig("fusion-panel", [{ name: "default", models: [] }], []);
+    assert.equal(bare.backendUrl, undefined);
+  } finally {
+    if (previous === undefined) delete process.env.FUSIONKIT_CODEX_BACKEND_URL;
+    else process.env.FUSIONKIT_CODEX_BACKEND_URL = previous;
   }
 });
 

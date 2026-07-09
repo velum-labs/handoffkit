@@ -164,7 +164,10 @@ export function openUrl(url: string): void {
 
 export type Observability = {
   url: string;
-  /** OTLP/HTTP traces endpoint (the scope collector's /api/ingest). */
+  /**
+   * OTLP/HTTP base endpoint (the scope collector's /api/ingest). The
+   * standard exporters append /v1/traces and /v1/logs to it.
+   */
   otlpUrl: string;
   close: () => Promise<void>;
 };
@@ -273,8 +276,8 @@ async function probeDashboardIdentity(loopbackUrl: string, expectedIdentity: str
 
 /**
  * Start the scope dashboard on the fixed port, backed by a fresh per-run SQLite
- * file, and return the OTLP endpoint the caller exports (as
- * OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) into every spawned process. Prefers the
+ * file, and return the OTLP base endpoint the caller exports (as
+ * OTEL_EXPORTER_OTLP_ENDPOINT) into every spawned process. Prefers the
  * prebuilt bundle shipped inside the npm package; falls back to building the
  * app from source in a monorepo dev checkout.
  */
@@ -361,8 +364,8 @@ export async function startObservability(input: {
 
   return {
     url: resolved.url,
-    // Spans post over loopback (the OTLP exporters do not carry the portless
-    // CA), so ingest uses the raw port; the named URL is for humans.
+    // Signals post over loopback (the OTLP exporters do not carry the
+    // portless CA), so ingest uses the raw port; the named URL is for humans.
     otlpUrl: `${resolved.loopbackUrl}/api/ingest`,
     close: async () => {
       await resolved.close();
