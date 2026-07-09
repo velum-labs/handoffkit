@@ -284,6 +284,7 @@ def test_cloud_runner_executes_one_entry_and_uploads_artifacts(
     monkeypatch.setattr(cloud_runner, "S3ResultStore", lambda *_args, **_kwargs: store)
     monkeypatch.setattr(cloud_runner, "get_benchmark", lambda _name: FakeAdapter())
     monkeypatch.setattr(cloud_runner, "get_sut", lambda _kind: FakeSut())
+    monkeypatch.setattr("hyperkit.core.orchestrator.configure", lambda: None)
 
     assert cloud_runner.main() == 0
 
