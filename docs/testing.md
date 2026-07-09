@@ -172,6 +172,14 @@ binaries. The returned stack carries:
 
 Coverage is a **product of declared axes**, not hand-written per-tool tests:
 
+The complete claimed behavior inventory lives in
+`spec/testing/expected-behaviors.json`; its reviewable generated form is
+`docs/generated/expected-behaviors.md`. Required rows name a concrete test
+file and source anchor; environment-gated rows must name the reason and exact
+live command. Node/Python meta-tests compare its door/tool/provider axes to
+the executable registries, and `pnpm check` fails if the generated list or
+anchors drift.
+
 - **Provider axis** — `fusionkit_testkit.matrix.PROVIDER_PROFILES`: one
   `ProviderProfile` per client family (OpenAI, OpenRouter, Anthropic, Google,
   Codex) with
@@ -285,7 +293,11 @@ clients, or the engine/gateway wire paths:
 uv run python scripts/mutation_pass.py   # clean tree + built workspace required
 ```
 
-Current score: **25/25 killed**. The newer mutations pin finite-k terminal
+Current score: **30/30 killed**. The newest mutations pin candidate reasoning
+entering judge evidence, streamed synthesizer reasoning on the gateway, and
+real Claude/Codex/OpenCode selection of injected named fused models.
+
+The preceding mutations pin finite-k terminal
 proposal summaries, k=1 straggler grace, native driver dialect routing,
 stale-session fallback, OpenRouter generation-cost association, configured
 provider base URLs in the real product CLI, budget gating, failed-tool
