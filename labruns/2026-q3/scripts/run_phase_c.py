@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import shlex
@@ -50,11 +51,27 @@ ORACLE_EXP_PANELS: dict[str, str] = {
     "p2": "configs/benchmark-panel.exp.p2-qwen-glm.yaml",
     "p3": "configs/benchmark-panel.exp.p3-kimi-glm.yaml",
 }
-PANELS: dict[str, str] = {**LEGACY_PANELS, **JUDGE_EXP_PANELS, **ORACLE_EXP_PANELS}
+SOLO_PANELS: dict[str, str] = {
+    "s1": "configs/benchmark-panel.solo.s1-qwen3-max-thinking.yaml",
+    "s2": "configs/benchmark-panel.solo.s2-kimi-k2-thinking.yaml",
+    "s3": "configs/benchmark-panel.solo.s3-nemotron-ultra.yaml",
+    "s4": "configs/benchmark-panel.solo.s4-mistral-large.yaml",
+    "s5": "configs/benchmark-panel.solo.s5-laguna.yaml",
+    "s6": "configs/benchmark-panel.solo.s6-gpt-oss-120b.yaml",
+    "s7": "configs/benchmark-panel.solo.s7-glm52.yaml",
+    "s8": "configs/benchmark-panel.solo.s8-qwen3-coder.yaml",
+}
+PANELS: dict[str, str] = {
+    **LEGACY_PANELS,
+    **JUDGE_EXP_PANELS,
+    **ORACLE_EXP_PANELS,
+    **SOLO_PANELS,
+}
 JUDGE_MATRIX_ORDER = ("j1-g", "j1-m", "j2-g", "j2-m", "j3-g", "j3-m")
 JUDGE_MIMO_ORDER = ("j1-m", "j2-m", "j3-m")
 JUDGE_GEMINI_ORDER = ("j1-g", "j2-g", "j3-g")
 ORACLE_EXP_ORDER = ("e1", "p1", "p2", "p3")
+SOLO_ORDER = ("s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8")
 SPEND_CAP_USD = 75.0
 PREFLIGHT_TIMEOUT_S = 7200.0
 PANEL_TIMEOUT_S = 21600.0
@@ -318,8 +335,6 @@ def run_judge_matrix(
         order = JUDGE_MATRIX_ORDER
 
     if parallel:
-        import concurrent.futures
-
         pending = [
             hypothesis
             for hypothesis in order
@@ -350,11 +365,35 @@ def run_oracle_exp(*, parallel: bool = False, only: str | None = None) -> None:
     order = (only,) if only else ORACLE_EXP_ORDER
 
     if parallel:
-        import concurrent.futures
-
         pending = [hypothesis for hypothesis in order if _ledger_total() < SPEND_CAP_USD]
         if not pending:
             print("spend cap reached before oracle experiments", file=sys.stderr)
+            return
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(pending)) as pool:
+            futures = {pool.submit(run_panel, hypothesis): hypothesis for hypothesis in pending}
+            for future in concurrent.futures.as_completed(futures):
+                hypothesis = futures[future]
+                try:
+                    future.result()
+                except SystemExit as exc:
+                    print(f"{hypothesis} failed: {exc}", file=sys.stderr)
+        return
+
+    for hypothesis in order:
+        if _ledger_total() >= SPEND_CAP_USD:
+            print(f"stopping before {hypothesis}: spend cap reached", file=sys.stderr)
+            break
+        run_panel(hypothesis)
+
+
+def run_solo_sweep(*, parallel: bool = False, only: str | None = None) -> None:
+    """Run solo self-judge/synthesis panels for the error-correlation sweep."""
+    order = (only,) if only else SOLO_ORDER
+
+    if parallel:
+        pending = [hypothesis for hypothesis in order if _ledger_total() < SPEND_CAP_USD]
+        if not pending:
+            print("spend cap reached before solo sweep", file=sys.stderr)
             return
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(pending)) as pool:
             futures = {pool.submit(run_panel, hypothesis): hypothesis for hypothesis in pending}
@@ -415,6 +454,21 @@ def main() -> None:
         default=None,
         help="run a single oracle experiment",
     )
+    solo = sub.add_parser(
+        "run-solo-sweep",
+        help="run single-model self-judge/synthesis panels until spend cap",
+    )
+    solo.add_argument(
+        "--parallel",
+        action="store_true",
+        help="run all pending solo panels concurrently",
+    )
+    solo.add_argument(
+        "--only",
+        choices=sorted(SOLO_PANELS),
+        default=None,
+        help="run a single solo panel",
+    )
     args = parser.parse_args()
 
     if args.command == "preflight":
@@ -431,6 +485,8 @@ def main() -> None:
         )
     elif args.command == "run-oracle-exp":
         run_oracle_exp(parallel=args.parallel, only=args.only)
+    elif args.command == "run-solo-sweep":
+        run_solo_sweep(parallel=args.parallel, only=args.only)
 
 
 if __name__ == "__main__":
