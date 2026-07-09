@@ -20,6 +20,7 @@ fusionkit-server = { workspace = true }
 fusionkit-evals = { workspace = true }
 fusionkit = { workspace = true }
 fusionkit-mlx = { workspace = true }
+hyperkit = { workspace = true }
 
 # Dev tooling shared by all members; synced by default with `uv sync`.
 [dependency-groups]
@@ -50,9 +51,9 @@ include = [
   "python/fusionkit-cli",
   "python/fusionkit-core",
   "python/fusionkit-evals",
-  "python/fusionkit-lab",
   "python/fusionkit-mlx",
   "python/fusionkit-server",
+  "python/hyperkit",
   "spec/model-fusion-contract/python",
   "scripts",
   "tests",

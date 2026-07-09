@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import hyperkit.adapters  # noqa: F401  (registers built-in adapters)
+import hyperkit.suts  # noqa: F401  (registers built-in SUTs)
 from hyperkit.backends.s3 import S3ResultStore, parse_s3_uri
 from hyperkit.core.models import Cell
 from hyperkit.core.orchestrator import RunOrchestrator

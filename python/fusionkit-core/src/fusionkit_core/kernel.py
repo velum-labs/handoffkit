@@ -95,6 +95,7 @@ class FusionKernel:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> FuseResult:
         return await self._engine.run_step(
             messages,
@@ -104,6 +105,7 @@ class FusionKernel:
             sample_count=sample_count,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         )
 
     def run_stream(
@@ -116,6 +118,7 @@ class FusionKernel:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         return self._engine.run_stream(
             messages,
@@ -125,6 +128,7 @@ class FusionKernel:
             sample_count=sample_count,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         )
 
     def stream_passthrough(
