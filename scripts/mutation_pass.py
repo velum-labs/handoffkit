@@ -118,6 +118,49 @@ MUTATIONS = [
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js",
     ),
+    Mutation(
+        id="M9",
+        what="the engine drops per-request prompt overrides on the fuse step",
+        file="python/fusionkit-server/src/fusionkit_server/app.py",
+        old="prompts=request.prompts,",
+        new="prompts=None,",
+        replace_all=True,
+        cmd=(
+            "uv run pytest python/fusionkit-testkit/tests/test_engine_depth.py -q -x "
+            "-k prompt_overrides"
+        ),
+    ),
+    Mutation(
+        id="M10",
+        what="the synthesizer context-overflow ladder loses its candidate fallback",
+        file="python/fusionkit-core/src/fusionkit_core/judge.py",
+        old='if retry_exc.category != "context_overflow":',
+        new="if True:",
+        cmd=(
+            "uv run pytest python/fusionkit-testkit/tests/test_engine_depth.py -q -x "
+            "-k context_overflow_ladder"
+        ),
+    ),
+    Mutation(
+        id="M11",
+        what=(
+            "a request-pinned judge no longer doubles as the synthesizer "
+            "(regression guard for the multi-ensemble routing bug)"
+        ),
+        file="python/fusionkit-server/src/fusionkit_server/app.py",
+        old="or request.judge_model",
+        new="or None",
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js",
+    ),
+    Mutation(
+        id="M12",
+        what="the Node gateway forwards empty ensemble prompt overrides",
+        file="packages/model-gateway/src/fusion-turn.ts",
+        old="stepBody.prompts = route.prompts;",
+        new="stepBody.prompts = {};",
+        build=True,
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js",
+    ),
 ]
 
 

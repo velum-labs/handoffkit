@@ -376,7 +376,17 @@ def create_app(
         http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         judge_model = request.judge_model or config.resolved_judge_model
-        synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
+        # Request-level precedence mirrors config-level resolution
+        # (FusionConfig.resolved_synthesizer_model): a request that pins a
+        # judge without a synthesizer means "this judge doubles as the
+        # synthesizer" — falling back to the *config* synthesizer instead
+        # would silently synthesize a named ensemble's turn on the default
+        # ensemble's judge model.
+        synthesizer_model = (
+            request.synthesizer_model
+            or request.judge_model
+            or config.resolved_synthesizer_model
+        )
         for required_model in (judge_model, synthesizer_model):
             try:
                 kernel.client(required_model)

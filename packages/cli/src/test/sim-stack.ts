@@ -16,11 +16,28 @@ import { join } from "node:path";
 
 import { scriptFusedTurn, simRouterConfigYaml, startEngine, startProviderSim } from "@fusionkit/testkit";
 import type { EngineHandle, FusedTurnScript, ProviderSimHandle, SimEndpointSpec } from "@fusionkit/testkit";
-import type { Gateway } from "@fusionkit/model-gateway";
+import type { Gateway, ModelPricing, SessionStore } from "@fusionkit/model-gateway";
+
+import { fusionModelId } from "@fusionkit/registry";
 
 import { startFusionStepGateway } from "../gateway.js";
+import type { GatewayEnsembleConfig } from "../gateway.js";
+import type { PromptOverrides } from "../fusion-config.js";
 
 export type SimStackMember = SimEndpointSpec;
+
+/** One named ensemble routed by the gateway (a subset of the stack's members). */
+export type SimStackEnsemble = {
+  name: string;
+  /** Member endpoint ids that fan out for this ensemble. */
+  memberIds: readonly string[];
+  /** Judge endpoint id; defaults to the stack judge. */
+  judgeId?: string;
+  synthesizerId?: string;
+  k?: number;
+  /** Per-ensemble judge/synthesizer prompt overrides (sent on the fuse step). */
+  prompts?: PromptOverrides;
+};
 
 /**
  * Thin typed fetch helpers for every HTTP door the gateway serves, so tests
@@ -101,6 +118,16 @@ export async function startSimFusionStack(options: {
   members: readonly SimStackMember[];
   judgeId?: string;
   k?: number;
+  /**
+   * Named ensembles (session-default first); each becomes its own advertised
+   * fused model (`fusion-<name>`, first is also `fusion-panel`'s default).
+   * When unset, one implicit ensemble spans every non-judge member.
+   */
+  ensembles?: readonly SimStackEnsemble[];
+  /** WS4 durable session store (e.g. `InMemorySessionStore` for assertions). */
+  sessionStore?: SessionStore;
+  /** Per-model token pricing overrides (WS7 cost accounting). */
+  pricing?: Readonly<Record<string, ModelPricing>>;
 }): Promise<SimFusionStack> {
   const first = options.members[0];
   if (first === undefined) throw new Error("at least one member is required");
@@ -108,6 +135,39 @@ export async function startSimFusionStack(options: {
   const judgeModel = options.members.find((member) => member.id === judgeId)?.model ?? first.model;
   const panelMembers = options.members.filter((member) => member.id !== judgeId);
   const panel = panelMembers.length > 0 ? panelMembers : [first];
+
+  const memberById = new Map(options.members.map((member) => [member.id, member]));
+  const toEnsembleConfig = (ensemble: SimStackEnsemble): GatewayEnsembleConfig => {
+    const ensembleJudgeId = ensemble.judgeId ?? judgeId;
+    const ensembleJudge = memberById.get(ensembleJudgeId);
+    return {
+      name: ensemble.name,
+      modelId: fusionModelId(ensemble.name),
+      models: ensemble.memberIds.map((id) => {
+        const member = memberById.get(id);
+        if (member === undefined) throw new Error(`unknown ensemble member id ${id}`);
+        return { id: member.id, model: member.model };
+      }),
+      judgeEndpointId: ensembleJudgeId,
+      judgeModelName: ensembleJudge?.model ?? judgeModel,
+      ...(ensemble.synthesizerId !== undefined ? { synthesizerEndpointId: ensemble.synthesizerId } : {}),
+      k: ensemble.k ?? options.k ?? 1,
+      ...(ensemble.prompts !== undefined ? { prompts: ensemble.prompts } : {})
+    };
+  };
+  const ensembles: GatewayEnsembleConfig[] =
+    options.ensembles !== undefined && options.ensembles.length > 0
+      ? options.ensembles.map(toEnsembleConfig)
+      : [
+          {
+            name: "default",
+            modelId: "fusion-panel",
+            models: panel.map((member) => ({ id: member.id, model: member.model })),
+            judgeEndpointId: judgeId,
+            judgeModelName: judgeModel,
+            k: options.k ?? 1
+          }
+        ];
 
   const sim = await startProviderSim();
   let engine: EngineHandle | undefined;
@@ -131,18 +191,11 @@ export async function startSimFusionStack(options: {
         outputRoot,
         harnesses: ["agent"],
         models: panel.map((member) => ({ id: member.id, model: member.model })),
-        ensembles: [
-          {
-            name: "default",
-            modelId: "fusion-panel",
-            models: panel.map((member) => ({ id: member.id, model: member.model })),
-            judgeEndpointId: judgeId,
-            judgeModelName: judgeModel,
-            k: options.k ?? 1
-          }
-        ],
+        ensembles,
         modelEndpoints: endpoints,
-        timeoutMs: 120_000
+        timeoutMs: 120_000,
+        ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),
+        ...(options.pricing !== undefined ? { pricing: options.pricing } : {})
       },
       host: "127.0.0.1",
       port: 0
