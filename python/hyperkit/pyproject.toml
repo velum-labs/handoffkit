@@ -1,0 +1,41 @@
+[project]
+name = "hyperkit"
+version = "0.1.0"
+description = "SUT-agnostic experiment orchestration platform: code-defined hypergrid sweeps, benchmark adapters, resumable growable runs, and observability. FusionKit is one system-under-test plugin."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "Velum Labs" }]
+keywords = ["benchmarks", "experiments", "hypergrid", "sweep", "evaluation", "llm"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+]
+# Core has NO fusionkit_* dependency by design (enforced by the import boundary
+# test). SUTs and adapters that need fusionkit register via entry-points from
+# their own packages.
+dependencies = [
+  "pydantic>=2.12.5",
+  "pyyaml>=6.0.2",
+  "typer>=0.15.0",
+]
+
+[project.optional-dependencies]
+aws = ["boto3>=1.43.37"]
+
+[project.scripts]
+hyperkit = "hyperkit.cli:app"
+
+[project.entry-points."hyperkit.backends"]
+aws-batch = "hyperkit.backends.aws_batch:factory"
+
+[project.urls]
+Repository = "https://github.com/velum-labs/handoffkit"
+
+[build-system]
+requires = ["uv_build>=0.11.21,<0.12.0"]
+build-backend = "uv_build"
