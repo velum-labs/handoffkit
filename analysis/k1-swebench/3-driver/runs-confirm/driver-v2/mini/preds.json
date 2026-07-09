@@ -123,5 +123,15 @@
     "model_name_or_path": "openai/fusionkit/panel",
     "instance_id": "sympy__sympy-13031",
     "model_patch": "No changes needed - fix already implemented\n"
+  },
+  "sympy__sympy-17318": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "sympy__sympy-17318",
+    "model_patch": "diff --git a/sympy/simplify/radsimp.py b/sympy/simplify/radsimp.py\nindex 216ae26204..f6ef993a39 100644\n--- a/sympy/simplify/radsimp.py\n+++ b/sympy/simplify/radsimp.py\n@@ -1113,6 +1113,9 @@ def _split_gcd(*a):\n     >>> _split_gcd(55, 35, 22, 14, 77, 10)\n     (5, [55, 35, 10], [22, 14, 77])\n     \"\"\"\n+    if not a:\n+        return 1, [], []\n+\n     g = a[0]\n     b1 = [g]\n     b2 = []\n"
+  },
+  "sympy__sympy-19346": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "sympy__sympy-19346",
+    "model_patch": "diff --git a/sympy/printing/repr.py b/sympy/printing/repr.py\nindex c936a692c0..f34c30bce8 100644\n--- a/sympy/printing/repr.py\n+++ b/sympy/printing/repr.py\n@@ -250,6 +250,20 @@ def _print_tuple(self, expr):\n         else:\n             return \"(%s)\" % self.reprify(expr, \", \")\n \n+    def _print_dict(self, expr):\n+        \"\"\"Print a dictionary.\"\"\"\n+        items = []\n+        for key, value in expr.items():\n+            items.append(\"%s: %s\" % (self._print(key), self._print(value)))\n+        return \"{%s}\" % \", \".join(items)\n+\n+    def _print_set(self, expr):\n+        \"\"\"Print a set.\"\"\"\n+        if len(expr) == 0:\n+            return \"set()\"\n+        items = [self._print(item) for item in expr]\n+        return \"{%s}\" % \", \".join(items)\n+\n     def _print_WildFunction(self, expr):\n         return \"%s('%s')\" % (expr.__class__.__name__, expr.name)\n \n"
   }
 }
