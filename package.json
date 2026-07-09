@@ -32,7 +32,7 @@
     "mono": "node scripts/monorepo.mjs"
   },
   "devDependencies": {
-    "@types/node": "22.19.20",
+    "@types/node": "26.1.1",
     "@velum-labs/model-fusion-protocol": "file:spec/model-fusion-contract",
     "typescript": "6.0.3"
   },
