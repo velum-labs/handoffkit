@@ -48,7 +48,14 @@ let workRoot: string;
 
 before(async function () {
   if (STACK_SKIP !== false) return;
-  stack = await startSimFusionStack({ members: [...MEMBERS], judgeId: "judge" });
+  stack = await startSimFusionStack({
+    members: [...MEMBERS],
+    judgeId: "judge",
+    ensembles: [
+      { name: "default", memberIds: ["alpha", "beta"], judgeId: "judge" },
+      { name: "mini", memberIds: ["alpha"], judgeId: "judge" }
+    ]
+  });
   workRoot = mkdtempSync(join(tmpdir(), "fusionkit-cli-e2e-"));
 });
 
@@ -259,3 +266,88 @@ test(
     );
   }
 );
+
+// --- model-extension / picker routing across every real tool -------------------------
+
+type RealToolModelCase = {
+  id: string;
+  skip: false | string;
+  hasTitleTurn?: boolean;
+  run: (input: { gatewayUrl: string; cwd: string }) => Promise<{
+    code: number | null;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+  }>;
+};
+
+const REAL_TOOL_MODEL_CASES: readonly RealToolModelCase[] = [
+  {
+    id: "claude",
+    skip: CLAUDE_SKIP,
+    run: ({ gatewayUrl, cwd }) =>
+      runClaudeCode({
+        gatewayUrl,
+        cwd,
+        model: "fusion-mini",
+        prompt: "Report the selected mini ensemble answer verbatim."
+      })
+  },
+  {
+    id: "codex",
+    skip: CODEX_SKIP,
+    run: ({ gatewayUrl, cwd }) =>
+      runCodexExec({
+        gatewayUrl,
+        cwd,
+        model: "fusion-mini",
+        prompt: "Report the selected mini ensemble answer verbatim."
+      })
+  },
+  {
+    id: "opencode",
+    skip: OPENCODE_SKIP,
+    hasTitleTurn: true,
+    run: ({ gatewayUrl, cwd }) =>
+      runOpenCode({
+        gatewayUrl,
+        cwd,
+        model: "fusion-mini",
+        prompt: "Report the selected mini ensemble answer verbatim."
+      })
+  }
+];
+
+for (const toolCase of REAL_TOOL_MODEL_CASES) {
+  test(
+    `[${toolCase.id}] real CLI selects injected fusion-mini and routes only its member`,
+    { skip: toolCase.skip },
+    async () => {
+      await stack.sim.reset();
+      if (toolCase.hasTitleTurn === true) {
+        await stack.sim.queue("gpt-panel-a", ["mini title candidate"]);
+        await stack.sim.queue("gpt-judge", [
+          { reply: judgeAnalysis() },
+          { reply: "Mini ensemble test" }
+        ]);
+      }
+      await stack.sim.queue("gpt-panel-a", ["the mini ensemble's only candidate"]);
+      await stack.sim.queue("gpt-judge", [
+        { reply: judgeAnalysis() },
+        { reply: `MODEL_EXTENSION_OK_${toolCase.id}` }
+      ]);
+
+      const cwd = mkdtempSync(join(workRoot, `${toolCase.id}-mini-`));
+      const result = await toolCase.run({ gatewayUrl: stack.gatewayUrl, cwd });
+      assert.equal(result.timedOut, false, result.stderr);
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(result.stdout, new RegExp(`MODEL_EXTENSION_OK_${toolCase.id}`));
+      assert.ok((await stack.sim.calls({ model: "gpt-panel-a" })).length >= 1);
+      assert.equal(
+        (await stack.sim.calls({ model: "claude-panel-b" })).length,
+        0,
+        `${toolCase.id} selected fusion-mini: default-only member beta must not run`
+      );
+    }
+  );
+}

@@ -40,6 +40,8 @@ export type DoorProfile = {
   toolCallOf: (body: unknown) => DoorToolCall | undefined;
   /** Concatenated answer text from the door's native SSE frames. */
   streamTextOf: (frames: readonly SseFrame[]) => string;
+  /** Concatenated model/judge reasoning from the door's native SSE frames. */
+  streamReasoningOf: (frames: readonly SseFrame[]) => string;
   /** True when the SSE stream terminated with the door's native close marker. */
   streamClosed: (frames: readonly SseFrame[]) => boolean;
 };
@@ -93,6 +95,20 @@ function chatStreamText(frames: readonly SseFrame[]): string {
         | Array<{ delta?: { content?: string } }>
         | undefined;
       return choices?.[0]?.delta?.content ?? "";
+    })
+    .join("");
+}
+
+function chatStreamReasoning(frames: readonly SseFrame[]): string {
+  return frames
+    .map((frame) => {
+      const choices = frameData(frame)?.choices as
+        | Array<{
+            delta?: { reasoning_content?: string; reasoning?: string };
+          }>
+        | undefined;
+      const delta = choices?.[0]?.delta;
+      return (delta?.reasoning_content ?? "") + (delta?.reasoning ?? "");
     })
     .join("");
 }
@@ -187,6 +203,7 @@ export const DOOR_PROFILES: readonly DoorProfile[] = [
     textOf: chatText,
     toolCallOf: chatToolCall,
     streamTextOf: chatStreamText,
+    streamReasoningOf: chatStreamReasoning,
     streamClosed: (frames) => sseDone(frames)
   },
   {
@@ -259,6 +276,17 @@ export const DOOR_PROFILES: readonly DoorProfile[] = [
           return (data.delta as { text?: string } | undefined)?.text ?? "";
         })
         .join(""),
+    streamReasoningOf: (frames) =>
+      frames
+        .map((frame) => {
+          const data = frameData(frame);
+          if (data?.type !== "content_block_delta") return "";
+          const delta = data.delta as
+            | { type?: string; thinking?: string }
+            | undefined;
+          return delta?.type === "thinking_delta" ? (delta.thinking ?? "") : "";
+        })
+        .join(""),
     streamClosed: (frames) => frameTypes(frames).includes("message_stop")
   },
   {
@@ -293,6 +321,19 @@ export const DOOR_PROFILES: readonly DoorProfile[] = [
           return typeof data.delta === "string" ? data.delta : "";
         })
         .join(""),
+    streamReasoningOf: (frames) =>
+      frames
+        .map((frame) => {
+          const data = frameData(frame);
+          if (
+            data?.type !== "response.reasoning_summary_text.delta" &&
+            data?.type !== "response.reasoning_text.delta"
+          ) {
+            return "";
+          }
+          return typeof data.delta === "string" ? data.delta : "";
+        })
+        .join(""),
     streamClosed: (frames) => frameTypes(frames).includes("response.completed")
   },
   {
@@ -309,6 +350,7 @@ export const DOOR_PROFILES: readonly DoorProfile[] = [
     textOf: chatText,
     toolCallOf: chatToolCall,
     streamTextOf: chatStreamText,
+    streamReasoningOf: chatStreamReasoning,
     streamClosed: (frames) => sseDone(frames)
   }
 ];

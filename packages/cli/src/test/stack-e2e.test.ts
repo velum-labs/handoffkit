@@ -103,6 +103,57 @@ for (const door of DOOR_PROFILES) {
     assert.ok(door.streamClosed(frames), `${door.id} stream must close with its native marker`);
   });
 
+  test(
+    `[${door.id}] candidate, judge, narration, and synthesizer reasoning survive fusion`,
+    { skip: SKIP },
+    async () => {
+      await stack.scriptFusedTurn({
+        candidates: Object.fromEntries(
+          PANEL_MODELS.map((model, index) => [
+            model,
+            {
+              reply: `candidate ${index}`,
+              reasoning: `PANEL_REASON_${index}_${model}`
+            }
+          ])
+        ),
+        answer: {
+          reply: `reasoned answer via ${door.id}`,
+          reasoning: `SYNTH_REASON_${door.id}`
+        }
+      });
+      const response = await callDoor(stack.gatewayUrl, door, {
+        model: "fusion-panel",
+        user: "reason carefully and expose the supported reasoning channel",
+        stream: true
+      });
+      assert.equal(response.status, 200);
+      const { frames } = await doorFrames(response);
+      const reasoning = door.streamReasoningOf(frames);
+      assert.match(
+        reasoning,
+        new RegExp(`SYNTH_REASON_${door.id}`),
+        `${door.id} must carry the synthesizer model's own reasoning`
+      );
+      assert.match(
+        reasoning,
+        /Fanning out to 4 models/,
+        `${door.id} must carry fusion progress narration`
+      );
+      assert.match(reasoning, /Weighing the candidates/, "judge analysis must be visible");
+
+      // Panel reasoning is evidence for the judge, not only display metadata.
+      const judgeRequest = (await stack.sim.calls({ model: "gpt-judge" }))[0];
+      const judgeWire = JSON.stringify(judgeRequest?.request);
+      for (let index = 0; index < PANEL_MODELS.length; index += 1) {
+        assert.ok(
+          judgeWire.includes(`PANEL_REASON_${index}_`),
+          `candidate ${index}'s reasoning must reach the judge wire`
+        );
+      }
+    }
+  );
+
   test(`[${door.id}] multi-turn fused tool loop round-trips the door's tool dialect`, { skip: SKIP }, async () => {
     // Turn 1: members propose; the fuse step commits a tool call.
     await stack.scriptFusedTurn({

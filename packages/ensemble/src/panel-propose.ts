@@ -51,6 +51,10 @@ export type ProposalPanelOptions = {
 
 type ChatCompletionMessage = {
   content?: unknown;
+  /** Out-of-band reasoning returned by the member router (provider-normalized). */
+  reasoning_content?: unknown;
+  /** Token-stream reasoning spelling used by local/OpenAI-compatible servers. */
+  reasoning?: unknown;
   tool_calls?: Array<{
     id?: unknown;
     function?: { name?: unknown; arguments?: unknown };
@@ -80,6 +84,15 @@ function completionToWire(input: {
 }): WireTrajectory {
   const items: Array<Record<string, unknown>> = [];
   let index = 0;
+  const reasoning =
+    typeof input.message?.reasoning_content === "string"
+      ? input.message.reasoning_content
+      : typeof input.message?.reasoning === "string"
+        ? input.message.reasoning
+        : "";
+  if (reasoning.length > 0) {
+    items.push({ index: index++, type: "reasoning", text: reasoning });
+  }
   const text = asText(input.message?.content);
   if (text.length > 0) items.push({ index: index++, type: "message", text });
   for (const call of input.message?.tool_calls ?? []) {
