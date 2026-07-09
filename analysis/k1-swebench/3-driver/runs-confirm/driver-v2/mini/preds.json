@@ -118,5 +118,10 @@
     "model_name_or_path": "openai/fusionkit/panel",
     "instance_id": "sphinx-doc__sphinx-9673",
     "model_patch": "diff --git a/sphinx/ext/autodoc/typehints.py b/sphinx/ext/autodoc/typehints.py\nindex af4b47bb0..dbb67249d 100644\n--- a/sphinx/ext/autodoc/typehints.py\n+++ b/sphinx/ext/autodoc/typehints.py\n@@ -149,7 +149,7 @@ def augment_descriptions_with_types(\n         elif parts[0] == 'type':\n             name = ' '.join(parts[1:])\n             has_type.add(name)\n-        elif parts[0] == 'return':\n+        elif parts[0] == 'return' or parts[0] == 'returns':\n             has_description.add('return')\n         elif parts[0] == 'rtype':\n             has_type.add('return')\n"
+  },
+  "sympy__sympy-13031": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "sympy__sympy-13031",
+    "model_patch": "No changes needed - fix already implemented\n"
   }
 }
