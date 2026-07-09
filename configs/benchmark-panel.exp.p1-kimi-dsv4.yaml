@@ -1,14 +1,11 @@
-# Experiment E3 — multi-sample panel, Gemini judge.
+# Experiment P1 — best measured trio, Gemini judge.
 #
-# Panel mode ignores sample_count (generate_panel issues one call per member),
-# so multi-sampling is implemented as duplicated endpoint ids for the two
-# strongest measured members: gemini x2 + kimi x2 + dsv4pro. Goal: harvest the
-# observed +/-3-task per-model sampling variance into the candidate oracle
-# without adding new (weaker) families.
+# Panel: gemini-3.1-pro + kimi-k2.7-code + deepseek-v4-pro (the two strongest
+# measured non-gemini members from the judge experiment, never yet paired).
 #
 # Requires OPENROUTER_API_KEY.
 endpoints:
-  - id: gemini_a
+  - id: gemini
     provider: openrouter
     model: google/gemini-3.1-pro-preview
     base_url: https://openrouter.ai/api
@@ -23,37 +20,7 @@ endpoints:
       output_per_1m_tokens: 12.0
       currency: USD
     tags: [closed, panel]
-  - id: gemini_b
-    provider: openrouter
-    model: google/gemini-3.1-pro-preview
-    base_url: https://openrouter.ai/api
-    api_key_env: OPENROUTER_API_KEY
-    timeout_s: 600
-    capabilities:
-      structured_output: true
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 2.0
-      output_per_1m_tokens: 12.0
-      currency: USD
-    tags: [closed, panel]
-  - id: kimi_a
-    provider: openrouter
-    model: moonshotai/kimi-k2.7-code
-    base_url: https://openrouter.ai/api
-    api_key_env: OPENROUTER_API_KEY
-    timeout_s: 600
-    capabilities:
-      structured_output: true
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 0.74
-      output_per_1m_tokens: 3.5
-      currency: USD
-    tags: [oss, panel]
-  - id: kimi_b
+  - id: kimi
     provider: openrouter
     model: moonshotai/kimi-k2.7-code
     base_url: https://openrouter.ai/api
@@ -83,18 +50,18 @@ endpoints:
       output_per_1m_tokens: 0.87
       currency: USD
     tags: [oss, panel]
-default_model: gemini_a
-judge_model: gemini_a
-synthesizer_model: gemini_a
+default_model: gemini
+judge_model: gemini
+synthesizer_model: gemini
 default_mode: panel
-panel_models: [gemini_a, gemini_b, kimi_a, kimi_b, dsv4pro]
+panel_models: [gemini, kimi, dsv4pro]
 harness_prompt_passthrough: true
 sampling:
   temperature: 0.2
   top_p: 0.95
   max_tokens: 8192
 budget:
-  max_candidates: 5
+  max_candidates: 3
   wall_clock_s: 1800
   max_cost: null
   max_tool_rounds: 24

@@ -45,14 +45,15 @@ JUDGE_EXP_PANELS: dict[str, str] = {
 }
 ORACLE_EXP_PANELS: dict[str, str] = {
     "e1": "configs/benchmark-panel.exp.e1-gpt55-solo.yaml",
-    "e2": "configs/benchmark-panel.exp.e2-oracle5.yaml",
-    "e3": "configs/benchmark-panel.exp.e3-sample5.yaml",
+    "p1": "configs/benchmark-panel.exp.p1-kimi-dsv4.yaml",
+    "p2": "configs/benchmark-panel.exp.p2-qwen-glm.yaml",
+    "p3": "configs/benchmark-panel.exp.p3-kimi-glm.yaml",
 }
 PANELS: dict[str, str] = {**LEGACY_PANELS, **JUDGE_EXP_PANELS, **ORACLE_EXP_PANELS}
 JUDGE_MATRIX_ORDER = ("j1-g", "j1-m", "j2-g", "j2-m", "j3-g", "j3-m")
 JUDGE_MIMO_ORDER = ("j1-m", "j2-m", "j3-m")
 JUDGE_GEMINI_ORDER = ("j1-g", "j2-g", "j3-g")
-ORACLE_EXP_ORDER = ("e1", "e2", "e3")
+ORACLE_EXP_ORDER = ("e1", "p1", "p2", "p3")
 SPEND_CAP_USD = 75.0
 PREFLIGHT_TIMEOUT_S = 7200.0
 PANEL_TIMEOUT_S = 21600.0
@@ -400,7 +401,7 @@ def main() -> None:
     )
     oracle = sub.add_parser(
         "run-oracle-exp",
-        help="run oracle-maximization experiments (e1 gpt-5.5 solo, e2 five-family, e3 multi-sample)",
+        help="run frontier-chase experiments (e1 gpt-5.5 solo, p1-p3 gemini-judge trios)",
     )
     oracle.add_argument(
         "--parallel",
