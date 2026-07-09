@@ -15,6 +15,8 @@
  *   the Python toolchain.
  */
 
+export { DOOR_PROFILES, callDoor, doorFrames } from "./doors.js";
+export type { DoorProfile, DoorRequestInput, DoorToolCall, DoorToolExchange } from "./doors.js";
 export type {
   SimBehavior,
   SimBehaviorInput,

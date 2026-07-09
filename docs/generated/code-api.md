@@ -425,6 +425,8 @@ Composable layers for realistic end-to-end tests (see docs/testing.md):
 - {@link detectStackTooling}: honest skip-gating for environments without
   the Python toolchain.
 
+- `export { DOOR_PROFILES, callDoor, doorFrames } from "./doors.js";`
+- `export type { DoorProfile, DoorRequestInput, DoorToolCall, DoorToolExchange } from "./doors.js";`
 - `export type { SimBehavior, SimBehaviorInput, SimDialect, SimError, SimJournalEntry, SimToolCall } from "./behaviors.js";`
 - `export { asBehavior, simErrors } from "./behaviors.js";`
 - `export { startEngine } from "./engine.js";`

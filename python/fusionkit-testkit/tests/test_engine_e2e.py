@@ -23,7 +23,6 @@ from fusionkit_testkit import (
     Behavior,
     ProviderSimulator,
     SimError,
-    SimToolCall,
     panel_config,
     parse_sse,
     sim_endpoint,
@@ -133,83 +132,6 @@ def test_fused_streaming_streams_real_synthesizer_tokens(
     assert sim.journal_for("gpt-synth")[0]["stream"] is True
 
 
-def test_passthrough_routes_to_one_endpoint_without_fusion(
-    sim: ProviderSimulator, client: TestClient
-) -> None:
-    sim.queue("claude-panel-b", Behavior(reply="passthrough answer"))
-
-    response = client.post(
-        "/v1/chat/completions",
-        json={
-            "model": "member-anthropic",
-            "messages": [{"role": "user", "content": "direct question"}],
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["choices"][0]["message"]["content"] == "passthrough answer"
-    # No fusion machinery ran: exactly one wire call, on the Anthropic dialect.
-    journal = sim.journal()
-    assert len(journal) == 1
-    assert journal[0]["dialect"] == "anthropic-messages"
-
-
-def test_passthrough_tool_loop_round_trip(sim: ProviderSimulator, client: TestClient) -> None:
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "read_file",
-                "description": "read a file",
-                "parameters": {"type": "object", "properties": {"path": {"type": "string"}}},
-            },
-        }
-    ]
-
-    # Turn 1: the model asks for a tool.
-    sim.queue(
-        "gpt-panel-a",
-        Behavior(
-            tool_calls=[SimToolCall(id="call_r1", name="read_file", arguments='{"path": "x"}')]
-        ),
-    )
-    first = client.post(
-        "/v1/chat/completions",
-        json={
-            "model": "member-openai",
-            "messages": [{"role": "user", "content": "what is in x?"}],
-            "tools": tools,
-        },
-    )
-    assert first.status_code == 200
-    message = first.json()["choices"][0]["message"]
-    assert first.json()["choices"][0]["finish_reason"] == "tool_calls"
-    (tool_call,) = message["tool_calls"]
-    assert tool_call["function"]["name"] == "read_file"
-
-    # Turn 2: the caller executes the tool and posts the result back.
-    sim.queue("gpt-panel-a", Behavior(reply="x contains 42"))
-    second = client.post(
-        "/v1/chat/completions",
-        json={
-            "model": "member-openai",
-            "messages": [
-                {"role": "user", "content": "what is in x?"},
-                {"role": "assistant", "content": None, "tool_calls": [tool_call]},
-                {"role": "tool", "tool_call_id": tool_call["id"], "content": "42"},
-            ],
-            "tools": tools,
-        },
-    )
-    assert second.status_code == 200
-    assert second.json()["choices"][0]["message"]["content"] == "x contains 42"
-
-    # The tool result really crossed the wire on the second request.
-    turn2_request = sim.journal_for("gpt-panel-a")[1]["request"]
-    roles = [m["role"] for m in turn2_request["messages"]]
-    assert "tool" in roles
-
-
 def test_panel_degrades_gracefully_when_one_member_fails_permanently(
     sim: ProviderSimulator, client: TestClient
 ) -> None:
@@ -230,18 +152,6 @@ def test_panel_degrades_gracefully_when_one_member_fails_permanently(
     assert response.json()["choices"][0]["message"]["content"] == "fused from the survivor"
     # The failed member's 401 is visible on the wire and was not retried.
     assert [entry["status"] for entry in sim.journal_for("gpt-panel-a")] == [401]
-
-
-def test_passthrough_surfaces_provider_errors_as_openai_error_body(
-    sim: ProviderSimulator, client: TestClient
-) -> None:
-    sim.queue("gpt-panel-a", Behavior(error=SimError.invalid_api_key()))
-    response = client.post(
-        "/v1/chat/completions",
-        json={"model": "member-openai", "messages": [{"role": "user", "content": "hi"}]},
-    )
-    assert response.status_code == 401
-    assert "error" in response.json()
 
 
 def test_trajectories_fuse_step_over_the_real_wire(

@@ -2,10 +2,6 @@
  * Cross-process depth suite: the product behaviors beyond single happy-path
  * turns, through the REAL gateway + REAL Python engine + scripted provider.
  *
- *  - the multi-turn fused agent tool loop (the product's core loop), on both
- *    the OpenAI chat and Anthropic Messages doors (dialect round-trips of
- *    tool_calls / tool_use / tool_result included);
- *  - k=1 proposal fidelity: panel members see the caller's tools verbatim;
  *  - multi-ensemble routing with per-ensemble judges and prompt overrides
  *    (asserted on the judge's actual wire request);
  *  - durable session accounting (turns + usage + priced cost in the store);
@@ -31,16 +27,6 @@ const MEMBERS = [
   { id: "minijudge", model: "gpt-mini-judge", provider: "openai" }
 ] as const;
 
-const TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "read_file",
-      description: "read a file",
-      parameters: { type: "object", properties: { path: { type: "string" } } }
-    }
-  }
-];
 
 let stack: SimFusionStack;
 let store: InMemorySessionStore;
@@ -79,142 +65,6 @@ type ChatChoice = {
   finish_reason: string;
   message: { content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> };
 };
-
-// --- the multi-turn fused agent tool loop (OpenAI door) ---------------------------
-
-test("fused multi-turn tool loop through the OpenAI door", { skip: SKIP }, async () => {
-  await stack.sim.reset();
-  // Turn 1: both members PROPOSE tool calls (k=1 members see caller tools
-  // verbatim); the judge analyzes; the synthesizer commits the batch.
-  await stack.sim.queue("gpt-deep-a", [
-    { tool_calls: [{ id: "prop_a", name: "read_file", arguments: '{"path": "config.yaml"}' }] }
-  ]);
-  await stack.sim.queue("claude-deep-b", [
-    { tool_calls: [{ id: "prop_b", name: "read_file", arguments: '{"path": "settings.py"}' }] }
-  ]);
-  await stack.sim.queue("gpt-deep-judge", [
-    { reply: judgeAnalysis() },
-    { tool_calls: [{ id: "call_cfg", name: "read_file", arguments: '{"path": "config.yaml"}' }] }
-  ]);
-  const turn1 = await stack.door.chat({
-    model: "fusion-panel",
-    messages: [{ role: "user", content: "why is the port wrong?" }],
-    tools: TOOLS
-  });
-  assert.equal(turn1.status, 200);
-  const choice1 = ((await turn1.json()) as { choices: ChatChoice[] }).choices[0];
-  assert.equal(choice1?.finish_reason, "tool_calls");
-  const toolCall = choice1?.message.tool_calls?.[0];
-  assert.equal(toolCall?.function.name, "read_file");
-  assert.deepEqual(JSON.parse(toolCall?.function.arguments ?? "{}"), { path: "config.yaml" });
-
-  // k=1 proposal contract (spec B7): members received the caller's tools
-  // VERBATIM on the wire — not a harness re-rendering.
-  for (const model of ["gpt-deep-a", "claude-deep-b"]) {
-    const call = (await stack.sim.calls({ model }))[0];
-    assert.ok(
-      JSON.stringify(call?.request).includes("read_file"),
-      `${model} must be offered the caller's tools: ${await stack.sim.describeJournal()}`
-    );
-  }
-
-  // Turn 2: the caller executed the tool; the loop closes on a fused answer.
-  await stack.sim.queue("gpt-deep-a", ["the port is 8081"]);
-  await stack.sim.queue("claude-deep-b", ["config pins 8081"]);
-  await stack.sim.queue("gpt-deep-judge", [
-    { reply: judgeAnalysis() },
-    { reply: "final: update the port to 8081" }
-  ]);
-  const turn2 = await stack.door.chat({
-    model: "fusion-panel",
-    messages: [
-      { role: "user", content: "why is the port wrong?" },
-      { role: "assistant", content: null, tool_calls: [toolCall] },
-      { role: "tool", tool_call_id: toolCall?.id, content: "port: 8081" }
-    ],
-    tools: TOOLS
-  });
-  assert.equal(turn2.status, 200);
-  const choice2 = ((await turn2.json()) as { choices: ChatChoice[] }).choices[0];
-  assert.match(choice2?.message.content ?? "", /final: update the port to 8081/);
-  // The tool output reached the second-round panel AND the synthesizer wire
-  // (the judge's analysis prompt sees the task + candidates by design; the
-  // synthesizer sees the live conversation including tool results).
-  const alphaTurn2 = (await stack.sim.calls({ model: "gpt-deep-a" }))[1];
-  assert.ok(JSON.stringify(alphaTurn2?.request).includes("port: 8081"));
-  const synthTurn2 = (await stack.sim.calls({ model: "gpt-deep-judge" }))[3];
-  assert.ok(
-    JSON.stringify(synthTurn2?.request).includes("port: 8081"),
-    await stack.sim.describeJournal()
-  );
-});
-
-// --- the same loop through the Anthropic door (dialect round-trip) -------------------
-
-test("fused tool loop through the Anthropic door round-trips tool_use/tool_result", { skip: SKIP }, async () => {
-  await stack.sim.reset();
-  await stack.sim.queue("gpt-deep-a", ["look at the config"]);
-  await stack.sim.queue("claude-deep-b", ["check config.yaml"]);
-  await stack.sim.queue("gpt-deep-judge", [
-    { reply: judgeAnalysis() },
-    { tool_calls: [{ id: "call_read", name: "read_file", arguments: '{"path": "config.yaml"}' }] }
-  ]);
-  const turn1 = await stack.door.messages({
-    model: "fusion-panel",
-    max_tokens: 256,
-    messages: [{ role: "user", content: "why is the port wrong?" }],
-    tools: [
-      {
-        name: "read_file",
-        description: "read a file",
-        input_schema: { type: "object", properties: { path: { type: "string" } } }
-      }
-    ]
-  });
-  assert.equal(turn1.status, 200);
-  const body1 = (await turn1.json()) as {
-    stop_reason: string;
-    content: Array<{ type: string; id?: string; name?: string; input?: Record<string, unknown> }>;
-  };
-  // The fused tool call must surface as a native Anthropic tool_use block.
-  assert.equal(body1.stop_reason, "tool_use");
-  const toolUse = body1.content.find((block) => block.type === "tool_use");
-  assert.equal(toolUse?.name, "read_file");
-  assert.deepEqual(toolUse?.input, { path: "config.yaml" });
-
-  await stack.sim.queue("gpt-deep-a", ["8081 confirmed"]);
-  await stack.sim.queue("claude-deep-b", ["it is 8081"]);
-  await stack.sim.queue("gpt-deep-judge", [
-    { reply: judgeAnalysis() },
-    { reply: "final via anthropic loop: port is 8081" }
-  ]);
-  const turn2 = await stack.door.messages({
-    model: "fusion-panel",
-    max_tokens: 256,
-    messages: [
-      { role: "user", content: "why is the port wrong?" },
-      { role: "assistant", content: [{ type: "tool_use", id: toolUse?.id, name: "read_file", input: { path: "config.yaml" } }] },
-      {
-        role: "user",
-        content: [{ type: "tool_result", tool_use_id: toolUse?.id, content: "port: 8081" }]
-      }
-    ],
-    tools: [
-      {
-        name: "read_file",
-        description: "read a file",
-        input_schema: { type: "object", properties: { path: { type: "string" } } }
-      }
-    ]
-  });
-  assert.equal(turn2.status, 200);
-  const body2 = (await turn2.json()) as { content: Array<{ type: string; text?: string }> };
-  const text = body2.content.find((block) => block.type === "text")?.text ?? "";
-  assert.match(text, /final via anthropic loop: port is 8081/);
-  // The Anthropic tool_result crossed the whole stack into the panel's wire.
-  const alphaTurn2 = (await stack.sim.calls({ model: "gpt-deep-a" }))[1];
-  assert.ok(JSON.stringify(alphaTurn2?.request).includes("port: 8081"));
-});
 
 // --- multi-ensemble routing + per-ensemble prompts -------------------------------------
 

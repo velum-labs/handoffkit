@@ -278,6 +278,7 @@ class _Handler(BaseHTTPRequestHandler):
                 "request": body,
                 "reply_preview": (behavior.reply or "")[:200],
                 "tool_call_names": [call.name for call in behavior.tool_calls],
+                "error_code": behavior.error.code if behavior.error is not None else None,
             }
         )
 
@@ -294,9 +295,12 @@ class _Handler(BaseHTTPRequestHandler):
         # the test script is wrong) — fail loudly instead of letting the
         # missing declaration pass silently.
         if behavior.tool_calls and not body.get("tools"):
+            # Status 400 with no taxonomy markers classifies `unknown`: neither
+            # the SDKs nor FusionKit retry it, so the violation cannot be
+            # masked by a retry falling through to the echo default.
             behavior = Behavior(
                 error=SimError(
-                    status=500,
+                    status=400,
                     code="sim_tools_not_declared",
                     error_type="simulator_contract_error",
                     message=(

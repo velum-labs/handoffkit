@@ -440,7 +440,12 @@ def _google_extract(
     candidates = getattr(response, "candidates", None) or []
     for candidate in candidates:
         if getattr(candidate, "finish_reason", None) is not None:
-            finish_reason = str(candidate.finish_reason)
+            # google-genai parses finish_reason into an enum; str() would leak
+            # the enum repr ("FinishReason.STOP"), inconsistent with every
+            # other provider's plain finish strings — use the bare name.
+            finish_reason = getattr(
+                candidate.finish_reason, "name", None
+            ) or str(candidate.finish_reason)
         content = getattr(candidate, "content", None)
         for part in getattr(content, "parts", None) or []:
             if getattr(part, "text", None):

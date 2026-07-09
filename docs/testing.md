@@ -146,19 +146,59 @@ binaries. The returned stack carries:
 - `scriptFusedTurn({candidates, answer})` — reset + script a fused turn
   against this stack's judge in one call.
 
+## The matrix: axes declared once, suites generated
+
+Coverage is a **product of declared axes**, not hand-written per-tool tests:
+
+- **Provider axis** — `fusionkit_testkit.matrix.PROVIDER_PROFILES`: one
+  `ProviderProfile` per client family (OpenAI, Anthropic, Google, Codex) with
+  its wire dialect, auth journal field, and *declared* capability quirks
+  (SDK-internal retries, sampling forwarding, finish-reason vocabulary, quota
+  classification). Suites `pytest.mark.parametrize` over `provider_params()`
+  and branch only on declared capabilities — never on provider-name
+  string-compares. Adding a provider = one profile entry + one `wire_*`
+  module; every matrix suite picks it up automatically.
+- **Door axis** — `@fusionkit/testkit`'s `DOOR_PROFILES`: one `DoorProfile`
+  per gateway front door (OpenAI chat, Anthropic Messages, Codex Responses,
+  Cursor BYOK hybrid) declaring how to build requests (plain / streaming /
+  tool-loop turns) and how to extract text / tool calls from its native JSON
+  and SSE shapes. Node suites loop over the profiles and generate tests.
+- **Behavior axis** — the scripted `Behavior`/`SimError` vocabulary (replies,
+  reasoning, tool calls, the error taxonomy, latency, broken streams).
+
+Matrix suites (generated tests = product of axes):
+
+- `test_matrix_wire_clients.py` — provider × {roundtrip, streaming
+  reassembly, tool calls ×2 modes, error taxonomy ×3, transient recovery,
+  truncated stream} = 36 tests over the real SDK clients.
+- `test_matrix_engine_passthrough.py` — provider × {JSON, SSE, multi-turn
+  tool loop with per-dialect tool-result wire markers, auth error} = 16 tests
+  through the real engine.
+- `stack-e2e.test.ts` — door × {fused JSON, fused SSE with native close
+  markers, multi-turn fused tool loop with native tool dialects} = 12
+  generated tests through the whole stack (plus targeted cross-door
+  invariants: per-provider passthrough, discovery, count_tokens, embeddings,
+  degradation).
+
+Dialect quirks with no cross-axis analogue (Anthropic 529, the tools
+guardrail, control-plane infra) stay as targeted tests in
+`test_simulator.py`; fused-path and depth behaviors stay in their dedicated
+suites.
+
 ## The test pyramid, by layer
 
 | Layer | What runs for real | What is simulated | Where |
 |---|---|---|---|
 | Unit / component | one module | everything around it | `packages/*/src/test`, `python/*/tests` (existing suites, incl. `FakeModelClient`-based server tests) |
-| Wire-client | real SDK clients + retry/classification, all four dialects | provider (simulator) | `python/fusionkit-testkit/tests/test_simulator.py`, `test_simulator_google_codex.py` |
-| Engine e2e | `create_app` + real clients + kernel | provider | `python/fusionkit-testkit/tests/test_engine_e2e.py` |
-| Engine surface matrix | every engine HTTP door + fusion mode, four-provider panel | provider | `python/fusionkit-testkit/tests/test_engine_surfaces.py` |
-| Engine depth | multi-turn fused tool loops, wire-shape matrix, storms/quota, overflow ladder, prompt overrides, exact usage, concurrency | provider | `python/fusionkit-testkit/tests/test_engine_depth.py` |
-| Adversarial | broken/garbage streams, multi-slot parallel tool calls, latency | provider | `python/fusionkit-testkit/tests/test_adversarial.py` |
-| Process e2e | real `fusionkit serve` child process | provider | `python/fusionkit-testkit/tests/test_engine_process.py` |
-| Cross-stack e2e | Node gateway (every front door) + Python engine, all processes & dialects | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
-| Cross-stack depth | multi-turn fused tool loops on both doors, multi-ensemble routing + prompts, session/cost accounting, narration | provider | `packages/cli/src/test/stack-depth-e2e.test.ts` |
+| Wire-client matrix | real SDK clients + retry/classification, provider × behavior product | provider (simulator) | `test_matrix_wire_clients.py` (+ dialect quirks in `test_simulator.py`) |
+| Engine passthrough matrix | provider × {JSON, SSE, tool loop, errors} through the real engine | provider | `test_matrix_engine_passthrough.py` |
+| Engine e2e (fused) | `create_app` + real clients + kernel | provider | `test_engine_e2e.py` |
+| Engine surface matrix | every engine HTTP door + fusion mode, four-provider panel | provider | `test_engine_surfaces.py` |
+| Engine depth | multi-turn fused tool loops, wire-shape matrix, storms/quota, overflow ladder, prompt overrides, exact usage, concurrency | provider | `test_engine_depth.py` |
+| Adversarial | broken/garbage streams, multi-slot parallel tool calls, latency | provider | `test_adversarial.py` |
+| Process e2e | real `fusionkit serve` child process | provider | `test_engine_process.py` |
+| Cross-stack door matrix | door × {fused JSON, fused SSE, tool loop} through the whole stack | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
+| Cross-stack depth | multi-ensemble routing + prompts, session/cost accounting, narration | provider | `packages/cli/src/test/stack-depth-e2e.test.ts` |
 | Live (env-gated) | everything incl. real providers/tools | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
 
 **Surface coverage** at the two e2e layers:

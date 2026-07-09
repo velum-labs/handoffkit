@@ -65,8 +65,8 @@ MUTATIONS = [
         old='prompt_tokens = getattr(start_usage, "input_tokens", None)',
         new="prompt_tokens = None",
         cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_simulator.py -q -x "
-            "-k anthropic_streaming"
+            "uv run pytest python/fusionkit-testkit/tests/test_matrix_wire_clients.py -q -x "
+            '-k "stream_reassembles and anthropic"'
         ),
     ),
     Mutation(
@@ -76,8 +76,8 @@ MUTATIONS = [
         old='for field in ("reasoning", "reasoning_content"):',
         new="for field in ():",
         cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_simulator.py -q -x "
-            "-k openai_chat_roundtrip"
+            "uv run pytest python/fusionkit-testkit/tests/test_matrix_wire_clients.py -q -x "
+            '-k "chat_roundtrip and openai"'
         ),
     ),
     Mutation(
@@ -87,7 +87,10 @@ MUTATIONS = [
         old="tools=tools,",
         new="tools=None,",
         replace_all=True,
-        cmd="uv run pytest python/fusionkit-testkit/tests/test_engine_e2e.py -q -x -k tool_loop",
+        cmd=(
+            "uv run pytest python/fusionkit-testkit/tests/test_matrix_engine_passthrough.py "
+            "-q -x -k tool_loop"
+        ),
     ),
     Mutation(
         id="M6",
