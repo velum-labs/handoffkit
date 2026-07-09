@@ -133,5 +133,10 @@
     "model_name_or_path": "openai/fusionkit/panel",
     "instance_id": "sympy__sympy-19346",
     "model_patch": "diff --git a/sympy/printing/repr.py b/sympy/printing/repr.py\nindex c936a692c0..f34c30bce8 100644\n--- a/sympy/printing/repr.py\n+++ b/sympy/printing/repr.py\n@@ -250,6 +250,20 @@ def _print_tuple(self, expr):\n         else:\n             return \"(%s)\" % self.reprify(expr, \", \")\n \n+    def _print_dict(self, expr):\n+        \"\"\"Print a dictionary.\"\"\"\n+        items = []\n+        for key, value in expr.items():\n+            items.append(\"%s: %s\" % (self._print(key), self._print(value)))\n+        return \"{%s}\" % \", \".join(items)\n+\n+    def _print_set(self, expr):\n+        \"\"\"Print a set.\"\"\"\n+        if len(expr) == 0:\n+            return \"set()\"\n+        items = [self._print(item) for item in expr]\n+        return \"{%s}\" % \", \".join(items)\n+\n     def _print_WildFunction(self, expr):\n         return \"%s('%s')\" % (expr.__class__.__name__, expr.name)\n \n"
+  },
+  "sympy__sympy-19637": {
+    "model_name_or_path": "openai/fusionkit/panel",
+    "instance_id": "sympy__sympy-19637",
+    "model_patch": "diff --git a/sympy/core/sympify.py b/sympy/core/sympify.py\nindex a3f1ce2851..4be7e193f3 100644\n--- a/sympy/core/sympify.py\n+++ b/sympy/core/sympify.py\n@@ -507,13 +507,14 @@ def kernS(s):\n                     break\n             s = s[:j] + \")\" + s[j:]\n             i = j + 2  # the first char after 2nd )\n+        kern = \"\"\n         if ' ' in s:\n             # get a unique kern\n             kern = '_'\n             while kern in s:\n                 kern += choice(string.ascii_letters + string.digits)\n             s = s.replace(' ', kern)\n-        hit = kern in s\n+        hit = kern != \"\"\n \n     for i in range(2):\n         try:\n"
   }
 }
