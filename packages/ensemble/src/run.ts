@@ -94,7 +94,11 @@ function isAbandonedStraggler(output: HarnessCandidateOutput): boolean {
  * (harnesses kill their children on abort, so this is prompt). Without
  * `graceMs` this is exactly `Promise.allSettled`.
  */
-async function settleWithStragglerGrace<T>(
+/**
+ * Shared by managed harnesses and raw k=1 proposal panels: straggler policy is
+ * a panel semantic, not an execution-mechanism detail.
+ */
+export async function settleWithStragglerGrace<T>(
   runs: readonly Promise<T>[],
   options: {
     graceMs: number | undefined;
