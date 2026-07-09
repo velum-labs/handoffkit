@@ -268,10 +268,15 @@ clients, or the engine/gateway wire paths:
 uv run python scripts/mutation_pass.py   # clean tree + built workspace required
 ```
 
-Current score: **12/12 killed** (the depth mutations M9–M12 pin per-request
+Current score: **14/14 killed** (the depth mutations M9–M12 pin per-request
 prompt forwarding, the context-overflow candidate fallback, the
 judge-doubles-as-synthesizer request resolution, and the gateway's ensemble
-prompt forwarding). The depth suites also caught a real product bug on first
+prompt forwarding; M13/M14 pin the Anthropic adapter's tool-call rendering on
+its JSON and streaming paths — M14 is killed by the REAL claude binary
+executing the wrong command). A lesson from M13's first run: it survived when
+aimed at the real-CLI suite because Claude Code consumes the *streaming*
+path — the suites and mutations must target the code path the client actually
+exercises. The depth suites also caught a real product bug on first
 run: a fuse request pinning `judge_model` without `synthesizer_model` fell
 back to the *config* synthesizer instead of the pinned judge, silently
 synthesizing a named ensemble's turns on the default ensemble's judge
