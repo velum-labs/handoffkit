@@ -146,6 +146,8 @@ def _frame_has_data(frame: dict[str, Any]) -> bool:
 def execute_queries(
     client: GrafanaClient,
     queries: list[tuple[str, str, str]],
+    *,
+    require_data: bool,
 ) -> list[str]:
     now_ms = int(time.time() * 1000)
     request_queries = []
@@ -184,7 +186,9 @@ def execute_queries(
             failures.append(f"{label}: {result.get('error', 'query failed')}")
             continue
         frames = result.get("frames", [])
-        if not frames or not any(_frame_has_data(frame) for frame in frames):
+        if require_data and (
+            not frames or not any(_frame_has_data(frame) for frame in frames)
+        ):
             failures.append(f"{label}: query returned no seeded data")
     return failures
 
@@ -215,13 +219,19 @@ def validate_live(
     client: GrafanaClient,
     attempts: int,
     retry_interval: float,
+    *,
+    require_data: bool,
 ) -> None:
     last_failures: list[str] = []
     for _ in range(attempts):
         health_status, health = client.request("/api/datasources/uid/amp/health")
         if health_status == 200 and health.get("status") in {"OK", "Success"}:
             live_queries = load_live_queries(client)
-            last_failures = execute_queries(client, live_queries)
+            last_failures = execute_queries(
+                client,
+                live_queries,
+                require_data=require_data,
+            )
             if not last_failures:
                 return
         else:
@@ -240,13 +250,23 @@ def main() -> int:
     parser.add_argument("--attempts", type=int, default=30)
     parser.add_argument("--retry-interval", type=float, default=1.0)
     parser.add_argument("--static-only", action="store_true")
+    parser.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="accept valid production queries without recent telemetry",
+    )
     args = parser.parse_args()
 
     try:
         queries = validate_static_contracts()
         if not args.static_only:
             client = GrafanaClient(args.grafana_url, args.username, args.password)
-            validate_live(client, args.attempts, args.retry_interval)
+            validate_live(
+                client,
+                args.attempts,
+                args.retry_interval,
+                require_data=not args.allow_empty,
+            )
     except (OSError, RuntimeError, ValueError, urllib.error.URLError) as exc:
         print(f"dashboard validation failed: {exc}", file=sys.stderr)
         return 1

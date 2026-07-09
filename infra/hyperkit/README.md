@@ -200,7 +200,14 @@ aws ecs update-service \
 aws ecs wait services-stable \
   --cluster "$(terraform output -raw observability_ecs_cluster_name)" \
   --services "$(terraform output -raw observability_ecs_service_name)"
+python3 ../../scripts/validate_hyperkit_dashboards.py \
+  --grafana-url "$(terraform output -raw grafana_url)" \
+  --password "$GRAFANA_ADMIN_PASSWORD" \
+  --allow-empty
 ```
+
+`--allow-empty` still fails datasource and PromQL errors; it only permits an
+idle production workspace with no recent shard samples.
 
 `grafana_allowed_cidrs` defaults to empty, so the ALB has no ingress. Use only
 trusted `/32` or VPN ranges. Set `grafana_certificate_arn` for HTTPS; HTTP mode
