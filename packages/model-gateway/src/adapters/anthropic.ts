@@ -324,6 +324,8 @@ export function anthropicToChat(
   if (typeof body.top_k === "number") chat.top_k = body.top_k;
   // Explicit nulls mean "unset" (see AnthropicRequest).
   if (body.metadata != null) droppedField("anthropic", "metadata");
+  // `thinking: null` means "no extended thinking" — skip, never dereference
+  // (same failure class as the Responses adapter's `reasoning: null`).
   if (body.thinking != null) {
     const reasoningEffort = mapThinking(body.thinking);
     if (reasoningEffort !== undefined) chat.reasoning_effort = reasoningEffort;

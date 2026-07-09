@@ -582,7 +582,19 @@ export async function startFusionStepGateway(input: {
       const trajectories = normalizeWireTrajectories(wire);
       logTurnCandidates({
         turn,
-        candidates: trajectories.map((t) => ({ modelId: t.model_id, status: t.status }))
+        candidates: trajectories.map((t) => ({
+          modelId: t.model_id,
+          status: t.status,
+          ...(t.end_reason?.kind !== undefined ? { endReason: t.end_reason.kind } : {}),
+          // The end reason's detail carries the harness/provider failure text
+          // (e.g. the upstream HTTP status + body); the failed-candidate
+          // placeholder final_output is the fallback attribution.
+          ...(t.end_reason?.detail !== undefined
+            ? { detail: t.end_reason.detail }
+            : t.status !== "succeeded" && t.final_output.length > 0
+              ? { detail: t.final_output }
+              : {})
+        }))
       });
       emitGatewayStatus({ phase: "judging", candidates: trajectories.length, turn });
       return trajectories;

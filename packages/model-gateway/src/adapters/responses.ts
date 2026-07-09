@@ -67,6 +67,12 @@ export type ResponsesRequest = {
   temperature?: number;
   top_p?: number;
   parallel_tool_calls?: boolean;
+  /**
+   * Codex serializes `reasoning: null` (not an absent key) for models whose
+   * catalog metadata carries no reasoning level — every custom-provider panel
+   * member slug (e.g. `grok-4`, `deepseek`) resolves to Codex's fallback model
+   * info, which has none. Null must translate as "no reasoning", never throw.
+   */
   reasoning?: { effort?: string; [key: string]: unknown } | null;
   text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } } | null;
   previous_response_id?: string | null;
@@ -535,7 +541,9 @@ export function responsesToChat(
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (typeof body.parallel_tool_calls === "boolean") chat.parallel_tool_calls = body.parallel_tool_calls;
-  // Explicit nulls mean "unset" on the Codex wire (see ResponsesRequest).
+  // `reasoning: null` means "this model has no reasoning config" (Codex sends
+  // it for every custom-provider panel member slug) — skip silently rather
+  // than treating it as an untranslatable field, and never dereference it.
   if (body.reasoning != null) {
     const effort = body.reasoning.effort;
     if (effort === "low" || effort === "medium" || effort === "high") {

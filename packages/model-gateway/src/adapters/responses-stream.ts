@@ -7,7 +7,14 @@ import type { ServerToolMarker } from "./server-tool-loop.js";
 const ENCODER = new TextEncoder();
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
-type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage | null; provider_cost?: unknown };
+type OpenAiStreamError = { message?: string; type?: string; code?: string };
+type OpenAiChunk = {
+  choices?: OpenAiChoice[];
+  usage?: OpenAiUsage | null;
+  provider_cost?: unknown;
+  /** An OpenAI-style mid-stream error event (`data: {"error": {...}}`). */
+  error?: OpenAiStreamError;
+};
 type ResponsesToolKind = "function" | "custom" | "typed" | "server";
 type ResponsesToolRegistry = ReadonlyMap<string, { kind: ResponsesToolKind; namespace?: string }>;
 
@@ -455,7 +462,33 @@ export function openAiSseToResponses(
     );
   };
 
+  // A mid-stream provider failure (`data: {"error": {...}}` — e.g. the fusion
+  // router's classified provider_error) becomes a `response.failed` event
+  // carrying the upstream message, so the consumer (codex) reports the real
+  // provider/API error instead of a bare "stream disconnected".
+  const failStream = (controller: Controller, error: OpenAiStreamError): void => {
+    if (finished) return;
+    finished = true;
+    if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
+    ensureCreated(controller);
+    controller.enqueue(
+      emit("response.failed", {
+        response: {
+          ...baseResponse("failed", assembleOutput()),
+          error: {
+            code: error.code ?? error.type ?? "upstream_error",
+            message: error.message ?? "upstream provider error"
+          }
+        }
+      })
+    );
+  };
+
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
+    if (chunk.error != null) {
+      failStream(controller, chunk.error);
+      return;
+    }
     // Real OpenAI streams carry `"usage": null` on every chunk except the
     // final usage chunk, so a null must read as "absent".
     inputTokens = chunk.usage?.prompt_tokens ?? inputTokens;
