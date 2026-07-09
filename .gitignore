@@ -30,3 +30,5 @@ release/state.json
 /.fusionkit/runs/
 /.fusionkit/fusion-bench/
 /.fusionkit/hillclimb/
+# Live benchmark run outputs (curated copies live in labruns/*/results/).
+/labdata/
