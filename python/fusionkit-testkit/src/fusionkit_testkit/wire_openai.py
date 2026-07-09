@@ -115,9 +115,12 @@ def stream_frames(
     for token in _tokenize(behavior.text()):
         if token:
             yield chunk({"content": token})
-    for slot, call in enumerate(behavior.tool_calls):
+    if behavior.tool_calls:
         # The real wire sends id/name only on the first fragment of a slot and
-        # keys every later fragment by index alone.
+        # keys every later fragment by index alone. With parallel calls a
+        # single chunk's `tool_calls` array may carry fragments for SEVERAL
+        # slots at once — emit the slot openings that way so consumers that
+        # only read `tool_calls[0]` lose calls, exactly like production.
         yield chunk(
             {
                 "tool_calls": [
@@ -127,11 +130,13 @@ def stream_frames(
                         "type": "function",
                         "function": {"name": call.name, "arguments": ""},
                     }
+                    for slot, call in enumerate(behavior.tool_calls)
                 ]
             }
         )
-        for fragment in _argument_fragments(call.arguments):
-            yield chunk({"tool_calls": [{"index": slot, "function": {"arguments": fragment}}]})
+        for slot, call in enumerate(behavior.tool_calls):
+            for fragment in _argument_fragments(call.arguments):
+                yield chunk({"tool_calls": [{"index": slot, "function": {"arguments": fragment}}]})
     yield chunk({}, finish_reason=behavior.finish_reason())
     if include_usage:
         yield json.dumps(

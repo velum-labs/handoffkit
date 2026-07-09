@@ -31,7 +31,7 @@ from typing import Any, cast
 from urllib.parse import urlsplit
 
 from fusionkit_testkit import wire_anthropic, wire_google, wire_openai, wire_responses
-from fusionkit_testkit.behaviors import Behavior
+from fusionkit_testkit.behaviors import Behavior, SimError
 
 _JSON_TYPE = "application/json"
 _SSE_TYPE = "text/event-stream"
@@ -288,6 +288,24 @@ class _Handler(BaseHTTPRequestHandler):
     ) -> Behavior:
         """Pop the next behavior, journal the call, and apply latency injection."""
         behavior, source = self._state.next_behavior(model, last_user)
+        # Realism guardrail: a real model can never call a tool the request did
+        # not declare. A scripted tool_calls behavior answering a request with
+        # no `tools` means the product dropped the caller's tools somewhere (or
+        # the test script is wrong) — fail loudly instead of letting the
+        # missing declaration pass silently.
+        if behavior.tool_calls and not body.get("tools"):
+            behavior = Behavior(
+                error=SimError(
+                    status=500,
+                    code="sim_tools_not_declared",
+                    error_type="simulator_contract_error",
+                    message=(
+                        f"simulator: a tool_calls behavior was queued for {model!r} but the "
+                        "request declared no tools — the caller's tool definitions were "
+                        "dropped before reaching the provider wire"
+                    ),
+                )
+            )
         self._record(
             dialect=dialect, model=model, stream=stream,
             source=source, behavior=behavior, body=body,

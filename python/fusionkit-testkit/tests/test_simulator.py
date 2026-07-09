@@ -116,7 +116,10 @@ async def test_openai_streaming_reassembles_text_tools_and_usage(sim: ProviderSi
     finish: str | None = None
     usage_seen = False
     try:
-        async for chunk in client.stream_chat([ChatMessage(role="user", content="go")]):
+        async for chunk in client.stream_chat(
+            [ChatMessage(role="user", content="go")],
+            tools=[{"name": "run", "parameters": {"type": "object"}}],
+        ):
             text.append(chunk.delta)
             if chunk.model_reasoning_delta:
                 reasoning.append(chunk.model_reasoning_delta)
@@ -271,7 +274,9 @@ async def test_anthropic_streaming_text_tools_and_usage(sim: ProviderSimulator) 
     terminal_usage = None
     try:
         async for chunk in client.stream_chat(
-            [ChatMessage(role="user", content="go")], sampling=SamplingConfig(max_tokens=64)
+            [ChatMessage(role="user", content="go")],
+            sampling=SamplingConfig(max_tokens=64),
+            tools=[{"name": "run", "parameters": {"type": "object"}}],
         ):
             text.append(chunk.delta)
             if chunk.tool_call_delta is not None:

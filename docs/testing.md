@@ -189,6 +189,38 @@ PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js
 CI runs the Python layers in the `python` job, and the cross-stack suites in
 the dedicated `stack-e2e` job (Node + uv toolchains installed together).
 
+## Proving the tests can fail — the mutation pass
+
+A suite that has never been seen to fail is unproven. `scripts/mutation_pass.py`
+applies targeted breaks to **product** code (dropping parallel tool-call
+slots, disabling transient retries, losing Anthropic prompt tokens, dropping
+reasoning fields, dropping the caller's tools, skipping the Cursor hybrid
+translation, omitting SSE `[DONE]`, routing panel proposals by the wrong
+identifier), runs the suite expected to catch each one (must fail), reverts,
+and reruns (must pass). Run it when touching the testkit, the provider
+clients, or the engine/gateway wire paths:
+
+```bash
+uv run python scripts/mutation_pass.py   # clean tree + built workspace required
+```
+
+Current score: **8/8 killed**. The first pass scored 6/8, and both survivors
+were real test weaknesses that got fixed:
+
+- the retry test queued one 500, which the openai SDK's *internal* retry
+  absorbed — FusionKit's own retry layer was never exercised. The test now
+  queues three 500s (exhausting the SDK budget) and asserts all four wire
+  attempts in the journal.
+- the tool-loop test kept passing when the engine dropped the caller's
+  `tools`, because the simulator happily returned a scripted `tool_calls`
+  behavior to a request that declared no tools. The simulator now enforces
+  the realism guardrail a real model implies — a queued `tool_calls` behavior
+  answering a tools-less request fails the call loudly
+  (`sim_tools_not_declared`).
+
+When adding significant simulator or wire-path behavior, add a mutation for
+it here rather than trusting a green run.
+
 ## Writing new tests — rules of thumb
 
 1. **Default to the simulator, not an inline mock.** If a test needs "a

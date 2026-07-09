@@ -315,11 +315,13 @@ def test_trajectories_fuse_streams_synthesizer_tokens(
 def test_transient_provider_failures_are_retried_through_the_full_stack(
     sim: ProviderSimulator, client: TestClient
 ) -> None:
-    # First wire attempt 500s, the retry succeeds — the passthrough response is
-    # clean and the journal shows both attempts.
+    # Three consecutive 500s exhaust the openai SDK's own internal retry
+    # budget (max_retries=2 -> 3 wire attempts), so surviving them proves
+    # FusionKit's `_call_with_retries` layer re-invoked the call — not just
+    # the SDK's built-in retry. The journal shows all four wire attempts.
     sim.queue(
         "gpt-panel-a",
-        Behavior(error=SimError.server_error()),
+        *[Behavior(error=SimError.server_error()) for _ in range(3)],
         Behavior(reply="recovered after retry"),
     )
     response = client.post(
@@ -328,4 +330,4 @@ def test_transient_provider_failures_are_retried_through_the_full_stack(
     )
     assert response.status_code == 200
     assert response.json()["choices"][0]["message"]["content"] == "recovered after retry"
-    assert [entry["status"] for entry in sim.journal_for("gpt-panel-a")] == [500, 200]
+    assert [entry["status"] for entry in sim.journal_for("gpt-panel-a")] == [500, 500, 500, 200]

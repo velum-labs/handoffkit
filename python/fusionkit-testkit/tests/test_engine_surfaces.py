@@ -126,21 +126,53 @@ def test_self_mode_samples_the_default_model_then_fuses(
     assert len(provider_sim.calls(model="gpt-judge")) == 2
 
 
-def test_heuristic_mode_routes_and_answers(
+def test_heuristic_mode_routes_short_prompts_to_single(
     provider_sim: ProviderSimulator, client: TestClient
 ) -> None:
-    # The heuristic router picks the mode; whatever it picks must complete
-    # against the wire (the default echo behaviors keep it deterministic-safe).
-    provider_sim.queue("gpt-judge", Behavior(reply=judge_analysis()))
+    # HeuristicRouter contract: a short prompt with no routing keywords is a
+    # `single` route — exactly one wire call, to the default model, no fusion.
+    provider_sim.queue("gpt-panel", "routed to single")
     response = client.post(
         "/v1/chat/completions",
         json={
             "model": "fusionkit/heuristic",
-            "messages": [{"role": "user", "content": "route me"}],
+            "messages": [{"role": "user", "content": "hello there"}],
         },
     )
     assert response.status_code == 200, response.text
-    assert len(provider_sim.calls()) >= 1, provider_sim.describe_journal()
+    assert response.json()["choices"][0]["message"]["content"] == "routed to single"
+    assert _fused_models(provider_sim) == ["gpt-panel"], provider_sim.describe_journal()
+
+
+def test_heuristic_mode_routes_hard_keywords_to_panel(
+    provider_sim: ProviderSimulator, client: TestClient
+) -> None:
+    # HeuristicRouter contract: a hard keyword ("compare") routes to `panel` —
+    # full fanout across every configured member, then judge + synthesizer.
+    script_fused_turn(
+        provider_sim,
+        candidates={
+            "gpt-panel": "openai candidate",
+            "claude-panel": "anthropic candidate",
+            "gemini-panel": "google candidate",
+            "gpt-codex-panel": "codex candidate",
+        },
+        judge_model="gpt-judge",
+        answer="fused after heuristic panel route",
+    )
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "fusionkit/heuristic",
+            "messages": [{"role": "user", "content": "compare these two designs"}],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["choices"][0]["message"]["content"] == (
+        "fused after heuristic panel route"
+    )
+    models = set(_fused_models(provider_sim))
+    assert {"gpt-panel", "claude-panel", "gemini-panel", "gpt-codex-panel", "gpt-judge"} <= models
 
 
 # --- discovery + health doors ----------------------------------------------------

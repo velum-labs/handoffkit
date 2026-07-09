@@ -244,14 +244,19 @@ test("model discovery doors advertise the fused model and every member", { skip:
   assert.ok(cursorModels.data.some((entry) => entry.id === "fusion-panel"));
 });
 
-test("count_tokens door answers Claude Code's preflight", { skip: SKIP }, async () => {
-  const response = await stack.door.countTokens({
-    model: "fusion-panel",
-    messages: [{ role: "user", content: "how many tokens is this?" }]
-  });
-  assert.equal(response.status, 200);
-  const body = (await response.json()) as { input_tokens: number };
-  assert.ok(body.input_tokens > 0);
+test("count_tokens door answers Claude Code's preflight and scales with input", { skip: SKIP }, async () => {
+  const count = async (content: string): Promise<number> => {
+    const response = await stack.door.countTokens({
+      model: "fusion-panel",
+      messages: [{ role: "user", content }]
+    });
+    assert.equal(response.status, 200);
+    return ((await response.json()) as { input_tokens: number }).input_tokens;
+  };
+  const short = await count("hi");
+  const long = await count("a much longer message ".repeat(50));
+  assert.ok(short > 0);
+  assert.ok(long > short * 5, `token estimate must scale with input (short=${short}, long=${long})`);
 });
 
 test("embeddings door states its unsupported contract instead of hanging", { skip: SKIP }, async () => {
