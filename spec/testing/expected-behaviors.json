@@ -1,0 +1,469 @@
+{
+  "version": "fusionkit.expected-behaviors.v1",
+  "description": "Executable inventory of product behaviors. Required entries must point to an existing test file and a unique source anchor; environment-gated entries must name the gate and runnable command.",
+  "axes": {
+    "providers": ["openai", "openrouter", "anthropic", "google", "codex"],
+    "doors": ["openai-chat", "anthropic-messages", "codex-responses", "cursor-chat"],
+    "tools": ["codex", "claude", "cursor", "opencode"],
+    "fusionModes": ["panel", "single", "self", "heuristic"],
+    "panelDepths": ["k=1", "finite-k", "unbounded"]
+  },
+  "behaviors": [
+    {
+      "id": "models.default-fused-advertised",
+      "category": "model-exposure",
+      "expectation": "Every discovery surface advertises fusion-panel.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "model discovery doors advertise the fused model"
+    },
+    {
+      "id": "models.named-ensembles-advertised",
+      "category": "model-exposure",
+      "expectation": "Every configured named ensemble is addressable as its own fused model.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-cli-e2e.test.ts",
+      "anchor": "selects injected fusion-mini"
+    },
+    {
+      "id": "models.native-members-advertised",
+      "category": "model-exposure",
+      "expectation": "Panel provider models remain available as native passthrough choices.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "must be advertised as a passthrough"
+    },
+    {
+      "id": "models.anthropic-discovery-shape",
+      "category": "model-exposure",
+      "expectation": "Claude model discovery uses the Anthropic model-list and single-model shapes.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "Claude Code's discovery probe"
+    },
+    {
+      "id": "models.cursor-discovery-mirror",
+      "category": "model-exposure",
+      "expectation": "Cursor-relative model discovery mirrors the canonical gateway catalog.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "Cursor probes the models list"
+    },
+    {
+      "id": "models.real-claude-selection",
+      "category": "model-exposure",
+      "expectation": "The real Claude CLI can select a named injected fused model and only its configured members run.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-cli-e2e.test.ts",
+      "anchor": "id: \"claude\""
+    },
+    {
+      "id": "models.real-codex-selection",
+      "category": "model-exposure",
+      "expectation": "The real Codex CLI can select a named injected fused model and only its configured members run.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-cli-e2e.test.ts",
+      "anchor": "id: \"codex\""
+    },
+    {
+      "id": "models.real-opencode-selection",
+      "category": "model-exposure",
+      "expectation": "The real OpenCode CLI can select a named injected fused model and only its configured members run.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-cli-e2e.test.ts",
+      "anchor": "id: \"opencode\""
+    },
+    {
+      "id": "models.real-cursor-selection",
+      "category": "model-exposure",
+      "expectation": "The real Cursor Agent can select fusion-panel through the Cursorkit bridge.",
+      "status": "environment-gated",
+      "gateReason": "Requires a genuine Cursor login; the official binary is installed and version-checked in CI.",
+      "liveCommand": "FUSIONKIT_GATEWAY_LIVE_CURSOR=1 node --test packages/cli/dist/test/gateway-e2e.test.js"
+    },
+    {
+      "id": "request.k1-messages-verbatim",
+      "category": "request-fidelity",
+      "expectation": "k=1 panel members receive the caller's exact message history.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "members saw the caller's message verbatim"
+    },
+    {
+      "id": "request.k1-tools-verbatim",
+      "category": "request-fidelity",
+      "expectation": "k=1 panel members receive the caller's tool definitions on every front-door dialect.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "must be offered the caller's tools via"
+    },
+    {
+      "id": "request.provider-wire-shapes",
+      "category": "request-fidelity",
+      "expectation": "Sampling, system prompts, auth, tools, and token limits are transformed according to each provider wire.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_depth.py",
+      "anchor": "test_wire_request_shape_matrix"
+    },
+    {
+      "id": "request.cursor-hybrid-translation",
+      "category": "request-fidelity",
+      "expectation": "Cursor Responses-hybrid input is translated into a valid chat conversation without dropping tool history.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
+      "anchor": "test_cursor_door_translates_the_responses_hybrid_body"
+    },
+    {
+      "id": "fusion.all-members-called",
+      "category": "fusion",
+      "expectation": "A fused panel turn fans out once to every healthy configured member.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "assertFullPanelOnTheWire"
+    },
+    {
+      "id": "fusion.judge-then-synth",
+      "category": "fusion",
+      "expectation": "Candidates are judged before synthesis, using the configured judge and synthesizer endpoints.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_e2e.py",
+      "anchor": "ordered_models.index"
+    },
+    {
+      "id": "fusion.named-ensemble-isolation",
+      "category": "fusion",
+      "expectation": "Selecting a named ensemble runs only its members and its judge.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-depth-e2e.test.ts",
+      "anchor": "multi-ensemble routing fans out only"
+    },
+    {
+      "id": "fusion.passthrough-bypasses-fusion",
+      "category": "fusion",
+      "expectation": "Selecting a native provider model performs exactly one provider call and never invokes the judge.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "vendor passthrough routes each member"
+    },
+    {
+      "id": "fusion.extension-metadata",
+      "category": "fusion",
+      "expectation": "Terminal fused responses carry synthesis decision, input trajectory ids, contribution diagnostics, and usage.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_e2e.py",
+      "anchor": "test_trajectories_fuse_step_over_the_real_wire"
+    },
+    {
+      "id": "fusion.mode-panel",
+      "category": "fusion",
+      "expectation": "fusionkit/panel performs panel fanout, judge, and synthesis.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
+      "anchor": "test_panel_fans_out_across_all_four_provider_dialects"
+    },
+    {
+      "id": "fusion.mode-single",
+      "category": "fusion",
+      "expectation": "fusionkit/single calls only the default model.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
+      "anchor": "test_single_mode_calls_only_the_default_model"
+    },
+    {
+      "id": "fusion.mode-self",
+      "category": "fusion",
+      "expectation": "fusionkit/self generates the configured number of samples and fuses them.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
+      "anchor": "test_self_mode_samples_the_default_model_then_fuses"
+    },
+    {
+      "id": "fusion.mode-heuristic",
+      "category": "fusion",
+      "expectation": "fusionkit/heuristic deterministically routes simple and hard requests to the documented modes.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
+      "anchor": "test_heuristic_mode_routes_hard_keywords_to_panel"
+    },
+    {
+      "id": "reasoning.provider-captured",
+      "category": "reasoning",
+      "expectation": "Every provider client's out-of-band reasoning is parsed separately from answer text.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_matrix_wire_clients.py",
+      "anchor": "assert response.reasoning == \"matrix thinking\""
+    },
+    {
+      "id": "reasoning.candidates-reach-judge",
+      "category": "reasoning",
+      "expectation": "Each panel candidate's reasoning is preserved as trajectory evidence and reaches the judge prompt.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "candidate, judge, narration, and synthesizer reasoning survive fusion"
+    },
+    {
+      "id": "reasoning.judge-visible",
+      "category": "reasoning",
+      "expectation": "Structured judge analysis is visible on every door's supported reasoning channel.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "judge analysis must be visible"
+    },
+    {
+      "id": "reasoning.synth-visible",
+      "category": "reasoning",
+      "expectation": "The synthesizer model's own reasoning survives every gateway dialect.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "must carry the synthesizer model's own reasoning"
+    },
+    {
+      "id": "reasoning.narration-visible",
+      "category": "reasoning",
+      "expectation": "Panel fanout and judging progress are narrated without entering answer text.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-depth-e2e.test.ts",
+      "anchor": "narrate panel progress on the reasoning channel"
+    },
+    {
+      "id": "stream.native-close-markers",
+      "category": "streaming",
+      "expectation": "Every door closes with its native terminal event or sentinel.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "fused streaming closes with the door's native marker"
+    },
+    {
+      "id": "stream.usage-terminal",
+      "category": "streaming",
+      "expectation": "The fused stream's terminal frame carries exact judge plus synthesizer usage.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_depth.py",
+      "anchor": "test_fused_stream_terminal_usage_is_the_exact_judge_plus_synth_sum"
+    },
+    {
+      "id": "stream.parallel-tools",
+      "category": "streaming",
+      "expectation": "Parallel tool calls packed into multi-slot chunks survive reassembly.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_adversarial.py",
+      "anchor": "test_parallel_tool_calls_survive_multi_slot_stream_chunks"
+    },
+    {
+      "id": "stream.failure-terminates",
+      "category": "streaming",
+      "expectation": "Truncated or garbage provider streams emit a safe error event and terminate rather than hanging.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_adversarial.py",
+      "anchor": "test_truncated_provider_stream_surfaces_error_event_and_terminates"
+    },
+    {
+      "id": "tools.all-door-roundtrip",
+      "category": "tools",
+      "expectation": "Tool calls and results round-trip in the native vocabulary of every front door.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-e2e.test.ts",
+      "anchor": "multi-turn fused tool loop round-trips the door's tool dialect"
+    },
+    {
+      "id": "tools.real-claude-executes",
+      "category": "tools",
+      "expectation": "The actual Claude Code binary executes a committed Bash call and posts the result.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-cli-e2e.test.ts",
+      "anchor": "real Claude Code CLI executes a fused Bash tool call"
+    },
+    {
+      "id": "tools.real-codex-executes",
+      "category": "tools",
+      "expectation": "The actual Codex binary executes a committed exec_command and posts the result.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-cli-e2e.test.ts",
+      "anchor": "real Codex CLI executes a fused exec_command"
+    },
+    {
+      "id": "tools.real-opencode-executes",
+      "category": "tools",
+      "expectation": "The actual OpenCode binary executes a committed bash call and posts the result.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-cli-e2e.test.ts",
+      "anchor": "real OpenCode CLI executes a fused bash tool"
+    },
+    {
+      "id": "harness.finite-k-boundary",
+      "category": "harness",
+      "expectation": "Finite k executes generations 1..k-1 and captures the k-th tool batch unexecuted.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-harness-k-e2e.test.ts",
+      "anchor": "execute boundary 1 and capture boundary 2 unexecuted"
+    },
+    {
+      "id": "harness.unbounded-completes",
+      "category": "harness",
+      "expectation": "Unbounded managed worktree agents execute tools until a terminal model answer.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-harness-k-e2e.test.ts",
+      "anchor": "unbounded managed rollouts execute tools"
+    },
+    {
+      "id": "harness.driver-cutover",
+      "category": "harness",
+      "expectation": "Claude Agent SDK and Codex SDK drivers use per-member native dialect gateways on multiple turns.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-drivers-e2e.test.ts",
+      "anchor": "real driver runs two fused turns"
+    },
+    {
+      "id": "harness.path-confinement",
+      "category": "security",
+      "expectation": "Managed file tools reject worktree path traversal and record the failure as trajectory evidence.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-harness-k-e2e.test.ts",
+      "anchor": "reject path traversal"
+    },
+    {
+      "id": "policy.failover-fusion",
+      "category": "policy",
+      "expectation": "A throttled native model fails over to fusion with the failed member excluded.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
+      "anchor": "onRateLimit=fusion"
+    },
+    {
+      "id": "policy.failover-passthrough",
+      "category": "policy",
+      "expectation": "Passthrough policy surfaces the engine's classified provider failure verbatim.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
+      "anchor": "onRateLimit=passthrough"
+    },
+    {
+      "id": "policy.failover-fail",
+      "category": "policy",
+      "expectation": "Fail policy returns an explicit failure and never invokes fusion.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
+      "anchor": "onRateLimit=fail"
+    },
+    {
+      "id": "policy.budget-before-spend",
+      "category": "policy",
+      "expectation": "An over-budget session is refused with 402 before any provider call.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
+      "anchor": "over-budget session is refused before any model call"
+    },
+    {
+      "id": "security.gateway-auth",
+      "category": "security",
+      "expectation": "Missing or incorrect gateway bearer credentials fail every door before provider spend.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-auth-e2e.test.ts",
+      "anchor": "rejects every door before provider spend"
+    },
+    {
+      "id": "session.finite-k-memoryless",
+      "category": "sessions",
+      "expectation": "Finite-k rounds re-run the panel over updated messages.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
+      "anchor": "finite-k rounds are memoryless"
+    },
+    {
+      "id": "session.unbounded-resume",
+      "category": "sessions",
+      "expectation": "Completed unbounded candidates persist across gateway restart and resume with zero re-fanout.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-resume-e2e.test.ts",
+      "anchor": "survive gateway restart"
+    },
+    {
+      "id": "session.cost-persisted",
+      "category": "sessions",
+      "expectation": "Fused usage and priced cost are persisted in the durable session ledger.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-depth-e2e.test.ts",
+      "anchor": "priced cost"
+    },
+    {
+      "id": "lifecycle.straggler-bounded",
+      "category": "lifecycle",
+      "expectation": "A slow k=1 sibling is abandoned after grace without delaying the survivor.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-chaos-e2e.test.ts",
+      "anchor": "straggler grace aborts"
+    },
+    {
+      "id": "lifecycle.panel-timeout",
+      "category": "lifecycle",
+      "expectation": "A hard panel timeout prevents judging partial work and does not poison the next turn.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-chaos-e2e.test.ts",
+      "anchor": "panel timeout fails a turn"
+    },
+    {
+      "id": "lifecycle.client-cancel",
+      "category": "lifecycle",
+      "expectation": "Client cancellation prevents later judging and the gateway remains healthy.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-chaos-e2e.test.ts",
+      "anchor": "caller abort cancels"
+    },
+    {
+      "id": "runs.event-sourced-lifecycle",
+      "category": "runs",
+      "expectation": "Native runs create, complete, inspect, page events, and idempotently replay without extra provider calls.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_runs_and_processes.py",
+      "anchor": "test_native_run_idempotency_key_replays_the_same_run"
+    },
+    {
+      "id": "process.product-cli-boot",
+      "category": "process",
+      "expectation": "The real FusionKit CLI loads config, preflights providers, spawns the Python engine, starts the gateway, and serves fusion.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-npm-cli-e2e.test.ts",
+      "anchor": "boots its production stack"
+    },
+    {
+      "id": "process.serve-endpoint",
+      "category": "process",
+      "expectation": "The real serve-endpoint child process advertises and fronts its single configured model.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_runs_and_processes.py",
+      "anchor": "test_serve_endpoint_process_fronts_one_model"
+    },
+    {
+      "id": "cli.management-surfaces",
+      "category": "cli",
+      "expectation": "The real CLI covers config, prompts, install/uninstall, telemetry, setup, doctor, completions, versions, and runtime registry.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/cli-command-surfaces-e2e.test.ts",
+      "anchor": "config path/show/get/set/unset/export-yaml"
+    },
+    {
+      "id": "observability.trace-semantics",
+      "category": "observability",
+      "expectation": "Fusion candidate, panel, judge, and provider spans use the registered semantic conventions and preserve trace context.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/fusion-backend-trace.test.ts",
+      "anchor": "trace"
+    },
+    {
+      "id": "platform.local-mlx",
+      "category": "platform",
+      "expectation": "Local MLX model lifecycle, scale-to-zero, memory pressure, and OOM guidance work on Apple Silicon.",
+      "status": "environment-gated",
+      "gateReason": "Requires Apple Silicon and downloaded MLX model weights.",
+      "liveCommand": "pnpm mlx:stress"
+    },
+    {
+      "id": "providers.real-accounts",
+      "category": "platform",
+      "expectation": "Real provider accounts accept the shipped request shapes and billed fusion completes.",
+      "status": "environment-gated",
+      "gateReason": "Requires explicit provider credentials and incurs spend.",
+      "liveCommand": "uv run --package fusionkit fusionkit bench public-bench --help"
+    }
+  ]
+}
