@@ -244,6 +244,7 @@ locals {
     exporters:
       prometheusremotewrite:
         endpoint: ${aws_prometheus_workspace.this.prometheus_endpoint}api/v1/remote_write
+        translation_strategy: UnderscoreEscapingWithSuffixes
         auth:
           authenticator: sigv4auth
       awsxray:
@@ -298,6 +299,10 @@ resource "aws_ecs_task_definition" "observability" {
           value = var.aws_region
         },
         {
+          name  = "AWS_SDK_LOAD_CONFIG"
+          value = "true"
+        },
+        {
           name  = "AMP_ENDPOINT"
           value = aws_prometheus_workspace.this.prometheus_endpoint
         },
@@ -316,6 +321,10 @@ resource "aws_ecs_task_definition" "observability" {
         {
           name  = "GF_AUTH_ANONYMOUS_ENABLED"
           value = "false"
+        },
+        {
+          name  = "GF_AUTH_SIGV4_AUTH_ENABLED"
+          value = "true"
         },
         {
           name  = "GF_USERS_ALLOW_SIGN_UP"

@@ -9,8 +9,8 @@
   "panels": [
     {
       "datasource": {
-        "type": "cloudwatch",
-        "uid": "cloudwatch"
+        "type": "prometheus",
+        "uid": "amp"
       },
       "fieldConfig": {
         "defaults": {
@@ -50,41 +50,20 @@
       },
       "targets": [
         {
-          "dimensions": {
-            "JobQueue": [
-              "*"
-            ]
-          },
-          "matchExact": false,
-          "metricName": "RunnableJobs",
-          "namespace": "AWS/Batch",
-          "period": "",
-          "refId": "A",
-          "region": "default",
-          "statistic": "Average"
-        },
-        {
-          "dimensions": {
-            "JobQueue": [
-              "*"
-            ]
-          },
-          "matchExact": false,
-          "metricName": "RunningJobs",
-          "namespace": "AWS/Batch",
-          "period": "",
-          "refId": "B",
-          "region": "default",
-          "statistic": "Average"
+          "editorMode": "code",
+          "expr": "sum by (hyperkit_benchmark) (rate(hyperkit_shards_completed_total[$__rate_interval]))",
+          "legendFormat": "{{hyperkit_benchmark}}",
+          "range": true,
+          "refId": "A"
         }
       ],
-      "title": "Batch queue depth",
+      "title": "Shard completion throughput",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "cloudwatch",
-        "uid": "cloudwatch"
+        "type": "prometheus",
+        "uid": "amp"
       },
       "fieldConfig": {
         "defaults": {
@@ -127,35 +106,21 @@
       },
       "targets": [
         {
-          "dimensions": {
-            "JobQueue": [
-              "*"
-            ]
-          },
-          "matchExact": false,
-          "metricName": "SucceededJobs",
-          "namespace": "AWS/Batch",
-          "period": "300",
-          "refId": "A",
-          "region": "default",
-          "statistic": "Sum"
+          "editorMode": "code",
+          "expr": "sum by (hyperkit_benchmark) (rate(hyperkit_shards_resolved_total[$__rate_interval]))",
+          "legendFormat": "resolved {{hyperkit_benchmark}}",
+          "range": true,
+          "refId": "A"
         },
         {
-          "dimensions": {
-            "JobQueue": [
-              "*"
-            ]
-          },
-          "matchExact": false,
-          "metricName": "FailedJobs",
-          "namespace": "AWS/Batch",
-          "period": "300",
-          "refId": "B",
-          "region": "default",
-          "statistic": "Sum"
+          "editorMode": "code",
+          "expr": "sum by (hyperkit_benchmark) (rate(hyperkit_shards_errors_total[$__rate_interval]))",
+          "legendFormat": "errors {{hyperkit_benchmark}}",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Job outcomes",
+      "title": "Shard outcomes",
       "type": "timeseries"
     },
     {
@@ -193,14 +158,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(otelcol_receiver_accepted_metric_points[5m]))",
+          "expr": "sum(rate(otelcol_receiver_accepted_metric_points[$__rate_interval]))",
           "legendFormat": "accepted",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(otelcol_receiver_refused_metric_points[5m]))",
+          "expr": "sum(rate(otelcol_receiver_refused_metric_points[$__rate_interval]))",
           "legendFormat": "refused",
           "range": true,
           "refId": "B"
@@ -216,7 +181,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -245,13 +210,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max by (instance_type) (hyperkit_worker_memory_reserved_bytes)",
-          "legendFormat": "{{instance_type}}",
+          "expr": "sum(rate(otelcol_exporter_sent_metric_points[$__rate_interval]))",
+          "legendFormat": "sent",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(otelcol_exporter_send_failed_metric_points[$__rate_interval]))",
+          "legendFormat": "failed",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Reserved worker memory",
+      "title": "Collector export throughput",
       "type": "timeseries"
     },
     {
@@ -261,7 +233,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit"
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -289,13 +261,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max by (instance_id) (hyperkit_worker_memory_used_bytes / hyperkit_worker_memory_total_bytes)",
-          "legendFormat": "{{instance_id}}",
+          "expr": "sum by (hyperkit_sut_kind) (rate(hyperkit_cost_usd_total[$__rate_interval]))",
+          "legendFormat": "{{hyperkit_sut_kind}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Worker memory pressure",
+      "title": "SUT spend rate",
       "type": "timeseries"
     }
   ],

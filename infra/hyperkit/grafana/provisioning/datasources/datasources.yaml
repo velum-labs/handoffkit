@@ -21,6 +21,7 @@ datasources:
     jsonData:
       httpMethod: POST
       sigV4Auth: true
+      sigV4AuthType: default
       sigV4Region: ${AWS_REGION}
       timeInterval: 30s
 

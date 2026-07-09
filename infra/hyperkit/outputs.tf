@@ -48,6 +48,16 @@ output "amp_workspace_endpoint" {
   value       = module.observability.amp_workspace_endpoint
 }
 
+output "observability_ecs_cluster_name" {
+  description = "ECS cluster hosting Grafana and ADOT."
+  value       = module.observability.ecs_cluster_name
+}
+
+output "observability_ecs_service_name" {
+  description = "ECS service hosting Grafana and ADOT."
+  value       = module.observability.ecs_service_name
+}
+
 output "managed_secret_arns" {
   description = "Empty secret containers created by this stack. Populate values outside Terraform."
   value       = module.secrets.secret_arns_by_name

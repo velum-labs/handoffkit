@@ -144,12 +144,9 @@ compute environment.
 
 The custom Grafana image installs the Athena and X-Ray plugins and bakes in:
 
-- `Sweep Live`: live shard counts, latency, failures, and durable Athena result
-  summaries.
-- `Fleet`: Batch queue/outcome metrics, ADOT throughput, and worker memory
-  reservation/pressure.
-- `Fusion Internal`: fusion uplift, judge/synthesis regret, stage tokens, cost,
-  and panel-selection share.
+- `Sweep Live`: completed/error shard counts, latency, and resolution rate.
+- `Fleet`: shard throughput/outcomes and ADOT receive/export health.
+- `Fusion Internal`: fusion-versus-solo resolution, outcomes, latency, and cost.
 
 The provisioned data sources use the Fargate task role:
 
@@ -163,10 +160,47 @@ The provisioned data sources use the Fargate task role:
   `s3://<artifact-bucket>/athena-results/`.
 - **X-Ray** receives OTLP traces from ADOT and supplies trace/service-map views.
 
-Dashboard PromQL assumes the runner emits the `hyperkit_*` instruments named in
-the JSON templates. Empty panels indicate missing instrumentation, not a
-Terraform or datasource failure. ADOT's own `otelcol_*` metrics provide a
-collector-path health signal.
+Dashboard PromQL is limited to the five instruments emitted by
+`hyperkit.telemetry` and ADOT's `otelcol_*` self-metrics. The remote-write
+translation strategy is pinned so dotted OTel names and counter/unit suffixes
+remain stable (`hyperkit.shards.completed` becomes
+`hyperkit_shards_completed_total`, for example). Dashboard queries never use
+`or vector(0)`, so missing telemetry remains visible instead of looking healthy.
+
+### Local dashboard validation
+
+The local compose stack replaces only the provisioned `amp` datasource with a
+seeded, unauthenticated Prometheus instance. The dashboard files and Grafana
+image are the production files; AWS provisioning remains unchanged.
+
+```sh
+docker compose -f infra/hyperkit/grafana/compose.yaml up --build -d --wait
+python3 scripts/validate_hyperkit_dashboards.py
+```
+
+Open `http://127.0.0.1:13000` and select the Hyperkit folder. Localhost-only
+anonymous Viewer access is enabled for this disposable stack, and every panel
+has seeded data.
+The validator fails on datasource errors, PromQL errors, unsupported metric
+names, missing dashboards, and empty query results. Stop the local stack with:
+
+```sh
+docker compose -f infra/hyperkit/grafana/compose.yaml down -v
+```
+
+Production Grafana explicitly enables SigV4 and uses the ECS task role for AMP,
+CloudWatch, Athena, and X-Ray. After publishing a new Grafana image and applying
+Terraform, restart and wait for the observability service with:
+
+```sh
+aws ecs update-service \
+  --cluster "$(terraform output -raw observability_ecs_cluster_name)" \
+  --service "$(terraform output -raw observability_ecs_service_name)" \
+  --force-new-deployment
+aws ecs wait services-stable \
+  --cluster "$(terraform output -raw observability_ecs_cluster_name)" \
+  --services "$(terraform output -raw observability_ecs_service_name)"
+```
 
 `grafana_allowed_cidrs` defaults to empty, so the ALB has no ingress. Use only
 trusted `/32` or VPN ranges. Set `grafana_certificate_arn` for HTTPS; HTTP mode

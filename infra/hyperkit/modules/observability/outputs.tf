@@ -32,3 +32,13 @@ output "adot_log_group_arn" {
   value       = aws_cloudwatch_log_group.adot.arn
   description = "ADOT CloudWatch log group ARN."
 }
+
+output "ecs_cluster_name" {
+  value       = aws_ecs_cluster.observability.name
+  description = "ECS cluster hosting Grafana and ADOT."
+}
+
+output "ecs_service_name" {
+  value       = aws_ecs_service.observability.name
+  description = "ECS service hosting Grafana and ADOT."
+}

@@ -1,0 +1,74 @@
+groups:
+  - name: hyperkit-local-seed
+    interval: 1s
+    rules:
+      - record: hyperkit_shards_completed_total
+        expr: time()
+        labels: &fusion
+          hyperkit_benchmark: humaneval
+          hyperkit_sut_kind: fusionkit-serve
+          hyperkit_sut_hash: fusion-seed
+          hyperkit_sweep_id: seed-run
+      - record: hyperkit_shards_completed_total
+        expr: time() * 0.9
+        labels: &solo
+          hyperkit_benchmark: humaneval
+          hyperkit_sut_kind: solo-model
+          hyperkit_sut_hash: solo-seed
+          hyperkit_sweep_id: seed-run
+      - record: hyperkit_shards_resolved_total
+        expr: time() * 0.78
+        labels: *fusion
+      - record: hyperkit_shards_resolved_total
+        expr: time() * 0.63
+        labels: *solo
+      - record: hyperkit_shards_errors_total
+        expr: time() * 0.01
+        labels: *fusion
+      - record: hyperkit_shards_errors_total
+        expr: time() * 0.02
+        labels: *solo
+      - record: hyperkit_cost_usd_total
+        expr: time() * 0.002
+        labels: *fusion
+      - record: hyperkit_cost_usd_total
+        expr: time() * 0.001
+        labels: *solo
+
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.2
+        labels: { <<: *fusion, le: "0.5" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.6
+        labels: { <<: *fusion, le: "1" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.9
+        labels: { <<: *fusion, le: "2" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time()
+        labels: { <<: *fusion, le: "+Inf" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.3
+        labels: { <<: *solo, le: "0.5" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.75
+        labels: { <<: *solo, le: "1" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.95
+        labels: { <<: *solo, le: "2" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time()
+        labels: { <<: *solo, le: "+Inf" }
+
+      - record: otelcol_receiver_accepted_metric_points
+        expr: time() * 20
+        labels: { receiver: otlp }
+      - record: otelcol_receiver_refused_metric_points
+        expr: time() * 0.001
+        labels: { receiver: otlp }
+      - record: otelcol_exporter_sent_metric_points
+        expr: time() * 20
+        labels: { exporter: prometheusremotewrite }
+      - record: otelcol_exporter_send_failed_metric_points
+        expr: time() * 0.001
+        labels: { exporter: prometheusremotewrite }

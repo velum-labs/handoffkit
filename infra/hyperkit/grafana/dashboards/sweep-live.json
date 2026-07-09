@@ -59,13 +59,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(hyperkit_shards_running{run_id=~\"$run_id\"}) or vector(0)",
-          "legendFormat": "running",
+          "expr": "sum(increase(hyperkit_shards_completed_total{hyperkit_sweep_id=~\"$run_id\"}[$__range]))",
+          "legendFormat": "completed",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Running shards",
+      "title": "Completed shards in range",
       "type": "stat"
     },
     {
@@ -116,13 +116,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(increase(hyperkit_shards_failed_total{run_id=~\"$run_id\"}[$__range])) or vector(0)",
-          "legendFormat": "failed",
+          "expr": "sum(increase(hyperkit_shards_errors_total{hyperkit_sweep_id=~\"$run_id\"}[$__range]))",
+          "legendFormat": "errors",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Failures in range",
+      "title": "Errors in range",
       "type": "stat"
     },
     {
@@ -168,26 +168,26 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le, stage) (rate(hyperkit_stage_duration_seconds_bucket{run_id=~\"$run_id\"}[5m])))",
-          "legendFormat": "p50 {{stage}}",
+          "expr": "histogram_quantile(0.50, sum by (le, hyperkit_benchmark) (rate(hyperkit_shard_latency_seconds_bucket{hyperkit_sweep_id=~\"$run_id\"}[$__rate_interval])))",
+          "legendFormat": "p50 {{hyperkit_benchmark}}",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(hyperkit_stage_duration_seconds_bucket{run_id=~\"$run_id\"}[5m])))",
-          "legendFormat": "p95 {{stage}}",
+          "expr": "histogram_quantile(0.95, sum by (le, hyperkit_benchmark) (rate(hyperkit_shard_latency_seconds_bucket{hyperkit_sweep_id=~\"$run_id\"}[$__rate_interval])))",
+          "legendFormat": "p95 {{hyperkit_benchmark}}",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Stage latency",
+      "title": "Shard latency",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "grafana-athena-datasource",
-        "uid": "athena"
+        "type": "prometheus",
+        "uid": "amp"
       },
       "gridPos": {
         "h": 9,
@@ -196,27 +196,37 @@
         "y": 9
       },
       "id": 4,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
         },
-        "showHeader": true
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "format": 1,
-          "rawSQL": "SELECT status, count(*) AS shards, avg(latency_s) AS avg_latency_s, sum(cost_usd) AS cost_usd FROM shard_results WHERE sweep_id = '$run_id' GROUP BY status ORDER BY status",
+          "editorMode": "code",
+          "expr": "sum by (hyperkit_benchmark, hyperkit_sut_kind) (rate(hyperkit_shards_resolved_total{hyperkit_sweep_id=~\"$run_id\"}[$__rate_interval])) / sum by (hyperkit_benchmark, hyperkit_sut_kind) (rate(hyperkit_shards_completed_total{hyperkit_sweep_id=~\"$run_id\"}[$__rate_interval]))",
+          "legendFormat": "{{hyperkit_benchmark}} / {{hyperkit_sut_kind}}",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "Durable shard results",
-      "type": "table"
+      "title": "Resolution rate",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
