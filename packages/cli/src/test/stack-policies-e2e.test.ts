@@ -96,6 +96,31 @@ test("onRateLimit=passthrough: the engine's classified vendor failure surfaces v
   });
 });
 
+test(
+  "onRateLimit=fail: a throttled vendor fails explicitly and never invokes fusion",
+  { skip: SKIP },
+  async () => {
+    await withStack(
+      { members: [...MEMBERS], judgeId: "judge", onRateLimit: "fail" },
+      async (stack) => {
+        await queueRateLimitStorm(stack, "gpt-panel-a");
+        const response = await stack.door.chat({
+          model: "gpt-panel-a",
+          messages: [{ role: "user", content: "fail instead of failing over" }]
+        });
+        assert.equal(response.status, 503, await stack.sim.describeJournal());
+        const body = (await response.json()) as { error?: { message?: string } };
+        assert.match(body.error?.message ?? "", /failover disabled/i);
+        assert.equal(
+          (await stack.sim.calls({ model: "gpt-judge" })).length,
+          0,
+          "fail policy must never invoke the ensemble"
+        );
+      }
+    );
+  }
+);
+
 test("fused-turn member throttling degrades to the surviving members (no failover needed)", { skip: SKIP }, async () => {
   await withStack({ members: [...MEMBERS], judgeId: "judge", onRateLimit: "fusion" }, async (stack) => {
     await queueRateLimitStorm(stack, "gpt-panel-a");
