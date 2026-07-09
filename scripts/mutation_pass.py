@@ -331,6 +331,65 @@ MUTATIONS = [
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-auth-e2e.test.js",
     ),
+    Mutation(
+        id="M26",
+        what="k=1 panel member reasoning is dropped before trajectories reach the judge",
+        file="packages/ensemble/src/panel-propose.ts",
+        old="  if (reasoning.length > 0) {",
+        new="  if (false) {",
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern reasoning "
+            "packages/cli/dist/test/stack-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M27",
+        what="streamed synthesizer model reasoning is dropped before the gateway",
+        file="python/fusionkit-core/src/fusionkit_core/client_openai.py",
+        old="                model_reasoning_delta=_reasoning_text(delta),",
+        new="                model_reasoning_delta=None,",
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern reasoning "
+            "packages/cli/dist/test/stack-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M28",
+        what="the real Claude CLI ignores the injected named fused model",
+        file="packages/testkit/src/clis.ts",
+        old='    ANTHROPIC_MODEL: input.model ?? "fusion-panel",',
+        new='    ANTHROPIC_MODEL: "fusion-panel",',
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern "
+            "'\\[claude\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M29",
+        what="the real Codex CLI ignores the injected named fused model",
+        file="packages/testkit/src/clis.ts",
+        old='      `model = "${input.model ?? "fusion-panel"}"`,',
+        new='      \'model = "fusion-panel"\',',
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern "
+            "'\\[codex\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M30",
+        what="the real OpenCode CLI ignores the injected named fused model",
+        file="packages/testkit/src/clis.ts",
+        old='  const model = input.model ?? "fusion-panel";',
+        new='  const model = "fusion-panel";',
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern "
+            "'\\[opencode\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+        ),
+    ),
 ]
 
 
