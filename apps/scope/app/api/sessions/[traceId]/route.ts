@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getSpans, getSession } from "@/lib/db";
+import { getEvents, getSpans, getSession } from "@/lib/db";
 import { deriveSession } from "@/lib/sessions";
 
 export const runtime = "nodejs";
@@ -13,10 +13,11 @@ export async function GET(
   const { traceId } = await context.params;
   const row = getSession(traceId);
   const spans = getSpans(traceId);
-  if (row === undefined && spans.length === 0) {
+  const events = getEvents(traceId);
+  if (row === undefined && spans.length === 0 && events.length === 0) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const detail = deriveSession(traceId, spans);
+  const detail = deriveSession(traceId, spans, events);
   // Prefer the persisted session row's final output (full) when present.
   if (row?.final_output) detail.finalOutput = row.final_output;
   if (row?.status) detail.status = row.status;

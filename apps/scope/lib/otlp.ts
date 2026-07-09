@@ -1,14 +1,16 @@
 import { componentOfScope } from "./types";
-import type { IncomingSpan } from "./types";
+import type { IncomingEvent, IncomingSpan } from "./types";
 
 /**
- * OTLP/HTTP JSON trace parsing (`ExportTraceServiceRequest`).
+ * OTLP/HTTP JSON parsing: traces (`ExportTraceServiceRequest`) and logs
+ * (`ExportLogsServiceRequest`, carrying fusion events as log records with
+ * `eventName`).
  *
  * Two encodings arrive here: the OTel JS exporter's spec-conformant OTLP JSON
  * (hex ids, integer enums) and the Python engine's protobuf-JSON mapping
- * (base64 ids, enum name strings, int64s as strings). The decoder accepts
+ * (base64 ids, enum name strings, int64s as strings). The decoders accept
  * both — the OTLP spec explicitly allows a receiver to be liberal — and
- * flattens every span into the collector's `IncomingSpan` shape.
+ * flatten every signal into the collector's incoming shapes.
  */
 
 type AnyValue = {
@@ -40,6 +42,25 @@ type ExportTraceServiceRequest = {
     scopeSpans?: Array<{
       scope?: { name?: string };
       spans?: OtlpSpan[];
+    }>;
+  }>;
+};
+
+type OtlpLogRecord = {
+  timeUnixNano?: number | string;
+  observedTimeUnixNano?: number | string;
+  eventName?: string;
+  traceId?: string;
+  spanId?: string;
+  attributes?: KeyValue[];
+};
+
+type ExportLogsServiceRequest = {
+  resourceLogs?: Array<{
+    resource?: { attributes?: KeyValue[] };
+    scopeLogs?: Array<{
+      scope?: { name?: string };
+      logRecords?: OtlpLogRecord[];
     }>;
   }>;
 };
@@ -135,4 +156,37 @@ export function parseOtlpExport(body: unknown): IncomingSpan[] {
     }
   }
   return spans;
+}
+
+/**
+ * Flatten an OTLP logs export into collector events. Records without an
+ * `eventName` or a trace id are skipped — the collector groups everything by
+ * trace, and only fusion events (named log records) are meaningful to it.
+ */
+export function parseOtlpLogsExport(body: unknown): IncomingEvent[] {
+  const request = (body ?? {}) as ExportLogsServiceRequest;
+  const events: IncomingEvent[] = [];
+  for (const resourceLog of request.resourceLogs ?? []) {
+    const resource = decodeAttributes(resourceLog.resource?.attributes);
+    const service = typeof resource["service.name"] === "string" ? resource["service.name"] : undefined;
+    for (const scopeLog of resourceLog.scopeLogs ?? []) {
+      const component = componentOfScope(scopeLog.scope?.name);
+      for (const record of scopeLog.logRecords ?? []) {
+        const traceId = decodeId(record.traceId, 32);
+        if (traceId === undefined || record.eventName === undefined || record.eventName.length === 0) continue;
+        const spanId = decodeId(record.spanId, 16);
+        const ts = decodeNanos(record.timeUnixNano ?? record.observedTimeUnixNano);
+        events.push({
+          trace_id: traceId,
+          ...(spanId !== undefined ? { span_id: spanId } : {}),
+          name: record.eventName,
+          component,
+          ...(service !== undefined ? { service } : {}),
+          ts_ms: ts,
+          attributes: decodeAttributes(record.attributes)
+        });
+      }
+    }
+  }
+  return events;
 }

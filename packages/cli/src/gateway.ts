@@ -23,7 +23,7 @@ import type {
 } from "@fusionkit/ensemble";
 import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
-import { emitFusionMarker, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
+import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
   FusionBackend,
   installAcpAdapters,
@@ -287,7 +287,7 @@ export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunn
       [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
       [ATTR.FUSION_REPO]: config.repo
     });
-    run.marker("gateway", "fusion.turn.info", {
+    run.event("gateway", "fusion.turn.info", {
       [ATTR.FUSION_DIALECT]: input.dialect,
       [ATTR.FUSION_PROMPT_PREVIEW]: input.prompt.slice(0, 600),
       [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
@@ -506,7 +506,7 @@ export async function startFusionStepGateway(input: {
       ensembleModelId !== undefined
         ? ensemblesByModelId.get(ensembleModelId)?.judgeModelName
         : undefined;
-    emitFusionMarker("gateway", "fusion.turn.info", trace, {
+    emitFusionEvent("gateway", "fusion.turn.info", trace, {
       [ATTR.FUSION_DIALECT]: "fusion-step",
       [ATTR.FUSION_TURN]: turn,
       [ATTR.FUSION_PROMPT_PREVIEW]: task.slice(0, 600),

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Final
 
-FUSION_SPAN_NAMES: Final[tuple[str, ...]] = ("fusion.run", "fusion.turn", "fusion.candidate", "fusion.judge", "fusion.fuse", "chat", "fusion.passthrough", "fusion.turn.info", "fusion.candidate.started", "fusion.candidate.step", "fusion.model_call.started", "fusion.judge.request", "fusion.judge.thinking", "fusion.judge.scored", "fusion.judge.synthesis", "fusion.cost", "fusion.narration", "fusion.tool.execution", "fusion.cursor.route",)
+FUSION_SPAN_NAMES: Final[tuple[str, ...]] = ("fusion.run", "fusion.turn", "fusion.candidate", "fusion.judge", "fusion.fuse", "chat", "fusion.passthrough",)
 
-FUSION_MARKER_NAMES: Final[tuple[str, ...]] = ("fusion.turn.info", "fusion.candidate.started", "fusion.candidate.step", "fusion.model_call.started", "fusion.judge.request", "fusion.judge.thinking", "fusion.judge.scored", "fusion.judge.synthesis", "fusion.cost", "fusion.narration", "fusion.tool.execution", "fusion.cursor.route",)
+FUSION_EVENT_NAMES: Final[tuple[str, ...]] = ("fusion.turn.info", "fusion.candidate.started", "fusion.candidate.step", "fusion.model_call.started", "fusion.judge.request", "fusion.judge.thinking", "fusion.judge.scored", "fusion.judge.synthesis", "fusion.cost", "fusion.narration", "fusion.tool.execution", "fusion.cursor.route",)
 
 
 class ATTR:
@@ -91,4 +91,4 @@ EXPORTABLE_ATTRIBUTES: Final[frozenset[str]] = frozenset({"fusion.turn", "fusion
 
 FUSION_SCOPES: Final[dict[str, str]] = {"gateway": "fusionkit.gateway", "ensemble": "fusionkit.ensemble", "panel-model": "fusionkit.panel-model", "judge": "fusionkit.judge", "synthesis": "fusionkit.synthesis", "cli": "fusionkit.cli", "cursor-bridge": "fusionkit.cursor-bridge"}
 
-FUSION_CONVENTIONS_VERSION: Final[str] = "1.0.0"
+FUSION_CONVENTIONS_VERSION: Final[str] = "2.0.0"

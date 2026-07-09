@@ -1,15 +1,16 @@
 /**
  * Attribute redaction at the OTLP export boundary.
  *
- * Spans carry full-fidelity payloads (prompts, messages, trajectories, final
- * outputs) for in-process consumers — the reasoning narrator and the local
- * dashboard need them. But the protocol's `EXPORTABLE_ATTRIBUTES` allowlist
- * defines what is "safe to leave the machine", so anything crossing a network
- * boundary to a non-loopback collector is filtered here, at the exporter,
- * not at span creation.
+ * Spans and events carry full-fidelity payloads (prompts, messages,
+ * trajectories, final outputs) for in-process consumers — the reasoning
+ * narrator and the local dashboard need them. But the protocol's
+ * `EXPORTABLE_ATTRIBUTES` allowlist defines what is "safe to leave the
+ * machine", so anything crossing a network boundary to a non-loopback
+ * collector is filtered here, at the exporter, not at creation.
  */
 import type { Attributes } from "@opentelemetry/api";
 import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
+import type { LogRecordExporter, ReadableLogRecord } from "@opentelemetry/sdk-logs";
 
 import { EXPORTABLE_ATTRIBUTES } from "@fusionkit/protocol";
 
@@ -102,6 +103,61 @@ export class AllowlistSpanExporter implements SpanExporter {
 
   forceFlush(): Promise<void> {
     return this.#inner.forceFlush?.() ?? Promise.resolve();
+  }
+}
+
+/**
+ * Return a copy of the log record with only `EXPORTABLE_ATTRIBUTES` retained.
+ * If nothing was dropped, the original record is returned unchanged;
+ * otherwise the copy carries `fusion.trace.redacted: true`.
+ */
+export function toExportableEvent(record: ReadableLogRecord): ReadableLogRecord {
+  const { kept, dropped } = filterAttributes(record.attributes as Attributes);
+  if (dropped === 0) return record;
+  return {
+    hrTime: record.hrTime,
+    hrTimeObserved: record.hrTimeObserved,
+    ...(record.spanContext !== undefined ? { spanContext: record.spanContext } : {}),
+    ...(record.severityText !== undefined ? { severityText: record.severityText } : {}),
+    ...(record.severityNumber !== undefined ? { severityNumber: record.severityNumber } : {}),
+    ...(record.body !== undefined ? { body: record.body } : {}),
+    ...(record.eventName !== undefined ? { eventName: record.eventName } : {}),
+    resource: record.resource,
+    instrumentationScope: record.instrumentationScope,
+    attributes: { ...kept, [TRACE_REDACTED_ATTRIBUTE]: true },
+    droppedAttributesCount: record.droppedAttributesCount + dropped
+  };
+}
+
+export type AllowlistLogExporterOptions = {
+  /** Skip filtering entirely (loopback collector or explicit user opt-in). */
+  fullFidelity?: boolean;
+};
+
+/**
+ * A `LogRecordExporter` decorator that applies the `EXPORTABLE_ATTRIBUTES`
+ * allowlist to every event before delegating to the wrapped exporter.
+ */
+export class AllowlistLogExporter implements LogRecordExporter {
+  readonly #inner: LogRecordExporter;
+  readonly #fullFidelity: boolean;
+
+  constructor(inner: LogRecordExporter, options: AllowlistLogExporterOptions = {}) {
+    this.#inner = inner;
+    this.#fullFidelity = options.fullFidelity ?? false;
+  }
+
+  export(records: ReadableLogRecord[], resultCallback: Parameters<LogRecordExporter["export"]>[1]): void {
+    const outgoing = this.#fullFidelity ? records : records.map(toExportableEvent);
+    this.#inner.export(outgoing, resultCallback);
+  }
+
+  shutdown(): Promise<void> {
+    return this.#inner.shutdown();
+  }
+
+  forceFlush(): Promise<void> {
+    return this.#inner.forceFlush();
   }
 }
 

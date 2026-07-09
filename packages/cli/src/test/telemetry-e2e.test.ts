@@ -7,9 +7,14 @@
  * contract: commands return/throw, one epilogue settles telemetry, flushes,
  * runs cleanups, then exits. Also pins env-only opt-in: FUSIONKIT_TELEMETRY=1
  * without a consent file must still capture (with an ephemeral install id).
+ *
+ * The SIGINT test pins the second variant of the same bug: interactive fusion
+ * sessions end with Ctrl+C, which exits through the cleanup registry's signal
+ * handler (process.exit after runCleanups) and never resumes main's finally —
+ * so the telemetry epilogue must also be registered as a cleanup.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -86,6 +91,65 @@ test("a real CLI run ships a cli.command event to the telemetry sink before exit
     );
     assert.equal(commandEvent.properties?.command, "version");
     assert.equal(commandEvent.properties?.exit_kind, "ok");
+  } finally {
+    sink.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a SIGINT-terminated CLI run still ships a cli.command event before exiting", async () => {
+  const bodies: string[] = [];
+  const sink = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks);
+      const text =
+        req.headers["content-encoding"] === "gzip"
+          ? gunzipSync(raw).toString("utf8")
+          : raw.toString("utf8");
+      bodies.push(text);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("{}");
+    });
+  });
+  await new Promise<void>((resolve) => sink.listen(0, "127.0.0.1", resolve));
+  const port = (sink.address() as AddressInfo).port;
+  const home = mkdtempSync(join(tmpdir(), "fk-telemetry-sigint-"));
+  try {
+    // `doctor` is async long enough to interrupt mid-run, needs no provider
+    // keys, and keeps the event loop responsive so the signal handler fires.
+    const child = spawn(process.execPath, [CLI, "doctor"], {
+      stdio: ["ignore", "ignore", "ignore"],
+      env: {
+        ...process.env,
+        FUSIONKIT_TELEMETRY: "1",
+        FUSIONKIT_TELEMETRY_PATH: join(home, "telemetry.json"),
+        FUSIONKIT_POSTHOG_KEY: "phc_test_key",
+        FUSIONKIT_POSTHOG_HOST: `http://127.0.0.1:${port}`,
+        DO_NOT_TRACK: ""
+      }
+    });
+    const exited = new Promise<number | null>((resolve) => child.on("exit", (code) => resolve(code)));
+    // Give the CLI time to boot and enter the command, then interrupt it. If
+    // doctor happens to finish first the run still ships an event; the
+    // interesting assertion is that SIGINT mid-run does not lose it.
+    setTimeout(() => child.kill("SIGINT"), 1_500);
+    const guard = setTimeout(() => child.kill("SIGKILL"), 30_000);
+    await exited;
+    clearTimeout(guard);
+
+    const deadline = Date.now() + 5_000;
+    while (bodies.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const events = eventsFromBodies(bodies);
+    const commandEvent = events.find((event) => event.event === "cli.command");
+    assert.ok(
+      commandEvent !== undefined,
+      `no cli.command event reached the sink after SIGINT; received bodies: ${bodies.join("\n") || "(none)"}`
+    );
+    assert.equal(commandEvent.properties?.command, "doctor");
   } finally {
     sink.close();
     rmSync(home, { recursive: true, force: true });

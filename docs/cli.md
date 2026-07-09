@@ -182,7 +182,7 @@ The full model is documented in [Configuration](configuration.md).
 | `FUSIONKIT_SKIP_KEY_VALIDATION` | Skip live provider-key validation when set to `1`. |
 | `FUSIONKIT_TELEMETRY` | `1`/`0` overrides the stored product-telemetry consent for one invocation. |
 | `DO_NOT_TRACK` | Any non-empty value force-disables product telemetry, beating every other setting. |
-| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Export fusion trace spans to your own OTLP/HTTP collector; `--observe` fills it with the local scope dashboard when unset. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Export fusion spans + events to your own OTLP/HTTP collector (base URL; signal-specific `..._TRACES_ENDPOINT`/`..._LOGS_ENDPOINT` win); `--observe` fills it with the local scope dashboard when unset. |
 | `PORTLESS` | Set to `0` to disable portless routing by default. |
 | `PORTLESS_STATE_DIR`, `PORTLESS_TLD` | Portless proxy state directory and local domain. |
 
