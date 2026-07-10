@@ -13,8 +13,16 @@ artifact_bucket_name          = null
 artifact_retention_days       = 90
 force_destroy_artifact_bucket = false
 
-runner_image_tag  = "2026-07-09"
-grafana_image_tag = "2026-07-09"
+runner_image_tag     = "2026-07-09"
+controller_image_tag = "2026-07-09"
+grafana_image_tag    = "2026-07-09"
+
+controller_desired_count = 1
+controller_poll_interval = 30
+controller_s3_prefix     = "runs/"
+# Set to one sweep ID to restrict aggregation, or leave null to aggregate all
+# sweeps and rely on each object's runs/<sweep_id>/results/ key.
+controller_sweep_id = null
 
 # Terraform creates only empty containers. Populate their values separately
 # with aws secretsmanager put-secret-value.
@@ -25,6 +33,8 @@ runner_managed_secret_environment = {
   ANTHROPIC_API_KEY = "hyperkit/production/anthropic-api-key"
 }
 runner_external_secret_environment = {}
+controller_managed_secret_environment = {}
+controller_external_secret_environment = {}
 
 batch_instance_types      = ["r7i.2xlarge", "r7i.4xlarge", "m7i.2xlarge", "m7i.4xlarge"]
 batch_max_vcpus           = 256

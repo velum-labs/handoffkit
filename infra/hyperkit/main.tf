@@ -1,16 +1,24 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  name                          = "${var.project_name}-${var.environment}"
-  grafana_admin_secret_name     = "${var.project_name}/${var.environment}/grafana-admin-password"
-  create_grafana_admin_secret   = var.grafana_admin_secret_arn == null
-  base_managed_secret_names     = setunion(var.secret_names, toset(values(var.runner_managed_secret_environment)))
+  name                        = "${var.project_name}-${var.environment}"
+  grafana_admin_secret_name   = "${var.project_name}/${var.environment}/grafana-admin-password"
+  create_grafana_admin_secret = var.grafana_admin_secret_arn == null
+  job_managed_secret_names    = setunion(var.secret_names, toset(values(var.runner_managed_secret_environment)))
+  base_managed_secret_names = setunion(
+    local.job_managed_secret_names,
+    toset(values(var.controller_managed_secret_environment)),
+  )
   managed_secret_names          = local.create_grafana_admin_secret ? setunion(local.base_managed_secret_names, toset([local.grafana_admin_secret_name])) : local.base_managed_secret_names
   readable_external_secret_arns = setunion(var.external_secret_arns, toset(values(var.runner_external_secret_environment)))
   grafana_admin_secret_arn      = local.create_grafana_admin_secret ? module.secrets.secret_arns_by_name[local.grafana_admin_secret_name] : var.grafana_admin_secret_arn
   runner_secret_environment = merge(
     { for environment_name, secret_name in var.runner_managed_secret_environment : environment_name => module.secrets.secret_arns_by_name[secret_name] },
     var.runner_external_secret_environment,
+  )
+  controller_secret_environment = merge(
+    { for environment_name, secret_name in var.controller_managed_secret_environment : environment_name => module.secrets.secret_arns_by_name[secret_name] },
+    var.controller_external_secret_environment,
   )
   grafana_listener_port = var.grafana_certificate_arn == null ? 80 : 443
 }
@@ -48,7 +56,7 @@ module "secrets" {
   aws_region                = var.aws_region
   account_id                = data.aws_caller_identity.current.account_id
   secret_names              = local.managed_secret_names
-  job_readable_secret_names = local.base_managed_secret_names
+  job_readable_secret_names = local.job_managed_secret_names
   external_secret_arns      = local.readable_external_secret_arns
   artifact_bucket_arn       = module.storage.bucket_arn
   ecr_repository_arns       = [module.registry.runner_repository_arn]

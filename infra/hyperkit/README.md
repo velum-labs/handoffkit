@@ -2,19 +2,22 @@
 
 This directory is a production-oriented Terraform scaffold for running Hyperkit
 shards on AWS Batch Spot capacity while keeping metrics and Grafana available
-on an always-on ECS Fargate service.
+on an always-on ECS Fargate service and continuously aggregating completed
+hypergrid cells with a separate Fargate controller.
 
 ## Architecture
 
 - `network`: one VPC with public and private subnets in two availability zones,
   one NAT gateway per AZ by default, a no-ingress Batch security group, and
-  security-group-to-security-group rules for Grafana and OTLP.
+  no-ingress controller security group, plus security-group-to-security-group
+  rules for Grafana and OTLP.
 - `storage`: a private, encrypted, versioned S3 artifact lake and a Glue
   `shard_results` table over `runs/<sweep_id>/results/*.json`. Partition
   projection avoids Glue partition crawlers; Athena queries must constrain
   `sweep_id`.
-- `registry`: immutable, scan-on-push ECR repositories for the runner and
-  provisioned Grafana image, with untagged and image-count lifecycle rules.
+- `registry`: immutable, scan-on-push ECR repositories for the runner,
+  controller, and provisioned Grafana image, with untagged and image-count
+  lifecycle rules.
 - `secrets`: empty Secrets Manager containers plus separate Batch job and EC2
   instance roles. Terraform never creates a secret version or accepts a secret
   value.
@@ -24,6 +27,10 @@ on an always-on ECS Fargate service.
 - `observability`: Amazon Managed Service for Prometheus (AMP), an Athena
   workgroup, X-Ray trace export, and a Grafana + ADOT task on Fargate behind a
   CIDR-restricted public ALB. Cloud Map gives runners a private OTLP endpoint.
+- `controller`: an encrypted SQS queue and DLQ fed by S3 result notifications,
+  plus a one-task-by-default Fargate service on the observability ECS cluster.
+  It reads run artifacts through a least-privilege task role and sends OTLP to
+  ADOT over the VPC.
 
 The root also creates a monthly AWS Cost Budget. It intentionally does not
 configure a Terraform backend; use the organization's encrypted, locked remote
@@ -33,8 +40,8 @@ state backend rather than committing local state.
 
 - Terraform 1.6 or newer
 - AWS CLI credentials able to manage VPC, IAM, Batch, ECS, ECR, AMP, Athena,
-  Glue, S3, Secrets Manager, CloudWatch, X-Ray, ALB, Service Discovery, and
-  Budgets resources
+  Glue, S3, SQS, Secrets Manager, CloudWatch, X-Ray, ALB, Service Discovery,
+  and Budgets resources
 - Docker with BuildKit
 - An ACM certificate in the selected region for production HTTPS
 - Trusted office or VPN egress CIDRs for Grafana
@@ -68,18 +75,23 @@ aws ecr get-login-password --region "$(aws configure get region)" \
 
 TAG="$(git rev-parse --short=12 HEAD)"
 RUNNER_REPO="$(terraform output -raw runner_repository_url)"
+CONTROLLER_REPO="$(terraform output -raw controller_repository_url)"
 GRAFANA_REPO="$(terraform output -raw grafana_repository_url)"
 
 docker build -f ../../docker/hyperkit-runner/Dockerfile \
   -t "$RUNNER_REPO:$TAG" ../..
 docker push "$RUNNER_REPO:$TAG"
 
+docker build -f ../../docker/hyperkit-controller/Dockerfile \
+  -t "$CONTROLLER_REPO:$TAG" ../..
+docker push "$CONTROLLER_REPO:$TAG"
+
 docker build -f grafana/Dockerfile -t "$GRAFANA_REPO:$TAG" grafana
 docker push "$GRAFANA_REPO:$TAG"
 ```
 
-Set `runner_image_tag` and `grafana_image_tag` to that immutable tag. ECR rejects
-reusing a tag by design.
+Set `runner_image_tag`, `controller_image_tag`, and `grafana_image_tag` to that
+immutable tag. ECR rejects reusing a tag by design.
 
 Populate each secret outside Terraform. Prefer a protected temporary file or
 stdin so the value does not enter shell history:
@@ -93,11 +105,13 @@ aws secretsmanager put-secret-value \
   --secret-string file:///secure/path/openai-api-key
 ```
 
-`runner_managed_secret_environment` maps environment names to containers this
-stack creates. `runner_external_secret_environment` maps environment names to
-existing secret ARNs. The Batch definition contains only ARNs; the ECS agent
-resolves values at job start. `secret_names` creates additional readable empty
-containers without injecting them as environment variables.
+`runner_managed_secret_environment` and
+`controller_managed_secret_environment` map environment names to containers
+this stack creates. Their `*_external_secret_environment` counterparts map
+environment names to existing secret ARNs. Task definitions contain only ARNs;
+the ECS agent resolves values at start. `secret_names` creates additional
+runner-readable empty containers without injecting them as environment
+variables.
 
 Run a fresh full plan after bootstrap:
 
@@ -107,8 +121,9 @@ terraform apply tfplan
 ```
 
 The Grafana ECS service cannot become healthy until its image exists and the
-admin-password secret has a current version. The runner image must exist before
-jobs are submitted.
+admin-password secret has a current version. The controller service also needs
+its image before the full apply, and the runner image must exist before jobs
+are submitted.
 
 ## Submit jobs and reserve memory
 
@@ -139,6 +154,52 @@ The host socket grants host-equivalent privileges. The worker security group has
 no ingress, the fleet is dedicated to this queue, IMDSv2 is required, disks are
 encrypted and deleted with instances, and no untrusted tenant should share the
 compute environment.
+
+## Live controller and resumability
+
+Each successful object creation under `runs/` with a `.json` suffix sends an
+event to the encrypted controller SQS queue. S3 notification filters cannot
+express the variable `runs/<sweep_id>/results/` middle segment, so the
+controller rejects unrelated JSON keys and optionally restricts work with
+`controller_sweep_id`. The Fargate task receives:
+
+- `HYPERKIT_S3_BUCKET` and `HYPERKIT_S3_PREFIX`
+- optional `HYPERKIT_SWEEP_ID`
+- `HYPERKIT_SQS_QUEUE_URL`
+- `HYPERKIT_POLL_INTERVAL`
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+
+The queue provides durable wake-ups while periodic S3 polling reconciles source
+of truth after restarts, deployment gaps, duplicate deliveries, or missed
+notifications. Keep writes idempotent: S3 notifications and SQS are
+at-least-once. A message returned five times moves to the encrypted DLQ for
+inspection rather than blocking newer cells. The controller task role can only
+list and read the configured run prefix and consume the primary queue; it
+cannot mutate artifacts or purge the queue.
+
+The default `controller_desired_count = 1` keeps one aggregator alive off the
+Spot fleet. Set it to zero for a planned pause without deleting queue state.
+After publishing a controller image and applying its immutable tag, deploy and
+wait with:
+
+```sh
+aws ecs update-service \
+  --cluster "$(terraform output -raw observability_ecs_cluster_name)" \
+  --service "$(terraform output -raw controller_ecs_service_name)" \
+  --force-new-deployment
+aws ecs wait services-stable \
+  --cluster "$(terraform output -raw observability_ecs_cluster_name)" \
+  --services "$(terraform output -raw controller_ecs_service_name)"
+aws logs tail "/aws/hyperkit/${PROJECT_NAME:-hyperkit}-${ENVIRONMENT:-production}/controller" \
+  --follow
+```
+
+Controller metrics and traces use the private ADOT HTTP endpoint and flow to AMP
+and X-Ray. Container stdout/stderr goes to its dedicated CloudWatch log group.
+CloudWatch also exposes the native SQS queue age, visible-message count, receive
+count, and DLQ depth; use those signals to detect aggregation lag and poison
+messages. The queue URL and ARN are available as
+`controller_results_queue_url` and `controller_results_queue_arn`.
 
 ## Observability
 
@@ -221,13 +282,14 @@ apply that change before destroying the stack.
 
 ## Cost controls
 
-The largest always-on charges are two NAT gateways, the ALB, one Fargate task,
-and AMP ingestion/storage. Set `single_nat_gateway = true` only when accepting a
-cross-AZ egress dependency. Batch EC2 and its 500+ GiB gp3 volumes disappear at
-zero jobs because `min_vcpus = 0`; Spot instances, EBS, model-provider calls,
-CloudWatch logs, X-Ray traces, Athena scans, S3, ECR, and data transfer remain
-usage-based costs. S3 aborts incomplete multipart uploads after seven days and
-expires noncurrent versions after the configured retention period.
+The largest always-on charges are two NAT gateways, the ALB, the observability
+and controller Fargate tasks, and AMP ingestion/storage. Set
+`single_nat_gateway = true` only when accepting a cross-AZ egress dependency.
+Batch EC2 and its 500+ GiB gp3 volumes disappear at zero jobs because
+`min_vcpus = 0`; Spot instances, EBS, model-provider calls, CloudWatch logs,
+X-Ray traces, Athena scans, S3, SQS, ECR, and data transfer remain usage-based
+costs. S3 aborts incomplete multipart uploads after seven days and expires
+noncurrent versions after the configured retention period.
 
 The budget sends actual and forecast notifications when
 `budget_alert_email` is set. AWS Budgets alerts do not stop workloads; enforce

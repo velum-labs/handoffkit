@@ -8,6 +8,26 @@ output "runner_repository_url" {
   value       = module.registry.runner_repository_url
 }
 
+output "controller_repository_url" {
+  description = "ECR URL for the Hyperkit controller image."
+  value       = module.registry.controller_repository_url
+}
+
+output "controller_results_queue_url" {
+  description = "SQS queue URL consumed by the Hyperkit controller."
+  value       = aws_sqs_queue.controller_results.id
+}
+
+output "controller_results_queue_arn" {
+  description = "SQS queue ARN receiving S3 result notifications."
+  value       = aws_sqs_queue.controller_results.arn
+}
+
+output "controller_ecs_service_name" {
+  description = "ECS service hosting the always-on Hyperkit controller."
+  value       = module.controller.service_name
+}
+
 output "grafana_repository_url" {
   description = "ECR URL for the provisioned Grafana image."
   value       = module.registry.grafana_repository_url
@@ -49,7 +69,7 @@ output "amp_workspace_endpoint" {
 }
 
 output "observability_ecs_cluster_name" {
-  description = "ECS cluster hosting Grafana and ADOT."
+  description = "ECS cluster hosting observability and controller services."
   value       = module.observability.ecs_cluster_name
 }
 

@@ -35,7 +35,7 @@ output "adot_log_group_arn" {
 
 output "ecs_cluster_name" {
   value       = aws_ecs_cluster.observability.name
-  description = "ECS cluster hosting Grafana and ADOT."
+  description = "ECS cluster hosting observability and controller services."
 }
 
 output "ecs_service_name" {

@@ -1,5 +1,5 @@
 locals {
-  repositories = toset(["runner", "grafana"])
+  repositories = toset(["runner", "controller", "grafana"])
 }
 
 resource "aws_ecr_repository" "this" {

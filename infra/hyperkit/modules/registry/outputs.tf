@@ -8,6 +8,16 @@ output "runner_repository_arn" {
   description = "Runner repository ARN."
 }
 
+output "controller_repository_url" {
+  value       = aws_ecr_repository.this["controller"].repository_url
+  description = "Controller repository URL."
+}
+
+output "controller_repository_arn" {
+  value       = aws_ecr_repository.this["controller"].arn
+  description = "Controller repository ARN."
+}
+
 output "grafana_repository_url" {
   value       = aws_ecr_repository.this["grafana"].repository_url
   description = "Grafana repository URL."

@@ -144,6 +144,27 @@ resource "aws_vpc_security_group_egress_rule" "batch" {
   description       = "Outbound access for registries, AWS APIs, and model providers"
 }
 
+resource "aws_security_group" "controller" {
+  name_prefix = "${var.name}-controller-"
+  description = "No-ingress Hyperkit controller security group"
+  vpc_id      = aws_vpc.this.id
+
+  tags = {
+    Name = "${var.name}-controller"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_egress_rule" "controller" {
+  security_group_id = aws_security_group.controller.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  description       = "Outbound access to AWS APIs and the private ADOT endpoint"
+}
+
 resource "aws_security_group" "grafana_alb" {
   name_prefix = "${var.name}-grafana-alb-"
   description = "CIDR-restricted ingress to the Grafana ALB"
@@ -215,6 +236,24 @@ resource "aws_vpc_security_group_ingress_rule" "observability_otlp_http" {
   to_port                      = 4318
   ip_protocol                  = "tcp"
   description                  = "OTLP HTTP telemetry from Batch workers"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "observability_controller_otlp_grpc" {
+  security_group_id            = aws_security_group.observability.id
+  referenced_security_group_id = aws_security_group.controller.id
+  from_port                    = 4317
+  to_port                      = 4317
+  ip_protocol                  = "tcp"
+  description                  = "OTLP gRPC telemetry from the Hyperkit controller"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "observability_controller_otlp_http" {
+  security_group_id            = aws_security_group.observability.id
+  referenced_security_group_id = aws_security_group.controller.id
+  from_port                    = 4318
+  to_port                      = 4318
+  ip_protocol                  = "tcp"
+  description                  = "OTLP HTTP telemetry from the Hyperkit controller"
 }
 
 resource "aws_vpc_security_group_egress_rule" "observability" {

@@ -18,6 +18,11 @@ output "batch_security_group_id" {
   description = "Batch worker security group ID."
 }
 
+output "controller_security_group_id" {
+  value       = aws_security_group.controller.id
+  description = "Always-on controller security group ID."
+}
+
 output "grafana_alb_security_group_id" {
   value       = aws_security_group.grafana_alb.id
   description = "Grafana ALB security group ID."

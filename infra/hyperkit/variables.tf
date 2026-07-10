@@ -63,6 +63,62 @@ variable "runner_image_tag" {
   default     = "latest"
 }
 
+variable "controller_image_tag" {
+  description = "Controller image tag referenced by the Fargate task definition."
+  type        = string
+  default     = "latest"
+
+  validation {
+    condition     = trimspace(var.controller_image_tag) != ""
+    error_message = "controller_image_tag must not be empty."
+  }
+}
+
+variable "controller_desired_count" {
+  description = "Number of always-on Hyperkit controller Fargate tasks."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.controller_desired_count >= 0 && floor(var.controller_desired_count) == var.controller_desired_count
+    error_message = "controller_desired_count must be a non-negative integer."
+  }
+}
+
+variable "controller_poll_interval" {
+  description = "Controller reconciliation poll interval in seconds."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.controller_poll_interval > 0 && floor(var.controller_poll_interval) == var.controller_poll_interval
+    error_message = "controller_poll_interval must be a positive integer."
+  }
+}
+
+variable "controller_s3_prefix" {
+  description = "S3 key prefix watched by the controller and used for bucket notifications."
+  type        = string
+  default     = "runs/"
+
+  validation {
+    condition     = var.controller_s3_prefix != "" && !startswith(var.controller_s3_prefix, "/") && endswith(var.controller_s3_prefix, "/")
+    error_message = "controller_s3_prefix must be non-empty, relative, and end with a slash."
+  }
+}
+
+variable "controller_sweep_id" {
+  description = "Optional sweep ID restricting controller aggregation; null processes every sweep under the configured prefix."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.controller_sweep_id == null || can(regex("\\S", var.controller_sweep_id))
+    error_message = "controller_sweep_id must be null or non-empty."
+  }
+}
+
 variable "grafana_image_tag" {
   description = "Grafana configuration image tag referenced by ECS."
   type        = string
@@ -89,6 +145,18 @@ variable "runner_managed_secret_environment" {
 
 variable "runner_external_secret_environment" {
   description = "Runner environment variable to existing secret-ARN mapping."
+  type        = map(string)
+  default     = {}
+}
+
+variable "controller_managed_secret_environment" {
+  description = "Controller environment variable to managed secret-name mapping. Terraform creates containers, never values."
+  type        = map(string)
+  default     = {}
+}
+
+variable "controller_external_secret_environment" {
+  description = "Controller environment variable to existing secret-ARN mapping."
   type        = map(string)
   default     = {}
 }
