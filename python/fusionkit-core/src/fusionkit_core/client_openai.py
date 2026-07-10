@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 from openai import AsyncOpenAI
 
-from fusionkit_core.client_errors import _call_with_retries
+from fusionkit_core.client_errors import ProviderCallError, _call_with_retries
 from fusionkit_core.client_types import ToolChoice, ToolDefinition
 from fusionkit_core.client_wire import (
     _openai_messages,

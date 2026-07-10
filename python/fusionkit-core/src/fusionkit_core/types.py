@@ -97,6 +97,16 @@ class Usage(BaseModel):
     completion_tokens: int | None = None
     total_tokens: int | None = None
 
+    @model_validator(mode="after")
+    def _derive_total_tokens(self) -> Usage:
+        if (
+            self.total_tokens is None
+            and self.prompt_tokens is not None
+            and self.completion_tokens is not None
+        ):
+            self.total_tokens = self.prompt_tokens + self.completion_tokens
+        return self
+
 
 class ProviderCost(BaseModel):
     source: Literal["provider", "estimate"] = "provider"
