@@ -74,9 +74,9 @@ class ContextPolicy(BaseModel):
 
 
 class SamplingConfig(BaseModel):
-    temperature: float = 0.2
-    top_p: float = 0.95
-    max_tokens: int = 1024
+    temperature: float = Field(default=0.2, ge=0, le=2)
+    top_p: float = Field(default=0.95, gt=0, le=1)
+    max_tokens: int = Field(default=1024, ge=1)
     seed: int | None = None
 
 

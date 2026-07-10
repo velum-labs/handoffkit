@@ -174,6 +174,13 @@ class RunStore(Protocol):
 
     def write_idempotency(self, record: IdempotencyRecord) -> None: ...
 
+    def initialize_idempotent_run(
+        self,
+        record: IdempotencyRecord,
+        event: FusionRunEvent,
+        summary: RunStateSummary,
+    ) -> tuple[IdempotencyRecord, bool]: ...
+
     def append_event(self, event: FusionRunEvent) -> FusionRunEvent: ...
 
     def list_events(self, run_id: str, after: int | None = None) -> list[FusionRunEvent]: ...

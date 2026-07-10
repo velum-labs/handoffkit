@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from fusionkit_core.contracts import Status, SynthesisDecision, TrajectoryItem
 
@@ -72,6 +73,23 @@ class ChatMessage(BaseModel):
             else:
                 flattened.append(call)
         return flattened
+
+    @model_validator(mode="after")
+    def _validate_tool_protocol(self) -> ChatMessage:
+        if self.role == "tool" and not self.tool_call_id:
+            raise ValueError("tool messages require a tool_call_id")
+        if not self.tool_calls:
+            return self
+        if self.role != "assistant":
+            raise ValueError("tool_calls are only valid on assistant messages")
+        for call in self.tool_calls:
+            try:
+                arguments = json.loads(call.arguments or "{}")
+            except json.JSONDecodeError as exc:
+                raise ValueError("tool-call arguments must be valid JSON") from exc
+            if not isinstance(arguments, dict):
+                raise ValueError("tool-call arguments must be a JSON object")
+        return self
 
 
 class Usage(BaseModel):

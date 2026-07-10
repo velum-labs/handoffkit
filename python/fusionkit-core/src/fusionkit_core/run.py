@@ -98,14 +98,47 @@ class FusionRunManager:
         idempotency_key: str | None = None,
     ) -> CreateRunResult:
         request_hash = hash_json(request.model_dump(mode="json"))
+        run_id = make_id("run")
+        trace_id = make_id("trace")
+        queued_event = FusionRunEvent(
+            event_seq=1,
+            run_id=run_id,
+            trace_id=trace_id,
+            state="queued",
+            status=status_for_run_state("queued"),
+            event_type="run_queued",
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+            payload={"request": request.model_dump(mode="json")},
+        )
+        queued_summary = RunStateSummary(
+            run_id=run_id,
+            trace_id=trace_id,
+            state="queued",
+            status=status_for_run_state("queued"),
+            event_cursor=1,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+        )
+
         if idempotency_key is not None:
-            existing = self.store.get_idempotency(idempotency_key)
-            if existing is not None:
-                if existing.request_hash == request_hash:
-                    summary = self.store.read_summary(existing.run_id)
+            proposed = IdempotencyRecord(
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+                run_id=run_id,
+                trace_id=trace_id,
+            )
+            canonical, created = self.store.initialize_idempotent_run(
+                proposed,
+                queued_event,
+                queued_summary,
+            )
+            if not created:
+                if canonical.request_hash == request_hash:
+                    summary = self.store.read_summary(canonical.run_id)
                     return CreateRunResult(
-                        run_id=existing.run_id,
-                        trace_id=existing.trace_id,
+                        run_id=canonical.run_id,
+                        trace_id=canonical.trace_id,
                         state=summary.state,
                         status=summary.status,
                         event_cursor=summary.event_cursor,
@@ -113,8 +146,8 @@ class FusionRunManager:
                         terminal_error=summary.terminal_error,
                     )
                 return CreateRunResult(
-                    run_id=existing.run_id,
-                    trace_id=existing.trace_id,
+                    run_id=canonical.run_id,
+                    trace_id=canonical.trace_id,
                     state=None,
                     status=None,
                     event_cursor=None,
@@ -127,49 +160,18 @@ class FusionRunManager:
                         terminal_reason="idempotency_key_reused_with_different_request",
                     ),
                 )
-
-        run_id = make_id("run")
-        trace_id = make_id("trace")
-        if idempotency_key is not None:
-            self.store.write_idempotency(
-                IdempotencyRecord(
-                    idempotency_key=idempotency_key,
-                    request_hash=request_hash,
-                    run_id=run_id,
-                    trace_id=trace_id,
-                )
+        else:
+            event = self.store.append_event(queued_event)
+            self.store.write_summary(
+                queued_summary.model_copy(update={"event_cursor": event.event_seq})
             )
 
-        event = self.store.append_event(
-            FusionRunEvent(
-                event_seq=1,
-                run_id=run_id,
-                trace_id=trace_id,
-                state="queued",
-                status=status_for_run_state("queued"),
-                event_type="run_queued",
-                idempotency_key=idempotency_key,
-                request_hash=request_hash,
-                payload={"request": request.model_dump(mode="json")},
-            )
-        )
-        self.store.write_summary(
-            RunStateSummary(
-                run_id=run_id,
-                trace_id=trace_id,
-                state="queued",
-                status=status_for_run_state("queued"),
-                event_cursor=event.event_seq,
-                idempotency_key=idempotency_key,
-                request_hash=request_hash,
-            )
-        )
         return CreateRunResult(
             run_id=run_id,
             trace_id=trace_id,
             state="queued",
             status=status_for_run_state("queued"),
-            event_cursor=event.event_seq,
+            event_cursor=1,
             idempotency_outcome="created",
         )
 
