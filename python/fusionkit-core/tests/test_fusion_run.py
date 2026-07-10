@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -20,7 +20,7 @@ from fusionkit_core.contracts import (
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.run import CreateRunResult, FusionRunManager, RunInspection
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.types import ChatMessage, ModelResponse
+from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk
 
 
 class _FailingChatClient:
@@ -353,6 +353,17 @@ async def test_wall_clock_budget_cancels_an_in_flight_provider_call(tmp_path) ->
         ) -> ModelResponse:
             await asyncio.sleep(2)
             return ModelResponse(model_id=self.model_id, content="too late")
+
+        async def stream_chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Any] | None = None,
+            tool_choice: Any | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            await asyncio.sleep(2)
+            yield StreamChunk(delta="too late", finish_reason="stop")
 
         async def aclose(self) -> None:
             return None

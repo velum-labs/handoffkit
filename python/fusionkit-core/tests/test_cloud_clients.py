@@ -232,7 +232,9 @@ def test_google_tool_result_recovers_function_name_from_prior_call_id() -> None:
         ]
     )
 
-    response_part = contents[-1].parts[0]
+    parts = contents[-1].parts
+    assert parts is not None
+    response_part = parts[0]
     assert response_part.function_response is not None
     assert response_part.function_response.name == "search"
 
