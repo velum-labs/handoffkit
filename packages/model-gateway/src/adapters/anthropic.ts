@@ -135,14 +135,24 @@ type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsa
 function systemText(system: AnthropicRequest["system"]): string {
   if (system == null) return "";
   if (typeof system === "string") return system;
-  return system.map((block) => block.text).join("\n");
+  return system
+    .map((block) =>
+      block !== null && typeof block === "object" && typeof block.text === "string"
+        ? block.text
+        : ""
+    )
+    .join("\n");
 }
 
-function blockText(content: string | AnthropicContentBlock[] | undefined): string {
-  if (content === undefined) return "";
+function blockText(content: string | AnthropicContentBlock[] | null | undefined): string {
+  if (content == null) return "";
   if (typeof content === "string") return content;
   return content
-    .map((block) => (block.type === "text" ? (block as AnthropicTextBlock).text : ""))
+    .map((block) =>
+      block !== null && typeof block === "object" && block.type === "text"
+        ? (block as AnthropicTextBlock).text
+        : ""
+    )
     .join("");
 }
 

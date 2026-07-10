@@ -37,13 +37,17 @@ function anthropicError(message: string): WireRejection {
 
 type ErrorShape = (message: string) => WireRejection;
 
-/** `messages` must be a non-empty array of objects each carrying a string `role`. */
-function checkMessages(body: Record<string, unknown>, shape: ErrorShape): WireRejection | undefined {
+/** Validate the common message-array shape without imposing a dialect's role enum. */
+function checkMessages(
+  body: Record<string, unknown>,
+  shape: ErrorShape,
+  options: { allowEmpty?: boolean; allowNullContent?: boolean } = {}
+): WireRejection | undefined {
   const messages = body.messages;
   if (!Array.isArray(messages)) {
     return shape("`messages` is required and must be an array of message objects");
   }
-  if (messages.length === 0) {
+  if (messages.length === 0 && options.allowEmpty !== true) {
     return shape("`messages` must contain at least one message");
   }
   for (const message of messages) {
@@ -51,8 +55,14 @@ function checkMessages(body: Record<string, unknown>, shape: ErrorShape): WireRe
       return shape("every message must be an object with a string `role`");
     }
     const content = message.content;
+    if (content === null && options.allowNullContent === false) {
+      return shape("message `content` must not be null");
+    }
     if (content !== undefined && content !== null && typeof content !== "string" && !Array.isArray(content)) {
       return shape("message `content` must be a string, an array of content parts, or null");
+    }
+    if (Array.isArray(content) && content.some((part) => !isObject(part))) {
+      return shape("every message content part must be an object");
     }
   }
   return undefined;
@@ -111,7 +121,7 @@ export function validateAnthropicRequest(body: unknown): WireRejection | undefin
     checkModel(body, anthropicError) ??
     checkStream(body, anthropicError) ??
     checkPositiveInteger(body, "max_tokens", anthropicError) ??
-    checkMessages(body, anthropicError) ??
+    checkMessages(body, anthropicError, { allowNullContent: false }) ??
     (system !== undefined && system !== null && typeof system !== "string" && !Array.isArray(system)
       ? anthropicError("`system` must be a string or an array of text blocks")
       : undefined)
@@ -121,19 +131,10 @@ export function validateAnthropicRequest(body: unknown): WireRejection | undefin
 /** Anthropic `count_tokens` door: same message-shape contract, no minimum length. */
 export function validateCountTokensRequest(body: unknown): WireRejection | undefined {
   if (!isObject(body)) return anthropicError("request body must be a JSON object");
-  if (!Array.isArray(body.messages)) {
-    return anthropicError("`messages` is required and must be an array of message objects");
-  }
-  for (const message of body.messages) {
-    if (!isObject(message) || typeof message.role !== "string") {
-      return anthropicError("every message must be an object with a string `role`");
-    }
-    const content = message.content;
-    if (content !== undefined && content !== null && typeof content !== "string" && !Array.isArray(content)) {
-      return anthropicError("message `content` must be a string, an array of content parts, or null");
-    }
-  }
-  return undefined;
+  return checkMessages(body, anthropicError, {
+    allowEmpty: true,
+    allowNullContent: false
+  });
 }
 
 /** OpenAI Responses door (`/v1/responses`). */
