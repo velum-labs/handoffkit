@@ -57,6 +57,41 @@ REJECTED: list[tuple[str, dict[str, Any]]] = [
         "unknown role",
         {"model": "fusionkit/panel", "messages": [{"role": "attacker", "content": "x"}]},
     ),
+    (
+        "negative max_tokens",
+        {
+            "model": "m",
+            "messages": [{"role": "user", "content": "x"}],
+            "max_tokens": -5,
+        },
+    ),
+    (
+        "out-of-range top_p",
+        {
+            "model": "m",
+            "messages": [{"role": "user", "content": "x"}],
+            "top_p": 1.5,
+        },
+    ),
+    (
+        "malformed tool arguments",
+        {
+            "model": "m",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_bad",
+                            "type": "function",
+                            "function": {"name": "read", "arguments": '{"broken"'},
+                        }
+                    ],
+                }
+            ],
+        },
+    ),
 ]
 
 
@@ -86,6 +121,22 @@ def test_invalid_json_is_a_4xx(client: TestClient) -> None:
     assert response.json() is not None
 
 
+def test_unknown_model_rejects_without_fanout(
+    provider_sim: ProviderSimulator, client: TestClient
+) -> None:
+    before = len(provider_sim.journal())
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "no-such-model",
+            "messages": [{"role": "user", "content": "do not silently fuse"}],
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "unknown_model"
+    assert len(provider_sim.journal()) == before
+
+
 def test_tolerated_oddities_still_complete(
     provider_sim: ProviderSimulator, client: TestClient
 ) -> None:
@@ -100,14 +151,6 @@ def test_tolerated_oddities_still_complete(
         (
             "null content",
             {"model": "m", "messages": [{"role": "user", "content": None}]},
-        ),
-        (
-            "negative max_tokens (provider's call)",
-            {
-                "model": "m",
-                "messages": [{"role": "user", "content": "x"}],
-                "max_tokens": -5,
-            },
         ),
         (
             "large content (256 KiB)",

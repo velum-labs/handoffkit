@@ -43,7 +43,7 @@ test.after(async () => {
 });
 
 /** Text that must never appear in a wire response: leaked JS internals. */
-const LEAKED_INTERNALS = /is not a function|is not iterable|Cannot read propert|undefined is not|\bTypeError\b|\bReferenceError\b|at .+\.js:\d+/;
+const LEAKED_INTERNALS = /is not a function|is not iterable|Cannot read propert|undefined is not|\bTypeError\b|\bReferenceError\b|\bAttributeError\b|Traceback \(most recent call last\)|at .+\.js:\d+/;
 
 type Probe = { status: number; text: string; parsed: "json" | "sse" | "unparseable"; elapsedMs: number };
 
@@ -96,16 +96,19 @@ const REJECTS: RejectCase[] = [
   { name: "chat array model", path: "/v1/chat/completions", body: { model: ["fusion-panel"], messages: [{ role: "user", content: "x" }] }, envelope: "openai" },
   { name: "chat string stream", path: "/v1/chat/completions", body: { model: "fusion-panel", messages: [{ role: "user", content: "x" }], stream: "yes" }, envelope: "openai" },
   { name: "chat string tools", path: "/v1/chat/completions", body: { model: "fuzz-member", messages: [{ role: "user", content: "x" }], tools: "read" }, envelope: "openai" },
+  { name: "chat negative max_tokens", path: "/v1/chat/completions", body: { model: "fusion-panel", messages: [{ role: "user", content: "x" }], max_tokens: -5 }, envelope: "openai" },
   // Anthropic messages door
   { name: "messages empty body", path: "/v1/messages", body: {}, envelope: "anthropic" },
   { name: "messages null messages", path: "/v1/messages", body: { model: "fusion-panel", max_tokens: 100, messages: null }, envelope: "anthropic" },
   { name: "messages array model", path: "/v1/messages", body: { model: ["x"], max_tokens: 100, messages: [{ role: "user", content: "hi" }] }, envelope: "anthropic" },
   { name: "messages string max_tokens", path: "/v1/messages", body: { model: "fusion-panel", max_tokens: "lots", messages: [{ role: "user", content: "hi" }] }, envelope: "anthropic" },
   { name: "count_tokens empty body", path: "/v1/messages/count_tokens", body: {}, envelope: "anthropic" },
+  { name: "count_tokens malformed item", path: "/v1/messages/count_tokens", body: { messages: [42] }, envelope: "anthropic" },
   // Responses door
   { name: "responses empty body", path: "/v1/responses", body: {}, envelope: "openai" },
   { name: "responses numeric input", path: "/v1/responses", body: { model: "fusion-panel", input: 42 }, envelope: "openai" },
   { name: "responses object model", path: "/v1/responses", body: { model: { a: 1 }, input: "hi" }, envelope: "openai" },
+  { name: "responses negative max_output_tokens", path: "/v1/responses", body: { model: "fusion-panel", input: "hi", max_output_tokens: -1 }, envelope: "openai" },
   // Passes door validation (items may be unknown types) but translates to an
   // empty fused turn — the FusionBackend's own boundary guard must answer 400.
   { name: "responses unknown-only input", path: "/v1/responses", body: { model: "fusion-panel", input: [{ type: "quantum" }] }, envelope: "openai" },
@@ -146,7 +149,6 @@ test("[fuzz] syntactically invalid JSON is a 400 on every door", { skip: SKIP },
 test("[fuzz] tolerated oddities still complete (weird-but-valid is not rejected)", { skip: SKIP }, async () => {
   const tolerated: Array<[string, unknown]> = [
     ["null-byte + astral unicode content", { model: "fusion-panel", messages: [{ role: "user", content: "a\u0000b \u{1F600} \u4E16\u754C" }] }],
-    ["negative max_tokens (provider's call)", { model: "fusion-panel", messages: [{ role: "user", content: "x" }], max_tokens: -5 }],
     ["deeply nested unknown field", { model: "fusion-panel", messages: [{ role: "user", content: "x" }], fusion: Array(200).fill(0).reduce((acc: unknown) => ({ nested: acc }), {}) }],
     ["large content (256 KiB)", { model: "fusion-panel", messages: [{ role: "user", content: "A".repeat(256 * 1024) }] }]
   ];
@@ -209,19 +211,62 @@ function randomBody(random: () => number): unknown {
   };
 }
 
-test("[fuzz] 40 seeded random bodies: parseable response, no leaked internals, bounded, gateway survives", { skip: SKIP }, async () => {
+function randomResponsesBody(random: () => number): unknown {
+  return {
+    model: pick(random, MODEL_VALUES),
+    input: pick(random, [
+      "hello",
+      "",
+      42,
+      null,
+      [],
+      [{ type: "message", role: "user", content: "hello" }],
+      [{ type: "quantum" }],
+      ["not-an-object"]
+    ] as const),
+    ...pick(random, [
+      {},
+      { stream: true },
+      { stream: "maybe" },
+      { max_output_tokens: -1 },
+      { max_output_tokens: 32 },
+      { tools: "hammer" }
+    ] as const)
+  };
+}
+
+const RANDOM_DOORS: ReadonlyArray<{
+  path: string;
+  body: (random: () => number) => unknown;
+}> = [
+  { path: "/v1/chat/completions", body: randomBody },
+  { path: "/v1/messages", body: randomBody },
+  {
+    path: "/v1/messages/count_tokens",
+    body: (random) => {
+      const candidate = randomBody(random) as { messages?: unknown };
+      return { messages: candidate.messages };
+    }
+  },
+  { path: "/v1/responses", body: randomResponsesBody },
+  { path: "/v1/cursor/chat/completions", body: randomResponsesBody }
+];
+
+test("[fuzz] seeded random bodies across every door: parseable, bounded, no leaks, gateway survives", { skip: SKIP }, async () => {
   const seed = 0xf0510;
   const random = mulberry32(seed);
-  for (let round = 0; round < 40; round += 1) {
-    const body = randomBody(random);
-    const result = await probe("/v1/chat/completions", JSON.stringify(body));
-    const detail = `seed=${seed} round=${round} body=${JSON.stringify(body).slice(0, 300)} -> ${result.status} ${result.text.slice(0, 200)}`;
-    assert.ok(result.parsed !== "unparseable", detail);
-    assert.doesNotMatch(result.text, LEAKED_INTERNALS, detail);
-    assert.ok(result.elapsedMs < 15_000, detail);
-    // 200 = tolerated shape completes; 400/422 = structural rejection; 502 =
-    // valid-shape garbage the providers themselves rejected (panel failed).
-    assert.ok([200, 400, 422, 502].includes(result.status), `unexpected status class: ${detail}`);
+  for (const door of RANDOM_DOORS) {
+    for (let round = 0; round < 16; round += 1) {
+      const body = door.body(random);
+      const result = await probe(door.path, JSON.stringify(body));
+      const detail = `seed=${seed} door=${door.path} round=${round} body=${JSON.stringify(body).slice(0, 300)} -> ${result.status} ${result.text.slice(0, 200)}`;
+      assert.ok(result.parsed !== "unparseable", detail);
+      assert.doesNotMatch(result.text, LEAKED_INTERNALS, detail);
+      assert.ok(result.elapsedMs < 15_000, detail);
+      // 200 = tolerated shape completes; 400/422 = structural rejection; 502 =
+      // valid-shape garbage the providers themselves rejected (panel failed).
+      assert.ok([200, 400, 422, 502].includes(result.status), `unexpected status class: ${detail}`);
+    }
   }
   await assertGatewayHealthy();
 });

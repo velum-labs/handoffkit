@@ -236,7 +236,7 @@
     {
       "id": "stream.usage-terminal",
       "category": "streaming",
-      "expectation": "The fused stream's terminal frame carries exact judge plus synthesizer usage.",
+      "expectation": "The fused stream's terminal frame carries exact panel plus judge plus synthesizer usage.",
       "status": "required",
       "testFile": "python/fusionkit-testkit/tests/test_engine_depth.py",
       "anchor": "test_fused_stream_terminal_usage_is_the_exact_judge_plus_synth_sum"
