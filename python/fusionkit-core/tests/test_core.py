@@ -4,7 +4,6 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
@@ -14,6 +13,7 @@ from fusionkit_core.producers import (
     trajectory_from_response,
 )
 from fusionkit_core.types import ChatMessage, ModelResponse
+from pydantic import ValidationError
 
 
 class FailingChatClient:

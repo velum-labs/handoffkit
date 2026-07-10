@@ -460,8 +460,14 @@ MUTATIONS = [
         id="M36",
         what="idempotency initialization ignores an existing canonical run",
         file="python/fusionkit-core/src/fusionkit_core/run_store.py",
-        old="                if path.exists():\n                    return IdempotencyRecord.model_validate(_read_json(path)), False",
-        new="                if False:\n                    return IdempotencyRecord.model_validate(_read_json(path)), False",
+        old=(
+            "                if path.exists():\n"
+            "                    return IdempotencyRecord.model_validate(_read_json(path)), False"
+        ),
+        new=(
+            "                if False:\n"
+            "                    return IdempotencyRecord.model_validate(_read_json(path)), False"
+        ),
         cmd=(
             "uv run pytest python/fusionkit-core/tests/test_fusion_run.py -q -x "
             "-k concurrent_idempotency"

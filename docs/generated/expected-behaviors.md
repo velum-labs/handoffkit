@@ -68,9 +68,10 @@ environment-gated rows name the reason and exact live command.
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `stream.native-close-markers` | Every door closes with its native terminal event or sentinel. | required | `packages/cli/src/test/stack-e2e.test.ts` — `fused streaming closes with the door's native marker` |
-| `stream.usage-terminal` | The fused stream's terminal frame carries exact judge plus synthesizer usage. | required | `python/fusionkit-testkit/tests/test_engine_depth.py` — `test_fused_stream_terminal_usage_is_the_exact_judge_plus_synth_sum` |
+| `stream.usage-terminal` | The fused stream's terminal frame carries exact panel plus judge plus synthesizer usage. | required | `python/fusionkit-testkit/tests/test_engine_depth.py` — `test_fused_stream_terminal_usage_is_the_exact_judge_plus_synth_sum` |
 | `stream.parallel-tools` | Parallel tool calls packed into multi-slot chunks survive reassembly. | required | `python/fusionkit-testkit/tests/test_adversarial.py` — `test_parallel_tool_calls_survive_multi_slot_stream_chunks` |
 | `stream.failure-terminates` | Truncated or garbage provider streams emit a safe error event and terminate rather than hanging. | required | `python/fusionkit-testkit/tests/test_adversarial.py` — `test_truncated_provider_stream_surfaces_error_event_and_terminates` |
+| `stream.buffered-equivalence` | For every gateway dialect, buffered JSON and streaming SSE reassemble to the same answer. | required | `packages/cli/src/test/stack-differential-e2e.test.ts` — `buffered JSON and SSE reassemble to the same answer` |
 
 ## tools
 

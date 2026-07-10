@@ -296,14 +296,22 @@ clients, or the engine/gateway wire paths:
 uv run python scripts/mutation_pass.py   # clean tree + built workspace required
 ```
 
-Current score: **33/33 killed**. A subset can be run by id
-(`uv run python scripts/mutation_pass.py M31 M32 M33`). The newest mutations
-pin structural door validation (M31), the `FusionBackend` SDK boundary guard
-(M32), and the concurrency suite's content-identity assertions (M33 poisons
-the simulator's echo default to prove cross-talk detection bites). Before
-them: candidate reasoning entering judge evidence, streamed synthesizer
-reasoning on the gateway, and real Claude/Codex/OpenCode selection of
-injected named fused models.
+Current score: **46/46 killed**. A subset can be run by id
+(`uv run python scripts/mutation_pass.py M34 M42`). M34–M46 pin the
+second-wave audit's bug contracts: streamed fused usage including panel
+tokens (M34), unknown-model rejection (M35), atomic idempotent run
+initialization (M36), Anthropic mid-stream provider error events (M37),
+TTL hint eviction / fresh-opener isolation (M38), caller-abort propagation
+into in-flight panels (M39), the request-body size cap (M40), allowlisted
+tool-launch environments (M41), in-flight wall-clock budget cancellation
+(M42), the paused-run execute guard (M43), count-tokens content validation
+(M44), Responses tool-array validation (M45), and the tool-message
+`tool_call_id` requirement (M46). M31–M33 pin structural door validation,
+the `FusionBackend` SDK boundary guard, and the concurrency suite's
+content-identity assertions (M33 poisons the simulator's echo default to
+prove cross-talk detection bites). Before them: candidate reasoning
+entering judge evidence, streamed synthesizer reasoning on the gateway, and
+real Claude/Codex/OpenCode selection of injected named fused models.
 
 The preceding mutations pin finite-k terminal
 proposal summaries, k=1 straggler grace, native driver dialect routing,
@@ -353,8 +361,9 @@ JavaScript/Python internals, rejected garbage never fans out to providers,
 arbitrary stream chunking reassembles byte-exactly, concurrent turns keep
 their own content, and the gateway survives everything.
 
-The first hostile-input run against the previously-green stack found three
-real gateway bugs, all fixed and now pinned:
+These layers have found **25 real production bugs** on a previously
+all-green stack, all fixed and pinned by regressions + mutations. The first
+hostile-input run found the original four:
 
 - **Leaked TypeErrors as 502s.** A `model` array or `messages` non-array
   reached deep code and answered `502 {"message": "requested.startsWith is
@@ -368,6 +377,40 @@ real gateway bugs, all fixed and now pinned:
 - **Wrong status class + wasted spend risk.** Malformed bodies could reach
   panel fanout before failing. The fuzz suite asserts zero journal growth
   for every rejected body.
+
+The second wave (targeted code audit + expanded all-door fuzzing +
+differential/stateful probes) found twenty-one more, spanning both stacks:
+
+- **Accounting**: streamed fused turns omitted panel-member tokens from the
+  terminal usage frame (buffered vs streamed responses billed differently).
+- **Money-before-validation**: unknown models, unknown request-level panel
+  members, invalid sampling (`max_tokens < 1`, `top_p > 1`), malformed tool
+  arguments, and tool messages without `tool_call_id` all fanned out to
+  providers (or crashed mid-panel as 502s) instead of answering 400/422.
+- **State machine**: concurrent identical `Idempotency-Key` requests created
+  two billed runs; `execute_run` restarted `requires_action` runs from
+  scratch; wall-clock budgets waited for in-flight provider calls instead of
+  cancelling at the deadline.
+- **Sessions**: an identical fresh opener after TTL eviction reattached to
+  the old persisted session's candidates and cost via a stale live hint.
+- **Cancellation/resources**: client disconnect cancelled neither the
+  in-flight panel run nor the upstream response body; request bodies were
+  unbounded; the engine never closed its provider HTTP clients on shutdown;
+  testkit child teardown reaped only direct children (uv/npm wrappers leaked
+  grandchildren); stale routers/dashboards were spawned alongside rather
+  than replacing their stale predecessors; `local serve` SIGINT bypassed
+  `finally` cleanup via `process.exit`.
+- **Protocol translation**: Anthropic streaming swallowed mid-stream
+  `{"error": ...}` events (reported as `incomplete_stream`); `count_tokens`
+  crashed on `content: null` (`Cannot read properties of null`); Responses/
+  Anthropic/Cursor doors crashed on non-array `tools`; Gemini tool results
+  lost their function name when only `tool_call_id` was present; empty
+  OpenAI `choices` raised a raw `IndexError`; `spawnTool` leaked every
+  parent env var (unrelated secrets) into vendor CLIs; the quota classifier
+  treated any 400 containing the word "billing" as exhausted quota; and
+  invalid fusion configs (duplicate/unknown endpoint ids, unknown
+  judge/panel references, `sample_count=0`) parsed successfully and failed
+  only at request time.
 
 ## Writing new tests — rules of thumb
 
