@@ -172,6 +172,9 @@ jobs:
       - name: Concurrency suite (cross-talk / abort isolation)
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-concurrency-e2e.test.js
 
+      - name: Differential suite (JSON/SSE and cross-door parity)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-differential-e2e.test.js
+
       - name: Harness-core real SDK driver cutover suite
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-drivers-e2e.test.js
 
