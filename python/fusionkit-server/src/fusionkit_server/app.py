@@ -82,7 +82,7 @@ class FusionToolExecutionOptions(BaseModel):
 
 class FusionOptions(BaseModel):
     mode: FusionMode | None = None
-    panel_models: list[str] | None = None
+    panel_models: list[str] | None = Field(default=None, min_length=1)
     sample_count: int | None = Field(default=None, ge=1)
     tool_execution: FusionToolExecutionOptions = Field(
         default_factory=FusionToolExecutionOptions
@@ -91,7 +91,7 @@ class FusionOptions(BaseModel):
 
 class FusionRequest(BaseModel):
     model: str = FUSION_DEFAULT_ALIAS
-    messages: list[ChatMessage]
+    messages: list[ChatMessage] = Field(min_length=1)
     temperature: float | None = Field(default=None, ge=0, le=2)
     top_p: float | None = Field(default=None, gt=0, le=1)
     max_tokens: int | None = Field(default=None, ge=1)
@@ -150,7 +150,7 @@ class FuseTrajectoriesRequest(BaseModel):
     model: str = FUSION_DEFAULT_ALIAS
     # ChatMessage accepts OpenAI's nested assistant tool calls, null content,
     # and content-part arrays while still requiring a valid role.
-    messages: list[ChatMessage]
+    messages: list[ChatMessage] = Field(min_length=1)
     trajectories: list[TrajectoryInput] = Field(default_factory=list)
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
@@ -320,6 +320,13 @@ def create_app(
                 f"Unknown model {request.model!r}.",
                 status_code=400,
             )
+        for panel_model in request.fusion.panel_models or []:
+            if not _is_endpoint_model(config, panel_model):
+                return _openai_error_response(
+                    "unknown_model",
+                    f"Unknown panel model endpoint {panel_model!r}.",
+                    status_code=400,
+                )
         # Real SSE streaming on the fused path: the candidate trajectories are
         # generated, then the synthesizer turn streams tokens straight through
         # (no buffer-then-rechunk).
