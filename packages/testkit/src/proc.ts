@@ -19,6 +19,23 @@ export type SpawnedProcess = {
   close: () => Promise<void>;
 };
 
+function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined) return;
+  if (process.platform !== "win32") {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child when the process group is already gone.
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch {
+    // already gone
+  }
+}
+
 export function spawnCaptured(input: {
   command: string;
   args: readonly string[];
@@ -28,6 +45,7 @@ export function spawnCaptured(input: {
   const child = spawn(input.command, input.args, {
     ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
     ...(input.env !== undefined ? { env: input.env } : {}),
+    detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"]
   });
   let log = "";
@@ -72,13 +90,17 @@ export function spawnCaptured(input: {
       }),
     close: async () => {
       if (child.exitCode !== null || child.signalCode !== null) return;
-      child.kill("SIGTERM");
+      signalProcessTree(child, "SIGTERM");
       await new Promise<void>((resolvePromise) => {
         const timer = setTimeout(() => {
-          child.kill("SIGKILL");
+          signalProcessTree(child, "SIGKILL");
         }, 5000);
         child.once("exit", () => {
           clearTimeout(timer);
+          // A wrapper (uv/npm) can exit before its descendants. Sweep the
+          // process group once more so teardown never leaves the real CLI or
+          // engine behind.
+          signalProcessTree(child, "SIGKILL");
           resolvePromise();
         });
       });
@@ -115,15 +137,33 @@ export async function waitForHttpReady(
   );
 }
 
-/** Pick a currently free TCP port (standard bind-and-release probe). */
-export async function freePort(): Promise<number> {
-  return await new Promise<number>((resolvePromise, reject) => {
+export type ReservedPort = {
+  port: number;
+  release: () => Promise<void>;
+};
+
+/** Hold an ephemeral loopback port until the caller is ready to spawn. */
+export async function reservePort(): Promise<ReservedPort> {
+  return await new Promise<ReservedPort>((resolvePromise, reject) => {
     const server = createServer();
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       const port = typeof address === "object" && address !== null ? address.port : 0;
-      server.close(() => resolvePromise(port));
+      resolvePromise({
+        port,
+        release: () =>
+          new Promise<void>((resolveRelease, rejectRelease) => {
+            server.close((error) => (error ? rejectRelease(error) : resolveRelease()));
+          })
+      });
     });
   });
+}
+
+/** Pick a currently free TCP port (compatibility helper). */
+export async function freePort(): Promise<number> {
+  const reservation = await reservePort();
+  await reservation.release();
+  return reservation.port;
 }

@@ -23,6 +23,19 @@ export type CliRunResult = {
   timedOut: boolean;
 };
 
+function killProcessTree(child: ReturnType<typeof spawn>): void {
+  if (child.pid === undefined) return;
+  if (process.platform !== "win32") {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to the direct child.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
 /** Whether a CLI binary is installed and answers `--version`. */
 export function cliAvailable(binary: string): boolean {
   const probe = spawnSync(binary, ["--version"], { encoding: "utf8", timeout: 15_000 });
@@ -43,6 +56,7 @@ function run(
     const child = spawn(command, args, {
       ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
       env: options.env,
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -52,10 +66,16 @@ function run(
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      killProcessTree(child);
     }, options.timeoutMs);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      stderr += error.message;
+      resolve({ code: null, stdout, stderr, timedOut });
+    });
     child.on("exit", (code) => {
       clearTimeout(timer);
+      if (timedOut) killProcessTree(child);
       resolve({ code, stdout, stderr, timedOut });
     });
   });

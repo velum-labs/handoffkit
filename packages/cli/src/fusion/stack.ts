@@ -856,6 +856,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     const resolved = await portless.discoverOrSpawn({
       name: "router",
       identity: expectedIdentity,
+      replaceStale: true,
       healthCheck: async (loopbackUrl) => {
         try {
           const response = await fetch(`${loopbackUrl}/health`, { signal: AbortSignal.timeout(2000) });

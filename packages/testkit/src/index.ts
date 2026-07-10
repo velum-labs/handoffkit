@@ -36,8 +36,8 @@ export type {
 export { asBehavior, simErrors } from "./behaviors.js";
 export { startEngine } from "./engine.js";
 export type { EngineHandle } from "./engine.js";
-export { freePort, spawnCaptured, waitForHttpReady } from "./proc.js";
-export type { SpawnedProcess } from "./proc.js";
+export { freePort, reservePort, spawnCaptured, waitForHttpReady } from "./proc.js";
+export type { ReservedPort, SpawnedProcess } from "./proc.js";
 export { startProviderSim } from "./provider-sim.js";
 export type { ProviderSimHandle, SimCallFilter } from "./provider-sim.js";
 export { detectStackTooling, repoRoot, stackToolingSkip, uvRunArgv } from "./python.js";

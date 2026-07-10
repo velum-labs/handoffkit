@@ -16,6 +16,7 @@ import {
   parseSse,
   simErrors,
   simRouterConfigYaml,
+  spawnCaptured,
   sseDone,
   sseText,
   stackToolingSkip,
@@ -34,6 +35,15 @@ const JUDGE_ANALYSIS = JSON.stringify({
   likely_errors: [],
   recommended_final_structure: []
 });
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 let sim: ProviderSimHandle;
 let engine: EngineHandle;
@@ -134,4 +144,24 @@ test("error injection reaches through the real engine (provider 401 surfaces)", 
   assert.equal(response.status, 401);
   const journal = await sim.journalFor("gpt-panel-a");
   assert.deepEqual(journal.map((entry) => entry.status), [401]);
+});
+
+test("captured-process teardown kills wrapper grandchildren", async () => {
+  const script = [
+    'const { spawn } = require("node:child_process");',
+    'const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });',
+    'console.log("GRANDCHILD:" + child.pid);',
+    "setInterval(() => {}, 1000);"
+  ].join("\n");
+  const proc = spawnCaptured({ command: process.execPath, args: ["-e", script] });
+  const line = await proc.nextLine(/^GRANDCHILD:/, 5_000);
+  const grandchildPid = Number(line.slice("GRANDCHILD:".length));
+  assert.ok(Number.isInteger(grandchildPid) && grandchildPid > 0);
+
+  await proc.close();
+  const deadline = Date.now() + 2_000;
+  while (processAlive(grandchildPid) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(processAlive(grandchildPid), false, "the child process group must be fully reaped");
 });

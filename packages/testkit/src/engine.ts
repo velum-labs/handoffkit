@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { freePort, spawnCaptured, waitForHttpReady } from "./proc.js";
+import { reservePort, spawnCaptured, waitForHttpReady } from "./proc.js";
 import { uvRunArgv } from "./python.js";
 import { CODEX_TEST_TOKEN_ENV } from "./router-config.js";
 
@@ -32,7 +32,8 @@ export async function startEngine(options: {
   const configDir = mkdtempSync(join(tmpdir(), "fusionkit-testkit-engine-"));
   const configPath = join(configDir, "router.yaml");
   writeFileSync(configPath, options.configYaml);
-  const port = await freePort();
+  const reservation = await reservePort();
+  const port = reservation.port;
   const runner = uvRunArgv("fusionkit", "fusionkit", [
     "serve",
     "--config",
@@ -50,6 +51,7 @@ export async function startEngine(options: {
     [CODEX_TEST_TOKEN_ENV]: process.env[CODEX_TEST_TOKEN_ENV] ?? "sim-codex-token",
     ...options.env
   };
+  await reservation.release();
   const proc = spawnCaptured({ ...runner, env });
   const url = `http://127.0.0.1:${port}`;
   try {
