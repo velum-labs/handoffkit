@@ -44,6 +44,7 @@ REJECTED: list[tuple[str, dict[str, Any]]] = [
     ("empty body", {}),
     ("null messages", {"model": "fusionkit/panel", "messages": None}),
     ("string messages", {"model": "fusionkit/panel", "messages": "hi"}),
+    ("empty messages", {"model": "fusionkit/panel", "messages": []}),
     ("role-less message", {"model": "fusionkit/panel", "messages": [{"content": "x"}]}),
     (
         "numeric content",
@@ -92,6 +93,14 @@ REJECTED: list[tuple[str, dict[str, Any]]] = [
             ],
         },
     ),
+    (
+        "empty panel override",
+        {
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "x"}],
+            "fusion": {"panel_models": []},
+        },
+    ),
 ]
 
 
@@ -121,17 +130,26 @@ def test_invalid_json_is_a_4xx(client: TestClient) -> None:
     assert response.json() is not None
 
 
-def test_unknown_model_rejects_without_fanout(
-    provider_sim: ProviderSimulator, client: TestClient
-) -> None:
-    before = len(provider_sim.journal())
-    response = client.post(
-        "/v1/chat/completions",
-        json={
+@pytest.mark.parametrize(
+    "body",
+    [
+        {
             "model": "no-such-model",
             "messages": [{"role": "user", "content": "do not silently fuse"}],
         },
-    )
+        {
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "do not call unknown member"}],
+            "fusion": {"panel_models": ["no-such-member"]},
+        },
+    ],
+)
+def test_unknown_model_rejects_without_fanout(
+    body: dict[str, Any],
+    provider_sim: ProviderSimulator, client: TestClient
+) -> None:
+    before = len(provider_sim.journal())
+    response = client.post("/v1/chat/completions", json=body)
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "unknown_model"
     assert len(provider_sim.journal()) == before
