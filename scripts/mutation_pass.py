@@ -411,7 +411,7 @@ MUTATIONS = [
         id="M32",
         what="FusionBackend's own boundary guard is removed (empty fused turns leak 502 internals)",
         file="packages/model-gateway/src/fusion-proxy.ts",
-        old="    if (messages.length === 0 && this.#passthroughFor(chat.model) === undefined) {",
+        old="    if (messages.length === 0) {",
         new="    if (false) {",
         build=True,
         cmd=(
@@ -433,6 +433,170 @@ MUTATIONS = [
             '        last_user_text = "poisoned shared reply"'
         ),
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-concurrency-e2e.test.js",
+    ),
+    Mutation(
+        id="M34",
+        what="streaming fusion usage drops panel-member tokens",
+        file="python/fusionkit-server/src/fusionkit_server/app.py",
+        old='extra["usage"] = _usage_payload(_fuse_step_usage(final_result))',
+        new='extra["usage"] = _usage_payload(final_result.turn_usage())',
+        cmd=(
+            "uv run pytest python/fusionkit-server/tests/test_streaming.py -q -x "
+            "-k fused_streaming_streams_synthesizer"
+        ),
+    ),
+    Mutation(
+        id="M35",
+        what="unknown engine model ids silently fall into fusion",
+        file="python/fusionkit-server/src/fusionkit_server/app.py",
+        old="        if request.model not in FUSION_MODEL_ALIASES:",
+        new="        if False:",
+        cmd=(
+            "uv run pytest python/fusionkit-testkit/tests/test_engine_fuzz.py -q -x "
+            "-k unknown_model"
+        ),
+    ),
+    Mutation(
+        id="M36",
+        what="idempotency initialization ignores an existing canonical run",
+        file="python/fusionkit-core/src/fusionkit_core/run_store.py",
+        old="                if path.exists():\n                    return IdempotencyRecord.model_validate(_read_json(path)), False",
+        new="                if False:\n                    return IdempotencyRecord.model_validate(_read_json(path)), False",
+        cmd=(
+            "uv run pytest python/fusionkit-core/tests/test_fusion_run.py -q -x "
+            "-k concurrent_idempotency"
+        ),
+    ),
+    Mutation(
+        id="M37",
+        what="Anthropic streaming discards upstream provider error events",
+        file="packages/model-gateway/src/adapters/anthropic.ts",
+        old="    if (chunk.error !== undefined && chunk.error !== null) {",
+        new="    if (false) {",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'mid-stream error' "
+            "packages/model-gateway/dist/test/anthropic.test.js"
+        ),
+    ),
+    Mutation(
+        id="M38",
+        what="expired live session hints keep reattaching fresh conversations",
+        file="packages/model-gateway/src/fusion-session.ts",
+        old="    this.#sweepExpired(Date.now());",
+        new="    // mutation: stale hints are never swept",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'identical fresh opener' "
+            "packages/model-gateway/dist/test/fusion-backend-session.test.js"
+        ),
+    ),
+    Mutation(
+        id="M39",
+        what="caller abort no longer reaches an in-flight panel run",
+        file="packages/model-gateway/src/fusion-proxy.ts",
+        old="      ...(signal !== undefined ? { signal } : {})",
+        new="      ...(false ? { signal } : {})",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'caller abort propagates' "
+            "packages/model-gateway/dist/test/fusion-backend-panel-timeout.test.js"
+        ),
+    ),
+    Mutation(
+        id="M40",
+        what="gateway accepts unbounded request bodies",
+        file="packages/model-gateway/src/server.ts",
+        old="const MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;",
+        new="const MAX_REQUEST_BODY_BYTES = Number.MAX_SAFE_INTEGER;",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'oversized request bodies' "
+            "packages/model-gateway/dist/test/server-resilience.test.js"
+        ),
+    ),
+    Mutation(
+        id="M41",
+        what="real tool launches inherit every parent secret",
+        file="packages/runtime-utils/src/index.ts",
+        old="      env: buildChildEnv({ extra: env }),",
+        new="      env: { ...process.env, ...env },",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'spawnTool forwards' "
+            "packages/runtime-utils/dist/test/helpers.test.js"
+        ),
+    ),
+    Mutation(
+        id="M42",
+        what="wall-clock budgets wait for provider calls instead of cancelling them",
+        file="python/fusionkit-core/src/fusionkit_core/run.py",
+        old="        limit = self.engine.config.budget.wall_clock_s",
+        new="        limit = None",
+        cmd=(
+            "uv run pytest python/fusionkit-core/tests/test_fusion_run.py -q -x "
+            "-k wall_clock_budget_cancels"
+        ),
+    ),
+    Mutation(
+        id="M43",
+        what="requires-action runs can be executed from the beginning again",
+        file="python/fusionkit-core/src/fusionkit_core/run.py",
+        old='        if summary.state != "queued":',
+        new='        if summary.state in ("cancelled", "completed", "failed", "expired"):',
+        cmd=(
+            "uv run pytest python/fusionkit-core/tests/test_fusion_run.py -q -x "
+            "-k execute_run_does_not_restart"
+        ),
+    ),
+    Mutation(
+        id="M44",
+        what="count_tokens accepts null message content and crashes in tokenization",
+        file="packages/model-gateway/src/adapters/validate.ts",
+        old=(
+            "  return checkMessages(body, anthropicError, {\n"
+            "    allowEmpty: true,\n"
+            "    allowNullContent: false\n"
+            "  });"
+        ),
+        new=(
+            "  return checkMessages(body, anthropicError, {\n"
+            "    allowEmpty: true,\n"
+            "    allowNullContent: true\n"
+            "  });"
+        ),
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'count_tokens requires' "
+            "packages/model-gateway/dist/test/wire-validation.test.js"
+        ),
+    ),
+    Mutation(
+        id="M45",
+        what="Responses requests bypass structural tool-array validation",
+        file="packages/model-gateway/src/adapters/validate.ts",
+        old=(
+            '    checkPositiveInteger(body, "max_output_tokens", openAiError) ??\n'
+            "    checkTools(body, openAiError);"
+        ),
+        new='    checkPositiveInteger(body, "max_output_tokens", openAiError);',
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'responses door requires' "
+            "packages/model-gateway/dist/test/wire-validation.test.js"
+        ),
+    ),
+    Mutation(
+        id="M46",
+        what="tool messages without call ids pass the gateway boundary",
+        file="packages/model-gateway/src/adapters/validate.ts",
+        old='      message.role === "tool" &&',
+        new="      false &&",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'chat door rejects' "
+            "packages/model-gateway/dist/test/wire-validation.test.js"
+        ),
     ),
 ]
 
