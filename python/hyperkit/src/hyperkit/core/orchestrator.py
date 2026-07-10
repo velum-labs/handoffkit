@@ -14,7 +14,7 @@ from pathlib import Path
 from hyperkit.core.contracts import BenchmarkAdapter, SystemUnderTest
 from hyperkit.core.models import Cell, ShardResult, ShardStatus
 from hyperkit.core.store import ResultStore
-from hyperkit.telemetry import configure, record_shard, shard_span
+from hyperkit.telemetry import configure, record_running, record_shard, shard_span
 
 
 class RunOrchestrator:
@@ -59,6 +59,7 @@ class RunOrchestrator:
             "hyperkit.sut.kind": cell.sut.kind,
             "hyperkit.sut.hash": cell.sut.hash,
         }
+        record_running(attributes, 1)
         with shard_span(attributes):
             try:
                 target = self.sut.start(cell.sut, workdir)
@@ -100,6 +101,7 @@ class RunOrchestrator:
                 )
             finally:
                 self.sut.stop()
+                record_running(attributes, -1)
 
         self.store.put(self.sweep_id, result)
         record_shard(

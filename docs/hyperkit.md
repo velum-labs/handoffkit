@@ -81,3 +81,31 @@ The migration gate reproduces the committed 19/30 vs 16/30 confirmation table.
 The S3 `ShardResult` is the checkpoint. Spot interruption or controller
 restart loses at most in-flight shards; `resume` submits only the missing set.
 
+## Live hypergrid performance
+
+Each result-object write emits an S3 notification to an encrypted SQS queue.
+The stateless `hyperkit controller` service reconciles the affected sweep from
+durable S3 cell metadata + `ShardResult`s, writes a `CellSnapshot` per cell, and
+publishes bounded-label OTLP gauges to AMP.
+
+Snapshots include planned/completed/pending/resolved/error shards, resolution
+rate + Wilson bounds, total cost + cost/resolve, p50/p95 latency, delta versus
+best single model, rank, and Pareto membership. Full arbitrary experiment
+parameters stay in S3/Athena; Prometheus carries only bounded labels
+(`run_id`, generation, benchmark, cell id, topology hash, and selected
+low-cardinality axes).
+
+Grafana provisions:
+
+- Hypergrid Leaderboard;
+- Hypergrid Explorer (selectable topology/k/panel/commit axes);
+- Quality/Cost Pareto;
+- Generation & Search Coverage;
+- Cell Drilldown;
+- Learning Curves;
+- operational Sweep Live, Fleet, and Fusion Internal dashboards.
+
+The controller keeps no database or in-memory authority. Restarting it
+recomputes the same snapshots from S3, so live views recover after deployment,
+Spot, or controller failures without special repair.
+

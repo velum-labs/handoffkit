@@ -138,6 +138,19 @@ class AwsBatchComputeBackend:
         entries: list[tuple[Cell, str, str]],
     ) -> str | None:
         cell = entries[0][0]
+        cell_key = self.store._key(f"runs/{sweep_id}/cells/{cell.cell_id}.json")
+        self.store.client.put_object(
+            Bucket=self.store.bucket,
+            Key=cell_key,
+            Body=json.dumps(
+                {
+                    "cell": cell.model_dump(mode="json"),
+                    "generation": self.generation,
+                },
+                sort_keys=True,
+            ).encode(),
+            ContentType="application/json",
+        )
         manifest = {
             str(index): {
                 # A shard only needs its own instance. Since instances are not

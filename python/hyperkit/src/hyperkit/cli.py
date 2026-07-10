@@ -14,6 +14,7 @@ import typer
 
 import hyperkit.adapters  # noqa: F401  (registers built-in benchmark adapters)
 import hyperkit.suts  # noqa: F401  (registers built-in SUTs)
+from hyperkit.cloud.controller import main as controller_main
 from hyperkit.core.aggregate import format_table
 from hyperkit.core.experiments import load_experiment
 from hyperkit.core.models import TopologySpec
@@ -96,6 +97,13 @@ def status(workdir: Annotated[Path, typer.Option()] = Path(".hyperkit")) -> None
 def collect(workdir: Annotated[Path, typer.Option()] = Path(".hyperkit")) -> None:
     engine = SweepEngine(workdir)
     typer.echo(format_table(engine.collect()))
+
+
+@app.command()
+def controller() -> None:
+    """Run the stateless S3/SQS hypergrid snapshot controller."""
+
+    raise typer.Exit(controller_main())
 
 
 @app.command("replay-swebench")
