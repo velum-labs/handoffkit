@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient, ProviderCallError
-from fusionkit_core.config import EndpointAuth, FusionConfig, FusionMode, ModelEndpoint
+from fusionkit_core.config import (
+    EndpointAuth,
+    FusionConfig,
+    FusionMode,
+    ModelEndpoint,
+    SamplingConfig,
+)
+from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk
 from fusionkit_server import create_app
 from fusionkit_server.app import FusionRequest
 
@@ -128,6 +136,128 @@ def _panel_app(tmp_path) -> TestClient:
         run_store_path=tmp_path / "runs",
     )
     return TestClient(app)
+
+
+def _fuse_payload(*, messages: list[dict[str, Any]], status: str = "succeeded") -> dict[str, Any]:
+    return {
+        "model": "fusionkit/panel",
+        "messages": messages,
+        "trajectories": [
+            {
+                "trajectory_id": "trajectory_1",
+                "model_id": "m1",
+                "status": status,
+                "final_output": "candidate",
+            }
+        ],
+    }
+
+
+def test_fuse_rejects_messages_without_roles_before_model_calls(tmp_path) -> None:
+    client = _panel_app(tmp_path)
+
+    response = client.post(
+        "/v1/fusion/trajectories:fuse",
+        json=_fuse_payload(messages=[{"content": "silently became a user message"}]),
+    )
+
+    assert response.status_code == 422
+
+
+def test_fuse_rejects_a_panel_with_no_successful_trajectory(tmp_path) -> None:
+    client = _panel_app(tmp_path)
+
+    response = client.post(
+        "/v1/fusion/trajectories:fuse",
+        json=_fuse_payload(
+            messages=[{"role": "user", "content": "fuse this"}],
+            status="failed",
+        ),
+    )
+
+    assert response.status_code == 422
+
+
+def test_chat_rejects_unknown_models_and_invalid_sampling_before_fanout(tmp_path) -> None:
+    for body in (
+        {
+            "model": "totally-unknown-model",
+            "messages": [{"role": "user", "content": "do not silently fuse"}],
+        },
+        {
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "negative tokens"}],
+            "max_tokens": -1,
+        },
+        {
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "invalid probability"}],
+            "top_p": 1.5,
+        },
+        {
+            "model": "fusionkit/panel",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_bad",
+                            "type": "function",
+                            "function": {"name": "read", "arguments": '{"broken"'},
+                        }
+                    ],
+                }
+            ],
+        },
+    ):
+        response = _panel_app(tmp_path).post("/v1/chat/completions", json=body)
+        assert response.status_code in (400, 422), response.text
+
+
+def test_app_shutdown_closes_every_model_client_once(tmp_path) -> None:
+    class ClosableClient:
+        model_id = "fast"
+        max_context = None
+
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        async def chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Mapping[str, Any]] | None = None,
+            tool_choice: str | Mapping[str, Any] | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> ModelResponse:
+            return ModelResponse(model_id=self.model_id, content="ok")
+
+        async def stream_chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Mapping[str, Any]] | None = None,
+            tool_choice: str | Mapping[str, Any] | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            yield StreamChunk(delta="ok", finish_reason="stop")
+
+        async def aclose(self) -> None:
+            self.close_calls += 1
+
+    client = ClosableClient()
+    config = FusionConfig(
+        endpoints=[ModelEndpoint(id="fast", model="fake-fast")],
+        default_model="fast",
+        default_mode="single",
+    )
+    with TestClient(
+        create_app(config, clients={"fast": client}, run_store_path=tmp_path / "runs")
+    ):
+        pass
+
+    assert client.close_calls == 1
 
 
 def test_plain_chat_completions_does_not_record_a_run(tmp_path) -> None:

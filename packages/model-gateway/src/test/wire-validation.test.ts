@@ -109,6 +109,27 @@ test("count_tokens requires a messages array but no minimum length", () => {
   assert.equal(validateCountTokensRequest({ messages: [{ role: "user", content: "x" }] }), undefined);
   assert.equal(validateCountTokensRequest({})?.status, 400);
   assert.equal(validateCountTokensRequest({ messages: "hi" })?.status, 400);
+  assert.equal(validateCountTokensRequest({ messages: [42] })?.status, 400);
+  assert.equal(validateCountTokensRequest({ messages: [{ content: "missing role" }] })?.status, 400);
+  assert.equal(
+    validateCountTokensRequest({ messages: [{ role: "user", content: { text: "wrong shape" } }] })
+      ?.status,
+    400
+  );
+});
+
+test("token limits must be positive integers at every wire door", () => {
+  assert.equal(validateChatRequest({ ...chatOk, max_tokens: -1 })?.status, 400);
+  assert.equal(validateChatRequest({ ...chatOk, max_completion_tokens: 1.5 })?.status, 400);
+  assert.equal(
+    validateAnthropicRequest({
+      model: "c",
+      messages: [{ role: "user", content: "x" }],
+      max_tokens: 0
+    })?.status,
+    400
+  );
+  assert.equal(validateResponsesRequest({ model: "m", input: "x", max_output_tokens: -1 })?.status, 400);
 });
 
 test("responses door requires a usable input and string model", () => {

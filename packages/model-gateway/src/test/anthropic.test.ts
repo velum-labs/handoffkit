@@ -331,6 +331,28 @@ test("truncated stream (no finish_reason) surfaces an Anthropic error, not end_t
   assert.ok(!out.includes('"stop_reason":"end_turn"'), "truncation must not fabricate a clean end_turn");
 });
 
+test("an OpenAI mid-stream error becomes a native Anthropic error event", async () => {
+  const encoder = new TextEncoder();
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          'data: {"error":{"message":"provider overloaded","type":"provider_error"}}\n\n'
+        )
+      );
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    }
+  });
+  const output = await new Response(openAiSseToAnthropic(upstream, "claude-x")).text();
+
+  assert.match(output, /event: error/);
+  assert.match(output, /provider overloaded/);
+  assert.match(output, /provider_error/);
+  assert.doesNotMatch(output, /incomplete_stream/);
+  assert.doesNotMatch(output, /"stop_reason":"end_turn"/);
+});
+
 test("chatToAnthropicMessage produces a text content block", () => {
   const message = chatToAnthropicMessage(
     {

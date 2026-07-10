@@ -47,3 +47,35 @@ test("a completed panel never sees its abort signal fire", async () => {
   await backend.chat({ ...userTurn, stream: false }).catch(() => undefined);
   assert.equal(panelSignal?.aborted, false);
 });
+
+test("caller abort propagates into an in-flight panel run", async () => {
+  let panelSignal: AbortSignal | undefined;
+  const backend = new FusionBackend({
+    stepUrl: UNREACHABLE_STEP,
+    panelTimeoutMs: 30_000,
+    runPanels: async ({ signal }) => {
+      panelSignal = signal;
+      await new Promise<void>((resolve) => {
+        if (signal?.aborted) return resolve();
+        signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+      throw signal?.reason ?? new Error("aborted");
+    }
+  });
+  const caller = new AbortController();
+  const pending = backend.chat({ ...userTurn, stream: false }, caller.signal);
+  const deadline = Date.now() + 1_000;
+  while (panelSignal === undefined && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  caller.abort(new Error("client disconnected"));
+  await Promise.race([
+    pending,
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(() => reject(new Error("aborted panel did not settle")), 1_000)
+    )
+  ]);
+
+  assert.equal(panelSignal?.aborted, true);
+});

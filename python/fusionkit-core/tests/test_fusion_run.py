@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from typing import Any
 
 import pytest
@@ -249,6 +251,46 @@ def test_tracked_fusion_run_idempotency_conflict_is_explicit(tmp_path) -> None:
     assert second.idempotency_outcome == "conflict"
     assert second.terminal_error is not None
     assert second.terminal_error.error_code == "idempotency_conflict"
+
+
+def test_concurrent_idempotency_claims_create_exactly_one_run(tmp_path, monkeypatch) -> None:
+    manager, store = _manager(tmp_path)
+    request = _request(mode="panel", request_id="fusion_req_race_001")
+    original_get = store.get_idempotency
+    barrier = Barrier(2)
+    calls = 0
+
+    def synchronized_get(key: str):
+        nonlocal calls
+        result = original_get(key)
+        if calls < 2:
+            calls += 1
+            barrier.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(store, "get_idempotency", synchronized_get)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(
+                lambda _index: manager.create_run(
+                    request,
+                    idempotency_key="concurrent-key",
+                ),
+                range(2),
+            )
+        )
+
+    assert {result.run_id for result in results} == {results[0].run_id}
+    assert sorted(result.idempotency_outcome for result in results) == [
+        "created",
+        "replayed",
+    ]
+    run_dirs = [
+        path
+        for path in (tmp_path / "runs").iterdir()
+        if path.is_dir() and path.name != "_idempotency"
+    ]
+    assert len(run_dirs) == 1
 
 
 def test_tracked_fusion_run_requires_action_placeholder_is_inspectable(tmp_path) -> None:

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { test } from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { estimateTokens, randomId } from "../index.js";
+import { estimateTokens, randomId, spawnTool } from "../index.js";
 
 test("randomId returns hex ids with optional prefix and default length", () => {
   const bare = randomId();
@@ -24,4 +27,38 @@ test("estimateTokens uses ceil(chars/4) with a minimum of 1", () => {
   assert.equal(estimateTokens("abcd"), 1);
   assert.equal(estimateTokens("abcde"), 2);
   assert.equal(estimateTokens("user", '{"tool":"payload"}'), 6);
+});
+
+test("spawnTool forwards explicit tool env without leaking unrelated secrets", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "fusionkit-spawn-tool-env-"));
+  const output = join(dir, "env.json");
+  process.env.FUSIONKIT_UNRELATED_SECRET = "must-not-leak";
+  try {
+    const script = [
+      'const { writeFileSync } = require("node:fs");',
+      `writeFileSync(${JSON.stringify(output)}, JSON.stringify({`,
+      "  secret: process.env.FUSIONKIT_UNRELATED_SECRET ?? null,",
+      "  explicit: process.env.FUSIONKIT_EXPLICIT_TOOL_ENV ?? null,",
+      "  hasPath: process.env.PATH !== undefined",
+      "}));"
+    ].join("\n");
+    const code = await spawnTool(
+      process.execPath,
+      ["-e", script],
+      { FUSIONKIT_EXPLICIT_TOOL_ENV: "gateway-only" },
+      dir
+    );
+    assert.equal(code, 0);
+    const observed = JSON.parse(readFileSync(output, "utf8")) as {
+      secret: string | null;
+      explicit: string | null;
+      hasPath: boolean;
+    };
+    assert.equal(observed.secret, null);
+    assert.equal(observed.explicit, "gateway-only");
+    assert.equal(observed.hasPath, true);
+  } finally {
+    delete process.env.FUSIONKIT_UNRELATED_SECRET;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
