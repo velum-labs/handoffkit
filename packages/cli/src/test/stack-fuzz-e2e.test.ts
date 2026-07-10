@@ -93,6 +93,7 @@ const REJECTS: RejectCase[] = [
   { name: "chat empty messages", path: "/v1/chat/completions", body: { model: "fusion-panel", messages: [] }, envelope: "openai" },
   { name: "chat role-less message", path: "/v1/chat/completions", body: { model: "fusion-panel", messages: [{ content: "x" }] }, envelope: "openai" },
   { name: "chat numeric content", path: "/v1/chat/completions", body: { model: "fusion-panel", messages: [{ role: "user", content: 42 }] }, envelope: "openai" },
+  { name: "chat tool message without call id", path: "/v1/chat/completions", body: { model: "fusion-panel", messages: [{ role: "tool", content: "result" }] }, envelope: "openai" },
   { name: "chat array model", path: "/v1/chat/completions", body: { model: ["fusion-panel"], messages: [{ role: "user", content: "x" }] }, envelope: "openai" },
   { name: "chat string stream", path: "/v1/chat/completions", body: { model: "fusion-panel", messages: [{ role: "user", content: "x" }], stream: "yes" }, envelope: "openai" },
   { name: "chat string tools", path: "/v1/chat/completions", body: { model: "fuzz-member", messages: [{ role: "user", content: "x" }], tools: "read" }, envelope: "openai" },

@@ -31,6 +31,8 @@ test("chat door rejects structurally hostile bodies with an OpenAI 400 envelope"
     ["empty messages", { model: "m", messages: [] }],
     ["message without role", { model: "m", messages: [{ content: "x" }] }],
     ["numeric content", { model: "m", messages: [{ role: "user", content: 42 }] }],
+    ["tool message without call id", { model: "m", messages: [{ role: "tool", content: "result" }] }],
+    ["string tool_calls", { model: "m", messages: [{ role: "assistant", content: null, tool_calls: "read" }] }],
     ["array model", { model: ["m"], messages: chatOk.messages }],
     ["object model", { model: { id: "m" }, messages: chatOk.messages }],
     ["string stream", { ...chatOk, stream: "yes" }],
