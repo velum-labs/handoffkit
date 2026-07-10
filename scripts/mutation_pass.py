@@ -397,8 +397,12 @@ MUTATIONS = [
         file="packages/model-gateway/src/adapters/validate.ts",
         old="export function validateChatRequest(body: unknown): WireRejection | undefined {",
         new=(
+            # An unconditional `return undefined;` would make the rest of the
+            # function unreachable (or over-narrow `body`) and fail tsc, so gate
+            # it on a value tsc cannot reason about that is always true at run
+            # time.
             "export function validateChatRequest(body: unknown): WireRejection | undefined {\n"
-            "  return undefined;"
+            "  if (Date.now() > 0) return undefined;"
         ),
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-fuzz-e2e.test.js",
