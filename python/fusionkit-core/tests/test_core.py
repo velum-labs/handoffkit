@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 from fusionkit_core.clients import FakeModelClient
 from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
@@ -315,6 +316,40 @@ def test_default_mode_is_named_heuristic() -> None:
         default_model="m",
     )
     assert config.default_mode == "heuristic"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"default_model": "missing"},
+        {"judge_model": "missing"},
+        {"synthesizer_model": "missing"},
+        {"panel_models": ["missing"]},
+        {"panel_models": ["m", "m"]},
+        {"sample_count": 0},
+    ],
+)
+def test_config_rejects_invalid_model_references_and_counts(
+    overrides: dict[str, object],
+) -> None:
+    payload: dict[str, object] = {
+        "endpoints": [ModelEndpoint(id="m", model="model-m")],
+        "default_model": "m",
+        **overrides,
+    }
+    with pytest.raises(ValidationError):
+        FusionConfig.model_validate(payload)
+
+
+def test_config_rejects_duplicate_endpoint_ids() -> None:
+    with pytest.raises(ValidationError):
+        FusionConfig(
+            endpoints=[
+                ModelEndpoint(id="same", model="model-a"),
+                ModelEndpoint(id="same", model="model-b"),
+            ],
+            default_model="same",
+        )
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:
