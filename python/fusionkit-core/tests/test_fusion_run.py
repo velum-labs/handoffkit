@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -9,7 +11,7 @@ from typing import Any
 import pytest
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
+from fusionkit_core.config import FusionConfig, ModelEndpoint, RunBudget, SamplingConfig
 from fusionkit_core.contracts import (
     FusionRunRequestV1,
     ModelCallRecordV1,
@@ -312,6 +314,73 @@ def test_tracked_fusion_run_requires_action_placeholder_is_inspectable(tmp_path)
     assert inspection.requires_action is not None
     assert inspection.requires_action.tool_call_id == "tool_call_read_001"
     assert inspection.judge_synthesis_record is None
+
+
+@pytest.mark.asyncio
+async def test_execute_run_does_not_restart_a_requires_action_run(tmp_path) -> None:
+    manager, store = _manager(tmp_path)
+    created = manager.create_run(_request(mode="panel", request_id="fusion_req_paused_001"))
+    assert created.run_id is not None
+    manager.record_requires_action(
+        created.run_id,
+        trajectory_id="trajectory_tool_001",
+        tool_call_id="tool_call_read_001",
+    )
+
+    result = await manager.execute_run(created.run_id)
+
+    assert result.state == "requires_action"
+    assert not [
+        event
+        for event in store.list_events(created.run_id)
+        if event.event_type == "model_call_recorded"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_wall_clock_budget_cancels_an_in_flight_provider_call(tmp_path) -> None:
+    class SlowClient:
+        model_id = "slow"
+        max_context = None
+
+        async def chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Any] | None = None,
+            tool_choice: Any | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> ModelResponse:
+            await asyncio.sleep(2)
+            return ModelResponse(model_id=self.model_id, content="too late")
+
+        async def aclose(self) -> None:
+            return None
+
+    config = FusionConfig(
+        endpoints=[ModelEndpoint(id="slow", model="slow-model")],
+        default_model="slow",
+        default_mode="single",
+        budget=RunBudget(wall_clock_s=0.05),
+    )
+    store = FileSystemRunStore(tmp_path / "runs")
+    manager = FusionRunManager(
+        FusionEngine(config=config, clients={"slow": SlowClient()}),
+        store,
+        LocalArtifactStore(tmp_path / "runs"),
+    )
+
+    started = time.perf_counter()
+    result = await manager.create_and_run(
+        _request(mode="single", request_id="fusion_req_wall_clock_001")
+    )
+    elapsed = time.perf_counter() - started
+
+    assert isinstance(result, RunInspection)
+    assert result.state == "failed"
+    assert result.terminal_error is not None
+    assert result.terminal_error.terminal_reason == "budget_exceeded:wall_clock_s"
+    assert elapsed < 0.5, f"wall-clock budget returned after {elapsed:.3f}s"
 
 
 def _manager(tmp_path) -> tuple[FusionRunManager, FileSystemRunStore]:

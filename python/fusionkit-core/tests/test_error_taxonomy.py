@@ -217,6 +217,12 @@ _CASES: list[tuple[str, _FakeSDKError, ProviderKind, ProviderErrorCategory]] = [
         "openai",
         "unknown",
     ),
+    (
+        "billing_word_is_not_always_quota",
+        _FakeSDKError(status_code=400, message="billing address has an invalid country code"),
+        "openai",
+        "unknown",
+    ),
 ]
 
 
