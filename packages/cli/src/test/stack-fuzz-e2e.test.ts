@@ -104,6 +104,7 @@ const REJECTS: RejectCase[] = [
   { name: "messages string max_tokens", path: "/v1/messages", body: { model: "fusion-panel", max_tokens: "lots", messages: [{ role: "user", content: "hi" }] }, envelope: "anthropic" },
   { name: "count_tokens empty body", path: "/v1/messages/count_tokens", body: {}, envelope: "anthropic" },
   { name: "count_tokens malformed item", path: "/v1/messages/count_tokens", body: { messages: [42] }, envelope: "anthropic" },
+  { name: "count_tokens null content", path: "/v1/messages/count_tokens", body: { messages: [{ role: "assistant", content: null }] }, envelope: "anthropic" },
   // Responses door
   { name: "responses empty body", path: "/v1/responses", body: {}, envelope: "openai" },
   { name: "responses numeric input", path: "/v1/responses", body: { model: "fusion-panel", input: 42 }, envelope: "openai" },

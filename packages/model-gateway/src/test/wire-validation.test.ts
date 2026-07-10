@@ -112,6 +112,11 @@ test("count_tokens requires a messages array but no minimum length", () => {
   assert.equal(validateCountTokensRequest({ messages: [42] })?.status, 400);
   assert.equal(validateCountTokensRequest({ messages: [{ content: "missing role" }] })?.status, 400);
   assert.equal(
+    validateCountTokensRequest({ messages: [{ role: "assistant", content: null }] })
+      ?.status,
+    400
+  );
+  assert.equal(
     validateCountTokensRequest({ messages: [{ role: "user", content: { text: "wrong shape" } }] })
       ?.status,
     400
