@@ -1,0 +1,137 @@
+# Previous-generation bridge models; the current-generation shortlist (spec open
+# decision #5) is added at cycle start. r1 and terminus deliberately share the
+# deepseek-v3 lineage to exercise the lineage veto.
+cycle_id: 2026-q3
+models:
+  - endpoint_id: r1
+    provider: openrouter
+    model: deepseek/deepseek-r1-0528
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.50
+    output_price_per_m: 2.15
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - deepseek-v3
+    generation: 2025-h2
+  - endpoint_id: terminus
+    provider: openrouter
+    model: deepseek/deepseek-v3.1-terminus
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.27
+    output_price_per_m: 0.95
+    max_completion_tokens: 32768
+    escalated_completion_tokens:
+    lineage:
+      - deepseek-v3
+    generation: 2025-h2
+  - endpoint_id: qwen3t
+    provider: openrouter
+    model: qwen/qwen3-235b-a22b-thinking-2507
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.1495
+    output_price_per_m: 1.495
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - qwen3
+    generation: 2025-h2
+  - endpoint_id: ds32
+    provider: openrouter
+    model: deepseek/deepseek-v3.2
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.2288
+    output_price_per_m: 0.3432
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - deepseek-v3
+    generation: 2025-h2
+  - endpoint_id: nemotron3s
+    provider: openrouter
+    model: nvidia/nemotron-3-super-120b-a12b
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.08
+    output_price_per_m: 0.45
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - nemotron-3-super
+    generation: 2026-h1
+  - endpoint_id: dsv4pro
+    provider: openrouter
+    model: deepseek/deepseek-v4-pro
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.435
+    output_price_per_m: 0.87
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - deepseek-v4
+    generation: 2026-h1
+  - endpoint_id: glm52
+    provider: openrouter
+    model: z-ai/glm-5.2
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.9086
+    output_price_per_m: 2.8556
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - glm-5
+    generation: 2026-h1
+  - endpoint_id: qwen37max
+    provider: openrouter
+    model: qwen/qwen3.7-max
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 1.25
+    output_price_per_m: 3.75
+    max_completion_tokens: 32768
+    escalated_completion_tokens: 65536
+    lineage:
+      - qwen3.7
+    generation: 2026-h1
+  - endpoint_id: ds32_64k
+    provider: openrouter
+    model: deepseek/deepseek-v3.2
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.2288
+    output_price_per_m: 0.3432
+    max_completion_tokens: 65536
+    escalated_completion_tokens:
+    lineage:
+      - deepseek-v3
+    generation: 2025-h2
+  - endpoint_id: nemotron3s_64k
+    provider: openrouter
+    model: nvidia/nemotron-3-super-120b-a12b
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.08
+    output_price_per_m: 0.45
+    max_completion_tokens: 65536
+    escalated_completion_tokens:
+    lineage:
+      - nemotron-3-super
+    generation: 2026-h1
+  - endpoint_id: kimi26_64k
+    provider: openrouter
+    model: moonshotai/kimi-k2.6
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    input_price_per_m: 0.66
+    output_price_per_m: 3.41
+    max_completion_tokens: 65536
+    escalated_completion_tokens:
+    lineage:
+      - kimi-k2
+    generation: 2026-h1

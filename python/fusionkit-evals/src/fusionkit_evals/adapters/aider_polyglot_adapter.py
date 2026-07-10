@@ -16,7 +16,7 @@ envelope JSON on stdout (everything else to stderr). Requires:
 
 Env overrides: POLYGLOT_ROOT, POLYGLOT_LANGUAGES (default python,go,rust),
 POLYGLOT_TIMEOUT_S (default 120), POLYGLOT_CONCURRENCY (default 3),
-POLYGLOT_CACHE_DIR, POLYGLOT_ARTIFACTS_DIR.
+POLYGLOT_TASK_TIMEOUT_S (default 2400), POLYGLOT_CACHE_DIR, POLYGLOT_ARTIFACTS_DIR.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from fusionkit_core.providers import estimate_cost
 from fusionkit_core.registry import FUSION_PANEL_ALIAS
 from fusionkit_core.types import ChatMessage
 
-from fusionkit_evals.bench_runtime import classify_exception, retry_async
+from fusionkit_evals.bench_runtime import classify_exception, is_transient, retry_async
 from fusionkit_evals.code_extract import extract_code
 from fusionkit_evals.polyglot import (
     PolyglotExercise,
@@ -49,6 +49,10 @@ from fusionkit_evals.polyglot import (
 from fusionkit_evals.provenance import build_provenance
 
 SCORING_VERSION = "1"
+
+
+class PolyglotTaskTimeoutError(TimeoutError):
+    """Raised when a whole fused polyglot task exceeds its wall clock."""
 
 
 def log(message: str) -> None:
@@ -120,6 +124,30 @@ def _candidate_cost(engine: FusionEngine, model_id: str, usage: object) -> float
     return estimate_cost(endpoint, usage if isinstance(usage, dict) else None)
 
 
+def should_retry_panel_error(exc: BaseException) -> bool:
+    if isinstance(exc, PolyglotTaskTimeoutError):
+        return False
+    return is_transient(exc)
+
+
+async def run_engine_with_task_timeout(
+    engine: FusionEngine,
+    prompt: str,
+    task_timeout_s: float,
+) -> Any:
+    task = asyncio.create_task(
+        engine.run([ChatMessage(role="user", content=prompt)], mode="panel")
+    )
+    try:
+        return await asyncio.wait_for(task, timeout=task_timeout_s)
+    except TimeoutError as exc:
+        if task.done() and not task.cancelled():
+            raise
+        raise PolyglotTaskTimeoutError(
+            f"polyglot task exceeded {task_timeout_s:g}s wall clock"
+        ) from exc
+
+
 async def evaluate_exercise(
     engine: FusionEngine,
     exercise: PolyglotExercise,
@@ -137,10 +165,12 @@ async def evaluate_exercise(
     prompt = build_prompt(exercise)
     async with semaphore:
         started = time.monotonic()
+        task_timeout_s = float(os.environ.get("POLYGLOT_TASK_TIMEOUT_S", "2400"))
         try:
             result = await retry_async(
-                lambda: engine.run([ChatMessage(role="user", content=prompt)], mode="panel"),
+                lambda: run_engine_with_task_timeout(engine, prompt, task_timeout_s),
                 attempts=int(os.environ.get("POLYGLOT_RETRIES", "3")),
+                retry_on=should_retry_panel_error,
             )
         except Exception as exc:  # noqa: BLE001 - classify rather than abort the batch
             outcome = classify_exception(exc)

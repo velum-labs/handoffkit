@@ -1,0 +1,68 @@
+# Experiment P1 — best measured trio, Gemini judge.
+#
+# Panel: gemini-3.1-pro + kimi-k2.7-code + deepseek-v4-pro (the two strongest
+# measured non-gemini members from the judge experiment, never yet paired).
+#
+# Requires OPENROUTER_API_KEY.
+endpoints:
+  - id: gemini
+    provider: openrouter
+    model: google/gemini-3.1-pro-preview
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 2.0
+      output_per_1m_tokens: 12.0
+      currency: USD
+    tags: [closed, panel]
+  - id: kimi
+    provider: openrouter
+    model: moonshotai/kimi-k2.7-code
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.74
+      output_per_1m_tokens: 3.5
+      currency: USD
+    tags: [oss, panel]
+  - id: dsv4pro
+    provider: openrouter
+    model: deepseek/deepseek-v4-pro
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.435
+      output_per_1m_tokens: 0.87
+      currency: USD
+    tags: [oss, panel]
+default_model: gemini
+judge_model: gemini
+synthesizer_model: gemini
+default_mode: panel
+panel_models: [gemini, kimi, dsv4pro]
+harness_prompt_passthrough: true
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 8192
+budget:
+  max_candidates: 3
+  wall_clock_s: 1800
+  max_cost: null
+  max_tool_rounds: 24
+  max_tool_calls: 200

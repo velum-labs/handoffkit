@@ -1,0 +1,37 @@
+# Solo vector for error-correlation sweep.
+#
+# Single-member panel: the model judges/synthesizes its own candidate.
+#
+# Requires OPENROUTER_API_KEY.
+endpoints:
+  - id: glm52
+    provider: openrouter
+    model: z-ai/glm-5.2
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 600
+    capabilities:
+      structured_output: true
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: 0.909
+      output_per_1m_tokens: 2.856
+      currency: USD
+    tags: [oss, solo]
+default_model: glm52
+judge_model: glm52
+synthesizer_model: glm52
+default_mode: panel
+panel_models: [glm52]
+harness_prompt_passthrough: true
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 8192
+budget:
+  max_candidates: 1
+  wall_clock_s: 1800
+  max_cost: null
+  max_tool_rounds: 24
+  max_tool_calls: 200
