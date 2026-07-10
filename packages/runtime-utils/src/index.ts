@@ -478,7 +478,7 @@ export function spawnTool(
   return new Promise((resolveExit, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
-      env: { ...process.env, ...env },
+      env: buildChildEnv({ extra: env }),
       ...(cwd !== undefined ? { cwd } : {})
     });
     child.on("error", reject);

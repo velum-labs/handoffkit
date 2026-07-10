@@ -127,7 +127,7 @@ function webSearchResultText(content: unknown): string {
 // ---- OpenAI shapes we read back ----
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
-type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage };
+type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; error?: unknown };
 type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsage };
 
 // ---- request translation ----
@@ -652,6 +652,19 @@ export function openAiSseToAnthropic(
     );
   };
 
+  const finalizeUpstreamError = (controller: Controller, error: unknown): void => {
+    if (state.finished) return;
+    state.finished = true;
+    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+    closeOpenBlocks(controller);
+    controller.enqueue(
+      sse("error", {
+        type: "error",
+        error: unwrapUpstreamError(JSON.stringify({ error }))
+      })
+    );
+  };
+
   // The server-tool loop injects marker chunks around each gateway-executed
   // web search; render them as native `server_tool_use` /
   // `web_search_tool_result` blocks (each opened and closed immediately —
@@ -694,6 +707,10 @@ export function openAiSseToAnthropic(
   };
 
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
+    if (chunk.error !== undefined && chunk.error !== null) {
+      finalizeUpstreamError(controller, chunk.error);
+      return;
+    }
     const choice = chunk.choices?.[0];
     if (choice === undefined) {
       if (chunk.usage?.prompt_tokens !== undefined) state.inputTokens = chunk.usage.prompt_tokens;

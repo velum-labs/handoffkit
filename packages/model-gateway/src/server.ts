@@ -298,19 +298,50 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 // ---- HTTP helpers (Node built-ins only) ----
 
 const NO_BODY = Symbol("no-body");
+const MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
 
 async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
+  let total = 0;
+  let tooLarge = false;
+  for await (const value of req) {
+    const chunk = value as Buffer;
+    total += chunk.length;
+    if (total > MAX_REQUEST_BODY_BYTES) {
+      tooLarge = true;
+      continue;
+    }
+    chunks.push(chunk);
+  }
+  if (tooLarge) throw new RequestBodyTooLargeError();
   return Buffer.concat(chunks);
 }
+
+class RequestBodyTooLargeError extends Error {}
 
 /**
  * Read and parse a JSON request body. On malformed JSON, write a 400 and
  * return the NO_BODY sentinel so the caller stops processing.
  */
 async function readJson(req: IncomingMessage, res: ServerResponse): Promise<unknown> {
-  const buffer = await readBody(req);
+  const declaredLength = Number(req.headers["content-length"]);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BODY_BYTES) {
+    req.resume();
+    writeJson(res, 413, {
+      error: { message: "request body exceeds the 16 MiB limit", type: "payload_too_large" }
+    });
+    return NO_BODY;
+  }
+  let buffer: Buffer;
+  try {
+    buffer = await readBody(req);
+  } catch (error) {
+    if (!(error instanceof RequestBodyTooLargeError)) throw error;
+    writeJson(res, 413, {
+      error: { message: "request body exceeds the 16 MiB limit", type: "payload_too_large" }
+    });
+    return NO_BODY;
+  }
   if (buffer.length === 0) return {};
   try {
     return JSON.parse(buffer.toString("utf8")) as unknown;
@@ -388,7 +419,7 @@ async function handleModelCall(
   try {
     const upstream = await route.invoke(callId, aborter.signal);
     // Only buffer the response body when a provenance sink will consume it.
-    const body = await pipeUpstream(res, upstream, sink !== undefined);
+    const body = await pipeUpstream(res, upstream, sink !== undefined, aborter.signal);
     const result = {
       statusCode: upstream.status,
       responseBody: body,
@@ -426,7 +457,8 @@ const PROVENANCE_BODY_CAP_BYTES = 2 * 1024 * 1024;
 async function pipeUpstream(
   res: ServerResponse,
   upstream: Response,
-  collectBody = false
+  collectBody = false,
+  signal?: AbortSignal
 ): Promise<Buffer> {
   res.statusCode = upstream.status;
   const contentType = upstream.headers.get("content-type");
@@ -437,6 +469,10 @@ async function pipeUpstream(
     return Buffer.alloc(0);
   }
   const reader = body.getReader();
+  const onAbort = (): void => {
+    void reader.cancel(signal?.reason).catch(() => undefined);
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
   const chunks: Buffer[] = [];
   let collectedBytes = 0;
   try {
@@ -444,6 +480,10 @@ async function pipeUpstream(
       const { done, value } = await reader.read();
       if (done) break;
       if (value !== undefined) {
+        if (signal?.aborted === true || res.destroyed || res.writableEnded) {
+          await reader.cancel(signal?.reason).catch(() => undefined);
+          break;
+        }
         const chunk = Buffer.from(value);
         // Accumulate for provenance only when a sink wants it, and only up to
         // the cap; the client always receives the full stream via res.write.
@@ -451,7 +491,9 @@ async function pipeUpstream(
           chunks.push(chunk);
           collectedBytes += chunk.length;
         }
-        if (!res.write(chunk)) await once(res, "drain");
+        if (!res.write(chunk)) {
+          await Promise.race([once(res, "drain"), once(res, "close")]);
+        }
       }
     }
   } catch (error) {
@@ -460,8 +502,10 @@ async function pipeUpstream(
     // disconnect for this request rather than a silently truncated body.
     res.destroy();
     throw error;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
   }
-  res.end();
+  if (!res.destroyed && !res.writableEnded) res.end();
   return Buffer.concat(chunks);
 }
 

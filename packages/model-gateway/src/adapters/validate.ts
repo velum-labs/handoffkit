@@ -72,12 +72,30 @@ function checkStream(body: Record<string, unknown>, shape: ErrorShape): WireReje
   return undefined;
 }
 
+function checkPositiveInteger(
+  body: Record<string, unknown>,
+  field: string,
+  shape: ErrorShape
+): WireRejection | undefined {
+  const value = body[field];
+  if (
+    value !== undefined &&
+    value !== null &&
+    (typeof value !== "number" || !Number.isInteger(value) || value < 1)
+  ) {
+    return shape(`\`${field}\` must be a positive integer`);
+  }
+  return undefined;
+}
+
 /** OpenAI Chat Completions door (`/v1/chat/completions`). */
 export function validateChatRequest(body: unknown): WireRejection | undefined {
   if (!isObject(body)) return openAiError("request body must be a JSON object");
   return (
     checkModel(body, openAiError) ??
     checkStream(body, openAiError) ??
+    checkPositiveInteger(body, "max_tokens", openAiError) ??
+    checkPositiveInteger(body, "max_completion_tokens", openAiError) ??
     checkMessages(body, openAiError) ??
     (body.tools !== undefined && body.tools !== null && !Array.isArray(body.tools)
       ? openAiError("`tools` must be an array of tool definitions")
@@ -92,10 +110,8 @@ export function validateAnthropicRequest(body: unknown): WireRejection | undefin
   return (
     checkModel(body, anthropicError) ??
     checkStream(body, anthropicError) ??
+    checkPositiveInteger(body, "max_tokens", anthropicError) ??
     checkMessages(body, anthropicError) ??
-    (body.max_tokens !== undefined && body.max_tokens !== null && typeof body.max_tokens !== "number"
-      ? anthropicError("`max_tokens` must be a number")
-      : undefined) ??
     (system !== undefined && system !== null && typeof system !== "string" && !Array.isArray(system)
       ? anthropicError("`system` must be a string or an array of text blocks")
       : undefined)
@@ -108,13 +124,25 @@ export function validateCountTokensRequest(body: unknown): WireRejection | undef
   if (!Array.isArray(body.messages)) {
     return anthropicError("`messages` is required and must be an array of message objects");
   }
+  for (const message of body.messages) {
+    if (!isObject(message) || typeof message.role !== "string") {
+      return anthropicError("every message must be an object with a string `role`");
+    }
+    const content = message.content;
+    if (content !== undefined && content !== null && typeof content !== "string" && !Array.isArray(content)) {
+      return anthropicError("message `content` must be a string, an array of content parts, or null");
+    }
+  }
   return undefined;
 }
 
 /** OpenAI Responses door (`/v1/responses`). */
 export function validateResponsesRequest(body: unknown): WireRejection | undefined {
   if (!isObject(body)) return openAiError("request body must be a JSON object");
-  const model = checkModel(body, openAiError) ?? checkStream(body, openAiError);
+  const model =
+    checkModel(body, openAiError) ??
+    checkStream(body, openAiError) ??
+    checkPositiveInteger(body, "max_output_tokens", openAiError);
   if (model !== undefined) return model;
   const input = body.input;
   if (typeof input === "string") return undefined;

@@ -196,9 +196,12 @@ export class FusionBackend implements Backend {
     if (chat.model !== undefined && typeof (chat.model as unknown) !== "string") {
       return invalidRequest("`model` must be a string");
     }
-    const messages = Array.isArray(chat.messages) ? chat.messages : [];
-    if (messages.length === 0 && this.#passthroughFor(chat.model) === undefined) {
-      return invalidRequest("the request contains no messages to run a fused turn on");
+    if (!Array.isArray(chat.messages)) {
+      return invalidRequest("`messages` is required and must be an array");
+    }
+    const messages = chat.messages;
+    if (messages.length === 0) {
+      return invalidRequest("the request contains no messages");
     }
     const req: FrontdoorRequestValue = {
       requestId: newSpanId(),
@@ -264,6 +267,7 @@ export class FusionBackend implements Backend {
   async #resolvePanelCandidates(req: FrontdoorRequestValue): Promise<readonly WireTrajectory[]> {
     const session = this.#sessions.ensureSession(req.sessionKey);
     const route = this.#routeFor(req);
+    const signal = this.#signalFor(req);
     const turnCandidates = this.#sessions.ensureTurnCandidates({
       session,
       sessionKey: req.sessionKey,
@@ -279,10 +283,14 @@ export class FusionBackend implements Backend {
       // `runPanelRound`, not re-encoded here.
       ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
       ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
-      ...(isFiniteK(route?.k) ? { k: route.k } : {})
+      ...(isFiniteK(route?.k) ? { k: route.k } : {}),
+      ...(signal !== undefined ? { signal } : {})
     });
-    const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel", (error) =>
-      session.turnAborts.get(req.turn)?.abort(error)
+    const candidates = await withTimeout(
+      turnCandidates.candidates,
+      this.#panelTimeoutMs,
+      "fusion panel",
+      (error) => turnCandidates.abort(error)
     );
     // Finite-k rounds run a fresh panel per request, so each round's candidate
     // cost is new; drop the per-turn metering latch that exists to avoid
