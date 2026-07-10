@@ -188,6 +188,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         });
         return;
       }
+      if ("input" in raw && rejectInvalid(res, validateResponsesRequest(raw))) return;
       // Validate the *translated* body: the hybrid's `input` items become chat
       // `messages`, so an input list that translates to nothing (e.g. only
       // unknown item types) is rejected here instead of failing deep in fusion.

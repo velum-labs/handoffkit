@@ -98,6 +98,21 @@ function checkPositiveInteger(
   return undefined;
 }
 
+function checkTools(
+  body: Record<string, unknown>,
+  shape: ErrorShape
+): WireRejection | undefined {
+  const tools = body.tools;
+  if (tools === undefined || tools === null) return undefined;
+  if (!Array.isArray(tools)) {
+    return shape("`tools` must be an array of tool definitions");
+  }
+  if (tools.some((tool) => !isObject(tool))) {
+    return shape("every tool definition must be an object");
+  }
+  return undefined;
+}
+
 /** OpenAI Chat Completions door (`/v1/chat/completions`). */
 export function validateChatRequest(body: unknown): WireRejection | undefined {
   if (!isObject(body)) return openAiError("request body must be a JSON object");
@@ -107,9 +122,7 @@ export function validateChatRequest(body: unknown): WireRejection | undefined {
     checkPositiveInteger(body, "max_tokens", openAiError) ??
     checkPositiveInteger(body, "max_completion_tokens", openAiError) ??
     checkMessages(body, openAiError) ??
-    (body.tools !== undefined && body.tools !== null && !Array.isArray(body.tools)
-      ? openAiError("`tools` must be an array of tool definitions")
-      : undefined)
+    checkTools(body, openAiError)
   );
 }
 
@@ -122,6 +135,7 @@ export function validateAnthropicRequest(body: unknown): WireRejection | undefin
     checkStream(body, anthropicError) ??
     checkPositiveInteger(body, "max_tokens", anthropicError) ??
     checkMessages(body, anthropicError, { allowNullContent: false }) ??
+    checkTools(body, anthropicError) ??
     (system !== undefined && system !== null && typeof system !== "string" && !Array.isArray(system)
       ? anthropicError("`system` must be a string or an array of text blocks")
       : undefined)
@@ -143,7 +157,8 @@ export function validateResponsesRequest(body: unknown): WireRejection | undefin
   const model =
     checkModel(body, openAiError) ??
     checkStream(body, openAiError) ??
-    checkPositiveInteger(body, "max_output_tokens", openAiError);
+    checkPositiveInteger(body, "max_output_tokens", openAiError) ??
+    checkTools(body, openAiError);
   if (model !== undefined) return model;
   const input = body.input;
   if (typeof input === "string") return undefined;
