@@ -54,6 +54,12 @@ function checkMessages(
     if (!isObject(message) || typeof message.role !== "string") {
       return shape("every message must be an object with a string `role`");
     }
+    if (
+      message.role === "tool" &&
+      (typeof message.tool_call_id !== "string" || message.tool_call_id.length === 0)
+    ) {
+      return shape("tool messages require a non-empty `tool_call_id`");
+    }
     const content = message.content;
     if (content === null && options.allowNullContent === false) {
       return shape("message `content` must not be null");
@@ -63,6 +69,33 @@ function checkMessages(
     }
     if (Array.isArray(content) && content.some((part) => !isObject(part))) {
       return shape("every message content part must be an object");
+    }
+    const toolCalls = message.tool_calls;
+    if (toolCalls !== undefined && toolCalls !== null) {
+      if (!Array.isArray(toolCalls)) {
+        return shape("message `tool_calls` must be an array");
+      }
+      if (message.role !== "assistant") {
+        return shape("message `tool_calls` are only valid on assistant messages");
+      }
+      for (const call of toolCalls) {
+        if (!isObject(call)) return shape("every tool call must be an object");
+        const functionCall = isObject(call.function) ? call.function : call;
+        if (typeof functionCall.name !== "string" || functionCall.name.length === 0) {
+          return shape("every tool call requires a function name");
+        }
+        if (typeof functionCall.arguments !== "string") {
+          return shape("tool-call `arguments` must be a JSON string");
+        }
+        try {
+          const parsed = JSON.parse(functionCall.arguments) as unknown;
+          if (!isObject(parsed)) {
+            return shape("tool-call `arguments` must encode a JSON object");
+          }
+        } catch {
+          return shape("tool-call `arguments` must be valid JSON");
+        }
+      }
     }
   }
   return undefined;
