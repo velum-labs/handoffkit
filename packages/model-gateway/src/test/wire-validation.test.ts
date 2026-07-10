@@ -70,7 +70,8 @@ test("anthropic door rejects hostile bodies with the Anthropic 400 envelope", ()
     ["empty messages", { model: "c", max_tokens: 10, messages: [] }],
     ["array model", { model: ["c"], max_tokens: 10, messages: [{ role: "user", content: "x" }] }],
     ["string max_tokens", { model: "c", max_tokens: "lots", messages: [{ role: "user", content: "x" }] }],
-    ["numeric system", { model: "c", max_tokens: 10, system: 42, messages: [{ role: "user", content: "x" }] }]
+    ["numeric system", { model: "c", max_tokens: 10, system: 42, messages: [{ role: "user", content: "x" }] }],
+    ["string tools", { model: "c", max_tokens: 10, tools: "hammer", messages: [{ role: "user", content: "x" }] }]
   ];
   for (const [name, body] of hostile) {
     const rejection = validateAnthropicRequest(body);
@@ -143,7 +144,8 @@ test("responses door requires a usable input and string model", () => {
     ["numeric input", { model: "m", input: 42 }],
     ["empty input array", { model: "m", input: [] }],
     ["non-object input item", { model: "m", input: ["hi"] }],
-    ["object model", { model: { a: 1 }, input: "hi" }]
+    ["object model", { model: { a: 1 }, input: "hi" }],
+    ["string tools", { model: "m", input: "hi", tools: "hammer" }]
   ];
   for (const [name, body] of hostile) {
     const rejection = validateResponsesRequest(body);

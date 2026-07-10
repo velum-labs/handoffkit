@@ -102,6 +102,7 @@ const REJECTS: RejectCase[] = [
   { name: "messages null messages", path: "/v1/messages", body: { model: "fusion-panel", max_tokens: 100, messages: null }, envelope: "anthropic" },
   { name: "messages array model", path: "/v1/messages", body: { model: ["x"], max_tokens: 100, messages: [{ role: "user", content: "hi" }] }, envelope: "anthropic" },
   { name: "messages string max_tokens", path: "/v1/messages", body: { model: "fusion-panel", max_tokens: "lots", messages: [{ role: "user", content: "hi" }] }, envelope: "anthropic" },
+  { name: "messages string tools", path: "/v1/messages", body: { model: "fusion-panel", max_tokens: 100, tools: "hammer", messages: [{ role: "user", content: "hi" }] }, envelope: "anthropic" },
   { name: "count_tokens empty body", path: "/v1/messages/count_tokens", body: {}, envelope: "anthropic" },
   { name: "count_tokens malformed item", path: "/v1/messages/count_tokens", body: { messages: [42] }, envelope: "anthropic" },
   { name: "count_tokens null content", path: "/v1/messages/count_tokens", body: { messages: [{ role: "assistant", content: null }] }, envelope: "anthropic" },
@@ -110,11 +111,13 @@ const REJECTS: RejectCase[] = [
   { name: "responses numeric input", path: "/v1/responses", body: { model: "fusion-panel", input: 42 }, envelope: "openai" },
   { name: "responses object model", path: "/v1/responses", body: { model: { a: 1 }, input: "hi" }, envelope: "openai" },
   { name: "responses negative max_output_tokens", path: "/v1/responses", body: { model: "fusion-panel", input: "hi", max_output_tokens: -1 }, envelope: "openai" },
+  { name: "responses string tools", path: "/v1/responses", body: { model: "fusion-panel", input: "hi", tools: "hammer" }, envelope: "openai" },
   // Passes door validation (items may be unknown types) but translates to an
   // empty fused turn — the FusionBackend's own boundary guard must answer 400.
   { name: "responses unknown-only input", path: "/v1/responses", body: { model: "fusion-panel", input: [{ type: "quantum" }] }, envelope: "openai" },
   // Cursor door (bogus + hybrid that translates to nothing)
   { name: "cursor no messages/input", path: "/v1/cursor/chat/completions", body: { weird: true }, envelope: "openai" },
+  { name: "cursor string tools", path: "/v1/cursor/chat/completions", body: { model: "fusion-panel", input: "hi", tools: "hammer" }, envelope: "openai" },
   { name: "cursor unknown-only input", path: "/v1/cursor/chat/completions", body: { model: "fusion-panel", input: [{ type: "quantum" }] }, envelope: "openai" }
 ];
 
