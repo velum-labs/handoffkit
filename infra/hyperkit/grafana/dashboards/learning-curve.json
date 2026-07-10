@@ -1,0 +1,243 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
+          "legendFormat": "{{cell_id}} rate",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_wilson_low{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
+          "legendFormat": "{{cell_id}} Wilson low",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_wilson_high{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
+          "legendFormat": "{{cell_id}} Wilson high",
+          "range": true,
+          "instant": false,
+          "refId": "C"
+        }
+      ],
+      "title": "Running resolution rate with Wilson bands",
+      "type": "timeseries",
+      "description": "Snapshot gauges are plotted over completion time; Wilson bands show uncertainty as shards complete."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
+          "legendFormat": "{{cell_id}} completed",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Completed shards over time",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 40,
+  "tags": [
+    "hyperkit",
+    "hypergrid",
+    "learning-curve"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate, run_id)",
+        "includeAll": true,
+        "label": "Run Id",
+        "multi": false,
+        "name": "run_id",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate, run_id)",
+          "refId": "var-run_id"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\"}, benchmark)",
+        "includeAll": true,
+        "label": "Benchmark",
+        "multi": false,
+        "name": "benchmark",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\"}, benchmark)",
+          "refId": "var-benchmark"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\"}, generation)",
+        "includeAll": true,
+        "label": "Generation",
+        "multi": false,
+        "name": "generation",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\"}, generation)",
+          "refId": "var-generation"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}, cell_id)",
+        "includeAll": true,
+        "label": "Cell Id",
+        "multi": false,
+        "name": "cell_id",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}, cell_id)",
+          "refId": "var-cell_id"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Hypergrid Learning Curve",
+  "uid": "hyperkit-learning-curve",
+  "version": 1
+}

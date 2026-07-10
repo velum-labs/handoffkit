@@ -11,6 +11,25 @@ TELEMETRY = ROOT / "python" / "hyperkit" / "src" / "hyperkit" / "telemetry.py"
 VALIDATOR = ROOT / "scripts" / "validate_hyperkit_dashboards.py"
 DASHBOARDS = ROOT / "infra" / "hyperkit" / "grafana" / "dashboards"
 METRIC_PATTERN = re.compile(r"\b(?:hyperkit|otelcol)_[A-Za-z0-9_]+\b(?=\s*(?:\{|\[))")
+HYPERGRID_METRICS = {
+    "hyperkit_cell_completed_shards",
+    "hyperkit_cell_cost_per_resolve",
+    "hyperkit_cell_cost_usd",
+    "hyperkit_cell_delta_vs_best_single",
+    "hyperkit_cell_errors",
+    "hyperkit_cell_latency_p50_seconds",
+    "hyperkit_cell_latency_p95_seconds",
+    "hyperkit_cell_pareto",
+    "hyperkit_cell_planned_shards",
+    "hyperkit_cell_rank",
+    "hyperkit_cell_resolution_rate",
+    "hyperkit_cell_resolved_shards",
+    "hyperkit_cell_wilson_high",
+    "hyperkit_cell_wilson_low",
+    "hyperkit_cells_total",
+    "hyperkit_shards_pending",
+    "hyperkit_shards_running",
+}
 
 
 def test_dashboards_only_query_supported_metrics() -> None:
@@ -22,7 +41,7 @@ def test_dashboards_only_query_supported_metrics() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "validated 20 panel queries" in result.stdout
+    assert "validated 91 dashboard queries across 9 dashboards" in result.stdout
 
 
 def test_hyperkit_dashboard_metrics_match_otel_translation() -> None:
@@ -47,7 +66,7 @@ def test_hyperkit_dashboard_metrics_match_otel_translation() -> None:
         if metric.startswith("hyperkit_")
     }
 
-    assert dashboard_metrics == translated
+    assert dashboard_metrics == translated | HYPERGRID_METRICS
 
 
 def _instrument_call(source: str, name: str) -> str:

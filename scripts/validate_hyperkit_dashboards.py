@@ -17,27 +17,73 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "infra" / "hyperkit" / "grafana" / "dashboards"
 EXPECTED_DASHBOARDS = {
+    "hyperkit-cell-drilldown",
     "hyperkit-fleet",
     "hyperkit-fusion-internal",
+    "hyperkit-generation-coverage",
+    "hyperkit-hypergrid-explorer",
+    "hyperkit-hypergrid-leaderboard",
+    "hyperkit-learning-curve",
+    "hyperkit-pareto",
     "hyperkit-sweep-live",
 }
+REQUIRED_VARIABLES = {
+    "hyperkit-cell-drilldown": {"benchmark", "cell_id", "generation", "run_id"},
+    "hyperkit-generation-coverage": {"benchmark", "run_id"},
+    "hyperkit-hypergrid-explorer": {
+        "benchmark",
+        "generation",
+        "run_id",
+        "x_dimension",
+        "y_dimension",
+    },
+    "hyperkit-hypergrid-leaderboard": {"benchmark", "generation", "run_id"},
+    "hyperkit-learning-curve": {"benchmark", "cell_id", "generation", "run_id"},
+    "hyperkit-pareto": {"benchmark", "generation", "run_id"},
+}
 SUPPORTED_METRICS = {
+    "hyperkit_cell_completed_shards",
+    "hyperkit_cell_cost_per_resolve",
+    "hyperkit_cell_cost_usd",
+    "hyperkit_cell_delta_vs_best_single",
+    "hyperkit_cell_errors",
+    "hyperkit_cell_latency_p50_seconds",
+    "hyperkit_cell_latency_p95_seconds",
+    "hyperkit_cell_pareto",
+    "hyperkit_cell_planned_shards",
+    "hyperkit_cell_rank",
+    "hyperkit_cell_resolution_rate",
+    "hyperkit_cell_resolved_shards",
+    "hyperkit_cell_wilson_high",
+    "hyperkit_cell_wilson_low",
+    "hyperkit_cells_total",
     "hyperkit_cost_usd_total",
     "hyperkit_shard_latency_seconds_bucket",
     "hyperkit_shards_completed_total",
     "hyperkit_shards_errors_total",
+    "hyperkit_shards_pending",
     "hyperkit_shards_resolved_total",
+    "hyperkit_shards_running",
     "otelcol_exporter_send_failed_metric_points",
     "otelcol_exporter_sent_metric_points",
     "otelcol_receiver_accepted_metric_points",
     "otelcol_receiver_refused_metric_points",
 }
 METRIC_PATTERN = re.compile(r"\b(?:hyperkit|otelcol)_[A-Za-z0-9_]+\b(?=\s*(?:\{|\[))")
+LABEL_VALUES_PATTERN = re.compile(
+    r"^label_values\((?P<selector>.+),\s*(?P<label>[A-Za-z_][A-Za-z0-9_]*)\)$"
+)
+MASKED_ZERO_PATTERN = re.compile(r"\bvector\s*\(\s*0(?:\.0*)?\s*\)", re.IGNORECASE)
 SUBSTITUTIONS = {
     "$__rate_interval": "5s",
+    "$__interval": "5s",
     "$__range": "5m",
     "$benchmark": ".*",
+    "$cell_id": ".*",
+    "$generation": ".*",
     "$run_id": ".*",
+    "$x_dimension": "k",
+    "$y_dimension": "topology",
 }
 
 
@@ -53,7 +99,12 @@ def iter_panel_queries(
 ) -> list[tuple[str, str, str]]:
     queries: list[tuple[str, str, str]] = []
     for dashboard in dashboards:
-        for panel in dashboard.get("panels", []):
+        panels = list(dashboard.get("panels", []))
+        while panels:
+            panel = panels.pop(0)
+            panels[0:0] = panel.get("panels", [])
+            if panel.get("type") == "row" and not panel.get("targets"):
+                continue
             datasource = panel.get("datasource", {})
             if datasource.get("type") != "prometheus" or datasource.get("uid") != "amp":
                 raise ValueError(
@@ -72,6 +123,69 @@ def iter_panel_queries(
     return queries
 
 
+def iter_variable_queries(
+    dashboards: list[dict[str, Any]],
+) -> list[tuple[str, str, str]]:
+    queries: list[tuple[str, str, str]] = []
+    for dashboard in dashboards:
+        variables = dashboard.get("templating", {}).get("list", [])
+        names = {
+            variable.get("name")
+            for variable in variables
+            if isinstance(variable.get("name"), str)
+        }
+        required = REQUIRED_VARIABLES.get(dashboard["uid"], set())
+        if missing := required - names:
+            raise ValueError(
+                f"{dashboard['uid']}: missing required variables {sorted(missing)}"
+            )
+
+        for variable in variables:
+            variable_type = variable.get("type")
+            name = variable.get("name", "<unnamed>")
+            if variable_type == "query":
+                datasource = variable.get("datasource", {})
+                if datasource.get("type") != "prometheus" or datasource.get("uid") != "amp":
+                    raise ValueError(
+                        f"{dashboard['uid']} / variable {name}: "
+                        "expected Prometheus datasource uid amp"
+                    )
+                raw_query = variable.get("query", "")
+                query = (
+                    raw_query.get("query", "")
+                    if isinstance(raw_query, dict)
+                    else raw_query
+                )
+                match = LABEL_VALUES_PATTERN.fullmatch(query.strip())
+                if match is None:
+                    raise ValueError(
+                        f"{dashboard['uid']} / variable {name}: "
+                        "expected label_values(selector, label)"
+                    )
+                selector = match.group("selector").strip()
+                label = match.group("label")
+                if re.fullmatch(r"(?:hyperkit|otelcol)_[A-Za-z0-9_]+", selector):
+                    selector += "{}"
+                queries.append(
+                    (
+                        dashboard["uid"],
+                        f"variable {name}",
+                        f"count by ({label}) ({selector})",
+                    )
+                )
+            elif variable_type == "custom":
+                if not variable.get("query"):
+                    raise ValueError(
+                        f"{dashboard['uid']} / variable {name}: custom variable is empty"
+                    )
+            elif variable_type != "textbox":
+                raise ValueError(
+                    f"{dashboard['uid']} / variable {name}: "
+                    f"unsupported variable type {variable_type!r}"
+                )
+    return queries
+
+
 def validate_static_contracts() -> list[tuple[str, str, str]]:
     dashboards = load_dashboard_files()
     actual_uids: set[str] = {
@@ -85,14 +199,14 @@ def validate_static_contracts() -> list[tuple[str, str, str]]:
             f"found {sorted(actual_uids)}"
         )
 
-    queries = iter_panel_queries(dashboards)
+    queries = iter_panel_queries(dashboards) + iter_variable_queries(dashboards)
     referenced = {
         metric for _, _, expression in queries for metric in METRIC_PATTERN.findall(expression)
     }
     unsupported = referenced - SUPPORTED_METRICS
     if unsupported:
         raise ValueError(f"dashboard queries reference unsupported metrics: {sorted(unsupported)}")
-    if "vector(0)" in " ".join(expression for _, _, expression in queries):
+    if MASKED_ZERO_PATTERN.search(" ".join(expression for _, _, expression in queries)):
         raise ValueError("dashboard query masks missing telemetry with vector(0)")
     return queries
 
@@ -134,10 +248,12 @@ def _substitute(expression: str) -> str:
 
 
 def _frame_has_data(frame: dict[str, Any]) -> bool:
+    fields = frame.get("schema", {}).get("fields", [])
     values = frame.get("data", {}).get("values", [])
     return any(
         value is not None
-        for field_values in values
+        for index, field_values in enumerate(values)
+        if index >= len(fields) or fields[index].get("type") != "time"
         if isinstance(field_values, list)
         for value in field_values
     )
@@ -212,7 +328,7 @@ def load_live_queries(client: GrafanaClient) -> list[tuple[str, str, str]]:
         if status != 200:
             raise RuntimeError(f"failed to load provisioned dashboard {uid}: HTTP {status}")
         dashboards.append(response["dashboard"])
-    return iter_panel_queries(dashboards)
+    return iter_panel_queries(dashboards) + iter_variable_queries(dashboards)
 
 
 def validate_live(
@@ -224,8 +340,18 @@ def validate_live(
 ) -> None:
     last_failures: list[str] = []
     for _ in range(attempts):
+        datasource_status, datasource = client.request("/api/datasources/uid/amp")
         health_status, health = client.request("/api/datasources/uid/amp/health")
-        if health_status == 200 and health.get("status") in {"OK", "Success"}:
+        datasource_valid = (
+            datasource_status == 200
+            and datasource.get("uid") == "amp"
+            and datasource.get("type") == "prometheus"
+        )
+        if (
+            datasource_valid
+            and health_status == 200
+            and health.get("status") in {"OK", "Success"}
+        ):
             live_queries = load_live_queries(client)
             last_failures = execute_queries(
                 client,
@@ -236,7 +362,9 @@ def validate_live(
                 return
         else:
             last_failures = [
-                f"Prometheus datasource unhealthy (HTTP {health_status}): {health.get('message')}"
+                "Prometheus datasource invalid or unhealthy "
+                f"(config HTTP {datasource_status}, health HTTP {health_status}): "
+                f"{health.get('message')}"
             ]
         time.sleep(retry_interval)
     raise RuntimeError("\n".join(last_failures))
@@ -273,7 +401,7 @@ def main() -> int:
 
     mode = "static contracts" if args.static_only else "static contracts and live queries"
     print(
-        f"validated {len(queries)} panel queries across "
+        f"validated {len(queries)} dashboard queries across "
         f"{len(EXPECTED_DASHBOARDS)} dashboards ({mode})"
     )
     return 0
