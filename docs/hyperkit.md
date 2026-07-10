@@ -97,6 +97,8 @@ low-cardinality axes).
 
 Grafana provisions:
 
+- Hypergrid Dynamics, an interactive Business Charts workspace for quality,
+  cost, latency, search flow, live ranking, and confidence intervals;
 - Hypergrid Leaderboard;
 - Hypergrid Explorer (selectable topology/k/panel/commit axes);
 - Quality/Cost Pareto;
@@ -104,6 +106,21 @@ Grafana provisions:
 - Cell Drilldown;
 - Learning Curves;
 - operational Sweep Live, Fleet, and Fusion Internal dashboards.
+
+`Hypergrid Dynamics` is driven entirely by the production
+`hyperkit_cell_*` Prometheus snapshots. Its `run_id`, `benchmark`, and
+multi-select `generation` variables update six linked views: a zoomable
+quality/cost bubble explorer, parallel coordinates, topology-by-K heatmap,
+generation-to-topology Sankey flow, animated cell ranking, and a Wilson
+confidence-interval forest. Tooltips expose the cell, topology, generation,
+K, panel, commit, rank, uplift, latency, and uncertainty metadata already
+present in the bounded metric labels. The charts make no browser-side network
+requests; Grafana supplies every value through provisioned Prometheus queries.
+
+The Grafana image pins Business Charts (`volkovlabs-echarts-panel`) 7.2.5 for
+Grafana 11.6. Local compose seed rules provide nine cells over three
+generations and four topologies, with small periodic quality, cost, and latency
+changes so dashboard refreshes exercise animated updates.
 
 The controller keeps no database or in-memory authority. Restarting it
 recomputes the same snapshots from S3, so live views recover after deployment,

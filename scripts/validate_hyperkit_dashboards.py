@@ -21,6 +21,7 @@ EXPECTED_DASHBOARDS = {
     "hyperkit-fleet",
     "hyperkit-fusion-internal",
     "hyperkit-generation-coverage",
+    "hyperkit-hypergrid-dynamics",
     "hyperkit-hypergrid-explorer",
     "hyperkit-hypergrid-leaderboard",
     "hyperkit-learning-curve",
@@ -30,6 +31,7 @@ EXPECTED_DASHBOARDS = {
 REQUIRED_VARIABLES = {
     "hyperkit-cell-drilldown": {"benchmark", "cell_id", "generation", "run_id"},
     "hyperkit-generation-coverage": {"benchmark", "run_id"},
+    "hyperkit-hypergrid-dynamics": {"benchmark", "generation", "run_id"},
     "hyperkit-hypergrid-explorer": {
         "benchmark",
         "generation",
@@ -41,6 +43,27 @@ REQUIRED_VARIABLES = {
     "hyperkit-learning-curve": {"benchmark", "cell_id", "generation", "run_id"},
     "hyperkit-pareto": {"benchmark", "generation", "run_id"},
 }
+BUSINESS_CHARTS_PLUGIN_ID = "volkovlabs-echarts-panel"
+BUSINESS_CHARTS_PLUGIN_VERSION = "7.2.5"
+SUPPORTED_PANEL_TYPES = {
+    "bargauge",
+    "stat",
+    "table",
+    "timeseries",
+    BUSINESS_CHARTS_PLUGIN_ID,
+}
+EXPECTED_BUSINESS_CHARTS = {
+    "Quality / Cost Bubble Explorer": ("type: 'scatter'", "dataZoom", "toolbox"),
+    "Cell Trade-space Parallel Coordinates": ("type: 'parallel'", "parallelAxis"),
+    "Topology × K Resolution Heatmap": ("type: 'heatmap'", "visualMap"),
+    "Generation → Topology → Cell Flow": ("type: 'sankey'", "links"),
+    "Live Cell Ranking": ("type: 'bar'", "animationDurationUpdate"),
+    "Resolution Confidence Forest": ("type: 'custom'", "renderItem"),
+}
+UNSAFE_CHART_CODE_PATTERN = re.compile(
+    r"\b(?:eval|fetch|XMLHttpRequest|WebSocket|axios)\s*\(|https?://",
+    re.IGNORECASE,
+)
 SUPPORTED_METRICS = {
     "hyperkit_cell_completed_shards",
     "hyperkit_cell_cost_per_resolve",
@@ -105,6 +128,11 @@ def iter_panel_queries(
             panels[0:0] = panel.get("panels", [])
             if panel.get("type") == "row" and not panel.get("targets"):
                 continue
+            if panel.get("type") not in SUPPORTED_PANEL_TYPES:
+                raise ValueError(
+                    f"{dashboard['uid']} / {panel['title']}: "
+                    f"unsupported panel type {panel.get('type')!r}"
+                )
             datasource = panel.get("datasource", {})
             if datasource.get("type") != "prometheus" or datasource.get("uid") != "amp":
                 raise ValueError(
@@ -121,6 +149,60 @@ def iter_panel_queries(
                     )
                 queries.append((dashboard["uid"], panel["title"], expression))
     return queries
+
+
+def validate_business_charts(dashboards: list[dict[str, Any]]) -> None:
+    dynamics = next(
+        (
+            dashboard
+            for dashboard in dashboards
+            if dashboard.get("uid") == "hyperkit-hypergrid-dynamics"
+        ),
+        None,
+    )
+    if dynamics is None:
+        raise ValueError("Hypergrid Dynamics dashboard is missing")
+
+    charts = {
+        panel.get("title"): panel
+        for panel in dynamics.get("panels", [])
+        if panel.get("type") == BUSINESS_CHARTS_PLUGIN_ID
+    }
+    if set(charts) != set(EXPECTED_BUSINESS_CHARTS):
+        raise ValueError(
+            "Hypergrid Dynamics chart set mismatch: "
+            f"expected {sorted(EXPECTED_BUSINESS_CHARTS)}, found {sorted(charts)}"
+        )
+
+    for title, features in EXPECTED_BUSINESS_CHARTS.items():
+        panel = charts[title]
+        options = panel.get("options")
+        if not isinstance(options, dict):
+            raise ValueError(f"{dynamics['uid']} / {title}: missing panel options")
+        code = options.get("getOption")
+        if not isinstance(code, str) or not code.strip():
+            raise ValueError(f"{dynamics['uid']} / {title}: getOption is empty")
+        if "context.panel.data" not in code:
+            raise ValueError(
+                f"{dynamics['uid']} / {title}: getOption must read context.panel.data"
+            )
+        if match := UNSAFE_CHART_CODE_PATTERN.search(code):
+            raise ValueError(
+                f"{dynamics['uid']} / {title}: unsafe chart code {match.group()!r}"
+            )
+        if missing := [feature for feature in features if feature not in code]:
+            raise ValueError(
+                f"{dynamics['uid']} / {title}: missing chart features {missing}"
+            )
+        if options.get("editorMode") != "code":
+            raise ValueError(
+                f"{dynamics['uid']} / {title}: expected Business Charts code editor"
+            )
+        if panel.get("pluginVersion") != BUSINESS_CHARTS_PLUGIN_VERSION:
+            raise ValueError(
+                f"{dynamics['uid']} / {title}: expected plugin version "
+                f"{BUSINESS_CHARTS_PLUGIN_VERSION}"
+            )
 
 
 def iter_variable_queries(
@@ -199,6 +281,7 @@ def validate_static_contracts() -> list[tuple[str, str, str]]:
             f"found {sorted(actual_uids)}"
         )
 
+    validate_business_charts(dashboards)
     queries = iter_panel_queries(dashboards) + iter_variable_queries(dashboards)
     referenced = {
         metric for _, _, expression in queries for metric in METRIC_PATTERN.findall(expression)
@@ -328,6 +411,7 @@ def load_live_queries(client: GrafanaClient) -> list[tuple[str, str, str]]:
         if status != 200:
             raise RuntimeError(f"failed to load provisioned dashboard {uid}: HTTP {status}")
         dashboards.append(response["dashboard"])
+    validate_business_charts(dashboards)
     return iter_panel_queries(dashboards) + iter_variable_queries(dashboards)
 
 
@@ -340,6 +424,9 @@ def validate_live(
 ) -> None:
     last_failures: list[str] = []
     for _ in range(attempts):
+        plugin_status, plugin = client.request(
+            f"/api/plugins/{BUSINESS_CHARTS_PLUGIN_ID}/settings"
+        )
         datasource_status, datasource = client.request("/api/datasources/uid/amp")
         health_status, health = client.request("/api/datasources/uid/amp/health")
         datasource_valid = (
@@ -347,7 +434,17 @@ def validate_live(
             and datasource.get("uid") == "amp"
             and datasource.get("type") == "prometheus"
         )
+        plugin_valid = (
+            plugin_status == 200
+            and plugin.get("id") == BUSINESS_CHARTS_PLUGIN_ID
+            and plugin.get("type") == "panel"
+            and bool(plugin.get("module"))
+            and plugin.get("signature") == "valid"
+            and plugin.get("info", {}).get("version") == BUSINESS_CHARTS_PLUGIN_VERSION
+        )
         if (
+            plugin_valid
+            and
             datasource_valid
             and health_status == 200
             and health.get("status") in {"OK", "Success"}
@@ -362,8 +459,11 @@ def validate_live(
                 return
         else:
             last_failures = [
-                "Prometheus datasource invalid or unhealthy "
-                f"(config HTTP {datasource_status}, health HTTP {health_status}): "
+                "Business Charts plugin or Prometheus datasource invalid/unhealthy "
+                f"(plugin HTTP {plugin_status}, version "
+                f"{plugin.get('info', {}).get('version')}, signature "
+                f"{plugin.get('signature')}; config HTTP {datasource_status}, "
+                f"health HTTP {health_status}): "
                 f"{health.get('message')}"
             ]
         time.sleep(retry_interval)

@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[3]
 TELEMETRY = ROOT / "python" / "hyperkit" / "src" / "hyperkit" / "telemetry.py"
 VALIDATOR = ROOT / "scripts" / "validate_hyperkit_dashboards.py"
 DASHBOARDS = ROOT / "infra" / "hyperkit" / "grafana" / "dashboards"
+GRAFANA_DOCKERFILE = ROOT / "infra" / "hyperkit" / "grafana" / "Dockerfile"
+SEED_RULES = ROOT / "infra" / "hyperkit" / "grafana" / "local" / "seed-rules.yml"
 METRIC_PATTERN = re.compile(r"\b(?:hyperkit|otelcol)_[A-Za-z0-9_]+\b(?=\s*(?:\{|\[))")
 HYPERGRID_METRICS = {
     "hyperkit_cell_completed_shards",
@@ -41,7 +43,62 @@ def test_dashboards_only_query_supported_metrics() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "validated 91 dashboard queries across 9 dashboards" in result.stdout
+    assert "validated 115 dashboard queries across 10 dashboards" in result.stdout
+
+
+def test_hypergrid_dynamics_business_charts_contract() -> None:
+    dashboard = json.loads(
+        (DASHBOARDS / "hypergrid-dynamics.json").read_text(encoding="utf-8")
+    )
+    panels = dashboard["panels"]
+
+    assert dashboard["uid"] == "hyperkit-hypergrid-dynamics"
+    assert dashboard["refresh"] == "5s"
+    assert {variable["name"] for variable in dashboard["templating"]["list"]} == {
+        "benchmark",
+        "generation",
+        "run_id",
+    }
+    assert len(panels) == 6
+    assert {panel["type"] for panel in panels} == {"volkovlabs-echarts-panel"}
+    assert {panel["pluginVersion"] for panel in panels} == {"7.2.5"}
+
+    code = "\n".join(panel["options"]["getOption"] for panel in panels)
+    for chart_type in ("scatter", "parallel", "heatmap", "sankey", "bar", "custom"):
+        assert f"type: '{chart_type}'" in code
+    for feature in (
+        "context.panel.data",
+        "dataZoom",
+        "toolbox",
+        "visualMap",
+        "animationDurationUpdate",
+        "renderItem",
+    ):
+        assert feature in code
+    assert re.search(
+        r"\b(?:eval|fetch|XMLHttpRequest|WebSocket|axios)\s*\(|https?://",
+        code,
+        re.IGNORECASE,
+    ) is None
+
+
+def test_business_charts_plugin_is_pinned() -> None:
+    dockerfile = GRAFANA_DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "ARG BUSINESS_CHARTS_PLUGIN_VERSION=7.2.5" in dockerfile
+    assert (
+        "plugins install volkovlabs-echarts-panel "
+        '"${BUSINESS_CHARTS_PLUGIN_VERSION}"'
+    ) in dockerfile
+
+
+def test_local_seed_has_rich_dynamic_hypergrid() -> None:
+    seed = SEED_RULES.read_text(encoding="utf-8")
+
+    assert len(set(re.findall(r'cell_id: "([^"]+)"', seed))) >= 9
+    assert len(set(re.findall(r'generation: "([^"]+)"', seed))) >= 3
+    assert len(set(re.findall(r'topology: "([^"]+)"', seed))) >= 3
+    assert seed.count("sin(vector(time()") >= 20
 
 
 def test_hyperkit_dashboard_metrics_match_otel_translation() -> None:
