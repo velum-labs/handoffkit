@@ -13,6 +13,7 @@ from fusionkit_core.producers import (
     trajectory_from_response,
 )
 from fusionkit_core.types import ChatMessage, ModelResponse
+from pydantic import ValidationError
 
 
 class FailingChatClient:
@@ -315,6 +316,40 @@ def test_default_mode_is_named_heuristic() -> None:
         default_model="m",
     )
     assert config.default_mode == "heuristic"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"default_model": "missing"},
+        {"judge_model": "missing"},
+        {"synthesizer_model": "missing"},
+        {"panel_models": ["missing"]},
+        {"panel_models": ["m", "m"]},
+        {"sample_count": 0},
+    ],
+)
+def test_config_rejects_invalid_model_references_and_counts(
+    overrides: dict[str, object],
+) -> None:
+    payload: dict[str, object] = {
+        "endpoints": [ModelEndpoint(id="m", model="model-m")],
+        "default_model": "m",
+        **overrides,
+    }
+    with pytest.raises(ValidationError):
+        FusionConfig.model_validate(payload)
+
+
+def test_config_rejects_duplicate_endpoint_ids() -> None:
+    with pytest.raises(ValidationError):
+        FusionConfig(
+            endpoints=[
+                ModelEndpoint(id="same", model="model-a"),
+                ModelEndpoint(id="same", model="model-b"),
+            ],
+            default_model="same",
+        )
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:

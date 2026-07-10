@@ -14,6 +14,7 @@ import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
+import { unwrapUpstreamError } from "./upstream-error.js";
 import { composeServerToolStream, runBufferedServerToolLoop, serverToolMarkerOf } from "./server-tool-loop.js";
 import type { ExecutedSearch, ServerToolMarker } from "./server-tool-loop.js";
 import { resolveWebSearchExecutor } from "./web-search.js";
@@ -126,7 +127,7 @@ function webSearchResultText(content: unknown): string {
 // ---- OpenAI shapes we read back ----
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
-type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage };
+type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; error?: unknown };
 type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsage };
 
 // ---- request translation ----
@@ -134,14 +135,24 @@ type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsa
 function systemText(system: AnthropicRequest["system"]): string {
   if (system == null) return "";
   if (typeof system === "string") return system;
-  return system.map((block) => block.text).join("\n");
+  return system
+    .map((block) =>
+      block !== null && typeof block === "object" && typeof block.text === "string"
+        ? block.text
+        : ""
+    )
+    .join("\n");
 }
 
-function blockText(content: string | AnthropicContentBlock[] | undefined): string {
-  if (content === undefined) return "";
+function blockText(content: string | AnthropicContentBlock[] | null | undefined): string {
+  if (content == null) return "";
   if (typeof content === "string") return content;
   return content
-    .map((block) => (block.type === "text" ? (block as AnthropicTextBlock).text : ""))
+    .map((block) =>
+      block !== null && typeof block === "object" && block.type === "text"
+        ? (block as AnthropicTextBlock).text
+        : ""
+    )
     .join("");
 }
 
@@ -651,6 +662,19 @@ export function openAiSseToAnthropic(
     );
   };
 
+  const finalizeUpstreamError = (controller: Controller, error: unknown): void => {
+    if (state.finished) return;
+    state.finished = true;
+    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+    closeOpenBlocks(controller);
+    controller.enqueue(
+      sse("error", {
+        type: "error",
+        error: unwrapUpstreamError(JSON.stringify({ error }))
+      })
+    );
+  };
+
   // The server-tool loop injects marker chunks around each gateway-executed
   // web search; render them as native `server_tool_use` /
   // `web_search_tool_result` blocks (each opened and closed immediately —
@@ -693,6 +717,10 @@ export function openAiSseToAnthropic(
   };
 
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
+    if (chunk.error !== undefined && chunk.error !== null) {
+      finalizeUpstreamError(controller, chunk.error);
+      return;
+    }
     const choice = chunk.choices?.[0];
     if (choice === undefined) {
       if (chunk.usage?.prompt_tokens !== undefined) state.inputTokens = chunk.usage.prompt_tokens;
@@ -927,10 +955,7 @@ export async function handleAnthropicMessages(
 
   if (!upstream.ok) {
     const detail = await upstream.text();
-    return jsonResponse(upstream.status, {
-      type: "error",
-      error: { type: "api_error", message: detail.slice(0, 2000) }
-    });
+    return jsonResponse(upstream.status, { type: "error", error: unwrapUpstreamError(detail) });
   }
 
   if (executor !== undefined) {

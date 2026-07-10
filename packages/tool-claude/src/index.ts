@@ -103,18 +103,15 @@ export const claudeTool: ToolIntegration = {
  * harness-driver cutover flag is set. The driver points `ANTHROPIC_BASE_URL`
  * at the gateway's Anthropic-Messages surface.
  *
- * Note: per-model endpoints are intentionally not forwarded here — those are
- * OpenAI-compatible router endpoints, whereas the claude CLI speaks the
- * Anthropic dialect, so every candidate routes through the shared gateway
- * Anthropic surface with its real claude model id. Driving a non-Anthropic
- * panel member through the claude CLI (the legacy translation-gateway trick)
- * stays on the legacy harness until the gateway exposes a per-endpoint
- * Anthropic surface.
+ * The stack wraps each OpenAI-compatible router endpoint in a per-member
+ * dialect gateway before resolving this harness, so modelEndpoints are native
+ * Anthropic surfaces and can be forwarded safely.
  */
 function claudeDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter {
   return createDriverHarness({
     driver: createClaudeDriver(),
     fusionBackendUrl: options.fusionBackendUrl,
+    ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
     ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),

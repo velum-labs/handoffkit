@@ -17,6 +17,7 @@ import type { Backend } from "../backend.js";
 import { randomId } from "@fusionkit/runtime-utils";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
+import { unwrapUpstreamError } from "./upstream-error.js";
 import { openAiSseToResponses } from "./responses-stream.js";
 import { composeServerToolStream, runBufferedServerToolLoop } from "./server-tool-loop.js";
 import type { ExecutedSearch } from "./server-tool-loop.js";
@@ -871,7 +872,7 @@ export async function handleResponses(
 
   if (!upstream.ok) {
     const detail = await upstream.text();
-    return jsonResponse(upstream.status, { error: { type: "api_error", message: detail.slice(0, 2000) } });
+    return jsonResponse(upstream.status, { error: unwrapUpstreamError(detail) });
   }
 
   if (executor !== undefined) {

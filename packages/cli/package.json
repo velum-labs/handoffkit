@@ -55,6 +55,7 @@
     "portless": "0.15.1"
   },
   "devDependencies": {
+    "@fusionkit/testkit": "workspace:*",
     "@types/figlet": "1.7.0"
   },
   "keywords": [

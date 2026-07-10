@@ -6,7 +6,8 @@ import {
   codexConfigToml,
   cursorInstructions,
   opencodeConfig,
-  opencodeModelArg
+  opencodeModelArg,
+  runLocal
 } from "../local.js";
 
 /**
@@ -59,4 +60,39 @@ test("cursorInstructions prints the gateway bearer token as the API key when set
   const text = cursorInstructions("https://abc.example", "fusion-panel", [], "fk_secret123");
   assert.ok(text.includes("OpenAI API Key           : fk_secret123"));
   assert.ok(!text.includes("any non-empty value"));
+});
+
+test("local serve handles SIGINT through finally and closes the gateway", async () => {
+  const listenersBefore = new Set(process.listeners("SIGINT"));
+  let closeCalls = 0;
+  const pending = runLocal("serve", [], {
+    config: {
+      kind: "openai",
+      baseUrl: "http://127.0.0.1:1/v1",
+      defaultModel: "local-test"
+    },
+    startGateway: async () => ({
+      url: "http://127.0.0.1:12345",
+      close: async () => {
+        closeCalls += 1;
+      }
+    }),
+    log: () => undefined
+  });
+
+  let interrupt: ((...args: never[]) => unknown) | undefined;
+  const deadline = Date.now() + 1_000;
+  while (interrupt === undefined && Date.now() < deadline) {
+    interrupt = process
+      .listeners("SIGINT")
+      .find((listener) => !listenersBefore.has(listener)) as
+      | ((...args: never[]) => unknown)
+      | undefined;
+    if (interrupt === undefined) await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.ok(interrupt !== undefined, "runLocal must install a SIGINT cleanup handler");
+  interrupt();
+
+  assert.equal(await pending, 130);
+  assert.equal(closeCalls, 1);
 });

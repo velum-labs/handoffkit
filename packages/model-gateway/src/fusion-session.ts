@@ -189,6 +189,7 @@ export class FusionSessionManager {
    *     same first message never share budget, cost, or candidate caches.
    */
   resolveSessionId(messages: readonly ChatMessageLike[], scope?: string): string {
+    this.#sweepExpired(Date.now());
     const hint = this.sessionKey(messages, scope);
     const live = this.#hintToId.get(hint);
     if (live !== undefined) return live;
@@ -306,7 +307,8 @@ export class FusionSessionManager {
     tools?: unknown;
     toolChoice?: unknown;
     k?: number;
-  }): Promise<WireTrajectory[]> {
+    signal?: AbortSignal;
+  }): { candidates: Promise<WireTrajectory[]>; abort: (reason?: unknown) => void } {
     // Rounds are memoryless for finite k: every request (including tool-result
     // continuations of the same user turn) re-runs the panel over the updated
     // messages, so candidates are per-round, never cached. Only unbounded
@@ -315,18 +317,28 @@ export class FusionSessionManager {
     const cacheable = !isFiniteK(input.k);
     if (cacheable) {
       const existing = input.session.turns.get(input.turn);
-      if (existing !== undefined) return existing;
+      if (existing !== undefined) {
+        const controller = input.session.turnAborts.get(input.turn);
+        return {
+          candidates: existing,
+          abort: (reason?: unknown) => controller?.abort(reason)
+        };
+      }
     }
 
     const abort = new AbortController();
     input.session.turnAborts.set(input.turn, abort);
+    const panelSignal =
+      input.signal !== undefined
+        ? AbortSignal.any([abort.signal, input.signal])
+        : abort.signal;
     const candidates = this.#runPanels({
       task: this.task(input.messages),
       messages: input.messages,
       trace: input.session.trace,
       sessionKey: input.sessionKey,
       turn: input.turn,
-      signal: abort.signal,
+      signal: panelSignal,
       ...(input.ensembleModelId !== undefined ? { ensembleModelId: input.ensembleModelId } : {}),
       ...(input.excludeModelIds !== undefined && input.excludeModelIds.length > 0
         ? { excludeModelIds: input.excludeModelIds }
@@ -350,16 +362,29 @@ export class FusionSessionManager {
         if (input.session.turns.get(input.turn) === candidates) input.session.turns.delete(input.turn);
       }
     );
-    return candidates;
+    return {
+      candidates,
+      abort: (reason?: unknown) => abort.abort(reason)
+    };
   }
 
   #sweepExpired(now: number): void {
+    const expiredIds = new Set<string>();
     for (const [key, session] of this.#kernelStateStore.entries()) {
       if (now - session.createdAt < this.#ttlMs) continue;
       this.#kernelStateStore.delete(key);
+      expiredIds.add(key);
+      expiredIds.add(session.id);
       for (const roundKey of this.#narrationRounds.keys()) {
         if (roundKey.startsWith(`${key}#`)) this.#narrationRounds.delete(roundKey);
       }
+    }
+    for (const id of expiredIds) {
+      const hint = this.#idToHint.get(id);
+      if (hint !== undefined && this.#hintToId.get(hint) === id) {
+        this.#hintToId.delete(hint);
+      }
+      this.#idToHint.delete(id);
     }
   }
 

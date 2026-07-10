@@ -150,12 +150,14 @@ test("a missing --resume target falls back to a fresh session", async () => {
   }
 });
 
-test("durable rehydrate: a cold cache reloads from the store instead of re-running", async () => {
+test("an identical fresh opener after TTL gets a new isolated session", async () => {
   const step = await startStepServer(jsonStep);
   const store = new InMemorySessionStore();
   try {
     let panelCalls = 0;
-    // A short in-memory TTL forces eviction; the store (no TTL) then rehydrates.
+    // A short in-memory TTL ends the live-conversation identity. A new request
+    // with no assistant turn is a fresh opener, even when its text is identical
+    // to an old conversation; it must not inherit cached candidates or cost.
     const backend = new FusionBackend({
       stepUrl: step.url,
       store,
@@ -168,9 +170,9 @@ test("durable rehydrate: a cold cache reloads from the store instead of re-runni
     await (await backend.chat({ ...userTurn, stream: false })).json();
     assert.equal(panelCalls, 1);
     await new Promise((resolve) => setTimeout(resolve, 60));
-    // After the in-memory TTL evicts, the same conversation reloads from disk.
     await (await backend.chat({ ...userTurn, stream: false })).json();
-    assert.equal(panelCalls, 1, "the durable store backs the evicted in-memory cache");
+    assert.equal(panelCalls, 2, "the fresh opener runs its own panel");
+    assert.equal(store.list().length, 2, "the fresh opener mints a new session id");
   } finally {
     await step.close();
   }

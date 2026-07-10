@@ -7,6 +7,7 @@ import time
 import traceback
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
@@ -62,7 +63,6 @@ from fusionkit_core.types import (
     PanelMode,
     ProviderCost,
     StreamChunk,
-    ToolCall,
     Usage,
 )
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -82,22 +82,30 @@ class FusionToolExecutionOptions(BaseModel):
 
 class FusionOptions(BaseModel):
     mode: FusionMode | None = None
-    panel_models: list[str] | None = None
+    panel_models: list[str] | None = Field(default=None, min_length=1)
     sample_count: int | None = Field(default=None, ge=1)
     tool_execution: FusionToolExecutionOptions = Field(
         default_factory=FusionToolExecutionOptions
     )
 
+    @model_validator(mode="after")
+    def _reject_duplicate_panel_members(self) -> FusionOptions:
+        if self.panel_models is not None and len(set(self.panel_models)) != len(
+            self.panel_models
+        ):
+            raise ValueError("panel_models must not contain duplicates")
+        return self
+
 
 class FusionRequest(BaseModel):
     model: str = FUSION_DEFAULT_ALIAS
-    messages: list[ChatMessage]
-    temperature: float | None = None
-    top_p: float | None = None
-    max_tokens: int | None = None
+    messages: list[ChatMessage] = Field(min_length=1)
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    top_p: float | None = Field(default=None, gt=0, le=1)
+    max_tokens: int | None = Field(default=None, ge=1)
     # OpenAI's modern spelling of `max_tokens` (required by reasoning models);
     # the Node gateway adapters emit it. Folded into `max_tokens` below.
-    max_completion_tokens: int | None = None
+    max_completion_tokens: int | None = Field(default=None, ge=1)
     stream: bool = False
     # Forwarded only on the per-model passthrough path (when `model` names a
     # configured endpoint); the fusion path ignores them.
@@ -148,10 +156,9 @@ class FuseTrajectoriesRequest(BaseModel):
     """
 
     model: str = FUSION_DEFAULT_ALIAS
-    # Raw OpenAI chat messages (assistant tool_calls are nested under `function`,
-    # tool results carry `tool_call_id`, content may be a parts array); normalized
-    # to FusionKit ChatMessage in the handler.
-    messages: list[dict[str, Any]]
+    # ChatMessage accepts OpenAI's nested assistant tool calls, null content,
+    # and content-part arrays while still requiring a valid role.
+    messages: list[ChatMessage] = Field(min_length=1)
     trajectories: list[TrajectoryInput] = Field(default_factory=list)
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
@@ -167,6 +174,12 @@ class FuseTrajectoriesRequest(BaseModel):
     panel_mode: PanelMode = "trajectory"
     stream: bool = False
 
+    @model_validator(mode="after")
+    def _require_successful_trajectory(self) -> FuseTrajectoriesRequest:
+        if not any(trajectory.status == "succeeded" for trajectory in self.trajectories):
+            raise ValueError("at least one succeeded trajectory is required")
+        return self
+
 
 def _package_version() -> str:
     try:
@@ -181,8 +194,25 @@ def create_app(
     run_manager: FusionRunManager | None = None,
     run_store_path: Path | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="fusionkit", version=_package_version())
     model_clients = clients or build_clients(config)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            seen: set[int] = set()
+            for client in model_clients.values():
+                identity = id(client)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                try:
+                    await client.aclose()
+                except Exception:  # noqa: BLE001 - close every remaining client
+                    logger.exception("failed to close model client %s", client.model_id)
+
+    app = FastAPI(title="fusionkit", version=_package_version(), lifespan=lifespan)
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
     kernel = FusionKernel(engine, native_runs)
@@ -292,6 +322,19 @@ def create_app(
         # path below.
         if _is_endpoint_model(config, request.model):
             return await _passthrough_chat(kernel, config, request)
+        if request.model not in FUSION_MODEL_ALIASES:
+            return _openai_error_response(
+                "unknown_model",
+                f"Unknown model {request.model!r}.",
+                status_code=400,
+            )
+        for panel_model in request.fusion.panel_models or []:
+            if not _is_endpoint_model(config, panel_model):
+                return _openai_error_response(
+                    "unknown_model",
+                    f"Unknown panel model endpoint {panel_model!r}.",
+                    status_code=400,
+                )
         # Real SSE streaming on the fused path: the candidate trajectories are
         # generated, then the synthesizer turn streams tokens straight through
         # (no buffer-then-rechunk).
@@ -376,7 +419,17 @@ def create_app(
         http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         judge_model = request.judge_model or config.resolved_judge_model
-        synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
+        # Request-level precedence mirrors config-level resolution
+        # (FusionConfig.resolved_synthesizer_model): a request that pins a
+        # judge without a synthesizer means "this judge doubles as the
+        # synthesizer" — falling back to the *config* synthesizer instead
+        # would silently synthesize a named ensemble's turn on the default
+        # ensemble's judge model.
+        synthesizer_model = (
+            request.synthesizer_model
+            or request.judge_model
+            or config.resolved_synthesizer_model
+        )
         for required_model in (judge_model, synthesizer_model):
             try:
                 kernel.client(required_model)
@@ -399,7 +452,7 @@ def create_app(
             )
             for trajectory in request.trajectories
         ]
-        messages = [_to_chat_message(message) for message in request.messages]
+        messages = request.messages
         tools = _normalize_tools(request.tools)
         tool_choice = _normalize_tool_choice(request.tool_choice)
         trace = context_from_headers(dict(http_request.headers))
@@ -734,7 +787,7 @@ async def _fused_completion_sse(
     # which reads `usage` off the SSE tail) can account a fused stream's cost —
     # mirroring the non-streaming `_openai_step_response` body.
     if final_result is not None:
-        extra["usage"] = _usage_payload(final_result.turn_usage())
+        extra["usage"] = _usage_payload(_fuse_step_usage(final_result))
         step_cost = final_result.turn_provider_cost()
         if step_cost is not None:
             extra["provider_cost"] = step_cost.model_dump(mode="json", exclude_none=True)
@@ -936,51 +989,6 @@ def _mode_from_request(request: FusionRequest) -> FusionMode:
     if request.fusion.mode is not None:
         return request.fusion.mode
     return cast(FusionMode, fusion_mode_for_model(request.model))
-
-
-def _coerce_message_content(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for part in content:
-            if isinstance(part, str):
-                parts.append(part)
-            elif isinstance(part, dict) and isinstance(part.get("text"), str):
-                parts.append(part["text"])
-        return "".join(parts)
-    return ""
-
-
-def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
-    """Normalize a raw OpenAI chat message into a FusionKit ChatMessage,
-    flattening nested ({function:{name,arguments}}) tool calls."""
-    kwargs: dict[str, Any] = {
-        "role": message.get("role", "user"),
-        "content": _coerce_message_content(message.get("content")),
-    }
-    if message.get("tool_call_id"):
-        kwargs["tool_call_id"] = message["tool_call_id"]
-    if message.get("name"):
-        kwargs["name"] = message["name"]
-    tool_calls = message.get("tool_calls")
-    if tool_calls:
-        parsed: list[ToolCall] = []
-        for call in tool_calls:
-            function = (
-                call.get("function") if isinstance(call, dict) and "function" in call else call
-            )
-            function = function if isinstance(function, dict) else {}
-            parsed.append(
-                ToolCall(
-                    id=call.get("id", "") if isinstance(call, dict) else "",
-                    name=function.get("name", ""),
-                    arguments=function.get("arguments", "{}") or "{}",
-                )
-            )
-        if parsed:
-            kwargs["tool_calls"] = parsed
-    return ChatMessage(**kwargs)
 
 
 # `type` values that mark a wire shape or a choice mode, never a tool identity.

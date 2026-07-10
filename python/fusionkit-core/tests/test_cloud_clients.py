@@ -208,6 +208,37 @@ def test_google_contents_split_system_and_roles() -> None:
     assert declarations[0].name == "search"
 
 
+def test_google_tool_result_recovers_function_name_from_prior_call_id() -> None:
+    _, contents = _google_contents(
+        [
+            ChatMessage(role="user", content="look it up"),
+            ChatMessage(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id="call_search_1",
+                        name="search",
+                        arguments='{"q":"fusion"}',
+                    )
+                ],
+            ),
+            # OpenAI-shaped tool continuations carry the call id but normally
+            # omit `name`; Gemini requires the original function name.
+            ChatMessage(
+                role="tool",
+                content="result",
+                tool_call_id="call_search_1",
+            ),
+        ]
+    )
+
+    parts = contents[-1].parts
+    assert parts is not None
+    response_part = parts[0]
+    assert response_part.function_response is not None
+    assert response_part.function_response.name == "search"
+
+
 # --- response normalization (mocked SDKs) -----------------------------------
 
 
@@ -407,6 +438,22 @@ async def test_openai_stream_chat_yields_chunks() -> None:
     assert chunks[-1].finish_reason == "stop"
     assert chunks[-1].usage is not None
     assert chunks[-1].usage.total_tokens == 3
+
+
+async def test_openai_chat_classifies_an_empty_choices_response() -> None:
+    client = OpenAICompatibleClient(_endpoint("openai-compatible"))
+    response = SimpleNamespace(
+        id="empty-completion",
+        choices=[],
+        usage=None,
+        model_dump=lambda mode="json": {"id": "empty-completion", "choices": []},
+    )
+    client._client.chat.completions.create = AsyncMock(return_value=response)
+
+    with pytest.raises(ProviderCallError, match="no completion choices") as raised:
+        await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert raised.value.category == "unknown"
 
 
 async def test_openrouter_chat_attaches_generation_cost(monkeypatch) -> None:

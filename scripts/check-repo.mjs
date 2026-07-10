@@ -137,6 +137,7 @@ const requiredFiles = [
   "scripts/check-generated-model-fusion-sdk.mjs",
   "scripts/generate-model-fusion-openapi-sdk.mjs",
   "scripts/generate-code-docs.mjs",
+  "scripts/generate-expected-behaviors.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "scripts/release.mjs",
   "scripts/lib/changelog.mjs",
@@ -153,6 +154,8 @@ const requiredFiles = [
   "docs/planning/ensemble-product-plan.md",
   "docs/specs/harness-prompt-passthrough.md",
   "docs/generated/code-api.md",
+  "spec/testing/expected-behaviors.json",
+  "docs/generated/expected-behaviors.md",
   "references/trackcn.json",
   "references/THIRD_PARTY.md",
   "references/opencode/LICENSE",
@@ -308,6 +311,21 @@ if (generatedCodeDocsCheck.stderr.trim()) {
 }
 if (generatedCodeDocsCheck.status !== 0) {
   fail("generated code documentation check failed");
+}
+
+const expectedBehaviorsCheck = spawnSync(
+  process.execPath,
+  ["scripts/generate-expected-behaviors.mjs", "--check"],
+  { encoding: "utf8" }
+);
+if (expectedBehaviorsCheck.stdout.trim()) {
+  console.log(expectedBehaviorsCheck.stdout.trim());
+}
+if (expectedBehaviorsCheck.stderr.trim()) {
+  console.error(expectedBehaviorsCheck.stderr.trim());
+}
+if (expectedBehaviorsCheck.status !== 0) {
+  fail("expected behavior documentation check failed");
 }
 
 // The docs-site changelog page is generated from CHANGELOG.md; fail when it

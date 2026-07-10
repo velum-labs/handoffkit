@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from fusionkit_core.registry import sampling_overrides_for_model
 
@@ -74,9 +74,9 @@ class ContextPolicy(BaseModel):
 
 
 class SamplingConfig(BaseModel):
-    temperature: float = 0.2
-    top_p: float = 0.95
-    max_tokens: int = 1024
+    temperature: float = Field(default=0.2, ge=0, le=2)
+    top_p: float = Field(default=0.95, gt=0, le=1)
+    max_tokens: int = Field(default=1024, ge=1)
     seed: int | None = None
 
 
@@ -128,8 +128,8 @@ class PromptOverrides(BaseModel):
 
 
 class ModelEndpoint(BaseModel):
-    id: str
-    model: str
+    id: str = Field(min_length=1)
+    model: str = Field(min_length=1)
     # Optional for subscription endpoints (claude-code / codex), where the client
     # falls back to the provider's default base URL.
     base_url: str = ""
@@ -151,12 +151,12 @@ class ModelEndpoint(BaseModel):
 
 
 class FusionConfig(BaseModel):
-    endpoints: list[ModelEndpoint]
+    endpoints: list[ModelEndpoint] = Field(min_length=1)
     default_model: str
     judge_model: str | None = None
     synthesizer_model: str | None = None
     default_mode: FusionMode = "heuristic"
-    sample_count: int = 4
+    sample_count: int = Field(default=4, ge=1)
     self_temperatures: list[float] = Field(default_factory=lambda: [0.2, 0.4, 0.6, 0.8])
     panel_models: list[str] = Field(default_factory=list)
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
@@ -175,6 +175,29 @@ class FusionConfig(BaseModel):
     # passing code) and skips the synth call. Falls back to composition when the judge
     # names no best candidate. No effect on tool-using agent fusion.
     synthesis_select_best: bool = False
+
+    @model_validator(mode="after")
+    def _validate_model_references(self) -> FusionConfig:
+        endpoint_ids = [endpoint.id for endpoint in self.endpoints]
+        known = set(endpoint_ids)
+        if len(known) != len(endpoint_ids):
+            raise ValueError("endpoint ids must be unique")
+        references = {
+            "default_model": self.default_model,
+            "judge_model": self.judge_model,
+            "synthesizer_model": self.synthesizer_model,
+        }
+        for field, model_id in references.items():
+            if model_id is not None and model_id not in known:
+                raise ValueError(f"{field} references unknown endpoint {model_id!r}")
+        if len(set(self.panel_models)) != len(self.panel_models):
+            raise ValueError("panel_models must not contain duplicates")
+        unknown_panel = [model_id for model_id in self.panel_models if model_id not in known]
+        if unknown_panel:
+            raise ValueError(
+                f"panel_models reference unknown endpoints: {', '.join(unknown_panel)}"
+            )
+        return self
 
     def endpoint_for(self, model_id: str) -> ModelEndpoint:
         for endpoint in self.endpoints:

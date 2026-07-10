@@ -351,6 +351,7 @@ export async function startObservability(input: {
     resolved = await input.portless.discoverOrSpawn({
       name: "scope",
       identity: dashboardIdentity,
+    replaceStale: true,
       healthCheck: (loopbackUrl) => probeDashboardIdentity(loopbackUrl, dashboardIdentity),
       spawn: spawnDashboard
     });

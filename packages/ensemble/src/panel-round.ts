@@ -76,6 +76,9 @@ export async function runPanelRound(options: PanelRoundOptions): Promise<WireTra
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
       ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.stragglerGraceMs !== undefined
+        ? { stragglerGraceMs: options.stragglerGraceMs }
+        : {}),
       ...(options.signal !== undefined ? { signal: options.signal } : {}),
       ...(options.trace !== undefined ? { trace: options.trace } : {}),
       ...(options.turn !== undefined ? { turn: options.turn } : {})

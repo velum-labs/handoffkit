@@ -1,0 +1,20 @@
+{
+  "name": "@fusionkit/testkit",
+  "private": true,
+  "version": "0.8.0",
+  "description": "Cross-stack test tooling for FusionKit: spawn the provider simulator and the real Python engine, script provider behaviors over the control plane, and observe the wire journal.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "yaml": "2.9.0"
+  },
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

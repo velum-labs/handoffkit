@@ -31,6 +31,13 @@ import type {
 } from "./fusion-types.js";
 import { defaultFusionGatewayLogger } from "./logger.js";
 
+function invalidRequest(message: string): Response {
+  return new Response(
+    JSON.stringify({ error: { message, type: "invalid_request_error", code: "invalid_request" } }),
+    { status: 400, headers: { "content-type": "application/json" } }
+  );
+}
+
 export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-session.js";
 export type {
   ChatMessageLike,
@@ -180,7 +187,22 @@ export class FusionBackend implements Backend {
 
   async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
     const chat = (body ?? {}) as ChatBody;
-    const messages = Array.isArray(chat.messages) ? chat.messages : [];
+    // `FusionBackend` is public SDK surface, so it guards its own boundary in
+    // addition to the HTTP doors: a non-string `model` used to reach route
+    // resolution and explode as a 502 TypeError ("requested.startsWith is not
+    // a function"), and an empty fused turn leaked panel internals ("proposal
+    // mode (k=1) needs the caller's `messages`") as a 502. Both are caller
+    // errors and must answer 400 without any panel fanout.
+    if (chat.model !== undefined && typeof (chat.model as unknown) !== "string") {
+      return invalidRequest("`model` must be a string");
+    }
+    if (!Array.isArray(chat.messages)) {
+      return invalidRequest("`messages` is required and must be an array");
+    }
+    const messages = chat.messages;
+    if (messages.length === 0) {
+      return invalidRequest("the request contains no messages");
+    }
     const req: FrontdoorRequestValue = {
       requestId: newSpanId(),
       chat,
@@ -245,6 +267,7 @@ export class FusionBackend implements Backend {
   async #resolvePanelCandidates(req: FrontdoorRequestValue): Promise<readonly WireTrajectory[]> {
     const session = this.#sessions.ensureSession(req.sessionKey);
     const route = this.#routeFor(req);
+    const signal = this.#signalFor(req);
     const turnCandidates = this.#sessions.ensureTurnCandidates({
       session,
       sessionKey: req.sessionKey,
@@ -260,10 +283,14 @@ export class FusionBackend implements Backend {
       // `runPanelRound`, not re-encoded here.
       ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
       ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
-      ...(isFiniteK(route?.k) ? { k: route.k } : {})
+      ...(isFiniteK(route?.k) ? { k: route.k } : {}),
+      ...(signal !== undefined ? { signal } : {})
     });
-    const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel", (error) =>
-      session.turnAborts.get(req.turn)?.abort(error)
+    const candidates = await withTimeout(
+      turnCandidates.candidates,
+      this.#panelTimeoutMs,
+      "fusion panel",
+      (error) => turnCandidates.abort(error)
     );
     // Finite-k rounds run a fresh panel per request, so each round's candidate
     // cost is new; drop the per-turn metering latch that exists to avoid

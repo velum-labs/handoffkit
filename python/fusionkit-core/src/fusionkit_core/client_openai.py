@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 from openai import AsyncOpenAI
 
-from fusionkit_core.client_errors import _call_with_retries
+from fusionkit_core.client_errors import ProviderCallError, _call_with_retries
 from fusionkit_core.client_types import ToolChoice, ToolDefinition
 from fusionkit_core.client_wire import (
     _openai_messages,
@@ -162,6 +162,13 @@ class OpenAICompatibleClient:
             model_id=self.model_id,
         )
         latency_s = time.perf_counter() - started
+        if not response.choices:
+            raise ProviderCallError(
+                "provider returned no completion choices",
+                category="unknown",
+                provider=self.endpoint.provider,
+                model_id=self.model_id,
+            )
         choice = response.choices[0]
         usage = Usage()
         if response.usage is not None:

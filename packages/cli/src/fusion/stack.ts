@@ -24,6 +24,7 @@ import type {
   SessionMetaInput,
   SessionStore
 } from "@fusionkit/model-gateway";
+import { harnessDriversEnabled } from "@fusionkit/tools";
 
 import { startFusionStepGateway } from "../gateway.js";
 import type { GatewayEnsembleConfig, GatewayRunnerConfig } from "../gateway.js";
@@ -407,6 +408,64 @@ function localComputePricing(specs: readonly PanelModelSpec[]): Record<string, L
 }
 
 /**
+ * Native harness drivers speak their tool's native model dialect (Claude
+ * Messages, Codex Responses, Cursor's OpenAI-compatible surface), while the
+ * consolidated Python router exposes Chat Completions. Put a real
+ * dialect-translating model gateway in front of each member endpoint so the
+ * driver reaches that member — not the fused front door — through its native
+ * protocol. The backend force-routes every request to the member's endpoint
+ * id; the driver may name either the endpoint or provider model.
+ */
+export async function startDriverEndpointGateways(input: {
+  models: readonly EnsembleModel[];
+  modelEndpoints: Readonly<Record<string, string>>;
+}): Promise<{
+  endpoints: Record<string, string>;
+  close: () => Promise<void>;
+}> {
+  const gateways: Gateway[] = [];
+  try {
+    const entries = await Promise.all(
+      input.models.map(async (model) => {
+        const routerUrl = input.modelEndpoints[model.id];
+        if (routerUrl === undefined) {
+          throw new Error(`no router endpoint configured for driver model "${model.id}"`);
+        }
+        const gateway = await startGateway({
+          backend: new KernelBackend(
+            new OpenAiBackend({
+              baseUrl: `${routerUrl.replace(/\/+$/, "")}/v1`,
+              forceModel: model.id,
+              defaultModel: model.id
+            }),
+            {
+              workflowIds: {
+                chat: `driver-member-${model.id}-turn`,
+                models: `driver-member-${model.id}-models`,
+                embeddings: `driver-member-${model.id}-embeddings`
+              }
+            }
+          ),
+          host: "127.0.0.1",
+          port: 0
+        });
+        gateways.push(gateway);
+        return [model.id, gateway.url()] as const;
+      })
+    );
+    return {
+      endpoints: Object.fromEntries(entries),
+      close: async () => {
+        await Promise.allSettled(gateways.map((gateway) => gateway.close()));
+      }
+    };
+  } catch (error) {
+    await Promise.allSettled(gateways.map((gateway) => gateway.close()));
+    throw error;
+  }
+}
+
+/**
  * Build the derived `fusionkit serve` router YAML for a resolved panel, for
  * `fusionkit config export-yaml` (raw `fusionkit serve` users who don't go
  * through the Node harness gateway). It reuses the exact same {@link
@@ -765,6 +824,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
   let fusionBackendUrl: string;
   let reusedRouter = false;
   let routerClose: () => Promise<void> | void = () => {};
+  let driverEndpointClose: () => Promise<void> = async () => {};
 
   if (override) {
     modelEndpoints = options.endpoints as Record<string, string>;
@@ -796,6 +856,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     const resolved = await portless.discoverOrSpawn({
       name: "router",
       identity: expectedIdentity,
+      replaceStale: true,
       healthCheck: async (loopbackUrl) => {
         try {
           const response = await fetch(`${loopbackUrl}/health`, { signal: AbortSignal.timeout(2000) });
@@ -842,6 +903,25 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       } else {
         options.log(`fusion: reusing running fusion router on ${resolved.loopbackUrl}`);
       }
+    }
+  }
+
+  const driverHarness =
+    options.harness === "codex" ||
+    options.harness === "claude-code" ||
+    options.harness === "cursor-acp" ||
+    options.harness === "cursor-desktop";
+  if (driverHarness && harnessDriversEnabled()) {
+    try {
+      const driverEndpoints = await startDriverEndpointGateways({
+        models,
+        modelEndpoints
+      });
+      modelEndpoints = driverEndpoints.endpoints;
+      driverEndpointClose = driverEndpoints.close;
+    } catch (error) {
+      await routerClose();
+      throw error;
     }
   }
 
@@ -974,11 +1054,13 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
         await gateway.close();
         portless.unregister("gateway");
         await narrationClose();
+        await driverEndpointClose();
         await routerClose();
       }
     };
   } catch (error) {
     await narrationClose();
+    await driverEndpointClose();
     await routerClose();
     throw error;
   }

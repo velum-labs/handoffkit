@@ -16,6 +16,7 @@ import {
   sessionReceiptLines,
   startFusionStack
 } from "../fusion-quickstart.js";
+import type { PortlessSession } from "../shared/portless.js";
 
 const SENTINEL = "FUSION_OK";
 
@@ -364,5 +365,37 @@ test("codexRelayConfig honors the FUSIONKIT_CODEX_BACKEND_URL override", () => {
     if (previous === undefined) delete process.env.FUSIONKIT_CODEX_BACKEND_URL;
     else process.env.FUSIONKIT_CODEX_BACKEND_URL = previous;
   }
+});
+
+test("fusion stack replaces a router whose effective config identity is stale", async () => {
+  let replaceStale: boolean | undefined;
+  const portless: PortlessSession = {
+    enabled: true,
+    caCertPath: undefined,
+    register: (_name, port) => `http://127.0.0.1:${port}`,
+    unregister: () => undefined,
+    discoverOrSpawn: async (input) => {
+      replaceStale = input.replaceStale;
+      throw new Error("stop after inspecting discovery policy");
+    }
+  };
+
+  await assert.rejects(
+    startFusionStack({
+      repo: "/tmp",
+      outputRoot: "/tmp",
+      models: [
+        {
+          id: "member",
+          model: "gpt-test",
+          provider: "openai"
+        }
+      ],
+      portless,
+      log: () => undefined
+    }),
+    /stop after inspecting discovery policy/
+  );
+  assert.equal(replaceStale, true);
 });
 
