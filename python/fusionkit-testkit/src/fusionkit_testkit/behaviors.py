@@ -139,6 +139,10 @@ class Behavior:
     answering (latency injection); ``chunk_delay_s`` paces stream frames.
     ``broken_stream`` corrupts a streaming response on purpose: ``truncate``
     closes the connection mid-stream, ``garbage`` emits an unparseable frame.
+    ``chunk_bytes`` re-splits the streamed SSE bytes into wire chunks of that
+    size, crossing frame and UTF-8 rune boundaries — real providers make no
+    chunk-alignment promises, so client stream parsing must reassemble any
+    split losslessly.
     """
 
     reply: str | None = None
@@ -150,6 +154,10 @@ class Behavior:
     prompt_tokens: int = 7
     completion_tokens: int | None = None
     broken_stream: BrokenStream | None = None
+    #: When set (and streaming), the rendered SSE bytes are re-chunked into
+    #: wire chunks of exactly this many bytes (the last may be shorter),
+    #: splitting frames and multi-byte UTF-8 runes at arbitrary boundaries.
+    chunk_bytes: int | None = None
     #: When set, the OpenRouter generation-cost lookup (`GET /v1/generation`)
     #: for this response's id reports this exact USD cost (the openrouter
     #: provider's post-response accounting wire).
@@ -177,6 +185,7 @@ class Behavior:
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "broken_stream": self.broken_stream,
+            "chunk_bytes": self.chunk_bytes,
             "provider_cost_usd": self.provider_cost_usd,
         }
 
@@ -186,6 +195,7 @@ class Behavior:
         raw_calls = data.get("tool_calls") or []
         completion_tokens = data.get("completion_tokens")
         broken = data.get("broken_stream")
+        chunk_bytes = data.get("chunk_bytes")
         provider_cost_usd = data.get("provider_cost_usd")
         return Behavior(
             reply=data.get("reply"),
@@ -197,5 +207,6 @@ class Behavior:
             prompt_tokens=int(data.get("prompt_tokens", 7)),
             completion_tokens=int(completion_tokens) if completion_tokens is not None else None,
             broken_stream=broken if broken in ("truncate", "garbage") else None,
+            chunk_bytes=int(chunk_bytes) if chunk_bytes is not None else None,
             provider_cost_usd=float(provider_cost_usd) if provider_cost_usd is not None else None,
         )

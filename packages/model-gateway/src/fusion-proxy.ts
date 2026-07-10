@@ -31,6 +31,13 @@ import type {
 } from "./fusion-types.js";
 import { defaultFusionGatewayLogger } from "./logger.js";
 
+function invalidRequest(message: string): Response {
+  return new Response(
+    JSON.stringify({ error: { message, type: "invalid_request_error", code: "invalid_request" } }),
+    { status: 400, headers: { "content-type": "application/json" } }
+  );
+}
+
 export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-session.js";
 export type {
   ChatMessageLike,
@@ -180,7 +187,19 @@ export class FusionBackend implements Backend {
 
   async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
     const chat = (body ?? {}) as ChatBody;
+    // `FusionBackend` is public SDK surface, so it guards its own boundary in
+    // addition to the HTTP doors: a non-string `model` used to reach route
+    // resolution and explode as a 502 TypeError ("requested.startsWith is not
+    // a function"), and an empty fused turn leaked panel internals ("proposal
+    // mode (k=1) needs the caller's `messages`") as a 502. Both are caller
+    // errors and must answer 400 without any panel fanout.
+    if (chat.model !== undefined && typeof (chat.model as unknown) !== "string") {
+      return invalidRequest("`model` must be a string");
+    }
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
+    if (messages.length === 0 && this.#passthroughFor(chat.model) === undefined) {
+      return invalidRequest("the request contains no messages to run a fused turn on");
+    }
     const req: FrontdoorRequestValue = {
       requestId: newSpanId(),
       chat,

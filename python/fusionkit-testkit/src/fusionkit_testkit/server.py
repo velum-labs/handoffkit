@@ -395,6 +395,9 @@ class _Handler(BaseHTTPRequestHandler):
         self, blocks: list[bytes], behavior: Behavior, *, done: bytes | None = None
     ) -> None:
         """Emit pre-rendered SSE blocks, honoring pacing and broken-stream injection."""
+        if behavior.chunk_bytes is not None and behavior.broken_stream is None:
+            self._stream_rechunked(blocks, behavior, done=done)
+            return
         self._start_sse()
         cutoff = max(1, len(blocks) // 2) if behavior.broken_stream is not None else None
         for index, block in enumerate(blocks):
@@ -410,6 +413,26 @@ class _Handler(BaseHTTPRequestHandler):
                 time.sleep(behavior.chunk_delay_s)
         if done is not None:
             self._write_chunk(done)
+        self._end_chunks()
+
+    def _stream_rechunked(
+        self, blocks: list[bytes], behavior: Behavior, *, done: bytes | None
+    ) -> None:
+        """Emit the whole SSE payload re-split into fixed-size wire chunks.
+
+        Real providers make no promise about how a stream's bytes align to
+        frames: a chunk may end mid-`data:` line or mid-UTF-8-rune. Splitting
+        at every ``chunk_bytes`` boundary (including inside multi-byte
+        characters) proves client stream reassembly is byte-exact.
+        """
+        size = max(1, behavior.chunk_bytes or 1)
+        payload = b"".join(blocks) + (done or b"")
+        self._start_sse()
+        for start in range(0, len(payload), size):
+            self._write_chunk(payload[start : start + size])
+            self.wfile.flush()
+            if behavior.chunk_delay_s > 0:
+                time.sleep(behavior.chunk_delay_s)
         self._end_chunks()
 
     # -- OpenAI Chat Completions -------------------------------------------

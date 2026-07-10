@@ -14,6 +14,7 @@ import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
+import { unwrapUpstreamError } from "./upstream-error.js";
 import { composeServerToolStream, runBufferedServerToolLoop, serverToolMarkerOf } from "./server-tool-loop.js";
 import type { ExecutedSearch, ServerToolMarker } from "./server-tool-loop.js";
 import { resolveWebSearchExecutor } from "./web-search.js";
@@ -927,10 +928,7 @@ export async function handleAnthropicMessages(
 
   if (!upstream.ok) {
     const detail = await upstream.text();
-    return jsonResponse(upstream.status, {
-      type: "error",
-      error: { type: "api_error", message: detail.slice(0, 2000) }
-    });
+    return jsonResponse(upstream.status, { type: "error", error: unwrapUpstreamError(detail) });
   }
 
   if (executor !== undefined) {

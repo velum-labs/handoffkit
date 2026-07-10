@@ -53,7 +53,7 @@ test("a mid-stream upstream failure does not kill the gateway process", async ()
       const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: "mock-model", stream: true, messages: [] })
+        body: JSON.stringify({ model: "mock-model", stream: true, messages: [{ role: "user", content: "hi" }] })
       });
       await response.text();
     });
@@ -85,7 +85,7 @@ test("an error before headers are sent still yields a 502 JSON body", async () =
     const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "mock-model", messages: [] })
+      body: JSON.stringify({ model: "mock-model", messages: [{ role: "user", content: "hi" }] })
     });
     assert.equal(response.status, 502);
     const body = (await response.json()) as { error?: { message?: string; type?: string } };

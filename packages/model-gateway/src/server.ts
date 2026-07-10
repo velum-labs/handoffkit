@@ -17,6 +17,13 @@ import type { ResponsesRequest } from "./adapters/responses.js";
 import { PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";
 import type { Backend } from "./backend.js";
 import {
+  validateAnthropicRequest,
+  validateChatRequest,
+  validateCountTokensRequest,
+  validateResponsesRequest
+} from "./adapters/validate.js";
+import type { WireRejection } from "./adapters/validate.js";
+import {
   buildModelCallRecord,
   MODEL_CALL_ID_HEADER,
   modelCallId
@@ -153,6 +160,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && (path === "/v1/chat/completions" || path === "/chat/completions")) {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
+      if (rejectInvalid(res, validateChatRequest(raw))) return;
       const body = withDefaultModel(raw, backend.defaultModel);
       await handleModelCall(res, provenance, {
         dialect: "openai-chat",
@@ -180,7 +188,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         });
         return;
       }
-      const body = withDefaultModel(translateCursorRequest(raw), backend.defaultModel);
+      // Validate the *translated* body: the hybrid's `input` items become chat
+      // `messages`, so an input list that translates to nothing (e.g. only
+      // unknown item types) is rejected here instead of failing deep in fusion.
+      const translated = translateCursorRequest(raw);
+      if (rejectInvalid(res, validateChatRequest(translated))) return;
+      const body = withDefaultModel(translated, backend.defaultModel);
       await handleModelCall(res, provenance, {
         dialect: "openai-chat",
         body,
@@ -200,6 +213,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/messages/count_tokens") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
+      if (rejectInvalid(res, validateCountTokensRequest(raw))) return;
       await pipeUpstream(res, handleCountTokens(raw as AnthropicRequest));
       return;
     }
@@ -207,6 +221,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/messages") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
+      if (rejectInvalid(res, validateAnthropicRequest(raw))) return;
       const body = raw as AnthropicRequest;
       await handleModelCall(res, provenance, {
         dialect: "anthropic-messages",
@@ -220,6 +235,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/responses") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
+      if (rejectInvalid(res, validateResponsesRequest(raw))) return;
       const body = raw as ResponsesRequest;
       // A stock-model pick from a Codex client: the gateway does not serve
       // this model itself, and the request carries the client's own ChatGPT
@@ -302,6 +318,13 @@ async function readJson(req: IncomingMessage, res: ServerResponse): Promise<unkn
     writeJson(res, 400, { error: { message: "invalid JSON body", type: "bad_request" } });
     return NO_BODY;
   }
+}
+
+/** Write a structural-validation rejection (if any) and report whether one was written. */
+function rejectInvalid(res: ServerResponse, rejection: WireRejection | undefined): boolean {
+  if (rejection === undefined) return false;
+  writeJson(res, rejection.status, rejection.body);
+  return true;
 }
 
 function writeJson(res: ServerResponse, status: number, value: unknown): Buffer {

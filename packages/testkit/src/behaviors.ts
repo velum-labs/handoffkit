@@ -41,6 +41,12 @@ export type SimBehavior = {
   completion_tokens?: number | null;
   /** Corrupt a streaming response: close mid-stream or emit an unparseable frame. */
   broken_stream?: "truncate" | "garbage" | null;
+  /**
+   * Re-split the streamed SSE bytes into wire chunks of exactly this size,
+   * crossing frame and UTF-8 rune boundaries (providers make no
+   * chunk-alignment promises; client reassembly must be byte-exact).
+   */
+  chunk_bytes?: number | null;
 };
 
 /** The provider wire dialects the simulator speaks (one per FusionKit client family). */

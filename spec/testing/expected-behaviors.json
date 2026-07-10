@@ -410,6 +410,54 @@
       "anchor": "caller abort cancels"
     },
     {
+      "id": "robustness.malformed-rejected-without-fanout",
+      "category": "robustness",
+      "expectation": "A structurally malformed body on any door is a 400 in the door's native error envelope with zero provider fanout.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-fuzz-e2e.test.ts",
+      "anchor": "400 in the native envelope, zero provider fanout"
+    },
+    {
+      "id": "robustness.no-leaked-internals",
+      "category": "robustness",
+      "expectation": "No wire response ever carries JavaScript/Python internals (TypeError text, tracebacks), including for seeded random garbage.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-fuzz-e2e.test.ts",
+      "anchor": "seeded random bodies"
+    },
+    {
+      "id": "robustness.engine-malformed-rejected",
+      "category": "robustness",
+      "expectation": "The Python engine's own door rejects malformed bodies as 4xx without provider fanout and never leaks tracebacks.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_engine_fuzz.py",
+      "anchor": "test_malformed_bodies_reject_without_fanout"
+    },
+    {
+      "id": "robustness.chunk-boundary-reassembly",
+      "category": "robustness",
+      "expectation": "Provider streams split at arbitrary byte boundaries (including mid-UTF-8-rune) reassemble byte-exactly for every provider family.",
+      "status": "required",
+      "testFile": "python/fusionkit-testkit/tests/test_stream_chunk_fuzz.py",
+      "anchor": "test_streamed_text_reassembles_byte_exactly_at_any_chunk_boundary"
+    },
+    {
+      "id": "concurrency.no-cross-talk",
+      "category": "concurrency",
+      "expectation": "Concurrent streaming turns each carry exactly their own request's content, with per-request provider accounting.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-concurrency-e2e.test.ts",
+      "anchor": "without cross-talk"
+    },
+    {
+      "id": "concurrency.abort-isolation",
+      "category": "concurrency",
+      "expectation": "A client abort mid-stream leaves concurrent sibling streams and the gateway intact.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-concurrency-e2e.test.ts",
+      "anchor": "leaves concurrent siblings and the gateway intact"
+    },
+    {
       "id": "runs.event-sourced-lifecycle",
       "category": "runs",
       "expectation": "Native runs create, complete, inspect, page events, and idempotently replay without extra provider calls.",

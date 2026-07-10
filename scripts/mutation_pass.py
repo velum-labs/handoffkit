@@ -8,7 +8,8 @@ is a finding against the tests, and this script exits non-zero.
 Run from the repo root with both toolchains available (uv + a built pnpm
 workspace)::
 
-    uv run python scripts/mutation_pass.py
+    uv run python scripts/mutation_pass.py            # full pass
+    uv run python scripts/mutation_pass.py M31 M32    # only these mutations
 
 Not part of CI's per-commit path (it runs each targeted suite twice, ~1 min
 total); run it when touching the testkit, the provider clients, or the
@@ -390,6 +391,45 @@ MUTATIONS = [
             "'\\[opencode\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
         ),
     ),
+    Mutation(
+        id="M31",
+        what="structural door validation is disabled (malformed bodies reach the panel)",
+        file="packages/model-gateway/src/adapters/validate.ts",
+        old="export function validateChatRequest(body: unknown): WireRejection | undefined {",
+        new=(
+            "export function validateChatRequest(body: unknown): WireRejection | undefined {\n"
+            "  return undefined;"
+        ),
+        build=True,
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-fuzz-e2e.test.js",
+    ),
+    Mutation(
+        id="M32",
+        what="FusionBackend's own boundary guard is removed (empty fused turns leak 502 internals)",
+        file="packages/model-gateway/src/fusion-proxy.ts",
+        old="    if (messages.length === 0 && this.#passthroughFor(chat.model) === undefined) {",
+        new="    if (false) {",
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern 'unknown-only input' "
+            "packages/cli/dist/test/stack-fuzz-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M33",
+        what="concurrent turns share state (every stream answers with the first request's text)",
+        file="python/fusionkit-testkit/src/fusionkit_testkit/server.py",
+        old=(
+            "            self._default_counts[model] += 1\n"
+            "            count = self._default_counts[model]"
+        ),
+        new=(
+            '            self._default_counts[model] += 1\n'
+            '            count = self._default_counts[model]\n'
+            '        last_user_text = "poisoned shared reply"'
+        ),
+        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-concurrency-e2e.test.js",
+    ),
 ]
 
 
@@ -416,10 +456,15 @@ def _require_clean_tree() -> None:
 
 def main() -> None:
     _require_clean_tree()
+    requested = set(sys.argv[1:])
+    selected = [m for m in MUTATIONS if not requested or m.id in requested]
+    if requested and len(selected) != len(requested):
+        known = {m.id for m in MUTATIONS}
+        raise SystemExit(f"unknown mutation id(s): {sorted(requested - known)}")
     # Validate every mechanical target before running an expensive suite, so a
     # stale/non-unique pattern fails immediately rather than halfway through.
     originals: dict[str, str] = {}
-    for mutation in MUTATIONS:
+    for mutation in selected:
         original = originals.setdefault(
             mutation.file, (ROOT / mutation.file).read_text()
         )
@@ -430,7 +475,7 @@ def main() -> None:
             raise SystemExit(f"{mutation.id}: pattern is not unique ({occurrences}x)")
 
     results: list[tuple[Mutation, str]] = []
-    for mutation in MUTATIONS:
+    for mutation in selected:
         path = ROOT / mutation.file
         original = originals[mutation.file]
         try:

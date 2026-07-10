@@ -237,6 +237,9 @@ suites.
 | Durable resume | unbounded candidate cache persisted in FileSystemSessionStore and restored after gateway restart with zero re-fanout | provider | `packages/cli/src/test/stack-resume-e2e.test.ts` |
 | Driver cutover | `FUSIONKIT_HARNESS_DRIVERS=1`: real Claude Agent SDK + Codex SDK, native dialect gateways, stale-cursor fallback | provider | `packages/cli/src/test/stack-drivers-e2e.test.ts` |
 | Auth boundary | every door rejects missing/wrong bearer credentials before any provider call | provider | `packages/cli/src/test/stack-auth-e2e.test.ts` |
+| Hostile-input fuzz | malformed bodies per door (structural rejection matrix) + 40 seeded random bodies; invariants: native 400 envelope, zero fanout, no leaked internals, bounded latency, gateway survives | provider | `packages/cli/src/test/stack-fuzz-e2e.test.ts`, `python/fusionkit-testkit/tests/test_engine_fuzz.py`, unit: `wire-validation.test.ts` |
+| Chunk-boundary fuzz | provider streams re-split at 1/3/7-byte boundaries (mid-frame, mid-UTF-8-rune) must reassemble byte-exactly, per provider family + fused | provider | `python/fusionkit-testkit/tests/test_stream_chunk_fuzz.py` |
+| Concurrency | 24 parallel passthrough streams + 8 parallel fused streams with per-request content identity (cross-talk detection), abort isolation | provider | `packages/cli/src/test/stack-concurrency-e2e.test.ts` |
 | Engine runs & processes | native runs API (create/inspect/events/idempotency) over the real wire, `serve-endpoint` child process, router identity handshake | provider | `python/fusionkit-testkit/tests/test_engine_runs_and_processes.py` |
 | **Real product CLI** | the ACTUAL `fusionkit serve` entrypoint booting its production stack: fusion.json loading, preflight probes, `uv run` router spawn, gateway + setup snippets | provider only | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` |
 | Real command CLI | actual built entrypoint: version/completions/runtime, config CRUD/export, prompts, install/uninstall, telemetry, setup, doctor | provider only for doctor probes | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` |
@@ -293,9 +296,14 @@ clients, or the engine/gateway wire paths:
 uv run python scripts/mutation_pass.py   # clean tree + built workspace required
 ```
 
-Current score: **30/30 killed**. The newest mutations pin candidate reasoning
-entering judge evidence, streamed synthesizer reasoning on the gateway, and
-real Claude/Codex/OpenCode selection of injected named fused models.
+Current score: **33/33 killed**. A subset can be run by id
+(`uv run python scripts/mutation_pass.py M31 M32 M33`). The newest mutations
+pin structural door validation (M31), the `FusionBackend` SDK boundary guard
+(M32), and the concurrency suite's content-identity assertions (M33 poisons
+the simulator's echo default to prove cross-talk detection bites). Before
+them: candidate reasoning entering judge evidence, streamed synthesizer
+reasoning on the gateway, and real Claude/Codex/OpenCode selection of
+injected named fused models.
 
 The preceding mutations pin finite-k terminal
 proposal summaries, k=1 straggler grace, native driver dialect routing,
@@ -333,6 +341,33 @@ were real test weaknesses that got fixed:
 
 When adding significant simulator or wire-path behavior, add a mutation for
 it here rather than trusting a green run.
+
+## Hunting unknown unknowns — adversarial invariants
+
+Scripted suites only explore well-formed request space, so "everything
+passes" says nothing about the complement. The fuzz/concurrency layers
+(`stack-fuzz-e2e`, `test_engine_fuzz.py`, `test_stream_chunk_fuzz.py`,
+`stack-concurrency-e2e`) assert **expectation-free invariants** instead of
+scripted outcomes: every response parses, no response leaks
+JavaScript/Python internals, rejected garbage never fans out to providers,
+arbitrary stream chunking reassembles byte-exactly, concurrent turns keep
+their own content, and the gateway survives everything.
+
+The first hostile-input run against the previously-green stack found three
+real gateway bugs, all fixed and now pinned:
+
+- **Leaked TypeErrors as 502s.** A `model` array or `messages` non-array
+  reached deep code and answered `502 {"message": "requested.startsWith is
+  not a function"}` / `"body.messages is not iterable"` — unvalidated input
+  misclassified as an *upstream* error. Now structurally validated per door
+  (`adapters/validate.ts`), answering 400 in each dialect's native envelope.
+- **Leaked fusion internals.** An empty body answered
+  `502 "proposal mode (k=1) needs the caller's messages..."` — internal
+  panel jargon on the public wire. Now a clean 400, guarded at both the
+  doors and the `FusionBackend` SDK boundary.
+- **Wrong status class + wasted spend risk.** Malformed bodies could reach
+  panel fanout before failing. The fuzz suite asserts zero journal growth
+  for every rejected body.
 
 ## Writing new tests — rules of thumb
 
