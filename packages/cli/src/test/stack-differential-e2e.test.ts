@@ -46,6 +46,10 @@ for (const door of DOOR_PROFILES) {
     async () => {
       await stack.sim.reset();
       const marker = `differential-${door.id}-${Date.now()}`;
+      // The simulator's unscripted fallback includes an incrementing call
+      // number, which would make two otherwise equivalent transports differ by
+      // fixture design. Script the same semantic answer for both calls.
+      await stack.sim.queue("differential-member", [marker, marker]);
       const buffered = await callDoor(stack.gatewayUrl, door, {
         model: "member",
         user: marker
