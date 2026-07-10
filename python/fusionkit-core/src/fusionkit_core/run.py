@@ -4,9 +4,9 @@ import asyncio
 import json
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
@@ -71,6 +71,9 @@ __all__ = [
     "hash_json",
     "make_id",
 ]
+
+_ResultT = TypeVar("_ResultT")
+
 
 class _BudgetExceededSignal(Exception):
     """Raised by the mid-turn budget guard to abort a run between phases."""
@@ -192,7 +195,7 @@ class FusionRunManager:
 
     async def execute_run(self, run_id: str) -> RunInspection:
         summary = await asyncio.to_thread(self.store.read_summary, run_id)
-        if summary.state in ("cancelled", "completed", "failed", "expired"):
+        if summary.state != "queued":
             return await asyncio.to_thread(self.store.inspect_run, run_id)
 
         events = await asyncio.to_thread(self.store.list_events, run_id)
@@ -212,7 +215,17 @@ class FusionRunManager:
             budget_error = self._check_wall_clock_budget(started)
             if budget_error is not None:
                 return await asyncio.to_thread(self._fail_run, summary, budget_error)
-            trajectories = await self._generate_trajectories(request, selected_mode, sampling)
+            try:
+                trajectories = await self._run_with_wall_clock(
+                    lambda: self._generate_trajectories(
+                        request,
+                        selected_mode,
+                        sampling,
+                    ),
+                    started,
+                )
+            except _BudgetExceededSignal as signal:
+                return await asyncio.to_thread(self._fail_run, summary, signal.error)
             trajectory_infos, model_call_ids, trajectory_artifacts = await asyncio.to_thread(
                 self._record_trajectories,
                 run_id,
@@ -269,11 +282,14 @@ class FusionRunManager:
 
                 await asyncio.to_thread(self._append_state, summary, "synthesizing")
                 try:
-                    fused = await self.engine._judge_synthesize(
-                        _runtime_messages(request.messages),
-                        trajectories,
-                        sampling=sampling,
-                        after_judge=after_judge,
+                    fused = await self._run_with_wall_clock(
+                        lambda: self.engine._judge_synthesize(
+                            _runtime_messages(request.messages),
+                            trajectories,
+                            sampling=sampling,
+                            after_judge=after_judge,
+                        ),
+                        started,
                     )
                 except _BudgetExceededSignal as signal:
                     return await asyncio.to_thread(self._fail_run, summary, signal.error)
@@ -933,6 +949,27 @@ class FusionRunManager:
         if time.perf_counter() - started <= budget.wall_clock_s:
             return None
         return _budget_error("wall_clock_s", "wall-clock budget exceeded")
+
+    async def _run_with_wall_clock(
+        self,
+        operation: Callable[[], Awaitable[_ResultT]],
+        started: float,
+    ) -> _ResultT:
+        limit = self.engine.config.budget.wall_clock_s
+        if limit is None:
+            return await operation()
+        remaining = limit - (time.perf_counter() - started)
+        if remaining <= 0:
+            raise _BudgetExceededSignal(
+                _budget_error("wall_clock_s", "wall-clock budget exceeded")
+            )
+        try:
+            async with asyncio.timeout(remaining):
+                return await operation()
+        except TimeoutError as exc:
+            raise _BudgetExceededSignal(
+                _budget_error("wall_clock_s", "wall-clock budget exceeded")
+            ) from exc
 
     def _check_cost_budget(self, run_id: str) -> NativeRunError | None:
         budget = self.engine.config.budget
