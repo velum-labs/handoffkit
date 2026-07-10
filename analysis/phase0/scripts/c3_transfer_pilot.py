@@ -6,7 +6,6 @@ import csv
 import hashlib
 import json
 import math
-import random
 import sys
 from collections import defaultdict
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -20,13 +19,13 @@ from fusionkit_core.config import CostMetadata, FusionConfig, ModelEndpoint, Sam
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.providers import estimate_cost
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk
-from fusionkit_evals.bench_stats import wilson_interval
 from fusionkit_evals.bench_verify import verify_solution
 from fusionkit_evals.candidate_bank import BankCandidate, BankTask, CandidateBank, save_bank
 from fusionkit_evals.code_extract import extract_code
 from fusionkit_evals.livecodebench_data import LCB_PROMPT_SUFFIX, prepare_tasks
 from fusionkit_evals.prompt_tuning import PromptVariant, TunerRuntime, evaluate_variant
 from fusionkit_evals.sandbox import LocalSandbox
+from hyperkit.stats import clustered_bootstrap_statistic, wilson_interval
 
 ROOT = Path(__file__).resolve().parents[3]
 PHASE0 = ROOT / "analysis" / "phase0"
@@ -762,16 +761,10 @@ def clustered_bootstrap_panel(
     for task_id in task_ids:
         cluster = str(by_task[task_id][members[0]].get("cluster_key") or task_id)
         clusters[cluster].append(task_id)
-    cluster_keys = list(clusters)
-    if not cluster_keys:
+    if not clusters:
         return {"oracle": (0.0, 0.0), "headroom": (0.0, 0.0)}
-    rng = random.Random(seed)
-    oracles = []
-    headrooms = []
-    for _ in range(iterations):
-        sampled = []
-        for _ in cluster_keys:
-            sampled.extend(clusters[rng.choice(cluster_keys)])
+
+    def metrics(sampled: Sequence[str]) -> tuple[float, float]:
         member_rates = []
         for member in members:
             vals = [int(by_task[task_id][member]["passed"]) for task_id in sampled]
@@ -781,18 +774,21 @@ def clustered_bootstrap_panel(
             for task_id in sampled
         ]
         oracle = sum(oracle_hits) / len(oracle_hits)
-        oracles.append(oracle)
-        headrooms.append(oracle - max(member_rates))
-    return {"oracle": percentile_ci(oracles), "headroom": percentile_ci(headrooms)}
+        return oracle, oracle - max(member_rates)
 
-
-def percentile_ci(values: Sequence[float]) -> tuple[float, float]:
-    ordered = sorted(values)
-    if not ordered:
-        return 0.0, 0.0
-    low = ordered[max(0, int(0.025 * len(ordered)))]
-    high = ordered[min(len(ordered) - 1, int(0.975 * len(ordered)))]
-    return low, high
+    oracle_ci = clustered_bootstrap_statistic(
+        clusters,
+        lambda sampled: metrics(sampled)[0],
+        iterations=iterations,
+        seed=seed,
+    )
+    headroom_ci = clustered_bootstrap_statistic(
+        clusters,
+        lambda sampled: metrics(sampled)[1],
+        iterations=iterations,
+        seed=seed,
+    )
+    return {"oracle": oracle_ci, "headroom": headroom_ci}
 
 
 def pairwise_calibrated(

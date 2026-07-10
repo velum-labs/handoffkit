@@ -1,0 +1,1407 @@
+groups:
+  - name: hyperkit-local-seed
+    interval: 1s
+    rules:
+      # Existing production telemetry keeps Fleet, Fusion Internal, and Sweep Live populated.
+      - record: hyperkit_shards_completed_total
+        expr: time()
+        labels: &fusion
+          hyperkit_benchmark: humaneval
+          hyperkit_sut_kind: fusionkit-serve
+          hyperkit_sut_hash: fusion-seed
+          hyperkit_sweep_id: seed-run
+      - record: hyperkit_shards_completed_total
+        expr: time() * 0.9
+        labels: &solo
+          hyperkit_benchmark: humaneval
+          hyperkit_sut_kind: solo-model
+          hyperkit_sut_hash: solo-seed
+          hyperkit_sweep_id: seed-run
+      - record: hyperkit_shards_resolved_total
+        expr: time() * 0.78
+        labels: *fusion
+      - record: hyperkit_shards_resolved_total
+        expr: time() * 0.63
+        labels: *solo
+      - record: hyperkit_shards_errors_total
+        expr: time() * 0.01
+        labels: *fusion
+      - record: hyperkit_shards_errors_total
+        expr: time() * 0.02
+        labels: *solo
+      - record: hyperkit_cost_usd_total
+        expr: time() * 0.002
+        labels: *fusion
+      - record: hyperkit_cost_usd_total
+        expr: time() * 0.001
+        labels: *solo
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.2
+        labels: { <<: *fusion, le: "0.5" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.6
+        labels: { <<: *fusion, le: "1" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.9
+        labels: { <<: *fusion, le: "2" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time()
+        labels: { <<: *fusion, le: "+Inf" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.3
+        labels: { <<: *solo, le: "0.5" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.75
+        labels: { <<: *solo, le: "1" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time() * 0.95
+        labels: { <<: *solo, le: "2" }
+      - record: hyperkit_shard_latency_seconds_bucket
+        expr: time()
+        labels: { <<: *solo, le: "+Inf" }
+      - record: otelcol_receiver_accepted_metric_points
+        expr: time() * 20
+        labels: { receiver: otlp }
+      - record: otelcol_receiver_refused_metric_points
+        expr: time() * 0.001
+        labels: { receiver: otlp }
+      - record: otelcol_exporter_sent_metric_points
+        expr: time() * 20
+        labels: { exporter: prometheusremotewrite }
+      - record: otelcol_exporter_send_failed_metric_points
+        expr: time() * 0.001
+        labels: { exporter: prometheusremotewrite }
+
+      # Hypergrid snapshots: nine cells over three search generations.
+      # Quality, cost, and latency use low-amplitude periodic drift so live
+      # dashboards visibly update without changing the overall ordering.
+      # hyperkit_cell_planned_shards
+      - record: hyperkit_cell_planned_shards
+        expr: vector(100)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_planned_shards
+        expr: vector(100)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_planned_shards
+        expr: vector(100)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_planned_shards
+        expr: vector(100)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_planned_shards
+        expr: vector(100)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_planned_shards
+        expr: vector(100)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_planned_shards
+        expr: vector(120)
+        labels: &g3_star
+          cell_id: "g3-star-k1"
+          generation: "3"
+          topology: "star"
+          topology_hash: "sha256:star-g7"
+          k: "1"
+          panel: "solo"
+          judge: "strict"
+          commit: "f7a8b9c"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_planned_shards
+        expr: vector(120)
+        labels: &g3_tree
+          cell_id: "g3-tree-k3"
+          generation: "3"
+          topology: "tree"
+          topology_hash: "sha256:tree-h8"
+          k: "3"
+          panel: "trio"
+          judge: "weighted"
+          commit: "f7a8b9c"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_planned_shards
+        expr: vector(120)
+        labels: &g3_mesh
+          cell_id: "g3-mesh-k5"
+          generation: "3"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-i9"
+          k: "5"
+          panel: "quint"
+          judge: "weighted"
+          commit: "f7a8b9c"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+
+      # hyperkit_cell_completed_shards
+      - record: hyperkit_cell_completed_shards
+        expr: vector(100)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_completed_shards
+        expr: vector(98)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_completed_shards
+        expr: vector(90)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_completed_shards
+        expr: vector(80)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_completed_shards
+        expr: vector(75)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_completed_shards
+        expr: vector(60)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_completed_shards
+        expr: vector(112)
+        labels: *g3_star
+      - record: hyperkit_cell_completed_shards
+        expr: vector(102)
+        labels: *g3_tree
+      - record: hyperkit_cell_completed_shards
+        expr: vector(88)
+        labels: *g3_mesh
+
+      # hyperkit_cell_resolved_shards
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(82)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(74)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(65)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(67)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(57)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(39)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(91)
+        labels: *g3_star
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(89)
+        labels: *g3_tree
+      - record: hyperkit_cell_resolved_shards
+        expr: vector(72)
+        labels: *g3_mesh
+
+      # hyperkit_cell_errors
+      - record: hyperkit_cell_errors
+        expr: vector(1)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_errors
+        expr: vector(2)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_errors
+        expr: vector(3)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_errors
+        expr: vector(1)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_errors
+        expr: vector(2)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_errors
+        expr: vector(4)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_errors
+        expr: vector(1)
+        labels: *g3_star
+      - record: hyperkit_cell_errors
+        expr: vector(2)
+        labels: *g3_tree
+      - record: hyperkit_cell_errors
+        expr: vector(3)
+        labels: *g3_mesh
+
+      # hyperkit_cell_resolution_rate
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.82) + 0.004 * sin(vector(time() / 17))
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.755) + 0.005 * sin(vector(time() / 19 + 1))
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.722) + 0.004 * sin(vector(time() / 23 + 2))
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.8375) + 0.006 * sin(vector(time() / 13 + 3))
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.76) + 0.005 * sin(vector(time() / 29 + 4))
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.65) + 0.004 * sin(vector(time() / 31 + 5))
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.8125) + 0.004 * sin(vector(time() / 21 + 1))
+        labels: *g3_star
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.8725) + 0.006 * sin(vector(time() / 15 + 2))
+        labels: *g3_tree
+      - record: hyperkit_cell_resolution_rate
+        expr: vector(0.8182) + 0.005 * sin(vector(time() / 25 + 3))
+        labels: *g3_mesh
+
+      # hyperkit_cell_wilson_low
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.735)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.661)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.622)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.741)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.651)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.524)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.728)
+        labels: *g3_star
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.793)
+        labels: *g3_tree
+      - record: hyperkit_cell_wilson_low
+        expr: vector(0.726)
+        labels: *g3_mesh
+
+      # hyperkit_cell_wilson_high
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.878)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.829)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.805)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.904)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.844)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.757)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.876)
+        labels: *g3_star
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.925)
+        labels: *g3_tree
+      - record: hyperkit_cell_wilson_high
+        expr: vector(0.883)
+        labels: *g3_mesh
+
+      # hyperkit_cell_cost_usd
+      - record: hyperkit_cell_cost_usd
+        expr: vector(1.8) + 0.04 * sin(vector(time() / 23))
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_usd
+        expr: vector(1.3) + 0.03 * sin(vector(time() / 27 + 1))
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_usd
+        expr: vector(2.1) + 0.05 * sin(vector(time() / 31 + 2))
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_usd
+        expr: vector(2.4) + 0.05 * sin(vector(time() / 19 + 3))
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_usd
+        expr: vector(1.0) + 0.025 * sin(vector(time() / 29 + 4))
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_usd
+        expr: vector(0.72) + 0.02 * sin(vector(time() / 37 + 5))
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_usd
+        expr: vector(0.58) + 0.015 * sin(vector(time() / 33 + 1))
+        labels: *g3_star
+      - record: hyperkit_cell_cost_usd
+        expr: vector(1.68) + 0.035 * sin(vector(time() / 18 + 2))
+        labels: *g3_tree
+      - record: hyperkit_cell_cost_usd
+        expr: vector(2.85) + 0.06 * sin(vector(time() / 26 + 3))
+        labels: *g3_mesh
+
+      # hyperkit_cell_cost_per_resolve
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.02195)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.01757)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.03231)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.03582)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.01754)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.01846)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.00637)
+        labels: *g3_star
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.01888)
+        labels: *g3_tree
+      - record: hyperkit_cell_cost_per_resolve
+        expr: vector(0.03958)
+        labels: *g3_mesh
+
+      # hyperkit_cell_latency_p50_seconds
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(0.8)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(0.62)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(1.12)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(0.92)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(0.55)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(0.48)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(0.41) + 0.02 * sin(vector(time() / 27 + 1))
+        labels: *g3_star
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(0.72) + 0.03 * sin(vector(time() / 20 + 2))
+        labels: *g3_tree
+      - record: hyperkit_cell_latency_p50_seconds
+        expr: vector(1.21) + 0.05 * sin(vector(time() / 24 + 3))
+        labels: *g3_mesh
+
+      # hyperkit_cell_latency_p95_seconds
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(1.8) + 0.08 * sin(vector(time() / 17))
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(1.42) + 0.06 * sin(vector(time() / 23 + 1))
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(2.75) + 0.1 * sin(vector(time() / 29 + 2))
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(1.95) + 0.08 * sin(vector(time() / 19 + 3))
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(1.2) + 0.05 * sin(vector(time() / 31 + 4))
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(1.08) + 0.04 * sin(vector(time() / 37 + 5))
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(0.92) + 0.04 * sin(vector(time() / 27 + 1))
+        labels: *g3_star
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(1.58) + 0.06 * sin(vector(time() / 20 + 2))
+        labels: *g3_tree
+      - record: hyperkit_cell_latency_p95_seconds
+        expr: vector(2.98) + 0.11 * sin(vector(time() / 24 + 3))
+        labels: *g3_mesh
+
+      # hyperkit_cell_delta_vs_best_single
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(0.14)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(0.075)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(0.042)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(0.1575)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(0.08)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(-0.03)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(0.1325)
+        labels: *g3_star
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(0.1925)
+        labels: *g3_tree
+      - record: hyperkit_cell_delta_vs_best_single
+        expr: vector(0.1382)
+        labels: *g3_mesh
+
+      # hyperkit_cell_rank
+      - record: hyperkit_cell_rank
+        expr: vector(1)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_rank
+        expr: vector(3)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_rank
+        expr: vector(5)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_rank
+        expr: vector(2)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_rank
+        expr: vector(4)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_rank
+        expr: vector(6)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_rank
+        expr: vector(4)
+        labels: *g3_star
+      - record: hyperkit_cell_rank
+        expr: vector(1)
+        labels: *g3_tree
+      - record: hyperkit_cell_rank
+        expr: vector(3)
+        labels: *g3_mesh
+
+      # hyperkit_cell_pareto
+      - record: hyperkit_cell_pareto
+        expr: vector(1)
+        labels:
+          cell_id: "g1-star-k2"
+          generation: "1"
+          topology: "star"
+          topology_hash: "sha256:star-a1"
+          k: "2"
+          panel: "duo"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_pareto
+        expr: vector(1)
+        labels:
+          cell_id: "g1-ring-k3"
+          generation: "1"
+          topology: "ring"
+          topology_hash: "sha256:ring-b2"
+          k: "3"
+          panel: "trio"
+          judge: "strict"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_pareto
+        expr: vector(0)
+        labels:
+          cell_id: "g1-mesh-k4"
+          generation: "1"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-c3"
+          k: "4"
+          panel: "quad"
+          judge: "majority"
+          commit: "a1b2c3d"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_pareto
+        expr: vector(1)
+        labels:
+          cell_id: "g2-star-k4"
+          generation: "2"
+          topology: "star"
+          topology_hash: "sha256:star-d4"
+          k: "4"
+          panel: "quad"
+          judge: "strict"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_pareto
+        expr: vector(1)
+        labels:
+          cell_id: "g2-ring-k2"
+          generation: "2"
+          topology: "ring"
+          topology_hash: "sha256:ring-e5"
+          k: "2"
+          panel: "duo"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_pareto
+        expr: vector(0)
+        labels:
+          cell_id: "g2-mesh-k3"
+          generation: "2"
+          topology: "mesh"
+          topology_hash: "sha256:mesh-f6"
+          k: "3"
+          panel: "trio"
+          judge: "majority"
+          commit: "d4e5f6a"
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+      - record: hyperkit_cell_pareto
+        expr: vector(1)
+        labels: *g3_star
+      - record: hyperkit_cell_pareto
+        expr: vector(1)
+        labels: *g3_tree
+      - record: hyperkit_cell_pareto
+        expr: vector(0)
+        labels: *g3_mesh
+
+      - record: hyperkit_cells_total
+        expr: vector(3)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "1"
+      - record: hyperkit_shards_pending
+        expr: vector(8)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "1"
+      - record: hyperkit_shards_running
+        expr: vector(7)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "1"
+      - record: hyperkit_cells_total
+        expr: vector(3)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "2"
+      - record: hyperkit_shards_pending
+        expr: vector(60)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "2"
+      - record: hyperkit_shards_running
+        expr: vector(25)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "2"
+      - record: hyperkit_cells_total
+        expr: vector(3)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "3"
+      - record: hyperkit_shards_pending
+        expr: vector(58)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "3"
+      - record: hyperkit_shards_running
+        expr: vector(24)
+        labels:
+          run_id: "seed-hypergrid"
+          benchmark: "humaneval"
+          generation: "3"

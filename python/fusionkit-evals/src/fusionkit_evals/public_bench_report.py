@@ -14,9 +14,9 @@ import math
 from collections.abc import Iterable
 from pathlib import Path
 
+from hyperkit.stats import wilson_interval
 from pydantic import BaseModel, Field
 
-from fusionkit_evals.bench_stats import wilson_interval
 from fusionkit_evals.benchmark_panel import BenchmarkPanel
 from fusionkit_evals.public_bench import (
     PUBLIC_BENCH_DISCLAIMER,

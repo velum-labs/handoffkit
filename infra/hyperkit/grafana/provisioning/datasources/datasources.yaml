@@ -1,0 +1,57 @@
+apiVersion: 1
+
+deleteDatasources:
+  - name: Amazon Managed Prometheus
+    orgId: 1
+  - name: CloudWatch
+    orgId: 1
+  - name: Athena
+    orgId: 1
+  - name: X-Ray
+    orgId: 1
+
+datasources:
+  - name: Amazon Managed Prometheus
+    uid: amp
+    type: prometheus
+    access: proxy
+    url: ${AMP_ENDPOINT}
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      sigV4Auth: true
+      sigV4AuthType: default
+      sigV4Region: ${AWS_REGION}
+      timeInterval: 30s
+
+  - name: CloudWatch
+    uid: cloudwatch
+    type: cloudwatch
+    access: proxy
+    editable: false
+    jsonData:
+      authType: default
+      defaultRegion: ${AWS_REGION}
+
+  - name: Athena
+    uid: athena
+    type: grafana-athena-datasource
+    access: proxy
+    editable: false
+    jsonData:
+      authType: default
+      defaultRegion: ${AWS_REGION}
+      catalog: AwsDataCatalog
+      database: ${ATHENA_DATABASE}
+      workgroup: ${ATHENA_WORKGROUP}
+      outputLocation: ${ATHENA_OUTPUT}
+
+  - name: X-Ray
+    uid: xray
+    type: grafana-x-ray-datasource
+    access: proxy
+    editable: false
+    jsonData:
+      authType: default
+      defaultRegion: ${AWS_REGION}

@@ -1,0 +1,544 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Interactive, data-driven views of Hyperkit hypergrid quality, cost, latency, search flow, ranking, and uncertainty.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "description": "Cost versus resolution rate. Bubble area tracks completed shards; color tracks topology. Zoom, restore, and data-view controls support interactive exploration.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "editor": {
+          "format": "auto",
+          "height": 700
+        },
+        "editorMode": "code",
+        "followTheme": true,
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cells.set(id, cell);\n});\n[['cost', 'cost'], ['rate', 'rate'], ['p95', 'p95'], ['completed', 'completed'], ['low', 'low'], ['high', 'high'], ['rank', 'rank'], ['delta', 'delta']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['cost', 'rate', 'p95', 'completed', 'low', 'high', 'rank', 'delta'].every((key) => Number.isFinite(cell[key])));\nconst topologies = Array.from(new Set(data.map((cell) => cell.topology))).sort();\nconst colors = ['#73BF69', '#5794F2', '#FF9830', '#B877D9', '#F2495C', '#8AB8FF'];\nconst completed = data.map((cell) => cell.completed);\nconst minCompleted = Math.min(...completed);\nconst maxCompleted = Math.max(...completed);\nreturn {\n  animationDurationUpdate: 700,\n  color: colors,\n  grid: { left: 62, right: 28, top: 48, bottom: 65 },\n  legend: { top: 4, data: topologies },\n  toolbox: { right: 8, feature: { dataZoom: {}, dataView: { readOnly: true }, restore: {}, saveAsImage: {} } },\n  tooltip: {\n    trigger: 'item',\n    formatter: ({ data: cell }) => `<b>${cell.cell_id}</b><br/>topology: ${cell.topology}<br/>cost: $${cell.cost.toFixed(2)}<br/>resolution: ${(cell.rate * 100).toFixed(1)}%<br/>95% CI: ${(cell.low * 100).toFixed(1)}–${(cell.high * 100).toFixed(1)}%<br/>p95: ${cell.p95.toFixed(2)}s · completed: ${cell.completed}<br/>rank: ${cell.rank} · k: ${cell.k}<br/>panel: ${cell.panel} · commit: ${cell.commit}<br/>delta: ${(cell.delta * 100).toFixed(1)}pp`\n  },\n  xAxis: { type: 'value', name: 'Cost (USD)', nameLocation: 'middle', nameGap: 34, scale: true },\n  yAxis: { type: 'value', name: 'Resolution rate', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` }, scale: true },\n  dataZoom: [{ type: 'inside', xAxisIndex: 0 }, { type: 'slider', xAxisIndex: 0, height: 18, bottom: 8 }],\n  series: topologies.map((topology, index) => ({\n    name: topology,\n    type: 'scatter',\n    data: data.filter((cell) => cell.topology === topology).map((cell) => ({ ...cell, value: [cell.cost, cell.rate, cell.completed] })),\n    symbolSize: (value) => 14 + 26 * (value[2] - minCompleted) / (maxCompleted - minCompleted || 1),\n    itemStyle: { color: colors[index % colors.length], opacity: 0.82, borderColor: '#ffffff', borderWidth: 1 },\n    emphasis: { focus: 'series', scale: 1.25 },\n    label: { show: true, position: 'top', formatter: ({ data: cell }) => cell.cell_id, fontSize: 10 }\n  }))\n};",
+        "renderer": "canvas",
+        "themeEditor": {
+          "config": "{}",
+          "name": "default"
+        },
+        "visualEditor": {
+          "code": "return { dataset: context.editor.dataset, series: context.editor.series };",
+          "dataset": [],
+          "series": []
+        }
+      },
+      "pluginVersion": "7.2.5",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_cost_usd{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "cost"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "rate"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_latency_p95_seconds{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "p95"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "completed"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_wilson_low{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "low"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_wilson_high{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "high"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_rank{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "rank"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_delta_vs_best_single{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "delta"
+        }
+      ],
+      "title": "Quality / Cost Bubble Explorer",
+      "type": "volkovlabs-echarts-panel"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "description": "Each polyline is one cell across normalized quality, cost, latency, uplift, progress, and panel-size dimensions.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "editor": {
+          "format": "auto",
+          "height": 700
+        },
+        "editorMode": "code",
+        "followTheme": true,
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cells.set(id, cell);\n});\n[['rate', 'rate'], ['cost', 'cost'], ['p95', 'p95'], ['delta', 'delta'], ['completed', 'completed'], ['planned', 'planned']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['rate', 'cost', 'p95', 'delta', 'completed', 'planned'].every((key) => Number.isFinite(cell[key])));\nconst groups = Array.from(new Set(data.map((cell) => `g${cell.generation} · ${cell.topology}`))).sort();\nconst colors = ['#73BF69', '#5794F2', '#FF9830', '#B877D9', '#F2495C', '#8AB8FF', '#FADE2A'];\nreturn {\n  animationDurationUpdate: 700,\n  color: colors,\n  legend: { type: 'scroll', top: 3, data: groups },\n  tooltip: { trigger: 'item', formatter: ({ data: item }) => { const cell = item.meta; return `<b>${cell.cell_id}</b><br/>generation: ${cell.generation} · topology: ${cell.topology}<br/>rate: ${(cell.rate * 100).toFixed(1)}% · cost: $${cell.cost.toFixed(2)}<br/>p95: ${cell.p95.toFixed(2)}s · delta: ${(cell.delta * 100).toFixed(1)}pp<br/>progress: ${(cell.completed / cell.planned * 100).toFixed(0)}% · k: ${cell.k}<br/>panel: ${cell.panel} · commit: ${cell.commit}`; } },\n  parallel: { left: 62, right: 38, top: 62, bottom: 28, parallelAxisDefault: { nameLocation: 'end', nameGap: 14, splitNumber: 4 } },\n  parallelAxis: [\n    { dim: 0, name: 'Score / rate', min: 'dataMin', max: 'dataMax', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n    { dim: 1, name: 'Cost $', min: 'dataMin', max: 'dataMax' },\n    { dim: 2, name: 'P95 s', min: 'dataMin', max: 'dataMax' },\n    { dim: 3, name: 'Delta', min: 'dataMin', max: 'dataMax', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}pp` } },\n    { dim: 4, name: 'Progress', min: 0, max: 1, axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n    { dim: 5, name: 'K', type: 'value' }\n  ],\n  series: groups.map((group, index) => ({\n    name: group,\n    type: 'parallel',\n    lineStyle: { color: colors[index % colors.length], width: 2.4, opacity: 0.62 },\n    emphasis: { lineStyle: { width: 5, opacity: 1 } },\n    data: data.filter((cell) => `g${cell.generation} · ${cell.topology}` === group).map((cell) => ({ value: [cell.rate, cell.cost, cell.p95, cell.delta, cell.completed / cell.planned, Number(cell.k)], meta: cell }))\n  }))\n};",
+        "renderer": "canvas",
+        "themeEditor": {
+          "config": "{}",
+          "name": "default"
+        },
+        "visualEditor": {
+          "code": "return { dataset: context.editor.dataset, series: context.editor.series };",
+          "dataset": [],
+          "series": []
+        }
+      },
+      "pluginVersion": "7.2.5",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "rate"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_cost_usd{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "cost"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_latency_p95_seconds{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "p95"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_delta_vs_best_single{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "delta"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "completed"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_planned_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "planned"
+        }
+      ],
+      "title": "Cell Trade-space Parallel Coordinates",
+      "type": "volkovlabs-echarts-panel"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "description": "Mean resolution rate for each topology and K combination; the color domain follows the filtered data.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "id": 3,
+      "options": {
+        "editor": {
+          "format": "auto",
+          "height": 700
+        },
+        "editorMode": "code",
+        "followTheme": true,
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst points = context.panel.data.series.flatMap((frame) => {\n  const fields = frame.fields || [];\n  const valueField = fields.find((field) => field.name === 'Value') || fields.filter((field) => field.type === 'number' && field.name !== 'Time').slice(-1)[0];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { topology: labels.topology, k: labels.k, value: Number(value) };\n  });\n}).filter((point) => point.topology && point.k && Number.isFinite(point.value));\nconst topologies = Array.from(new Set(points.map((point) => point.topology))).sort();\nconst ks = Array.from(new Set(points.map((point) => point.k))).sort((a, b) => Number(a) - Number(b));\nconst values = points.map((point) => point.value);\nreturn {\n  animationDurationUpdate: 600,\n  grid: { left: 72, right: 22, top: 28, bottom: 70 },\n  tooltip: { position: 'top', formatter: ({ data }) => `<b>${topologies[data[1]]} · k=${ks[data[0]]}</b><br/>mean resolution: ${(data[2] * 100).toFixed(1)}%` },\n  xAxis: { type: 'category', name: 'K', data: ks, splitArea: { show: true } },\n  yAxis: { type: 'category', name: 'Topology', data: topologies, splitArea: { show: true } },\n  visualMap: { min: Math.min(...values), max: Math.max(...values), calculable: true, orient: 'horizontal', left: 'center', bottom: 4, inRange: { color: ['#1F3B73', '#5794F2', '#73BF69', '#FADE2A'] }, formatter: (value) => `${(value * 100).toFixed(0)}%` },\n  series: [{ name: 'Resolution rate', type: 'heatmap', data: points.map((point) => [ks.indexOf(point.k), topologies.indexOf(point.topology), point.value]), label: { show: true, formatter: ({ data }) => `${(data[2] * 100).toFixed(1)}%` }, emphasis: { itemStyle: { shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.45)' } } }]\n};",
+        "renderer": "canvas",
+        "themeEditor": {
+          "config": "{}",
+          "name": "default"
+        },
+        "visualEditor": {
+          "code": "return { dataset: context.editor.dataset, series: context.editor.series };",
+          "dataset": [],
+          "series": []
+        }
+      },
+      "pluginVersion": "7.2.5",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "avg by (topology, k) (hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{topology}} · k={{k}}",
+          "range": false,
+          "refId": "rate"
+        }
+      ],
+      "title": "Topology × K Resolution Heatmap",
+      "type": "volkovlabs-echarts-panel"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "description": "Completed shard volume flowing from search generation through topology into individual cells.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 8,
+        "y": 10
+      },
+      "id": 4,
+      "options": {
+        "editor": {
+          "format": "auto",
+          "height": 700
+        },
+        "editorMode": "code",
+        "followTheme": true,
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst cells = context.panel.data.series.flatMap((frame) => {\n  const fields = frame.fields || [];\n  const valueField = fields.find((field) => field.name === 'Value') || fields.filter((field) => field.type === 'number' && field.name !== 'Time').slice(-1)[0];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { ...labels, value: Number(value) };\n  });\n}).filter((cell) => cell.cell_id && cell.generation && cell.topology && Number.isFinite(cell.value));\nconst linkTotals = new Map();\nconst addLink = (source, target, value) => {\n  const key = `${source}\\u0000${target}`;\n  const link = linkTotals.get(key) || { source, target, value: 0 };\n  link.value += value;\n  linkTotals.set(key, link);\n};\ncells.forEach((cell) => {\n  const generation = `Generation ${cell.generation}`;\n  const topology = `g${cell.generation} · ${cell.topology}`;\n  addLink(generation, topology, cell.value);\n  addLink(topology, cell.cell_id, cell.value);\n});\nconst nodes = Array.from(new Set(Array.from(linkTotals.values()).flatMap((link) => [link.source, link.target]))).map((name) => ({ name }));\nreturn {\n  animationDurationUpdate: 800,\n  tooltip: { trigger: 'item', formatter: (params) => params.dataType === 'edge' ? `<b>${params.data.source} → ${params.data.target}</b><br/>completed shards: ${params.data.value.toFixed(0)}` : `<b>${params.name}</b>` },\n  series: [{ type: 'sankey', data: nodes, links: Array.from(linkTotals.values()), left: 14, right: 130, top: 18, bottom: 18, nodeWidth: 18, nodeGap: 10, draggable: true, emphasis: { focus: 'adjacency' }, lineStyle: { color: 'gradient', curveness: 0.5, opacity: 0.55 }, label: { fontSize: 11 } }]\n};",
+        "renderer": "canvas",
+        "themeEditor": {
+          "config": "{}",
+          "name": "default"
+        },
+        "visualEditor": {
+          "code": "return { dataset: context.editor.dataset, series: context.editor.series };",
+          "dataset": [],
+          "series": []
+        }
+      },
+      "pluginVersion": "7.2.5",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "completed"
+        }
+      ],
+      "title": "Generation → Topology → Cell Flow",
+      "type": "volkovlabs-echarts-panel"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "description": "Live ordering by resolution rate; dashboard refreshes animate rank changes.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 5,
+      "options": {
+        "editor": {
+          "format": "auto",
+          "height": 700
+        },
+        "editorMode": "code",
+        "followTheme": true,
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const valueField = fields.find((field) => field.name === 'Value') || fields.filter((field) => field.type === 'number' && field.name !== 'Time').slice(-1)[0];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nrows('rate').forEach(({ labels, value }) => cells.set(labels.cell_id, { ...labels, rate: value }));\nrows('delta').forEach(({ labels, value }) => { const cell = cells.get(labels.cell_id); if (cell) Object.assign(cell, labels, { delta: value }); });\nconst data = Array.from(cells.values()).filter((cell) => Number.isFinite(cell.rate) && Number.isFinite(cell.delta)).sort((a, b) => a.rate - b.rate);\nconst palette = { star: '#73BF69', ring: '#5794F2', mesh: '#FF9830', tree: '#B877D9' };\nreturn {\n  animationDuration: 800,\n  animationDurationUpdate: 1200,\n  animationEasingUpdate: 'quinticInOut',\n  grid: { left: 118, right: 72, top: 20, bottom: 34 },\n  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params) => { const cell = params[0].data.meta; return `<b>${cell.cell_id}</b><br/>resolution: ${(cell.rate * 100).toFixed(1)}%<br/>delta: ${(cell.delta * 100).toFixed(1)}pp<br/>generation: ${cell.generation} · topology: ${cell.topology}<br/>k: ${cell.k} · panel: ${cell.panel} · commit: ${cell.commit}`; } },\n  xAxis: { type: 'value', min: 'dataMin', max: 'dataMax', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n  yAxis: { type: 'category', data: data.map((cell) => cell.cell_id), inverse: false, axisLabel: { fontSize: 10 } },\n  series: [{ name: 'Resolution rate', type: 'bar', realtimeSort: true, data: data.map((cell) => ({ value: cell.rate, meta: cell, itemStyle: { color: palette[cell.topology] || '#8AB8FF', borderRadius: [0, 4, 4, 0] } })), label: { show: true, position: 'right', formatter: ({ value }) => `${(value * 100).toFixed(1)}%` } }]\n};",
+        "renderer": "canvas",
+        "themeEditor": {
+          "config": "{}",
+          "name": "default"
+        },
+        "visualEditor": {
+          "code": "return { dataset: context.editor.dataset, series: context.editor.series };",
+          "dataset": [],
+          "series": []
+        }
+      },
+      "pluginVersion": "7.2.5",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "rate"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_delta_vs_best_single{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "delta"
+        }
+      ],
+      "title": "Live Cell Ranking",
+      "type": "volkovlabs-echarts-panel"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "description": "Wilson 95% confidence intervals with point estimates, sorted by resolution rate.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 6,
+      "options": {
+        "editor": {
+          "format": "auto",
+          "height": 700
+        },
+        "editorMode": "code",
+        "followTheme": true,
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const valueField = fields.find((field) => field.name === 'Value') || fields.filter((field) => field.type === 'number' && field.name !== 'Time').slice(-1)[0];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cells.set(id, cell);\n});\n[['rate', 'rate'], ['low', 'low'], ['high', 'high']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['rate', 'low', 'high'].every((key) => Number.isFinite(cell[key]))).sort((a, b) => a.rate - b.rate);\nconst colors = { star: '#73BF69', ring: '#5794F2', mesh: '#FF9830', tree: '#B877D9' };\nreturn {\n  animationDurationUpdate: 700,\n  grid: { left: 120, right: 28, top: 20, bottom: 42 },\n  tooltip: { trigger: 'item', formatter: ({ data: item }) => { const cell = item.meta; return `<b>${cell.cell_id}</b><br/>estimate: ${(cell.rate * 100).toFixed(1)}%<br/>Wilson 95% CI: ${(cell.low * 100).toFixed(1)}–${(cell.high * 100).toFixed(1)}%<br/>generation: ${cell.generation} · topology: ${cell.topology}<br/>k: ${cell.k} · panel: ${cell.panel} · commit: ${cell.commit}`; } },\n  xAxis: { type: 'value', name: 'Resolution rate (Wilson 95% CI)', nameLocation: 'middle', nameGap: 30, min: 'dataMin', max: 'dataMax', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n  yAxis: { type: 'category', data: data.map((cell) => cell.cell_id), axisLabel: { fontSize: 10 } },\n  series: [\n    {\n      name: 'Wilson interval',\n      type: 'custom',\n      renderItem: (params, api) => {\n        const low = api.coord([api.value(0), api.value(2)]);\n        const high = api.coord([api.value(1), api.value(2)]);\n        const half = Math.max(4, api.size([0, 1])[1] * 0.22);\n        const style = api.style({ stroke: api.value(3), lineWidth: 2.2 });\n        return { type: 'group', children: [\n          { type: 'line', shape: { x1: low[0], y1: low[1], x2: high[0], y2: high[1] }, style },\n          { type: 'line', shape: { x1: low[0], y1: low[1] - half, x2: low[0], y2: low[1] + half }, style },\n          { type: 'line', shape: { x1: high[0], y1: high[1] - half, x2: high[0], y2: high[1] + half }, style }\n        ] };\n      },\n      encode: { x: [0, 1], y: 2 },\n      data: data.map((cell, index) => ({ value: [cell.low, cell.high, index, colors[cell.topology] || '#8AB8FF'], meta: cell }))\n    },\n    { name: 'Point estimate', type: 'scatter', symbolSize: 10, z: 4, data: data.map((cell, index) => ({ value: [cell.rate, index], meta: cell, itemStyle: { color: colors[cell.topology] || '#8AB8FF', borderColor: '#ffffff', borderWidth: 1.2 } })) }\n  ]\n};",
+        "renderer": "canvas",
+        "themeEditor": {
+          "config": "{}",
+          "name": "default"
+        },
+        "visualEditor": {
+          "code": "return { dataset: context.editor.dataset, series: context.editor.series };",
+          "dataset": [],
+          "series": []
+        }
+      },
+      "pluginVersion": "7.2.5",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "rate"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_wilson_low{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "low"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_wilson_high{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "refId": "high"
+        }
+      ],
+      "title": "Resolution Confidence Forest",
+      "type": "volkovlabs-echarts-panel"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 40,
+  "tags": [
+    "hyperkit",
+    "hypergrid",
+    "dynamics",
+    "business-charts"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate, run_id)",
+        "includeAll": true,
+        "label": "Run Id",
+        "multi": false,
+        "name": "run_id",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate, run_id)",
+          "refId": "var-run_id"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\"}, benchmark)",
+        "includeAll": true,
+        "label": "Benchmark",
+        "multi": false,
+        "name": "benchmark",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\"}, benchmark)",
+          "refId": "var-benchmark"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\"}, generation)",
+        "includeAll": true,
+        "label": "Generation",
+        "multi": true,
+        "name": "generation",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\"}, generation)",
+          "refId": "var-generation"
+        },
+        "refresh": 2,
+        "sort": 3,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Hypergrid Dynamics",
+  "uid": "hyperkit-hypergrid-dynamics",
+  "version": 1
+}

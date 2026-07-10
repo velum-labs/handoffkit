@@ -90,6 +90,8 @@ export type { WireResponseValue } from "./wire-artifacts.js";
 export { createKernelFuseStepRunner, KERNEL_FUSE_STEP_WORKFLOW } from "./kernel-gateway.js";
 export type { FuseStepTransport } from "./kernel-gateway.js";
 export type { GraphNodeInput, KernelWorkflow, WorkflowFactory } from "./kernel.js";
+export { resolveTopology, topology, topologyHash } from "./topology-spec.js";
+export type { ResolvedTopology, TopologySpec } from "./topology-spec.js";
 export {
   artifactValue,
   candidatesFromInputs,

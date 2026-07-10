@@ -1,0 +1,11 @@
+global:
+  evaluation_interval: 1s
+  scrape_interval: 1s
+
+rule_files:
+  - /etc/prometheus/seed-rules.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]

@@ -15,6 +15,7 @@ from typing import Any
 import duckdb
 import numpy as np
 import yaml
+from hyperkit.stats import clustered_bootstrap_statistic
 
 ROOT = Path("/workspace")
 OUT = ROOT / "analysis" / "phase0"
@@ -515,16 +516,12 @@ def clustered_ci(
     seed: int = SEED,
 ) -> tuple[float, float]:
     grouped = cluster_groups(tasks, clusters)
-    keys = sorted(grouped)
-    if not keys:
-        return float("nan"), float("nan")
-    rng = np.random.default_rng(seed)
-    values = []
-    for _ in range(n_boot):
-        sampled_keys = rng.choice(keys, size=len(keys), replace=True)
-        sampled_tasks = [task for key in sampled_keys for task in grouped[key]]
-        values.append(metric(sampled_tasks))
-    return float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))
+    return clustered_bootstrap_statistic(
+        grouped,
+        metric,
+        iterations=n_boot,
+        seed=seed,
+    )
 
 
 def best_panel_headroom_ci(data: MatrixData, panel: dict[str, Any]) -> tuple[float, float]:

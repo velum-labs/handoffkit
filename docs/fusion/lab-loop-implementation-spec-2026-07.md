@@ -1,5 +1,12 @@
 # Lab Loop Implementation Spec (2026-07)
 
+> **Superseded by [Hyperkit](../hyperkit.md).** The clean-break extraction
+> deletes `python/fusionkit-lab` and moves its generic registry/orchestration
+> responsibilities into the SUT-agnostic `python/hyperkit` platform. Fusion
+> candidate banks, prompt tuning, and hill-climb logic remain in
+> `fusionkit-evals` as Hyperkit consumers. This document is retained as the
+> historical staged design; `docs/hyperkit.md` is the implemented architecture.
+
 **Status:** approved-for-implementation spec, drafted 2026-07-06. No code yet.
 **Reader:** the engineer implementing the lab loop. Assumes you have read
 `lab-loop-2026-07.md` (the process this code automates). This document says

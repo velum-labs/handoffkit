@@ -146,6 +146,30 @@ jobs:
           uv build --all-packages
           uv run --with twine python -m twine check dist/*
 
+  observability:
+    name: Hyperkit dashboard query smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Start seeded Prometheus and Grafana
+        run: docker compose -f infra/hyperkit/grafana/compose.yaml up --build -d --wait
+
+      - name: Execute every dashboard query
+        run: python scripts/validate_hyperkit_dashboards.py
+
+      - name: Show observability logs
+        if: failure()
+        run: docker compose -f infra/hyperkit/grafana/compose.yaml logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f infra/hyperkit/grafana/compose.yaml down -v
+
   docker:
     name: legacy Warrant docker compose smoke
     runs-on: ubuntu-latest
