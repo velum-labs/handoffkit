@@ -88,6 +88,14 @@ class FusionOptions(BaseModel):
         default_factory=FusionToolExecutionOptions
     )
 
+    @model_validator(mode="after")
+    def _reject_duplicate_panel_members(self) -> FusionOptions:
+        if self.panel_models is not None and len(set(self.panel_models)) != len(
+            self.panel_models
+        ):
+            raise ValueError("panel_models must not contain duplicates")
+        return self
+
 
 class FusionRequest(BaseModel):
     model: str = FUSION_DEFAULT_ALIAS

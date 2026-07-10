@@ -343,11 +343,12 @@ def test_fused_stream_terminal_usage_is_the_exact_judge_plus_synth_sum(
     assert response.status_code == 200
     frames = parse_sse(response.text)
     terminal = next(frame for frame in frames if "usage" in frame)
-    # The documented contract: the terminal SSE chunk carries the fuse step's
-    # usage (judge + synthesizer combined) for streaming cost accounting.
-    assert terminal["usage"]["prompt_tokens"] == 100 + 200
-    assert terminal["usage"]["completion_tokens"] == 20 + 40
-    assert terminal["usage"]["total_tokens"] == 300 + 60
+    # The documented contract: the terminal SSE chunk carries the whole fused
+    # turn's usage (panel members + judge + synthesizer) so a streaming client
+    # accounts the same spend as the buffered JSON response.
+    assert terminal["usage"]["prompt_tokens"] == 11 + 13 + 100 + 200
+    assert terminal["usage"]["completion_tokens"] == 3 + 5 + 20 + 40
+    assert terminal["usage"]["total_tokens"] == 14 + 18 + 120 + 240
 
 
 # --- concurrency isolation ---------------------------------------------------------------
