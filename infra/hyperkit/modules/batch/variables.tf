@@ -74,3 +74,9 @@ variable "secret_environment" {
   description = "Environment variable to Secrets Manager ARN mapping; only ARNs enter Terraform state."
   default     = {}
 }
+
+variable "permissions_boundary_arn" {
+  type        = string
+  description = "Optional permissions boundary policy ARN attached to IAM roles created by this module."
+  default     = null
+}

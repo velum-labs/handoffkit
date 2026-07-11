@@ -57,3 +57,7 @@ tags = {
   Owner      = "platform"
   CostCenter = "hyperkit"
 }
+
+# Required when deploying as a principal that may only create bounded IAM roles
+# (e.g. the Cursor Cloud Agent's cursor-agent-infra role). Leave null otherwise.
+iam_permissions_boundary_arn = "arn:aws:iam::052777341990:policy/cursor-agent-boundary"

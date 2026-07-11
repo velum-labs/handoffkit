@@ -41,3 +41,9 @@ variable "ecr_repository_arns" {
   description = "ECR repositories that runner jobs may pull sibling images from."
   default     = []
 }
+
+variable "permissions_boundary_arn" {
+  type        = string
+  description = "Optional permissions boundary policy ARN attached to IAM roles created by this module."
+  default     = null
+}

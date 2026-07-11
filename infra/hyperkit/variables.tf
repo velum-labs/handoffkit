@@ -255,3 +255,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "iam_permissions_boundary_arn" {
+  description = "Permissions boundary policy ARN attached to every IAM role this stack creates. Required when the deploying principal may only create bounded roles."
+  type        = string
+  default     = null
+}

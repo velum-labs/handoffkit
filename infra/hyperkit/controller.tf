@@ -92,6 +92,8 @@ module "controller" {
   otlp_endpoint        = module.observability.otlp_http_endpoint
   secret_environment   = local.controller_secret_environment
 
+  permissions_boundary_arn = var.iam_permissions_boundary_arn
+
   depends_on = [
     aws_s3_bucket_notification.controller_results,
     module.observability,

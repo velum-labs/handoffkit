@@ -79,3 +79,9 @@ variable "glue_database_name" {
   type        = string
   description = "Glue catalog database queried by Athena."
 }
+
+variable "permissions_boundary_arn" {
+  type        = string
+  description = "Optional permissions boundary policy ARN attached to IAM roles created by this module."
+  default     = null
+}

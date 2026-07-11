@@ -59,8 +59,9 @@ data "aws_iam_policy_document" "ecs_task_assume" {
 }
 
 resource "aws_iam_role" "execution" {
-  name               = "${var.name}-observability-execution"
-  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
+  name                 = "${var.name}-observability-execution"
+  assume_role_policy   = data.aws_iam_policy_document.ecs_task_assume.json
+  permissions_boundary = var.permissions_boundary_arn
 }
 
 resource "aws_iam_role_policy_attachment" "execution" {
@@ -82,8 +83,9 @@ resource "aws_iam_role_policy" "execution_secret" {
 }
 
 resource "aws_iam_role" "task" {
-  name               = "${var.name}-observability-task"
-  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
+  name                 = "${var.name}-observability-task"
+  assume_role_policy   = data.aws_iam_policy_document.ecs_task_assume.json
+  permissions_boundary = var.permissions_boundary_arn
 }
 
 data "aws_iam_policy_document" "task" {

@@ -60,6 +60,7 @@ module "secrets" {
   external_secret_arns      = local.readable_external_secret_arns
   artifact_bucket_arn       = module.storage.bucket_arn
   ecr_repository_arns       = [module.registry.runner_repository_arn]
+  permissions_boundary_arn  = var.iam_permissions_boundary_arn
 }
 
 module "batch" {
@@ -80,6 +81,8 @@ module "batch" {
   job_timeout_seconds  = var.batch_job_timeout_seconds
   otlp_endpoint        = module.observability.otlp_http_endpoint
   secret_environment   = local.runner_secret_environment
+
+  permissions_boundary_arn = var.iam_permissions_boundary_arn
 }
 
 module "observability" {
@@ -101,6 +104,7 @@ module "observability" {
   artifact_bucket_arn       = module.storage.bucket_arn
   artifact_bucket_name      = module.storage.bucket_name
   glue_database_name        = module.storage.glue_database_name
+  permissions_boundary_arn  = var.iam_permissions_boundary_arn
 }
 
 resource "aws_budgets_budget" "monthly" {

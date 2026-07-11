@@ -31,8 +31,9 @@ data "aws_iam_policy_document" "job_assume" {
 }
 
 resource "aws_iam_role" "job" {
-  name               = "${var.name}-batch-job"
-  assume_role_policy = data.aws_iam_policy_document.job_assume.json
+  name                 = "${var.name}-batch-job"
+  assume_role_policy   = data.aws_iam_policy_document.job_assume.json
+  permissions_boundary = var.permissions_boundary_arn
 }
 
 data "aws_iam_policy_document" "job" {
@@ -131,8 +132,9 @@ data "aws_iam_policy_document" "instance_assume" {
 }
 
 resource "aws_iam_role" "instance" {
-  name               = "${var.name}-batch-instance"
-  assume_role_policy = data.aws_iam_policy_document.instance_assume.json
+  name                 = "${var.name}-batch-instance"
+  assume_role_policy   = data.aws_iam_policy_document.instance_assume.json
+  permissions_boundary = var.permissions_boundary_arn
 }
 
 resource "aws_iam_role_policy_attachment" "instance_ecs" {

@@ -11,8 +11,9 @@ data "aws_iam_policy_document" "batch_assume" {
 }
 
 resource "aws_iam_role" "batch_service" {
-  name               = "${var.name}-batch-service"
-  assume_role_policy = data.aws_iam_policy_document.batch_assume.json
+  name                 = "${var.name}-batch-service"
+  assume_role_policy   = data.aws_iam_policy_document.batch_assume.json
+  permissions_boundary = var.permissions_boundary_arn
 }
 
 resource "aws_iam_role_policy_attachment" "batch_service" {
@@ -33,8 +34,9 @@ data "aws_iam_policy_document" "spot_assume" {
 }
 
 resource "aws_iam_role" "spot_fleet" {
-  name               = "${var.name}-spot-fleet"
-  assume_role_policy = data.aws_iam_policy_document.spot_assume.json
+  name                 = "${var.name}-spot-fleet"
+  assume_role_policy   = data.aws_iam_policy_document.spot_assume.json
+  permissions_boundary = var.permissions_boundary_arn
 }
 
 resource "aws_iam_role_policy_attachment" "spot_fleet" {
