@@ -174,6 +174,14 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export type { Gateway, GatewayOptions } from "./server.js";`
 - `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
 - `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions, CodexStockEntry } from "./codex-relay.js";`
+- `export { defaultSubscriptionCredentialPath, defaultSubscriptionPoolDirectory, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, subscriptionCredentialLabel } from "./subscription-credentials.js";`
+- `export { subscriptionProvider } from "./subscription-provider.js";`
+- `export type { SubscriptionProvider } from "./subscription-provider.js";`
+- `export { RateLimitTracker, SubscriptionPool, SubscriptionPoolExhaustedError } from "./subscription-pool.js";`
+- `export type { SubscriptionPoolOptions } from "./subscription-pool.js";`
+- `export { AnthropicBackendRelay, forwardRelayHeaders, RelayOnlyBackend } from "./subscription-relay.js";`
+- `export type { AnthropicRelayOptions, SubscriptionRelay, SubscriptionRelayDialect } from "./subscription-relay.js";`
+- `export type { AccountLimits, CreditSnapshot, RateLimitWindow, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionPoolSnapshot, SubscriptionPoolStrategy } from "./subscription-types.js";`
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend, PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";`
 - `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { FusionBackend } from "./fusion-backend.js";`
@@ -298,6 +306,9 @@ it without cycles.
 - `export function providerDiscovery(provider: string): ProviderDiscovery | undefined ...`
   Live model-discovery capability for a provider, or undefined.
 - `export type SubscriptionMode ...`
+- `export type SubscriptionOAuthInfo ...`
+- `export type SubscriptionRateLimitInfo ...`
+- `export type SubscriptionAdminInfo ...`
 - `export type SubscriptionInfo ...`
 - `export const SUBSCRIPTIONS: Readonly<Record<SubscriptionMode, SubscriptionInfo>> ...`
 - `export function subscriptionInfo(mode: SubscriptionMode): SubscriptionInfo ...`
