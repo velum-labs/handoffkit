@@ -10,7 +10,7 @@ import {
   AnthropicBackendRelay,
   RelayOnlyBackend,
   startGateway,
-  SubscriptionPool,
+  SubscriptionAccountSet,
   subscriptionProvider
 } from "../index.js";
 
@@ -102,12 +102,12 @@ test("Anthropic relay strips ingress auth and transparently rotates pooled crede
   const address = upstream.address();
   assert.ok(typeof address === "object" && address !== null);
 
-  const pool = await SubscriptionPool.open(subscriptionProvider("claude-code"), {
+  const accounts = await SubscriptionAccountSet.open(subscriptionProvider("claude-code"), {
     mode: "claude-code",
-    directory
+    source: { kind: "directory", path: directory }
   });
   const relay = new AnthropicBackendRelay({
-    pool,
+    accounts,
     backendUrl: `http://127.0.0.1:${address.port}`
   });
   const gateway = await startGateway({
@@ -154,9 +154,11 @@ test("Anthropic relay strips ingress auth and transparently rotates pooled crede
       headers: { authorization: "Bearer proxy-secret" }
     });
     const status = (await usage.json()) as {
-      pools: Array<{ members: Array<{ id: string; coolingUntil?: number }> }>;
+      accountSets: Array<{ members: Array<{ id: string; coolingUntil?: number }> }>;
     };
-    assert.ok(status.pools[0]?.members.find((member) => member.id === "a")?.coolingUntil);
+    assert.ok(
+      status.accountSets[0]?.members.find((member) => member.id === "a")?.coolingUntil
+    );
   } finally {
     await gateway.close();
     await closeServer(upstream);

@@ -17,7 +17,7 @@ import type {
 } from "./subscription-relay.js";
 import type {
   RateLimitWindow,
-  SubscriptionPoolSnapshot
+  SubscriptionAccountSetSnapshot
 } from "./subscription-types.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
@@ -82,13 +82,13 @@ export type Gateway = {
   close(): Promise<void>;
 };
 
-function codexWindow(snapshot: SubscriptionPoolSnapshot, name: string): RateLimitWindow | undefined {
+function codexWindow(snapshot: SubscriptionAccountSetSnapshot, name: string): RateLimitWindow | undefined {
   const member = snapshot.members.find((candidate) => candidate.active) ?? snapshot.members[0];
   if (member?.limits === undefined) return undefined;
   return Object.entries(member.limits.windows).find(([key]) => key.endsWith(`:${name}`) || key === name)?.[1];
 }
 
-function codexUsagePayload(snapshot: SubscriptionPoolSnapshot): Record<string, unknown> {
+function codexUsagePayload(snapshot: SubscriptionAccountSetSnapshot): Record<string, unknown> {
   const member = snapshot.members.find((candidate) => candidate.active) ?? snapshot.members[0];
   const primary = codexWindow(snapshot, "primary");
   const secondary = codexWindow(snapshot, "secondary");
@@ -126,14 +126,17 @@ function codexUsagePayload(snapshot: SubscriptionPoolSnapshot): Record<string, u
 export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const host = options.host ?? "127.0.0.1";
   const { backend, authToken, provenance } = options;
-  // With a gateway auth token, the Authorization header is the gateway's own
-  // bearer, never a relayable ChatGPT token — the relay cannot work.
-  const codexRelay =
-    authToken === undefined || options.codexRelay?.isPooled === true
-      ? options.codexRelay
-      : undefined;
+  // Client-forwarded Codex auth and server-owned subscription accounts are
+  // distinct trust models. Gateway auth disables only the client-forwarded
+  // relay; a server-owned account set remains available behind the proxy key.
+  const codexClientRelay = authToken === undefined ? options.codexRelay : undefined;
   const anthropicRelay = options.subscriptionRelays?.anthropic;
-  const codexSubscriptionRelay = options.subscriptionRelays?.codex ?? codexRelay;
+  const codexSubscriptionRelay = options.subscriptionRelays?.codex;
+  const codexCatalogRelay =
+    codexSubscriptionRelay instanceof CodexBackendRelay
+      ? codexSubscriptionRelay
+      : codexClientRelay;
+  const codexRequestRelay = codexSubscriptionRelay ?? codexClientRelay;
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -163,7 +166,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 
     if (method === "GET" && path === "/usage") {
       writeJson(res, 200, {
-        pools: [anthropicRelay?.snapshot?.(), codexSubscriptionRelay?.snapshot?.()].filter(
+        accountSets: [anthropicRelay?.snapshot?.(), codexSubscriptionRelay?.snapshot?.()].filter(
           (snapshot) => snapshot !== undefined
         )
       });
@@ -195,11 +198,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel, backend.listModelIds?.()));
         return;
       }
-      if (codexRelay !== undefined) {
+      if (codexCatalogRelay !== undefined) {
         // Codex parses the `models` key (its ModelInfo catalog — this is what
         // drives its /model picker); OpenAI-shape clients read `data`. Serving
         // both keys on one response keeps every client working.
-        const merged = await codexRelay.mergedCatalog(req.headers, url.search);
+        const merged = await codexCatalogRelay.mergedCatalog(req.headers, url.search);
         if (merged !== undefined) {
           const base = (await (await backend.models()).json()) as {
             data?: Array<{ id: string } & Record<string, unknown>>;
@@ -207,7 +210,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           if (merged.etag !== undefined) res.setHeader("etag", merged.etag);
           writeJson(res, 200, {
             object: "list",
-            data: codexRelay.mergeDataIds(base.data ?? [], merged.models),
+            data: codexCatalogRelay.mergeDataIds(base.data ?? [], merged.models),
             models: merged.models
           });
           return;
@@ -357,8 +360,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // folding it into the fused default.
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
       if (
-        codexSubscriptionRelay !== undefined &&
-        codexSubscriptionRelay.shouldRelay(req.headers, requestedModel, (model) =>
+        codexRequestRelay !== undefined &&
+        codexRequestRelay.shouldRelay(req.headers, requestedModel, (model) =>
           backend.servesModel?.(model) ?? false
         )
       ) {
@@ -367,7 +370,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           body,
           defaultModel: backend.defaultModel,
           invoke: (_callId, signal) =>
-            codexSubscriptionRelay.relay(req.headers, body, signal)
+            codexRequestRelay.relay(req.headers, body, signal)
         });
         return;
       }
@@ -406,7 +409,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // leaking it when the gateway shuts down.
       await backend.close?.();
       const relays = new Set(
-        [codexRelay, anthropicRelay, codexSubscriptionRelay].filter(
+        [codexClientRelay, anthropicRelay, codexSubscriptionRelay].filter(
           (relay): relay is SubscriptionRelay => relay !== undefined
         )
       );

@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 import {
   RateLimitTracker,
-  SubscriptionPool,
+  SubscriptionAccountSet,
   type AccountLimits,
   type SubscriptionCredential,
   type SubscriptionProvider
@@ -81,9 +81,9 @@ test("pool transparently rotates from a quota-exhausted member", async () => {
   const directory = mkdtempSync(join(tmpdir(), "fusionkit-pool-"));
   writeMember(directory, "a", { accessToken: "token-a" });
   writeMember(directory, "b", { accessToken: "token-b" });
-  const pool = await SubscriptionPool.open(fakeProvider({ refreshes: 0 }), {
+  const pool = await SubscriptionAccountSet.open(fakeProvider({ refreshes: 0 }), {
     mode: "codex",
-    directory,
+    source: { kind: "directory", path: directory },
     strategy: "sticky"
   });
   const seen: string[] = [];
@@ -113,9 +113,9 @@ test("pool proactively moves away from a member over the utilization threshold",
   const directory = mkdtempSync(join(tmpdir(), "fusionkit-pool-"));
   writeMember(directory, "a", { accessToken: "token-a" });
   writeMember(directory, "b", { accessToken: "token-b" });
-  const pool = await SubscriptionPool.open(fakeProvider({ refreshes: 0 }), {
+  const pool = await SubscriptionAccountSet.open(fakeProvider({ refreshes: 0 }), {
     mode: "codex",
-    directory,
+    source: { kind: "directory", path: directory },
     strategy: "sticky",
     switchThreshold: 0.9
   });
@@ -142,9 +142,9 @@ test("pool absorbs a short throttle on the same account instead of rotating the 
   const directory = mkdtempSync(join(tmpdir(), "fusionkit-pool-"));
   writeMember(directory, "a", { accessToken: "token-a" });
   writeMember(directory, "b", { accessToken: "token-b" });
-  const pool = await SubscriptionPool.open(fakeProvider({ refreshes: 0 }), {
+  const pool = await SubscriptionAccountSet.open(fakeProvider({ refreshes: 0 }), {
     mode: "codex",
-    directory
+    source: { kind: "directory", path: directory }
   });
   const seen: string[] = [];
   try {
@@ -173,9 +173,9 @@ test("pool coalesces near-expiry credential refresh before serving", async () =>
     expiresAt: Date.now() / 1000 - 1
   });
   const state = { refreshes: 0 };
-  const pool = await SubscriptionPool.open(fakeProvider(state), {
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
     mode: "codex",
-    directory
+    source: { kind: "directory", path: directory }
   });
   try {
     const response = await pool.execute("gpt-5.3-codex", (credential: SubscriptionCredential) =>

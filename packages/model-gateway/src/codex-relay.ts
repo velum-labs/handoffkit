@@ -7,19 +7,22 @@ import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
 
 import type { FusionGatewayLogger } from "./logger.js";
 import { defaultFusionGatewayLogger } from "./logger.js";
-import type { SubscriptionPool } from "./subscription-pool.js";
+import type { SubscriptionAccountSet } from "./subscription-pool.js";
 import { subscriptionProvider } from "./subscription-provider.js";
 import { forwardRelayHeaders } from "./subscription-relay.js";
 import type { SubscriptionRelay } from "./subscription-relay.js";
-import type { SubscriptionPoolSnapshot } from "./subscription-types.js";
+import type { SubscriptionAccountSetSnapshot } from "./subscription-types.js";
 
 /**
  * The Codex backend relay: lets a Codex client keep its own stock models while
  * pointed at the FusionKit gateway as its (single) model provider.
  *
- * Codex attaches the user's own ChatGPT login (bearer token + account id) to
- * every request it sends its configured provider — i.e. this gateway. The
- * relay uses that:
+ * The relay supports two explicit credential trust models:
+ *
+ * - `client` forwards the ChatGPT login Codex attached to the request.
+ * - `accounts` selects from a server-owned {@link SubscriptionAccountSet}.
+ *
+ * In either mode:
  *
  * - `GET /v1/models`: forwarded to the ChatGPT Codex backend with the client's
  *   relayed auth, and the live stock catalog is merged behind the fusion/panel
@@ -32,8 +35,8 @@ import type { SubscriptionPoolSnapshot } from "./subscription-types.js";
  *   backend, so a stock model pick behaves bit-for-bit like plain Codex —
  *   same auth, same billing, same responses.
  *
- * The relay never stores or mints credentials: it only forwards the auth
- * material the client itself attached to the request.
+ * Client mode never stores or mints credentials. Account-set mode strips
+ * ingress auth and injects the selected managed credential.
  */
 
 /** One model catalog entry in Codex's own `ModelInfo` wire shape. */
@@ -77,12 +80,13 @@ export type CodexRelayOptions = {
   /** Upstream fetch timeout (ms). Codex itself caps the whole refresh at 5s. */
   timeoutMs?: number;
   logger?: FusionGatewayLogger;
-  /**
-   * Optional server-owned subscription pool. When set, client auth is stripped
-   * and a selected pool member is injected for catalog and Responses calls.
-   */
-  pool?: SubscriptionPool;
+  /** Credential trust model. Defaults to forwarding the Codex client's auth. */
+  auth?: CodexRelayAuthSource;
 };
+
+export type CodexRelayAuthSource =
+  | { kind: "client" }
+  | { kind: "accounts"; accounts: SubscriptionAccountSet };
 
 /** ChatGPT auth material relayed from the client's own request. */
 export type CodexRelayAuth = {
@@ -117,7 +121,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
   readonly #fallbackStock: () => CodexCatalogEntry[];
   readonly #timeoutMs: number;
   readonly #logger: FusionGatewayLogger;
-  readonly #pool: SubscriptionPool | undefined;
+  readonly #auth: CodexRelayAuthSource;
 
   constructor(options: CodexRelayOptions) {
     this.#backendUrl = trimTrailingSlashes(options.backendUrl ?? providerDefaultBaseUrl("codex") ?? "");
@@ -125,11 +129,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
     this.#fallbackStock = options.fallbackStock ?? (() => []);
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_RELAY_TIMEOUT_MS;
     this.#logger = options.logger ?? defaultFusionGatewayLogger;
-    this.#pool = options.pool;
-  }
-
-  get isPooled(): boolean {
-    return this.#pool !== undefined;
+    this.#auth = options.auth ?? { kind: "client" };
   }
 
   /**
@@ -144,7 +144,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
     search: string
   ): Promise<{ models: CodexCatalogEntry[]; etag?: string } | undefined> {
     const auth = codexRelayAuth(headers);
-    if (auth !== undefined || this.#pool !== undefined) {
+    if (auth !== undefined || this.#auth.kind === "accounts") {
       try {
         const upstream = await this.#fetchUpstreamModels(headers, search);
         const template = upstream.models[0];
@@ -183,9 +183,9 @@ export class CodexBackendRelay implements SubscriptionRelay {
       });
     };
     const response =
-      this.#pool === undefined
+      this.#auth.kind === "client"
         ? await request()
-        : await this.#pool.execute(undefined, (credential) =>
+        : await this.#auth.accounts.execute(undefined, (credential) =>
             request(subscriptionProvider("codex").authHeaders(credential))
           );
     if (!response.ok) {
@@ -216,7 +216,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
   ): boolean {
     if (model === undefined || model.length === 0) return false;
     if (servesLocally(model)) return false;
-    return this.#pool !== undefined || codexRelayAuth(headers) !== undefined;
+    return this.#auth.kind === "accounts" || codexRelayAuth(headers) !== undefined;
   }
 
   shouldRelay(
@@ -250,7 +250,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
         ...(signal !== undefined ? { signal } : {})
       });
     };
-    if (this.#pool === undefined) return request();
+    if (this.#auth.kind === "client") return request();
     const model =
       typeof body === "object" &&
       body !== null &&
@@ -258,7 +258,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
       typeof body.model === "string"
         ? body.model
         : undefined;
-    return this.#pool.execute(model, (credential) =>
+    return this.#auth.accounts.execute(model, (credential) =>
       request(subscriptionProvider("codex").authHeaders(credential))
     );
   }
@@ -271,12 +271,12 @@ export class CodexBackendRelay implements SubscriptionRelay {
     return this.relayResponses(headers, body, signal);
   }
 
-  snapshot(): SubscriptionPoolSnapshot | undefined {
-    return this.#pool?.snapshot();
+  snapshot(): SubscriptionAccountSetSnapshot | undefined {
+    return this.#auth.kind === "accounts" ? this.#auth.accounts.snapshot() : undefined;
   }
 
   close(): Promise<void> | undefined {
-    return this.#pool?.close();
+    return this.#auth.kind === "accounts" ? this.#auth.accounts.close() : undefined;
   }
 
   /** Merge relayed stock slugs into an OpenAI-shape `data` model list. */

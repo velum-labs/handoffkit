@@ -6,8 +6,8 @@ import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 import type { Backend } from "./backend.js";
-import type { SubscriptionPool } from "./subscription-pool.js";
-import type { SubscriptionPoolSnapshot } from "./subscription-types.js";
+import type { SubscriptionAccountSet } from "./subscription-pool.js";
+import type { SubscriptionAccountSetSnapshot } from "./subscription-types.js";
 
 export type SubscriptionRelayDialect = "anthropic" | "codex";
 
@@ -29,7 +29,7 @@ export type SubscriptionRelay = {
     body: AnthropicRequest,
     signal?: AbortSignal
   ): Promise<Response>;
-  snapshot?(): SubscriptionPoolSnapshot | undefined;
+  snapshot?(): SubscriptionAccountSetSnapshot | undefined;
   close?(): Promise<void> | void;
 };
 
@@ -63,7 +63,7 @@ export function forwardRelayHeaders(headers: IncomingHttpHeaders): Record<string
 }
 
 export type AnthropicRelayOptions = {
-  pool: SubscriptionPool;
+  accounts: SubscriptionAccountSet;
   backendUrl?: string;
 };
 
@@ -135,11 +135,11 @@ export class RelayOnlyBackend implements Backend {
 
 export class AnthropicBackendRelay implements SubscriptionRelay {
   readonly dialect = "anthropic" as const;
-  readonly #pool: SubscriptionPool;
+  readonly #accounts: SubscriptionAccountSet;
   readonly #backendUrl: string;
 
   constructor(options: AnthropicRelayOptions) {
-    this.#pool = options.pool;
+    this.#accounts = options.accounts;
     this.#backendUrl = trimTrailingSlashes(
       options.backendUrl ?? providerDefaultBaseUrl("anthropic") ?? "https://api.anthropic.com"
     );
@@ -158,7 +158,7 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     body: AnthropicRequest,
     signal?: AbortSignal
   ): Promise<Response> {
-    return this.#pool.execute(body.model, (credential) => {
+    return this.#accounts.execute(body.model, (credential) => {
       return fetch(`${this.#backendUrl}/v1/messages`, {
         method: "POST",
         headers: this.#upstreamHeaders(headers, credential.accessToken),
@@ -173,7 +173,7 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     search: string,
     signal?: AbortSignal
   ): Promise<Response> {
-    return this.#pool.execute(undefined, (credential) =>
+    return this.#accounts.execute(undefined, (credential) =>
       fetch(`${this.#backendUrl}/v1/models${search}`, {
         headers: this.#upstreamHeaders(headers, credential.accessToken),
         ...(signal !== undefined ? { signal } : {})
@@ -186,7 +186,7 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     body: AnthropicRequest,
     signal?: AbortSignal
   ): Promise<Response> {
-    return this.#pool.execute(body.model, (credential) =>
+    return this.#accounts.execute(body.model, (credential) =>
       fetch(`${this.#backendUrl}/v1/messages/count_tokens`, {
         method: "POST",
         headers: this.#upstreamHeaders(headers, credential.accessToken),
@@ -196,12 +196,12 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     );
   }
 
-  snapshot(): SubscriptionPoolSnapshot {
-    return this.#pool.snapshot();
+  snapshot(): SubscriptionAccountSetSnapshot {
+    return this.#accounts.snapshot();
   }
 
   close(): Promise<void> {
-    return this.#pool.close();
+    return this.#accounts.close();
   }
 
   #upstreamHeaders(

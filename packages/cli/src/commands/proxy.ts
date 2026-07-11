@@ -11,17 +11,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
-  AnthropicBackendRelay,
-  CodexBackendRelay,
-  defaultSubscriptionPoolDirectory,
   enrollCurrentSubscription,
+  openSubscriptionRelays,
   RelayOnlyBackend,
   startGateway,
-  SubscriptionPool,
-  subscriptionProvider,
-  type SubscriptionPoolSnapshot,
-  type SubscriptionPoolStrategy,
-  type SubscriptionRelay
+  type SubscriptionAccountSetSnapshot,
+  type SubscriptionSelectionStrategy
 } from "@fusionkit/model-gateway";
 import type { SubscriptionMode } from "@fusionkit/registry";
 import { registerCleanup } from "@fusionkit/runtime-utils";
@@ -81,7 +76,7 @@ function parseMode(value: string): SubscriptionMode {
   throw new Error("provider must be claude-code or codex");
 }
 
-function parseStrategy(value: string): SubscriptionPoolStrategy {
+function parseStrategy(value: string): SubscriptionSelectionStrategy {
   if (value === "sticky" || value === "round_robin" || value === "capacity_weighted") {
     return value;
   }
@@ -96,20 +91,13 @@ function parseNumber(value: string, label: string, options: { min: number; max: 
   return parsed;
 }
 
-function codexCatalog(
-  _template: Record<string, unknown>,
-  stock: readonly Record<string, unknown>[]
-): Record<string, unknown>[] {
-  return [...stock];
-}
-
 function usageBar(utilization: number): string {
   const width = 20;
   const filled = Math.round(Math.max(0, Math.min(1, utilization)) * width);
   return `[${"#".repeat(filled)}${"-".repeat(width - filled)}] ${(utilization * 100).toFixed(1)}%`;
 }
 
-function renderSnapshots(snapshots: SubscriptionPoolSnapshot[]): string {
+function renderSnapshots(snapshots: SubscriptionAccountSetSnapshot[]): string {
   const lines: string[] = [];
   for (const pool of snapshots) {
     lines.push(`${pool.mode} (${pool.strategy}, switch at ${(pool.switchThreshold * 100).toFixed(0)}%)`);
@@ -138,21 +126,23 @@ function renderSnapshots(snapshots: SubscriptionPoolSnapshot[]): string {
 
 async function readLiveUsage(): Promise<{
   runtime?: ProxyRuntime;
-  pools: SubscriptionPoolSnapshot[];
+  accountSets: SubscriptionAccountSetSnapshot[];
 }> {
   const runtime = readJson<ProxyRuntime>(PROXY_RUNTIME_PATH);
   const config = readJson<ProxyConfig>(PROXY_CONFIG_PATH);
-  if (runtime === undefined || config === undefined) return { pools: [] };
+  if (runtime === undefined || config === undefined) return { accountSets: [] };
   try {
     const response = await fetch(`${runtime.url}/usage`, {
       headers: { authorization: `Bearer ${config.token}` },
       signal: AbortSignal.timeout(3000)
     });
-    if (!response.ok) return { runtime, pools: [] };
-    const payload = (await response.json()) as { pools?: SubscriptionPoolSnapshot[] };
-    return { runtime, pools: payload.pools ?? [] };
+    if (!response.ok) return { runtime, accountSets: [] };
+    const payload = (await response.json()) as {
+      accountSets?: SubscriptionAccountSetSnapshot[];
+    };
+    return { runtime, accountSets: payload.accountSets ?? [] };
   } catch {
-    return { runtime, pools: [] };
+    return { runtime, accountSets: [] };
   }
 }
 
@@ -170,35 +160,22 @@ async function serveProxy(options: ProxyServeOptions, command: Command): Promise
     max: 86_400
   });
   const config = proxyConfig(options.authToken);
-  const relays: Partial<Record<"anthropic" | "codex", SubscriptionRelay>> = {};
-
-  const claudePool = await SubscriptionPool.open(subscriptionProvider("claude-code"), {
-    mode: "claude-code",
-    directory: defaultSubscriptionPoolDirectory("claude-code"),
+  const policy = {
+    source: { kind: "auto" as const },
     strategy,
     switchThreshold,
     ...(probeSeconds > 0 ? { probeIntervalMs: probeSeconds * 1000 } : {})
+  };
+  const { relays } = await openSubscriptionRelays({
+    accounts: {
+      "claude-code": policy,
+      codex: policy
+    }
   });
-  if (claudePool.size > 0) relays.anthropic = new AnthropicBackendRelay({ pool: claudePool });
-  else await claudePool.close();
-
-  const codexPool = await SubscriptionPool.open(subscriptionProvider("codex"), {
-    mode: "codex",
-    directory: defaultSubscriptionPoolDirectory("codex"),
-    strategy,
-    switchThreshold,
-    ...(probeSeconds > 0 ? { probeIntervalMs: probeSeconds * 1000 } : {})
-  });
-  const codexRelay =
-    codexPool.size > 0
-      ? new CodexBackendRelay({ catalog: codexCatalog, pool: codexPool })
-      : undefined;
-  if (codexRelay !== undefined) relays.codex = codexRelay;
-  else await codexPool.close();
 
   if (relays.anthropic === undefined && relays.codex === undefined) {
     throw new Error(
-      "no subscription accounts are enrolled; run `fusionkit proxy add claude-code` or `fusionkit proxy add codex`"
+      "no subscription accounts are available; sign in with `claude` or `codex login`, or enroll an additional account with `fusionkit proxy add`"
     );
   }
 
@@ -207,7 +184,6 @@ async function serveProxy(options: ProxyServeOptions, command: Command): Promise
     host,
     port,
     authToken: config.token,
-    ...(codexRelay !== undefined ? { codexRelay } : {}),
     subscriptionRelays: relays
   });
   const runtime: ProxyRuntime = {
@@ -299,7 +275,9 @@ export function registerProxy(program: Command): void {
         `proxy ${status.runtime.url} pid=${status.runtime.pid} started=${status.runtime.startedAt}`
       );
       ctx.presenter.line(
-        status.pools.length > 0 ? renderSnapshots(status.pools) : "usage unavailable"
+        status.accountSets.length > 0
+          ? renderSnapshots(status.accountSets)
+          : "usage unavailable"
       );
     });
 

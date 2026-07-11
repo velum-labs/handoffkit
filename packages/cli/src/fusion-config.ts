@@ -31,7 +31,8 @@ import { join } from "node:path";
 
 import type {
   OnRateLimitPolicy,
-  SubscriptionPoolStrategy
+  SubscriptionAccountSource,
+  SubscriptionSelectionStrategy
 } from "@fusionkit/model-gateway";
 import { DEFAULT_ENSEMBLE_NAME } from "@fusionkit/registry";
 import type { SubscriptionMode } from "@fusionkit/registry";
@@ -85,12 +86,13 @@ export const PROMPT_CONFIG_KEY: Record<PromptId, string> = {
 
 export type PromptOverrides = Partial<Record<PromptId, string>>;
 
-export type SubscriptionPoolConfig = {
-  directory?: string;
-  strategy?: SubscriptionPoolStrategy;
+export type SubscriptionAccountConfig = {
+  source?: SubscriptionAccountSource;
+  strategy?: SubscriptionSelectionStrategy;
   switchThreshold?: number;
   probeIntervalMs?: number;
 };
+
 
 /**
  * One named ensemble: its panel, judge, synthesizer, and (hydrated at load
@@ -131,8 +133,8 @@ export type FusionConfig = {
   port?: number | null;
   /** WS5 rate-limit / credit handoff policy for vendor passthrough models. */
   onRateLimit?: OnRateLimitPolicy;
-  /** Optional provider-native subscription pools consumed by the model gateway. */
-  subscriptionPools?: Partial<Record<SubscriptionMode, SubscriptionPoolConfig>>;
+  /** Optional provider-native subscription account sets consumed by the gateway. */
+  subscriptionAccounts?: Partial<Record<SubscriptionMode, SubscriptionAccountConfig>>;
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
@@ -217,31 +219,89 @@ function optionalK(value: unknown, path: string): number | undefined {
   return value;
 }
 
-function validateSubscriptionPools(
-  value: unknown,
-  source: string
-): Partial<Record<SubscriptionMode, SubscriptionPoolConfig>> {
-  if (!isRecord(value)) {
-    throw new FusionConfigError(`${source}: subscriptionPools must be an object`);
+function optionalSourcePath(value: unknown, path: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new FusionConfigError(`${path} must be a non-empty string`);
   }
-  const result: Partial<Record<SubscriptionMode, SubscriptionPoolConfig>> = {};
+  return value;
+}
+
+function validateSubscriptionAccountSource(
+  value: unknown,
+  path: string
+): SubscriptionAccountSource {
+  if (!isRecord(value) || typeof value.kind !== "string") {
+    throw new FusionConfigError(`${path} must be an account source object`);
+  }
+  switch (value.kind) {
+    case "auto":
+    case "canonical":
+      return {
+        kind: value.kind,
+        ...(optionalSourcePath(value.directory, `${path}.directory`) !== undefined
+          ? { directory: value.directory as string }
+          : {}),
+        ...(optionalSourcePath(value.canonicalPath, `${path}.canonicalPath`) !== undefined
+          ? { canonicalPath: value.canonicalPath as string }
+          : {})
+      };
+    case "directory": {
+      const sourcePath = optionalSourcePath(value.path, `${path}.path`);
+      if (sourcePath === undefined) {
+        throw new FusionConfigError(`${path}.path is required`);
+      }
+      return { kind: "directory", path: sourcePath };
+    }
+    case "paths": {
+      if (
+        !Array.isArray(value.paths) ||
+        value.paths.length === 0 ||
+        !value.paths.every((entry) => typeof entry === "string" && entry.length > 0)
+      ) {
+        throw new FusionConfigError(`${path}.paths must be a non-empty string array`);
+      }
+      const stateDirectory = optionalSourcePath(
+        value.stateDirectory,
+        `${path}.stateDirectory`
+      );
+      return {
+        kind: "paths",
+        paths: value.paths as string[],
+        ...(stateDirectory !== undefined ? { stateDirectory } : {})
+      };
+    }
+    default:
+      throw new FusionConfigError(
+        `${path}.kind must be auto, canonical, directory, or paths`
+      );
+  }
+}
+
+function validateSubscriptionAccounts(
+  value: unknown,
+  source: string,
+  field: "subscriptionAccounts"
+): Partial<Record<SubscriptionMode, SubscriptionAccountConfig>> {
+  if (!isRecord(value)) {
+    throw new FusionConfigError(`${source}: ${field} must be an object`);
+  }
+  const result: Partial<Record<SubscriptionMode, SubscriptionAccountConfig>> = {};
   for (const [mode, raw] of Object.entries(value)) {
     if (mode !== "claude-code" && mode !== "codex") {
       throw new FusionConfigError(
-        `${source}: subscriptionPools key must be claude-code or codex`
+        `${source}: ${field} key must be claude-code or codex`
       );
     }
     if (!isRecord(raw)) {
-      throw new FusionConfigError(`${source}: subscriptionPools.${mode} must be an object`);
+      throw new FusionConfigError(`${source}: ${field}.${mode} must be an object`);
     }
-    const config: SubscriptionPoolConfig = {};
-    if (raw.directory !== undefined) {
-      if (typeof raw.directory !== "string" || raw.directory.length === 0) {
-        throw new FusionConfigError(
-          `${source}: subscriptionPools.${mode}.directory must be a non-empty string`
-        );
-      }
-      config.directory = raw.directory;
+    const config: SubscriptionAccountConfig = {};
+    if (raw.source !== undefined) {
+      config.source = validateSubscriptionAccountSource(
+        raw.source,
+        `${source}: ${field}.${mode}.source`
+      );
     }
     if (raw.strategy !== undefined) {
       if (
@@ -250,7 +310,7 @@ function validateSubscriptionPools(
         raw.strategy !== "capacity_weighted"
       ) {
         throw new FusionConfigError(
-          `${source}: subscriptionPools.${mode}.strategy must be sticky, round_robin, or capacity_weighted`
+          `${source}: ${field}.${mode}.strategy must be sticky, round_robin, or capacity_weighted`
         );
       }
       config.strategy = raw.strategy;
@@ -263,7 +323,7 @@ function validateSubscriptionPools(
         raw.switchThreshold > 1
       ) {
         throw new FusionConfigError(
-          `${source}: subscriptionPools.${mode}.switchThreshold must be in (0, 1]`
+          `${source}: ${field}.${mode}.switchThreshold must be in (0, 1]`
         );
       }
       config.switchThreshold = raw.switchThreshold;
@@ -275,7 +335,7 @@ function validateSubscriptionPools(
         raw.probeIntervalMs < 60_000
       ) {
         throw new FusionConfigError(
-          `${source}: subscriptionPools.${mode}.probeIntervalMs must be at least 60000`
+          `${source}: ${field}.${mode}.probeIntervalMs must be at least 60000`
         );
       }
       config.probeIntervalMs = raw.probeIntervalMs;
@@ -508,8 +568,12 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
     }
     config.onRateLimit = raw.onRateLimit as OnRateLimitPolicy;
   }
-  if (raw.subscriptionPools !== undefined) {
-    config.subscriptionPools = validateSubscriptionPools(raw.subscriptionPools, source);
+  if (raw.subscriptionAccounts !== undefined) {
+    config.subscriptionAccounts = validateSubscriptionAccounts(
+      raw.subscriptionAccounts,
+      source,
+      "subscriptionAccounts"
+    );
   }
   if (raw.budgetUsd !== undefined) {
     if (typeof raw.budgetUsd !== "number" || !Number.isFinite(raw.budgetUsd) || raw.budgetUsd <= 0) {

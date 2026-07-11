@@ -1,9 +1,7 @@
 import {
   chmodSync,
   existsSync,
-  mkdirSync,
   readFileSync,
-  readdirSync,
   renameSync,
   writeFileSync
 } from "node:fs";
@@ -12,25 +10,28 @@ import { join } from "node:path";
 import type { SubscriptionMode } from "@fusionkit/registry";
 
 import { isFailoverWorthy } from "./fusion-failover.js";
+import { resolveSubscriptionAccounts } from "./subscription-account-source.js";
+import type { SubscriptionAccountSource } from "./subscription-account-source.js";
 import { subscriptionCredentialLabel } from "./subscription-credentials.js";
 import type { SubscriptionProvider } from "./subscription-provider.js";
 import type {
   AccountLimits,
   SubscriptionCredential,
   SubscriptionMemberStatus,
-  SubscriptionPoolSnapshot,
-  SubscriptionPoolStrategy
+  SubscriptionAccountSetSnapshot,
+  SubscriptionSelectionStrategy
 } from "./subscription-types.js";
 
-export type SubscriptionPoolOptions = {
+export type SubscriptionAccountSetOptions = {
   mode: SubscriptionMode;
-  directory: string;
-  strategy?: SubscriptionPoolStrategy;
+  source?: SubscriptionAccountSource;
+  strategy?: SubscriptionSelectionStrategy;
   switchThreshold?: number;
   probeIntervalMs?: number;
   refreshSkewSeconds?: number;
   fallbackCooldownSeconds?: number;
 };
+
 
 type PersistedMemberState = {
   limits?: AccountLimits;
@@ -225,7 +226,7 @@ export class RateLimitTracker {
   }
 }
 
-export class SubscriptionPoolExhaustedError extends Error {
+export class SubscriptionAccountSetExhaustedError extends Error {
   readonly resetAt: number | undefined;
 
   constructor(mode: SubscriptionMode, resetAt?: number) {
@@ -238,14 +239,14 @@ export class SubscriptionPoolExhaustedError extends Error {
   }
 }
 
-export class SubscriptionPool {
+export class SubscriptionAccountSet {
   readonly #provider: SubscriptionProvider;
   readonly #options: Required<
     Pick<
-      SubscriptionPoolOptions,
+      SubscriptionAccountSetOptions,
       "strategy" | "switchThreshold" | "refreshSkewSeconds" | "fallbackCooldownSeconds"
     >
-  > & SubscriptionPoolOptions;
+  > & SubscriptionAccountSetOptions;
   readonly #members: PoolMember[];
   readonly #tracker: RateLimitTracker;
   readonly #refreshes = new Map<string, Promise<void>>();
@@ -255,7 +256,7 @@ export class SubscriptionPool {
 
   private constructor(
     provider: SubscriptionProvider,
-    options: SubscriptionPoolOptions,
+    options: SubscriptionAccountSetOptions,
     members: PoolMember[],
     tracker: RateLimitTracker
   ) {
@@ -274,16 +275,13 @@ export class SubscriptionPool {
 
   static async open(
     provider: SubscriptionProvider,
-    options: SubscriptionPoolOptions
-  ): Promise<SubscriptionPool> {
-    mkdirSync(options.directory, { recursive: true, mode: 0o700 });
-    const tracker = new RateLimitTracker(join(options.directory, ".state.json"));
-    const files = readdirSync(options.directory)
-      .filter((name) => name.endsWith(".json") && !name.startsWith("."))
-      .sort();
+    options: SubscriptionAccountSetOptions
+  ): Promise<SubscriptionAccountSet> {
+    const source = options.source ?? { kind: "auto" as const };
+    const accounts = await resolveSubscriptionAccounts(options.mode, source);
+    const tracker = new RateLimitTracker(join(accounts.stateDirectory, ".state.json"));
     const members: PoolMember[] = [];
-    for (const name of files) {
-      const sourcePath = join(options.directory, name);
+    for (const sourcePath of accounts.paths) {
       try {
         const credential = await provider.loadCredential(sourcePath);
         const id = subscriptionCredentialLabel(sourcePath);
@@ -304,9 +302,9 @@ export class SubscriptionPool {
         // excluded from serving until the operator re-enrolls it.
       }
     }
-    const pool = new SubscriptionPool(provider, options, members, tracker);
-    pool.#startProbe();
-    return pool;
+    const accountSet = new SubscriptionAccountSet(provider, options, members, tracker);
+    accountSet.#startProbe();
+    return accountSet;
   }
 
   get mode(): SubscriptionMode {
@@ -317,7 +315,7 @@ export class SubscriptionPool {
     return this.#members.length;
   }
 
-  snapshot(): SubscriptionPoolSnapshot {
+  snapshot(): SubscriptionAccountSetSnapshot {
     return {
       mode: this.mode,
       strategy: this.#options.strategy,
@@ -345,7 +343,7 @@ export class SubscriptionPool {
     model: string | undefined,
     operation: (credential: SubscriptionCredential) => Promise<Response>
   ): Promise<Response> {
-    if (this.#members.length === 0) throw new SubscriptionPoolExhaustedError(this.mode);
+    if (this.#members.length === 0) throw new SubscriptionAccountSetExhaustedError(this.mode);
     const excluded = new Set<string>();
     const absorbed = new Set<string>();
     let lastResponse: Response | undefined;
@@ -396,7 +394,7 @@ export class SubscriptionPool {
     }
 
     if (lastResponse !== undefined) return lastResponse;
-    throw new SubscriptionPoolExhaustedError(this.mode, this.#soonestReset(model));
+    throw new SubscriptionAccountSetExhaustedError(this.mode, this.#soonestReset(model));
   }
 
   #memberStatus(member: PoolMember): SubscriptionMemberStatus {
@@ -427,7 +425,9 @@ export class SubscriptionPool {
     const eligible = this.#members.filter(
       (member) => !excluded.has(member.id) && this.#eligible(member, model, now)
     );
-    if (eligible.length === 0) throw new SubscriptionPoolExhaustedError(this.mode, this.#soonestReset(model));
+    if (eligible.length === 0) {
+      throw new SubscriptionAccountSetExhaustedError(this.mode, this.#soonestReset(model));
+    }
     const member = this.#select(eligible, model);
     await this.#ensureFresh(member);
     if (this.#activeId !== member.id) {
@@ -611,3 +611,4 @@ export class SubscriptionPool {
     void this.probe();
   }
 }
+

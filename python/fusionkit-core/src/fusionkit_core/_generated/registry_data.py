@@ -126,7 +126,7 @@ REGISTRY: Final[dict[str, Any]] = {
         "claude-code": {
             "provider": "anthropic",
             "credentialsPath": "~/.claude/.credentials.json",
-            "poolDirectory": "~/.fusionkit/subscriptions/claude-code",
+            "accountsDirectory": "~/.fusionkit/subscriptions/claude-code",
             "keychainService": "Claude Code-credentials",
             "defaultModel": "claude-sonnet-4-5",
             "oauthBetaHeader": "oauth-2025-04-20",
@@ -150,7 +150,7 @@ REGISTRY: Final[dict[str, Any]] = {
         "codex": {
             "provider": "codex",
             "credentialsPath": "~/.codex/auth.json",
-            "poolDirectory": "~/.fusionkit/subscriptions/codex",
+            "accountsDirectory": "~/.fusionkit/subscriptions/codex",
             "configPath": "~/.codex/config.toml",
             "modelsCachePath": "~/.codex/models_cache.json",
             "authFileName": "auth.json",

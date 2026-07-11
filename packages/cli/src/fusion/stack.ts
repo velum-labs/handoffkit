@@ -761,8 +761,8 @@ export type StartFusionStackOptions = {
   timeoutMs?: number;
   /** WS5 rate-limit / credit failover policy (default `fusion`). */
   onRateLimit?: OnRateLimitPolicy;
-  /** Provider-native subscription pools consumed by the gateway relay seam. */
-  subscriptionPools?: GatewayRunnerConfig["subscriptionPools"];
+  /** Provider-native subscription account sets consumed by the gateway relay seam. */
+  subscriptionAccounts?: GatewayRunnerConfig["subscriptionAccounts"];
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
   /** WS4 durable session store; when set the gateway persists/resumes sessions. */
@@ -1027,8 +1027,8 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
         (spec.provider ?? "mlx") === "mlx" ? [spec.model, spec.id] : []
       ),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
-      ...(options.subscriptionPools !== undefined
-        ? { subscriptionPools: options.subscriptionPools }
+      ...(options.subscriptionAccounts !== undefined
+        ? { subscriptionAccounts: options.subscriptionAccounts }
         : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),

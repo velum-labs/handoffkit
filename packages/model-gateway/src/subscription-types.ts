@@ -2,7 +2,7 @@ import type { SubscriptionMode } from "@fusionkit/registry";
 
 import type { FailoverCategory } from "./fusion-types.js";
 
-export type SubscriptionPoolStrategy = "sticky" | "round_robin" | "capacity_weighted";
+export type SubscriptionSelectionStrategy = "sticky" | "round_robin" | "capacity_weighted";
 
 export type SubscriptionCredential = {
   mode: SubscriptionMode;
@@ -53,9 +53,10 @@ export type SubscriptionMemberStatus = {
   limits?: AccountLimits;
 };
 
-export type SubscriptionPoolSnapshot = {
+export type SubscriptionAccountSetSnapshot = {
   mode: SubscriptionMode;
-  strategy: SubscriptionPoolStrategy;
+  strategy: SubscriptionSelectionStrategy;
   switchThreshold: number;
   members: SubscriptionMemberStatus[];
 };
+

@@ -58,25 +58,33 @@ test("parseFusionConfig validates provider-native subscription pool policy", () 
   const config = parseFusionConfig(
     {
       version: FUSION_CONFIG_VERSION,
-      subscriptionPools: {
+      subscriptionAccounts: {
         "claude-code": {
+          source: { kind: "auto" },
           strategy: "capacity_weighted",
           switchThreshold: 0.9,
           probeIntervalMs: 60_000
         },
-        codex: { strategy: "sticky" }
+        codex: {
+          source: { kind: "directory", path: "/tmp/codex-accounts" },
+          strategy: "sticky"
+        }
       }
     },
     "test"
   );
-  assert.equal(config.subscriptionPools?.["claude-code"]?.strategy, "capacity_weighted");
-  assert.equal(config.subscriptionPools?.codex?.strategy, "sticky");
+  assert.equal(config.subscriptionAccounts?.["claude-code"]?.strategy, "capacity_weighted");
+  assert.equal(config.subscriptionAccounts?.codex?.strategy, "sticky");
+  assert.deepEqual(config.subscriptionAccounts?.codex?.source, {
+    kind: "directory",
+    path: "/tmp/codex-accounts"
+  });
   assert.throws(
     () =>
       parseFusionConfig(
         {
           version: FUSION_CONFIG_VERSION,
-          subscriptionPools: { codex: { switchThreshold: 1.5 } }
+          subscriptionAccounts: { codex: { switchThreshold: 1.5 } }
         },
         "test"
       ),

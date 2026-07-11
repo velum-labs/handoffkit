@@ -106,7 +106,7 @@ export type SubscriptionInfo = {
   /** Credential store location with a leading `~/` (expand against $HOME). */
   credentialsPath: string;
   /** FusionKit-owned copies of enrolled credentials. */
-  poolDirectory: string;
+  accountsDirectory: string;
   keychainService?: string;
   configPath?: string;
   modelsCachePath?: string;

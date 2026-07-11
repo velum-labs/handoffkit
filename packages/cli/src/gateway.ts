@@ -25,17 +25,14 @@ import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
-  AnthropicBackendRelay,
   CodexBackendRelay,
-  defaultSubscriptionPoolDirectory,
   FusionBackend,
   installAcpAdapters,
+  openSubscriptionRelays,
   runAcpAgent,
   runFrontDoorAcceptance,
   startFusionGateway,
-  startGateway,
-  SubscriptionPool,
-  subscriptionProvider
+  startGateway
 } from "@fusionkit/model-gateway";
 import type {
   AcpRunner,
@@ -53,8 +50,7 @@ import type {
   PassthroughModel,
   SessionMetaInput,
   SessionStore,
-  SubscriptionPoolOptions,
-  SubscriptionRelay,
+  SubscriptionAccountSetOptions,
   WireTrajectory
 } from "@fusionkit/model-gateway";
 import type { SubscriptionMode } from "@fusionkit/registry";
@@ -121,14 +117,11 @@ export type GatewayRunnerConfig = {
    */
   codexRelay?: CodexRelayOptions;
   /**
-   * Optional provider-native subscription pools. Static provider metadata
+   * Optional provider-native subscription account sets. Static provider metadata
    * comes from the registry; these options only control runtime policy/store.
    */
-  subscriptionPools?: Partial<
-    Record<
-      SubscriptionMode,
-      Omit<SubscriptionPoolOptions, "mode" | "directory"> & { directory?: string }
-    >
+  subscriptionAccounts?: Partial<
+    Record<SubscriptionMode, Omit<SubscriptionAccountSetOptions, "mode">>
   >;
   command?: string;
   timeoutMs?: number;
@@ -703,44 +696,16 @@ export async function startFusionStepGateway(input: {
   // Session persistence is detached from the request path; make sure the tail
   // of turn/cost writes lands before the process exits (WS10).
   registerCleanup(() => backend.flush());
-  const subscriptionRelays: Partial<Record<"anthropic" | "codex", SubscriptionRelay>> = {};
-  const claudePoolConfig = config.subscriptionPools?.["claude-code"];
-  if (claudePoolConfig !== undefined) {
-    const pool = await SubscriptionPool.open(subscriptionProvider("claude-code"), {
-      mode: "claude-code",
-      directory:
-        claudePoolConfig.directory ?? defaultSubscriptionPoolDirectory("claude-code"),
-      ...claudePoolConfig
-    });
-    if (pool.size > 0) subscriptionRelays.anthropic = new AnthropicBackendRelay({ pool });
-    else await pool.close();
-  }
-  const codexPoolConfig = config.subscriptionPools?.codex;
-  let pooledCodexRelay: CodexBackendRelay | undefined;
-  if (codexPoolConfig !== undefined) {
-    const pool = await SubscriptionPool.open(subscriptionProvider("codex"), {
-      mode: "codex",
-      directory: codexPoolConfig.directory ?? defaultSubscriptionPoolDirectory("codex"),
-      ...codexPoolConfig
-    });
-    if (pool.size > 0) {
-      pooledCodexRelay = new CodexBackendRelay({
-        ...(config.codexRelay ?? {
-          catalog: (_template, stock) => [...stock]
-        }),
-        logger: requestLogGatewayLogger,
-        pool
-      });
-      subscriptionRelays.codex = pooledCodexRelay;
-    } else {
-      await pool.close();
-    }
-  }
+  const { relays: subscriptionRelays } = await openSubscriptionRelays({
+    accounts: config.subscriptionAccounts ?? {},
+    ...(config.codexRelay !== undefined
+      ? { codex: { logger: requestLogGatewayLogger, ...config.codexRelay } }
+      : {})
+  });
   const codexRelay =
-    pooledCodexRelay ??
-    (config.codexRelay !== undefined
+    subscriptionRelays.codex === undefined && config.codexRelay !== undefined
       ? new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay })
-      : undefined);
+      : undefined;
   const gateway = await startGateway({
     backend,
     host: input.host,

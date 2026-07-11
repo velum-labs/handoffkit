@@ -90,8 +90,8 @@ async function credentialBlob(
   return parsed;
 }
 
-export function defaultSubscriptionPoolDirectory(mode: SubscriptionMode): string {
-  return expandHome(subscriptionInfo(mode).poolDirectory);
+export function defaultSubscriptionAccountDirectory(mode: SubscriptionMode): string {
+  return expandHome(subscriptionInfo(mode).accountsDirectory);
 }
 
 export function defaultSubscriptionCredentialPath(mode: SubscriptionMode): string {
@@ -255,14 +255,15 @@ async function enrichClaudePoolBlob(
 
 export async function enrollCurrentSubscription(
   mode: SubscriptionMode,
-  options: { label?: string; poolDirectory?: string } = {}
+  options: { label?: string; accountsDirectory?: string; sourcePath?: string } = {}
 ): Promise<string> {
   const info: SubscriptionInfo = subscriptionInfo(mode);
-  const sourcePath = defaultSubscriptionCredentialPath(mode);
+  const sourcePath = options.sourcePath ?? defaultSubscriptionCredentialPath(mode);
   const source = await credentialBlob(mode, sourcePath);
   const credential = await loadSubscriptionCredential(mode, sourcePath);
   if (mode === "claude-code") await enrichClaudePoolBlob(info, credential, source);
-  const directory = options.poolDirectory ?? defaultSubscriptionPoolDirectory(mode);
+  const directory =
+    options.accountsDirectory ?? defaultSubscriptionAccountDirectory(mode);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const identity = credentialIdentity(credential);
   const label = sanitizeSubscriptionLabel(options.label ?? `${mode}-${identity}`);

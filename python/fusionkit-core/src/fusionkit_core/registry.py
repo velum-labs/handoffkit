@@ -53,8 +53,8 @@ CLAUDE_CODE_KEYCHAIN_SERVICE: str = _CLAUDE_CODE["keychainService"]
 DEFAULT_CLAUDE_CREDENTIALS_PATH: str = _CLAUDE_CODE["credentialsPath"]
 DEFAULT_CODEX_CREDENTIALS_PATH: str = _CODEX["credentialsPath"]
 DEFAULT_CODEX_CONFIG_PATH: str = _CODEX["configPath"]
-SUBSCRIPTION_POOL_DIRECTORIES: dict[str, str] = {
-    mode: cast(str, info["poolDirectory"]) for mode, info in _SUBSCRIPTIONS.items()
+SUBSCRIPTION_ACCOUNT_DIRECTORIES: dict[str, str] = {
+    mode: cast(str, info["accountsDirectory"]) for mode, info in _SUBSCRIPTIONS.items()
 }
 SUBSCRIPTION_OAUTH: dict[str, dict[str, str]] = {
     mode: cast(dict[str, str], info["oauth"]) for mode, info in _SUBSCRIPTIONS.items()
@@ -243,7 +243,7 @@ __all__ = [
     "REGISTRY",
     "SUBSCRIPTION_ADMIN",
     "SUBSCRIPTION_OAUTH",
-    "SUBSCRIPTION_POOL_DIRECTORIES",
+    "SUBSCRIPTION_ACCOUNT_DIRECTORIES",
     "SUBSCRIPTION_RATE_LIMIT",
     "default_model_for_auth_choice",
     "default_pricing_for",

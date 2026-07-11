@@ -8,10 +8,23 @@ Claude Code or Codex subscriptions. The proxy preserves each harness's native
 wire protocol and streaming behavior; it only replaces the ingress proxy token
 with the selected account's OAuth token.
 
-## Enroll accounts
+## Start with one account
 
-The official CLIs remain the login UI. Sign in to one account, copy that login
-into FusionKit's private pool, then repeat for the other accounts:
+The official CLIs remain the login UI. Sign in normally, then start the proxy:
+
+```bash
+claude
+codex login
+fusionkit proxy serve
+```
+
+When no managed accounts exist yet, FusionKit imports the current official CLI
+login as a managed one-account set. The same selection and refresh path serves
+one or many accounts; single-account auth is not a separate mode.
+
+## Add accounts
+
+To grow that account set, sign into another account and enroll it:
 
 ```bash
 claude
