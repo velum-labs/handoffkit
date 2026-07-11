@@ -69,9 +69,16 @@ test results, not judge rhetoric — ranks the family as follows:
    (arXiv:2502.14382) reports large LiveCodeBench gains from exactly this
    parallel+sequential hybrid; self-repair surveys find **two rounds capture
    76-95% of achievable gain** and structured test feedback beats prose
-   critique (arXiv:2504.06939). Kill: repair conversion <15% or the
-   public->private overfit gap widens >5pp. **Piloted — see
-   `analysis/nonlinear-pilot-2026-07/`.**
+   critique    (arXiv:2504.06939). Kill: repair conversion <15% or the
+   public->private overfit gap widens >5pp. **Piloted 2026-07-11
+   (`analysis/nonlinear-pilot-2026-07/`): KILLED as configured** — repair
+   conversion 12.5% (<15% rule), paired tie with 6-wide at n=25. Two durable
+   observations: (a) one repair composed a solve the entire 6-sample pool
+   missed (novel-win existence proof), and (b) the arm matched 6-wide quality
+   at 0.69x cost purely from early-exit, promoting a repair-free
+   **adaptive-width cascade** ("sample until public-pass") to Phase A. Any
+   repair re-pilot requires a changed, pre-written configuration
+   (lineage-external repairer, all-failing-tests feedback, near-miss gating).
 2. **Adaptive branch-or-refine tree search (AB-MCTS)** — at each node decide
    to go wider (new sample) or deeper (refine a promising node) using
    execution-score posteriors; beats repeated sampling on LiveCodeBench at
@@ -142,9 +149,9 @@ and cheap, confirm narrow.
   **replay rows**: judge-variant / router-threshold / no-synth selection
   simulations over existing captures (no new member calls).
 - Grid: solo baselines for every roster model x panels {P7, P3, P1, P4-if-audited}
-  x architectures {exec-select, exec-select-repair, judge-select, self-BoN
-  (SE1/SE2), router-sim} + the promoted non-linear arms from section 2b
-  (matched-budget width-vs-repair, AB-MCTS-6 if the repair family promotes).
+  x architectures {exec-select, adaptive-width cascade (sample-until-public-pass,
+  promoted by the 2026-07-11 pilot), judge-select, self-BoN (SE1/SE2),
+  router-sim} + AB-MCTS-6 as the remaining non-linear lane from section 2b.
   ~25-35 cells, most under $2 each.
 - **Promotion criteria**: oracle headroom ≥5pp AND capture ≥25-30% AND point
   uplift ≥3pp over best cheap solo AND projected cost-per-solve ≤2x solo AND
