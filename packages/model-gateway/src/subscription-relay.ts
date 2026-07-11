@@ -46,11 +46,18 @@ const DROP_HEADERS = new Set([
 ]);
 
 export function forwardRelayHeaders(headers: IncomingHttpHeaders): Record<string, string> {
-  const forwarded: Record<string, string> = {};
+  const forwarded = Object.create(null) as Record<string, string>;
   for (const [name, value] of Object.entries(headers)) {
     if (DROP_HEADERS.has(name.toLowerCase())) continue;
-    if (typeof value === "string") forwarded[name] = value;
-    else if (Array.isArray(value)) forwarded[name] = value.join(", ");
+    const normalized =
+      typeof value === "string" ? value : Array.isArray(value) ? value.join(", ") : undefined;
+    if (normalized === undefined) continue;
+    Object.defineProperty(forwarded, name, {
+      value: normalized,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    });
   }
   return forwarded;
 }

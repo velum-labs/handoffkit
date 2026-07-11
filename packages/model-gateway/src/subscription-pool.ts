@@ -32,8 +32,13 @@ export type SubscriptionPoolOptions = {
   fallbackCooldownSeconds?: number;
 };
 
-type PersistedTrackerState = {
-  members: Record<string, { limits?: AccountLimits; coolingUntil?: number }>;
+type PersistedMemberState = {
+  limits?: AccountLimits;
+  coolingUntil?: number;
+};
+
+type PersistedTrackerFile = {
+  members: Array<{ id: string; limits?: AccountLimits; coolingUntil?: number }>;
 };
 
 type PoolMember = {
@@ -64,22 +69,103 @@ function atomicWrite(path: string, value: unknown): void {
   renameSync(temp, path);
 }
 
-function readTrackerState(path: string): PersistedTrackerState {
-  if (!existsSync(path)) return { members: {} };
+function parsedRateLimitWindow(value: unknown): AccountLimits["windows"][string] | undefined {
+  if (!isRecord(value) || typeof value.utilization !== "number") return undefined;
+  return {
+    utilization: value.utilization,
+    ...(typeof value.status === "string" ? { status: value.status } : {}),
+    ...(typeof value.resetsAt === "number" ? { resetsAt: value.resetsAt } : {}),
+    ...(typeof value.windowSeconds === "number" ? { windowSeconds: value.windowSeconds } : {}),
+    ...(typeof value.limitName === "string" ? { limitName: value.limitName } : {})
+  };
+}
+
+function parsedAccountLimits(value: unknown): AccountLimits | undefined {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.windows) ||
+    typeof value.observedAt !== "number" ||
+    (value.source !== "headers" && value.source !== "usage" && value.source !== "stream")
+  ) {
+    return undefined;
+  }
+  const windows = Object.create(null) as AccountLimits["windows"];
+  for (const [key, raw] of Object.entries(value.windows)) {
+    const window = parsedRateLimitWindow(raw);
+    if (window !== undefined) Object.defineProperty(windows, key, {
+      value: window,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    });
+  }
+  return {
+    windows,
+    observedAt: value.observedAt,
+    source: value.source,
+    ...(typeof value.planType === "string" ? { planType: value.planType } : {}),
+    ...(isRecord(value.credits) ? { credits: value.credits } : {})
+  };
+}
+
+function parsedMemberState(value: unknown): PersistedMemberState | undefined {
+  if (!isRecord(value)) return undefined;
+  const limits = parsedAccountLimits(value.limits);
+  const coolingUntil =
+    typeof value.coolingUntil === "number" && Number.isFinite(value.coolingUntil)
+      ? value.coolingUntil
+      : undefined;
+  if (limits === undefined && coolingUntil === undefined) return {};
+  return {
+    ...(limits !== undefined ? { limits } : {}),
+    ...(coolingUntil !== undefined ? { coolingUntil } : {})
+  };
+}
+
+function readTrackerState(path: string): Map<string, PersistedMemberState> {
+  const state = new Map<string, PersistedMemberState>();
+  if (!existsSync(path)) return state;
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!isRecord(parsed) || !isRecord(parsed.members)) return { members: {} };
-    return parsed as PersistedTrackerState;
+    if (!isRecord(parsed)) return state;
+    if (Array.isArray(parsed.members)) {
+      for (const entry of parsed.members) {
+        if (!isRecord(entry) || typeof entry.id !== "string") continue;
+        const member = parsedMemberState(entry);
+        if (member !== undefined) state.set(entry.id, member);
+      }
+      return state;
+    }
+    // One-time migration from the original object-keyed state format.
+    if (isRecord(parsed.members)) {
+      for (const [id, raw] of Object.entries(parsed.members)) {
+        const member = parsedMemberState(raw);
+        if (member !== undefined) state.set(id, member);
+      }
+    }
+    return state;
   } catch {
-    return { members: {} };
+    return state;
   }
 }
 
 function mergeLimits(previous: AccountLimits | undefined, next: AccountLimits): AccountLimits {
+  const windows = Object.create(null) as AccountLimits["windows"];
+  for (const source of [previous?.windows, next.windows]) {
+    if (source === undefined) continue;
+    for (const [key, window] of Object.entries(source)) {
+      Object.defineProperty(windows, key, {
+        value: window,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      });
+    }
+  }
   return {
     ...previous,
     ...next,
-    windows: { ...(previous?.windows ?? {}), ...next.windows },
+    windows,
     observedAt: next.observedAt,
     source: next.source
   };
@@ -87,7 +173,7 @@ function mergeLimits(previous: AccountLimits | undefined, next: AccountLimits): 
 
 export class RateLimitTracker {
   readonly #statePath: string;
-  readonly #state: PersistedTrackerState;
+  readonly #state: Map<string, PersistedMemberState>;
 
   constructor(statePath: string) {
     this.#statePath = statePath;
@@ -95,44 +181,47 @@ export class RateLimitTracker {
   }
 
   limits(memberId: string): AccountLimits | undefined {
-    return this.#state.members[memberId]?.limits;
+    return this.#state.get(memberId)?.limits;
   }
 
   coolingUntil(memberId: string): number | undefined {
-    return this.#state.members[memberId]?.coolingUntil;
+    return this.#state.get(memberId)?.coolingUntil;
   }
 
   update(memberId: string, limits: AccountLimits): void {
-    const member = this.#state.members[memberId] ?? {};
+    const member = this.#state.get(memberId) ?? {};
     member.limits = mergeLimits(member.limits, limits);
-    this.#state.members[memberId] = member;
+    this.#state.set(memberId, member);
     this.#persist();
   }
 
   cool(memberId: string, until: number): void {
-    const member = this.#state.members[memberId] ?? {};
+    const member = this.#state.get(memberId) ?? {};
     member.coolingUntil = until;
-    this.#state.members[memberId] = member;
+    this.#state.set(memberId, member);
     this.#persist();
   }
 
   clearCooling(memberId: string): void {
-    const member = this.#state.members[memberId];
+    const member = this.#state.get(memberId);
     if (member === undefined || member.coolingUntil === undefined) return;
     delete member.coolingUntil;
     this.#persist();
   }
 
   resetAfterRefresh(memberId: string): void {
-    const member = this.#state.members[memberId] ?? {};
+    const member = this.#state.get(memberId) ?? {};
     delete member.limits;
     delete member.coolingUntil;
-    this.#state.members[memberId] = member;
+    this.#state.set(memberId, member);
     this.#persist();
   }
 
   #persist(): void {
-    atomicWrite(this.#statePath, this.#state);
+    const file: PersistedTrackerFile = {
+      members: [...this.#state].map(([id, member]) => ({ id, ...member }))
+    };
+    atomicWrite(this.#statePath, file);
   }
 }
 

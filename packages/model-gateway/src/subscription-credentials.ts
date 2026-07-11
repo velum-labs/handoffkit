@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -174,13 +174,41 @@ export async function persistSubscriptionCredential(
   };
 }
 
-function safeLabel(label: string): string {
-  const normalized = label.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+export function sanitizeSubscriptionLabel(label: string): string {
+  let normalized = "";
+  let pendingSeparator = false;
+  for (const character of label.trim().toLowerCase()) {
+    const code = character.charCodeAt(0);
+    const allowed =
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      character === "." ||
+      character === "_" ||
+      character === "-";
+    if (allowed) {
+      if (character === "-" && normalized.length === 0) continue;
+      if (
+        pendingSeparator &&
+        character !== "-" &&
+        normalized.length > 0 &&
+        !normalized.endsWith("-")
+      ) {
+        normalized += "-";
+      }
+      normalized += character;
+      pendingSeparator = false;
+    } else {
+      pendingSeparator = true;
+    }
+  }
+  let end = normalized.length;
+  while (end > 0 && normalized[end - 1] === "-") end -= 1;
+  normalized = normalized.slice(0, end);
   return normalized.length > 0 ? normalized : "account";
 }
 
 function credentialIdentity(credential: SubscriptionCredential): string {
-  return credential.accountId ?? createHash("sha256").update(credential.accessToken).digest("hex").slice(0, 12);
+  return credential.accountId ?? randomUUID();
 }
 
 function accountIdFromProfile(value: unknown): string | undefined {
@@ -237,7 +265,7 @@ export async function enrollCurrentSubscription(
   const directory = options.poolDirectory ?? defaultSubscriptionPoolDirectory(mode);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const identity = credentialIdentity(credential);
-  const label = safeLabel(options.label ?? `${mode}-${identity}`);
+  const label = sanitizeSubscriptionLabel(options.label ?? `${mode}-${identity}`);
   const target = join(directory, `${label}.json`);
   atomicWriteJson(target, source);
   return target;

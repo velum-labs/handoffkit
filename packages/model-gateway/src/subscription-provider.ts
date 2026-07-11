@@ -78,6 +78,19 @@ function utilization(value: unknown): number | undefined {
   return Math.max(0, Math.min(1, parsed > 1 ? parsed / 100 : parsed));
 }
 
+function defineWindow(
+  windows: Record<string, RateLimitWindow>,
+  key: string,
+  window: RateLimitWindow
+): void {
+  Object.defineProperty(windows, key, {
+    value: window,
+    enumerable: true,
+    configurable: true,
+    writable: true
+  });
+}
+
 function retryAfter(headers: Headers): number | undefined {
   return numeric(headers.get("retry-after"));
 }
@@ -109,26 +122,26 @@ function refreshPayload(body: unknown): {
 
 function windowsFromUsagePayload(payload: unknown): Record<string, RateLimitWindow> {
   if (!isRecord(payload)) return {};
-  const windows: Record<string, RateLimitWindow> = {};
+  const windows = Object.create(null) as Record<string, RateLimitWindow>;
   for (const [key, raw] of Object.entries(payload)) {
     if (!isRecord(raw)) continue;
     const used = utilization(raw.utilization ?? raw.used_percent);
     if (used === undefined) continue;
     const resetsAt = epochSeconds(raw.resets_at ?? raw.reset_at);
     const windowSeconds = numeric(raw.limit_window_seconds);
-    windows[key] = {
+    defineWindow(windows, key, {
       utilization: used,
       ...(typeof raw.status === "string" ? { status: raw.status } : {}),
       ...(resetsAt !== undefined ? { resetsAt } : {}),
       ...(windowSeconds !== undefined ? { windowSeconds } : {})
-    };
+    });
   }
   return windows;
 }
 
 function anthropicLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
   const prefix = subscriptionInfo("claude-code").rateLimit.headerPrefix.toLowerCase();
-  const windows: Record<string, RateLimitWindow> = {};
+  const windows = Object.create(null) as Record<string, RateLimitWindow>;
   const suffixes = new Set<string>();
   for (const [name] of headers) {
     const lowered = name.toLowerCase();
@@ -140,11 +153,11 @@ function anthropicLimitsFromHeaders(headers: Headers): AccountLimits | undefined
     if (used === undefined) continue;
     const status = headers.get(`${prefix}-${key}-status`);
     const resetsAt = epochSeconds(headers.get(`${prefix}-${key}-reset`));
-    windows[key] = {
+    defineWindow(windows, key, {
       utilization: used,
       ...(status !== null ? { status } : {}),
       ...(resetsAt !== undefined ? { resetsAt } : {})
-    };
+    });
   }
   return Object.keys(windows).length > 0
     ? { windows, observedAt: Date.now() / 1000, source: "headers" }

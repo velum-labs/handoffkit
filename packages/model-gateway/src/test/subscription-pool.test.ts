@@ -6,11 +6,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import {
+  RateLimitTracker,
   SubscriptionPool,
   type AccountLimits,
   type SubscriptionCredential,
   type SubscriptionProvider
 } from "../index.js";
+import { sanitizeSubscriptionLabel } from "../subscription-credentials.js";
 
 type FakeCredentialFile = {
   accessToken: string;
@@ -183,6 +185,38 @@ test("pool coalesces near-expiry credential refresh before serving", async () =>
     assert.equal(state.refreshes, 1);
   } finally {
     await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("subscription labels are normalized in linear time without credential-derived hashes", () => {
+  assert.equal(sanitizeSubscriptionLabel("  Work !!! Account --"), "work-account");
+  assert.equal(sanitizeSubscriptionLabel("-".repeat(100_000)), "account");
+  assert.equal(sanitizeSubscriptionLabel("Team_A.2"), "team_a.2");
+});
+
+test("tracker safely migrates hostile object keys into map-backed state", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "fusionkit-pool-state-"));
+  const statePath = join(directory, ".state.json");
+  writeFileSync(
+    statePath,
+    '{"members":{"__proto__":{"coolingUntil":123},"constructor":{"coolingUntil":456}}}'
+  );
+  const tracker = new RateLimitTracker(statePath);
+  try {
+    assert.equal(tracker.coolingUntil("__proto__"), 123);
+    tracker.cool("__proto__", 789);
+    tracker.cool("prototype", 999);
+    const persisted = JSON.parse(await readFile(statePath, "utf8")) as {
+      members: Array<{ id: string; coolingUntil?: number }>;
+    };
+    assert.ok(Array.isArray(persisted.members));
+    assert.equal(
+      persisted.members.find((member) => member.id === "__proto__")?.coolingUntil,
+      789
+    );
+    assert.equal(({} as { polluted?: unknown }).polluted, undefined);
+  } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
