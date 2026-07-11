@@ -12,6 +12,7 @@ import { registerInstall } from "./commands/install.js";
 import { registerLocal } from "./commands/local.js";
 import { registerModels } from "./commands/models.js";
 import { registerPrompts } from "./commands/prompts.js";
+import { registerProxy } from "./commands/proxy.js";
 import { registerRuntime } from "./commands/runtime.js";
 import { registerSessions } from "./commands/sessions.js";
 import { registerSetup } from "./commands/setup.js";
@@ -48,6 +49,7 @@ export function buildProgram(): Command {
   registerDoctor(program);
   registerConfig(program);
   registerPrompts(program);
+  registerProxy(program);
   registerSessions(program);
   registerModels(program);
   registerEnsemble(program);

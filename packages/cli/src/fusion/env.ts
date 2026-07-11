@@ -16,10 +16,11 @@ import {
   PREFERRED_LOCAL_MODELS,
   defaultKeyEnv as registryDefaultKeyEnv,
   providerDefaultBaseUrl as registryProviderDefaultBaseUrl,
-  providerForAuthMode
+  providerForAuthMode,
+  type SubscriptionMode
 } from "@fusionkit/registry";
 
-import type { PromptOverrides } from "../fusion-config.js";
+import type { PromptOverrides, SubscriptionPoolConfig } from "../fusion-config.js";
 
 export type { OnRateLimitPolicy };
 
@@ -175,6 +176,8 @@ export type RunFusionOptions = {
    * (return the vendor error verbatim), or `fail` (surface a gateway error).
    */
   onRateLimit?: OnRateLimitPolicy;
+  /** Provider-native subscription pools for the gateway relay seam. */
+  subscriptionPools?: Partial<Record<SubscriptionMode, SubscriptionPoolConfig>>;
   /**
    * WS7 budget cap (USD). Plumbed to the gateway: once a session has accrued at
    * least this much gateway-observed cost, the next turn is refused with a clear

@@ -230,6 +230,9 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   if (options.onRateLimit === undefined && config.onRateLimit !== undefined) {
     options.onRateLimit = config.onRateLimit;
   }
+  if (options.subscriptionPools === undefined && config.subscriptionPools !== undefined) {
+    options.subscriptionPools = config.subscriptionPools;
+  }
   if (options.budgetUsd === undefined && config.budgetUsd !== undefined) {
     options.budgetUsd = config.budgetUsd;
   }

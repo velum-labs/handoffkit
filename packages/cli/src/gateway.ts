@@ -25,13 +25,17 @@ import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
+  AnthropicBackendRelay,
   CodexBackendRelay,
+  defaultSubscriptionPoolDirectory,
   FusionBackend,
   installAcpAdapters,
   runAcpAgent,
   runFrontDoorAcceptance,
   startFusionGateway,
-  startGateway
+  startGateway,
+  SubscriptionPool,
+  subscriptionProvider
 } from "@fusionkit/model-gateway";
 import type {
   AcpRunner,
@@ -49,8 +53,11 @@ import type {
   PassthroughModel,
   SessionMetaInput,
   SessionStore,
+  SubscriptionPoolOptions,
+  SubscriptionRelay,
   WireTrajectory
 } from "@fusionkit/model-gateway";
+import type { SubscriptionMode } from "@fusionkit/registry";
 import { bold, cyan, gray, uiStream } from "@fusionkit/cli-ui";
 import { registerCleanup } from "@fusionkit/runtime-utils";
 import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
@@ -113,6 +120,16 @@ export type GatewayRunnerConfig = {
    * the gateway's own bearer, not a relayable ChatGPT token).
    */
   codexRelay?: CodexRelayOptions;
+  /**
+   * Optional provider-native subscription pools. Static provider metadata
+   * comes from the registry; these options only control runtime policy/store.
+   */
+  subscriptionPools?: Partial<
+    Record<
+      SubscriptionMode,
+      Omit<SubscriptionPoolOptions, "mode" | "directory"> & { directory?: string }
+    >
+  >;
   command?: string;
   timeoutMs?: number;
   /**
@@ -686,14 +703,51 @@ export async function startFusionStepGateway(input: {
   // Session persistence is detached from the request path; make sure the tail
   // of turn/cost writes lands before the process exits (WS10).
   registerCleanup(() => backend.flush());
+  const subscriptionRelays: Partial<Record<"anthropic" | "codex", SubscriptionRelay>> = {};
+  const claudePoolConfig = config.subscriptionPools?.["claude-code"];
+  if (claudePoolConfig !== undefined) {
+    const pool = await SubscriptionPool.open(subscriptionProvider("claude-code"), {
+      mode: "claude-code",
+      directory:
+        claudePoolConfig.directory ?? defaultSubscriptionPoolDirectory("claude-code"),
+      ...claudePoolConfig
+    });
+    if (pool.size > 0) subscriptionRelays.anthropic = new AnthropicBackendRelay({ pool });
+    else await pool.close();
+  }
+  const codexPoolConfig = config.subscriptionPools?.codex;
+  let pooledCodexRelay: CodexBackendRelay | undefined;
+  if (codexPoolConfig !== undefined) {
+    const pool = await SubscriptionPool.open(subscriptionProvider("codex"), {
+      mode: "codex",
+      directory: codexPoolConfig.directory ?? defaultSubscriptionPoolDirectory("codex"),
+      ...codexPoolConfig
+    });
+    if (pool.size > 0) {
+      pooledCodexRelay = new CodexBackendRelay({
+        ...(config.codexRelay ?? {
+          catalog: (_template, stock) => [...stock]
+        }),
+        logger: requestLogGatewayLogger,
+        pool
+      });
+      subscriptionRelays.codex = pooledCodexRelay;
+    } else {
+      await pool.close();
+    }
+  }
+  const codexRelay =
+    pooledCodexRelay ??
+    (config.codexRelay !== undefined
+      ? new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay })
+      : undefined);
   const gateway = await startGateway({
     backend,
     host: input.host,
     port: input.port,
     ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
-    ...(config.codexRelay !== undefined
-      ? { codexRelay: new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay }) }
-      : {})
+    ...(codexRelay !== undefined ? { codexRelay } : {}),
+    ...(Object.keys(subscriptionRelays).length > 0 ? { subscriptionRelays } : {})
   });
   selfGatewayUrl = gateway.url();
   return gateway;

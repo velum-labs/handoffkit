@@ -29,8 +29,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+import type {
+  OnRateLimitPolicy,
+  SubscriptionPoolStrategy
+} from "@fusionkit/model-gateway";
 import { DEFAULT_ENSEMBLE_NAME } from "@fusionkit/registry";
+import type { SubscriptionMode } from "@fusionkit/registry";
 
 import type { PanelTrust } from "@fusionkit/ensemble";
 
@@ -81,6 +85,13 @@ export const PROMPT_CONFIG_KEY: Record<PromptId, string> = {
 
 export type PromptOverrides = Partial<Record<PromptId, string>>;
 
+export type SubscriptionPoolConfig = {
+  directory?: string;
+  strategy?: SubscriptionPoolStrategy;
+  switchThreshold?: number;
+  probeIntervalMs?: number;
+};
+
 /**
  * One named ensemble: its panel, judge, synthesizer, and (hydrated at load
  * time, never stored inline) its prompt overrides. A missing/empty `panel` on
@@ -120,6 +131,8 @@ export type FusionConfig = {
   port?: number | null;
   /** WS5 rate-limit / credit handoff policy for vendor passthrough models. */
   onRateLimit?: OnRateLimitPolicy;
+  /** Optional provider-native subscription pools consumed by the model gateway. */
+  subscriptionPools?: Partial<Record<SubscriptionMode, SubscriptionPoolConfig>>;
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
@@ -202,6 +215,74 @@ function optionalK(value: unknown, path: string): number | undefined {
     throw new FusionConfigError(`${path} must be a positive integer (step boundaries per panel member)`);
   }
   return value;
+}
+
+function validateSubscriptionPools(
+  value: unknown,
+  source: string
+): Partial<Record<SubscriptionMode, SubscriptionPoolConfig>> {
+  if (!isRecord(value)) {
+    throw new FusionConfigError(`${source}: subscriptionPools must be an object`);
+  }
+  const result: Partial<Record<SubscriptionMode, SubscriptionPoolConfig>> = {};
+  for (const [mode, raw] of Object.entries(value)) {
+    if (mode !== "claude-code" && mode !== "codex") {
+      throw new FusionConfigError(
+        `${source}: subscriptionPools key must be claude-code or codex`
+      );
+    }
+    if (!isRecord(raw)) {
+      throw new FusionConfigError(`${source}: subscriptionPools.${mode} must be an object`);
+    }
+    const config: SubscriptionPoolConfig = {};
+    if (raw.directory !== undefined) {
+      if (typeof raw.directory !== "string" || raw.directory.length === 0) {
+        throw new FusionConfigError(
+          `${source}: subscriptionPools.${mode}.directory must be a non-empty string`
+        );
+      }
+      config.directory = raw.directory;
+    }
+    if (raw.strategy !== undefined) {
+      if (
+        raw.strategy !== "sticky" &&
+        raw.strategy !== "round_robin" &&
+        raw.strategy !== "capacity_weighted"
+      ) {
+        throw new FusionConfigError(
+          `${source}: subscriptionPools.${mode}.strategy must be sticky, round_robin, or capacity_weighted`
+        );
+      }
+      config.strategy = raw.strategy;
+    }
+    if (raw.switchThreshold !== undefined) {
+      if (
+        typeof raw.switchThreshold !== "number" ||
+        !Number.isFinite(raw.switchThreshold) ||
+        raw.switchThreshold <= 0 ||
+        raw.switchThreshold > 1
+      ) {
+        throw new FusionConfigError(
+          `${source}: subscriptionPools.${mode}.switchThreshold must be in (0, 1]`
+        );
+      }
+      config.switchThreshold = raw.switchThreshold;
+    }
+    if (raw.probeIntervalMs !== undefined) {
+      if (
+        typeof raw.probeIntervalMs !== "number" ||
+        !Number.isFinite(raw.probeIntervalMs) ||
+        raw.probeIntervalMs < 60_000
+      ) {
+        throw new FusionConfigError(
+          `${source}: subscriptionPools.${mode}.probeIntervalMs must be at least 60000`
+        );
+      }
+      config.probeIntervalMs = raw.probeIntervalMs;
+    }
+    result[mode] = config;
+  }
+  return result;
 }
 
 function validatePanelEntry(entry: unknown, path: string): PanelModelSpec {
@@ -426,6 +507,9 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
       );
     }
     config.onRateLimit = raw.onRateLimit as OnRateLimitPolicy;
+  }
+  if (raw.subscriptionPools !== undefined) {
+    config.subscriptionPools = validateSubscriptionPools(raw.subscriptionPools, source);
   }
   if (raw.budgetUsd !== undefined) {
     if (typeof raw.budgetUsd !== "number" || !Number.isFinite(raw.budgetUsd) || raw.budgetUsd <= 0) {

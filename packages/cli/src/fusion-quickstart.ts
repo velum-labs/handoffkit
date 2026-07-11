@@ -730,6 +730,9 @@ export async function runFusion(
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
+      ...(options.subscriptionPools !== undefined
+        ? { subscriptionPools: options.subscriptionPools }
+        : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
       ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
