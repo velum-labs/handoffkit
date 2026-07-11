@@ -3,6 +3,7 @@
   "pages": [
     "inference-endpoint",
     "rate-limit-handoff",
+    "subscription-pooling",
     "cost-and-models",
     "observability",
     "troubleshooting",
