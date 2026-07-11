@@ -1,0 +1,32 @@
+# Cheap lineage-vetoed pilot panel (see preregistration.md).
+# Pricing is the OpenRouter list price at pilot time; used for ledger estimates only.
+endpoints:
+  - id: terminus
+    provider: openrouter
+    model: deepseek/deepseek-v3.1-terminus
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    pricing:
+      input_per_1m_tokens: 0.27
+      output_per_1m_tokens: 0.95
+      currency: USD
+    timeout_s: 240.0
+  - id: qwen3
+    provider: openrouter
+    model: qwen/qwen3-coder
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    pricing:
+      input_per_1m_tokens: 0.22
+      output_per_1m_tokens: 1.80
+      currency: USD
+    timeout_s: 240.0
+default_model: terminus
+judge_model: terminus
+synthesizer_model: terminus
+default_mode: panel
+panel_models: [terminus, qwen3]
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 8192

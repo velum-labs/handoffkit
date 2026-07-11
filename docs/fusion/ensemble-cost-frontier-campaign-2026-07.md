@@ -54,6 +54,54 @@ only as reference baselines.
    committees, speculative collaborative decoding — run only if 1-5 leave
    budget, or as Phase B arms for promoted panels.
 
+## 2b. Non-linear architectures (cycles, feedback, populations)
+
+Everything above (and everything in our record) is a single feed-forward pass.
+A dedicated research pass on non-linear topologies — grounded in the rule that
+our only strong positive signal is EXECUTION EVIDENCE, so loops must be fed by
+test results, not judge rhetoric — ranks the family as follows:
+
+1. **S\*-lite hybrid: width + targeted execution-feedback repair** — sample
+   4 diverse candidates, run public tests; if none passes, spend the remaining
+   budget on repair calls for the top-2 failing candidates, feeding back the
+   failing input/expected/actual/stderr; select over originals + repairs.
+   Matched-budget alternative to pure 6-wide selection. Literature: S\*
+   (arXiv:2502.14382) reports large LiveCodeBench gains from exactly this
+   parallel+sequential hybrid; self-repair surveys find **two rounds capture
+   76-95% of achievable gain** and structured test feedback beats prose
+   critique (arXiv:2504.06939). Kill: repair conversion <15% or the
+   public->private overfit gap widens >5pp. **Piloted — see
+   `analysis/nonlinear-pilot-2026-07/`.**
+2. **Adaptive branch-or-refine tree search (AB-MCTS)** — at each node decide
+   to go wider (new sample) or deeper (refine a promising node) using
+   execution-score posteriors; beats repeated sampling on LiveCodeBench at
+   budget 2^3 (arXiv:2503.04412). Maps to upgrading the scaffolded
+   `TreeSearchScheduler` (GEN/CONT nodes, score backup, Thompson/UCB policy).
+   Kill: at equal 6 calls, worse than 6-wide by >2pp.
+3. **Adversarial test synthesis in the loop** — a cheap model generates
+   distinguishing/adversarial inputs between rival candidates; execution
+   arbitrates and feeds repair (S\* input synthesis; AdverMCTS). Directly
+   attacks the pseudo-correct-on-sparse-public-tests failure mode. Kill:
+   >20% of generated tests invalid.
+4. **Cross-model review-then-fix** — reviewer model localizes bugs with
+   line-level findings, coder fixes (1 coder + 1 reviewer + 1 fix call).
+   "Review beats planning" line of work. Risk: reviewer sycophancy on cheap
+   models. Kill: worse than self-repair or review null/vague rate >40%.
+5. **Test-grounded sparse debate** — only worthwhile if every debate turn is
+   anchored to execution results; 2025-2026 literature documents sycophancy
+   and consensus-collapse in cheap-model debate, with isolated self-correction
+   beating homogeneous debate. Low priority.
+6. **Evolutionary populations** (FunSearch/AlphaEvolve-style) — wrong cost
+   class for per-task inference (needs population >= 8-16 x generations >= 3-5);
+   only relevant for reusable-artifact optimization. Deferred.
+7. **MoA depth >1** — layered aggregation without execution signal; literature
+   support is for chat quality, not private-test code correctness. Deferred
+   behind the execution-grounded loops.
+
+Budget-allocation prior (fixed ~6 cheap calls/task): width-first with
+selective depth — 4 wide + up to 2 execution-feedback repairs — over
+all-width, all-depth, or debate allocations.
+
 ## 3. Model roster and panels (prices need re-verification at run time)
 
 Roster of measurable cheap models (all ≤ ~$0.7/M in, ≤ ~$3.4/M out via
@@ -95,7 +143,9 @@ and cheap, confirm narrow.
   simulations over existing captures (no new member calls).
 - Grid: solo baselines for every roster model x panels {P7, P3, P1, P4-if-audited}
   x architectures {exec-select, exec-select-repair, judge-select, self-BoN
-  (SE1/SE2), router-sim}. ~25-30 cells, most under $2 each.
+  (SE1/SE2), router-sim} + the promoted non-linear arms from section 2b
+  (matched-budget width-vs-repair, AB-MCTS-6 if the repair family promotes).
+  ~25-35 cells, most under $2 each.
 - **Promotion criteria**: oracle headroom ≥5pp AND capture ≥25-30% AND point
   uplift ≥3pp over best cheap solo AND projected cost-per-solve ≤2x solo AND
   judge null <35%.
