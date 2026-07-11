@@ -54,6 +54,34 @@ export type AnthropicRelayOptions = {
   backendUrl?: string;
 };
 
+function withAnthropicAccount(
+  body: AnthropicRequest,
+  accountId: string | undefined
+): AnthropicRequest {
+  if (accountId === undefined) return body;
+  const request = body as AnthropicRequest & {
+    metadata?: { user_id?: unknown } & Record<string, unknown>;
+  };
+  const userId = request.metadata?.user_id;
+  if (typeof userId !== "string") return body;
+  try {
+    const parsed: unknown = JSON.parse(userId);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return body;
+    return {
+      ...body,
+      metadata: {
+        ...request.metadata,
+        user_id: JSON.stringify({
+          ...(parsed as Record<string, unknown>),
+          account_uuid: accountId
+        })
+      }
+    } as AnthropicRequest;
+  } catch {
+    return body;
+  }
+}
+
 /** Backend sentinel for a gateway whose entire model surface is relay-owned. */
 export class RelayOnlyBackend implements Backend {
   readonly defaultModel = undefined;
@@ -130,7 +158,7 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
       return fetch(`${this.#backendUrl}/v1/messages`, {
         method: "POST",
         headers: forwarded,
-        body: JSON.stringify(body),
+        body: JSON.stringify(withAnthropicAccount(body, credential.accountId)),
         ...(signal !== undefined ? { signal } : {})
       });
     });

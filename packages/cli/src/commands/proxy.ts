@@ -224,21 +224,27 @@ async function serveProxy(options: ProxyServeOptions, command: Command): Promise
 
   if (ctx.json) {
     ctx.emit({ ...runtime, token: config.token, providers: Object.keys(relays) });
-    return;
+  } else {
+    ctx.presenter.success(`subscription proxy listening at ${runtime.url}`);
+    ctx.presenter.line(`export ANTHROPIC_BASE_URL=${runtime.url}`);
+    ctx.presenter.line(`export ANTHROPIC_AUTH_TOKEN=${config.token}`);
+    ctx.presenter.blank();
+    ctx.presenter.line(`export FUSIONKIT_PROXY_TOKEN=${config.token}`);
+    ctx.presenter.line("[model_providers.fusionkit-subscriptions]");
+    ctx.presenter.line('name = "openai"');
+    ctx.presenter.line(`base_url = "${runtime.url}/backend-api/codex"`);
+    ctx.presenter.line('wire_api = "responses"');
+    ctx.presenter.line('env_key = "FUSIONKIT_PROXY_TOKEN"');
+    ctx.presenter.line("requires_openai_auth = false");
+    ctx.presenter.blank();
+    ctx.presenter.note("Press Ctrl+C to stop; use a process supervisor for a login-persistent service.");
   }
-  ctx.presenter.success(`subscription proxy listening at ${runtime.url}`);
-  ctx.presenter.line(`export ANTHROPIC_BASE_URL=${runtime.url}`);
-  ctx.presenter.line(`export ANTHROPIC_AUTH_TOKEN=${config.token}`);
-  ctx.presenter.blank();
-  ctx.presenter.line(`export FUSIONKIT_PROXY_TOKEN=${config.token}`);
-  ctx.presenter.line("[model_providers.fusionkit-subscriptions]");
-  ctx.presenter.line('name = "openai"');
-  ctx.presenter.line(`base_url = "${runtime.url}/backend-api/codex"`);
-  ctx.presenter.line('wire_api = "responses"');
-  ctx.presenter.line('env_key = "FUSIONKIT_PROXY_TOKEN"');
-  ctx.presenter.line("requires_openai_auth = false");
-  ctx.presenter.blank();
-  ctx.presenter.note("Press Ctrl+C to stop; use a process supervisor for a login-persistent service.");
+
+  // Commander actions normally return after setup, and the top-level CLI then
+  // runs cleanups and exits explicitly. Keep the serve action pending so this
+  // is a real long-lived endpoint; the process-wide signal handler performs
+  // the registered cleanup on SIGINT/SIGTERM.
+  await new Promise<never>(() => undefined);
 }
 
 export function registerProxy(program: Command): void {

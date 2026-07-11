@@ -281,17 +281,20 @@ export class SubscriptionPool {
         });
         if (failure === undefined || !isFailoverWorthy(failure.category)) return lastResponse;
 
-        if (
-          failure.category === "transient" &&
-          failure.retryAfter !== undefined &&
-          failure.retryAfter <= 60 &&
-          !absorbed.has(member.id)
-        ) {
-          absorbed.add(member.id);
-          await new Promise((resolve) => setTimeout(resolve, failure.retryAfter! * 1000));
-          continue;
+        if (failure.category === "transient") {
+          if (!absorbed.has(member.id)) {
+            absorbed.add(member.id);
+            const delaySeconds = Math.min(60, failure.retryAfter ?? 0.5);
+            await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
+            continue;
+          }
+          // A short provider throttle is account-local and often prompt-cache
+          // sensitive. Do not march the same burst through the whole pool.
+          return lastResponse;
         }
 
+        // Only an actual spent quota window rotates accounts. Authentication,
+        // context, and unknown failures were already returned above.
         const until =
           failure.resetsAt ??
           Date.now() / 1000 +

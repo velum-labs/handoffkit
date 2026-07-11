@@ -108,12 +108,14 @@ export async function loadSubscriptionCredential(
     if (!isRecord(oauth) || typeof oauth.accessToken !== "string" || oauth.accessToken.length === 0) {
       throw new Error("Claude Code credentials contain no OAuth access token");
     }
+    const fusionkit = isRecord(blob.fusionkit) ? blob.fusionkit : undefined;
     return {
       mode,
       accessToken: oauth.accessToken,
       sourcePath,
       ...(typeof oauth.refreshToken === "string" ? { refreshToken: oauth.refreshToken } : {}),
-      ...(typeof oauth.expiresAt === "number" ? { expiresAt: oauth.expiresAt / 1000 } : {})
+      ...(typeof oauth.expiresAt === "number" ? { expiresAt: oauth.expiresAt / 1000 } : {}),
+      ...(typeof fusionkit?.accountId === "string" ? { accountId: fusionkit.accountId } : {})
     };
   }
 
@@ -181,6 +183,48 @@ function credentialIdentity(credential: SubscriptionCredential): string {
   return credential.accountId ?? createHash("sha256").update(credential.accessToken).digest("hex").slice(0, 12);
 }
 
+function accountIdFromProfile(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  for (const key of ["account_uuid", "accountUuid"]) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && candidate.length > 0) return candidate;
+  }
+  const account = value.account;
+  if (isRecord(account)) {
+    const uuid = account.uuid ?? account.id;
+    if (typeof uuid === "string" && uuid.length > 0) return uuid;
+  }
+  for (const child of Object.values(value)) {
+    const candidate = accountIdFromProfile(child);
+    if (candidate !== undefined) return candidate;
+  }
+  return undefined;
+}
+
+async function enrichClaudePoolBlob(
+  info: SubscriptionInfo,
+  credential: SubscriptionCredential,
+  source: Record<string, unknown>
+): Promise<void> {
+  const endpoint = info.oauth.profileEndpoint;
+  if (endpoint === undefined) return;
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        authorization: `Bearer ${credential.accessToken}`,
+        "anthropic-beta": info.oauthBetaHeader ?? "oauth-2025-04-20",
+        accept: "application/json"
+      }
+    });
+    if (!response.ok) return;
+    const accountId = accountIdFromProfile(await response.json());
+    if (accountId !== undefined) source.fusionkit = { accountId };
+  } catch {
+    // Enrollment still succeeds offline; the relay simply preserves the
+    // caller's metadata until this account is re-enrolled online.
+  }
+}
+
 export async function enrollCurrentSubscription(
   mode: SubscriptionMode,
   options: { label?: string; poolDirectory?: string } = {}
@@ -189,6 +233,7 @@ export async function enrollCurrentSubscription(
   const sourcePath = defaultSubscriptionCredentialPath(mode);
   const source = await credentialBlob(mode, sourcePath);
   const credential = await loadSubscriptionCredential(mode, sourcePath);
+  if (mode === "claude-code") await enrichClaudePoolBlob(info, credential, source);
   const directory = options.poolDirectory ?? defaultSubscriptionPoolDirectory(mode);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const identity = credentialIdentity(credential);

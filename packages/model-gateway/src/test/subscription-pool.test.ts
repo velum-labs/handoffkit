@@ -133,6 +133,33 @@ test("pool proactively moves away from a member over the utilization threshold",
   }
 });
 
+test("pool absorbs a short throttle on the same account instead of rotating the burst", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "fusionkit-pool-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  writeMember(directory, "b", { accessToken: "token-b" });
+  const pool = await SubscriptionPool.open(fakeProvider({ refreshes: 0 }), {
+    mode: "codex",
+    directory
+  });
+  const seen: string[] = [];
+  try {
+    const response = await pool.execute("gpt-5.3-codex", (credential) => {
+      seen.push(credential.accessToken);
+      return Promise.resolve(
+        new Response(JSON.stringify({ quota: false }), {
+          status: 429,
+          headers: { "content-type": "application/json" }
+        })
+      );
+    });
+    assert.equal(response.status, 429);
+    assert.deepEqual(seen, ["token-a", "token-a"]);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("pool coalesces near-expiry credential refresh before serving", async () => {
   const directory = mkdtempSync(join(tmpdir(), "fusionkit-pool-"));
   writeMember(directory, "a", {
