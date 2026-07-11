@@ -2,6 +2,7 @@ import { captureWorktreeDiff } from "@fusionkit/runtime-utils";
 
 import { artifactHash } from "@fusionkit/protocol";
 import type { JsonValue, ModelFusionErrorKind, ModelFusionHarnessKind } from "@fusionkit/protocol";
+import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import {
   HarnessError,
   PANEL_APPROVAL_POLICY,
@@ -79,8 +80,8 @@ export type DriverHarnessOptions<Config> = {
    * candidate id.
    */
   resumeCursors?: Map<string, ResumeCursor>;
-  traceId?: string;
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing run/turn; candidates span under it. */
+  trace?: FusionTraceCarrier;
   turn?: number;
 };
 
@@ -235,8 +236,7 @@ export function createDriverHarness<Config>(
       const cwd = worktree?.path ?? descriptor.workspace ?? process.cwd();
       const tracer = traceCandidate(
         {
-          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.trace !== undefined ? { trace: options.trace } : {}),
           ...(options.turn !== undefined ? { turn: options.turn } : {})
         },
         {

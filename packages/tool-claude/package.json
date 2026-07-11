@@ -33,11 +33,19 @@
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runner": "workspace:*",
-    "@fusionkit/session-harness": "workspace:*",
     "@fusionkit/tools": "workspace:*"
   },
   "devDependencies": {
     "@fusionkit/workspace": "workspace:*"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "claude-code",
+    "harness",
+    "adapter"
+  ]
 }

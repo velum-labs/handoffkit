@@ -2,19 +2,25 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
+import { dim, done, note, uiStream } from "@fusionkit/cli-ui";
+
 import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
-import { initHome } from "../config.js";
 import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
+import { configDefaultEnsembleName } from "../fusion/effective-config.js";
 import { runFusionInit } from "../fusion-init.js";
+import { toolRegistry } from "../tools.js";
 import { fail } from "../shared/errors.js";
-import { resolveDir } from "../shared/plane.js";
+import { warnPassthroughTypos } from "../shared/flag-suggest.js";
+
+import { registerPaletteAction } from "./palette.js";
 import {
   collect,
   parseBudget,
   parseFusionTool,
   parseIdValue,
+  parseK,
   parseOnRateLimit,
   parsePanelModelSpec,
   parsePanelTrust,
@@ -28,6 +34,7 @@ type FusionOpts = {
   models?: string[];
   modelEndpoint?: string[];
   keyEnv?: string[];
+  ensemble?: string;
   judgeModel?: string;
   synthesisUrl?: string;
   fusionkitDir?: string;
@@ -38,18 +45,18 @@ type FusionOpts = {
   reasoningModel?: string | boolean;
   yes?: boolean;
   force?: boolean;
+  subagents?: boolean;
   authToken?: string;
   port?: string;
   portless?: boolean;
   ide?: boolean;
+  expose?: boolean;
   onRateLimit?: string;
   budget?: string;
   panelTrust?: string;
+  k?: string;
   resume?: string;
   continue?: boolean;
-  dir?: string;
-  host?: string;
-  planeUrl?: string;
 };
 
 /** Attach the panel/gateway flags shared by `fusion` and the per-tool launchers. */
@@ -59,11 +66,15 @@ function applyFusionOptions(command: Command): Command {
     .option("--models <spec>", "alias of --model", collect)
     .option("--model-endpoint <spec>", "pre-running OpenAI-compatible endpoint ID=URL (repeatable)", collect)
     .option("--key-env <spec>", "env var holding a model's API key ID=ENV (repeatable)", collect)
+    .option(
+      "--ensemble <name>",
+      "the session-default ensemble from .fusionkit/fusion.json (every defined ensemble is still registered as its own model)"
+    )
     .option("--judge-model <model>", "model used for judge synthesis")
     .option("--synthesis-url <url>", "pre-running fusionkit serve for synthesis")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for the uvx synthesizer)")
     .option("--repo <dir>", "coding workspace the panel fuses over")
-    .option("--local", "use the local MLX panel trio instead of the default cloud panel")
+    .option("--local", "run the panel on local MLX models (Apple Silicon only) instead of cloud providers")
     .option("--no-local", "override a .fusionkit default of local=true")
     .option("--observe", "boot the local scope dashboard and stream live trace events")
     .option("--no-observe", "override a .fusionkit default of observe=true")
@@ -75,11 +86,17 @@ function applyFusionOptions(command: Command): Command {
         `(e.g. openai/gpt-5.5-mini), or a local MLX repo (default: ${DEFAULT_REASONING_MODEL}; Apple Silicon)`
     )
     .option("--yes", "skip the interactive cloud-panel cost confirmation")
+    .option("--subagents", "auto-provision one native sub-agent per ensemble in the launched tool (default)")
+    .option("--no-subagents", "skip sub-agent auto-provisioning (Codex roles, Claude --agents, agent file scaffolds)")
     .option("--auth-token <token>", "require a bearer token on the gateway")
     .option("--port <n>", "gateway port (default: ephemeral)")
     .option("--portless", "route services through portless stable URLs (default; needs the proxy)")
     .option("--no-portless", "disable portless; use raw loopback ports (same as PORTLESS=0)")
     .option("--ide", "Cursor only: wire the Cursor IDE to the gateway (local desktop proxy, no tunnel)")
+    .option(
+      "--expose",
+      "serve only: publish the gateway on a public HTTPS tunnel (Cloudflare Quick Tunnel) with a required bearer token — e.g. for Cursor BYOK"
+    )
     .option(
       "--on-rate-limit <policy>",
       "vendor rate-limit/credit handoff: fusion (continue on the ensemble, default) | passthrough | fail"
@@ -88,6 +105,11 @@ function applyFusionOptions(command: Command): Command {
     .option(
       "--panel-trust <level>",
       "panel candidate autonomy: full (max, default) | guarded (harness-fenced to the worktree)"
+    )
+    .option(
+      "--k <n>",
+      "step boundaries per panel member before aggregation: 1 = single-completion proposers " +
+        "(caller executes the adopted step), n > 1 = bounded managed rollout, unset = full rollout (default)"
     )
     .option("--resume <id>", "resume a stored session by id (or unique prefix); see `fusionkit sessions`")
     .option("--continue", "resume the most recently active stored session")
@@ -104,6 +126,7 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
     keyEnvs[id] = value;
   }
 
+  if (opts.ensemble !== undefined) options.ensemble = opts.ensemble;
   if (opts.judgeModel !== undefined) options.judgeModel = opts.judgeModel;
   if (opts.synthesisUrl !== undefined) options.synthesisUrl = opts.synthesisUrl;
   if (opts.fusionkitDir !== undefined) options.fusionkitDir = resolve(opts.fusionkitDir);
@@ -118,14 +141,20 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
     options.reasoningModel = opts.reasoningModel === true ? DEFAULT_REASONING_MODEL : String(opts.reasoningModel);
   }
   if (opts.yes === true) options.yes = true;
+  // subagents is tri-state: only set when the user passed the flag (or its
+  // --no- form), so an unset flag can fall through to the config.
+  if (opts.subagents !== undefined) options.subagents = opts.subagents;
   if (opts.portless !== undefined) options.portless = opts.portless;
   if (opts.ide === true) options.ide = true;
+  if (opts.expose === true) options.expose = true;
   const onRateLimit = parseOnRateLimit(opts.onRateLimit);
   if (onRateLimit !== undefined) options.onRateLimit = onRateLimit;
   const budgetUsd = parseBudget(opts.budget);
   if (budgetUsd !== undefined) options.budgetUsd = budgetUsd;
   const panelTrust = parsePanelTrust(opts.panelTrust);
   if (panelTrust !== undefined) options.panelTrust = panelTrust;
+  const k = parseK(opts.k);
+  if (k !== undefined) options.k = k;
   if (opts.authToken !== undefined) options.authToken = opts.authToken;
   if (opts.port !== undefined) options.port = parsePort(opts.port, 0);
   if (opts.resume !== undefined) options.resume = opts.resume;
@@ -160,12 +189,35 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   return options;
 }
 
-/** Fill any option the user did not set explicitly from `fusionkit.json`. */
+/** Fill any option the user did not set explicitly from `.fusionkit/fusion.json`. */
 function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
-  if (options.models === undefined && options.endpoints === undefined && config.panel !== undefined && config.panel.length > 0) {
-    options.models = config.panel.map((spec) => ({ ...spec }));
+  // Named ensembles: every defined ensemble flows through (each registers as
+  // its own gateway model); `--ensemble` (or the config's defaultEnsemble)
+  // picks the session default. Flag `--model`/`--judge-model` overrides apply
+  // to the selected ensemble inside `runFusion`.
+  if (
+    options.ensembles === undefined &&
+    options.endpoints === undefined &&
+    config.ensembles !== undefined &&
+    Object.keys(config.ensembles).length > 0
+  ) {
+    options.ensembles = Object.entries(config.ensembles).map(([name, ensemble]) => {
+      // Per-ensemble k falls back to the config's top-level default.
+      const k = ensemble.k ?? config.k;
+      return {
+        name,
+        models: (ensemble.panel ?? []).map((spec) => ({ ...spec })),
+        ...(ensemble.judgeModel !== undefined ? { judgeModel: ensemble.judgeModel } : {}),
+        ...(ensemble.synthesizerModel !== undefined ? { synthesizerModel: ensemble.synthesizerModel } : {}),
+        ...(k !== undefined ? { k } : {}),
+        ...(ensemble.prompts !== undefined ? { prompts: ensemble.prompts } : {})
+      };
+    });
+    if (options.ensemble === undefined) {
+      const configured = configDefaultEnsembleName(config);
+      if (configured !== undefined) options.ensemble = configured;
+    }
   }
-  if (options.judgeModel === undefined && config.judgeModel !== undefined) options.judgeModel = config.judgeModel;
   if (options.local === undefined && config.local !== undefined) options.local = config.local;
   if (options.observe === undefined && config.observe !== undefined) options.observe = config.observe;
   if (options.reasoning === undefined && config.reasoning !== undefined) options.reasoning = config.reasoning;
@@ -182,6 +234,10 @@ function mergeConfig(options: RunFusionOptions, config: FusionConfig): void {
   }
   if (options.panelTrust === undefined && config.panelTrust !== undefined) {
     options.panelTrust = config.panelTrust;
+  }
+  if (options.k === undefined && config.k !== undefined) options.k = config.k;
+  if (options.subagents === undefined && config.subagents !== undefined) {
+    options.subagents = config.subagents;
   }
   if (options.prompts === undefined && config.prompts !== undefined) options.prompts = config.prompts;
 }
@@ -211,35 +267,40 @@ function resolveContext(opts: FusionOpts): { options: RunFusionOptions; configTo
 }
 
 export function registerFusion(program: Command): void {
-  // Top-level `init` — scaffold a committed .fusionkit/ folder for this repo.
-  program
-    .command("init")
-    .description("scaffold a committed .fusionkit/ folder for this repo")
-    .option("--repo <dir>", "coding workspace the panel fuses over")
-    .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
-    .option("--force", "overwrite an existing .fusionkit/ config and prompts without prompting")
-    .option("--dir <dir>", "legacy plane home directory")
-    .option("--host <host>", "legacy plane bind address")
-    .option("--plane-url <url>", "legacy public plane URL")
-    .option("--port <n>", "legacy plane port")
-    .action(async (opts: FusionOpts) => {
-      if (opts.host !== undefined || opts.planeUrl !== undefined || opts.dir !== undefined) {
-        initHome(resolveDir(opts.dir), {
-          ...(opts.host !== undefined ? { host: opts.host } : {}),
-          ...(opts.planeUrl !== undefined ? { planeUrl: opts.planeUrl } : {}),
-          ...(opts.port !== undefined ? { port: parsePort(opts.port, 7172) } : {})
-        });
-        return;
-      }
-      const options = resolveOptions(opts);
-      const repoRoot = configRepoRoot(options);
-      const code = await runFusionInit({
-        repoRoot,
-        force: opts.force === true,
-        ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
+  registerPaletteAction(
+    ...toolRegistry.launchableFusion().map((tool) => ({
+      label: `Run ${tool.id} with fusion`,
+      hint: `fusionkit ${tool.id}`,
+      argv: [tool.id]
+    })),
+    { label: "Run the gateway for any tool", hint: "fusionkit serve", argv: ["serve"] },
+    { label: "Set up this repo (.fusionkit/)", hint: "fusionkit init", argv: ["init"] },
+    { label: "Stop background fusion services", hint: "fusionkit fusion stop", argv: ["fusion", "stop"] }
+  );
+
+  // Top-level shortcuts: `fusionkit codex`, `fusionkit claude`, etc.
+  for (const tool of FUSION_TOOLS) {
+    applyFusionOptions(
+      program
+        .command(tool)
+        .description(`real model fusion backs ${tool === "serve" ? "any tool (prints setup snippets)" : tool}`)
+        .argument("[args...]", `arguments forwarded to ${tool}`)
+    )
+      .addHelpText(
+        "after",
+        `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
+      )
+      .action(async (args: string[], _opts: FusionOpts, command: Command) => {
+        const opts = command.optsWithGlobals<FusionOpts>();
+        warnPassthroughTypos(command, args, tool);
+        const { options } = resolveContext(opts);
+        if (options.expose === true && tool !== "serve") {
+          fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
+        }
+        const code = await runFusion(tool, args, options);
+        process.exit(code);
       });
-      process.exit(code);
-    });
+  }
 
   // Generic `fusion [tool]` — keeps the original surface and interactive pick.
   applyFusionOptions(
@@ -256,12 +317,15 @@ export function registerFusion(program: Command): void {
         "\nRun `fusionkit init` to scaffold a committed .fusionkit/ folder for this repo." +
         "\nRun `fusionkit fusion stop` to reap portless singleton services (router, dashboard, ...)."
     )
-    .action(async (positionalTool: string | undefined, args: string[], opts: FusionOpts) => {
+    .action(async (positionalTool: string | undefined, args: string[], _opts: FusionOpts, command: Command) => {
+      // Merge program-level flags (--yes and friends may precede `fusion`).
+      const opts = command.optsWithGlobals<FusionOpts>();
       // `fusion stop` reaps persistent portless singletons left running by prior
       // runs (the router, dashboard, ...).
       if (positionalTool === "stop") {
-        const stopped = await reapFusionServices((line) => console.error(line));
-        console.error(`fusion: stopped ${stopped} portless service(s)`);
+        const stopped = await reapFusionServices((line) => uiStream().write(`${dim(line)}\n`));
+        if (stopped === 0) note("no background fusion services were running");
+        else done(`stopped ${stopped} background fusion service(s)`);
         process.exit(0);
       }
 
@@ -276,26 +340,29 @@ export function registerFusion(program: Command): void {
         }
       }
       const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
+      warnPassthroughTypos(command, toolArgs, resolvedTool);
+      if (options.expose === true && resolvedTool !== "serve") {
+        fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
+      }
       const code = await runFusion(resolvedTool, toolArgs, options);
       process.exit(code);
     });
 
-  // Top-level shortcuts: `fusionkit codex`, `fusionkit claude`, etc.
-  for (const tool of FUSION_TOOLS) {
-    applyFusionOptions(
-      program
-        .command(tool)
-        .description(`real model fusion backs ${tool === "serve" ? "any tool (prints setup snippets)" : tool}`)
-        .argument("[args...]", `arguments forwarded to ${tool}`)
-    )
-      .addHelpText(
-        "after",
-        `\nfusionkit's own flags must precede any ${tool} args; everything after is forwarded to ${tool}.`
-      )
-      .action(async (args: string[], opts: FusionOpts) => {
-        const { options } = resolveContext(opts);
-        const code = await runFusion(tool, args, options);
-        process.exit(code);
+  // Top-level `init` — scaffold a committed .fusionkit/ folder for this repo.
+  program
+    .command("init")
+    .description("scaffold a committed .fusionkit/ folder for this repo")
+    .option("--repo <dir>", "coding workspace the panel fuses over")
+    .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for default prompts)")
+    .option("--force", "overwrite an existing .fusionkit/ config and prompts without prompting")
+    .action(async (opts: FusionOpts) => {
+      const options = resolveOptions(opts);
+      const repoRoot = configRepoRoot(options);
+      const code = await runFusionInit({
+        repoRoot,
+        force: opts.force === true,
+        ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
       });
-  }
+      process.exit(code);
+    });
 }

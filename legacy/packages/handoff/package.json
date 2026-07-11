@@ -1,0 +1,50 @@
+{
+  "name": "@fusionkit/handoff",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "legacy/packages/handoff"
+  },
+  "description": "Legacy governance stack (not part of the FusionKit product): Handoff SDK: continuation-first developer surface (checkpoint, continueIn, parallel, review, pull) built entirely on Warrant primitives.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "4.0.2",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/runtime-utils": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/workspace": "workspace:*",
+    "ai": "6.0.200",
+    "zod": "4.4.3"
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "legacy",
+    "handoff",
+    "continuation"
+  ],
+  "devDependencies": {
+    "@fusionkit/testkit": "workspace:*"
+  }
+}

@@ -14,8 +14,9 @@
  */
 
 import type { Backend } from "../backend.js";
-
-const ENCODER = new TextEncoder();
+import type { OpenAiChoice } from "./openai-chat-wire.js";
+import { openAiSseToResponses } from "./responses-stream.js";
+export { openAiSseToResponses } from "./responses-stream.js";
 
 // ---- Responses request types (the subset Codex sends) ----
 
@@ -29,15 +30,19 @@ type ResponsesInputItem =
   | { type: string; [key: string]: unknown };
 
 /** A tool declaration on a Responses request: a function tool (JSON-schema
- *  `parameters`) or a freeform "custom" tool (a grammar/text `format` and raw
- *  string input — e.g. Codex's `apply_patch` for GPT-5-family models). */
+ *  `parameters`), a freeform "custom" tool (a grammar/text `format` and raw
+ *  string input — e.g. Codex's `apply_patch` for GPT-5-family models), or a
+ *  *typed* tool identified only by its `type` (e.g. Codex's `tool_search` /
+ *  `web_search` entries, which carry no `name`). */
 type ResponsesTool = {
   type?: string;
-  name: string;
+  name?: string;
   description?: string;
   parameters?: unknown;
   strict?: boolean;
   format?: { type?: string; syntax?: string; definition?: string };
+  /** Typed tools declare who executes them ("client" for CLI-side tools). */
+  execution?: string;
 };
 
 export type ResponsesRequest = {
@@ -45,7 +50,7 @@ export type ResponsesRequest = {
   instructions?: string;
   input?: string | ResponsesInputItem[];
   tools?: ResponsesTool[];
-  tool_choice?: "auto" | "none" | "required" | { type: "function"; name: string };
+  tool_choice?: "auto" | "none" | "required" | { type: string; name?: string };
   max_output_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -54,27 +59,6 @@ export type ResponsesRequest = {
 
 // ---- OpenAI chat shapes we read back ----
 
-type OpenAiToolCall = { id?: string; index?: number; function?: { name?: string; arguments?: string } };
-// Reasoning rides two distinct wire fields: `reasoning_content` carries
-// complete narration beats (the fusion judge channel — one summary part per
-// delta), while `reasoning` carries the upstream model's raw thinking tokens
-// (local MLX / router passthrough — accumulated into a single summary part).
-type OpenAiDelta = {
-  content?: string | null;
-  reasoning?: string | null;
-  reasoning_content?: string | null;
-  tool_calls?: OpenAiToolCall[];
-};
-type OpenAiChoice = {
-  delta?: OpenAiDelta;
-  message?: {
-    content?: string | null;
-    reasoning?: string | null;
-    reasoning_content?: string | null;
-    tool_calls?: OpenAiToolCall[];
-  };
-  finish_reason?: string | null;
-};
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
 type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; provider_cost?: unknown };
 type OpenAiResponse = {
@@ -119,22 +103,147 @@ function contentToParts(content: string | ResponsesContentPart[]): string | Reco
 
 function mapToolChoice(choice: NonNullable<ResponsesRequest["tool_choice"]>): unknown {
   if (typeof choice === "string") return choice;
-  return { type: "function", function: { name: choice.name } };
+  // A typed tool choice (e.g. {type: "tool_search"}) resolves to the name the
+  // tool is projected under on the chat side (its type).
+  const name = choice.name ?? (choice.type !== "function" ? choice.type : undefined);
+  if (name === undefined || name.length === 0) return undefined;
+  return { type: "function", function: { name } };
 }
 
 /**
- * The names of the freeform ("custom") tools a Responses request declares.
- * The chat core only speaks JSON function tools, so these are forwarded as
- * function tools with an `{input: string}` schema — and on the way back, a
- * call to one of these names must be emitted as a `custom_tool_call` item
- * (raw string input), which is the shape the caller (Codex) expects.
+ * How a declared tool must be emitted when the model calls it:
+ * - `function`: a plain `function_call` item (JSON-schema function tools, and
+ *   tools discovered mid-conversation via `tool_search_output`).
+ * - `custom`: a `custom_tool_call` item carrying raw string input (freeform
+ *   tools like Codex's `apply_patch`).
+ * - `typed`: the tool's own native item type (`<type>_call`, e.g.
+ *   `tool_search_call`) — Codex dispatches these by payload shape, and a
+ *   `function_call` under the same name fails with "handler received
+ *   unsupported payload".
+ */
+export type ResponsesToolKind = "function" | "custom" | "typed";
+
+export type ResponsesToolEntry = {
+  kind: ResponsesToolKind;
+  /**
+   * The tool's namespace, for tools *discovered* through a `tool_search`
+   * execution (e.g. `spawn_agent` under `multi_agent_v1`). Codex routes a
+   * discovered tool's `function_call` by name **and** namespace — without the
+   * namespace the call fails with "unsupported call".
+   */
+  namespace?: string;
+};
+
+export type ResponsesToolRegistry = ReadonlyMap<string, ResponsesToolEntry>;
+
+const EMPTY_TOOL_REGISTRY: ResponsesToolRegistry = new Map();
+
+/**
+ * Whether a declared tool is a *typed, client-executed* tool: identified only
+ * by its `type` (no `name`) and executed by the caller (`execution: "client"`,
+ * e.g. Codex's `tool_search` for deferred-tool discovery). Server-executed
+ * typed tools (e.g. `web_search`, which OpenAI's backend runs) are excluded —
+ * the gateway cannot honor them, so advertising them to the fused model would
+ * produce calls nobody executes.
+ */
+function isClientTypedTool(tool: ResponsesTool): boolean {
+  return (
+    typeof tool.type === "string" &&
+    tool.type.length > 0 &&
+    tool.type !== "function" &&
+    tool.type !== "custom" &&
+    (tool.name === undefined || tool.name.length === 0) &&
+    tool.execution === "client"
+  );
+}
+
+/** A tool definition harvested from an echoed `tool_search_output` item. */
+type DiscoveredTool = {
+  name: string;
+  namespace?: string;
+  description?: string;
+  parameters?: unknown;
+};
+
+function collectDiscovered(entries: unknown[], namespace: string | undefined, out: DiscoveredTool[]): void {
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as {
+      type?: string;
+      name?: string;
+      description?: string;
+      parameters?: unknown;
+      tools?: unknown;
+    };
+    if (record.type === "namespace" && Array.isArray(record.tools)) {
+      collectDiscovered(record.tools, typeof record.name === "string" ? record.name : namespace, out);
+      continue;
+    }
+    if (typeof record.name === "string" && record.name.length > 0) {
+      out.push({
+        name: record.name,
+        ...(namespace !== undefined ? { namespace } : {}),
+        ...(typeof record.description === "string" ? { description: record.description } : {}),
+        ...(record.parameters !== undefined ? { parameters: record.parameters } : {})
+      });
+    }
+  }
+}
+
+/**
+ * The tools *discovered* through prior typed-tool executions in this
+ * conversation. Codex never adds discovered tools to the request's `tools`
+ * array — their definitions ride inside the echoed `tool_search_output` items
+ * (possibly grouped under namespaces) and Codex dispatches subsequent calls by
+ * name + namespace. Harvesting them here is what closes the discovery loop:
+ * the follow-up fused turn can advertise and call `spawn_agent` etc.
+ */
+function discoveredToolsFromInput(body: ResponsesRequest): DiscoveredTool[] {
+  const found: DiscoveredTool[] = [];
+  if (!Array.isArray(body.input)) return found;
+  for (const item of body.input) {
+    if (typeof item !== "object" || item === null) continue;
+    const record = item as { type?: string; tools?: unknown };
+    if (typeof record.type !== "string" || !record.type.endsWith("_output")) continue;
+    if (!Array.isArray(record.tools)) continue;
+    collectDiscovered(record.tools, undefined, found);
+  }
+  return found;
+}
+
+/**
+ * The per-request tool registry: every callable tool the request declares or
+ * has discovered, keyed by the name the chat-side model calls it under, mapped
+ * to how its calls must be emitted. Typed tools are keyed by their `type`;
+ * discovered tools carry their namespace for egress dispatch.
+ */
+export function responsesToolRegistry(body: ResponsesRequest): ResponsesToolRegistry {
+  const registry = new Map<string, ResponsesToolEntry>();
+  for (const tool of body.tools ?? []) {
+    if (typeof tool.name === "string" && tool.name.length > 0) {
+      registry.set(tool.name, { kind: tool.type === "custom" ? "custom" : "function" });
+      continue;
+    }
+    if (isClientTypedTool(tool)) registry.set(tool.type as string, { kind: "typed" });
+  }
+  for (const tool of discoveredToolsFromInput(body)) {
+    if (registry.has(tool.name)) continue;
+    registry.set(tool.name, {
+      kind: "function",
+      ...(tool.namespace !== undefined ? { namespace: tool.namespace } : {})
+    });
+  }
+  return registry;
+}
+
+/**
+ * Back-compat helper: the names of the freeform ("custom") tools a Responses
+ * request declares (see {@link responsesToolRegistry}).
  */
 export function customToolNames(body: ResponsesRequest): ReadonlySet<string> {
   const names = new Set<string>();
-  for (const tool of body.tools ?? []) {
-    if (tool.type === "custom" && typeof tool.name === "string" && tool.name.length > 0) {
-      names.add(tool.name);
-    }
+  for (const [name, entry] of responsesToolRegistry(body)) {
+    if (entry.kind === "custom") names.add(name);
   }
   return names;
 }
@@ -241,6 +350,31 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
         });
         continue;
       }
+      // A prior *typed* tool call echoed back (e.g. `tool_search_call`): replay
+      // it as an assistant tool call under the tool's projected name (its item
+      // type minus `_call`) so the chat-side history stays coherent across the
+      // caller's discovery/execution loop.
+      if (
+        typeof item.type === "string" &&
+        item.type.endsWith("_call") &&
+        item.type !== "function_call" &&
+        item.type !== "custom_tool_call" &&
+        typeof (item as { call_id?: unknown }).call_id === "string"
+      ) {
+        const call = item as { type: string; call_id: string; id?: string; arguments?: unknown };
+        pendingToolCalls.push({
+          id: call.call_id,
+          type: "function",
+          function: {
+            name: call.type.slice(0, -"_call".length),
+            arguments:
+              typeof call.arguments === "string"
+                ? call.arguments
+                : JSON.stringify(call.arguments ?? {})
+          }
+        });
+        continue;
+      }
       flushToolCalls();
       // Reasoning items round-trip: Codex echoes the fusion narration item back
       // verbatim on the next request (with `summary`, and `content` that may be
@@ -255,6 +389,23 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
         const out = item as { call_id: string; output: unknown };
         const content = typeof out.output === "string" ? out.output : JSON.stringify(out.output);
         messages.push({ role: "tool", tool_call_id: out.call_id, content });
+        continue;
+      }
+      // A typed tool's result (e.g. `tool_search_output`): the whole item body
+      // (minus wire boilerplate) is the tool result the chat side reads — for
+      // tool_search that is the discovered tool list.
+      if (
+        typeof item.type === "string" &&
+        item.type.endsWith("_output") &&
+        typeof (item as { call_id?: unknown }).call_id === "string"
+      ) {
+        const { type: _type, call_id, id: _id, ...rest } = item as {
+          type: string;
+          call_id: string;
+          id?: string;
+          [key: string]: unknown;
+        };
+        messages.push({ role: "tool", tool_call_id: call_id, content: JSON.stringify(rest) });
         continue;
       }
       // message item (explicit type "message" or a bare {role, content}); any
@@ -277,49 +428,118 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
   if (typeof body.max_output_tokens === "number") chat.max_tokens = body.max_output_tokens;
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
-  if (Array.isArray(body.tools) && body.tools.length > 0) {
-    // Only forward tools with a usable name (Chat Completions rejects an empty
-    // function name outright). A freeform "custom" tool (e.g. Codex's
-    // `apply_patch`) has no JSON schema — it becomes a function tool with an
-    // `{input: string}` schema and its grammar folded into the description, so
-    // the chat-side model knows exactly how to call it.
-    const named = body.tools.filter(
-      (tool) => typeof tool.name === "string" && tool.name.length > 0
-    );
-    if (named.length > 0) {
-      chat.tools = named.map((tool) =>
-        tool.type === "custom"
-          ? {
-              type: "function",
-              function: {
-                name: tool.name,
-                description: customToolDescription(tool),
-                parameters: CUSTOM_TOOL_PARAMETERS
+  {
+    // Every callable tool is forwarded as a chat function tool (Chat
+    // Completions only speaks JSON function tools):
+    // - named function tools pass through;
+    // - a freeform "custom" tool (e.g. Codex's `apply_patch`) has no JSON
+    //   schema — it becomes a function tool with an `{input: string}` schema
+    //   and its grammar folded into the description;
+    // - a typed client-executed tool (e.g. Codex's `tool_search`, the
+    //   deferred-tool discovery door) is projected under its `type` as the
+    //   function name, so the chat-side model can call it and the caller can
+    //   dispatch it (the egress emits its native `<type>_call` item).
+    // Server-executed typed tools (e.g. `web_search`) are excluded: nothing on
+    // this side can run them, so advertising them would only produce calls
+    // nobody answers.
+    const tools: Record<string, unknown>[] = [];
+    for (const tool of body.tools ?? []) {
+      if (typeof tool.name === "string" && tool.name.length > 0) {
+        tools.push(
+          tool.type === "custom"
+            ? {
+                type: "function",
+                function: {
+                  name: tool.name,
+                  description: customToolDescription(tool),
+                  parameters: CUSTOM_TOOL_PARAMETERS
+                }
               }
-            }
-          : {
-              type: "function",
-              function: {
-                name: tool.name,
-                ...(tool.description !== undefined ? { description: tool.description } : {}),
-                parameters: tool.parameters ?? { type: "object", properties: {} }
+            : {
+                type: "function",
+                function: {
+                  name: tool.name,
+                  ...(tool.description !== undefined ? { description: tool.description } : {}),
+                  parameters: tool.parameters ?? { type: "object", properties: {} }
+                }
               }
-            }
-      );
+        );
+        continue;
+      }
+      if (isClientTypedTool(tool)) {
+        tools.push({
+          type: "function",
+          function: {
+            name: tool.type,
+            ...(tool.description !== undefined ? { description: tool.description } : {}),
+            parameters: tool.parameters ?? { type: "object", properties: {} }
+          }
+        });
+      }
     }
+    // Tools discovered mid-conversation (via a prior `tool_search` execution)
+    // never appear in the request's `tools` array — the caller expects them to
+    // be callable anyway, so they must be advertised to the chat-side model.
+    const declared = new Set(
+      tools.map((tool) => (tool.function as { name?: string } | undefined)?.name)
+    );
+    for (const tool of discoveredToolsFromInput(body)) {
+      if (declared.has(tool.name)) continue;
+      declared.add(tool.name);
+      tools.push({
+        type: "function",
+        function: {
+          name: tool.name,
+          ...(tool.description !== undefined ? { description: tool.description } : {}),
+          parameters: tool.parameters ?? { type: "object", properties: {} }
+        }
+      });
+    }
+    if (tools.length > 0) chat.tools = tools;
   }
-  if (body.tool_choice !== undefined) chat.tool_choice = mapToolChoice(body.tool_choice);
+  if (body.tool_choice !== undefined) {
+    const choice = mapToolChoice(body.tool_choice);
+    if (choice !== undefined) chat.tool_choice = choice;
+  }
   if (body.stream === true) chat.stream_options = { include_usage: true };
   return chat;
 }
 
 // ---- non-streaming response translation ----
 
-const NO_CUSTOM_TOOLS: ReadonlySet<string> = new Set();
+/** Parse a typed tool call's accumulated arguments into the JSON value its
+ *  native item carries (`arguments` is an object on the wire, not a string). */
+function typedToolArguments(args: string): unknown {
+  if (args.trim().length === 0) return {};
+  try {
+    return JSON.parse(args) as unknown;
+  } catch {
+    return {};
+  }
+}
+
+/** The native item for a typed tool call (e.g. name "tool_search" ->
+ *  `tool_search_call`). Codex dispatches typed tools by payload shape; a
+ *  `function_call` under the same name fails with "unsupported payload". */
+function typedToolCallItem(input: {
+  name: string;
+  itemId: string;
+  callId: string;
+  args: string;
+}): Record<string, unknown> {
+  return {
+    type: `${input.name}_call`,
+    id: input.itemId,
+    call_id: input.callId,
+    status: "completed",
+    execution: "client",
+    arguments: typedToolArguments(input.args)
+  };
+}
 
 function buildOutput(
   message: OpenAiChoice["message"],
-  customTools: ReadonlySet<string>
+  toolRegistry: ResponsesToolRegistry
 ): Record<string, unknown>[] {
   const output: Record<string, unknown>[] = [];
   const reasoning =
@@ -352,7 +572,8 @@ function buildOutput(
     for (const call of message.tool_calls) {
       const name = call.function?.name ?? "";
       const args = call.function?.arguments ?? "";
-      if (customTools.has(name)) {
+      const entry = toolRegistry.get(name) ?? { kind: "function" as const };
+      if (entry.kind === "custom") {
         // The caller declared this tool as freeform: it expects a
         // `custom_tool_call` item carrying the raw string input.
         output.push({
@@ -365,11 +586,24 @@ function buildOutput(
         });
         continue;
       }
+      if (entry.kind === "typed") {
+        output.push(
+          typedToolCallItem({
+            name,
+            itemId: `ttc_${randomId()}`,
+            callId: call.id ?? `call_${randomId()}`,
+            args
+          })
+        );
+        continue;
+      }
       output.push({
         type: "function_call",
         id: `fc_${randomId()}`,
         call_id: call.id ?? `call_${randomId()}`,
         name,
+        // A discovered tool's call routes by name *and* namespace.
+        ...(entry.namespace !== undefined ? { namespace: entry.namespace } : {}),
         arguments: args,
         status: "completed"
       });
@@ -381,10 +615,10 @@ function buildOutput(
 export function chatToResponses(
   openai: OpenAiResponse,
   model: string,
-  customTools: ReadonlySet<string> = NO_CUSTOM_TOOLS
+  toolRegistry: ResponsesToolRegistry = EMPTY_TOOL_REGISTRY
 ): Record<string, unknown> {
   const message = openai.choices?.[0]?.message;
-  const output = buildOutput(message, customTools);
+  const output = buildOutput(message, toolRegistry);
   const inputTokens = openai.usage?.prompt_tokens;
   const outputTokens = openai.usage?.completion_tokens;
   return {
@@ -410,447 +644,7 @@ export function chatToResponses(
 
 // ---- streaming translation (OpenAI chat SSE -> Responses SSE) ----
 
-function sse(type: string, data: Record<string, unknown>): Uint8Array {
-  return ENCODER.encode(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
-}
-
-type ToolAccumulator = {
-  outputIndex: number;
-  itemId: string;
-  callId: string;
-  name: string;
-  args: string;
-  /** Declared by the caller as a freeform tool: emit `custom_tool_call` (raw
-   *  string input, extracted from the completed JSON arguments) instead of
-   *  `function_call`. Input is only extractable once the arguments are
-   *  complete, so custom calls stream no per-delta argument events. */
-  custom: boolean;
-};
-
-export function openAiSseToResponses(
-  upstream: ReadableStream<Uint8Array>,
-  model: string,
-  customTools: ReadonlySet<string> = NO_CUSTOM_TOOLS
-): ReadableStream<Uint8Array> {
-  const reader = upstream.getReader();
-  const decoder = new TextDecoder();
-  const responseId = `resp_${randomId()}`;
-  const messageItemId = `msg_${randomId()}`;
-  const reasoningItemId = `rs_${randomId()}`;
-  const tools = new Map<number, ToolAccumulator>();
-  let buffer = "";
-  let created = false;
-  let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
-  let textOpen = false;
-  let textValue = "";
-  let reasoningOpen = false;
-  let reasoningClosed = false;
-  const reasoningParts: string[] = [];
-  let reasoningOutputIndex = -1;
-  /** Index into `reasoningParts` of the open token-accumulating part, or -1. */
-  let tokenPartIndex = -1;
-  let nextOutputIndex = 0;
-  let messageOutputIndex = -1;
-  let finished = false;
-  let inputTokens: number | undefined;
-  let outputTokens: number | undefined;
-  let providerCost: unknown;
-
-  type Controller = ReadableStreamDefaultController<Uint8Array>;
-
-  const baseResponse = (status: string, output: Record<string, unknown>[]): Record<string, unknown> => ({
-    id: responseId,
-    object: "response",
-    created_at: Math.floor(Date.now() / 1000),
-    status,
-    model,
-    output,
-    usage:
-      status === "completed"
-        ? inputTokens !== undefined || outputTokens !== undefined
-          ? {
-              ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
-              ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
-              ...(inputTokens !== undefined && outputTokens !== undefined
-                ? { total_tokens: inputTokens + outputTokens }
-                : {})
-            }
-          : null
-        : null,
-    ...(status === "completed" && providerCost !== undefined ? { provider_cost: providerCost } : {})
-  });
-
-  const ensureCreated = (controller: Controller): void => {
-    if (created) return;
-    created = true;
-    controller.enqueue(sse("response.created", { response: baseResponse("in_progress", []) }));
-  };
-
-  // Reasoning summary item lifecycle. The item opens on the first reasoning
-  // delta and closes as soon as the first real output (text or tool call)
-  // begins. Two delta flavors share the item:
-  // - `reasoning_content` (fusion narration): each delta is a complete beat,
-  //   so each becomes its OWN summary part (added -> delta -> done). Codex
-  //   flushes reasoning to the transcript on summary-part boundaries and
-  //   promotes the newest part's bold header to its live status, so per-beat
-  //   parts are what make the narration visible as it happens.
-  // - `reasoning` (the model's raw thinking tokens): deltas are token
-  //   fragments, so they accumulate into ONE summary part that stays open
-  //   until a beat arrives or the reasoning item closes.
-  const ensureReasoningItem = (controller: Controller): void => {
-    ensureCreated(controller);
-    if (reasoningOpen || reasoningClosed) return;
-    reasoningOpen = true;
-    reasoningOutputIndex = nextOutputIndex++;
-    controller.enqueue(
-      sse("response.output_item.added", {
-        output_index: reasoningOutputIndex,
-        item: { type: "reasoning", id: reasoningItemId, summary: [] }
-      })
-    );
-  };
-
-  const emitReasoningPart = (controller: Controller, text: string): void => {
-    ensureReasoningItem(controller);
-    if (reasoningClosed) return;
-    closeTokenPart(controller);
-    const summaryIndex = reasoningParts.length;
-    reasoningParts.push(text);
-    const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: summaryIndex };
-    controller.enqueue(
-      sse("response.reasoning_summary_part.added", { ...base, part: { type: "summary_text", text: "" } })
-    );
-    controller.enqueue(sse("response.reasoning_summary_text.delta", { ...base, delta: text }));
-    controller.enqueue(sse("response.reasoning_summary_text.done", { ...base, text }));
-    controller.enqueue(
-      sse("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
-    );
-  };
-
-  // The single accumulating part for raw thinking tokens (`delta.reasoning`).
-  const emitReasoningTokenDelta = (controller: Controller, text: string): void => {
-    ensureReasoningItem(controller);
-    if (reasoningClosed) return;
-    if (tokenPartIndex === -1) {
-      tokenPartIndex = reasoningParts.length;
-      reasoningParts.push("");
-      controller.enqueue(
-        sse("response.reasoning_summary_part.added", {
-          item_id: reasoningItemId,
-          output_index: reasoningOutputIndex,
-          summary_index: tokenPartIndex,
-          part: { type: "summary_text", text: "" }
-        })
-      );
-    }
-    reasoningParts[tokenPartIndex] += text;
-    controller.enqueue(
-      sse("response.reasoning_summary_text.delta", {
-        item_id: reasoningItemId,
-        output_index: reasoningOutputIndex,
-        summary_index: tokenPartIndex,
-        delta: text
-      })
-    );
-  };
-
-  const closeTokenPart = (controller: Controller): void => {
-    if (tokenPartIndex === -1) return;
-    const text = reasoningParts[tokenPartIndex] ?? "";
-    const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: tokenPartIndex };
-    tokenPartIndex = -1;
-    controller.enqueue(sse("response.reasoning_summary_text.done", { ...base, text }));
-    controller.enqueue(
-      sse("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
-    );
-  };
-
-  const reasoningSummary = (): Array<Record<string, unknown>> =>
-    reasoningParts.map((text) => ({ type: "summary_text", text }));
-
-  const closeReasoning = (controller: Controller): void => {
-    if (!reasoningOpen || reasoningClosed) return;
-    closeTokenPart(controller);
-    reasoningClosed = true;
-    controller.enqueue(
-      sse("response.output_item.done", {
-        output_index: reasoningOutputIndex,
-        item: { type: "reasoning", id: reasoningItemId, summary: reasoningSummary() }
-      })
-    );
-  };
-
-  const ensureText = (controller: Controller): void => {
-    ensureCreated(controller);
-    closeReasoning(controller);
-    if (textOpen) return;
-    textOpen = true;
-    messageOutputIndex = nextOutputIndex++;
-    controller.enqueue(
-      sse("response.output_item.added", {
-        output_index: messageOutputIndex,
-        item: { type: "message", id: messageItemId, status: "in_progress", role: "assistant", content: [] }
-      })
-    );
-    controller.enqueue(
-      sse("response.content_part.added", {
-        item_id: messageItemId,
-        output_index: messageOutputIndex,
-        content_index: 0,
-        part: { type: "output_text", text: "", annotations: [] }
-      })
-    );
-  };
-
-  const assembleOutput = (): Record<string, unknown>[] => {
-    const output: Record<string, unknown>[] = [];
-    if (reasoningParts.length > 0) {
-      output.push({ type: "reasoning", id: reasoningItemId, summary: reasoningSummary() });
-    }
-    if (textOpen) {
-      output.push({
-        type: "message",
-        id: messageItemId,
-        status: "completed",
-        role: "assistant",
-        content: [{ type: "output_text", text: textValue, annotations: [] }]
-      });
-    }
-    for (const tool of tools.values()) {
-      output.push(
-        tool.custom
-          ? {
-              type: "custom_tool_call",
-              id: tool.itemId,
-              call_id: tool.callId,
-              name: tool.name,
-              input: customToolInput(tool.args),
-              status: "completed"
-            }
-          : {
-              type: "function_call",
-              id: tool.itemId,
-              call_id: tool.callId,
-              name: tool.name,
-              arguments: tool.args,
-              status: "completed"
-            }
-      );
-    }
-    return output;
-  };
-
-  const finalize = (controller: Controller): void => {
-    if (finished) return;
-    finished = true;
-    if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
-    closeReasoning(controller);
-    if (textOpen) {
-      controller.enqueue(
-        sse("response.output_text.done", {
-          item_id: messageItemId,
-          output_index: messageOutputIndex,
-          content_index: 0,
-          text: textValue
-        })
-      );
-      controller.enqueue(
-        sse("response.content_part.done", {
-          item_id: messageItemId,
-          output_index: messageOutputIndex,
-          content_index: 0,
-          part: { type: "output_text", text: textValue, annotations: [] }
-        })
-      );
-      controller.enqueue(
-        sse("response.output_item.done", {
-          output_index: messageOutputIndex,
-          item: {
-            type: "message",
-            id: messageItemId,
-            status: "completed",
-            role: "assistant",
-            content: [{ type: "output_text", text: textValue, annotations: [] }]
-          }
-        })
-      );
-    }
-    for (const tool of tools.values()) {
-      if (tool.custom) {
-        // The raw input is only extractable from the completed JSON arguments,
-        // so a custom call flushes its whole input here in one delta + done.
-        const input = customToolInput(tool.args);
-        const base = { item_id: tool.itemId, output_index: tool.outputIndex };
-        controller.enqueue(sse("response.custom_tool_call_input.delta", { ...base, delta: input }));
-        controller.enqueue(sse("response.custom_tool_call_input.done", { ...base, input }));
-        controller.enqueue(
-          sse("response.output_item.done", {
-            output_index: tool.outputIndex,
-            item: {
-              type: "custom_tool_call",
-              id: tool.itemId,
-              call_id: tool.callId,
-              name: tool.name,
-              input,
-              status: "completed"
-            }
-          })
-        );
-        continue;
-      }
-      controller.enqueue(
-        sse("response.function_call_arguments.done", {
-          item_id: tool.itemId,
-          output_index: tool.outputIndex,
-          arguments: tool.args
-        })
-      );
-      controller.enqueue(
-        sse("response.output_item.done", {
-          output_index: tool.outputIndex,
-          item: {
-            type: "function_call",
-            id: tool.itemId,
-            call_id: tool.callId,
-            name: tool.name,
-            arguments: tool.args,
-            status: "completed"
-          }
-        })
-      );
-    }
-    controller.enqueue(sse("response.completed", { response: baseResponse("completed", assembleOutput()) }));
-  };
-
-  const process = (controller: Controller, chunk: OpenAiChunk): void => {
-    if (chunk.usage !== undefined) {
-      inputTokens = chunk.usage.prompt_tokens ?? inputTokens;
-      outputTokens = chunk.usage.completion_tokens ?? outputTokens;
-    }
-    if (chunk.provider_cost !== undefined) providerCost = chunk.provider_cost;
-    const choice = chunk.choices?.[0];
-    if (choice === undefined) return;
-    const delta = choice.delta ?? {};
-
-    if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0 && !reasoningClosed) {
-      emitReasoningPart(controller, delta.reasoning_content);
-    }
-
-    if (typeof delta.reasoning === "string" && delta.reasoning.length > 0 && !reasoningClosed) {
-      emitReasoningTokenDelta(controller, delta.reasoning);
-    }
-
-    if (typeof delta.content === "string" && delta.content.length > 0) {
-      ensureText(controller);
-      textValue += delta.content;
-      controller.enqueue(
-        sse("response.output_text.delta", {
-          item_id: messageItemId,
-          output_index: messageOutputIndex,
-          content_index: 0,
-          delta: delta.content
-        })
-      );
-    }
-
-    if (Array.isArray(delta.tool_calls)) {
-      for (const call of delta.tool_calls) {
-        const openAiIndex = typeof call.index === "number" ? call.index : 0;
-        let tool = tools.get(openAiIndex);
-        if (tool === undefined) {
-          ensureCreated(controller);
-          closeReasoning(controller);
-          const name = call.function?.name ?? "";
-          const custom = customTools.has(name);
-          tool = {
-            outputIndex: nextOutputIndex++,
-            itemId: custom ? `ctc_${randomId()}` : `fc_${randomId()}`,
-            callId: call.id ?? `call_${randomId()}`,
-            name,
-            args: "",
-            custom
-          };
-          tools.set(openAiIndex, tool);
-          controller.enqueue(
-            sse("response.output_item.added", {
-              output_index: tool.outputIndex,
-              item: custom
-                ? { type: "custom_tool_call", id: tool.itemId, call_id: tool.callId, name: tool.name, input: "" }
-                : { type: "function_call", id: tool.itemId, call_id: tool.callId, name: tool.name, arguments: "" }
-            })
-          );
-        }
-        if (call.function?.name !== undefined && tool.name.length === 0) tool.name = call.function.name;
-        const args = call.function?.arguments;
-        if (typeof args === "string" && args.length > 0) {
-          tool.args += args;
-          // Custom calls buffer their arguments (input is extracted at finalize).
-          if (!tool.custom) {
-            controller.enqueue(
-              sse("response.function_call_arguments.delta", {
-                item_id: tool.itemId,
-                output_index: tool.outputIndex,
-                delta: args
-              })
-            );
-          }
-        }
-      }
-    }
-
-    if (choice.finish_reason !== null && choice.finish_reason !== undefined) {
-      finalize(controller);
-    }
-  };
-
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      // Emit `response.created` immediately and keep the connection alive with
-      // SSE comments while the upstream is still producing its first event. Real
-      // CLIs (codex) reconnect if they see nothing for a while — which happens
-      // during the fusion panel phase before the judge's first token.
-      ensureCreated(controller);
-      keepaliveTimer = setInterval(() => {
-        if (finished) return;
-        try {
-          controller.enqueue(ENCODER.encode(": keepalive\n\n"));
-        } catch {
-          // controller closed
-        }
-      }, 3000);
-    },
-    async pull(controller) {
-      const { done, value } = await reader.read();
-      if (done) {
-        if (!finished) finalize(controller);
-        controller.close();
-        return;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      let newline = buffer.indexOf("\n");
-      while (newline >= 0) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        newline = buffer.indexOf("\n");
-        if (!line.startsWith("data:")) continue;
-        const payload = line.slice(5).trim();
-        if (payload === "[DONE]") {
-          if (!finished) finalize(controller);
-          continue;
-        }
-        try {
-          process(controller, JSON.parse(payload) as OpenAiChunk);
-        } catch {
-          // ignore malformed lines
-        }
-      }
-    },
-    cancel(reason) {
-      if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
-      return reader.cancel(reason);
-    }
-  });
-}
+// ---- streaming translation (OpenAI chat SSE -> Responses SSE) ----
 
 // ---- handler ----
 
@@ -862,13 +656,14 @@ export async function handleResponses(
   backend: Backend,
   body: ResponsesRequest,
   modelCallId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  panelDepth?: number
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
-  const customTools = customToolNames(body);
+  const toolRegistry = responsesToolRegistry(body);
   const chat = responsesToChat(body, upstreamModel);
-  const upstream = await backend.chat(chat, signal, { modelCallId });
+  const upstream = await backend.chat(chat, signal, { modelCallId, ...(panelDepth !== undefined ? { panelDepth } : {}) });
 
   if (!upstream.ok) {
     const detail = await upstream.text();
@@ -878,12 +673,12 @@ export async function handleResponses(
   if (body.stream === true) {
     const source = upstream.body;
     if (source === null) return jsonResponse(502, { error: { type: "api_error", message: "no upstream stream" } });
-    return new Response(openAiSseToResponses(source, requestedModel, customTools), {
+    return new Response(openAiSseToResponses(source, requestedModel, toolRegistry), {
       status: 200,
       headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
     });
   }
 
   const openai = (await upstream.json()) as OpenAiResponse;
-  return jsonResponse(200, chatToResponses(openai, requestedModel, customTools));
+  return jsonResponse(200, chatToResponses(openai, requestedModel, toolRegistry));
 }

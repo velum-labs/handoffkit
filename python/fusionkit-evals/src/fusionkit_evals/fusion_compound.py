@@ -16,9 +16,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from hyperkit.stats import wilson_interval
 from pydantic import BaseModel, Field
 
-from fusionkit_evals.bench_stats import wilson_interval
 from fusionkit_evals.prompt_tuning import McNemarResult, mcnemar
 from fusionkit_evals.public_bench import ExternalBenchmarkRun, ExternalBenchmarkTaskRow
 

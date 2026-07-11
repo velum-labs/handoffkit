@@ -10,7 +10,7 @@ import {
 } from "../local.js";
 
 /**
- * M4 coverage: the pure shim builders for `warrant local`. The spawn/exec path
+ * M4 coverage: the pure shim builders for `fusionkit local`. The spawn/exec path
  * needs the real vendor binaries and is exercised manually, not in CI.
  */
 
@@ -48,7 +48,15 @@ test("opencodeConfig registers an OpenAI-compatible provider", () => {
 
 test("cursorInstructions surfaces the public URL and plan-mode caveat", () => {
   const text = cursorInstructions("https://abc.example", "local-model");
-  assert.ok(text.includes("https://abc.example/v1"));
+  assert.ok(text.includes("https://abc.example/v1/cursor"));
   assert.ok(text.includes("local-model"));
   assert.ok(text.toLowerCase().includes("plan"));
+  // No token configured: any placeholder key works.
+  assert.ok(text.includes("any non-empty value"));
+});
+
+test("cursorInstructions prints the gateway bearer token as the API key when set", () => {
+  const text = cursorInstructions("https://abc.example", "fusion-panel", [], "fk_secret123");
+  assert.ok(text.includes("OpenAI API Key           : fk_secret123"));
+  assert.ok(!text.includes("any non-empty value"));
 });

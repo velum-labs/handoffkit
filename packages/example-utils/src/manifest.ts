@@ -15,6 +15,7 @@ export type DemoInfo = {
   title: string;
   summary: string;
   interactive: boolean;
+  location?: "examples" | "legacy/examples";
 };
 
 const MANIFEST_URL = new URL("../../../examples/manifest.json", import.meta.url);

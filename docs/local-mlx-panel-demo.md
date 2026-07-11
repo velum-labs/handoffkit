@@ -67,7 +67,7 @@ The summary should show:
 - `run_cdfc7ce9e88b4955af6369faebeafe49`: polished pass. It completed with 3 candidates, 13 events, 4 artifacts, and judge structured parse `parsed`.
 - `run_bc7d0a3a6af54367b68df58fadbe1e49`: fresh verification pass. It completed with 3 candidates, 13 events, 4 artifacts, and judge structured parse `parsed`.
 
-The local artifact directories for those runs were under `/Users/alen/.openclaw/workspace/artifacts/` on `velum-mini`. They are evidence from that machine, not portable repository fixtures.
+The local artifact directories for those runs were under `~/fusionkit-artifacts/`. They are local evidence from that machine, not portable repository fixtures.
 
 ## Rules
 

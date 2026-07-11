@@ -123,7 +123,7 @@ node packages/cli/dist/index.js setup     # warms pinned fusionkit engine from P
 uv sync
 
 # Benchmark runners, install as needed per suite:
-#   livecodebench: uses the in-repo adapter (uv run python python/fusionkit-evals/adapters/livecodebench_adapter.py)
+#   livecodebench: uses the in-repo adapter (uv run python python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py)
 #   aider-polyglot: uv tool install aider-chat  (runner: aider --benchmark, pointed at the gateway)
 # Docker-dependent suites (SWE-bench Pro, Terminal-Bench) are OUT OF SCOPE
 # unless `docker` is available — check once, note in the report, move on.

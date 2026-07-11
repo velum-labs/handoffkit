@@ -1,0 +1,40 @@
+diff --git a/sympy/core/numbers.py b/sympy/core/numbers.py
+index 52f7ea45ad..19f5344024 100644
+--- a/sympy/core/numbers.py
++++ b/sympy/core/numbers.py
+@@ -1625,19 +1625,25 @@ def __new__(cls, p, q=None, gcd=None):
+             q = 1
+             gcd = 1
+ 
+-        if not isinstance(p, SYMPY_INTS):
+-            p = Rational(p)
+-            q *= p.q
+-            p = p.p
+-        else:
+-            p = int(p)
+-
++        # Fix: Convert q first if it's a string to avoid string multiplication
+         if not isinstance(q, SYMPY_INTS):
+-            q = Rational(q)
+-            p *= q.q
+-            q = q.p
++            q_temp = Rational(q)
++            q = q_temp.p
++            # If p is also not SYMPY_INTS, we need to handle it differently
++            if not isinstance(p, SYMPY_INTS):
++                p_temp = Rational(p)
++                p = p_temp.p * q_temp.q
++                q = p_temp.q * q
++            else:
++                p = int(p) * q_temp.q
+         else:
+             q = int(q)
++            if not isinstance(p, SYMPY_INTS):
++                p_temp = Rational(p)
++                p = p_temp.p
++                q *= p_temp.q
++            else:
++                p = int(p)
+ 
+         # p and q are now ints
+         if q == 0:

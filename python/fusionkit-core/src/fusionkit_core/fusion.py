@@ -8,10 +8,12 @@ from fusionkit_core.judge import (
     FuseResult,
     JudgeSynthesizer,
     accumulate_tool_call,
+    judge_synthesizer_for,
     warn_malformed_tool_calls,
 )
 from fusionkit_core.producers import ChatTrajectoryProducer
 from fusionkit_core.router import HeuristicRouter
+from fusionkit_core.trace import TraceContext
 from fusionkit_core.types import (
     ChatMessage,
     FusionAnalysis,
@@ -35,12 +37,12 @@ class FusionEngine:
         self.clients = dict(clients)
         self.producer = ChatTrajectoryProducer(self.clients)
         self.router = router or HeuristicRouter()
-        self.judge_synthesizer = JudgeSynthesizer(
-            config.prompts,
-            harness_passthrough=config.harness_prompt_passthrough,
-            select_best=config.synthesis_select_best,
-            context_policy=config.context,
-        )
+        self.judge_synthesizer = judge_synthesizer_for(config)
+        # Native panel members are single completions (k = 1 by construction),
+        # so a tool-carrying fuse judges step *proposals*: adopt one candidate's
+        # tool-call batch verbatim or answer in text — the same semantics the
+        # Node gateway requests via ``panel_mode: "step"``.
+        self.step_judge_synthesizer = judge_synthesizer_for(config, panel_mode="step")
 
     async def run(
         self,
@@ -133,6 +135,7 @@ class FusionEngine:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> FuseResult:
         """One OpenAI-compatible fusion *step* that may emit tool calls.
 
@@ -166,7 +169,7 @@ class FusionEngine:
             tools=tools,
         )
         survivors = [t for t in trajectories if t.status == "succeeded"] or list(trajectories)
-        return await self.judge_synthesizer.fuse(
+        return await self._fuse_synthesizer(tools).fuse(
             messages,
             survivors,
             judge_client=self._client(self.config.resolved_judge_model),
@@ -174,7 +177,17 @@ class FusionEngine:
             sampling=self.config.sampling,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         )
+
+    def _fuse_synthesizer(self, tools: Sequence[ToolDefinition] | None) -> JudgeSynthesizer:
+        """Step-mode judging when candidates carry actionable proposals.
+
+        With tools present, each member's completion may end in a tool-call
+        batch — a next-step proposal the caller executes — so the fuse selects
+        a step. Text-only fusion (no tools) keeps the trajectory prompts.
+        """
+        return self.step_judge_synthesizer if tools else self.judge_synthesizer
 
     async def run_stream(
         self,
@@ -186,6 +199,7 @@ class FusionEngine:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Stream the fused answer: real token streaming on the synthesizer turn.
 
@@ -217,7 +231,7 @@ class FusionEngine:
             tools=tools,
         )
         survivors = [t for t in trajectories if t.status == "succeeded"] or list(trajectories)
-        async for item in self.judge_synthesizer.fuse_stream(
+        async for item in self._fuse_synthesizer(tools).fuse_stream(
             messages,
             survivors,
             judge_client=self._client(self.config.resolved_judge_model),
@@ -225,6 +239,7 @@ class FusionEngine:
             sampling=self.config.sampling,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         ):
             yield item
 

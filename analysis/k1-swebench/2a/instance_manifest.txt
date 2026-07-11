@@ -1,0 +1,38 @@
+# Round 2A' confirmation manifest — FROZEN before any billed 2A' run.
+# Dataset: princeton-nlp/SWE-bench_Verified, split test.
+# Eligible universe: 489 instances = 500 minus the 10 dev instances
+# (../instance_manifest.txt) and the smoke instance astropy__astropy-12907.
+# Eligible sorted-id list SHA-256:
+# 38664619b3eb00eabf5439057d1c5efcbe0ad3e740d96259ec45dc77c91d9cc5
+# Selection rule: random.Random(43).shuffle(eligible); take in order,
+# capping any single repo at 12 (40%), until 30 instances; sorted.
+django__django-11119
+django__django-12304
+django__django-13121
+django__django-13837
+django__django-14376
+django__django-14500
+django__django-14765
+django__django-15268
+django__django-16139
+django__django-16454
+django__django-16662
+django__django-9296
+matplotlib__matplotlib-20676
+matplotlib__matplotlib-20826
+matplotlib__matplotlib-24970
+pallets__flask-5014
+pydata__xarray-6938
+scikit-learn__scikit-learn-13124
+scikit-learn__scikit-learn-13135
+scikit-learn__scikit-learn-13328
+scikit-learn__scikit-learn-26194
+sphinx-doc__sphinx-8475
+sphinx-doc__sphinx-8548
+sphinx-doc__sphinx-9602
+sphinx-doc__sphinx-9698
+sympy__sympy-14248
+sympy__sympy-15599
+sympy__sympy-16886
+sympy__sympy-19783
+sympy__sympy-20590

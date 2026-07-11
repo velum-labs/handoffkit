@@ -24,8 +24,18 @@
  * fail a turn.
  */
 
-import { addTraceListener, emitTrace, removeTraceListener } from "@fusionkit/protocol";
-import type { FusionTraceEvent } from "@fusionkit/protocol";
+import { ATTR, isProposalK } from "@fusionkit/protocol";
+import {
+  addSpanListener,
+  attrJson,
+  attrNum,
+  attrStr,
+  emitFusionMarker,
+  removeSpanListener,
+  spanEndMs,
+  spanTraceId
+} from "@fusionkit/tracing";
+import type { FusionTraceCarrier, ReadableSpan } from "@fusionkit/tracing";
 import type { RuntimeEvent } from "@fusionkit/kernel";
 
 /** A narration delta for the client stream (serialized as `delta.reasoning_content`). */
@@ -41,13 +51,20 @@ export type ReasoningDeltaEvent = { type: "reasoning.delta"; text: string };
 export type NarrationWriter = {
   /** One factual sentence about a finished candidate; undefined -> template. */
   candidateGist(
-    input: { id: string; finalOutput: string },
+    input: { id: string; finalOutput: string; proposal?: string },
     signal: AbortSignal
   ): Promise<string | undefined>;
   /** One sentence comparing the candidates at judge time; undefined -> template. */
   compareCandidates(
     input: {
-      candidates: Array<{ id: string; finalOutput?: string; diff?: string; verificationStatus?: string }>;
+      candidates: Array<{
+        id: string;
+        finalOutput?: string;
+        diff?: string;
+        verificationStatus?: string;
+        /** Rendered terminal proposal, when the candidate ends in one. */
+        proposal?: string;
+      }>;
     },
     signal: AbortSignal
   ): Promise<string | undefined>;
@@ -160,6 +177,86 @@ export function changedFiles(diff: string | undefined): string[] {
   return [...paths].sort();
 }
 
+// ---- candidate structure (the k-general narration substrate) ---------------
+//
+// Narration renders the candidate *wire*, not a mode: a candidate may carry
+// executed evidence (tool calls with observations, a diff) and may end in a
+// terminal proposal (a trailing `function_call` batch with no observation
+// after it) or a final answer. Every k produces some mix — k=1 proposals
+// only, finite k>1 lookahead evidence plus a proposal, k=∞ evidence plus an
+// answer — and these helpers read the structure so the beats never branch on
+// mode.
+
+/** One proposed (unexecuted) call from a candidate's terminal batch. */
+export type ProposedCall = { name?: string; arguments?: string };
+
+type WireItemLike = { type?: unknown; name?: unknown; arguments?: unknown; text?: unknown };
+
+function wireItems(wire: { items?: unknown }): WireItemLike[] {
+  return Array.isArray(wire.items)
+    ? wire.items.filter((item): item is WireItemLike => item !== null && typeof item === "object")
+    : [];
+}
+
+/**
+ * The candidate's terminal proposal: the trailing `function_call` batch with
+ * nothing executed after it. Trailing empty `message` items (a bounded rollout
+ * ends with an empty output marker) are skipped; any observation or non-empty
+ * message after a call means the calls were executed, not proposed.
+ */
+export function terminalProposal(wire: { items?: unknown }): ProposedCall[] {
+  const items = wireItems(wire);
+  const batch: ProposedCall[] = [];
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index] as WireItemLike;
+    if (item.type === "message" && batch.length === 0) {
+      const text = typeof item.text === "string" ? item.text.trim() : "";
+      if (text.length === 0) continue; // trailing empty output marker
+      break;
+    }
+    if (item.type === "function_call") {
+      batch.unshift({
+        ...(typeof item.name === "string" ? { name: item.name } : {}),
+        ...(typeof item.arguments === "string" ? { arguments: item.arguments } : {})
+      });
+      continue;
+    }
+    break;
+  }
+  return batch;
+}
+
+/** Executed evidence: how many observations (executed tool results) the candidate carries. */
+export function executedEvidence(wire: { items?: unknown }): { observations: number } {
+  const observations = wireItems(wire).filter((item) => item.type === "function_call_output").length;
+  return { observations };
+}
+
+/** Compact human rendering of a proposed batch: `get_weather({"city":"Paris"}) + run(...)`. */
+export function renderProposal(calls: readonly ProposedCall[], maxLength = 90): string {
+  const rendered = calls
+    .map((call) => `${call.name ?? "tool"}(${(call.arguments ?? "").replace(/\s+/g, " ")})`)
+    .join(" + ");
+  return rendered.length > maxLength ? `${rendered.slice(0, maxLength - 1)}…` : rendered;
+}
+
+/** Whether two proposed batches are the same step (JSON-normalized arguments). */
+export function proposalsAgree(a: readonly ProposedCall[], b: readonly ProposedCall[]): boolean {
+  if (a.length !== b.length || a.length === 0) return false;
+  const normalize = (call: ProposedCall): string => {
+    let args = call.arguments ?? "";
+    try {
+      args = JSON.stringify(JSON.parse(args === "" ? "{}" : args));
+    } catch {
+      args = args.replace(/\s+/g, "");
+    }
+    return `${call.name ?? ""}\u0000${args}`;
+  };
+  const left = a.map(normalize).sort();
+  const right = b.map(normalize).sort();
+  return left.every((entry, index) => entry === right[index]);
+}
+
 function joinNames(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
@@ -181,6 +278,8 @@ export type CandidateFinish = {
   elapsedMs?: number;
   steps?: number;
   gist?: string;
+  /** The candidate's terminal proposal, when it ended in one. */
+  proposal?: ProposedCall[];
 };
 
 /** One judge-time candidate fact sheet (mined from the judge.request payload). */
@@ -190,6 +289,8 @@ export type JudgeCandidate = {
   diff?: string;
   verificationStatus?: string;
   finalOutput?: string;
+  /** The candidate's terminal proposal, when it ended in one. */
+  proposal?: ProposedCall[];
 };
 
 export type NarrationTrigger =
@@ -201,8 +302,17 @@ export type NarrationTrigger =
 export type NarratorState = {
   turn: number;
   judgeModel?: string;
-  /** The model the judge picked last turn (opener color). */
+  /** The candidate the judge adopted on the previous fuse (opener color). */
   lastPick?: string;
+  /** Rendered step the whole panel proposed last fuse (tie: no single pick). */
+  lastAgreed?: string;
+  /**
+   * The route's k. The fan-out/quiet beats are the only k consumers — they
+   * must speak before candidates exist, so structure cannot inform them.
+   */
+  k?: number;
+  /** 1-based fuse round within the turn; headlines prefix "Step N —" when > 1. */
+  round?: number;
   roster: Array<{ id: string; model?: string }>;
   finishes: CandidateFinish[];
   phase: "panel" | "judging";
@@ -217,11 +327,17 @@ export function createNarratorState(input: {
   turn: number;
   judgeModel?: string;
   lastPick?: string;
+  lastAgreed?: string;
+  k?: number;
+  round?: number;
 }): NarratorState {
   return {
     turn: input.turn,
     ...(input.judgeModel !== undefined ? { judgeModel: input.judgeModel } : {}),
     ...(input.lastPick !== undefined ? { lastPick: input.lastPick } : {}),
+    ...(input.lastAgreed !== undefined ? { lastAgreed: input.lastAgreed } : {}),
+    ...(input.k !== undefined ? { k: input.k } : {}),
+    ...(input.round !== undefined ? { round: input.round } : {}),
     roster: [],
     finishes: [],
     phase: "panel",
@@ -246,16 +362,25 @@ function renderFanout(state: NarratorState): NarratorBeat {
   const count = state.roster.length;
   const headline =
     state.lastPick !== undefined
-      ? `Last turn the judge picked ${state.lastPick} — fanning out again`
-      : count > 0
-        ? `Fanning out to ${plural(count, "model")}`
-        : "Fanning out to the panel";
+      ? `Last round the judge picked ${state.lastPick} — fanning out again`
+      : state.lastAgreed !== undefined
+        ? `Last round the panel agreed on ${state.lastAgreed} — fanning out again`
+        : count > 0
+          ? `Fanning out to ${plural(count, "model")}`
+          : "Fanning out to the panel";
   const names = state.roster.map((member) => member.model ?? member.id);
+  // The one k-informed copy: candidates don't exist yet, so structure cannot
+  // tell us whether members will execute (worktrees) or only propose (k=1).
+  const proposing = isProposalK(state.k);
   const prose =
     names.length > 1
-      ? `${joinNames(names)} are each taking a shot in isolated worktrees.`
+      ? proposing
+        ? `${joinNames(names)} are each proposing one step.`
+        : `${joinNames(names)} are each taking a shot in isolated worktrees.`
       : names.length === 1
-        ? `${names[0]} is taking a shot in an isolated worktree.`
+        ? proposing
+          ? `${names[0]} is proposing one step.`
+          : `${names[0]} is taking a shot in an isolated worktree.`
         : undefined;
   return { headline, ...(prose !== undefined ? { prose } : {}) };
 }
@@ -282,9 +407,16 @@ function renderFinish(state: NarratorState, finish: CandidateFinish): NarratorBe
     return { headline };
   }
 
+  // Structural gist: a terminal proposal renders as the concrete step; a
+  // final answer renders as its text preview. Executed-evidence facts (steps,
+  // elapsed) append whenever present — one rule for every k.
+  const gist =
+    finish.proposal !== undefined && finish.proposal.length > 0
+      ? renderProposal(finish.proposal)
+      : finish.gist;
   const gistProse = (subject: string | undefined): string | undefined =>
-    finish.gist !== undefined
-      ? `${subject !== undefined ? `${subject} proposes` : "Proposes"}: ${finish.gist}${finishFacts(finish)}`
+    gist !== undefined
+      ? `${subject !== undefined ? `${subject} proposes` : "Proposes"}: ${gist}${finishFacts(finish)}`
       : undefined;
 
   if (ordinal === 1) {
@@ -317,12 +449,43 @@ function renderJudging(state: NarratorState, candidates: JudgeCandidate[]): Narr
   }
   const usable = candidates.filter((candidate) => candidate.ok);
   const hadFailures = state.finishes.some((finish) => !finish.ok) || usable.length < candidates.length;
+  // Structural headline: when every usable candidate ends in a proposal, the
+  // judge is selecting a next step; otherwise it compares candidates/survivors.
+  const proposers = usable.filter(
+    (candidate) => candidate.proposal !== undefined && candidate.proposal.length > 0
+  );
+  const noun = usable.length > 0 && proposers.length === usable.length ? "proposal" : "candidate";
   const what = hadFailures
     ? `the ${usable.length === 1 ? "1 survivor" : `${usable.length} survivors`}`
-    : plural(usable.length, "candidate");
+    : plural(usable.length, noun);
   const headline = `Judging ${what}${withJudge}`;
 
   const sentences: string[] = [];
+  // Proposal agreement: equality over terminal batches — defined whenever
+  // candidates propose, whatever k produced them.
+  if (proposers.length >= 2) {
+    const [first, ...rest] = proposers;
+    const unanimous = rest.every((candidate) =>
+      proposalsAgree(first?.proposal ?? [], candidate.proposal ?? [])
+    );
+    if (unanimous) {
+      sentences.push(
+        `${joinNames(proposers.map((candidate) => candidate.id))} propose the same step: ` +
+          `${renderProposal(first?.proposal ?? [])}.`
+      );
+    } else {
+      for (const candidate of proposers.slice(0, 3)) {
+        sentences.push(`${candidate.id} proposes ${renderProposal(candidate.proposal ?? [], 70)}.`);
+      }
+    }
+  } else if (proposers.length === 1 && usable.length > 1) {
+    const proposer = proposers[0];
+    const texters = usable.filter((candidate) => candidate !== proposer).map((candidate) => candidate.id);
+    sentences.push(
+      `${proposer?.id} proposes ${renderProposal(proposer?.proposal ?? [], 70)}; ` +
+        `${joinNames(texters)} answer${texters.length === 1 ? "s" : ""} in text.`
+    );
+  }
   for (const candidate of usable.slice(0, 3)) {
     const stat = diffStat(candidate.diff);
     const verify = verificationLabel(candidate.verificationStatus);
@@ -356,7 +519,8 @@ function renderQuiet(state: NarratorState, at: number): NarratorBeat | null {
   const waiting = outstandingIds(state);
   if (state.roster.length > 0 && waiting.length === 0) return null;
   const who = waiting.length > 0 ? ` — waiting on ${joinNames(waiting)}` : "";
-  return { headline: `Still working${who}${elapsed}` };
+  const verb = isProposalK(state.k) ? "Still proposing" : "Still working";
+  return { headline: `${verb}${who}${elapsed}` };
 }
 
 /**
@@ -366,44 +530,60 @@ function renderQuiet(state: NarratorState, at: number): NarratorBeat | null {
  */
 export function narrationBeat(state: NarratorState, trigger: NarrationTrigger): NarratorBeat | null {
   state.startedAt ??= trigger.at;
-  switch (trigger.kind) {
-    case "fanout": {
-      if (state.sawPanel) return null;
-      state.sawPanel = true;
-      state.roster = trigger.roster;
-      return renderFanout(state);
+  const beat = ((): NarratorBeat | null => {
+    switch (trigger.kind) {
+      case "fanout": {
+        if (state.sawPanel) return null;
+        state.sawPanel = true;
+        state.roster = trigger.roster;
+        return renderFanout(state);
+      }
+      case "finish": {
+        state.sawPanel = true;
+        if (state.finishes.some((finish) => finish.id === trigger.finish.id)) return null;
+        state.finishes.push(trigger.finish);
+        return renderFinish(state, trigger.finish);
+      }
+      case "judging": {
+        const rendered = renderJudging(state, trigger.candidates);
+        state.phase = "judging";
+        return rendered;
+      }
+      case "quiet":
+        return renderQuiet(state, trigger.at);
+      default: {
+        const exhaustive: never = trigger;
+        throw new Error(`unknown narration trigger: ${String(exhaustive)}`);
+      }
     }
-    case "finish": {
-      state.sawPanel = true;
-      if (state.finishes.some((finish) => finish.id === trigger.finish.id)) return null;
-      state.finishes.push(trigger.finish);
-      return renderFinish(state, trigger.finish);
-    }
-    case "judging": {
-      const beat = renderJudging(state, trigger.candidates);
-      state.phase = "judging";
-      return beat;
-    }
-    case "quiet":
-      return renderQuiet(state, trigger.at);
-    default: {
-      const exhaustive: never = trigger;
-      throw new Error(`unknown narration trigger: ${String(exhaustive)}`);
-    }
+  })();
+  // Round ordinal: rounds exist for every k (k = ∞ trivially has one per
+  // turn), so the prefix self-suppresses exactly where rounds don't repeat.
+  if (beat !== null && state.round !== undefined && state.round > 1) {
+    beat.headline = `Step ${state.round} — ${beat.headline}`;
   }
+  return beat;
 }
 
 // ---- the live narrator ------------------------------------------------------
 
 export type TurnNarratorInput = {
-  /** The session trace id: only this session's events are narrated. */
+  /** The session trace id: only this session's spans are narrated. */
   traceId: string;
+  /** The session carrier, for mirroring beats onto the trace stream. */
+  trace?: FusionTraceCarrier;
   /** The 1-based user-turn index: other turns' events are ignored. */
   turn: number;
   /** The configured judge model name, for the judging headline. */
   judgeModel?: string;
-  /** The model the judge picked last turn (opener color). */
+  /** The candidate the judge adopted on the previous fuse (opener color). */
   lastPick?: string;
+  /** Rendered step the whole panel proposed last fuse (tie opener). */
+  lastAgreed?: string;
+  /** The route's k — consumed only by the fan-out/quiet phase copy. */
+  k?: number;
+  /** 1-based fuse round within the turn (headlines prefix "Step N —" when > 1). */
+  round?: number;
   /** Quiet-beat escalation delays; injectable for tests. */
   quietDelaysMs?: readonly number[];
   /** Optional prose writer (e.g. a small local model); advisory only. */
@@ -418,14 +598,15 @@ const DEFAULT_WRITER_TIMEOUT_MS = 400;
 /** Length cap for a writer-authored comparison sentence (longer than a gist). */
 const COMPARISON_MAX_LENGTH = 160;
 
-function candidateLabel(event: FusionTraceEvent): string | undefined {
-  return event.model_id ?? event.candidate_id;
+function candidateLabel(span: ReadableSpan): string | undefined {
+  return attrStr(span, ATTR.FUSION_MODEL_ID) ?? attrStr(span, ATTR.FUSION_CANDIDATE_ID);
 }
 
-function rosterOf(payload: Record<string, unknown>): Array<{ id: string; model?: string }> {
-  const environment = payload.environment as
-    | { models?: Array<{ id?: unknown; model?: unknown }> }
-    | undefined;
+function rosterOf(span: ReadableSpan): Array<{ id: string; model?: string }> {
+  const environment = attrJson<{ models?: Array<{ id?: unknown; model?: unknown }> }>(
+    span,
+    ATTR.FUSION_ENVIRONMENT
+  );
   const models = Array.isArray(environment?.models) ? environment.models : [];
   return models
     .filter((entry): entry is { id: string; model?: unknown } => typeof entry.id === "string")
@@ -435,8 +616,9 @@ function rosterOf(payload: Record<string, unknown>): Array<{ id: string; model?:
     }));
 }
 
-function judgeCandidatesOf(payload: Record<string, unknown>): JudgeCandidate[] {
-  const wires = Array.isArray(payload.trajectories) ? payload.trajectories : [];
+function judgeCandidatesOf(span: ReadableSpan): JudgeCandidate[] {
+  const parsed = attrJson<unknown[]>(span, ATTR.FUSION_TRAJECTORIES);
+  const wires = Array.isArray(parsed) ? parsed : [];
   return wires
     .filter((wire): wire is Record<string, unknown> => wire !== null && typeof wire === "object")
     .map((wire) => {
@@ -447,14 +629,28 @@ function judgeCandidatesOf(payload: Record<string, unknown>): JudgeCandidate[] {
             ? wire.trajectory_id
             : "candidate";
       const verification = wire.verification as { status?: unknown } | undefined;
+      const proposal = terminalProposal(wire);
       return {
         id,
         ok: wire.status !== "failed",
         ...(typeof wire.diff === "string" ? { diff: wire.diff } : {}),
         ...(typeof verification?.status === "string" ? { verificationStatus: verification.status } : {}),
-        ...(typeof wire.final_output === "string" ? { finalOutput: wire.final_output } : {})
+        ...(typeof wire.final_output === "string" ? { finalOutput: wire.final_output } : {}),
+        ...(proposal.length > 0 ? { proposal } : {})
       };
     });
+}
+
+/** Mine a candidate span's `fusion.proposed_calls` attribute into proposed calls. */
+function proposedCallsOf(span: ReadableSpan): ProposedCall[] {
+  const parsed = attrJson<unknown[]>(span, ATTR.FUSION_PROPOSED_CALLS);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((entry): entry is Record<string, unknown> => entry !== null && typeof entry === "object")
+    .map((entry) => ({
+      ...(typeof entry.name === "string" ? { name: entry.name } : {}),
+      ...(typeof entry.arguments_preview === "string" ? { arguments: entry.arguments_preview } : {})
+    }));
 }
 
 /**
@@ -473,7 +669,10 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
   const state = createNarratorState({
     turn: input.turn,
     ...(input.judgeModel !== undefined ? { judgeModel: input.judgeModel } : {}),
-    ...(input.lastPick !== undefined ? { lastPick: input.lastPick } : {})
+    ...(input.lastPick !== undefined ? { lastPick: input.lastPick } : {}),
+    ...(input.lastAgreed !== undefined ? { lastAgreed: input.lastAgreed } : {}),
+    ...(input.k !== undefined ? { k: input.k } : {}),
+    ...(input.round !== undefined ? { round: input.round } : {})
   });
   const quietDelays = input.quietDelaysMs ?? DEFAULT_QUIET_DELAYS_MS;
   const writer = input.writer;
@@ -520,81 +719,108 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
     queue.push(text);
     // Mirror the beat onto the trace stream so the observability dashboard
     // shows the narration alongside the run (fire-and-forget, never blocking).
-    emitTrace({
-      component: "gateway",
-      event_type: "log",
-      traceId: input.traceId,
-      payload: {
-        kind: "narration.beat",
-        turn: input.turn,
-        headline: beat.headline,
-        ...(beat.prose !== undefined ? { prose: beat.prose } : {})
-      }
+    emitFusionMarker("gateway", "fusion.narration", input.trace, {
+      [ATTR.FUSION_TURN]: input.turn,
+      [ATTR.FUSION_HEADLINE]: beat.headline,
+      [ATTR.FUSION_PROSE]: beat.prose
     });
     state.lastBeatAt = at;
     if (quiet) state.quietStage += 1;
     else state.quietStage = 0;
   };
 
-  const listener = (event: FusionTraceEvent): void => {
-    if (closed || event.trace_id !== input.traceId) return;
-    const payload = event.payload ?? {};
-    if (typeof payload.turn === "number" && payload.turn !== input.turn) return;
-    switch (event.event_type) {
-      case "session.started": {
+  const listener = (span: ReadableSpan): void => {
+    if (closed || spanTraceId(span) !== input.traceId) return;
+    // Narration mirrors would echo back into this listener; ignore them.
+    if (span.name === "fusion.narration") return;
+    const spanTurn = attrNum(span, ATTR.FUSION_TURN);
+    if (spanTurn !== undefined && spanTurn !== input.turn) return;
+    const at = spanEndMs(span);
+    switch (span.name) {
+      case "fusion.turn.info": {
         // The per-turn panel kickoff (emitted right before the fan-out).
-        if (payload.dialect !== "fusion-step") return;
-        const roster = rosterOf(payload);
-        enqueue(() => emitBeat(narrationBeat(state, { kind: "fanout", roster, at: event.ts }), event.ts, false));
+        if (attrStr(span, ATTR.FUSION_DIALECT) !== "fusion-step") return;
+        const roster = rosterOf(span);
+        enqueue(() => emitBeat(narrationBeat(state, { kind: "fanout", roster, at }), at, false));
         return;
       }
-      case "harness.candidate.started": {
+      case "fusion.candidate.started": {
         // Silent: all members start together; the fan-out beat covers it. Only
         // the start time is recorded (for per-candidate elapsed). The sawPanel
         // mutation rides the chain so it cannot overtake a pending fan-out beat.
-        if (event.candidate_id !== undefined) candidateStartedAt.set(event.candidate_id, event.ts);
+        const candidateId = attrStr(span, ATTR.FUSION_CANDIDATE_ID);
+        if (candidateId !== undefined) candidateStartedAt.set(candidateId, at);
         enqueue(() => {
           state.sawPanel = true;
         });
         return;
       }
-      case "harness.candidate.finished": {
-        const id = candidateLabel(event);
+      case "fusion.candidate": {
+        const id = candidateLabel(span);
         if (id === undefined) return;
-        const began = event.candidate_id !== undefined ? candidateStartedAt.get(event.candidate_id) : undefined;
-        const preview = typeof payload.final_output_preview === "string" ? payload.final_output_preview : undefined;
-        const ok = payload.status === "succeeded";
+        const candidateId = attrStr(span, ATTR.FUSION_CANDIDATE_ID);
+        const began = candidateId !== undefined ? candidateStartedAt.get(candidateId) : undefined;
+        const preview = attrStr(span, ATTR.FUSION_FINAL_OUTPUT_PREVIEW);
+        const proposal = proposedCallsOf(span);
+        const ok = attrStr(span, ATTR.FUSION_STATUS) === "succeeded";
+        const finishReason = attrStr(span, ATTR.FUSION_FINISH_REASON);
+        const stepCount = attrNum(span, ATTR.FUSION_STEP_COUNT);
         enqueue(async () => {
           // The writer sees the raw preview; its sentence (and the fallback)
           // both pass through the sanitize gate before entering the channel.
           let gist = preview !== undefined ? sanitizeGist(preview) : undefined;
-          if (writer !== undefined && ok && preview !== undefined) {
-            const written = await withBudget((signal) => writer.candidateGist({ id, finalOutput: preview }, signal));
+          if (writer !== undefined && ok && (preview !== undefined || proposal.length > 0)) {
+            const written = await withBudget((signal) =>
+              writer.candidateGist(
+                {
+                  id,
+                  finalOutput: preview ?? "",
+                  ...(proposal.length > 0 ? { proposal: renderProposal(proposal, 200) } : {})
+                },
+                signal
+              )
+            );
             const sanitized = written !== undefined ? sanitizeGist(written) : undefined;
             if (sanitized !== undefined) gist = sanitized;
           }
           const finish: CandidateFinish = {
             id,
             ok,
-            ...(typeof payload.finish_reason === "string" ? { finishReason: payload.finish_reason } : {}),
-            ...(began !== undefined ? { elapsedMs: event.ts - began } : {}),
-            ...(typeof payload.step_count === "number" ? { steps: payload.step_count } : {}),
-            ...(gist !== undefined ? { gist } : {})
+            ...(finishReason !== undefined ? { finishReason } : {}),
+            ...(began !== undefined ? { elapsedMs: at - began } : {}),
+            ...(stepCount !== undefined ? { steps: stepCount } : {}),
+            ...(gist !== undefined ? { gist } : {}),
+            ...(proposal.length > 0 ? { proposal } : {})
           };
-          emitBeat(narrationBeat(state, { kind: "finish", finish, at: event.ts }), event.ts, false);
+          emitBeat(narrationBeat(state, { kind: "finish", finish, at }), at, false);
         });
         return;
       }
-      case "judge.request": {
-        const candidates = judgeCandidatesOf(payload);
+      case "fusion.judge.request": {
+        const candidates = judgeCandidatesOf(span);
         enqueue(async () => {
-          const beat = narrationBeat(state, { kind: "judging", candidates, at: event.ts });
+          const beat = narrationBeat(state, { kind: "judging", candidates, at });
           if (beat !== null && writer !== undefined && candidates.length > 0) {
-            const written = await withBudget((signal) => writer.compareCandidates({ candidates }, signal));
+            const written = await withBudget((signal) =>
+              writer.compareCandidates(
+                {
+                  candidates: candidates.map(({ id, finalOutput, diff, verificationStatus, proposal }) => ({
+                    id,
+                    ...(finalOutput !== undefined ? { finalOutput } : {}),
+                    ...(diff !== undefined ? { diff } : {}),
+                    ...(verificationStatus !== undefined ? { verificationStatus } : {}),
+                    ...(proposal !== undefined && proposal.length > 0
+                      ? { proposal: renderProposal(proposal, 200) }
+                      : {})
+                  }))
+                },
+                signal
+              )
+            );
             const sanitized = written !== undefined ? sanitizeGist(written, COMPARISON_MAX_LENGTH) : undefined;
             if (sanitized !== undefined) beat.prose = sanitized;
           }
-          emitBeat(beat, event.ts, false);
+          emitBeat(beat, at, false);
         });
         return;
       }
@@ -615,12 +841,12 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
   }, Math.min(QUIET_POLL_MS, ...quietDelays.map((delay) => Math.max(50, Math.floor(delay / 2)))));
   quietTimer.unref();
 
-  addTraceListener(listener);
+  addSpanListener(listener);
   const close = (): void => {
     if (closed) return;
     closed = true;
     clearInterval(quietTimer);
-    removeTraceListener(listener);
+    removeSpanListener(listener);
     // Abort any in-flight writer call so the chain settles promptly, flush the
     // already-enqueued beats (template fallback), then end the queue.
     closeController.abort();
@@ -630,9 +856,42 @@ export function createTurnNarrator(input: TurnNarratorInput): TurnNarration {
 }
 
 /**
+ * Whether a fuse-stream SSE chunk carries real judge output (content, reasoning,
+ * tool calls, a finish, or an error). The Python step endpoint yields an empty
+ * role-announce chunk the instant the POST connects — closing narration on that
+ * handshake would drop any beat still in flight (most visibly the "judging"
+ * beat, rendered milliseconds earlier), so the merge only closes on payload.
+ */
+export function sseChunkHasPayload(data: string): boolean {
+  for (const line of data.split("\n")) {
+    const trimmed = line.trimEnd();
+    if (trimmed.length === 0 || trimmed.startsWith(":")) continue; // blank / keepalive comment
+    if (!trimmed.startsWith("data: ")) return true; // anything unrecognized counts as payload
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed.slice(6));
+    } catch {
+      // [DONE] or non-JSON data — assume payload; never risk splitting output.
+      return true;
+    }
+    if (parsed === null || typeof parsed !== "object") return true;
+    const frame = parsed as { error?: unknown; choices?: Array<Record<string, unknown>> };
+    if (frame.error !== undefined) return true;
+    for (const choice of frame.choices ?? []) {
+      if (choice.finish_reason !== null && choice.finish_reason !== undefined) return true;
+      const delta = choice.delta;
+      if (delta === null || typeof delta !== "object") return true;
+      if (Object.keys(delta).some((key) => key !== "role")) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Interleave a turn's runtime events with its narration deltas. Narration flows
- * only until the first `sse.chunk` (the judge's first bytes) — from then on the
- * judge stream is exclusive, so narration can never split or delay real output.
+ * only until the first `sse.chunk` with payload (the judge's first real bytes;
+ * the empty role-announce handshake doesn't count) — from then on the judge
+ * stream is exclusive, so narration can never split or delay real output.
  * The narration channel is always closed on exit.
  */
 export async function* mergeEventsWithNarration(
@@ -666,7 +925,7 @@ export async function* mergeEventsWithNarration(
         const result = winner.result as IteratorResult<RuntimeEvent>;
         if (result.done === true) return;
         mainNext = mainIt.next();
-        if (result.value.type === "sse.chunk") {
+        if (result.value.type === "sse.chunk" && sseChunkHasPayload(result.value.data)) {
           // Judge tokens have started: narration ends here, permanently.
           narration.close();
           sideNext = undefined;

@@ -10,53 +10,69 @@
  */
 import type { Command } from "commander";
 
+import { bold, dim, green, red } from "@fusionkit/cli-ui";
+import type { Presenter } from "@fusionkit/cli-ui";
+
 import { detectHost } from "../fusion/local-catalog.js";
 import { platformCapabilities } from "../fusion/platform.js";
 import { provisionEngineWithProgress } from "../fusion/provision.js";
-import { bold, brandBanner, dim, glyph, gray, green, red } from "../ui/theme.js";
+import { contextFor } from "../shared/context.js";
+import type { CommandContext } from "../shared/context.js";
+
+import { registerPaletteAction } from "./palette.js";
 
 type SetupOpts = { fusionkitDir?: string; force?: boolean };
 
-function reportCapabilities(): void {
-  console.log("");
-  console.log(bold("platform capability"));
+function reportCapabilities(presenter: Presenter): void {
+  presenter.blank();
+  presenter.heading("platform capability");
   for (const cap of platformCapabilities(detectHost())) {
-    const mark = cap.ok ? green(glyph.tick()) : gray(glyph.bullet());
-    console.log(`  ${mark} ${cap.label} ${dim(`— ${cap.detail}`)}`);
+    presenter.status(cap.ok ? "ok" : "pending", cap.label, `— ${cap.detail}`);
   }
 }
 
-async function runSetup(opts: SetupOpts): Promise<number> {
-  console.log(`\n${brandBanner("setup")}\n`);
-  console.log(dim("pre-provisioning the fusion engine so your first run is instant."));
-  console.log("");
+async function runSetup(opts: SetupOpts, ctx: CommandContext): Promise<number> {
+  const { presenter } = ctx;
+  presenter.blank();
+  presenter.banner("setup");
+  presenter.blank();
+  presenter.line(dim("pre-provisioning the fusion engine so your first run is instant."));
+  presenter.blank();
 
-  const code = await provisionEngineWithProgress({
-    ...(opts.fusionkitDir !== undefined ? { fusionkitDir: opts.fusionkitDir } : {}),
-    ...(opts.force === true ? { force: true } : {})
-  });
+  const code = await provisionEngineWithProgress(
+    {
+      ...(opts.fusionkitDir !== undefined ? { fusionkitDir: opts.fusionkitDir } : {}),
+      ...(opts.force === true ? { force: true } : {})
+    },
+    presenter
+  );
 
-  reportCapabilities();
+  reportCapabilities(presenter);
 
-  console.log("");
+  presenter.blank();
   if (code === 0) {
-    console.log(
+    presenter.line(
       `${dim("already-cached runs are offline-fast; re-warm any time with")} ${bold("fusionkit setup --force")}.`
     );
-    console.log(green("ready. Try: ") + bold("fusionkit codex") + dim("  (or: claude | cursor | serve)"));
+    presenter.line(green("ready. Try: ") + bold("fusionkit codex") + dim("  (or: claude | cursor | serve)"));
   } else {
-    console.log(red("setup did not complete. Fix the issue above, then re-run `fusionkit setup`."));
+    presenter.line(red("setup did not complete. Fix the issue above, then re-run `fusionkit setup`."));
+  }
+  if (ctx.json) {
+    ctx.emit({ ok: code === 0, capabilities: platformCapabilities(detectHost()) });
   }
   return code;
 }
 
 export function registerSetup(program: Command): void {
+  registerPaletteAction({ label: "Warm the fusion engine", hint: "fusionkit setup", argv: ["setup"] });
   program
     .command("setup")
     .description("pre-provision the fusion engine (warm the uv cache) so the first run is instant")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for the engine)")
     .option("--force", "re-warm even if the engine is already cached")
-    .action(async (opts: SetupOpts) => {
-      process.exit(await runSetup(opts));
+    .option("--json", "emit machine-readable JSON")
+    .action(async (opts: SetupOpts, command: Command) => {
+      process.exit(await runSetup(opts, contextFor(command)));
     });
 }

@@ -1,5 +1,8 @@
 # Cloud Agent Prompt: Implement FusionKit MoA Runtime Kernel
 
+> **Internal - not product documentation:** Design archive for maintainers; do not treat this as current user-facing product guidance.
+
+
 > Status note: this was the implementation prompt that started the runtime-kernel work.
 > For current implementation status, use `docs/fusion/MOA_IMPLEMENTATION_STATUS.md`.
 > For developer-facing docs, use `docs/fusion/runtime-kernel.md` and

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { eventsByType } from "@/lib/db";
-import { rollupModels } from "@/lib/rollups";
+import { spansByName } from "@/lib/db";
+import { rollupCost, rollupModels } from "@/lib/rollups";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<NextResponse> {
-  const events = eventsByType(["model.call.started", "model.call.finished"]);
-  return NextResponse.json({ models: rollupModels(events) });
+  const spans = spansByName(["fusion.model_call.started", "chat"]);
+  const costSpans = spansByName(["fusion.cost"]);
+  return NextResponse.json({ models: rollupModels(spans), costs: rollupCost(costSpans) });
 }

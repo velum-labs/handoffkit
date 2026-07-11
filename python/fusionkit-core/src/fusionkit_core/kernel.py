@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
-from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
+from fusionkit_core.config import FusionConfig, FusionMode, PromptOverrides, SamplingConfig
 from fusionkit_core.contracts import FusionRunRequestV1
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import FuseResult
+from fusionkit_core.judge import FuseResult, JudgeSynthesizer, judge_synthesizer_for
 from fusionkit_core.run import CreateRunResult, FusionRunManager, NativeRunError
 from fusionkit_core.run_models import (
     RunEventPage,
@@ -14,7 +14,8 @@ from fusionkit_core.run_models import (
     RunStateSummary,
     ToolResultSubmission,
 )
-from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, Trajectory
+from fusionkit_core.trace import TraceContext
+from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, Trajectory
 
 
 class FusionKernel:
@@ -94,6 +95,7 @@ class FusionKernel:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> FuseResult:
         return await self._engine.run_step(
             messages,
@@ -103,6 +105,7 @@ class FusionKernel:
             sample_count=sample_count,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         )
 
     def run_stream(
@@ -115,6 +118,7 @@ class FusionKernel:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         return self._engine.run_stream(
             messages,
@@ -124,6 +128,7 @@ class FusionKernel:
             sample_count=sample_count,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         )
 
     def stream_passthrough(
@@ -152,6 +157,28 @@ class FusionKernel:
             messages, sampling, tools=tools, tool_choice=tool_choice
         )
 
+    def _judge_synthesizer_for(
+        self,
+        prompts: PromptOverrides | None,
+        panel_mode: PanelMode = "trajectory",
+    ) -> JudgeSynthesizer:
+        """The engine's cached judge/synthesizer, or a per-request variant.
+
+        The transient variant (per-request prompt overrides, or step mode) is
+        built by :func:`judge_synthesizer_for` — the one construction point —
+        and is cheap: it holds only prompt strings and policy flags.
+        """
+        no_overrides = prompts is None or (
+            prompts.judge_system is None and prompts.synthesizer_system is None
+        )
+        if no_overrides:
+            return (
+                self._engine.judge_synthesizer
+                if panel_mode != "step"
+                else self._engine.step_judge_synthesizer
+            )
+        return judge_synthesizer_for(self._engine.config, prompts=prompts, panel_mode=panel_mode)
+
     async def fuse_trajectories(
         self,
         messages: Sequence[ChatMessage],
@@ -162,10 +189,11 @@ class FusionKernel:
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
-        trace_id: str | None = None,
-        span_id: str | None = None,
+        prompts: PromptOverrides | None = None,
+        panel_mode: PanelMode = "trajectory",
+        trace: TraceContext | None = None,
     ) -> FuseResult:
-        return await self._engine.judge_synthesizer.fuse(
+        return await self._judge_synthesizer_for(prompts, panel_mode).fuse(
             messages,
             trajectories,
             judge_client=self.client(judge_model),
@@ -173,8 +201,7 @@ class FusionKernel:
             sampling=sampling,
             tools=tools,
             tool_choice=tool_choice,
-            trace_id=trace_id,
-            span_id=span_id,
+            trace=trace,
         )
 
     def fuse_trajectories_stream(
@@ -187,10 +214,11 @@ class FusionKernel:
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
-        trace_id: str | None = None,
-        span_id: str | None = None,
+        prompts: PromptOverrides | None = None,
+        panel_mode: PanelMode = "trajectory",
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
-        return self._engine.judge_synthesizer.fuse_stream(
+        return self._judge_synthesizer_for(prompts, panel_mode).fuse_stream(
             messages,
             trajectories,
             judge_client=self.client(judge_model),
@@ -198,6 +226,5 @@ class FusionKernel:
             sampling=sampling,
             tools=tools,
             tool_choice=tool_choice,
-            trace_id=trace_id,
-            span_id=span_id,
+            trace=trace,
         )

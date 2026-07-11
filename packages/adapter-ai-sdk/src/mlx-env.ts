@@ -362,7 +362,7 @@ export class MlxEnv {
     if (process.platform !== "darwin" || process.arch !== "arm64") {
       throw new MlxCapabilityError(
         `MLX requires macOS on Apple Silicon; this host is ${process.platform}/${process.arch}. ` +
-          "Use a cloud model (or handoffModel escalation) on this machine."
+          "Use a cloud model or a caller-owned fallback on this machine."
       );
     }
   }

@@ -14,14 +14,6 @@ from fusionkit_evals.bench_history import (
     load_runs,
 )
 from fusionkit_evals.bench_runtime import classify_exception, is_transient, retry_async
-from fusionkit_evals.bench_stats import (
-    ProportionCI,
-    SeedAggregate,
-    aggregate_seeds,
-    bootstrap_ci,
-    pass_at_k,
-    wilson_interval,
-)
 from fusionkit_evals.bench_verify import SolutionRun, verify_solution
 from fusionkit_evals.benchmark import BenchmarkRunner
 from fusionkit_evals.benchmark_panel import (
@@ -228,21 +220,17 @@ __all__ = [
     "PreparedTask",
     "PromptEval",
     "PromptVariant",
-    "ProportionCI",
     "Sandbox",
     "SandboxConfig",
     "SandboxResult",
-    "SeedAggregate",
     "SolutionRun",
     "StubProposer",
     "TaskOutcome",
     "TaskSplit",
     "TunerRuntime",
     "TuningResult",
-    "aggregate_seeds",
     "append_run",
     "bank_signature",
-    "bootstrap_ci",
     "build_candidate_bank",
     "build_provenance",
     "build_sandbox",
@@ -259,7 +247,6 @@ __all__ = [
     "mcnemar",
     "normalize_lines",
     "optimize",
-    "pass_at_k",
     "prepare_tasks",
     "regression_guard_tasks",
     "retry_async",
@@ -267,7 +254,6 @@ __all__ = [
     "select_decision_tasks",
     "split_dev_val",
     "verify_solution",
-    "wilson_interval",
     "CommandExternalBenchmarkExecutor",
     "CommandHandoffKitExecutor",
     "ComparisonBaselineRow",

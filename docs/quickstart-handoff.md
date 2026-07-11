@@ -1,5 +1,10 @@
 # Quickstart: rate-limit / credit handoff
 
+Canonical user docs live at https://fusionkit.velum-labs.com/docs/getting-started/rate-limit-handoff; this file is the in-repo mirror.
+
+Here, "handoff" means rate-limit failover, unrelated to the legacy governance handoff SDK archived under `legacy/docs/handoff-sdk.md`.
+
+
 The headline feature: when a vendor passthrough model hits a **rate limit, quota,
 or billing error**, the turn is transparently continued on the **ensemble**
 instead of failing, and you're told it happened.

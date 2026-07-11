@@ -30,11 +30,20 @@ export type CursorBridgeEnvInput = CursorBridgeModelEnvInput & {
   baseEnv?: NodeJS.ProcessEnv;
   caCertPath?: string;
   routeInventory?: boolean;
+  /**
+   * Every fused ensemble model id (session default first). When more than the
+   * single default is registered, the bridge also receives a
+   * `BRIDGE_MODELS_JSON` list so each ensemble is selectable by model name.
+   */
+  fusedModels?: readonly string[];
+  nativeModels?: readonly string[];
 };
 
 export type CursorIdeModelsInput = {
   gatewayUrl: string;
   modelLabel: string;
+  /** Every fused ensemble model id (session default first). */
+  fusedModels?: readonly string[];
   nativeModels?: readonly string[];
   apiKey?: string;
   contextTokenLimit?: number;
@@ -66,11 +75,29 @@ export function cursorBridgeModelEnv(input: CursorBridgeModelEnvInput): Record<s
 
 export function cursorBridgeEnv(input: CursorBridgeEnvInput): Record<string, string> {
   const env = scrubBridgeEnv(input.baseEnv ?? process.env, CURSOR_BRIDGE_SCRUB_PREFIXES);
+  // With multiple registered ensembles (or natives), also hand the bridge the
+  // full model list so every fused id is selectable; MODEL_NAME stays the
+  // session default for bridges that only read the single-model env.
+  const extraModels =
+    (input.fusedModels ?? []).some((id) => id !== input.modelName) ||
+    (input.nativeModels ?? []).length > 0;
   return {
     ...env,
     ...(input.caCertPath !== undefined ? { NODE_EXTRA_CA_CERTS: env.NODE_EXTRA_CA_CERTS ?? input.caCertPath } : {}),
     BRIDGE_PORT: String(input.port),
     BRIDGE_ROUTE_INVENTORY: input.routeInventory === false ? "false" : "true",
+    ...(extraModels
+      ? {
+          BRIDGE_MODELS_JSON: cursorIdeModelsJson({
+            gatewayUrl: input.gatewayUrl,
+            modelLabel: input.modelName,
+            ...(input.fusedModels !== undefined ? { fusedModels: input.fusedModels } : {}),
+            ...(input.nativeModels !== undefined ? { nativeModels: input.nativeModels } : {}),
+            ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+            ...(input.contextTokenLimit !== undefined ? { contextTokenLimit: input.contextTokenLimit } : {})
+          })
+        }
+      : {}),
     ...cursorBridgeModelEnv(input)
   };
 }
@@ -79,6 +106,7 @@ export function cursorIdeEnv(input: {
   repo: string;
   gatewayUrl: string;
   modelLabel: string;
+  fusedModels?: readonly string[];
   nativeModels?: readonly string[];
   apiKey?: string;
   caCertPath?: string;
@@ -100,7 +128,9 @@ export function cursorIdeEnv(input: {
   };
 }
 
-/** Build the `BRIDGE_MODELS_JSON` the desktop bridge seeds into Cursor's model picker. */
+/** Build the `BRIDGE_MODELS_JSON` the desktop bridge seeds into Cursor's model
+ *  picker: the session-default fused model first, then every other fused
+ *  ensemble model, then the natives, deduped. */
 export function cursorIdeModelsJson(input: CursorIdeModelsInput): string {
   const baseUrl = cursorBridgeBaseUrl(input.gatewayUrl);
   const apiKey = input.apiKey ?? DEFAULT_LOCAL_API_KEY;
@@ -113,6 +143,9 @@ export function cursorIdeModelsJson(input: CursorIdeModelsInput): string {
     apiKey,
     contextTokenLimit
   });
-  const natives = (input.nativeModels ?? []).filter((model) => model !== input.modelLabel);
-  return JSON.stringify([entry(input.modelLabel), ...natives.map(entry)]);
+  const ids = [input.modelLabel];
+  for (const id of [...(input.fusedModels ?? []), ...(input.nativeModels ?? [])]) {
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return JSON.stringify(ids.map(entry));
 }

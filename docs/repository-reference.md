@@ -80,7 +80,7 @@ sequenceDiagram
 
 `@fusionkit/cli` is the primary product surface and publishes the `fusionkit` binary. Its entry script is `packages/cli/src/index.ts`, which builds the Commander program and handles top-level process errors. The command tree is built by `buildProgram()` in `packages/cli/src/cli.ts`.
 
-The package owns launcher commands such as `codex`, `claude`, `cursor`, and `serve`; the generic `fusion` command group; `local`; `models`; `runtime`; `sessions`; `config`; `setup`; `doctor`; `status`; and lower-level ensemble and deployment helpers. The product path depends heavily on `registerFusion`, `registerEnsemble`, `registerLocal`, `registerModels`, `registerSessions`, `registerConfig`, `registerSetup`, `registerDoctor`, and `registerDeployment`.
+The package owns launcher commands such as `codex`, `claude`, `cursor`, and `serve`; the generic `fusion` command group; `local`; `models`; `runtime`; `sessions`; `config`; `setup`; `doctor`; `status`; and lower-level ensemble helpers. The product path depends heavily on `registerFusion`, `registerEnsemble`, `registerLocal`, `registerModels`, `registerSessions`, `registerConfig`, `registerSetup`, and `registerDoctor`.
 
 Important behavior includes preflight validation through `PreflightError`, version reporting that names both the npm CLI and pinned PyPI synthesizer, bare invocation help, and fail-closed policy error reporting for governed execution paths.
 
@@ -149,13 +149,13 @@ await gateway.close();
 
 ### `@fusionkit/protocol`
 
-`@fusionkit/protocol` is the zero-runtime-dependency contract layer. It defines Warrant contracts, receipts, event chains, manifests, policies, checkpoints, handoff envelopes, model-fusion schemas, generated OpenAPI clients, hashing, signing, verification, trace events, and validation helpers.
+`@fusionkit/protocol` is the zero-runtime-dependency contract layer. It defines Warrant contracts, receipts, event chains, manifests, policies, checkpoints, handoff envelopes, model-fusion schemas, generated OpenAPI clients, hashing, signing, verification, generated trace conventions, and validation helpers.
 
 Validation and normalization exports include `parseHostAllowlistEntry`, `parsePoolName`, `parseSecretName`, `parseWorkspaceManifestPath`, `assertWireTrajectory`, `isWireTrajectory`, `normalizeWireTrajectories`, and the generated model-fusion assertion functions such as `assertHarnessRunRequestV1`, `assertHarnessRunResultV1`, `assertModelFusionRecord`, `assertEnsembleReceiptV1`, and `assertToolExecutionRecordV1`.
 
 Cryptographic and provenance exports include `canonicalize`, `sha256Hex`, `sha256PrefixedHex`, `hashCanonical`, `hashCanonicalSha256`, `requestHash`, `responseHash`, `artifactHash`, `schemaBundleHash`, `generateEd25519KeyPair`, `keyIdFromPublicPem`, `signData`, `verifyData`, `contractHash`, `signContract`, `appendEvent`, `verifyChain`, `signReceipt`, `verifyRunnerReceipt`, and `verifyReceiptBundle`.
 
-Trace exports include `TraceEmitter`, `newTraceId`, `newSpanId`, `ambientTraceId`, `emitTrace`, `getTraceEmitter`, `assertFusionTraceEvent`, `isFusionTraceEvent`, and typed payload helpers for model-call and judge events.
+Trace exports are the generated fusion semantic-convention constants (`ATTR`, span/marker name lists, `EXPORTABLE_ATTRIBUTES`); the OpenTelemetry-backed span helpers live in `@fusionkit/tracing`.
 
 Example:
 
@@ -339,7 +339,7 @@ console.log(Boolean(plane), Boolean(runner));
 
 `fusionkit_core.run_store` defines `FileSystemRunStore`, which persists run state, events, artifacts, tool pauses, idempotency records, and inspections to the local filesystem.
 
-`fusionkit_core.trace` defines `TraceEmitter`, `new_trace_id()`, `new_span_id()`, `ambient_trace_id()`, `get_emitter()`, and `emit()`.
+`fusionkit_core.trace` defines `setup_fusion_tracing()`, `fusion_span()`, `start_fusion_span()`, `end_fusion_span()`, `emit_marker()`, `context_from_headers()`, and `candidate_baggage_of()` over the OpenTelemetry SDK.
 
 `fusionkit_core.artifacts` defines `hash_bytes()`, `hash_text()`, and `LocalArtifactStore`.
 
@@ -387,7 +387,7 @@ Example:
 ```bash
 uv run --package fusionkit fusionkit init --global
 uv run --package fusionkit fusionkit serve --config .fusionkit/fusion.yaml --port 8000
-uv run --package fusionkit fusionkit prompts dump --output .fusionkit/prompts
+uv run --package fusionkit fusionkit prompts dump --dir .fusionkit/prompts
 ```
 
 ### `fusionkit-evals`
@@ -396,7 +396,7 @@ uv run --package fusionkit fusionkit prompts dump --output .fusionkit/prompts
 
 Important modules include `fusion_bench`, `fusion_hillclimb`, `fusion_compound`, `benchmark`, `benchmark_panel`, `dirty_dozen`, `public_bench`, `public_bench_report`, `prompt_tuning`, `pareto`, `exec_select`, `candidate_bank`, `bench_verify`, `bench_stats`, and `gateway_target`.
 
-Key symbols include `FusionBenchRunner`, `BenchmarkRunner`, `run_climb`, `check_target`, scorer functions, code extraction helpers, and report writers. Adapters under `python/fusionkit-evals/adapters/` connect the evaluation system to LiveCodeBench, Aider-style polyglot tasks, and selection experiments.
+Key symbols include `FusionBenchRunner`, `BenchmarkRunner`, `run_climb`, `check_target`, scorer functions, code extraction helpers, and report writers. Adapters under `python/fusionkit-evals/src/fusionkit_evals/adapters/` connect the evaluation system to LiveCodeBench, Aider-style polyglot tasks, and selection experiments.
 
 Example:
 
@@ -455,7 +455,7 @@ The model-fusion contract lives under `spec/model-fusion-contract/`. JSON Schema
 
 Generated TypeScript bindings live under `spec/model-fusion-contract/gen/typescript/` and are consumed by `@fusionkit/protocol`. Generated Python bindings live under `spec/model-fusion-contract/python/` as `velum_model_fusion_protocol`.
 
-The fusion trace contract lives under `spec/fusion-trace/`. Runtime trace emitters in TypeScript and Python should preserve the schema shape, trace id, span id, parent span id, component, event type, and payload semantics.
+The fusion semantic conventions live under `spec/fusion-trace/registry.json` (span names, attribute keys, sensitivity classes). Runtime tracers in TypeScript and Python emit OpenTelemetry spans that follow the registry; bindings are generated by `scripts/generate-trace-conventions.mjs`.
 
 When changing a schema, update the schema, regenerate bindings, update fixtures, update protocol assertions, and run both TypeScript and Python tests that consume the affected contract. The repository includes `scripts/generate_protocol_codegen.py` for code generation.
 

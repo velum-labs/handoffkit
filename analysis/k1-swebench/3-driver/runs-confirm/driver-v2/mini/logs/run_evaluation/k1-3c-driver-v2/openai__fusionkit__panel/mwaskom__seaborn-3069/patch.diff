@@ -1,0 +1,115 @@
+diff --git a/seaborn/_core/plot.py b/seaborn/_core/plot.py
+index 4f0290a4..34c38b4d 100644
+--- a/seaborn/_core/plot.py
++++ b/seaborn/_core/plot.py
+@@ -1352,7 +1352,48 @@ class Plotter:
+ 
+         # TODO is this the right place for this?
+         for view in self._subplots:
+-            view["ax"].autoscale_view()
++            # Skip autoscaling for axes with Nominal scales
++            ax = view["ax"]
++            skip_autoscale = False
++            for axis in "xy":
++                axis_key = view[axis]
++                coord_var = axis_key.rstrip("0123456789")  # Remove numeric suffix
++                if coord_var in self._scales:
++                    scale = self._scales[coord_var]
++                    from seaborn._core.scales import Nominal
++                    if isinstance(scale, Nominal):
++                        skip_autoscale = True
++                        break
++            
++            if not skip_autoscale:
++                ax.autoscale_view()
++
++
++        
++        # Apply categorical behaviors for Nominal scales
++        for view in self._subplots:
++            ax = view["ax"]
++            for axis in "xy":
++                axis_key = view[axis]
++                coord_var = axis_key.rstrip("0123456789")  # Remove numeric suffix
++                
++                # Look up the scale for this coordinate variable in the Plotter
++                if coord_var in self._scales:
++                    scale = self._scales[coord_var]
++                    from seaborn._core.scales import Nominal
++                    if isinstance(scale, Nominal):
++                        # Get the number of categories from the axis ticks
++                        n_categories = len(getattr(ax, f"get_{axis}ticks")())
++                        
++                        # 1. Set axis limits to +/- 0.5 from category boundaries
++                        if axis == "x":
++                            ax.set_xlim(-0.5, n_categories - 0.5, auto=None)
++                        else:
++                            # 3. Invert y-axis if categorical
++                            ax.set_ylim(n_categories - 0.5, -0.5, auto=None)
++                        
++                        # 2. Disable grid for the categorical axis
++                        getattr(ax, f"{axis}axis").grid(False)
+ 
+         if layer["legend"]:
+             self._update_legend_contents(p, mark, data, scales)
+@@ -1474,8 +1515,17 @@ class Plotter:
+             for view in subplots:
+ 
+                 axes_df = self._filter_subplot_data(df, view)
+-
+-                with pd.option_context("mode.use_inf_as_null", True):
++                try:
++                    with pd.option_context("mode.use_inf_as_null", True):
++                        if keep_na:
++                            # The simpler thing to do would be x.dropna().reindex(x.index).
++                            # But that doesn't work with the way that the subset iteration
++                            # is written below, which assumes data for grouping vars.
++                            # Matplotlib (usually?) masks nan data, so this should "work".
++                            # Downstream code can also drop these rows, at some speed cost.
++                            present = axes_df.notna().all(axis=1)
++                except:
++                    # Fallback for pandas versions that don't support this option
+                     if keep_na:
+                         # The simpler thing to do would be x.dropna().reindex(x.index).
+                         # But that doesn't work with the way that the subset iteration
+@@ -1644,6 +1694,40 @@ class Plotter:
+                         hi = cast(float, hi) + 0.5
+                     ax.set(**{f"{axis}lim": (lo, hi)})
+ 
++                # Handle Nominal scales (apply categorical behaviors)
++                # Check if this axis corresponds to a coordinate variable with Nominal scale
++                # axis_key might be "x", "x0", "x1", etc. We need to check the scale for the coordinate
++                coord_var = axis_key.rstrip("0123456789")  # Remove numeric suffix
++                
++                # Look up the scale for this coordinate variable in the Plot object
++                if coord_var in p._scales:
++                    scale = p._scales[coord_var]
++                    from seaborn._core.scales import Nominal
++                    if isinstance(scale, Nominal):
++                        # Get the number of categories from the axis ticks
++                        n_categories = len(getattr(ax, f"get_{axis}ticks")())
++                        
++                        # 1. Set axis limits to +/- 0.5 from category boundaries
++                        # Use more forceful approach to prevent autoscaling from overriding
++                        if axis == "x":
++                            ax.set_xlim(-0.5, n_categories - 0.5)
++                            # Disable autoscaling for this axis
++                            ax.xaxis.get_major_locator().set_params(auto=False)
++                        else:
++                            # 3. Invert y-axis if categorical
++                            ax.set_ylim(n_categories - 0.5, -0.5)
++                            # Disable autoscaling for this axis
++                            ax.yaxis.get_major_locator().set_params(auto=False)
++                        
++                        # 2. Disable grid for the categorical axis
++                        # Use more forceful approach to ensure grid stays disabled
++                        axis_obj = getattr(ax, f"{axis}axis")
++                        axis_obj.grid(False)
++                        # Also remove any existing grid lines
++                        for line in axis_obj.get_gridlines():
++                            line.set_visible(False)
++
++
+         engine_default = None if p._target is not None else "tight"
+         layout_engine = p._layout_spec.get("engine", engine_default)
+         set_layout_engine(self._figure, layout_engine)

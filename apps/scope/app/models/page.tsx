@@ -1,17 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cpu } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
 
 import { EmptyState } from "@/components/scope/empty-state";
 import { ErrorBanner } from "@/components/scope/error-banner";
+import { StatStripSkeleton, TableSkeleton } from "@/components/scope/loading";
 import { LiveDot, PageHeader } from "@/components/scope/page-header";
 import { Section } from "@/components/scope/section";
 import { StatStrip } from "@/components/scope/stat-strip";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useModels } from "@/lib/api";
-import { fmtDateTime, fmtNumber, fmtRelative } from "@/lib/format";
+import { fmtDateTime, fmtNumber, fmtRelative, fmtUsd } from "@/lib/format";
 
 const chartTooltipStyle = {
   background: "var(--popover)",
@@ -51,7 +52,7 @@ function ModelChart({
           <XAxis dataKey="name" tick={axisTick} stroke="var(--border)" />
           <YAxis allowDecimals={false} tick={axisTick} stroke="var(--border)" />
           <ChartTooltip cursor={{ fill: "var(--accent)", opacity: 0.3 }} contentStyle={chartTooltipStyle} />
-          <Bar dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
+          <Bar dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} maxBarSize={56} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -60,7 +61,7 @@ function ModelChart({
 
 export default function ModelsPage() {
   const router = useRouter();
-  const { models, loading, error, live } = useModels();
+  const { models, costs, loading, error, live } = useModels();
 
   const chartData = models.map((model) => ({
     name: model.modelId.length > 16 ? `${model.modelId.slice(0, 15)}…` : model.modelId,
@@ -93,8 +94,11 @@ export default function ModelsPage() {
         <ErrorBanner error={error} />
 
         {loading ? (
-          <Skeleton className="h-80 w-full" />
-        ) : models.length === 0 ? (
+          <div className="space-y-4">
+            <StatStripSkeleton />
+            <TableSkeleton rows={4} />
+          </div>
+        ) : models.length === 0 && costs.entries === 0 ? (
           <EmptyState
             icon={<Cpu className="size-8" />}
             title="No model calls observed"
@@ -118,9 +122,61 @@ export default function ModelsPage() {
                   value: totals.running > 0 ? fmtNumber(totals.running) : "0",
                   mono: true
                 },
-                { label: "Tokens", value: fmtNumber(totals.tokens), mono: true }
+                { label: "Tokens", value: fmtNumber(totals.tokens), mono: true },
+                {
+                  label: "Spend",
+                  value:
+                    costs.entries > 0
+                      ? `${fmtUsd(costs.totalUsd)}${costs.unknownEntries > 0 ? "+" : ""}`
+                      : undefined,
+                  mono: true
+                }
               ]}
             />
+
+            {costs.entries > 0 ? (
+              <Section
+                title="Spend"
+                count={fmtUsd(costs.totalUsd)}
+                summary={costs.perStage
+                  .map((stage) => `${stage.stage} ${fmtUsd(stage.usd)}`)
+                  .join(" · ")}
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Model</TableHead>
+                      <TableHead>Stage</TableHead>
+                      <TableHead className="text-right">Entries</TableHead>
+                      <TableHead className="text-right">Tokens</TableHead>
+                      <TableHead className="text-right">Cost</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {costs.perModel.map((row) => (
+                      <TableRow key={`${row.model}-${row.stage}`}>
+                        <TableCell className="mono text-sm">{row.model}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="font-normal">
+                            {row.stage}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="mono text-right">{fmtNumber(row.entries)}</TableCell>
+                        <TableCell className="mono text-right">{fmtNumber(row.tokens)}</TableCell>
+                        <TableCell className="mono text-right">{fmtUsd(row.usd)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {costs.unknownEntries > 0 ? (
+                  <p className="text-muted-foreground mt-2 text-xs">
+                    {fmtNumber(costs.unknownEntries)}{" "}
+                    {costs.unknownEntries === 1 ? "entry" : "entries"} could not be priced (unknown
+                    model pricing or usage), so the real total is higher.
+                  </p>
+                ) : null}
+              </Section>
+            ) : null}
 
             <Section title="Charts" defaultOpen={false} summary="calls and tokens per model">
               <div className="space-y-6">
@@ -166,7 +222,15 @@ export default function ModelsPage() {
                         onClick={() => router.push(`/?q=${encodeURIComponent(model.modelId)}`)}
                         title={`Show sessions using ${model.modelId}`}
                       >
-                        <TableCell className="mono text-sm">{model.modelId}</TableCell>
+                        <TableCell className="mono text-sm">
+                          <Link
+                            href={`/?q=${encodeURIComponent(model.modelId)}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="hover:underline"
+                          >
+                            {model.modelId}
+                          </Link>
+                        </TableCell>
                         <TableCell>
                           {model.provider ? (
                             <Badge variant="secondary" className="font-normal">
@@ -180,8 +244,8 @@ export default function ModelsPage() {
                         <TableCell className="mono text-muted-foreground text-right">
                           {model.running > 0 ? model.running : "—"}
                         </TableCell>
-                        <TableCell className="mono text-right text-emerald-500">{model.succeeded}</TableCell>
-                        <TableCell className="mono text-right text-red-500">{model.failed}</TableCell>
+                        <TableCell className="mono text-(--status-success) text-right">{model.succeeded}</TableCell>
+                        <TableCell className="mono text-(--status-danger) text-right">{model.failed}</TableCell>
                         <TableCell className="mono text-right">
                           {successRate !== undefined ? `${successRate.toFixed(0)}%` : "—"}
                         </TableCell>

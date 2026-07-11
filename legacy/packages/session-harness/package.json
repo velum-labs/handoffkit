@@ -1,0 +1,58 @@
+{
+  "name": "@fusionkit/session-harness",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "legacy/packages/session-harness"
+  },
+  "description": "Legacy governance stack (not part of the FusionKit product): AI SDK harness session backend for Warrant runners: drives vendor agent harnesses (Claude Code) through @ai-sdk/harness inside a Vercel Sandbox microVM, capturing the structured harness event stream as governed-session evidence.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@ai-sdk/harness": "1.0.0-canary.6",
+    "@ai-sdk/harness-claude-code": "1.0.0-canary.2",
+    "@ai-sdk/harness-pi": "1.0.0-canary.2",
+    "@ai-sdk/sandbox-just-bash": "1.0.0-canary.6",
+    "@ai-sdk/sandbox-vercel": "1.0.0-canary.6",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/registry": "workspace:*",
+    "@fusionkit/runner": "workspace:*",
+    "@fusionkit/runtime-utils": "workspace:*",
+    "@fusionkit/session-hermetic": "workspace:*",
+    "@fusionkit/session-vercel-sandbox": "workspace:*",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@fusionkit/plane": "workspace:*",
+    "@fusionkit/sdk": "workspace:*",
+    "@fusionkit/testkit": "workspace:*",
+    "@fusionkit/workspace": "workspace:*"
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "legacy",
+    "harness",
+    "sandbox"
+  ]
+}

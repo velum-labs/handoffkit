@@ -6,12 +6,18 @@
 
 /*
  * scope — fusion observability dashboard.
- * Dark-first design system on shadcn tokens. The app forces the `dark` class on
- * <html> (see app/layout.tsx); the light :root block is kept only so individual
- * tokens resolve if dark is ever removed.
+ * Light + dark design system on shadcn tokens. The active theme is a `dark`
+ * class on <html>, resolved before first paint (see app/layout.tsx and
+ * lib/theme.ts): explicit choices persist in a cookie so SSR renders the right
+ * theme, and "system" follows prefers-color-scheme.
+ *
+ * All data-viz colors (status, trace component, trajectory step, JSON syntax)
+ * are semantic tokens defined here per theme — components must reference the
+ * tokens (via lib/format.ts helpers or `*-(--token)` utilities), never raw hex.
  */
 
 :root {
+  color-scheme: light;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -19,34 +25,60 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.55 0.19 256);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent: oklch(0.96 0.01 256);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --ring: oklch(0.55 0.19 256);
+  --chart-1: oklch(0.55 0.19 256);
+  --chart-2: oklch(0.6 0.15 162.48);
+  --chart-3: oklch(0.65 0.15 70.08);
+  --chart-4: oklch(0.55 0.22 303.9);
+  --chart-5: oklch(0.58 0.2 16.439);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.55 0.19 256);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.94 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.55 0.19 256);
+  /* Statuses (sessions, candidates, model calls). */
+  --status-success: oklch(0.55 0.15 150);
+  --status-danger: oklch(0.55 0.2 27);
+  --status-warning: oklch(0.6 0.13 85);
+  --status-neutral: oklch(0.58 0.02 250);
+  /* Trace components (timeline bars, legend, event chips). */
+  --trace-gateway: oklch(0.52 0.16 258);
+  --trace-ensemble: oklch(0.52 0.2 300);
+  --trace-agent: oklch(0.55 0.11 210);
+  --trace-panel-model: oklch(0.55 0.15 150);
+  --trace-judge: oklch(0.58 0.13 80);
+  --trace-synthesis: oklch(0.56 0.19 350);
+  --trace-cursor-bridge: oklch(0.6 0.16 50);
+  --trace-other: oklch(0.58 0.02 250);
+  /* Trajectory step kinds. */
+  --step-reasoning: oklch(0.52 0.2 300);
+  --step-tool-call: oklch(0.52 0.16 258);
+  --step-observation: oklch(0.55 0.11 210);
+  --step-output: oklch(0.55 0.15 150);
+  --step-other: oklch(0.58 0.02 250);
+  /* JSON tree syntax. */
+  --json-key: oklch(0.5 0.17 300);
+  --json-string: oklch(0.5 0.13 150);
+  --json-number: oklch(0.55 0.13 70);
+  --json-boolean: oklch(0.5 0.14 240);
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -78,6 +110,27 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.62 0.19 256);
+  --status-success: oklch(0.72 0.17 150);
+  --status-danger: oklch(0.68 0.19 25);
+  --status-warning: oklch(0.75 0.13 85);
+  --status-neutral: oklch(0.68 0.02 250);
+  --trace-gateway: oklch(0.72 0.12 258);
+  --trace-ensemble: oklch(0.68 0.17 300);
+  --trace-agent: oklch(0.78 0.11 210);
+  --trace-panel-model: oklch(0.72 0.17 150);
+  --trace-judge: oklch(0.78 0.13 85);
+  --trace-synthesis: oklch(0.68 0.17 350);
+  --trace-cursor-bridge: oklch(0.73 0.14 50);
+  --trace-other: oklch(0.68 0.02 250);
+  --step-reasoning: oklch(0.68 0.17 300);
+  --step-tool-call: oklch(0.72 0.12 258);
+  --step-observation: oklch(0.78 0.11 210);
+  --step-output: oklch(0.72 0.17 150);
+  --step-other: oklch(0.68 0.02 250);
+  --json-key: oklch(0.75 0.12 300);
+  --json-string: oklch(0.78 0.13 155);
+  --json-number: oklch(0.82 0.12 80);
+  --json-boolean: oklch(0.76 0.1 235);
 }
 
 @theme inline {
@@ -129,6 +182,9 @@
   }
   html {
     @apply font-sans;
+    /* Reserve the scrollbar track so pages whose content grows past the fold
+       (or live sessions streaming new events) never shift horizontally. */
+    scrollbar-gutter: stable;
   }
 }
 

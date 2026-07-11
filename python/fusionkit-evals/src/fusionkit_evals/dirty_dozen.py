@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import Literal
 
 from fusionkit_evals.fusion_bench import FusionBenchTask, load_benchmark_tasks
+from fusionkit_evals.resources import packaged_data_path
 
-DIRTY_DOZEN_ROOT = Path(__file__).resolve().parents[2] / "benchmarks" / "dirty-dozen"
+DIRTY_DOZEN_ROOT = packaged_data_path("benchmarks", "dirty-dozen")
 DIRTY_DOZEN_TASK_COUNT = 12
 DirtyDozenRepo = Literal["fusionkit", "handoffkit", "cursorkit", "mlx-lm"]
 DIRTY_DOZEN_REPOS: tuple[DirtyDozenRepo, ...] = (

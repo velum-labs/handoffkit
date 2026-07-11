@@ -156,8 +156,8 @@ export function openUrl(url: string): void {
 
 export type Observability = {
   url: string;
-  ingestUrl: string;
-  traceDir: string;
+  /** OTLP/HTTP traces endpoint (the scope collector's /api/ingest). */
+  otlpUrl: string;
   close: () => Promise<void>;
 };
 
@@ -186,7 +186,6 @@ function startBundledDashboard(input: {
 function startDevDashboard(input: {
   env: Record<string, string | undefined>;
   identity: string;
-  traceDir: string;
   logFile?: string;
 }): LoggedChild {
   const scopeDir = findScopeAppDir();
@@ -251,8 +250,8 @@ async function probeDashboardIdentity(loopbackUrl: string, expectedIdentity: str
 
 /**
  * Start the scope dashboard on the fixed port, backed by a fresh per-run SQLite
- * file and trace dir, and return the URLs the caller injects (as
- * FUSION_TRACE_URL / FUSION_TRACE_DIR) into every spawned process. Prefers the
+ * file, and return the OTLP endpoint the caller exports (as
+ * OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) into every spawned process. Prefers the
  * prebuilt bundle shipped inside the npm package; falls back to building the
  * app from source in a monorepo dev checkout.
  */
@@ -262,8 +261,8 @@ export async function startObservability(input: {
   report?: StackReporter;
   portless: PortlessSession;
 }): Promise<Observability> {
-  const traceDir = mkdtempSync(join(tmpdir(), "fusion-trace-"));
-  const dbPath = join(traceDir, "scope.db");
+  const stateDir = mkdtempSync(join(tmpdir(), "fusion-scope-"));
+  const dbPath = join(stateDir, "scope.db");
   const bundled = bundledScopeServer();
   const dashboardIdentity = bundled !== undefined ? SCOPE_BUNDLED_IDENTITY : scopeSourceIdentity();
 
@@ -274,8 +273,7 @@ export async function startObservability(input: {
       ...process.env,
       NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
       SCOPEKIT_DB: dbPath,
-      SCOPEKIT_DASHBOARD_ID: dashboardIdentity,
-      FUSION_TRACE_DIR: traceDir
+      SCOPEKIT_DASHBOARD_ID: dashboardIdentity
     },
     input.portless.caCertPath
   );
@@ -297,7 +295,6 @@ export async function startObservability(input: {
           : startDevDashboard({
               env: childEnv,
               identity: dashboardIdentity,
-              traceDir,
               ...(input.logFile !== undefined ? { logFile: input.logFile } : {})
             });
     } catch (error) {
@@ -329,7 +326,7 @@ export async function startObservability(input: {
       spawn: spawnDashboard
     });
   } catch (error) {
-    rmSync(traceDir, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
     throw error instanceof Error ? error : new Error(String(error));
   }
 
@@ -338,13 +335,12 @@ export async function startObservability(input: {
 
   return {
     url: resolved.url,
-    // Trace events post over loopback (the in-process emitters do not carry the
-    // portless CA), so ingest uses the raw port; the named URL is for humans.
-    ingestUrl: `${resolved.loopbackUrl}/api/ingest`,
-    traceDir,
+    // Spans post over loopback (the OTLP exporters do not carry the portless
+    // CA), so ingest uses the raw port; the named URL is for humans.
+    otlpUrl: `${resolved.loopbackUrl}/api/ingest`,
     close: async () => {
       await resolved.close();
-      rmSync(traceDir, { recursive: true, force: true });
+      rmSync(stateDir, { recursive: true, force: true });
     }
   };
 }

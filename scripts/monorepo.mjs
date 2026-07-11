@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(SCRIPT_DIR);
-const PACKAGES_DIR = join(REPO_ROOT, "packages");
+const WORKSPACE_PACKAGE_DIRS = ["packages", "legacy/packages"];
 
 const log = (msg) => process.stdout.write(`${msg}\n`);
 const die = (msg) => {
@@ -32,13 +32,18 @@ function run(cmd, args, opts = {}) {
 function loadGraph() {
   const byName = new Map();
   const dirOf = new Map();
-  for (const entry of readdirSync(PACKAGES_DIR)) {
-    const pkgPath = join(PACKAGES_DIR, entry, "package.json");
-    if (!existsSync(pkgPath)) continue;
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-    if (!pkg.name?.startsWith("@fusionkit/")) continue;
-    byName.set(pkg.name, { name: pkg.name, dir: join("packages", entry), deps: [] });
-    dirOf.set(pkg.name, join("packages", entry));
+  for (const base of WORKSPACE_PACKAGE_DIRS) {
+    const absBase = join(REPO_ROOT, base);
+    if (!existsSync(absBase)) continue;
+    for (const entry of readdirSync(absBase)) {
+      const pkgPath = join(absBase, entry, "package.json");
+      if (!existsSync(pkgPath)) continue;
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+      if (!pkg.name?.startsWith("@fusionkit/")) continue;
+      const dir = join(base, entry);
+      byName.set(pkg.name, { name: pkg.name, dir, deps: [] });
+      dirOf.set(pkg.name, dir);
+    }
   }
   for (const node of byName.values()) {
     const pkg = JSON.parse(readFileSync(join(REPO_ROOT, node.dir, "package.json"), "utf8"));
@@ -131,7 +136,7 @@ function cmdAffected(args) {
 
   const directly = new Set();
   for (const file of changedFiles(base)) {
-    const m = file.match(/^packages\/[^/]+/);
+    const m = file.match(/^(?:packages|legacy\/packages)\/[^/]+/);
     if (m && dirToName.has(m[0])) directly.add(dirToName.get(m[0]));
   }
 

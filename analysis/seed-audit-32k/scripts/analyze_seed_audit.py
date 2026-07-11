@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import csv
 import json
-import math
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+from hyperkit.stats import wilson_interval
 
 ROOT = Path(__file__).resolve().parents[3]
 ROUND = ROOT / "analysis" / "seed-audit-32k"
@@ -71,17 +72,6 @@ def numeric(row: dict[str, Any], key: str) -> float | None:
     return float(value)
 
 
-def wilson(successes: int, n: int) -> tuple[float, float, float]:
-    if n == 0:
-        return (0.0, 0.0, 0.0)
-    z = 1.959963984540054
-    phat = successes / n
-    denom = 1 + z * z / n
-    center = (phat + z * z / (2 * n)) / denom
-    margin = z * math.sqrt((phat * (1 - phat) + z * z / (4 * n)) / n) / denom
-    return (phat, max(0.0, center - margin), min(1.0, center + margin))
-
-
 def merge_reruns(outcomes_path: Path, rerun_paths: list[Path]) -> list[dict[str, Any]]:
     rows = read_csv(outcomes_path)
     failed_keys = {
@@ -118,7 +108,8 @@ def model_metrics(rows: list[dict[str, Any]], max_tokens: int) -> dict[str, dict
         )
         completion_tokens = [numeric(row, "completion_tokens") or 0.0 for row in model_rows]
         cost = sum(numeric(row, "charged_cost_usd") or 0.0 for row in model_rows)
-        estimate, low, high = wilson(passed, n)
+        ci = wilson_interval(passed, n, z=1.959963984540054)
+        estimate, low, high = ci.estimate, ci.low, ci.high
         out[model] = {
             "n": n,
             "n_succeeded": len(succeeded),

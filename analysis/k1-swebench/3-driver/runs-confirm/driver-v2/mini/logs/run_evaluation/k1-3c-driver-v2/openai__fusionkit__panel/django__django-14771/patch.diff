@@ -1,0 +1,20 @@
+diff --git a/django/utils/autoreload.py b/django/utils/autoreload.py
+index cc65c043ab..375a9d790f 100644
+--- a/django/utils/autoreload.py
++++ b/django/utils/autoreload.py
+@@ -219,7 +219,14 @@ def get_child_arguments():
+     import __main__
+     py_script = Path(sys.argv[0])
+ 
+-    args = [sys.executable] + ['-W%s' % o for o in sys.warnoptions]
++    args = [sys.executable] + ["-W%s" % o for o in sys.warnoptions]
++    # Add -X options for CPython implementation-specific options
++    xoptions = getattr(sys, "_xoptions", {})
++    for option, value in xoptions.items():
++        if value is True:
++            args.append("-X%s" % option)
++        else:
++            args.append("-X%s=%s" % (option, value))
+     # __spec__ is set when the server was started with the `-m` option,
+     # see https://docs.python.org/3/reference/import.html#main-spec
+     # __spec__ may not exist, e.g. when running in a Conda env.

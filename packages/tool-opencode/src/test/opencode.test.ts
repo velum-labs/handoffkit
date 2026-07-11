@@ -35,3 +35,34 @@ test("opencodeModelArg namespaces the model under the local provider", () => {
     `${LOCAL_MODEL_LABEL}/panel-model`
   );
 });
+
+test("opencodeConfig lists every fused ensemble model and defines a subagent each", () => {
+  const config = opencodeConfig(
+    "http://127.0.0.1:9999",
+    "fusion-panel",
+    ["gpt-5.5"],
+    ["fusion-panel", "fusion-deep"],
+    [
+      { name: "default", modelId: "fusion-panel", memberIds: ["kimi", "qwen3"] },
+      { name: "deep", modelId: "fusion-deep", memberIds: ["opus"] }
+    ]
+  );
+  const provider = config.provider as Record<string, Record<string, unknown>>;
+  const models = provider[LOCAL_MODEL_LABEL]?.models as Record<string, { name: string }>;
+  assert.deepEqual(Object.keys(models), ["fusion-panel", "fusion-deep", "gpt-5.5"]);
+
+  const agent = config.agent as Record<
+    string,
+    { mode: string; model: string; description: string; prompt: string }
+  >;
+  assert.deepEqual(Object.keys(agent), ["fusion-panel", "fusion-deep"]);
+  assert.equal(agent["fusion-deep"]?.mode, "subagent");
+  assert.equal(agent["fusion-deep"]?.model, `${LOCAL_MODEL_LABEL}/fusion-deep`);
+  assert.match(agent["fusion-panel"]?.description ?? "", /default "default" fusion ensemble/);
+  assert.match(agent["fusion-deep"]?.prompt ?? "", /panel-and-judge fusion/);
+});
+
+test("opencodeConfig omits the agent map without ensembles", () => {
+  const config = opencodeConfig("http://127.0.0.1:9999", "fusion-panel", ["gpt-5.5"]);
+  assert.equal(config.agent, undefined);
+});

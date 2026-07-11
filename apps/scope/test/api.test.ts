@@ -14,22 +14,21 @@ const { GET: listSessionsRoute } = await import("../app/api/sessions/route");
 const { GET: getSessionRoute } = await import("../app/api/sessions/[traceId]/route");
 const { GET: modelsRoute } = await import("../app/api/models/route");
 const { GET: environmentsRoute } = await import("../app/api/environments/route");
-const { syntheticSession } = await import("./fixture");
+const { syntheticSession, toOtlpExport } = await import("./fixture");
 
-test("POST /api/ingest then GET /api/sessions/[id] renders structured detail", async () => {
-  const traceId = "trace_api_e2e";
-  const events = syntheticSession(traceId);
+test("POST /api/ingest (OTLP) then GET /api/sessions/[id] renders structured detail", async () => {
+  const traceId = "33333333333333333333333333330001";
+  const spans = syntheticSession(traceId);
 
   const ingestResponse = await ingest(
     new Request("http://localhost/api/ingest", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events })
+      body: JSON.stringify(toOtlpExport(spans))
     })
   );
-  const ingestBody = (await ingestResponse.json()) as { accepted: number; rejected: number };
-  assert.equal(ingestBody.accepted, events.length);
-  assert.equal(ingestBody.rejected, 0);
+  const ingestBody = (await ingestResponse.json()) as { accepted: number };
+  assert.equal(ingestBody.accepted, spans.length);
 
   // Sessions list includes the new session (with its prompt preview).
   const listResponse = await listSessionsRoute();
@@ -64,7 +63,7 @@ test("POST /api/ingest then GET /api/sessions/[id] renders structured detail", a
 
 test("GET /api/sessions/[id] 404s for an unknown trace", async () => {
   const response = await getSessionRoute(new Request("http://localhost/api/sessions/nope"), {
-    params: Promise.resolve({ traceId: "trace_does_not_exist" })
+    params: Promise.resolve({ traceId: "44444444444444444444444444440000" })
   });
   assert.equal(response.status, 404);
 });

@@ -77,19 +77,21 @@ reconnect before the first byte.
 
 ## Observability
 
-Every component emits `fusion-trace-event.v1` events correlated by one
-`trace_id`: `session.started` (with the environment snapshot),
-`harness.candidate.started/finished`, `trajectory.step`,
-`model.call.started/finished`, `tool.execution`, and the judge's
-`judge.thinking` (each tool-call step) → `judge.final` (terminal). The terminal
-`judge.final` carries the final answer and marks the session succeeded in the
-collector. Run with `--observe` to launch the dashboard and stream events into
-it.
+Every component emits OpenTelemetry spans named by the fusion semantic
+conventions (`spec/fusion-trace/registry.json`), correlated by one trace id:
+a `fusion.turn.info` marker (with the environment snapshot), `fusion.candidate`
+spans with live `fusion.candidate.step` markers, GenAI `chat` spans for model
+calls, `fusion.tool.execution` markers, and the judge's
+`fusion.judge.thinking` markers (each tool-call step) under the terminal
+`fusion.judge` span. The judge span's end carries the final answer and marks
+the session succeeded in the collector. Run with `--observe` to launch the
+dashboard and export spans into it (standard
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`).
 
 ## Test drive
 
 ```bash
-cd /Users/alen/Documents/Development/handoffkit && pnpm build
+cd /path/to/this/repo && pnpm build
 
 # One command: real cloud panel (gpt-5.5 + sonnet + gemini), judge gpt-5.5, codex as the
 # front-door harness, and the scope dashboard observing it live on :4317.

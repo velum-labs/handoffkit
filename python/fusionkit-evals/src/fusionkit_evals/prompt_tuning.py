@@ -21,9 +21,10 @@ from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import PromptOverrides, SamplingConfig
 from fusionkit_core.judge import JudgeSynthesizer
 from fusionkit_core.types import ChatMessage, Trajectory
+from hyperkit.stats import McNemarResult, wilson_interval
+from hyperkit.stats import mcnemar as paired_mcnemar
 from pydantic import BaseModel, Field
 
-from fusionkit_evals.bench_stats import wilson_interval
 from fusionkit_evals.bench_verify import verify_solution
 from fusionkit_evals.candidate_bank import BankTask, CandidateBank
 from fusionkit_evals.checkers import CheckerMode
@@ -72,13 +73,6 @@ class PromptEval(BaseModel):
     ci_low: float
     ci_high: float
     passes: dict[str, bool] = Field(default_factory=dict)
-
-
-class McNemarResult(BaseModel):
-    wins: int
-    losses: int
-    statistic: float | None = None
-    significant: bool = False
 
 
 class TrialRecord(BaseModel):
@@ -264,16 +258,11 @@ async def evaluate_variant(
 def mcnemar(incumbent: Mapping[str, bool], candidate: Mapping[str, bool]) -> McNemarResult:
     """Paired test on per-task pass/fail; wins = candidate fixed an incumbent failure."""
 
-    wins = sum(1 for key, value in candidate.items() if value and not incumbent.get(key, False))
-    losses = sum(
-        1 for key, value in candidate.items() if not value and incumbent.get(key, False)
+    keys = sorted(set(incumbent) | set(candidate))
+    return paired_mcnemar(
+        [incumbent.get(key, False) for key in keys],
+        [candidate.get(key, False) for key in keys],
     )
-    discordant = wins + losses
-    if discordant == 0:
-        return McNemarResult(wins=0, losses=0, statistic=None, significant=False)
-    statistic = (abs(wins - losses) - 1) ** 2 / discordant  # continuity-corrected, 1 dof
-    significant = statistic >= 3.841 and wins > losses  # chi-square p < 0.05
-    return McNemarResult(wins=wins, losses=losses, statistic=statistic, significant=significant)
 
 
 # --- optimizer ---------------------------------------------------------------

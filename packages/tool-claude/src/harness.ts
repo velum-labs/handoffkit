@@ -1,17 +1,14 @@
 import { artifactHash } from "@fusionkit/protocol";
-import type { NetworkPolicy, RunEvent } from "@fusionkit/protocol";
-import { claudeModelAlias, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
-import { CapabilityMismatchError } from "@fusionkit/runner";
-import type { SessionBackendResult } from "@fusionkit/runner";
 import {
-  claudeCodeBinding,
-  runHarnessSession,
-  VERCEL_SANDBOX_CREDENTIAL_ENVS
-} from "@fusionkit/session-harness";
-import type { ClaudeCodeBindingOptions, HarnessSessionRun } from "@fusionkit/session-harness";
-import { PROVIDERS } from "@fusionkit/registry";
+  claudeModelAlias,
+  ModelRoutedBackend,
+  OpenAiBackend,
+  PANEL_DEPTH_HEADER,
+  startGateway
+} from "@fusionkit/model-gateway";
+import type { Backend } from "@fusionkit/model-gateway";
 
-import { claudeEnv } from "./launch.js";
+import { claudeAgentsJson, claudeEnv } from "./launch.js";
 import {
   buildChildEnv,
   captureWorktreeDiff,
@@ -21,351 +18,76 @@ import {
 } from "@fusionkit/tools";
 import type { CliCaptureResult } from "@fusionkit/tools";
 
-import { hardeningToJson, KernelBackend, traceCandidate } from "@fusionkit/ensemble";
+import { KernelBackend, traceCandidate } from "@fusionkit/ensemble";
+import type { FusionTraceCarrier } from "@fusionkit/ensemble";
 import { createClaudeStreamStepEmitter, parseClaudeStreamJson, resolveClaudeCliModel } from "./stream-trajectory.js";
 import type {
-  CandidateHardeningMetadata,
   EnsembleDescriptor,
+  FusedSubagentAccess,
   HarnessAdapter,
   HarnessCandidateOutput,
   HarnessRunInput
 } from "@fusionkit/ensemble";
 
-const DEFAULT_RUNTIME = "node24";
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
-const DEFAULT_LOG_MAX_BYTES = 256 * 1024;
-/** The registry host for a provider's default base URL (e.g. api.anthropic.com). */
-function providerHost(provider: string): string[] {
-  const baseUrl = PROVIDERS[provider]?.baseUrl;
-  if (baseUrl === undefined) return [];
-  try {
-    return [new URL(baseUrl).hostname];
-  } catch {
-    return [];
-  }
-}
+const AUTH_ENV_NAMES = [
+  "AI_GATEWAY_API_KEY",
+  "AI_GATEWAY_BASE_URL",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_BASE_URL"
+];
 
-/**
- * Deny-by-default sandbox egress: npm (bridge bootstrap) plus the provider and
- * AI Gateway hosts from the provider registry's base URLs.
- */
-const DEFAULT_CLAUDE_NETWORK: NetworkPolicy = {
-  defaultDeny: true,
-  allowHosts: ["registry.npmjs.org", ...providerHost("anthropic"), ...providerHost("ai-gateway")]
-};
-
-/** The env vars (key/token/base URL) a provider registry entry names. */
-function providerEnvVars(provider: string): string[] {
-  const info = PROVIDERS[provider];
-  if (info === undefined) return [];
-  return [info.keyEnv, info.authTokenEnv, info.baseUrlEnv].filter(
-    (name): name is string => name !== undefined
-  );
-}
-
-/**
- * Claude auth env vars, from the same provider secret registry the
- * session-harness auth path pins (AI Gateway + Anthropic).
- */
-const AUTH_ENV_NAMES = [...providerEnvVars("ai-gateway"), ...providerEnvVars("anthropic")];
-
-type AuthEnvName = string;
 export type ClaudeCodeHarnessEnv = Record<string, string | undefined>;
 
-export type ClaudeCodeHarnessOptions = ClaudeCodeBindingOptions & {
+export type ClaudeCodeHarnessOptions = {
   id?: string;
-  /**
-   * Where the agent runs. `"sandbox"` (default) drives Claude Code in a Vercel
-   * sandbox via the session backend; `"local"` drives the `claude` CLI directly
-   * in the candidate's git worktree, pointed at the fusion router. The fusion
-   * panel uses `"local"` for uniform local-worktree isolation.
-   */
-  execution?: "local" | "sandbox";
-  /** Local mode: the CLI binary to spawn (defaults to `claude`). */
+  /** CLI binary to spawn (defaults to `claude`). */
   command?: string;
-  /** Local mode: the fusion router base URL the CLI's model calls go to. */
+  /** Fusion router base URL the CLI's model calls go to. */
   fusionBackendUrl?: string;
-  /** Local mode: bearer token presented to the router (defaults to `local`). */
+  /** Bearer token presented to the router (defaults to `local`). */
   apiKey?: string;
   /**
-   * Local mode: per-model router endpoints keyed by `EnsembleModel.id`. When a
-   * candidate's id is present, the CLI is pointed at that endpoint and requests
-   * the endpoint id as its model.
+   * Per-model router endpoints keyed by `EnsembleModel.id`. When a candidate's
+   * id is present, the CLI is pointed at that endpoint and requests the endpoint
+   * id as its model.
    */
   modelEndpoints?: Record<string, string>;
   /** Defaults to `process.env`; tests can pass `{}` for deterministic skips. */
   env?: ClaudeCodeHarnessEnv;
-  /** Already-released secret values delivered into the session env. */
-  secrets?: { name: string; value: string }[];
-  /**
-   * Test/extension seam: executes one harness session run. Defaults to
-   * `runHarnessSession` over `claudeCodeBinding(options)`.
-   */
-  runSession?: (run: HarnessSessionRun) => Promise<SessionBackendResult>;
-  network?: NetworkPolicy;
   timeoutMs?: number;
-  logMaxBytes?: number;
   skipWhenUnavailable?: boolean;
-  /** Observability correlation for per-candidate trace events. */
-  traceId?: string;
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing run/turn; candidates span under it. */
+  trace?: FusionTraceCarrier;
   turn?: number;
+  /** Enable native sub-agents inside panel members (default on). */
+  subagents?: boolean;
+  /**
+   * Fused sub-agent access: router-gateway members get one session-scoped
+   * `--agents` definition per fused ensemble, and their translation gateway
+   * routes `fusion-*` (and `claude-fusion-*`) requests to the front-door
+   * fusion gateway stamped with the panel depth. Native-Anthropic members are
+   * unaffected (their turns never pass a gateway that could route fusion ids).
+   */
+  fusedSubagents?: FusedSubagentAccess;
 };
 
-type CredentialGate =
-  | { available: true; authEnv: Record<AuthEnvName, string> }
-  | { available: false; reason: string; missing: string[] };
+const DEFAULT_CLAUDE_COMMAND = "claude";
 
-type PreparedClaudeCodeHarness = {
-  gate: CredentialGate;
-};
-
-function candidateId(input: HarnessRunInput): string {
-  return `${input.descriptor.id}_${input.model.id}_${input.ordinal}`;
-}
-
-function envValue(env: ClaudeCodeHarnessEnv, name: string): string | undefined {
-  const value = env[name];
-  return value && value.length > 0 ? value : undefined;
-}
-
-function authEnvFrom(env: ClaudeCodeHarnessEnv): Record<AuthEnvName, string> {
-  const authEnv = {} as Record<AuthEnvName, string>;
-  for (const name of AUTH_ENV_NAMES) {
-    const value = envValue(env, name);
-    if (value !== undefined) authEnv[name] = value;
-  }
-  return authEnv;
-}
-
-function credentialGate(
-  env: ClaudeCodeHarnessEnv,
-  options: ClaudeCodeHarnessOptions
-): CredentialGate {
-  const missing: string[] = [];
-  const hasProviderCredential =
-    envValue(env, "AI_GATEWAY_API_KEY") ??
-    envValue(env, "ANTHROPIC_API_KEY") ??
-    envValue(env, "ANTHROPIC_AUTH_TOKEN");
-  const hasSandboxCredential =
-    options.runSession !== undefined ||
-    options.createSandboxProvider !== undefined ||
-    options.token !== undefined ||
-    envValue(env, VERCEL_SANDBOX_CREDENTIAL_ENVS.token) !== undefined;
-
-  if (!hasSandboxCredential) missing.push(VERCEL_SANDBOX_CREDENTIAL_ENVS.token);
-  if (!hasProviderCredential) {
-    missing.push("ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|AI_GATEWAY_API_KEY");
-  }
-
-  if (missing.length > 0) {
-    return {
-      available: false,
-      missing,
-      reason:
-        "Claude Code harness skipped: missing Claude Code credential/env; set VERCEL_TOKEN and one of " +
-        "ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or AI_GATEWAY_API_KEY."
-    };
-  }
-
-  return { available: true, authEnv: authEnvFrom(env) };
+function unavailableReasonFor(command: string, env: ClaudeCodeHarnessEnv): string | undefined {
+  return commandOnPath(command, env)
+    ? undefined
+    : `Claude CLI "${command}" was not found on PATH; install the Claude Code CLI and log in.`;
 }
 
 export function claudeCodeHarnessCredentialSkipReason(
   env: ClaudeCodeHarnessEnv = process.env,
   options: ClaudeCodeHarnessOptions = {}
 ): string | undefined {
-  const gate = credentialGate(env, options);
-  return gate.available ? undefined : gate.reason;
+  return unavailableReasonFor(options.command ?? DEFAULT_CLAUDE_COMMAND, env);
 }
 
-/** The binding options this harness forwards to `claudeCodeBinding`. */
-function bindingOptionsFor(
-  options: ClaudeCodeHarnessOptions,
-  env: ClaudeCodeHarnessEnv
-): ClaudeCodeBindingOptions {
-  return {
-    ...(options.runtime !== undefined ? { runtime: options.runtime } : {}),
-    ...(options.bridgePort !== undefined ? { bridgePort: options.bridgePort } : {}),
-    token: options.token ?? envValue(env, VERCEL_SANDBOX_CREDENTIAL_ENVS.token),
-    teamId: options.teamId ?? envValue(env, VERCEL_SANDBOX_CREDENTIAL_ENVS.teamId),
-    projectId: options.projectId ?? envValue(env, VERCEL_SANDBOX_CREDENTIAL_ENVS.projectId),
-    ...(options.model !== undefined ? { model: options.model } : {}),
-    ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
-    ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
-    ...(options.startupTimeoutMs !== undefined
-      ? { startupTimeoutMs: options.startupTimeoutMs }
-      : {}),
-    ...(options.createHarness !== undefined ? { createHarness: options.createHarness } : {}),
-    ...(options.createSandboxProvider !== undefined
-      ? { createSandboxProvider: options.createSandboxProvider }
-      : {})
-  };
-}
-
-/** The egress policy for this run: explicit option, descriptor isolation, or the deny-by-default set. */
-function networkPolicyFor(
-  descriptor: EnsembleDescriptor,
-  options: ClaudeCodeHarnessOptions
-): NetworkPolicy {
-  if (options.network !== undefined) return options.network;
-  const fromDescriptor = descriptor.runtime.isolation?.networkPolicy;
-  if (fromDescriptor !== undefined) {
-    return {
-      defaultDeny: fromDescriptor.defaultDeny,
-      allowHosts: [...fromDescriptor.allowHosts]
-    };
-  }
-  return DEFAULT_CLAUDE_NETWORK;
-}
-
-/**
- * Hardening metadata built only from facts this harness can stand behind:
- * `executed` distinguishes a run that actually went through the sandbox
- * binding from one that never started, and network enforcement is claimed
- * only when the default Vercel sandbox factory applied the policy at VM
- * creation (an injected sandbox or run seam owns its own enforcement story).
- */
-function hardeningFor(input: {
-  descriptor: EnsembleDescriptor;
-  options: ClaudeCodeHarnessOptions;
-  repoDir: string;
-  authEnvNames: readonly string[];
-  executed: boolean;
-}): CandidateHardeningMetadata {
-  const networkPolicy = networkPolicyFor(input.descriptor, input.options);
-  const mountPolicy = input.descriptor.runtime.isolation?.mountPolicy;
-  const secretPolicy = input.descriptor.runtime.isolation?.secretPolicy;
-  const enforcedByDefaultSandbox =
-    input.executed &&
-    input.options.runSession === undefined &&
-    input.options.createSandboxProvider === undefined;
-  return {
-    requested_isolation: "microvm",
-    actual_isolation: input.executed ? "vercel-sandbox" : "process",
-    runtime: {
-      provider: "vercel-sandbox",
-      runtime:
-        input.options.runtime ??
-        (input.descriptor.runtime.isolation?.kind === "microvm"
-          ? input.descriptor.runtime.isolation.runtime
-          : undefined) ??
-        DEFAULT_RUNTIME,
-      workdir: mountPolicy?.workdir ?? input.repoDir
-    },
-    mount_policy: {
-      worktree_writable: mountPolicy?.worktreeWritable ?? true,
-      read_only_caches: [...(mountPolicy?.readOnlyCachePaths ?? [])],
-      ignored_dirs: [...(mountPolicy?.ignoredDirs ?? [".git", "node_modules", ".warrant"])]
-    },
-    network_policy: {
-      default_deny: networkPolicy.defaultDeny,
-      allow_hosts: [...networkPolicy.allowHosts],
-      enforced: enforcedByDefaultSandbox
-    },
-    cleanup: input.executed
-      ? { attempted: true, succeeded: true, status: "succeeded" }
-      : { attempted: false, succeeded: true, status: "not_required" },
-    secret_absence: {
-      secret_names: [
-        ...(secretPolicy?.secretNames ?? input.options.secrets?.map((secret) => secret.name) ?? [])
-      ],
-      secret_value_hashes: [...(secretPolicy?.secretValueHashes ?? [])],
-      injected_env_names: [...(secretPolicy?.injectedEnvNames ?? input.authEnvNames)],
-      scanned: false,
-      leaks_found: false,
-      scan_scope: [],
-      leak_count: 0
-    }
-  };
-}
-
-function skippedOutput(input: {
-  runInput: HarnessRunInput;
-  reason: string;
-  missing: readonly string[];
-  options: ClaudeCodeHarnessOptions;
-}): HarnessCandidateOutput {
-  const evidenceHash = artifactHash(input.reason);
-  const repoDir = input.runInput.worktree?.path ?? input.runInput.descriptor.sourceRepo;
-  return {
-    candidateId: candidateId(input.runInput),
-    model: input.runInput.model,
-    status: "skipped",
-    ...(input.runInput.worktree
-      ? {
-          branchName: input.runInput.worktree.branchName,
-          worktreePath: input.runInput.worktree.path
-        }
-      : {}),
-    transcript: input.reason,
-    summary: input.reason,
-    error: {
-      kind: "capability_missing",
-      message: input.reason,
-      retryable: false
-    },
-    metadata: {
-      adapter: "claude-code",
-      credential_gate: "skipped",
-      missing_credentials: [...input.missing],
-      hardening: hardeningToJson(
-        hardeningFor({
-          descriptor: input.runInput.descriptor,
-          options: input.options,
-          repoDir,
-          authEnvNames: [],
-          executed: false
-        })
-      )
-    }
-  };
-}
-
-function failureOutput(input: {
-  runInput: HarnessRunInput;
-  error: unknown;
-  options: ClaudeCodeHarnessOptions;
-  authEnvNames: readonly string[];
-}): HarnessCandidateOutput {
-  const message = input.error instanceof Error ? input.error.message : String(input.error);
-  const errorHash = artifactHash(message);
-  const repoDir = input.runInput.worktree?.path ?? input.runInput.descriptor.sourceRepo;
-  return {
-    candidateId: candidateId(input.runInput),
-    model: input.runInput.model,
-    status: "failed",
-    ...(input.runInput.worktree
-      ? {
-          branchName: input.runInput.worktree.branchName,
-          worktreePath: input.runInput.worktree.path
-        }
-      : {}),
-    transcript: `Claude Code harness failed: ${message}`,
-    error: {
-      kind: "provider_error",
-      message,
-      retryable: true
-    },
-    metadata: {
-      adapter: "claude-code",
-      credential_gate: "available",
-      event_count: 0,
-      auth_env_names: [...input.authEnvNames],
-      hardening: hardeningToJson(
-        hardeningFor({
-          descriptor: input.runInput.descriptor,
-          options: input.options,
-          repoDir,
-          authEnvNames: input.authEnvNames,
-          executed: false
-        })
-      )
-    }
-  };
-}
-
-const DEFAULT_CLAUDE_COMMAND = "claude";
 
 /**
  * True when the `claude` CLI can serve this panel model natively: an
@@ -388,23 +110,42 @@ function startCandidateRouterGateway(input: {
   endpointUrl: string;
   endpointId: string;
   apiKey: string;
+  fusedSubagents?: FusedSubagentAccess;
 }): ReturnType<typeof startGateway> {
+  const primary: Backend = new OpenAiBackend({
+    baseUrl: normalizeApiBaseUrl(input.endpointUrl),
+    apiKey: input.apiKey,
+    defaultModel: input.endpointId,
+    forceModel: input.endpointId
+  });
+  // Fused sub-agent access: the member's Task-tool agents pin `claude-fusion-*`
+  // model ids; route those (and the raw `fusion-*` ids) to the front-door
+  // fusion gateway — which strips the claude alias itself — stamped with the
+  // panel depth so fused access never recurses another level down.
+  const fused = input.fusedSubagents;
+  const backend: Backend =
+    fused === undefined || fused.ensembles.length === 0
+      ? primary
+      : new ModelRoutedBackend({
+          routedModelIds: fused.ensembles.flatMap((ensemble) => [
+            ensemble.modelId,
+            claudeModelAlias(ensemble.modelId)
+          ]),
+          routed: new OpenAiBackend({
+            baseUrl: normalizeApiBaseUrl(fused.gatewayUrl),
+            ...(fused.authToken !== undefined ? { apiKey: fused.authToken } : {}),
+            headers: { [PANEL_DEPTH_HEADER]: String(fused.depth) }
+          }),
+          primary
+        });
   return startGateway({
-    backend: new KernelBackend(
-      new OpenAiBackend({
-        baseUrl: normalizeApiBaseUrl(input.endpointUrl),
-        apiKey: input.apiKey,
-        defaultModel: input.endpointId,
-        forceModel: input.endpointId
-      }),
-      {
-        workflowIds: {
-          chat: "native-passthrough-turn",
-          models: "native-passthrough-models",
-          embeddings: "native-passthrough-embeddings"
-        }
+    backend: new KernelBackend(backend, {
+      workflowIds: {
+        chat: "native-passthrough-turn",
+        models: "native-passthrough-models",
+        embeddings: "native-passthrough-embeddings"
       }
-    )
+    })
   });
 }
 
@@ -435,6 +176,8 @@ async function driveClaudePrint(input: {
   env: Record<string, string>;
   /** When set, point the CLI at this Anthropic-dialect gateway instead of api.anthropic.com. */
   gateway?: { baseUrl: string; authToken: string };
+  /** Session-scoped `--agents` JSON (fused sub-agent definitions). */
+  agentsJson?: string;
   onStdoutLine?: (line: string) => void;
   /** Aborts the claude child process (panel cancellation / straggler policy). */
   signal?: AbortSignal;
@@ -450,7 +193,8 @@ async function driveClaudePrint(input: {
     "--permission-mode",
     "bypassPermissions",
     "--model",
-    input.model
+    input.model,
+    ...(input.agentsJson !== undefined ? ["--agents", input.agentsJson] : [])
   ];
   const childEnv: Record<string, string> = { ...input.env };
   if (input.gateway !== undefined) {
@@ -547,7 +291,7 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
       const candidate = `${descriptor.id}_${model.id}_${ordinal}`;
       const reason = (runInput.prepared as { reason?: string } | undefined)?.reason ?? unavailableReason();
       if (reason !== undefined) {
-        if (!skipWhenUnavailable) throw new CapabilityMismatchError(reason);
+        if (!skipWhenUnavailable) throw new Error(reason);
         return {
           candidateId: candidate,
           model,
@@ -563,8 +307,7 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
       // candidate's trajectory live (started now, finished when the run completes).
       const tracer = traceCandidate(
         {
-          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.trace !== undefined ? { trace: options.trace } : {}),
           ...(options.turn !== undefined ? { turn: options.turn } : {})
         },
         {
@@ -582,11 +325,14 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
       // same claude-alias passthrough trick the front door's model picker uses.
       const endpointUrl = options.modelEndpoints?.[model.id] ?? options.fusionBackendUrl;
       const viaRouter = !isNativeAnthropicModel(model.model) && endpointUrl !== undefined;
+      const fusedSubagents =
+        options.subagents !== false && viaRouter ? options.fusedSubagents : undefined;
       const routerGateway = viaRouter
         ? await startCandidateRouterGateway({
             endpointUrl,
             endpointId: model.id,
-            apiKey: options.apiKey ?? "local"
+            apiKey: options.apiKey ?? "local",
+            ...(fusedSubagents !== undefined ? { fusedSubagents } : {})
           })
         : undefined;
       const cliModel = viaRouter ? claudeModelAlias(model.id) : resolveClaudeCliModel(model.model);
@@ -605,6 +351,12 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
           env: buildChildEnv({ base: env, allow: [...AUTH_ENV_NAMES, /^CLAUDE_/] }),
           ...(routerGateway !== undefined
             ? { gateway: { baseUrl: routerGateway.url(), authToken: options.apiKey ?? "local" } }
+            : {}),
+          // Fused sub-agents: one session-scoped agent per ensemble, so the
+          // member's Task tool can delegate to any `fusion-<name>` ensemble
+          // (its translation gateway routes those turns to the front door).
+          ...(fusedSubagents !== undefined
+            ? { agentsJson: claudeAgentsJson(fusedSubagents.ensembles, fusedSubagents.defaultModelId) }
             : {}),
           onStdoutLine: emitStep,
           ...(runInput.signal !== undefined ? { signal: runInput.signal } : {})
@@ -664,7 +416,7 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
               ? {
                   error: {
                     kind: "provider_error" as const,
-                    message: result.reason ?? "Claude CLI run failed.",
+                    message: result.reason || "Claude CLI run failed.",
                     retryable: false
                   }
                 }
@@ -675,7 +427,7 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
           ? {
               error: {
                 kind: "provider_error" as const,
-                message: result.reason ?? "Claude CLI run failed.",
+                message: result.reason || "Claude CLI run failed.",
                 retryable: false
               }
             }
@@ -697,139 +449,9 @@ function createLocalClaudeCodeHarness(options: ClaudeCodeHarnessOptions): Harnes
 }
 
 export function createClaudeCodeHarness(options: ClaudeCodeHarnessOptions = {}): HarnessAdapter {
-  if (options.execution === "local") {
-    return createLocalClaudeCodeHarness(options);
-  }
-  const id = options.id ?? "claude-code";
-  const env = options.env ?? process.env;
-  const skipWhenUnavailable = options.skipWhenUnavailable ?? true;
-  return {
-    id,
-    harnessKind: "claude_code",
-    prepare: (): PreparedClaudeCodeHarness => {
-      const gate = credentialGate(env, options);
-      if (!gate.available && !skipWhenUnavailable) {
-        throw new CapabilityMismatchError(gate.reason);
-      }
-      return { gate };
-    },
-    capabilities: () => {
-      const gate = credentialGate(env, options);
-      return {
-        workspace_read: gate.available ? "supported" : "degraded",
-        workspace_write: gate.available ? "supported" : "degraded",
-        apply_patch: gate.available ? "supported" : "degraded",
-        tool_records: "supported",
-        microvm_isolation: gate.available ? "supported" : "degraded",
-        credential_gate: gate.available ? "supported" : "degraded"
-      };
-    },
-    verificationProfile: () => ({
-      id: `${id}-verification`,
-      requiredEvidence: ["structured transcript", "exit code", "worktree diff or skip reason"]
-    }),
-    run: async (runInput): Promise<HarnessCandidateOutput> => {
-      const state = runInput.prepared as PreparedClaudeCodeHarness;
-      if (!state.gate.available) {
-        return skippedOutput({
-          runInput,
-          reason: state.gate.reason,
-          missing: state.gate.missing,
-          options
-        });
-      }
-
-      const id = candidateId(runInput);
-      const repoDir =
-        runInput.worktree?.path ?? runInput.descriptor.workspace ?? runInput.descriptor.sourceRepo;
-      const events: RunEvent[] = [];
-      const authEnvNames = Object.keys(state.gate.authEnv);
-      // The session env is exactly the gated auth vars plus explicitly
-      // released secrets — an honest statement of what the run needs, not a
-      // fabricated governance contract.
-      const sessionEnv: Record<string, string> = { ...state.gate.authEnv };
-      for (const secret of options.secrets ?? []) sessionEnv[secret.name] = secret.value;
-      const runSession = options.runSession ?? runHarnessSession;
-      const timeoutMs =
-        options.timeoutMs ?? runInput.descriptor.policy.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-
-      try {
-        const result = await runSession({
-          binding: claudeCodeBinding(bindingOptionsFor(options, env)),
-          prompt: runInput.descriptor.prompt,
-          env: sessionEnv,
-          timeoutMs,
-          logMaxBytes: options.logMaxBytes ?? DEFAULT_LOG_MAX_BYTES,
-          network: networkPolicyFor(runInput.descriptor, options),
-          repoDir,
-          emit: (event: RunEvent) => {
-            events.push(event);
-          }
-        });
-        const transcript = result.log.toString("utf8");
-        const outputHash = artifactHash(transcript);
-        const status: HarnessCandidateOutput["status"] =
-          result.exitCode === 0 ? "succeeded" : "failed";
-        return {
-          candidateId: id,
-          model: runInput.model,
-          status,
-          ...(runInput.worktree
-            ? {
-                branchName: runInput.worktree.branchName,
-                worktreePath: runInput.worktree.path
-              }
-            : {}),
-          transcript,
-          toolRecords: [
-            {
-              execution_id: `exec_${id}`,
-              plan_id: `plan_${id}`,
-              status,
-              output_hash: outputHash
-            }
-          ],
-          ...(status === "failed"
-            ? {
-                error: {
-                  kind: "provider_error" as const,
-                  message: "Claude Code harness exited non-zero",
-                  retryable: true
-                }
-              }
-            : {}),
-          metadata: {
-            adapter: "claude-code",
-            backend_isolation: "vercel-sandbox",
-            credential_gate: "available",
-            event_count: events.length,
-            auth_env_names: authEnvNames,
-            hardening: hardeningToJson(
-              hardeningFor({
-                descriptor: runInput.descriptor,
-                options,
-                repoDir,
-                authEnvNames,
-                executed: true
-              })
-            )
-          }
-        };
-      } catch (error) {
-        if (skipWhenUnavailable && error instanceof CapabilityMismatchError) {
-          return skippedOutput({
-            runInput,
-            reason: error.message,
-            missing: ["capability_mismatch"],
-            options
-          });
-        }
-        return failureOutput({ runInput, error, options, authEnvNames });
-      }
-    },
-    collectArtifacts: () => []
-  };
+  return createLocalClaudeCodeHarness(options);
 }
+
 
 export function claudeCodeHarness(options: ClaudeCodeHarnessOptions = {}): HarnessAdapter {
   return createClaudeCodeHarness(options);

@@ -1,3 +1,10 @@
+"""FusionKit configuration models and loaders.
+
+Prompt precedence is: per-request overrides > YAML ``prompts`` fields >
+``.fusionkit/prompts/{judge,synthesizer}.md`` beside the config file (or the
+current working directory when serving from elsewhere) > built-in defaults.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -164,7 +171,34 @@ class FusionConfig(BaseModel):
         return self.synthesizer_model or self.resolved_judge_model
 
 
+_PROMPT_FILE_FIELDS = {
+    "judge_system": "judge.md",
+    "synthesizer_system": "synthesizer.md",
+}
+
+
 def load_config(path: str | Path) -> FusionConfig:
     config_path = Path(path)
     data = yaml.safe_load(config_path.read_text()) or {}
+    _apply_prompt_file_overrides(data, config_path)
     return FusionConfig.model_validate(data)
+
+
+def _apply_prompt_file_overrides(data: object, config_path: Path) -> None:
+    if not isinstance(data, dict):
+        return
+    prompts = data.setdefault("prompts", {})
+    if not isinstance(prompts, dict):
+        return
+    prompt_dirs = [
+        config_path.parent / ".fusionkit" / "prompts",
+        Path.cwd() / ".fusionkit" / "prompts",
+    ]
+    for field, filename in _PROMPT_FILE_FIELDS.items():
+        if prompts.get(field) is not None:
+            continue
+        for prompt_dir in prompt_dirs:
+            prompt_path = prompt_dir / filename
+            if prompt_path.exists():
+                prompts[field] = prompt_path.read_text(encoding="utf-8").rstrip("\n")
+                break

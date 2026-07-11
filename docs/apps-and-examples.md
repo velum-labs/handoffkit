@@ -52,7 +52,7 @@ pnpm install
 pnpm test
 ```
 
-Use this app when validating observability behavior, trace rendering, session inspection, or local debugging workflows. When trace event shapes change, update both the app and [Specs and APIs](specs-and-apis.md).
+Use this app when validating observability behavior, trace rendering, session inspection, or local debugging workflows. When the trace semantic conventions change (`spec/fusion-trace/registry.json`), regenerate the bindings and update both the app and [Specs and APIs](specs-and-apis.md).
 
 ## Example execution model
 
@@ -126,7 +126,7 @@ Expected value: the example should print benchmark measurements and exit success
 
 ## Governance and receipt examples
 
-### `examples/governed-run`
+### `legacy/examples/governed-run`
 
 Scope: Warrant governed execution.
 
@@ -141,7 +141,7 @@ pnpm demo governed-run
 
 Expected value: the demo should create an authorized run, execute it through the configured backend, and show receipt verification. Use it when changing contract signing, receipt bundles, runner behavior, or plane claim flow.
 
-### `examples/dry-run`
+### `legacy/examples/dry-run`
 
 Scope: Warrant policy and disclosure preview.
 
@@ -156,7 +156,7 @@ pnpm demo dry-run
 
 Expected value: the example should show what would be disclosed or executed without performing the final governed action.
 
-### `examples/offline-verify`
+### `legacy/examples/offline-verify`
 
 Scope: receipt tamper evidence.
 
@@ -171,7 +171,7 @@ pnpm demo offline-verify
 
 Expected value: the valid receipt should verify, and the tampered receipt should fail verification.
 
-### `examples/consent-secrets`
+### `legacy/examples/consent-secrets`
 
 Scope: consent-gated secret release.
 
@@ -186,7 +186,7 @@ pnpm demo consent-secrets
 
 Expected value: the example should show secret release only after the required consent path is satisfied.
 
-### `examples/egress-policy`
+### `legacy/examples/egress-policy`
 
 Scope: deny-by-default network policy.
 
@@ -203,7 +203,7 @@ Expected value: allowed destinations should succeed, denied destinations should 
 
 ## Handoff and orchestration examples
 
-### `examples/handoff`
+### `legacy/examples/handoff`
 
 Scope: continuation handoff.
 
@@ -218,7 +218,7 @@ pnpm demo handoff
 
 Expected value: the demo should create a handoff, execute it, and collect results with a verifiable path back to the request.
 
-### `examples/parallel-fanout`
+### `legacy/examples/parallel-fanout`
 
 Scope: parallel continuation and review.
 
@@ -233,7 +233,7 @@ pnpm demo parallel-fanout
 
 Expected value: multiple candidate continuations should be created, reviewed, and summarized.
 
-### `examples/model-escalation`
+### `legacy/examples/model-escalation`
 
 Scope: deterministic model routing.
 
@@ -248,7 +248,7 @@ pnpm demo model-escalation
 
 Expected value: the example should show a lower-cost or local model path escalating to a higher-capability model under the configured condition.
 
-### `examples/ai-sdk-loop`
+### `legacy/examples/ai-sdk-loop`
 
 Scope: app-owned AI SDK loop with governed remote tools.
 
@@ -263,7 +263,7 @@ pnpm demo ai-sdk-loop
 
 Expected value: the loop should call governed tools and report receipt or evidence metadata for those calls.
 
-### `examples/swarm`
+### `legacy/examples/swarm`
 
 Scope: governed swarm orchestration.
 
@@ -280,7 +280,7 @@ Expected value: the orchestrator should coordinate worker tasks and expose enoug
 
 ## Sandbox and session examples
 
-### `examples/compute-sandbox`
+### `legacy/examples/compute-sandbox`
 
 Scope: ComputeSDK-shaped sandbox.
 
@@ -295,7 +295,7 @@ pnpm demo compute-sandbox
 
 Expected value: sandbox operations should execute through the governed session abstraction and return evidence rather than raw local side effects.
 
-### `examples/hermetic-session`
+### `legacy/examples/hermetic-session`
 
 Scope: hermetic interpreter-backed sessions.
 
@@ -310,7 +310,7 @@ pnpm demo hermetic-session
 
 Expected value: commands should run inside the hermetic backend, and denied network or filesystem operations should fail according to policy.
 
-### `examples/microvm-isolation-bench`
+### `legacy/examples/microvm-isolation-bench`
 
 Scope: isolation timing benchmark.
 
@@ -327,7 +327,7 @@ Expected value: the benchmark should print timing measurements. Optional live Ve
 
 ## UI and seed examples
 
-### `examples/control-panel`
+### `legacy/examples/control-panel`
 
 Scope: interactive control panel exploration.
 
@@ -342,7 +342,7 @@ pnpm demo control-panel
 
 Expected value: the example should produce or launch a control panel environment with seeded runs. Interactive behavior may require manual browser inspection.
 
-### `examples/seed`
+### `legacy/examples/seed`
 
 Scope: Docker and control-panel seeding.
 
@@ -357,7 +357,7 @@ pnpm demo seed
 
 Expected value: seeded records or fixtures should be created for downstream UI exploration.
 
-### `examples/golden-interface`
+### `legacy/examples/golden-interface`
 
 Scope: high-level Warrant interface.
 

@@ -1,6 +1,8 @@
 packages:
   - "packages/*"
   - "examples/*"
+  - "legacy/packages/*"
+  - "legacy/examples/*"
 
 # @ai-sdk/harness-claude-code declares @anthropic-ai/claude-agent-sdk as a
 # peer, but never executes it on the host: the adapter ships a bridge bundle
@@ -25,9 +27,16 @@ packages:
 # verified against the installed just-bash separately, so the single repo
 # version is accepted here rather than carrying two major lines of the same
 # interpreter.
+#
+# @anthropic-ai/claude-agent-sdk declares SDK peers used by optional live MCP /
+# provider integrations. The local test and FusionKit panel paths exercise the
+# CLI/Agent SDK boundary without loading those peer packages on the host, so
+# they stay out of the default workspace install.
 peerDependencyRules:
   ignoreMissing:
     - "@anthropic-ai/claude-agent-sdk"
+    - "@anthropic-ai/sdk"
     - "@earendil-works/pi-coding-agent"
+    - "@modelcontextprotocol/sdk"
   allowedVersions:
     "@ai-sdk/sandbox-just-bash>just-bash": "3.0.1"

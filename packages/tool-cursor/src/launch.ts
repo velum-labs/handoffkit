@@ -7,6 +7,7 @@ import type { ToolLaunchContext } from "@fusionkit/tools";
 
 import { cursorIdeEnv } from "./bridge-config.js";
 import { startCursorBridge } from "./bridge.js";
+import { scaffoldCursorSubagents } from "./subagents.js";
 
 /** Human-facing setup for the turnkey Cursor IDE (desktop proxy) flow. */
 export function cursorIdeInstructions(model: string): string {
@@ -24,15 +25,27 @@ export function cursorIdeInstructions(model: string): string {
 }
 
 /** Human-facing setup for Cursor (IDE plan/chat panel only; needs a public URL). */
-export function cursorInstructions(publicUrl: string, model: string): string {
+export function cursorInstructions(
+  publicUrl: string,
+  model: string,
+  fusedModels: readonly string[] = [],
+  apiKey?: string
+): string {
+  const otherFused = fusedModels.filter((id) => id !== model);
   return [
     "Cursor backs only its plan/chat panel with a custom model, and cannot reach",
     "localhost — so this uses a public tunnel. In Cursor: Settings -> Models ->",
     "enable 'Override OpenAI Base URL', then set:",
     "",
-    `  Override OpenAI Base URL : ${publicUrl}/v1`,
+    `  Override OpenAI Base URL : ${publicUrl}/v1/cursor`,
     `  Model name               : ${model}`,
-    `  OpenAI API Key           : fusionkit-local (any non-empty value)`,
+    `  OpenAI API Key           : ${apiKey ?? "fusionkit-local (any non-empty value)"}`,
+    ...(otherFused.length > 0
+      ? [
+          "",
+          `Other registered ensembles work as model names too: ${otherFused.join(", ")}.`
+        ]
+      : []),
     "",
     "Use the chat/plan panel (Cmd/Ctrl+L). Composer, inline edit, apply, and",
     "autocomplete remain on Cursor's own backend and are not affected."
@@ -47,6 +60,8 @@ async function launchCursorFusion(ctx: ToolLaunchContext): Promise<number> {
   const started = await startCursorBridge({
     fusionUrl: ctx.gatewayUrl,
     modelLabel: ctx.modelLabel,
+    ...(ctx.fusedModels !== undefined ? { fusedModels: ctx.fusedModels } : {}),
+    ...(ctx.nativeModels !== undefined ? { nativeModels: ctx.nativeModels } : {}),
     ...(ctx.logsDir !== undefined ? { logFile: join(ctx.logsDir, "cursor-bridge.log") } : {}),
     ...(ctx.caCertPath !== undefined ? { caCertPath: ctx.caCertPath } : {}),
     log: ctx.log
@@ -73,6 +88,9 @@ async function launchCursorFusion(ctx: ToolLaunchContext): Promise<number> {
 async function launchCursorLocal(ctx: ToolLaunchContext): Promise<number> {
   const publicUrl = ctx.publicUrl;
   if (publicUrl === undefined || publicUrl.length === 0) {
+    // The CLI normally auto-provisions a Quick Tunnel before this launcher
+    // runs; landing here means that failed (or was bypassed), so print the
+    // manual fallback.
     ctx.log("");
     ctx.log("Cursor needs a public URL (it cannot reach localhost). Start a tunnel to");
     ctx.log(`${ctx.gatewayUrl} (e.g. 'cloudflared tunnel --url ${ctx.gatewayUrl}' or 'ngrok http`);
@@ -81,7 +99,7 @@ async function launchCursorLocal(ctx: ToolLaunchContext): Promise<number> {
     return 1;
   }
   ctx.log("");
-  ctx.log(cursorInstructions(publicUrl, ctx.modelLabel));
+  ctx.log(cursorInstructions(publicUrl, ctx.modelLabel, ctx.fusedModels ?? [], ctx.authToken));
   ctx.log("");
   ctx.log("Gateway is running; leave this process up while you use Cursor. Ctrl+C to stop.");
   await new Promise<void>(() => {
@@ -112,6 +130,7 @@ async function launchCursorIde(ctx: ToolLaunchContext): Promise<number> {
     repo,
     gatewayUrl: ctx.gatewayUrl,
     modelLabel: ctx.modelLabel,
+    ...(ctx.fusedModels !== undefined ? { fusedModels: ctx.fusedModels } : {}),
     ...(ctx.nativeModels !== undefined ? { nativeModels: ctx.nativeModels } : {}),
     ...(ctx.authToken !== undefined ? { apiKey: ctx.authToken } : {}),
     ...(ctx.caCertPath !== undefined ? { caCertPath: ctx.caCertPath } : {})
@@ -146,6 +165,15 @@ async function launchCursorIde(ctx: ToolLaunchContext): Promise<number> {
 
 /** Boot Cursor, branching on whether it backs the fusion panel or a local model. */
 export async function launchCursor(ctx: ToolLaunchContext): Promise<number> {
+  // OOTB sub-agents: Cursor only reads agent definitions from the repo's
+  // `.cursor/agents/`, so scaffold one per ensemble (idempotent — existing
+  // files are never overwritten) in every launch mode before the spawn.
+  if (ctx.subagents !== false && ctx.fusedEnsembles !== undefined && ctx.fusedEnsembles.length > 0) {
+    scaffoldCursorSubagents(ctx.repo ?? process.cwd(), ctx.fusedEnsembles, {
+      defaultModelId: ctx.modelLabel,
+      log: ctx.log
+    });
+  }
   if (ctx.ide === true) {
     return await launchCursorIde(ctx);
   }

@@ -1,59 +1,55 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { test } from "node:test";
+
+import {
+  attrJson,
+  attrNum,
+  attrStr,
+  initFusionTracing,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  spanEndMs
+} from "@fusionkit/tracing";
+import type { ReadableSpan } from "@fusionkit/tracing";
 
 import { FusionBackend } from "../fusion-backend.js";
 import type { WireTrajectory } from "../fusion-backend.js";
 
-// node:test isolates each file in its own process, so enabling the trace emitter
-// here (before its lazy singleton is created) does not affect other suites.
-const traceDir = mkdtempSync(join(tmpdir(), "fusion-judge-trace-"));
-process.env.FUSION_TRACE_DIR = traceDir;
-delete process.env.FUSION_TRACE_URL;
+// node:test isolates each file in its own process, so installing the tracer
+// provider here does not affect other suites.
+const exporter = new InMemorySpanExporter();
+initFusionTracing({ serviceName: "fusion-backend-trace-test", spanProcessors: [new SimpleSpanProcessor(exporter)] });
 
 function candidate(id: string): WireTrajectory {
   return { trajectory_id: id, model_id: id, status: "succeeded", final_output: "ok", items: [] };
 }
 
-type TraceEvent = {
-  component: string;
-  event_type: string;
-  parent_span_id?: string;
-  span_id: string;
-  ts: number;
-  payload?: Record<string, unknown>;
-};
-
-function readEvents(): TraceEvent[] {
-  const events: TraceEvent[] = [];
-  for (const file of readdirSync(traceDir)) {
-    if (!file.endsWith(".jsonl")) continue;
-    for (const line of readFileSync(join(traceDir, file), "utf8").split("\n")) {
-      if (line.trim().length === 0) continue;
-      events.push(JSON.parse(line) as TraceEvent);
-    }
-  }
-  return events;
+function spans(): ReadableSpan[] {
+  return exporter.getFinishedSpans() as ReadableSpan[];
 }
 
 async function startStepServer(
   handler: (req: IncomingMessage, res: ServerResponse) => void
-): Promise<{ url: string; close: () => Promise<void> }> {
-  const server = createServer(handler);
+): Promise<{ url: string; close: () => Promise<void>; headers: Array<Record<string, string | string[] | undefined>> }> {
+  const headers: Array<Record<string, string | string[] | undefined>> = [];
+  const server = createServer((req, res) => {
+    headers.push(req.headers);
+    handler(req, res);
+  });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : 0;
   return {
     url: `http://127.0.0.1:${port}/v1/fusion/trajectory:step`,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve()))
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    headers
   };
 }
 
-test("FusionBackend emits the full judge prompt and final output", async () => {
+test("FusionBackend traces the judge phase: request marker, judge span, traceparent to the fuse step", async () => {
+  exporter.reset();
   const step = await startStepServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(
@@ -71,30 +67,48 @@ test("FusionBackend emits the full judge prompt and final output", async () => {
     });
     const res = await backend.chat({ messages: [{ role: "user", content: "the task" }], stream: false });
     await res.text();
-    // judge.final is captured from a cloned response asynchronously.
+    // The judge span ends from a cloned response asynchronously.
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const events = readEvents();
-    const request = events.find((event) => event.event_type === "judge.request");
-    assert.ok(request, "expected a judge.request event");
-    assert.equal(request.component, "judge");
-    assert.equal(request.payload?.judge_model, "judge-x");
-    assert.equal(request.payload?.turn, 1, "first user message is turn 1");
-    assert.deepEqual(request.payload?.trajectory_ids, ["c1", "c2"]);
-    assert.ok(Array.isArray(request.payload?.messages), "judge prompt carries the conversation");
-    assert.ok(Array.isArray(request.payload?.trajectories), "judge prompt carries candidate trajectories");
-    assert.ok(typeof request.parent_span_id === "string", "judge span nests under the session span");
+    const request = spans().find((span) => span.name === "fusion.judge.request");
+    assert.ok(request, "expected a fusion.judge.request marker");
+    assert.equal(attrStr(request, "fusion.judge.model"), "judge-x");
+    assert.equal(attrNum(request, "fusion.turn"), 1, "first user message is turn 1");
+    assert.deepEqual(request.attributes["fusion.trajectory_ids"], ["c1", "c2"]);
+    assert.ok(Array.isArray(attrJson(request, "fusion.messages")), "judge input carries the conversation");
+    assert.ok(Array.isArray(attrJson(request, "fusion.trajectories")), "judge input carries candidate trajectories");
 
-    const final = events.find((event) => event.event_type === "judge.final");
-    assert.ok(final, "expected a judge.final event");
-    assert.equal(final.payload?.final_output, "FUSED ANSWER");
-    assert.equal(final.span_id, request.span_id, "request and final share the judge span");
+    const judge = spans().find((span) => span.name === "fusion.judge");
+    assert.ok(judge, "expected the fusion.judge span");
+    assert.equal(attrStr(judge, "fusion.final_output"), "FUSED ANSWER");
+    assert.equal(attrStr(judge, "fusion.status"), "succeeded");
+    assert.equal(
+      request.parentSpanContext?.spanId,
+      judge.spanContext().spanId,
+      "the request marker nests under the judge span"
+    );
+    assert.equal(
+      request.spanContext().traceId,
+      judge.spanContext().traceId,
+      "marker and span share the session trace"
+    );
+
+    // The fuse step HTTP call carries the judge span's W3C trace context.
+    const stepHeaders = step.headers[0];
+    assert.ok(stepHeaders, "fuse step was called");
+    const traceparent = stepHeaders.traceparent;
+    assert.ok(typeof traceparent === "string", "fuse step receives a traceparent header");
+    assert.ok(
+      traceparent.includes(judge.spanContext().traceId),
+      "the fuse step continues the session trace"
+    );
   } finally {
     await step.close();
   }
 });
 
-test("an intermediate tool-call turn emits judge.thinking, not judge.final", async () => {
+test("an intermediate tool-call turn emits fusion.judge.thinking and keeps the judge span open", async () => {
+  exporter.reset();
   const step = await startStepServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(
@@ -119,15 +133,15 @@ test("an intermediate tool-call turn emits judge.thinking, not judge.final", asy
     await res.text();
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const events = readEvents().filter((event) => event.ts >= since);
+    const recent = spans().filter((span) => spanEndMs(span) >= since);
     assert.equal(
-      events.some((event) => event.event_type === "judge.final"),
+      recent.some((span) => span.name === "fusion.judge"),
       false,
-      "an intermediate tool-call turn must not be reported as judge.final"
+      "an intermediate tool-call turn must not end the judge span"
     );
-    const thinking = events.find((event) => event.event_type === "judge.thinking");
-    assert.ok(thinking, "expected a judge.thinking event for the intermediate step");
-    assert.ok(thinking.payload?.tool_calls, "judge.thinking carries the intermediate tool calls");
+    const thinking = recent.find((span) => span.name === "fusion.judge.thinking");
+    assert.ok(thinking, "expected a fusion.judge.thinking marker for the intermediate step");
+    assert.ok(attrJson(thinking, "fusion.tool_calls"), "the marker carries the intermediate tool calls");
   } finally {
     await step.close();
   }

@@ -37,7 +37,7 @@ export function CopyButton({
       aria-label={copied ? "Copied" : label}
       className={cn("text-muted-foreground hover:text-foreground", className)}
     >
-      {copied ? <Check className="text-emerald-500" /> : <Copy />}
+      {copied ? <Check className="text-(--status-success)" /> : <Copy />}
     </Button>
   );
 }

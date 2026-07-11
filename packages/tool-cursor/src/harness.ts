@@ -10,6 +10,7 @@ import type {
 } from "@fusionkit/ensemble";
 
 import { traceCandidate } from "@fusionkit/ensemble";
+import type { FusionTraceCarrier } from "@fusionkit/ensemble";
 
 import { createCursorStreamStepEmitter, parseCursorStreamJson } from "./stream-trajectory.js";
 import {
@@ -93,9 +94,8 @@ export type CursorHarnessOptions = {
    * panel member).
    */
   modelEndpoints?: Record<string, string>;
-  /** Observability correlation for per-candidate trace events. */
-  traceId?: string;
-  parentSpanId?: string;
+  /** Trace carrier of the enclosing run/turn; candidates span under it. */
+  trace?: FusionTraceCarrier;
   turn?: number;
 };
 
@@ -360,9 +360,12 @@ async function driveCursorAgentPrint(input: {
     exitCode: result.exitCode,
     ...(status === "failed"
       ? {
+          // Never an empty string: the protocol schema rejects empty
+          // error.message, and a killed cursor-agent can leave stderr blank.
           reason: parsed.isError
             ? parsed.finalOutput || "cursor-agent reported an error"
-            : result.stderr.slice(0, 500)
+            : result.stderr.trim().slice(0, 500) ||
+              `cursor-agent exited with code ${result.exitCode}`
         }
       : {})
   };
@@ -437,8 +440,7 @@ export function createCursorHarness(
       // candidate's trajectory live (started now, finished when the run completes).
       const tracer = traceCandidate(
         {
-          ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-          ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+          ...(options.trace !== undefined ? { trace: options.trace } : {}),
           ...(options.turn !== undefined ? { turn: options.turn } : {})
         },
         {
@@ -552,7 +554,7 @@ export function createCursorHarness(
               ? {
                   error: {
                     kind: "provider_error",
-                    message: result.reason ?? "Cursor run failed.",
+                    message: result.reason || "Cursor run failed.",
                     retryable: false
                   }
                 }
@@ -563,7 +565,7 @@ export function createCursorHarness(
           ? {
               error: {
                 kind: "provider_error",
-                message: result.reason ?? "Cursor run failed.",
+                message: result.reason || "Cursor run failed.",
                 retryable: false
               }
             }

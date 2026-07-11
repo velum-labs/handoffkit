@@ -123,10 +123,19 @@
     "@fusionkit/kernel": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/runner": "workspace:*",
     "@fusionkit/runtime-utils": "workspace:*",
-    "@fusionkit/session-harness": "workspace:*",
+    "@fusionkit/tracing": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
-    "@velum-labs/cursorkit": "0.1.2"
-  }
+    "@velum-labs/cursorkit": "0.2.0"
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "orchestration",
+    "judge",
+    "synthesis"
+  ]
 }

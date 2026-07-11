@@ -1,5 +1,8 @@
 # Quickstart: coding harness
 
+Canonical user docs live at https://fusionkit.velum-labs.com/docs/getting-started/quickstart; this file is the in-repo mirror.
+
+
 Back an **unmodified coding agent** (Codex, Claude Code, Cursor) with a model
 ensemble. The agent speaks its own native wire protocol to a local gateway and
 never learns that fusion is happening.

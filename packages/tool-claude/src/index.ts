@@ -2,7 +2,7 @@
  * Claude Code tool integration entry point. It exposes launcher environment helpers and the Claude Code ensemble harness adapter.
  */
 import { smokeModelForTool } from "@fusionkit/registry";
-import { harnessDriversEnabled } from "@fusionkit/tools";
+import { harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
 import type { ToolIntegration } from "@fusionkit/tools";
 import { createDriverHarness } from "@fusionkit/ensemble";
 import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";
@@ -33,7 +33,7 @@ export const claudeTool: ToolIntegration = {
   setupSnippet: ({ gatewayUrl }) =>
     [
       "Claude Code (Anthropic Messages); Claude appends /v1/messages, so use the gateway root:",
-      `  ANTHROPIC_BASE_URL=${gatewayUrl.replace(/\/+$/, "")}`,
+      `  ANTHROPIC_BASE_URL=${trimTrailingSlashes(gatewayUrl)}`,
       "  ANTHROPIC_AUTH_TOKEN=local"
     ].join("\n"),
   acpAdapterId: "claude-agent",
@@ -43,14 +43,14 @@ export const claudeTool: ToolIntegration = {
   launch: launchClaude,
   createHarness: (_kind, options) =>
     harnessDriversEnabled() ? claudeDriverHarness(options) : createClaudeCodeHarness({
-      execution: "local",
       fusionBackendUrl: options.fusionBackendUrl,
       ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
-      ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
-      ...(options.turn !== undefined ? { turn: options.turn } : {})
+      ...(options.trace !== undefined ? { trace: options.trace } : {}),
+      ...(options.turn !== undefined ? { turn: options.turn } : {}),
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+      ...(options.fusedSubagents !== undefined ? { fusedSubagents: options.fusedSubagents } : {})
     }),
   harness: {
     harnessKind: "claude_code",
@@ -115,8 +115,7 @@ function claudeDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter
   return createDriverHarness({
     driver: createClaudeDriver(),
     fusionBackendUrl: options.fusionBackendUrl,
-    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),
     configForModel: (route) =>
@@ -130,6 +129,6 @@ export {
   createClaudeCodeHarness
 } from "./harness.js";
 export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./harness.js";
-export { claudeEnv, launchClaude } from "./launch.js";
+export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";
 export { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";
 export type { ClaudeDriverConfig } from "./driver.js";

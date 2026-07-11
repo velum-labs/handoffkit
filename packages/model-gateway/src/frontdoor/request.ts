@@ -70,6 +70,7 @@ async function runFusionTurnResponse(
     const merged = narration !== undefined ? mergeEventsWithNarration(events, narration) : events;
     return eventsToSseResponse(merged, {
       ...(req.notice !== undefined ? { notice: req.notice } : {}),
+      logger: services.logger,
       onError: () => {
         narration?.close();
         services.evictTurn(req);
@@ -80,7 +81,7 @@ async function runFusionTurnResponse(
   const outcome = await runFusionFrontdoorTurn(services, req, { runId });
   if (outcome.kind === "panel_error") {
     services.evictTurn(req);
-    console.error(`fusion: panel phase failed: ${errorText(outcome.error)}`);
+    services.logger.error(`fusion: panel phase failed: ${errorText(outcome.error)}`);
     return jsonError(502, errorText(outcome.error));
   }
   return outcome.response;

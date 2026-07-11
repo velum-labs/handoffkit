@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from fusionkit_core.clients import ChatClient, ProviderCallError
-from fusionkit_core.config import ContextPolicy, PromptOverrides, SamplingConfig
+from fusionkit_core.config import ContextPolicy, FusionConfig, PromptOverrides, SamplingConfig
 from fusionkit_core.context import (
     ContextBudget,
     estimate_messages_tokens,
@@ -19,19 +19,31 @@ from fusionkit_core.context import (
     pack_trajectories,
 )
 from fusionkit_core.prompts import (
+    JUDGE_STEP_SYSTEM_PROMPT,
     JUDGE_SYSTEM_PROMPT,
+    SYNTHESIZER_STEP_SYSTEM_PROMPT,
     SYNTHESIZER_SYSTEM_PROMPT,
     FusionIdentity,
     build_fuse_system,
     build_judge_prompt,
     build_judge_system,
 )
-from fusionkit_core.trace import emit as trace_emit
-from fusionkit_core.trace import new_span_id
+from fusionkit_core.trace import (
+    ATTR,
+    Span,
+    TraceContext,
+    context_of_span,
+    emit_marker,
+    end_fusion_span,
+    fusion_span,
+    json_attr,
+    start_fusion_span,
+)
 from fusionkit_core.types import (
     ChatMessage,
     FusionAnalysis,
     ModelResponse,
+    PanelMode,
     StreamChunk,
     ToolCall,
     Trajectory,
@@ -81,6 +93,9 @@ class FuseResult(BaseModel):
     terminal: bool
     analysis: FusionAnalysis
     trajectory: Trajectory | None = None
+    #: True when the synthesizer returned empty content and the final output
+    #: fell back to the best candidate's own answer (see _build_fuse_result).
+    synthesis_empty: bool = False
 
 
 # Rough token cost of the fixed prompt scaffolding (section headers, labels)
@@ -133,6 +148,35 @@ class _PreparedTurn:
     diagnostics: _TurnDiagnostics = field(default_factory=_TurnDiagnostics)
 
 
+def judge_synthesizer_for(
+    config: FusionConfig,
+    *,
+    prompts: PromptOverrides | None = None,
+    panel_mode: PanelMode = "trajectory",
+) -> JudgeSynthesizer:
+    """The single construction point for a configured :class:`JudgeSynthesizer`.
+
+    Per-request ``prompts`` (a named ensemble's committed overrides) win per
+    field over the config-level overrides, which win over the built-in prompts
+    (the step-mode variants when ``panel_mode == "step"``). Every path that
+    needs a synthesizer — the engine's cached pair, the kernel's per-request
+    variants — goes through here, so prompt precedence and policy wiring exist
+    in exactly one place.
+    """
+    merged = PromptOverrides(
+        judge_system=(prompts.judge_system if prompts else None) or config.prompts.judge_system,
+        synthesizer_system=(prompts.synthesizer_system if prompts else None)
+        or config.prompts.synthesizer_system,
+    )
+    return JudgeSynthesizer(
+        merged,
+        harness_passthrough=config.harness_prompt_passthrough,
+        select_best=config.synthesis_select_best,
+        context_policy=config.context,
+        panel_mode=panel_mode,
+    )
+
+
 class JudgeSynthesizer:
     def __init__(
         self,
@@ -141,10 +185,20 @@ class JudgeSynthesizer:
         harness_passthrough: bool = True,
         select_best: bool = False,
         context_policy: ContextPolicy | None = None,
+        panel_mode: PanelMode = "trajectory",
     ) -> None:
         overrides = prompts or PromptOverrides()
-        self._judge_system = overrides.judge_system or JUDGE_SYSTEM_PROMPT
-        self._synthesizer_system = overrides.synthesizer_system or SYNTHESIZER_SYSTEM_PROMPT
+        # Step mode (finite-k panels): candidates are receding-horizon step
+        # proposals; the judge frames selection over proposed next steps and
+        # the synthesizer adopts exactly one candidate's tool-call batch
+        # verbatim (or answers in text). Committed prompt overrides still win.
+        step = panel_mode == "step"
+        self._judge_system = overrides.judge_system or (
+            JUDGE_STEP_SYSTEM_PROMPT if step else JUDGE_SYSTEM_PROMPT
+        )
+        self._synthesizer_system = overrides.synthesizer_system or (
+            SYNTHESIZER_STEP_SYSTEM_PROMPT if step else SYNTHESIZER_SYSTEM_PROMPT
+        )
         self._synthesizer_overridden = overrides.synthesizer_system is not None
         # When on, a coding-harness system prompt arriving in the conversation is
         # treated as the primary base for the judge/synthesizer (fusion framing
@@ -200,8 +254,7 @@ class JudgeSynthesizer:
         tools: Sequence[Mapping[str, Any]] | None = None,
         tool_choice: str | Mapping[str, Any] | None = None,
         analysis: FusionAnalysis | None = None,
-        trace_id: str | None = None,
-        span_id: str | None = None,
+        trace: TraceContext | None = None,
     ) -> FuseResult:
         """One fusion step: produce the next step, or the final answer.
 
@@ -218,79 +271,87 @@ class JudgeSynthesizer:
         fusion result lives on the trajectory, not in a separate record.
         """
         synth_client = synthesizer_client or judge_client
-        judge_span = span_id or new_span_id()
-        prepared = await self._prepare_conversation(
-            messages,
-            trajectories,
-            judge_client=judge_client,
-            synth_client=synth_client,
-            identity=self._identity(trajectories, judge_client, synth_client),
-            sampling=sampling,
-            tools=tools,
-            analysis=analysis,
-            trace_id=trace_id,
-            judge_span=judge_span,
-        )
-        resolved_analysis = prepared.analysis
-        # Best-of-N selection (no tools): return the judge-picked candidate verbatim
-        # instead of an LLM rewrite, skipping the synthesizer call entirely.
-        selected = (
-            self._selected_verbatim(trajectories, resolved_analysis, synth_client)
-            if tools is None
-            else None
-        )
-        if selected is not None:
-            response = selected
-        else:
-            try:
-                response = await synth_client.chat(
-                    prepared.conversation,
-                    sampling,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                )
-            except ProviderCallError as exc:
-                if exc.category != "context_overflow":
-                    raise
-                # Overflow ladder step 1: retry once with the evidence reduced
-                # to final outputs only.
-                reduced = self._rebuild_reduced_conversation(prepared)
+        with fusion_span(
+            "synthesis",
+            "fusion.fuse",
+            trace,
+            {
+                ATTR.FUSION_JUDGE_MODEL: getattr(judge_client, "model_id", None),
+                ATTR.FUSION_SYNTHESIZER_MODEL: getattr(synth_client, "model_id", None),
+                ATTR.FUSION_FUSION_UNIT: "trajectory",
+            },
+        ) as fuse_span_handle:
+            step_ctx = context_of_span(fuse_span_handle, trace) if trace is not None else None
+            prepared = await self._prepare_conversation(
+                messages,
+                trajectories,
+                judge_client=judge_client,
+                synth_client=synth_client,
+                identity=self._identity(trajectories, judge_client, synth_client),
+                sampling=sampling,
+                tools=tools,
+                analysis=analysis,
+                trace=step_ctx,
+            )
+            resolved_analysis = prepared.analysis
+            # Best-of-N selection (no tools): return the judge-picked candidate
+            # verbatim instead of an LLM rewrite, skipping the synthesizer call.
+            selected = (
+                self._selected_verbatim(trajectories, resolved_analysis, synth_client)
+                if tools is None
+                else None
+            )
+            if selected is not None:
+                response = selected
+            else:
                 try:
                     response = await synth_client.chat(
-                        reduced,
+                        prepared.conversation,
                         sampling,
                         tools=tools,
                         tool_choice=tool_choice,
                     )
-                    prepared.diagnostics.synth_fallback = "reduced_evidence_retry"
-                except ProviderCallError as retry_exc:
-                    if retry_exc.category != "context_overflow":
+                except ProviderCallError as exc:
+                    if exc.category != "context_overflow":
                         raise
-                    # Step 2: no synthesizer call fits; fall back to a candidate
-                    # answer so the turn still produces a fused response.
-                    response = self._overflow_fallback_response(
-                        trajectories, resolved_analysis, synth_client, prepared.diagnostics
-                    )
-        result = self._build_fuse_result(
-            response, trajectories, resolved_analysis, prepared.diagnostics
-        )
-        result.response = _with_analysis_provider_cost(
-            result.response, prepared.diagnostics.analysis_response
-        )
-        if result.terminal:
-            # Parity with fuse_stream's Act III: surface the judge's analysis on
-            # the reasoning channel of the terminal response (ahead of any of
-            # the synthesizer model's own reasoning). The stream path instead
-            # yields it as a reasoning_delta before content, so this stays
-            # non-stream only.
-            judged = analysis_reasoning_markdown(resolved_analysis, trajectories)
-            if judged is not None:
-                combined = (judged + (result.response.reasoning or "")).rstrip()
-                result.response.reasoning = combined
-        self._emit_step(
-            trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
-        )
-        return result
+                    # Overflow ladder step 1: retry once with the evidence
+                    # reduced to final outputs only.
+                    reduced = self._rebuild_reduced_conversation(prepared)
+                    try:
+                        response = await synth_client.chat(
+                            reduced,
+                            sampling,
+                            tools=tools,
+                            tool_choice=tool_choice,
+                        )
+                        prepared.diagnostics.synth_fallback = "reduced_evidence_retry"
+                    except ProviderCallError as retry_exc:
+                        if retry_exc.category != "context_overflow":
+                            raise
+                        # Step 2: no synthesizer call fits; fall back to a
+                        # candidate answer so the turn still produces a fused
+                        # response.
+                        response = self._overflow_fallback_response(
+                            trajectories, resolved_analysis, synth_client, prepared.diagnostics
+                        )
+            result = self._build_fuse_result(
+                response, trajectories, resolved_analysis, prepared.diagnostics
+            )
+            result.response = _with_analysis_provider_cost(
+                result.response, prepared.diagnostics.analysis_response
+            )
+            if result.terminal:
+                # Parity with fuse_stream's Act III: surface the judge's
+                # analysis on the reasoning channel of the terminal response
+                # (ahead of any of the synthesizer model's own reasoning). The
+                # stream path instead yields it as a reasoning_delta before
+                # content, so this stays non-stream only.
+                judged = analysis_reasoning_markdown(resolved_analysis, trajectories)
+                if judged is not None:
+                    combined = (judged + (result.response.reasoning or "")).rstrip()
+                    result.response.reasoning = combined
+            self._emit_step(step_ctx, fuse_span_handle, result, trajectories)
+            return result
 
     async def fuse_stream(
         self,
@@ -303,8 +364,7 @@ class JudgeSynthesizer:
         tools: Sequence[Mapping[str, Any]] | None = None,
         tool_choice: str | Mapping[str, Any] | None = None,
         analysis: FusionAnalysis | None = None,
-        trace_id: str | None = None,
-        span_id: str | None = None,
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Streaming counterpart of :meth:`fuse`: the synthesizer turn streams.
 
@@ -315,19 +375,27 @@ class JudgeSynthesizer:
         still a single up-front non-streaming call.
         """
         synth_client = synthesizer_client or judge_client
-        judge_span = span_id or new_span_id()
-        prepared = await self._prepare_conversation(
-            messages,
-            trajectories,
-            judge_client=judge_client,
-            synth_client=synth_client,
-            identity=self._identity(trajectories, judge_client, synth_client),
-            sampling=sampling,
-            tools=tools,
-            analysis=analysis,
-            trace_id=trace_id,
-            judge_span=judge_span,
+        fuse_span_handle = _start_fuse_span(trace, judge_client, synth_client)
+        step_ctx = (
+            context_of_span(fuse_span_handle, trace)
+            if trace is not None and fuse_span_handle is not None
+            else None
         )
+        try:
+            prepared = await self._prepare_conversation(
+                messages,
+                trajectories,
+                judge_client=judge_client,
+                synth_client=synth_client,
+                identity=self._identity(trajectories, judge_client, synth_client),
+                sampling=sampling,
+                tools=tools,
+                analysis=analysis,
+                trace=step_ctx,
+            )
+        except Exception as exc:
+            _end_fuse_span(fuse_span_handle, error=str(exc))
+            raise
         resolved_analysis = prepared.analysis
         # Act III of the narrated turn: surface the judge's real analysis on the
         # reasoning channel before any answer tokens stream.
@@ -349,14 +417,8 @@ class JudgeSynthesizer:
             result.response = _with_analysis_provider_cost(
                 result.response, prepared.diagnostics.analysis_response
             )
-            self._emit_step(
-                trace_id,
-                judge_span,
-                result.response,
-                result.terminal,
-                result.trajectory,
-                trajectories,
-            )
+            self._emit_step(step_ctx, fuse_span_handle, result, trajectories)
+            _end_fuse_span(fuse_span_handle)
             yield result
             return
         accumulator = _StreamAccumulator()
@@ -384,6 +446,7 @@ class JudgeSynthesizer:
                 break
             except ProviderCallError as exc:
                 if exc.category != "context_overflow" or accumulator.yielded:
+                    _end_fuse_span(fuse_span_handle, error=str(exc))
                     raise
         if response is None:
             response = self._overflow_fallback_response(
@@ -396,9 +459,8 @@ class JudgeSynthesizer:
         result.response = _with_analysis_provider_cost(
             result.response, prepared.diagnostics.analysis_response
         )
-        self._emit_step(
-            trace_id, judge_span, result.response, result.terminal, result.trajectory, trajectories
-        )
+        self._emit_step(step_ctx, fuse_span_handle, result, trajectories)
+        _end_fuse_span(fuse_span_handle)
         yield result
 
     def _identity(
@@ -448,8 +510,7 @@ class JudgeSynthesizer:
         sampling: SamplingConfig,
         tools: Sequence[Mapping[str, Any]] | None,
         analysis: FusionAnalysis | None,
-        trace_id: str | None,
-        judge_span: str | None,
+        trace: TraceContext | None,
     ) -> _PreparedTurn:
         """Build the synthesizer conversation (judge analysis + system + history).
 
@@ -469,8 +530,7 @@ class JudgeSynthesizer:
                 trajectories,
                 judge_client=judge_client,
                 judge_sampling=sampling.model_copy(update={"temperature": 0.0}),
-                trace_id=trace_id,
-                judge_span=judge_span,
+                trace=trace,
                 diagnostics=diagnostics,
             )
         if resolved_analysis is None:
@@ -589,12 +649,14 @@ class JudgeSynthesizer:
     ) -> FuseResult:
         terminal = not response.tool_calls
         output_trajectory: Trajectory | None = None
+        synthesis_empty = False
         if terminal:
             final_output = response.content
             if not final_output.strip() and trajectories:
                 # The synthesizer returned nothing (e.g. a reasoning model spent
                 # its budget on reasoning). Fall back to the best trajectory's own
                 # answer so a fused response is always produced.
+                synthesis_empty = True
                 final_output = _best_trajectory_output(trajectories)
                 response = response.model_copy(update={"content": final_output})
             output_trajectory = _consolidated_trajectory(
@@ -605,6 +667,7 @@ class JudgeSynthesizer:
             terminal=terminal,
             analysis=resolved_analysis,
             trajectory=output_trajectory,
+            synthesis_empty=synthesis_empty,
         )
 
     async def analyze(
@@ -614,8 +677,7 @@ class JudgeSynthesizer:
         *,
         judge_client: ChatClient,
         judge_sampling: SamplingConfig,
-        trace_id: str | None = None,
-        judge_span: str | None = None,
+        trace: TraceContext | None = None,
         diagnostics: _TurnDiagnostics | None = None,
     ) -> FusionAnalysis:
         """The judge's gap analysis, packed to its budget and degrade-not-fail.
@@ -663,12 +725,11 @@ class JudgeSynthesizer:
                 try:
                     response = await call(evidence_budget // 2)
                 except ProviderCallError as retry_exc:
-                    return _degraded_analysis(retry_exc, trace_id, judge_span, diagnostics)
+                    return _degraded_analysis(retry_exc, trace, diagnostics)
             else:
-                return _degraded_analysis(exc, trace_id, judge_span, diagnostics)
+                return _degraded_analysis(exc, trace, diagnostics)
         _emit_judge(
-            trace_id,
-            judge_span,
+            trace,
             "judge.thinking",
             payload={
                 "fusion_unit": "trajectory",
@@ -678,42 +739,99 @@ class JudgeSynthesizer:
         )
         if diagnostics is not None:
             diagnostics.analysis_response = response
-        return parse_analysis(response.content)
+        analysis = parse_analysis(response.content)
+        # The structured verdict behind the raw thinking: what the judge found
+        # per candidate. Emitted separately so observers can render the parsed
+        # analysis without re-parsing raw_analysis.
+        _emit_judge(
+            trace,
+            "judge.scored",
+            payload={
+                "fusion_unit": "trajectory",
+                "analysis": {
+                    "consensus": analysis.consensus,
+                    "contradictions": analysis.contradictions,
+                    "unique_insights": analysis.unique_insights,
+                    "coverage_gaps": analysis.coverage_gaps,
+                    "likely_errors": analysis.likely_errors,
+                },
+                "metrics": {
+                    "best_trajectory": analysis.best_trajectory,
+                    "recommended_final_structure": analysis.recommended_final_structure,
+                },
+                "input_ids": [trajectory.id for trajectory in trajectories],
+                "usage": _usage_payload(response),
+            },
+        )
+        return analysis
 
     def _emit_step(
         self,
-        trace_id: str | None,
-        judge_span: str | None,
-        response: ModelResponse,
-        terminal: bool,
-        output_trajectory: Trajectory | None,
+        trace: TraceContext | None,
+        fuse_span_handle: Span | None,
+        result: FuseResult,
         trajectories: Sequence[Trajectory],
     ) -> None:
-        payload: dict[str, Any] = {
-            "fusion_unit": "trajectory_step",
-            "terminal": terminal,
-            "content_preview": response.content[:500],
-            "tool_calls": [
-                {"id": call.id, "name": call.name, "arguments": call.arguments}
-                for call in response.tool_calls
-            ],
-            "input_trajectory_ids": [trajectory.id for trajectory in trajectories],
-            "usage": _usage_payload(response),
-        }
-        if terminal and output_trajectory is not None:
-            synthesis = output_trajectory.synthesis
-            payload["final_output"] = response.content
-            if synthesis is not None:
-                payload["decision"] = synthesis.decision
-                payload["selected_trajectory_id"] = synthesis.selected_trajectory_id
-                payload["rationale"] = synthesis.rationale
-                payload["synthesis"] = synthesis.model_dump(mode="json")
-        _emit_judge(
-            trace_id,
-            judge_span,
-            "judge.final" if terminal else "judge.thinking",
-            payload=payload,
-        )
+        response = result.response
+        terminal = result.terminal
+        output_trajectory = result.trajectory
+        synthesis = output_trajectory.synthesis if output_trajectory is not None else None
+        if terminal and (
+            (synthesis is not None and synthesis.decision == "synthesize")
+            or result.synthesis_empty
+        ):
+            # The synthesizer's own terminal turn (select-verbatim steps skip
+            # it): the raw fused output, and whether it came back empty and
+            # fell back to the best candidate's answer.
+            _emit_judge(
+                trace,
+                "judge.synthesis",
+                payload={
+                    "raw_output": response.content,
+                    "empty": result.synthesis_empty,
+                    "usage": _usage_payload(response),
+                },
+            )
+        if terminal:
+            # Terminal facts land on the fuse span itself; scope and any OTLP
+            # backend read the step outcome from the span, not a marker.
+            if fuse_span_handle is not None:
+                attrs: dict[str, Any] = {
+                    ATTR.FUSION_TERMINAL: True,
+                    ATTR.FUSION_FINAL_OUTPUT: response.content,
+                    ATTR.FUSION_SYNTHESIS_EMPTY: result.synthesis_empty,
+                }
+                usage_attr = json_attr(_usage_payload(response))
+                if usage_attr is not None:
+                    attrs[ATTR.FUSION_USAGE] = usage_attr
+                if synthesis is not None:
+                    attrs[ATTR.FUSION_DECISION] = synthesis.decision
+                    if synthesis.selected_trajectory_id:
+                        attrs[ATTR.FUSION_SELECTED_TRAJECTORY_ID] = (
+                            synthesis.selected_trajectory_id
+                        )
+                    if synthesis.rationale:
+                        attrs[ATTR.FUSION_RATIONALE] = synthesis.rationale
+                    synthesis_attr = json_attr(synthesis.model_dump(mode="json"))
+                    if synthesis_attr is not None:
+                        attrs[ATTR.FUSION_SYNTHESIS] = synthesis_attr
+                fuse_span_handle.set_attributes(attrs)
+        else:
+            _emit_judge(
+                trace,
+                "judge.thinking",
+                payload={
+                    "fusion_unit": "trajectory_step",
+                    "terminal": False,
+                    "content_preview": response.content[:500],
+                    "tool_calls": [
+                        {"id": call.id, "name": call.name, "arguments": call.arguments}
+                        for call in response.tool_calls
+                    ],
+                    "input_trajectory_ids": [trajectory.id for trajectory in trajectories],
+                    "usage": _usage_payload(response),
+                },
+            )
 
 
 # Sentinel consensus written when the judge response is not valid JSON. Shared
@@ -728,16 +846,14 @@ _JUDGE_DEGRADED_CONSENSUS = "Judge analysis unavailable: the judge model call fa
 
 def _degraded_analysis(
     exc: ProviderCallError,
-    trace_id: str | None,
-    judge_span: str | None,
+    trace: TraceContext | None,
     diagnostics: _TurnDiagnostics | None,
 ) -> FusionAnalysis:
     """An empty analysis carrying the judge failure, so synthesis proceeds."""
     if diagnostics is not None:
         diagnostics.judge_degraded = exc.category
     _emit_judge(
-        trace_id,
-        judge_span,
+        trace,
         "judge.thinking",
         payload={
             "fusion_unit": "trajectory",
@@ -1052,20 +1168,65 @@ def _extract_json(content: str) -> str:
     return stripped
 
 
+# payload key -> registry attribute for judge markers. Structured values are
+# JSON-stringified (OTel attributes are primitives / primitive arrays).
+_JUDGE_ATTR_MAP: dict[str, tuple[str, bool]] = {
+    "fusion_unit": (ATTR.FUSION_FUSION_UNIT, False),
+    "raw_analysis": (ATTR.FUSION_RAW_ANALYSIS, False),
+    "raw_output": (ATTR.FUSION_RAW_OUTPUT, False),
+    "empty": (ATTR.FUSION_SYNTHESIS_EMPTY, False),
+    "terminal": (ATTR.FUSION_TERMINAL, False),
+    "content_preview": (ATTR.FUSION_CONTENT, False),
+    "judge_degraded": (ATTR.FUSION_JUDGE_DEGRADED, False),
+    "error": (ATTR.FUSION_ERROR, False),
+    "usage": (ATTR.FUSION_USAGE, True),
+    "analysis": (ATTR.FUSION_ANALYSIS, True),
+    "metrics": (ATTR.FUSION_METRICS, True),
+    "tool_calls": (ATTR.FUSION_TOOL_CALLS, True),
+    "input_ids": (ATTR.FUSION_INPUT_IDS, False),
+    "input_trajectory_ids": (ATTR.FUSION_INPUT_IDS, False),
+}
+
+
 def _emit_judge(
-    trace_id: str | None,
-    span_id: str | None,
+    trace: TraceContext | None,
     event_type: str,
     *,
     payload: dict[str, Any],
 ) -> None:
-    trace_emit(
-        component="judge",
-        event_type=event_type,
-        trace_id=trace_id,
-        span_id=span_id,
-        payload=payload,
+    """Emit one judge signal as a `fusion.<event_type>` marker.
+
+    Tests monkeypatch this seam to capture the engine's judge activity.
+    """
+    attributes: dict[str, Any] = {}
+    for key, value in payload.items():
+        mapped = _JUDGE_ATTR_MAP.get(key)
+        if mapped is None or value is None:
+            continue
+        attr, as_json = mapped
+        attributes[attr] = json_attr(value) if as_json else value
+    emit_marker("judge", f"fusion.{event_type}", trace, attributes)
+
+
+def _start_fuse_span(
+    trace: TraceContext | None,
+    judge_client: ChatClient,
+    synth_client: ChatClient,
+) -> Span | None:
+    return start_fusion_span(
+        "synthesis",
+        "fusion.fuse",
+        trace,
+        {
+            ATTR.FUSION_JUDGE_MODEL: getattr(judge_client, "model_id", None),
+            ATTR.FUSION_SYNTHESIZER_MODEL: getattr(synth_client, "model_id", None),
+            ATTR.FUSION_FUSION_UNIT: "trajectory",
+        },
     )
+
+
+def _end_fuse_span(span: Span | None, *, error: str | None = None) -> None:
+    end_fusion_span(span, error=error)
 
 
 def _usage_payload(response: Any) -> dict[str, Any]:

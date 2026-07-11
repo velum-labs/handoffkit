@@ -6,8 +6,8 @@ import { ChevronRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { componentColor, fmtDuration } from "@/lib/format";
-import { TRACE_COMPONENTS } from "@/lib/types";
-import type { StoredEvent } from "@/lib/types";
+import { candidateIdOf, isMarker, modelIdOf, TRACE_COMPONENTS } from "@/lib/types";
+import type { StoredSpan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Track = {
@@ -19,33 +19,30 @@ type Track = {
   detail?: string;
   startTs: number;
   endTs: number;
-  open: boolean;
   isPoint: boolean;
   depth: number;
-  /** The underlying events (start, and finish when paired) for inspection. */
-  events: StoredEvent[];
+  /** The underlying span, for inspection. */
+  spans: StoredSpan[];
 };
 
 // Grid column template + horizontal padding shared by the ruler and every row,
-// so the bar column lines up exactly with the gridline/cursor overlay.
-const GRID = "grid grid-cols-[56px_200px_1fr_56px] gap-3 px-2";
-const BAR_COL_LEFT_PX = 8 + 56 + 12 + 200 + 12; // px-2 + col + gap + col + gap
+// so the bar column lines up exactly with the gridline/cursor overlay. The
+// label column is sized to fit the longest span names (fusion.candidate,
+// fusion.judge.thinking, …) plus a candidate id without truncating.
+const GRID = "grid grid-cols-[56px_260px_1fr_56px] gap-3 px-2";
+const BAR_COL_LEFT_PX = 8 + 56 + 12 + 260 + 12; // px-2 + col + gap + col + gap
 const BAR_COL_RIGHT_PX = 8 + 56 + 12; // px-2 + last col + gap
 const TICKS = [0, 0.25, 0.5, 0.75, 1];
 
-function baseLabel(eventType: string): string {
-  return eventType.replace(/\.(started|finished)$/, "");
-}
-
-function detailOf(event: StoredEvent): string | undefined {
-  return event.candidate_id ?? event.model_id ?? undefined;
+function detailOf(span: StoredSpan): string | undefined {
+  return candidateIdOf(span) ?? modelIdOf(span) ?? undefined;
 }
 
 /** Walk parent_span_id chains to compute an indentation depth per span. */
-function buildDepths(events: StoredEvent[]): Map<string, number> {
+function buildDepths(spans: StoredSpan[]): Map<string, number> {
   const parent = new Map<string, string | undefined>();
-  for (const event of events) {
-    if (!parent.has(event.span_id)) parent.set(event.span_id, event.parent_span_id);
+  for (const span of spans) {
+    if (!parent.has(span.span_id)) parent.set(span.span_id, span.parent_span_id);
   }
   const depths = new Map<string, number>();
   const depthOf = (spanId: string, seen: Set<string>): number => {
@@ -65,75 +62,26 @@ function buildDepths(events: StoredEvent[]): Map<string, number> {
   return depths;
 }
 
-/** Fold a flat event list into duration spans (paired *.started/*.finished) and point markers. */
-function buildTracks(events: StoredEvent[], lastTs: number): Track[] {
-  const depths = buildDepths(events);
-  const started = new Map<string, StoredEvent>();
-  const finished = new Map<string, StoredEvent>();
-  const points: StoredEvent[] = [];
-
-  for (const event of events) {
-    if (event.event_type.endsWith(".started")) started.set(event.span_id, event);
-    else if (event.event_type.endsWith(".finished")) finished.set(event.span_id, event);
-    else points.push(event);
-  }
-
-  const tracks: Track[] = [];
-
-  for (const [spanId, startEvent] of started) {
-    const endEvent = finished.get(spanId);
-    tracks.push({
-      key: `span-${spanId}`,
-      spanId,
-      parentSpanId: startEvent.parent_span_id,
-      component: startEvent.component,
-      label: baseLabel(startEvent.event_type),
-      detail: detailOf(startEvent),
-      startTs: startEvent.ts,
-      endTs: endEvent?.ts ?? lastTs,
-      open: endEvent === undefined,
-      isPoint: false,
-      depth: depths.get(spanId) ?? 0,
-      events: endEvent !== undefined ? [startEvent, endEvent] : [startEvent]
-    });
-  }
-
-  for (const [spanId, endEvent] of finished) {
-    if (started.has(spanId)) continue;
-    tracks.push({
-      key: `end-${endEvent.id}`,
-      spanId,
-      parentSpanId: endEvent.parent_span_id,
-      component: endEvent.component,
-      label: baseLabel(endEvent.event_type),
-      detail: detailOf(endEvent),
-      startTs: endEvent.ts,
-      endTs: endEvent.ts,
-      open: false,
-      isPoint: true,
-      depth: depths.get(spanId) ?? 0,
-      events: [endEvent]
-    });
-  }
-
-  for (const event of points) {
-    tracks.push({
-      key: `pt-${event.id}`,
-      spanId: event.span_id,
-      parentSpanId: event.parent_span_id,
-      component: event.component,
-      label: event.event_type,
-      detail: detailOf(event),
-      startTs: event.ts,
-      endTs: event.ts,
-      open: false,
-      isPoint: true,
-      depth: depths.get(event.span_id) ?? 0,
-      events: [event]
-    });
-  }
-
-  return tracks.sort((a, b) => a.startTs - b.startTs || a.endTs - b.endTs);
+/** Spans are already the waterfall: duration bars for units, markers for signals. */
+function buildTracks(spans: StoredSpan[]): Track[] {
+  const depths = buildDepths(spans);
+  return spans
+    .map(
+      (span): Track => ({
+        key: `span-${span.id}`,
+        spanId: span.span_id,
+        parentSpanId: span.parent_span_id,
+        component: span.component,
+        label: span.name,
+        detail: detailOf(span),
+        startTs: span.start_ms,
+        endTs: span.end_ms,
+        isPoint: isMarker(span),
+        depth: depths.get(span.span_id) ?? 0,
+        spans: [span]
+      })
+    )
+    .sort((a, b) => a.startTs - b.startTs || a.endTs - b.endTs);
 }
 
 function Legend({ components }: { components: string[] }) {
@@ -151,24 +99,25 @@ function Legend({ components }: { components: string[] }) {
 }
 
 /**
- * A trace waterfall: duration spans render as bars, instantaneous events as
- * markers. Every row is clickable and opens the event inspector with the
- * track's underlying events.
+ * The trace waterfall: unit spans render as bars, markers as points. Every
+ * row is clickable and opens the span inspector.
  */
 export function Timeline({
-  events,
+  spans,
   startedAt,
   durationMs,
+  live,
   onInspect
 }: {
-  events: StoredEvent[];
+  spans: StoredSpan[];
   startedAt: number;
   durationMs: number;
-  onInspect?: (events: StoredEvent[]) => void;
+  /** True while the session is still running (draws the live cursor). */
+  live?: boolean;
+  onInspect?: (spans: StoredSpan[]) => void;
 }) {
   const span = Math.max(1, durationMs);
-  const lastTs = startedAt + durationMs;
-  const tracks = useMemo(() => buildTracks(events, lastTs), [events, lastTs]);
+  const tracks = useMemo(() => buildTracks(spans), [spans]);
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -185,8 +134,6 @@ export function Timeline({
     for (const [spanId, count] of childCount) if (count > 0) hasChildren.add(spanId);
     return { parentOf: parent, collapsible: hasChildren };
   }, [tracks]);
-
-  const live = tracks.some((track) => track.open);
 
   const legendComponents = useMemo(() => {
     const present = new Set(tracks.map((track) => track.component));
@@ -253,9 +200,9 @@ export function Timeline({
             className="pointer-events-none absolute inset-y-0 z-0 opacity-40"
             style={{ left: BAR_COL_LEFT_PX, right: BAR_COL_RIGHT_PX, ...gridlineStyle }}
           />
-          {live ? (
+          {live === true ? (
             <div
-              className="pointer-events-none absolute inset-y-0 z-0 w-px bg-emerald-500/60"
+              className="bg-(--status-success)/60 pointer-events-none absolute inset-y-0 z-0 w-px"
               style={{ right: BAR_COL_RIGHT_PX }}
             />
           ) : null}
@@ -270,7 +217,7 @@ export function Timeline({
               const dur = track.endTs - track.startTs;
               const canCollapse = collapsible.has(track.spanId);
               const isOpen = !collapsed.has(track.spanId);
-              const durLabel = track.isPoint ? "" : track.open ? "live" : fmtDuration(dur);
+              const durLabel = track.isPoint ? "" : fmtDuration(dur);
               return (
                 <div
                   key={track.key}
@@ -279,7 +226,7 @@ export function Timeline({
                     "hover:bg-accent/50 items-center rounded-md py-1",
                     onInspect !== undefined && "cursor-pointer"
                   )}
-                  onClick={onInspect !== undefined ? () => onInspect(track.events) : undefined}
+                  onClick={onInspect !== undefined ? () => onInspect(track.spans) : undefined}
                 >
                   <span className="mono text-muted-foreground text-right text-xs">{fmtDuration(offset)}</span>
                   <div
@@ -303,11 +250,16 @@ export function Timeline({
                       <span className="inline-block size-3 shrink-0" />
                     )}
                     <span className="size-2 shrink-0 rounded-full" style={{ background: color }} />
-                    <span className="truncate text-xs font-medium" style={{ color }}>
+                    <span className="truncate text-xs font-medium" style={{ color }} title={track.label}>
                       {track.label}
                     </span>
                     {track.detail ? (
-                      <span className="text-muted-foreground mono truncate text-[11px]">{track.detail}</span>
+                      <span
+                        className="text-muted-foreground mono truncate text-[11px]"
+                        title={track.detail}
+                      >
+                        {track.detail}
+                      </span>
                     ) : null}
                   </div>
                   <Tooltip>
@@ -325,7 +277,7 @@ export function Timeline({
                               left: `${left}%`,
                               width: `${width}%`,
                               background: color,
-                              opacity: track.open ? 0.5 : 0.85
+                              opacity: 0.85
                             }}
                           />
                         )}
@@ -333,14 +285,18 @@ export function Timeline({
                     </TooltipTrigger>
                     <TooltipContent>
                       <div className="space-y-0.5">
-                        <div className="font-medium" style={{ color }}>
+                        {/* Plain text plus a colored dot: the theme-resolved
+                            component color is not readable on the inverted
+                            tooltip background. */}
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <span className="size-2 shrink-0 rounded-full" style={{ background: color }} />
                           {track.label}
-                          <span className="text-background/70 ml-1.5 font-normal">{track.component}</span>
+                          <span className="text-background/70 font-normal">{track.component}</span>
                         </div>
                         {track.detail ? <div className="mono">{track.detail}</div> : null}
                         <div className="mono">
                           start {fmtDuration(offset)}
-                          {track.isPoint ? "" : ` · ${track.open ? "live" : fmtDuration(dur)}`}
+                          {track.isPoint ? "" : ` · ${fmtDuration(dur)}`}
                         </div>
                         <div className="text-background/70">click to inspect</div>
                       </div>

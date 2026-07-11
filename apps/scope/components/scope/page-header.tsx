@@ -40,24 +40,30 @@ export function PageHeader({
 /**
  * A small pulsing dot indicating the live event stream connection. One meaning
  * everywhere: connected to the collector's SSE stream (not "no fetch error").
+ * The label column has a fixed width so toggling live/offline never nudges the
+ * neighboring header controls.
  */
 export function LiveDot({ active }: { active: boolean }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+        <span
+          className="text-muted-foreground inline-flex items-center gap-1.5 text-xs"
+          role="status"
+          aria-label={active ? "Live event stream connected" : "Live event stream disconnected"}
+        >
           <span className="relative flex size-2">
             {active ? (
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60 motion-reduce:animate-none" />
+              <span className="bg-(--status-success) absolute inline-flex size-full animate-ping rounded-full opacity-60 motion-reduce:animate-none" />
             ) : null}
             <span
               className={cn(
                 "relative inline-flex size-2 rounded-full",
-                active ? "bg-emerald-500" : "bg-muted-foreground/40"
+                active ? "bg-(--status-success)" : "bg-muted-foreground/40"
               )}
             />
           </span>
-          {active ? "live" : "offline"}
+          <span className="w-9">{active ? "live" : "offline"}</span>
         </span>
       </TooltipTrigger>
       <TooltipContent>

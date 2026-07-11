@@ -18,23 +18,8 @@ importers:
         specifier: 0.5.0
         version: 0.5.0
       typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-
-  examples/ai-sdk-loop:
-    dependencies:
-      '@fusionkit/adapter-ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/adapter-ai-sdk
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      ai:
-        specifier: 6.0.200
-        version: 6.0.200(zod@4.4.3)
+        specifier: 6.0.3
+        version: 6.0.3
 
   examples/bench:
     dependencies:
@@ -48,156 +33,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/workspace
 
-  examples/compute-sandbox:
-    dependencies:
-      '@fusionkit/adapter-compute':
-        specifier: workspace:*
-        version: link:../../packages/adapter-compute
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/consent-secrets:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/control-panel:
-    dependencies:
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/seed-example':
-        specifier: workspace:*
-        version: link:../seed
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/dry-run:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
-
-  examples/egress-policy:
-    dependencies:
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/golden-interface:
-    dependencies:
-      '@fusionkit/adapter-compute':
-        specifier: workspace:*
-        version: link:../../packages/adapter-compute
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      ai:
-        specifier: 6.0.200
-        version: 6.0.200(zod@4.4.3)
-
-  examples/governed-run:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/handoff:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/hermetic-session:
-    dependencies:
-      '@fusionkit/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/session-hermetic':
-        specifier: workspace:*
-        version: link:../../packages/session-hermetic
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/microvm-isolation-bench:
-    dependencies:
-      '@fusionkit/adapter-compute':
-        specifier: workspace:*
-        version: link:../../packages/adapter-compute
-      '@fusionkit/ensemble':
-        specifier: workspace:*
-        version: link:../../packages/ensemble
-      '@fusionkit/session-vercel-sandbox':
-        specifier: workspace:*
-        version: link:../../packages/session-vercel-sandbox
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
-      '@vercel/sandbox':
-        specifier: 2.2.0
-        version: 2.2.0
-
   examples/mlx:
     dependencies:
       '@fusionkit/adapter-ai-sdk':
@@ -210,51 +45,6 @@ importers:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
 
-  examples/model-escalation:
-    dependencies:
-      '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
-      '@fusionkit/adapter-ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/adapter-ai-sdk
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      ai:
-        specifier: 6.0.200
-        version: 6.0.200(zod@4.4.3)
-
-  examples/offline-verify:
-    dependencies:
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
-  examples/parallel-fanout:
-    dependencies:
-      '@fusionkit/example-utils':
-        specifier: workspace:*
-        version: link:../../packages/example-utils
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../../packages/handoff
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-
   examples/runtime-kernel:
     dependencies:
       '@fusionkit/ensemble':
@@ -264,25 +54,232 @@ importers:
         specifier: workspace:*
         version: link:../../packages/example-utils
 
-  examples/seed:
+  legacy/examples/ai-sdk-loop:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  legacy/examples/compute-sandbox:
+    dependencies:
+      '@fusionkit/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/consent-secrets:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/control-panel:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/seed-example':
+        specifier: workspace:*
+        version: link:../seed
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/dry-run:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+
+  legacy/examples/egress-policy:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/golden-interface:
+    dependencies:
+      '@fusionkit/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  legacy/examples/governed-run:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/handoff:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/hermetic-session:
+    dependencies:
+      '@fusionkit/cli':
+        specifier: workspace:*
+        version: link:../../../packages/cli
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/session-hermetic':
+        specifier: workspace:*
+        version: link:../../packages/session-hermetic
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/microvm-isolation-bench:
+    dependencies:
+      '@fusionkit/adapter-compute':
+        specifier: workspace:*
+        version: link:../../packages/adapter-compute
+      '@fusionkit/ensemble':
+        specifier: workspace:*
+        version: link:../../../packages/ensemble
+      '@fusionkit/session-vercel-sandbox':
+        specifier: workspace:*
+        version: link:../../packages/session-vercel-sandbox
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+      '@vercel/sandbox':
+        specifier: 2.4.0
+        version: 2.4.0
+
+  legacy/examples/model-escalation:
+    dependencies:
+      '@ai-sdk/provider':
+        specifier: 4.0.2
+        version: 4.0.2
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
+
+  legacy/examples/offline-verify:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/parallel-fanout:
+    dependencies:
+      '@fusionkit/example-utils':
+        specifier: workspace:*
+        version: link:../../../packages/example-utils
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../packages/handoff
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/examples/seed:
     dependencies:
       '@fusionkit/handoff':
         specifier: workspace:*
         version: link:../../packages/handoff
       '@fusionkit/protocol':
         specifier: workspace:*
-        version: link:../../packages/protocol
+        version: link:../../../packages/protocol
       '@fusionkit/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       '@fusionkit/testkit':
         specifier: workspace:*
-        version: link:../../packages/testkit
+        version: link:../../../packages/testkit
       '@fusionkit/workspace':
         specifier: workspace:*
-        version: link:../../packages/workspace
+        version: link:../../../packages/workspace
 
-  examples/swarm:
+  legacy/examples/swarm:
     dependencies:
       '@ai-sdk/harness':
         specifier: 1.0.0-canary.6
@@ -292,16 +289,13 @@ importers:
         version: 1.0.0-canary.2(@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3))
       '@ai-sdk/sandbox-vercel':
         specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
+        version: 1.0.0-canary.6(@vercel/sandbox@2.4.0)(ws@8.21.0)(zod@4.4.3)
       '@ai-sdk/tui':
         specifier: 1.0.0-canary.6
         version: 1.0.0-canary.6(zod@4.4.3)
-      '@fusionkit/adapter-ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/adapter-ai-sdk
       '@fusionkit/example-utils':
         specifier: workspace:*
-        version: link:../../packages/example-utils
+        version: link:../../../packages/example-utils
       '@fusionkit/handoff':
         specifier: workspace:*
         version: link:../../packages/handoff
@@ -310,31 +304,50 @@ importers:
         version: link:../../packages/session-harness
       '@fusionkit/testkit':
         specifier: workspace:*
-        version: link:../../packages/testkit
+        version: link:../../../packages/testkit
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
 
-  packages/adapter-ai-sdk:
+  legacy/packages/adapter-compute:
     dependencies:
-      '@ai-sdk/openai-compatible':
-        specifier: 2.0.48
-        version: 2.0.48(zod@4.4.3)
-      '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
       '@fusionkit/handoff':
         specifier: workspace:*
         version: link:../handoff
       '@fusionkit/protocol':
         specifier: workspace:*
-        version: link:../protocol
+        version: link:../../../packages/protocol
       '@fusionkit/runtime-utils':
         specifier: workspace:*
-        version: link:../runtime-utils
+        version: link:../../../packages/runtime-utils
       '@fusionkit/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+    devDependencies:
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+
+  legacy/packages/handoff:
+    dependencies:
+      '@ai-sdk/provider':
+        specifier: 4.0.2
+        version: 4.0.2
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-utils
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -344,62 +357,183 @@ importers:
     devDependencies:
       '@fusionkit/testkit':
         specifier: workspace:*
-        version: link:../testkit
+        version: link:../../../packages/testkit
 
-  packages/adapter-compute:
+  legacy/packages/plane:
     dependencies:
-      '@fusionkit/handoff':
+      '@fusionkit/protocol':
         specifier: workspace:*
-        version: link:../handoff
+        version: link:../../../packages/protocol
+      jose:
+        specifier: 6.2.3
+        version: 6.2.3
+      pino:
+        specifier: 10.3.1
+        version: 10.3.1
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  legacy/packages/runner:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-utils
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+
+  legacy/packages/sdk:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+
+  legacy/packages/session-harness:
+    dependencies:
+      '@ai-sdk/harness':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
+      '@ai-sdk/harness-claude-code':
+        specifier: 1.0.0-canary.2
+        version: 1.0.0-canary.2(@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3))
+      '@ai-sdk/harness-pi':
+        specifier: 1.0.0-canary.2
+        version: 1.0.0-canary.2(ws@8.21.0)
+      '@ai-sdk/sandbox-just-bash':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(just-bash@3.0.1)(ws@8.21.0)(zod@4.4.3)
+      '@ai-sdk/sandbox-vercel':
+        specifier: 1.0.0-canary.6
+        version: 1.0.0-canary.6(@vercel/sandbox@2.4.0)(ws@8.21.0)(zod@4.4.3)
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/registry':
+        specifier: workspace:*
+        version: link:../../../packages/registry
+      '@fusionkit/runner':
+        specifier: workspace:*
+        version: link:../runner
+      '@fusionkit/runtime-utils':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-utils
+      '@fusionkit/session-hermetic':
+        specifier: workspace:*
+        version: link:../session-hermetic
+      '@fusionkit/session-vercel-sandbox':
+        specifier: workspace:*
+        version: link:../session-vercel-sandbox
+      ws:
+        specifier: 8.21.0
+        version: 8.21.0
+    devDependencies:
+      '@fusionkit/plane':
+        specifier: workspace:*
+        version: link:../plane
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+
+  legacy/packages/session-hermetic:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/runner':
+        specifier: workspace:*
+        version: link:../runner
+      just-bash:
+        specifier: 3.0.1
+        version: 3.0.1
+    devDependencies:
+      '@fusionkit/plane':
+        specifier: workspace:*
+        version: link:../plane
+      '@fusionkit/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@fusionkit/testkit':
+        specifier: workspace:*
+        version: link:../../../packages/testkit
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+
+  legacy/packages/session-vercel-sandbox:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../../../packages/protocol
+      '@fusionkit/runner':
+        specifier: workspace:*
+        version: link:../runner
+      '@fusionkit/workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace
+      '@vercel/sandbox':
+        specifier: 2.4.0
+        version: 2.4.0
+      ms:
+        specifier: 2.1.3
+        version: 2.1.3
+
+  packages/adapter-ai-sdk:
+    dependencies:
+      '@ai-sdk/openai-compatible':
+        specifier: 2.0.48
+        version: 2.0.48(zod@4.4.3)
+      '@ai-sdk/provider':
+        specifier: 4.0.2
+        version: 4.0.2
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@fusionkit/sdk':
+      '@fusionkit/tracing':
         specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-    devDependencies:
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../testkit
+        version: link:../tracing
+      ai:
+        specifier: 6.0.200
+        version: 6.0.200(zod@4.4.3)
 
   packages/cli:
     dependencies:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
+      '@fusionkit/cli-ui':
+        specifier: workspace:*
+        version: link:../cli-ui
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
-      '@fusionkit/handoff':
-        specifier: workspace:*
-        version: link:../handoff
       '@fusionkit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
       '@fusionkit/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@fusionkit/plane':
-        specifier: workspace:*
-        version: link:../plane
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@fusionkit/tool-claude':
         specifier: workspace:*
         version: link:../tool-claude
@@ -415,6 +549,9 @@ importers:
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@fusionkit/tracing':
+        specifier: workspace:*
+        version: link:../tracing
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
@@ -424,17 +561,42 @@ importers:
       figlet:
         specifier: 1.11.0
         version: 1.11.0
+      posthog-node:
+        specifier: 5.39.4
+        version: 5.39.4
+      untun:
+        specifier: 0.1.3
+        version: 0.1.3
     devDependencies:
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../testkit
       '@types/figlet':
         specifier: 1.7.0
         version: 1.7.0
     optionalDependencies:
       portless:
-        specifier: 0.14.0
-        version: 0.14.0
+        specifier: 0.15.1
+        version: 0.15.1
+
+  packages/cli-ui:
+    dependencies:
+      figlet:
+        specifier: 1.11.0
+        version: 1.11.0
+      ink:
+        specifier: 7.1.0
+        version: 7.1.0(@types/react@19.2.17)(react@19.2.7)
+      react:
+        specifier: 19.2.7
+        version: 19.2.7
+    devDependencies:
+      '@types/figlet':
+        specifier: 1.7.0
+        version: 1.7.0
+      '@types/react':
+        specifier: 19.2.17
+        version: 19.2.17
+      ink-testing-library:
+        specifier: 4.0.0
+        version: 4.0.0(@types/react@19.2.17)
 
   packages/ensemble:
     dependencies:
@@ -453,21 +615,18 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@fusionkit/session-harness':
+      '@fusionkit/tracing':
         specifier: workspace:*
-        version: link:../session-harness
+        version: link:../tracing
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
       '@velum-labs/cursorkit':
-        specifier: 0.1.2
-        version: 0.1.2
+        specifier: 0.2.0
+        version: 0.2.0
 
   packages/example-utils:
     dependencies:
@@ -475,26 +634,20 @@ importers:
         specifier: 2.0.48
         version: 2.0.48(zod@4.4.3)
       '@ai-sdk/provider':
-        specifier: 3.0.10
-        version: 3.0.10
+        specifier: 4.0.2
+        version: 4.0.2
+      '@fusionkit/handoff':
+        specifier: workspace:*
+        version: link:../../legacy/packages/handoff
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
-
-  packages/handoff:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
 
   packages/harness-core:
     dependencies:
@@ -527,158 +680,30 @@ importers:
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
-
-  packages/plane:
-    dependencies:
-      '@fusionkit/protocol':
+      '@fusionkit/tracing':
         specifier: workspace:*
-        version: link:../protocol
-      jose:
-        specifier: 6.2.3
-        version: 6.2.3
-      pino:
-        specifier: 10.3.1
-        version: 10.3.1
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        version: link:../tracing
 
   packages/protocol: {}
 
   packages/registry: {}
 
-  packages/runner:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-
   packages/runtime-utils: {}
-
-  packages/sdk:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-
-  packages/session-harness:
-    dependencies:
-      '@ai-sdk/harness':
-        specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
-      '@ai-sdk/harness-claude-code':
-        specifier: 1.0.0-canary.2
-        version: 1.0.0-canary.2(@anthropic-ai/claude-agent-sdk@0.3.198(zod@4.4.3))
-      '@ai-sdk/harness-pi':
-        specifier: 1.0.0-canary.2
-        version: 1.0.0-canary.2(ws@8.21.0)
-      '@ai-sdk/sandbox-just-bash':
-        specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(just-bash@3.0.1)(ws@8.21.0)(zod@4.4.3)
-      '@ai-sdk/sandbox-vercel':
-        specifier: 1.0.0-canary.6
-        version: 1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@fusionkit/session-hermetic':
-        specifier: workspace:*
-        version: link:../session-hermetic
-      '@fusionkit/session-vercel-sandbox':
-        specifier: workspace:*
-        version: link:../session-vercel-sandbox
-      ws:
-        specifier: 8.21.0
-        version: 8.21.0
-    devDependencies:
-      '@fusionkit/plane':
-        specifier: workspace:*
-        version: link:../plane
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../testkit
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-
-  packages/session-hermetic:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      just-bash:
-        specifier: 3.0.1
-        version: 3.0.1
-    devDependencies:
-      '@fusionkit/plane':
-        specifier: workspace:*
-        version: link:../plane
-      '@fusionkit/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@fusionkit/testkit':
-        specifier: workspace:*
-        version: link:../testkit
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-
-  packages/session-vercel-sandbox:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
-      '@vercel/sandbox':
-        specifier: 2.2.0
-        version: 2.2.0
-      ms:
-        specifier: 2.1.3
-        version: 2.1.3
 
   packages/testkit:
     dependencies:
       '@fusionkit/plane':
         specifier: workspace:*
-        version: link:../plane
+        version: link:../../legacy/packages/plane
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@fusionkit/runner':
         specifier: workspace:*
-        version: link:../runner
+        version: link:../../legacy/packages/runner
       '@fusionkit/sdk':
         specifier: workspace:*
-        version: link:../sdk
+        version: link:../../legacy/packages/sdk
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
@@ -703,12 +728,6 @@ importers:
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runner':
-        specifier: workspace:*
-        version: link:../runner
-      '@fusionkit/session-harness':
-        specifier: workspace:*
-        version: link:../session-harness
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
@@ -740,6 +759,9 @@ importers:
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@fusionkit/tracing':
+        specifier: workspace:*
+        version: link:../tracing
       '@openai/codex-sdk':
         specifier: 0.142.5
         version: 0.142.5
@@ -800,6 +822,27 @@ importers:
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
+
+  packages/tracing:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@opentelemetry/api':
+        specifier: 1.9.1
+        version: 1.9.1
+      '@opentelemetry/exporter-trace-otlp-http':
+        specifier: 0.220.0
+        version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources':
+        specifier: 2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base':
+        specifier: 2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node':
+        specifier: 2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
 
   packages/workspace:
     dependencies:
@@ -871,6 +914,10 @@ packages:
     resolution: {integrity: sha512-+XBwXEPkN+l/90bb7TaSK15jAq9ScsGrauJ/NLSGip0KX5Mf1pfEfqBWDuJMIYVRYHNdV1dDBy7JCoKUCQe/tA==}
     engines: {node: '>=22'}
 
+  '@ai-sdk/provider@4.0.2':
+    resolution: {integrity: sha512-pfPoy9J1B1xV7cqJ8MYHOsDYrMv5tR3+EMNfI249OhkD2uRakvav3Fo7XpD2luuN/YNCBY7KfEQc7vEV7KEtyw==}
+    engines: {node: '>=22'}
+
   '@ai-sdk/sandbox-just-bash@1.0.0-canary.6':
     resolution: {integrity: sha512-cO+Py06hxRYUzbLzJBrfW2LrTv9i2SukcYr4EbXllRYvacABfKngNRjOe4P+sGQCpc6P2uV1YY4gyZpIFQugFQ==}
     engines: {node: '>=22'}
@@ -886,6 +933,10 @@ packages:
   '@ai-sdk/tui@1.0.0-canary.6':
     resolution: {integrity: sha512-Kw9Yu83Tbq5gpZvefJr6BKsO51z4GCcZ7QTSWAtpTD44pD+hYfOSu1OH8+VhalmdJShS3q6XENL3UExFgL01nA==}
     engines: {node: '>=22'}
+
+  '@alcalzone/ansi-tokenize@0.3.0':
+    resolution: {integrity: sha512-p+CMKJ93HFmLkjXKlXiVGlMQEuRb6H0MokBSwUsX+S6BRX8eV5naFZpQJFfJHjRZY0Hmnqy1/r6UWl3x+19zYA==}
+    engines: {node: '>=18'}
 
   '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.198':
     resolution: {integrity: sha512-ZmiAybQKIKcP1qEAE/vfXvfxtKxG9CnJn98QTXC5Zxiwuy7Mllx2ALXh9dfmsf0V87CGEodlZQmMgUJotNIsUw==}
@@ -942,8 +993,8 @@ packages:
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
 
-  '@bufbuild/protobuf@2.12.0':
-    resolution: {integrity: sha512-B/XlCaFIP8LOwzo+bz5uFzATYokcwCKQcghqnlfwSmM5eX/qTkvDBnDPs+gXtX/RyjxJ4DRikECcPJbyALA8FA==}
+  '@bufbuild/protobuf@2.12.1':
+    resolution: {integrity: sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -1034,9 +1085,83 @@ packages:
   '@opencode-ai/sdk@1.17.13':
     resolution: {integrity: sha512-VItOGjMzRQx3zypwmeFLNhCiIx32kxS7FqzIJvVZLfyNGCifs3rfGC9qzNKWcxQo4SjNvAw++v4gWWU6Inv+JQ==}
 
+  '@opentelemetry/api-logs@0.220.0':
+    resolution: {integrity: sha512-CmVa4ImJ+ynfrPMNaAXHET6Bhb44SwzmfyVJFq9ni2jgXJR/l7C6gfVFddNmHP+ZOkP9cf4f9DBe68qVLTHc9w==}
+    engines: {node: '>=8.0.0'}
+
   '@opentelemetry/api@1.9.1':
     resolution: {integrity: sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==}
     engines: {node: '>=8.0.0'}
+
+  '@opentelemetry/context-async-hooks@2.9.0':
+    resolution: {integrity: sha512-OQ0vzvbZBiUhjqLnUaoNfYmP8553Crr3aggB4y0ZUi815mZ7idpdJXQmoKdeBKJelYttoBlLSSHubmyw3wvX4w==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/core@2.9.0':
+    resolution: {integrity: sha512-m2nckMT80NnmjTYSPjJQObBJ+8dgkoajEOUbznL8AHZ3T3yHRk2P7gI1PhEBc1+lOnrYE9UWrWHqJDsmqjmNbw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/exporter-trace-otlp-http@0.220.0':
+    resolution: {integrity: sha512-/+ExB3lRkf+erv4PnoywyL7RHKITidxtUpUTS55k7OQ0dB42S7gEF1gry7swb9MSm1hYLUhJg4QQh9W8SpwwqA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/otlp-exporter-base@0.220.0':
+    resolution: {integrity: sha512-CXYo8UD5Mn9YbgebO2EL4wejtA+gxLmLiu6HCk2KH2BR7XhFN6/6p1UlCb23DYCjeYkndevLHuejCCN1yx4+OQ==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/otlp-transformer@0.220.0':
+    resolution: {integrity: sha512-lXGrv7KXZ0gNH9SVNUaa6vv6phVYGvJxfXAlMbzbakiXru75f5MZl8Z7oqiMMQD77riVHJCFlQvbZs/VVN2/4A==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/resources@2.9.0':
+    resolution: {integrity: sha512-jyA5MBLQ+Dkl3+JsZkUoUvL7yHvU64kLsvpXKarWm6347Sl1t1bXFTFykUePNpT5WH5pm9a2Qtt03iIYQhZ1Fg==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/sdk-logs@0.220.0':
+    resolution: {integrity: sha512-WywcTkQtv2iNmt+6y5Kcd4rzvx9bLVsBa2Nwcmg01IUaBTkTow3W4d9KE5vNBpEDtb9tp21WcRBY/lANRrApYA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.4.0 <1.10.0'
+
+  '@opentelemetry/sdk-metrics@2.9.0':
+    resolution: {integrity: sha512-Xx8RGS4H5XEBl01WuCreMIpiah9cCXMbSkeuIePPdD2cUpq/vUzYmj8E/MK1OsbOc93FuAD4jfn2WOacKwLn7Q==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.9.0 <1.10.0'
+
+  '@opentelemetry/sdk-trace-base@2.9.0':
+    resolution: {integrity: sha512-cp9zmTl62R8PJrpvFcmc8N2JQU/xfa0S+61q511Nji+QxCfZ8Ifvg7H27G8cANe4crg4RTrWsVvanHiXjSp6ag==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/sdk-trace-node@2.9.0':
+    resolution: {integrity: sha512-ec9a7ps37huy5itYk0MalaZdSLlM6AXWp/FhtEjgMpp5leEGojBDvAl/UWttQnkMZOvFHKzRESn8TD3yKTF5nQ==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/sdk-trace@2.9.0':
+    resolution: {integrity: sha512-sGA19HvtrrSKYsseHphluH6j3p6Xa3fqc7c7y8f/7mYWejc1lyDFcpSdD1kYa50HCLUeEo4zA5bW0pniaPszuw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/semantic-conventions@1.41.1':
+    resolution: {integrity: sha512-/UhIkaZgPutTFmQ7RnIJGgDXZmtEJ7Dvi86xNTFWcnRxVRNk/aotsqDJYeEvDP+FSMB2SdW+pQzNMcWP0rwuNA==}
+    engines: {node: '>=14'}
 
   '@peculiar/asn1-cms@2.8.0':
     resolution: {integrity: sha512-NgekZOrSJFSBFLFoLfwePguAWAx7z1+f2TEsWFUMyiqqfntZ4+S/S5hzqME3q4pCA0iOsFKdwiQ35dwY24eVqA==}
@@ -1078,6 +1203,12 @@ packages:
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
 
+  '@posthog/core@1.39.6':
+    resolution: {integrity: sha512-o6ajIwN5zXoNP0D4H/QPmOyibNTUkSyOR6ya7AG5U2ywXx4awo72L2KnCoiZPQM5x/bXv6jPBdimH8M18Ax0aw==}
+
+  '@posthog/types@1.392.1':
+    resolution: {integrity: sha512-Qg6Gl7/1vlr8+gPtBi5gwnLgAgiyFoKOVmTvTtDcvya9cpTwZfna7rQmkGQ4B63CunUYNNbOlqcwiUwUDyTK6w==}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -1094,8 +1225,11 @@ packages:
   '@types/node@22.19.20':
     resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
 
-  '@velum-labs/cursorkit@0.1.2':
-    resolution: {integrity: sha512-xbblHKSIQUzsXKttmqh415jgEN6UVA4K9Zpgl3i5jXrOWvhqNbFCNbgABVE/sgBG/1OhzYvlxQ391AUA7WZOwQ==}
+  '@types/react@19.2.17':
+    resolution: {integrity: sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==}
+
+  '@velum-labs/cursorkit@0.2.0':
+    resolution: {integrity: sha512-FNPF6p9azJ9dN2ZpnltJutEU/23wGaxXUSaGhIACXi+WniYynQt1P86UMNyujqrJxdbTj2kFmQY4cFq4zLHXgQ==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -1106,8 +1240,8 @@ packages:
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
 
-  '@vercel/sandbox@2.2.0':
-    resolution: {integrity: sha512-i5af0bMBLfUp3U1bSewSm+duCc3fErxi3GGqv2F3/xFbI09BHw+HaRI0pHjwbi/+0sLNPTZn/0jkg/M1OWB0rg==}
+  '@vercel/sandbox@2.4.0':
+    resolution: {integrity: sha512-pifnr8hex/rgQ3EPyLYHYwHyf0Kwmc4Vbya9kHGk4aERFVGj44P+742S8/SDdt2guMxBriXBOMkMLq1Kaiyyeg==}
 
   '@workflow/serde@4.1.0':
     resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
@@ -1131,6 +1265,18 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  ansi-escapes@7.3.0:
+    resolution: {integrity: sha512-BvU8nYgGQBxcmMuEeUEmNTvrMVjJNSH7RgW24vXexN4Ven6qCvy4TntnvlnwnMLTVlcRQQdbRY8NKnaIoeWDNg==}
+    engines: {node: '>=18'}
+
+  ansi-regex@6.2.2:
+    resolution: {integrity: sha512-Bq3SmSpyFHaWjPk8If9yc6svM8c56dB5BAtW4Qbw5jHTwwXXcTLoRMkpDJp6VL0XzlWaCHTXrkFURMYmD0sLqg==}
+    engines: {node: '>=12'}
+
+  ansi-styles@6.2.3:
+    resolution: {integrity: sha512-4Dj6M28JB+oAH8kFkTLUo+a2jwOFkuqb3yucU0CANcRRUbxS0cP0nZYCGjcc3BNXwRIsUVmDGgzawme7zvJHvg==}
+    engines: {node: '>=12'}
+
   anynum@1.0.0:
     resolution: {integrity: sha512-xjR9/zBVnUOP6ztMIIgShjsxui80nQUQH+5xJnvrYLs+90bF25/KJqaAi8mk+B4RDtX1Nspi6fmp4YTEts8SfA==}
 
@@ -1144,6 +1290,10 @@ packages:
   atomic-sleep@1.0.0:
     resolution: {integrity: sha512-kNOjDqAh7px0XWNI+4QbzoiR/nTkHAWNud2uvnJquD1/x5a7EQZMJT0AczqK0Qn67oY/TTQ1LbUKajZpp3I9tQ==}
     engines: {node: '>=8.0.0'}
+
+  auto-bind@5.0.1:
+    resolution: {integrity: sha512-ooviqdwwgfIfNmDwo94wlshcdzfO64XV0Cg6oDsDYBJfITDz1EngD2z7DkbvCWn+XIMsIqW27sEVF6qcpJrRcg==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   b4a@1.8.1:
     resolution: {integrity: sha512-aiqre1Nr0B/6DgE2N5vwTc+2/oQZ4Wh1t4NznYY4E00y8LCt6NqdRv81so00oo27D8MVKTpUa/MwUUtBLXCoDw==}
@@ -1182,8 +1332,31 @@ packages:
     resolution: {integrity: sha512-U1Z/ob71V/bXfVABvNr/Kumf5VyeQRBEm6Txb0PQ6S7V5GpBM3w4Cbqz/xPDicR5tN0uvDifng8C+5qECeGwyQ==}
     engines: {node: '>=6.0.0'}
 
+  chalk@5.6.2:
+    resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==}
+    engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
+
   chownr@1.1.4:
     resolution: {integrity: sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg==}
+
+  citty@0.1.6:
+    resolution: {integrity: sha512-tskPPKEs8D2KPafUypv2gxwJP8h/OaJmC82QQGGDQcHvXX43xF2VDACcJVmZ0EuSxkpO9Kc4MlrA3q0+FG58AQ==}
+
+  cli-boxes@4.0.1:
+    resolution: {integrity: sha512-5IOn+jcCEHEraYolBPs/sT4BxYCe2nHg374OPiItB1O96KZFseS2gthU4twyYzeDcFew4DaUM/xwc5BQf08JJw==}
+    engines: {node: '>=18.20 <19 || >=20.10'}
+
+  cli-cursor@4.0.0:
+    resolution: {integrity: sha512-VGtlMu3x/4DOtIUwEkRezxUZ2lBacNJCHash0N0WeZDBS+7Ux1dm3XWAgWYxLJFMMdOeXMHXorshEFhbMSGelg==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  cli-truncate@6.1.0:
+    resolution: {integrity: sha512-ofWtXdvPO1WepoE9Gn4dPdZw+ADud1Yz9K+xm9FjK5vvrs/D60vrlKIQeSw1wJX4cphW2bnWi8GZSKvf9T6shw==}
+    engines: {node: '>=22'}
+
+  code-excerpt@4.0.0:
+    resolution: {integrity: sha512-xxodCmBen3iy2i0WtAK8FlFNrRzjUqjRsMfho58xT/wvZU1YTM3fCnRjcy1gJPMepaRlgm/0e6w8SpWHpn3/cA==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   commander@14.0.3:
     resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
@@ -1193,9 +1366,20 @@ packages:
     resolution: {integrity: sha512-U7VdrJFnJgo4xjrHpTzu0yrHPGImdsmD95ZlgYSEajAn2JKzDhDTPG9kBTefmObL2w/ngeZnilk+OV9CG3d7UA==}
     engines: {node: '>= 6'}
 
+  consola@3.4.2:
+    resolution: {integrity: sha512-5IKcdX0nnYavi6G7TtOhwkYzyjfJlatbjMjuLSfE2kYT5pMDOilZ4OvMhi637CcDICTmz3wARPoyhqyX1Y+XvA==}
+    engines: {node: ^14.18.0 || >=16.10.0}
+
+  convert-to-spaces@2.0.1:
+    resolution: {integrity: sha512-rcQ1bsQO9799wq24uE5AM2tAILy4gXGIK/njFWcVQkGNZ96edlpY+A7bjwvzjYvLDyzmG1MmMLZhpcsb+klNMQ==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
+
+  csstype@3.2.3:
+    resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -1224,6 +1408,17 @@ packages:
 
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
+
+  environment@1.1.0:
+    resolution: {integrity: sha512-xUtoPkMggbz0MPyPiIWr1Kp4aeWJjDZ6SMvURhimjdZgsRuDplF5/s9hcgGhyXMhs+6vpnuoiZ2kFiu3FMnS8Q==}
+    engines: {node: '>=18'}
+
+  es-toolkit@1.49.0:
+    resolution: {integrity: sha512-G5iZ6Pc/FNRY/soKZHC+TxGDD83rHUDXxzaWhGCX44vAv/tMs56WMusnm/KMNK+luUPsgA9U28cGr4RDlSzL2g==}
+
+  escape-string-regexp@2.0.0:
+    resolution: {integrity: sha512-UpzcLCXolUWcNu5HtVMHYdXJjArjsF9C0aNnquZYY4uW/Vu0miy5YoWvbV345HauVvcAUnpRuhMMcqTcGOY2+w==}
+    engines: {node: '>=8'}
 
   events-universal@1.0.1:
     resolution: {integrity: sha512-LUd5euvbMLpwOF8m6ivPCbhQeSiYVNb8Vs0fQ8QjXo0JTkEHpz8pxdQf0gStltaPpw0Cca8b39KxvK9cfKRiAw==}
@@ -1258,11 +1453,19 @@ packages:
   fs-constants@1.0.0:
     resolution: {integrity: sha512-y6OAwoSIf7FyjMIv94u+b5rdheZEjzR63GTyZJm5qh4Bi+2YgwLCcI/fPFZkL5PSixOt6ZNKm+w+Hfp/Bciwow==}
 
+  get-east-asian-width@1.6.0:
+    resolution: {integrity: sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==}
+    engines: {node: '>=18'}
+
   github-from-package@0.0.0:
     resolution: {integrity: sha512-SyHy3T1v2NUXn29OsWdxmK6RwHD+vkj3v8en8AOBZ1wBQ/hCAQ5bAQTD02kW4W9tUp/3Qh6J8r9EvntiyCmOOw==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
+
+  indent-string@5.0.0:
+    resolution: {integrity: sha512-m6FAo/spmsW2Ab2fU35JTYwtOKa2yAwXSwgjSv1TJzh4Mh7mC3lzAOVLBprb72XsTrgkEIsl7YrFNAiDiRhIGg==}
+    engines: {node: '>=12'}
 
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
@@ -1273,6 +1476,37 @@ packages:
   ini@6.0.0:
     resolution: {integrity: sha512-IBTdIkzZNOpqm7q3dRqJvMaldXjDHWkEDfrwGEQTs5eaQMWV+djAhR+wahyNNMAa+qpbDUhBMVt4ZKNwpPm7xQ==}
     engines: {node: ^20.17.0 || >=22.9.0}
+
+  ink-testing-library@4.0.0:
+    resolution: {integrity: sha512-yF92kj3pmBvk7oKbSq5vEALO//o7Z9Ck/OaLNlkzXNeYdwfpxMQkSowGTFUCS5MSu9bWfSZMewGpp7bFc66D7Q==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+
+  ink@7.1.0:
+    resolution: {integrity: sha512-VWE6/yeLtFCJBNLflyI2OSylyXK1Rc24LuXup8Qt+icwkmmycFNdbn8IkSp6Frc0h1iA0NOvvi1ajW44U/w3Qg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@types/react': '>=19.2.0'
+      react: '>=19.2.0'
+      react-devtools-core: '>=6.1.2'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      react-devtools-core:
+        optional: true
+
+  is-fullwidth-code-point@5.1.0:
+    resolution: {integrity: sha512-5XHYaSyiqADb4RnZ1Bdad6cPp8Toise4TzEjcOYDHZkTCbKgiUl7WTUCpNWHuxmDt91wnsZBc9xinNzopv3JMQ==}
+    engines: {node: '>=18'}
+
+  is-in-ci@2.0.0:
+    resolution: {integrity: sha512-cFeerHriAnhrQSbpAxL37W1wcJKUUX07HyLWZCW1URJT/ra3GyUTzBgUnh24TMVfNTV2Hij2HLxkPHFZfOZy5w==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
@@ -1292,6 +1526,10 @@ packages:
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
+
+  mimic-fn@2.1.0:
+    resolution: {integrity: sha512-OqbOk5oEQeAZ8WXWydlu9HJjz9WVdEIvamMCcXmuqUYjTknH/sqsWvhQ3vgwKFRR1HpjvNBKQ37nbJgYzGqGcg==}
+    engines: {node: '>=6'}
 
   mimic-response@3.1.0:
     resolution: {integrity: sha512-z0yWI+4FDrrweS8Zmt4Ej5HdJmky15+L2e6Wgn3+iK5fWzb6T3fhNFq2+MeTRb064c6Wr4N/wv0DzQTjNzHNGQ==}
@@ -1341,12 +1579,20 @@ packages:
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
 
+  onetime@5.1.2:
+    resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
+    engines: {node: '>=6'}
+
   os-paths@4.4.0:
     resolution: {integrity: sha512-wrAwOeXp1RRMFfQY8Sy7VaGVmPocaLwSFOYCGKSyo8qmJ+/yaafCl5BCA1IQZWqFSRBrKDYFeR9d/VyQzfH/jg==}
     engines: {node: '>= 6.0'}
 
   papaparse@5.5.3:
     resolution: {integrity: sha512-5QvjGxYVjxO59MGU2lHVYpRWBBtKHnlIAcSe1uNFCkkptUh63NFRj0FJQm7nR67puEruUci/ZkjmEFrjCAyP4A==}
+
+  patch-console@2.0.0:
+    resolution: {integrity: sha512-0YNdUceMdaQwoKce1gatDScmMo5pu/tfABfnzEqeG0gtTmd7mh/WcwgUjtAeOU7N8nFFlbQBnFK2gXW5fGvmMA==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   path-expression-matcher@1.5.0:
     resolution: {integrity: sha512-cbrerZV+6rvdQrrD+iGMcZFEiiSrbv9Tfdkvnusy6y0x0GKBXREFg/Y65GhIfm0tnLntThhzCnfKwp1WRjeCyQ==}
@@ -1355,6 +1601,9 @@ packages:
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
     engines: {node: '>=8'}
+
+  pathe@1.1.2:
+    resolution: {integrity: sha512-whLdWMYL2TwI08hn8/ZqAbrVemu0LNaNNJZX73O6qaIdCTfXutsLhMkjdENX0qhsQ9uIimo4/aQOmXkoon2nDQ==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -1373,11 +1622,20 @@ packages:
     resolution: {integrity: sha512-emEcLuomt2j03vxD54giVB4SxTjnsqkU692xZOZXHDVoYyypEm+b3jpiTcc+Cf+myooc+/Ly0z01jqeNHVgJGw==}
     engines: {node: '>=16.0.0'}
 
-  portless@0.14.0:
-    resolution: {integrity: sha512-kKxmxB1DQ9gI8t+V13VhuwTXu31io5nbFubvZAE82AxzXBsvcJV7qQJbmomrQUpbVxo2UVHqs14iX4YK0BClmQ==}
+  portless@0.15.1:
+    resolution: {integrity: sha512-MQTt405HrcIa3m9OSKpH6WjJDbfNP4oFMNg0VzAoUO4B19l1eFJBFcSWfQY8KYMhzZVfa+Gea2OUrlDm8+/M4A==}
     engines: {node: '>=24'}
     os: [darwin, linux, win32]
     hasBin: true
+
+  posthog-node@5.39.4:
+    resolution: {integrity: sha512-+fCQ7htBFRQQFbIzl1T0TA7bDwYyaB9XP308ZFMCUoB5LzTzOFxBa6TYVrxdH/VQl43WXTp6sf0QsG2Z4XlNBg==}
+    engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
 
   prebuild-install@7.1.3:
     resolution: {integrity: sha512-8Mf2cbV7x1cXPUILADGI3wuhfqWvtiLA1iclTDbFRZkgRQS0NqsPZphna9V+HyTEadheuPmjaJMsbzKQFOzLug==}
@@ -1419,6 +1677,16 @@ packages:
   re2js@1.3.3:
     resolution: {integrity: sha512-s/I5zEAo79SUK0Qw4dpZKpiMwbQ6Gz0KU2NRr7eaO4x/p2g7Vvmn3hdeXDg8VsaUjfj/ora+e9oi27LX/C9+mw==}
 
+  react-reconciler@0.33.0:
+    resolution: {integrity: sha512-KetWRytFv1epdpJc3J4G75I4WrplZE5jOL7Yq0p34+OVOKF4Se7WrdIdVC45XsSSmUTlht2FM/fM1FZb1mfQeA==}
+    engines: {node: '>=0.10.0'}
+    peerDependencies:
+      react: ^19.2.0
+
+  react@19.2.7:
+    resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}
+    engines: {node: '>=0.10.0'}
+
   readable-stream@3.6.2:
     resolution: {integrity: sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==}
     engines: {node: '>= 6'}
@@ -1433,6 +1701,10 @@ packages:
   reflect-metadata@0.2.2:
     resolution: {integrity: sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q==}
 
+  restore-cursor@4.0.0:
+    resolution: {integrity: sha512-I9fPXU9geO9bHOt9pHHOhOkYerIMsmVaWB0rA2AI9ERh/+x/i7MV5HKBNrg+ljO5eoPVgCcnFuRjJ9uH6I/3eg==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
   retry@0.13.1:
     resolution: {integrity: sha512-XQBQ3I8W1Cge0Seh+6gjj03LbmRFWuoszgK9ooCpwYIrhhoO80pfq4cUkU5DkknwfOfFteRwlZ56PYOGYyFWdg==}
     engines: {node: '>= 4'}
@@ -1443,6 +1715,9 @@ packages:
   safe-stable-stringify@2.5.0:
     resolution: {integrity: sha512-b3rppTKm9T+PsVCBEOUR46GWI7fdOs00VKZ1+9c1EWDaDMvjQc6tUwuFyIprgGgTcWoVHSKrU8H31ZHA2e0RHA==}
     engines: {node: '>=10'}
+
+  scheduler@0.27.0:
+    resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
 
   seek-bzip@2.0.0:
     resolution: {integrity: sha512-SMguiTnYrhpLdk3PwfzHeotrcwi8bNV4iemL9tx9poR/yeaMYwB9VzR1w7b57DuWpuqR8n6oZboi0hj3AxZxQg==}
@@ -1465,11 +1740,18 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
+  signal-exit@3.0.7:
+    resolution: {integrity: sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==}
+
   simple-concat@1.0.1:
     resolution: {integrity: sha512-cSFtAPtRhljv69IK0hTVZQ+OfE9nePi/rtJmw5UjHeVyVroEqJXP1sFztKUy1qU+xvz3u/sfYJLa947b7nAN2Q==}
 
   simple-get@4.0.1:
     resolution: {integrity: sha512-brv7p5WgH0jmQJr1ZDDfKDOSeWWg+OVypG99A/5vYGPqJ6pxiaHLy8nxtFjBA7oMa01ebA9gfh1uMCFqOuXxvA==}
+
+  slice-ansi@9.0.0:
+    resolution: {integrity: sha512-SO/3iYL5S3W57LLEniscOGPZgOqZUPCx6d3dB+52B80yJ0XstzsC/eV8gnA4tM3MHDrKz+OCFSLNjswdSC+/bA==}
+    engines: {node: '>=22'}
 
   smol-toml@1.6.1:
     resolution: {integrity: sha512-dWUG8F5sIIARXih1DTaQAX4SsiTXhInKf1buxdY9DIg4ZYPZK5nGM1VRIYmEbDbsHt7USo99xSLFu5Q1IqTmsg==}
@@ -1488,11 +1770,23 @@ packages:
   sql.js@1.14.1:
     resolution: {integrity: sha512-gcj8zBWU5cFsi9WUP+4bFNXAyF1iRpA3LLyS/DP5xlrNzGmPIizUeBggKa8DbDwdqaKwUcTEnChtd2grWo/x/A==}
 
-  streamx@2.27.0:
-    resolution: {integrity: sha512-WZ189TKnHoAokYHvwzaAQMpd55cgUmFIcJFzBSgGcb886jau5DL+XdDhTWV4ps3FLvk+OORp0dLRTPsLZ21CSA==}
+  stack-utils@2.0.6:
+    resolution: {integrity: sha512-XlkWvfIm6RmsWtNJx+uqtKLS8eqFbxUg0ZzLXqY0caEy9l7hruX8IpiDnjsLavoBgqCCR71TqWO8MaXYheJ3RQ==}
+    engines: {node: '>=10'}
+
+  streamx@2.28.0:
+    resolution: {integrity: sha512-1Yowhzjf0ivGMrTIkY9hav5TxobO9qIVqUE41fiCGMGgc3CLlf4MY+9AHmZqBWgDTue0fY9zWjYFVyf6Diuobw==}
+
+  string-width@8.2.1:
+    resolution: {integrity: sha512-IIaP0g3iy9Cyy18w3M9YcaDudujEAVHKt3a3QJg1+sr/oX96TbaGUubG0hJyCjCBThFH+tFpcIyoUHUn1ogaLA==}
+    engines: {node: '>=20'}
 
   string_decoder@1.3.0:
     resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
+
+  strip-ansi@7.2.0:
+    resolution: {integrity: sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==}
+    engines: {node: '>=12'}
 
   strip-json-comments@2.0.1:
     resolution: {integrity: sha512-4gB8na07fecVVkOI6Rs4e7T6NOTki5EmL7TUduTs6bu3EdnSycntVJ4re8kgZA+wx9IueI2Y11bfbgwtzuE0KQ==}
@@ -1505,6 +1799,10 @@ packages:
     resolution: {integrity: sha512-ki4hZQfh5rX0QDLLkOCj+h+CVNkqmp/CMf8v8kZpkNVK6jGQooMytqzLZYUVYIZcFZ6yDB70EfD8POcFXiF5oA==}
     engines: {node: '>=18'}
 
+  tagged-tag@1.0.0:
+    resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
+    engines: {node: '>=20'}
+
   tar-fs@2.1.4:
     resolution: {integrity: sha512-mDAjwmZdh7LTT6pNleZ05Yt65HC3E+NiQzl672vQG38jIrehtJk/J3mNwIg+vShQPcLF/LV7CMnDW6vjj6sfYQ==}
 
@@ -1514,6 +1812,10 @@ packages:
 
   tar-stream@3.1.7:
     resolution: {integrity: sha512-qJj60CXt7IU1Ffyc3NJMjh6EkuCFej46zUqJ4J7pqYlThyd9bO0XBTmcOIhSzZJVWfsLks0+nle/j538YAW9RQ==}
+
+  terminal-size@4.0.1:
+    resolution: {integrity: sha512-avMLDQpUI9I5XFrklECw1ZEUPJhqzcwSWsyyI8blhRLT+8N1jLJWLWWYQpB2q2xthq8xDvjZPISVh53T/+CLYQ==}
+    engines: {node: '>=18'}
 
   text-decoder@1.2.7:
     resolution: {integrity: sha512-vlLytXkeP4xvEq2otHeJfSQIRyWxo/oZGEbXrtEEF9Hnmrdly59sUbzZ/QgyWuLYHctCHxFF4tRQZNQ9k60ExQ==}
@@ -1543,11 +1845,15 @@ packages:
     resolution: {integrity: sha512-I8yFsfRzmzK0WV1pNNOA4A7y4RDfFxPRxb3t+e3ui14qSGOxGtiSP6GjeX+Y6CHb7HYaFj7ECUD7VE5kQMZWGQ==}
     engines: {node: '>=18', npm: '>=9'}
 
+  type-fest@5.7.0:
+    resolution: {integrity: sha512-1URUxUqfHFM1c+zfSPsa3gnkO7Aq21qyH75SIduNYz4SzY964rn1X2vCMQaHSHhktiw+0kPa2iyb6PUpXqB6Vg==}
+    engines: {node: '>=20'}
+
   typebox@1.2.8:
     resolution: {integrity: sha512-rlsKhsd7L3082m9nxhFIB4Gl8jizLd/6YlFAWaz96hdV8+VJRjwYaYmDlT0jlTRwkb48SxCSSirqUtrg/HilNw==}
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -1566,6 +1872,10 @@ packages:
     resolution: {integrity: sha512-xamtWoB1EshgjpmlXd7GGm2VfdDtw1+rD8uhry8pSNW3If6S8E0m2T2+orSKeZXEn/aPJMviCpDBA65WJt8zhg==}
     engines: {node: '>=22.19.0'}
 
+  untun@0.1.3:
+    resolution: {integrity: sha512-4luGP9LMYszMRZwsvyUd9MrxgEGZdZuZgpVQHEEX0lCYFESasVRvZd0EYpCkOIbJKHMuv0LskpXc/8Un+MJzEQ==}
+    hasBin: true
+
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
@@ -1573,6 +1883,14 @@ packages:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
     hasBin: true
+
+  widest-line@6.0.0:
+    resolution: {integrity: sha512-U89AsyEeAsyoF0zVJBkG9zBgekjgjK7yk9sje3F4IQpXBJ10TF6ByLlIfjMhcmHMJgHZI4KHt4rdNfktzxIAMA==}
+    engines: {node: '>=20'}
+
+  wrap-ansi@10.0.0:
+    resolution: {integrity: sha512-SGcvg80f0wUy2/fXES19feHMz8E0JoXv2uNgHOu4Dgi2OrCy1lqwFYEJz1BLbDI0exjPMe/ZdzZ/YpGECBG/aQ==}
+    engines: {node: '>=20'}
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
@@ -1605,6 +1923,9 @@ packages:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
     engines: {node: '>= 14.6'}
     hasBin: true
+
+  yoga-layout@3.2.1:
+    resolution: {integrity: sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==}
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
@@ -1712,6 +2033,10 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
+  '@ai-sdk/provider@4.0.2':
+    dependencies:
+      json-schema: 0.4.0
+
   '@ai-sdk/sandbox-just-bash@1.0.0-canary.6(just-bash@3.0.1)(ws@8.21.0)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/harness': 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
@@ -1721,11 +2046,11 @@ snapshots:
       - ws
       - zod
 
-  '@ai-sdk/sandbox-vercel@1.0.0-canary.6(@vercel/sandbox@2.2.0)(ws@8.21.0)(zod@4.4.3)':
+  '@ai-sdk/sandbox-vercel@1.0.0-canary.6(@vercel/sandbox@2.4.0)(ws@8.21.0)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/harness': 1.0.0-canary.6(ws@8.21.0)(zod@4.4.3)
       '@ai-sdk/provider-utils': 5.0.0-canary.47(zod@4.4.3)
-      '@vercel/sandbox': 2.2.0
+      '@vercel/sandbox': 2.4.0
     transitivePeerDependencies:
       - ws
       - zod
@@ -1735,6 +2060,11 @@ snapshots:
       ai: 7.0.0-canary.171(zod@4.4.3)
     transitivePeerDependencies:
       - zod
+
+  '@alcalzone/ansi-tokenize@0.3.0':
+    dependencies:
+      ansi-styles: 6.2.3
+      is-fullwidth-code-point: 5.1.0
 
   '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.198':
     optional: true
@@ -1775,16 +2105,16 @@ snapshots:
 
   '@borewit/text-codec@0.2.2': {}
 
-  '@bufbuild/protobuf@2.12.0': {}
+  '@bufbuild/protobuf@2.12.1': {}
 
-  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))':
+  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+      '@bufbuild/protobuf': 2.12.1
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
 
-  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0)':
+  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1)':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/protobuf': 2.12.1
 
   '@jitl/quickjs-ffi-types@0.32.0': {}
 
@@ -1851,7 +2181,89 @@ snapshots:
     dependencies:
       cross-spawn: 7.0.6
 
+  '@opentelemetry/api-logs@0.220.0':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+
   '@opentelemetry/api@1.9.1': {}
+
+  '@opentelemetry/context-async-hooks@2.9.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+
+  '@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/semantic-conventions': 1.41.1
+
+  '@opentelemetry/exporter-trace-otlp-http@0.220.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace': 2.9.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/otlp-exporter-base@0.220.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.220.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/otlp-transformer@0.220.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.220.0
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace': 2.9.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/resources@2.9.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.41.1
+
+  '@opentelemetry/sdk-logs@0.220.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.220.0
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.41.1
+
+  '@opentelemetry/sdk-metrics@2.9.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.9.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.41.1
+
+  '@opentelemetry/sdk-trace-node@2.9.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/context-async-hooks': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.9.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/sdk-trace@2.9.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.41.1
+
+  '@opentelemetry/semantic-conventions@1.41.1': {}
 
   '@peculiar/asn1-cms@2.8.0':
     dependencies:
@@ -1949,6 +2361,12 @@ snapshots:
 
   '@pinojs/redact@0.4.0': {}
 
+  '@posthog/core@1.39.6':
+    dependencies:
+      '@posthog/types': 1.392.1
+
+  '@posthog/types@1.392.1': {}
+
   '@standard-schema/spec@1.1.0': {}
 
   '@tokenizer/inflate@0.4.1':
@@ -1966,11 +2384,15 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@velum-labs/cursorkit@0.1.2':
+  '@types/react@19.2.17':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))
+      csstype: 3.2.3
+
+  '@velum-labs/cursorkit@0.2.0':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       commander: 14.0.3
       protobufjs: 8.6.3
       selfsigned: 5.5.0
@@ -1980,7 +2402,7 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  '@vercel/sandbox@2.2.0':
+  '@vercel/sandbox@2.4.0':
     dependencies:
       '@vercel/oidc': 3.2.0
       '@workflow/serde': 4.1.0-beta.2
@@ -2027,6 +2449,14 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.0-canary.47(zod@4.4.3)
       zod: 4.4.3
 
+  ansi-escapes@7.3.0:
+    dependencies:
+      environment: 1.1.0
+
+  ansi-regex@6.2.2: {}
+
+  ansi-styles@6.2.3: {}
+
   anynum@1.0.0: {}
 
   asn1js@3.0.10:
@@ -2040,6 +2470,8 @@ snapshots:
       retry: 0.13.1
 
   atomic-sleep@1.0.0: {}
+
+  auto-bind@5.0.1: {}
 
   b4a@1.8.1: {}
 
@@ -2069,18 +2501,45 @@ snapshots:
 
   bytestreamjs@2.0.1: {}
 
+  chalk@5.6.2: {}
+
   chownr@1.1.4:
     optional: true
+
+  citty@0.1.6:
+    dependencies:
+      consola: 3.4.2
+
+  cli-boxes@4.0.1: {}
+
+  cli-cursor@4.0.0:
+    dependencies:
+      restore-cursor: 4.0.0
+
+  cli-truncate@6.1.0:
+    dependencies:
+      slice-ansi: 9.0.0
+      string-width: 8.2.1
+
+  code-excerpt@4.0.0:
+    dependencies:
+      convert-to-spaces: 2.0.1
 
   commander@14.0.3: {}
 
   commander@6.2.1: {}
+
+  consola@3.4.2: {}
+
+  convert-to-spaces@2.0.1: {}
 
   cross-spawn@7.0.6:
     dependencies:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  csstype@3.2.3: {}
 
   debug@4.4.3:
     dependencies:
@@ -2103,6 +2562,12 @@ snapshots:
     dependencies:
       once: 1.4.0
     optional: true
+
+  environment@1.1.0: {}
+
+  es-toolkit@1.49.0: {}
+
+  escape-string-regexp@2.0.0: {}
 
   events-universal@1.0.1:
     dependencies:
@@ -2146,10 +2611,14 @@ snapshots:
   fs-constants@1.0.0:
     optional: true
 
+  get-east-asian-width@1.6.0: {}
+
   github-from-package@0.0.0:
     optional: true
 
   ieee754@1.2.1: {}
+
+  indent-string@5.0.0: {}
 
   inherits@2.0.4:
     optional: true
@@ -2158,6 +2627,50 @@ snapshots:
     optional: true
 
   ini@6.0.0: {}
+
+  ink-testing-library@4.0.0(@types/react@19.2.17):
+    optionalDependencies:
+      '@types/react': 19.2.17
+
+  ink@7.1.0(@types/react@19.2.17)(react@19.2.7):
+    dependencies:
+      '@alcalzone/ansi-tokenize': 0.3.0
+      ansi-escapes: 7.3.0
+      ansi-styles: 6.2.3
+      auto-bind: 5.0.1
+      chalk: 5.6.2
+      cli-boxes: 4.0.1
+      cli-cursor: 4.0.0
+      cli-truncate: 6.1.0
+      code-excerpt: 4.0.0
+      es-toolkit: 1.49.0
+      indent-string: 5.0.0
+      is-in-ci: 2.0.0
+      patch-console: 2.0.0
+      react: 19.2.7
+      react-reconciler: 0.33.0(react@19.2.7)
+      scheduler: 0.27.0
+      signal-exit: 3.0.7
+      slice-ansi: 9.0.0
+      stack-utils: 2.0.6
+      string-width: 8.2.1
+      terminal-size: 4.0.1
+      type-fest: 5.7.0
+      widest-line: 6.0.0
+      wrap-ansi: 10.0.0
+      ws: 8.21.0
+      yoga-layout: 3.2.1
+    optionalDependencies:
+      '@types/react': 19.2.17
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  is-fullwidth-code-point@5.1.0:
+    dependencies:
+      get-east-asian-width: 1.6.0
+
+  is-in-ci@2.0.0: {}
 
   isexe@2.0.0: {}
 
@@ -2191,6 +2704,8 @@ snapshots:
       - supports-color
 
   long@5.3.2: {}
+
+  mimic-fn@2.1.0: {}
 
   mimic-response@3.1.0:
     optional: true
@@ -2236,13 +2751,21 @@ snapshots:
       wrappy: 1.0.2
     optional: true
 
+  onetime@5.1.2:
+    dependencies:
+      mimic-fn: 2.1.0
+
   os-paths@4.4.0: {}
 
   papaparse@5.5.3: {}
 
+  patch-console@2.0.0: {}
+
   path-expression-matcher@1.5.0: {}
 
   path-key@3.1.1: {}
+
+  pathe@1.1.2: {}
 
   picocolors@1.1.1: {}
 
@@ -2275,8 +2798,12 @@ snapshots:
       pvutils: 1.1.5
       tslib: 2.8.1
 
-  portless@0.14.0:
+  portless@0.15.1:
     optional: true
+
+  posthog-node@5.39.4:
+    dependencies:
+      '@posthog/core': 1.39.6
 
   prebuild-install@7.1.3:
     dependencies:
@@ -2336,6 +2863,13 @@ snapshots:
 
   re2js@1.3.3: {}
 
+  react-reconciler@0.33.0(react@19.2.7):
+    dependencies:
+      react: 19.2.7
+      scheduler: 0.27.0
+
+  react@19.2.7: {}
+
   readable-stream@3.6.2:
     dependencies:
       inherits: 2.0.4
@@ -2349,12 +2883,19 @@ snapshots:
 
   reflect-metadata@0.2.2: {}
 
+  restore-cursor@4.0.0:
+    dependencies:
+      onetime: 5.1.2
+      signal-exit: 3.0.7
+
   retry@0.13.1: {}
 
   safe-buffer@5.2.1:
     optional: true
 
   safe-stable-stringify@2.5.0: {}
+
+  scheduler@0.27.0: {}
 
   seek-bzip@2.0.0:
     dependencies:
@@ -2374,6 +2915,8 @@ snapshots:
 
   shebang-regex@3.0.0: {}
 
+  signal-exit@3.0.7: {}
+
   simple-concat@1.0.1:
     optional: true
 
@@ -2383,6 +2926,11 @@ snapshots:
       once: 1.4.0
       simple-concat: 1.0.1
     optional: true
+
+  slice-ansi@9.0.0:
+    dependencies:
+      ansi-styles: 6.2.3
+      is-fullwidth-code-point: 5.1.0
 
   smol-toml@1.6.1: {}
 
@@ -2396,7 +2944,11 @@ snapshots:
 
   sql.js@1.14.1: {}
 
-  streamx@2.27.0:
+  stack-utils@2.0.6:
+    dependencies:
+      escape-string-regexp: 2.0.0
+
+  streamx@2.28.0:
     dependencies:
       events-universal: 1.0.1
       fast-fifo: 1.3.2
@@ -2405,10 +2957,19 @@ snapshots:
       - bare-abort-controller
       - react-native-b4a
 
+  string-width@8.2.1:
+    dependencies:
+      get-east-asian-width: 1.6.0
+      strip-ansi: 7.2.0
+
   string_decoder@1.3.0:
     dependencies:
       safe-buffer: 5.2.1
     optional: true
+
+  strip-ansi@7.2.0:
+    dependencies:
+      ansi-regex: 6.2.2
 
   strip-json-comments@2.0.1:
     optional: true
@@ -2420,6 +2981,8 @@ snapshots:
   strtok3@10.3.5:
     dependencies:
       '@tokenizer/token': 0.3.0
+
+  tagged-tag@1.0.0: {}
 
   tar-fs@2.1.4:
     dependencies:
@@ -2442,10 +3005,12 @@ snapshots:
     dependencies:
       b4a: 1.8.1
       fast-fifo: 1.3.2
-      streamx: 2.27.0
+      streamx: 2.28.0
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
+
+  terminal-size@4.0.1: {}
 
   text-decoder@1.2.7:
     dependencies:
@@ -2480,9 +3045,13 @@ snapshots:
     dependencies:
       '@mixmark-io/domino': 2.2.0
 
+  type-fest@5.7.0:
+    dependencies:
+      tagged-tag: 1.0.0
+
   typebox@1.2.8: {}
 
-  typescript@5.9.3: {}
+  typescript@6.0.3: {}
 
   uint8array-extras@1.5.0: {}
 
@@ -2492,12 +3061,28 @@ snapshots:
 
   undici@8.5.0: {}
 
+  untun@0.1.3:
+    dependencies:
+      citty: 0.1.6
+      consola: 3.4.2
+      pathe: 1.1.2
+
   util-deprecate@1.0.2:
     optional: true
 
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
+
+  widest-line@6.0.0:
+    dependencies:
+      string-width: 8.2.1
+
+  wrap-ansi@10.0.0:
+    dependencies:
+      ansi-styles: 6.2.3
+      string-width: 8.2.1
+      strip-ansi: 7.2.0
 
   wrappy@1.0.2:
     optional: true
@@ -2515,6 +3100,8 @@ snapshots:
   xml-naming@0.1.0: {}
 
   yaml@2.9.0: {}
+
+  yoga-layout@3.2.1: {}
 
   zod@3.25.76: {}
 

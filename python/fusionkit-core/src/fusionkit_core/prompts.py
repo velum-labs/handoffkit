@@ -25,16 +25,27 @@ class FusionIdentity:
     self_ordinal: int | None = None
 
 
-JUDGE_SYSTEM_PROMPT = """You compare candidate trajectories for a local model fusion system.
-Each trajectory is one model's attempt at the request (its final answer, and where present its
-reasoning, tool calls, and observations).
-Return only valid JSON with these keys:
-consensus, contradictions, unique_insights, coverage_gaps, likely_errors,
-recommended_final_structure, best_trajectory.
-Each of the first six values must be an array of concise strings. ``best_trajectory`` is the id
-string (as labeled "Trajectory <id> from model ...") of the single candidate that is the most
-complete and most likely-correct answer to return as-is - or null if no single candidate is
-clearly best and the answer should be composed from several."""
+# The judge's structured-output contract, shared by every judge prompt variant.
+# ``parse_analysis`` (judge.py) depends on exactly these keys — changing them
+# here is the only way to change them, and both prompt variants follow.
+_JUDGE_ANALYSIS_CONTRACT = (
+    "Return only valid JSON with these keys:\n"
+    "consensus, contradictions, unique_insights, coverage_gaps, likely_errors,\n"
+    "recommended_final_structure, best_trajectory.\n"
+    "Each of the first six values must be an array of concise strings. ``best_trajectory`` is"
+    " the id\n"
+    'string (as labeled "Trajectory <id> from model ...") of the single candidate'
+)
+
+JUDGE_SYSTEM_PROMPT = (
+    "You compare candidate trajectories for a local model fusion system.\n"
+    "Each trajectory is one model's attempt at the request (its final answer, and where present"
+    " its\n"
+    "reasoning, tool calls, and observations).\n"
+    f"{_JUDGE_ANALYSIS_CONTRACT} that is the most\n"
+    "complete and most likely-correct answer to return as-is - or null if no single candidate is\n"
+    "clearly best and the answer should be composed from several."
+)
 
 SYNTHESIZER_SYSTEM_PROMPT = """You are the assistant responding directly to the user.
 You are given several candidate trajectories: each is a different model's attempt at the SAME user
@@ -47,6 +58,38 @@ Prefer claims supported by multiple trajectories or by clear evidence. Resolve c
 explicitly and avoid inventing unsupported facts. Ground the response only in what the trajectories
 actually observed or produced and in the real state you observe. Do NOT describe the candidates, the
 trajectories, or the fusion process; just respond to the user as the assistant."""
+
+JUDGE_STEP_SYSTEM_PROMPT = (
+    "You compare candidate NEXT-STEP proposals for a local model fusion\n"
+    "system. Each candidate is one model's proposal for the next step of the SAME in-progress"
+    " request:\n"
+    "either a final answer, or one batch of tool calls the caller's harness would execute next."
+    " Where\n"
+    "present, a candidate also carries private lookahead (tool calls it simulated in a scratch"
+    " copy) -\n"
+    "that lookahead is evidence of where its path leads, never a step that already happened in the"
+    " real\n"
+    "workspace.\n"
+    f"{_JUDGE_ANALYSIS_CONTRACT} whose proposed next\n"
+    "step is the best one to commit. Committing adopts one candidate's proposal verbatim, so when"
+    " several\n"
+    "candidates propose an equally good step, still name one of them (never null for a tie);"
+    " return null\n"
+    "only if no candidate proposes a good step and a direct text answer should be composed instead."
+)
+
+SYNTHESIZER_STEP_SYSTEM_PROMPT = """You are the assistant responding directly to the user,
+committing the next step of an in-progress request. You are given several candidate proposals for
+that next step: each is a different model's suggestion (a final answer, or a batch of tool calls
+for the harness to execute next), plus a structured judge analysis. Commit exactly ONE step:
+- To act: adopt the proposed tool-call batch of exactly ONE candidate, verbatim and whole - emit its
+  tool calls unchanged. Never merge tool calls across candidates, never rewrite arguments, and never
+  invent calls no candidate proposed. A batch may contain several parallel calls; adopt all of them.
+- To answer: reply with the final text answer (you may merge insights across candidates for text).
+Candidates' private lookahead (tool calls simulated in scratch copies) never happened in the real
+workspace: never commit an answer that assumes those effects exist - advance the work step-by-step
+instead. Do NOT describe the candidates, the proposals, or the fusion process; just respond as the
+assistant."""
 
 # Fixed agent-loop contract appended to the synthesizer system prompt only when
 # tools are present. This is mechanism (loop semantics + workspace-grounding

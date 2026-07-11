@@ -14,49 +14,50 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { componentColor, fmtDuration } from "@/lib/format";
-import type { StoredEvent } from "@/lib/types";
+import { candidateIdOf, modelIdOf } from "@/lib/types";
+import type { StoredSpan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
- * The raw event backstop: every ingested event for a session, filterable by
- * component and free text, with row click opening the event inspector. Makes
- * event types with no dedicated view (tool.execution, cursor.route, log)
+ * The raw span backstop: every ingested span for a session, filterable by
+ * component and free text, with row click opening the span inspector. Makes
+ * span names with no dedicated view (fusion.tool.execution, fusion.cost, …)
  * reachable.
  */
 export function EventTable({
-  events,
+  spans,
   startedAt,
   onInspect
 }: {
-  events: StoredEvent[];
+  spans: StoredSpan[];
   startedAt: number;
-  onInspect: (events: StoredEvent[]) => void;
+  onInspect: (spans: StoredSpan[]) => void;
 }) {
   const [component, setComponent] = useState<string>("all");
   const [query, setQuery] = useState("");
 
   const components = useMemo(() => {
-    const present = new Set(events.map((event) => event.component));
+    const present = new Set(spans.map((span) => span.component));
     return ["all", ...present];
-  }, [events]);
+  }, [spans]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return events.filter((event) => {
-      if (component !== "all" && event.component !== component) return false;
+    return spans.filter((span) => {
+      if (component !== "all" && span.component !== component) return false;
       if (q.length === 0) return true;
       const haystack = [
-        event.event_type,
-        event.component,
-        event.span_id,
-        event.candidate_id ?? "",
-        event.model_id ?? ""
+        span.name,
+        span.component,
+        span.span_id,
+        candidateIdOf(span) ?? "",
+        modelIdOf(span) ?? ""
       ]
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [events, component, query]);
+  }, [spans, component, query]);
 
   return (
     <div>
@@ -81,15 +82,15 @@ export function EventTable({
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter by type, span, model…"
-            aria-label="Filter events"
+            placeholder="Filter by name, span, model…"
+            aria-label="Filter spans"
             className="border-input bg-input/30 focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border pr-2.5 pl-8 text-sm outline-none focus-visible:ring-3"
           />
         </div>
       </div>
 
       {visible.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No matching events.</p>
+        <p className="text-muted-foreground text-sm">No matching spans.</p>
       ) : (
         <ScrollArea viewportClassName="max-h-[440px]">
           <Table>
@@ -97,36 +98,36 @@ export function EventTable({
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-[72px] text-right">Offset</TableHead>
                 <TableHead className="w-[120px]">Component</TableHead>
-                <TableHead>Event</TableHead>
-                <TableHead>Candidate / model</TableHead>
                 <TableHead>Span</TableHead>
+                <TableHead>Candidate / model</TableHead>
+                <TableHead className="w-[72px] text-right">Duration</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.map((event) => (
+              {visible.map((span) => (
                 <TableRow
-                  key={event.id}
+                  key={span.id}
                   className="cursor-pointer"
-                  onClick={() => onInspect([event])}
+                  onClick={() => onInspect([span])}
                 >
                   <TableCell className="mono text-muted-foreground text-right text-xs">
-                    {fmtDuration(Math.max(0, event.ts - startedAt))}
+                    {fmtDuration(Math.max(0, span.start_ms - startedAt))}
                   </TableCell>
                   <TableCell>
                     <span className="inline-flex items-center gap-1.5 text-xs">
                       <span
                         className="size-2 rounded-full"
-                        style={{ background: componentColor(event.component) }}
+                        style={{ background: componentColor(span.component) }}
                       />
-                      {event.component}
+                      {span.component}
                     </span>
                   </TableCell>
-                  <TableCell className={cn("mono text-xs")}>{event.event_type}</TableCell>
+                  <TableCell className={cn("mono text-xs")}>{span.name}</TableCell>
                   <TableCell className="mono text-muted-foreground max-w-[200px] truncate text-xs">
-                    {event.candidate_id ?? event.model_id ?? "—"}
+                    {candidateIdOf(span) ?? modelIdOf(span) ?? "—"}
                   </TableCell>
-                  <TableCell className="mono text-muted-foreground max-w-[140px] truncate text-xs">
-                    {event.span_id}
+                  <TableCell className="mono text-muted-foreground text-right text-xs">
+                    {span.end_ms - span.start_ms > 0 ? fmtDuration(span.end_ms - span.start_ms) : "—"}
                   </TableCell>
                 </TableRow>
               ))}

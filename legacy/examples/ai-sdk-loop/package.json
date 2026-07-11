@@ -1,0 +1,14 @@
+{
+  "name": "@fusionkit/example-ai-sdk-loop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Warrant example: AI SDK loop with governed remote tools.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@fusionkit/example-utils": "workspace:*",
+    "@fusionkit/handoff": "workspace:*",
+    "@fusionkit/testkit": "workspace:*",
+    "ai": "6.0.200"
+  }
+}

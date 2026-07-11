@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/model-gateway"
   },
-  "description": "Native local-model gateway: fronts an OpenAI-compatible local model and exposes the wire dialects each agent harness needs (OpenAI chat, Anthropic Messages, OpenAI Responses) so a local model can transparently back Claude Code, Codex, opencode, and Cursor.",
+  "description": "FusionKit harness gateway: wire dialect translation, streaming, durable sessions, cost metering, rate-limit handoff, and model-fusion backend routing.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -30,6 +30,17 @@
     "@fusionkit/kernel": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*"
-  }
+    "@fusionkit/runtime-utils": "workspace:*",
+    "@fusionkit/tracing": "workspace:*"
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "gateway",
+    "openai-compatible",
+    "streaming"
+  ]
 }

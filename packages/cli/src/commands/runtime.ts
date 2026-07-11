@@ -5,6 +5,11 @@ import {
   registerBuiltInWorkflows
 } from "@fusionkit/ensemble";
 
+import { bold, contentWidth, cyan, dim, wrapText } from "@fusionkit/cli-ui";
+
+import { contextFor } from "../shared/context.js";
+import { CliError } from "../shared/errors.js";
+
 const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[]; description: string }> = {
   direct: {
     scheduler: "direct-fast-path",
@@ -77,30 +82,72 @@ const WORKFLOW_DETAILS: Record<string, { scheduler: string; operators: string[];
 export function registerRuntime(program: Command): void {
   const runtime = program
     .command("runtime")
-    .description("inspect FusionKit runtime-kernel workflows and composition primitives");
+    .description("advanced/maintainer: inspect runtime-kernel workflows and composition primitives");
 
   runtime
     .command("list")
     .description("list built-in runtime workflows")
-    .action(() => {
+    .option("--json", "emit machine-readable JSON")
+    .action((_opts: { json?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
       registerBuiltInWorkflows();
       const ids = [...new Set([...listWorkflows(), ...Object.keys(WORKFLOW_DETAILS)])].sort();
+      if (ctx.json) {
+        ctx.emit({
+          workflows: ids.map((id) => ({ id, ...(WORKFLOW_DETAILS[id] ?? {}) }))
+        });
+        return;
+      }
+      const { presenter } = ctx;
+      presenter.header();
+      presenter.heading("runtime workflows");
+      const width = contentWidth();
       for (const id of ids) {
         const detail = WORKFLOW_DETAILS[id];
-        console.log(detail === undefined ? id : `${id}\t${detail.scheduler}\t${detail.description}`);
+        presenter.blank();
+        presenter.line(
+          detail === undefined ? `  ${bold(id)}` : `  ${bold(id)}  ${dim(`(${detail.scheduler})`)}`
+        );
+        for (const line of wrapText(detail?.description ?? "", width - 4)) {
+          if (line.length > 0) presenter.line(dim(`    ${line}`));
+        }
       }
+      presenter.blank();
+      presenter.note(`inspect one with ${bold("fusionkit runtime explain <workflow>")}`);
     });
 
   runtime
     .command("explain")
     .argument("<workflow>", "built-in workflow id")
     .description("explain a built-in workflow's scheduler and operator kinds")
-    .action((workflow: string) => {
+    .option("--json", "emit machine-readable JSON")
+    .action((workflow: string, _opts: { json?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
       registerBuiltInWorkflows();
       const detail = WORKFLOW_DETAILS[workflow];
       if (detail === undefined) {
-        throw new Error(`unknown built-in workflow ${workflow}; run 'fusionkit runtime list'`);
+        throw new CliError({
+          code: "unknown-workflow",
+          message: `unknown built-in workflow "${workflow}"`,
+          hint: "workflow ids come from the runtime kernel's built-in registry",
+          tryCommand: "fusionkit runtime list"
+        });
       }
-      console.log(JSON.stringify({ id: workflow, ...detail }, null, 2));
+      if (ctx.json) {
+        ctx.emit({ id: workflow, ...detail });
+        return;
+      }
+      const { presenter } = ctx;
+      presenter.header();
+      presenter.keyValue([
+        { label: "workflow", value: bold(workflow) },
+        { label: "scheduler", value: detail.scheduler }
+      ]);
+      presenter.blank();
+      presenter.heading("operators");
+      for (const operator of detail.operators) presenter.line(`  ${cyan(operator)}`);
+      presenter.blank();
+      const width = contentWidth();
+      for (const line of wrapText(detail.description, width)) presenter.line(dim(line));
     });
 }

@@ -30,5 +30,15 @@
     "@fusionkit/tools": "workspace:*",
     "@opencode-ai/sdk": "1.17.13",
     "zod": "4.4.3"
-  }
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "llm",
+    "ensemble",
+    "coding-agent",
+    "opencode",
+    "harness",
+    "adapter"
+  ]
 }

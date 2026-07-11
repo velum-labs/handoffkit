@@ -1,7 +1,7 @@
 /**
  * Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cursorkit bridge, and the Cursor ensemble harness adapter.
  */
-import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
+import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
 import type { ToolIntegration } from "@fusionkit/tools";
 import { createDriverHarness } from "@fusionkit/ensemble";
 import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";
@@ -25,7 +25,7 @@ export const cursorTool: ToolIntegration = {
     [
       "Cursor (via Cursorkit backend):",
       `  cursor-agent --endpoint ${note ?? gatewayUrl} --model ${FUSION_PANEL_MODEL}`,
-      `  Cursorkit model backend: ${gatewayUrl.replace(/\/+$/, "")}/v1/chat/completions`
+      `  Cursorkit model backend: ${trimTrailingSlashes(gatewayUrl)}/v1/chat/completions`
     ].join("\n"),
   modes: ["fusion", "local"],
   harnessKinds: ["cursor-acp", "cursor-desktop"],
@@ -38,8 +38,7 @@ export const cursorTool: ToolIntegration = {
       ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
-      ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-      ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+      ...(options.trace !== undefined ? { trace: options.trace } : {}),
       ...(options.turn !== undefined ? { turn: options.turn } : {})
     }),
   harness: {
@@ -98,8 +97,7 @@ function cursorDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter
     driver: createCursorDriver(),
     fusionBackendUrl: options.fusionBackendUrl,
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
-    ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
-    ...(options.parentSpanId !== undefined ? { parentSpanId: options.parentSpanId } : {}),
+    ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),
     configForModel: (route) =>
@@ -131,5 +129,10 @@ export {
   cursorIdeModelsJson
 } from "./bridge-config.js";
 export { cursorIdeInstructions, cursorInstructions, launchCursor } from "./launch.js";
+export {
+  CURSOR_AGENTS_DIRNAME,
+  cursorSubagentMarkdown,
+  scaffoldCursorSubagents
+} from "./subagents.js";
 export { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";
 export type { CursorDriverConfig } from "./driver.js";

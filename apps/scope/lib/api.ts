@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { EnvironmentRollup, ModelRollup } from "./rollups";
+import type { CostRollup, EnvironmentRollup, JudgeRollup, ModelRollup } from "./rollups";
 import type { SessionDetail } from "./sessions";
 import type { RawEnvironment } from "./types";
 import { useTraceStream } from "./useLive";
@@ -25,7 +25,7 @@ export type SessionSummary = {
   environment: RawEnvironment | null;
   promptPreview: string | null;
   finalOutput: string | null;
-  eventCount: number;
+  spanCount: number;
   durationMs: number;
 };
 
@@ -101,9 +101,62 @@ function useLiveResource<T>(url: string, key: string, initial: T): { data: T; lo
   return { data, loading, error, live, refetch };
 }
 
-export function useModels(): { models: ModelRollup[]; loading: boolean; error?: string; live: boolean } {
-  const { data, loading, error, live } = useLiveResource<ModelRollup[]>("/api/models", "models", []);
-  return { models: data, loading, error, live };
+const EMPTY_COSTS: CostRollup = {
+  totalUsd: 0,
+  entries: 0,
+  unknownEntries: 0,
+  sessionsWithCost: 0,
+  perModel: [],
+  perStage: []
+};
+
+export function useModels(): {
+  models: ModelRollup[];
+  costs: CostRollup;
+  loading: boolean;
+  error?: string;
+  live: boolean;
+} {
+  const [models, setModels] = useState<ModelRollup[]>([]);
+  const [costs, setCosts] = useState<CostRollup>(EMPTY_COSTS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const refetch = useCallback(() => {
+    fetch("/api/models")
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return (await response.json()) as { models: ModelRollup[]; costs?: CostRollup };
+      })
+      .then((payload) => {
+        setModels(payload.models);
+        setCosts(payload.costs ?? EMPTY_COSTS);
+        setError(undefined);
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => refetch(), [refetch]);
+
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const live = useTraceStream(
+    useCallback(() => {
+      if (timer.current !== undefined) clearTimeout(timer.current);
+      timer.current = setTimeout(refetch, REFRESH_DEBOUNCE_MS);
+    }, [refetch])
+  );
+
+  return { models, costs, loading, error, live };
+}
+
+export function useJudge(): { judge: JudgeRollup | undefined; loading: boolean; error?: string; live: boolean } {
+  const { data, loading, error, live } = useLiveResource<JudgeRollup | undefined>(
+    "/api/judge",
+    "judge",
+    undefined
+  );
+  return { judge: data, loading, error, live };
 }
 
 export function useEnvironments(): {

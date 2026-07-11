@@ -1,0 +1,308 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "width": 110
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cell"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Topology hash"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 16,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "legendFormat": "Score",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_cost_usd{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "legendFormat": "Cost USD",
+          "range": false,
+          "instant": true,
+          "refId": "B",
+          "format": "table"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_cost_per_resolve{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "legendFormat": "Cost / resolve",
+          "range": false,
+          "instant": true,
+          "refId": "C",
+          "format": "table"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_latency_p95_seconds{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "legendFormat": "P95 latency",
+          "range": false,
+          "instant": true,
+          "refId": "D",
+          "format": "table"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_pareto{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "legendFormat": "Pareto",
+          "range": false,
+          "instant": true,
+          "refId": "E",
+          "format": "table"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_rank{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "legendFormat": "Rank",
+          "range": false,
+          "instant": true,
+          "refId": "F",
+          "format": "table"
+        }
+      ],
+      "title": "Score / cost / latency frontier",
+      "type": "table",
+      "description": "Pareto=1 marks non-dominated cells; compare score against spend and tail latency.",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "cell_id",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            },
+            "renameByName": {
+              "Value #A": "Score",
+              "Value #B": "Cost USD",
+              "Value #C": "Cost / resolve",
+              "Value #D": "P95 latency",
+              "Value #E": "Pareto",
+              "Value #F": "Rank",
+              "benchmark 1": "Benchmark",
+              "cell_id": "Cell",
+              "commit 1": "Commit",
+              "generation": "Generation",
+              "generation 1": "Generation",
+              "judge 1": "Judge",
+              "k 1": "K",
+              "panel 1": "Panel",
+              "run_id 1": "Run",
+              "topology 1": "Topology",
+              "topology_hash 1": "Topology hash"
+            },
+            "indexByName": {
+              "Value #F": 0,
+              "cell_id": 1,
+              "Value #A": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "Value #D": 5,
+              "Value #E": 6,
+              "topology 1": 7,
+              "k 1": 8,
+              "panel 1": 9,
+              "commit 1": 10,
+              "topology_hash 1": 11
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "amp"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "legendFormat": "{{cell_id}}",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Score by cell",
+      "type": "bargauge"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 40,
+  "tags": [
+    "hyperkit",
+    "hypergrid",
+    "pareto"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate, run_id)",
+        "includeAll": true,
+        "label": "Run Id",
+        "multi": false,
+        "name": "run_id",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate, run_id)",
+          "refId": "var-run_id"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\"}, benchmark)",
+        "includeAll": true,
+        "label": "Benchmark",
+        "multi": false,
+        "name": "benchmark",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\"}, benchmark)",
+          "refId": "var-benchmark"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "amp"
+        },
+        "definition": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\"}, generation)",
+        "includeAll": true,
+        "label": "Generation",
+        "multi": false,
+        "name": "generation",
+        "query": {
+          "query": "label_values(hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\"}, generation)",
+          "refId": "var-generation"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Hypergrid Pareto",
+  "uid": "hyperkit-pareto",
+  "version": 1
+}

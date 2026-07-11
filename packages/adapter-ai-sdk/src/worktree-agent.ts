@@ -5,15 +5,9 @@ import { dirname, relative, resolve } from "node:path";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 
-import {
-  emitTrace,
-  modelCallFinishedPayload,
-  modelCallStartedPayload,
-  newSpanId,
-  TRACE_CANDIDATE_HEADER,
-  TRACE_ID_HEADER,
-  TRACE_SPAN_HEADER
-} from "@fusionkit/protocol";
+import { ATTR } from "@fusionkit/protocol";
+import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
+import type { FusionSpan, FusionTraceCarrier } from "@fusionkit/tracing";
 
 /**
  * A uniform, real model-driven agent loop for trajectory-level fusion. One
@@ -54,18 +48,27 @@ export type WorktreeAgentInput = {
   /** Model name to request from the endpoint. */
   model: string;
   apiKey?: string;
-  /** Max agent steps (tool round-trips) before stopping. Defaults to 12. */
-  maxSteps?: number;
+  /**
+   * Finite step-boundary budget (receding-horizon lookahead). A step boundary
+   * is one generation that emitted tool calls; a generation's parallel batch
+   * counts once and executes atomically. Batches 1..k-1 execute in the
+   * worktree; the k-th generation's batch is captured **unexecuted** as the
+   * candidate's terminal proposal. Unset = unbounded rollout (aggregate at
+   * the final answer, bounded only by the internal safety cap).
+   */
+  k?: number;
   /** Per-`run` command timeout in ms. Defaults to 120000. */
   commandTimeoutMs?: number;
   abortSignal?: AbortSignal;
-  /** Observability correlation id; when set, steps and model calls are traced. */
-  traceId?: string;
+  /** Candidate span carrier; when set, the agent's model call is traced under it. */
+  trace?: FusionTraceCarrier;
   /** Candidate id this agent run belongs to (for trace correlation). */
   candidateId?: string;
-  /** Parent span (e.g. the ensemble candidate span) for waterfall linking. */
-  parentSpanId?: string;
-  /** User-turn index this run belongs to (stamped on model.call events). */
+  /** Panel member id (short handle) this run belongs to. */
+  modelId?: string;
+  /** Called with each captured trajectory step, live (the candidate tracer). */
+  onStep?: (step: TrajectoryStep) => void;
+  /** User-turn index this run belongs to (stamped on model-call spans). */
   turn?: number;
 };
 
@@ -227,20 +230,70 @@ function stringifyOutput(value: unknown): string {
   }
 }
 
+/**
+ * Sentinel returned instead of executing a tool call at the k-th step
+ * boundary: the call is the candidate's terminal *proposal* (judged, maybe
+ * adopted by the caller), never executed here. Sentinel observations are
+ * stripped from the captured trajectory so candidates end at their proposed
+ * `function_call` items.
+ */
+const PROPOSAL_SENTINEL = "[proposal boundary: call captured for judging, not executed]";
+
+/**
+ * Internal safety cap on an unbounded (k = ∞) rollout so a looping model
+ * cannot run forever. Not a tuning knob: bounded rollouts are expressed with
+ * `k`, never by adjusting this.
+ */
+const UNBOUNDED_ROLLOUT_CAP = 12;
+
+type AnyTool = { execute?: (args: never, options: never) => unknown };
+
+/**
+ * Wrap a toolset so calls at or past the k-th step boundary are captured as
+ * proposals instead of executing. `currentGeneration` reads the live 1-based
+ * generation ordinal (a generation's whole parallel batch shares one ordinal,
+ * so a batch is proposed atomically).
+ */
+function withProposalBoundary<T extends Record<string, AnyTool>>(
+  tools: T,
+  k: number,
+  currentGeneration: () => number
+): T {
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, entry]) => [
+      name,
+      {
+        ...entry,
+        execute: async (args: never, options: never): Promise<unknown> => {
+          if (currentGeneration() >= k) return PROPOSAL_SENTINEL;
+          return await entry.execute?.(args, options);
+        }
+      }
+    ])
+  ) as T;
+}
+
 /** Run one panel model as a real agent over the worktree and capture its trajectory. */
 export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<WorktreeAgentResult> {
-  const agentSpan = newSpanId();
-  const traceHeaders: Record<string, string> | undefined =
-    input.traceId !== undefined
-      ? {
-          [TRACE_ID_HEADER]: input.traceId,
-          [TRACE_SPAN_HEADER]: agentSpan,
-          ...(input.candidateId !== undefined ? { [TRACE_CANDIDATE_HEADER]: input.candidateId } : {})
-        }
+  const identity = {
+    [ATTR.GEN_AI_OPERATION_NAME]: "chat",
+    [ATTR.GEN_AI_REQUEST_MODEL]: input.model,
+    [ATTR.FUSION_CANDIDATE_ID]: input.candidateId,
+    [ATTR.FUSION_TRAJECTORY_ID]: input.candidateId,
+    [ATTR.FUSION_MODEL_ID]: input.modelId,
+    [ATTR.FUSION_TURN]: input.turn
+  };
+  // One `chat` span covers the whole agent tool loop (the panel model server
+  // adds its own per-request chat spans as children via traceparent).
+  const callSpan: FusionSpan | undefined =
+    input.trace !== undefined
+      ? startFusionSpan("panel-model", `chat ${input.model}`, input.trace, identity)
       : undefined;
+  const traceHeaders = callSpan !== undefined ? headersOf(callSpan.carrier) : undefined;
   let baseUrlEnd = input.baseUrl.length;
   while (baseUrlEnd > 0 && input.baseUrl[baseUrlEnd - 1] === "/") baseUrlEnd -= 1;
-  // TODO(@000alen): why are OpenAI-compatible provider name, /v1 suffix, and local dummy apiKey hardcoded here? Reuse the shared OpenAI-compatible endpoint helper used by OpenAiBackend/ManagedModelServer.
+  // The worktree agent talks to a local OpenAI-compatible server, so the
+  // provider name, /v1 prefix, and dummy key stay tied to this launch path.
   const provider = createOpenAICompatible({
     name: "fusion-panel-agent",
     baseURL: `${input.baseUrl.slice(0, baseUrlEnd)}/v1`,
@@ -256,43 +309,25 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
     return full;
   };
   const emitStep = (step: TrajectoryStep): void => {
-    if (input.traceId === undefined) return;
-    emitTrace({
-      component: "panel-model",
-      event_type: "trajectory.step",
-      traceId: input.traceId,
-      spanId: agentSpan,
-      ...(input.parentSpanId !== undefined ? { parentSpanId: input.parentSpanId } : {}),
-      ...(input.candidateId !== undefined ? { candidateId: input.candidateId } : {}),
-      modelId: input.model,
-      payload: { step }
-    });
-  };
-  const emitModelCall = (eventType: "model.call.started" | "model.call.finished", payload: Record<string, unknown>): void => {
-    if (input.traceId === undefined) return;
-    emitTrace({
-      component: "panel-model",
-      event_type: eventType,
-      traceId: input.traceId,
-      spanId: agentSpan,
-      ...(input.parentSpanId !== undefined ? { parentSpanId: input.parentSpanId } : {}),
-      ...(input.candidateId !== undefined ? { candidateId: input.candidateId } : {}),
-      modelId: input.model,
-      payload
-    });
+    input.onStep?.(step);
   };
 
-  const tools = worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000);
-  emitModelCall(
-    "model.call.started",
-    modelCallStartedPayload({
-      model: input.model,
-      systemPrompt: AGENT_SYSTEM_PROMPT,
-      prompt: input.prompt,
-      tools: Object.keys(tools),
-      ...(input.turn !== undefined ? { turn: input.turn } : {})
-    })
-  );
+  // Finite k: 1-based generation ordinal; the batch of the k-th generation is
+  // captured unexecuted (the candidate's terminal proposal) and the loop stops
+  // at that boundary. Observations count nothing extra — every tool call
+  // conservatively marks a step boundary, per-generation, batch-atomic.
+  let generation = 1;
+  const rawTools = worktreeTools(input.worktree, input.commandTimeoutMs ?? 120_000);
+  const tools =
+    input.k !== undefined
+      ? withProposalBoundary(rawTools, input.k, () => generation)
+      : rawTools;
+  callSpan?.marker("panel-model", "fusion.model_call.started", {
+    ...identity,
+    [ATTR.FUSION_SYSTEM_PROMPT]: AGENT_SYSTEM_PROMPT,
+    [ATTR.FUSION_PROMPT]: input.prompt,
+    [ATTR.FUSION_TOOL_COUNT]: Object.keys(tools).length
+  });
   const startedAt = Date.now();
 
   try {
@@ -301,11 +336,15 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
       system: AGENT_SYSTEM_PROMPT,
       prompt: input.prompt,
       tools,
-      stopWhen: stepCountIs(input.maxSteps ?? 12),
+      stopWhen: stepCountIs(input.k ?? UNBOUNDED_ROLLOUT_CAP),
       onStepFinish: (step) => {
         for (const normalized of extractSteps(step.content as AgentContentPart[])) {
+          // Sentinel observations are bookkeeping, not evidence: the captured
+          // trajectory must end at the proposed function_call items.
+          if (normalized.type === "observation" && normalized.text === PROPOSAL_SENTINEL) continue;
           emitStep(push(normalized));
         }
+        generation += 1;
       },
       ...(input.abortSignal !== undefined ? { abortSignal: input.abortSignal } : {})
     });
@@ -313,19 +352,22 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
     const toolCallCount = steps.filter((step) => step.type === "tool_call").length;
     const finalOutput = result.text ?? "";
     emitStep(push({ type: "output", text: finalOutput }));
-    emitModelCall(
-      "model.call.finished",
-      modelCallFinishedPayload({
-        model: input.model,
-        finalOutput,
-        finishReason: result.finishReason ?? "stop",
-        stepCount: steps.length,
-        toolCallCount,
-        latencyS: (Date.now() - startedAt) / 1000,
-        ...(input.turn !== undefined ? { turn: input.turn } : {}),
-        ...(normalizeUsage(result.usage) !== undefined ? { usage: normalizeUsage(result.usage) } : {})
-      })
-    );
+    const usage = normalizeUsage(result.usage);
+    callSpan?.end({
+      status: "succeeded",
+      attributes: {
+        [ATTR.GEN_AI_RESPONSE_FINISH_REASONS]: [result.finishReason ?? "stop"],
+        [ATTR.GEN_AI_USAGE_INPUT_TOKENS]: usage?.prompt_tokens,
+        [ATTR.GEN_AI_USAGE_OUTPUT_TOKENS]: usage?.completion_tokens,
+        [ATTR.FUSION_USAGE]: jsonAttr(
+          usage !== undefined ? { ...usage, latency_s: (Date.now() - startedAt) / 1000 } : { latency_s: (Date.now() - startedAt) / 1000 }
+        ),
+        [ATTR.FUSION_FINISH_REASON]: result.finishReason ?? "stop",
+        [ATTR.FUSION_STEP_COUNT]: steps.length,
+        [ATTR.FUSION_TOOL_CALL_COUNT]: toolCallCount,
+        [ATTR.FUSION_FINAL_OUTPUT]: finalOutput
+      }
+    });
     return {
       status: "succeeded",
       steps,
@@ -336,16 +378,14 @@ export async function runWorktreeAgent(input: WorktreeAgentInput): Promise<Workt
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     emitStep(push({ type: "output", text: `agent failed: ${message}` }));
-    emitModelCall(
-      "model.call.finished",
-      modelCallFinishedPayload({
-        model: input.model,
-        finishReason: "error",
-        latencyS: (Date.now() - startedAt) / 1000,
-        error: message,
-        ...(input.turn !== undefined ? { turn: input.turn } : {})
-      })
-    );
+    callSpan?.end({
+      status: "failed",
+      error: message,
+      attributes: {
+        [ATTR.FUSION_FINISH_REASON]: "error",
+        [ATTR.FUSION_USAGE]: jsonAttr({ latency_s: (Date.now() - startedAt) / 1000 })
+      }
+    });
     return { status: "failed", steps, finalOutput: `agent failed: ${message}`, finishReason: "error", toolCallCount: 0 };
   }
 }

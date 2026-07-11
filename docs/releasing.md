@@ -35,7 +35,8 @@ visible in plans for version awareness, never published by this tool.
 - `release/workspace.release.json`: static topology (repos, ecosystems, tags,
   publish workflows, version sources, dependency edges, tracked surfaces).
 - `release/desired.json`: target version per unit (the thing you edit).
-- `release/state.json`: last-applied cache, reconciled by `refresh`.
+- `release/state.json`: local, gitignored last-applied cache. It is reconcilable
+  and regenerated from registries + git tags with `node scripts/release.mjs refresh`.
 - `release/.plans/*.plan.json`: generated plan artifacts (gitignored).
 
 ## Workflow
@@ -55,14 +56,35 @@ node scripts/release.mjs apply --auto-approve
 ```
 
 `apply` walks the DAG: for each releasing unit it propagates the protocol pin
-(if applicable), bumps versions, updates `CHANGELOG.md` (handoffkit), commits
-(staging only the files it changed, never `git add -A`), pushes, then either
-creates a published GitHub Release (handoffkit, cursorkit, fusionkit-pypi,
-mlx-lm) or pushes the `model-fusion-protocol-v*` tag, and waits for the publish
-workflow before starting dependents. Before mutating each unit it asserts a
-clean tree, the expected branch, up-to-date-with-remote, and no drift from the
-plan. It stops at the first failure and is safe to re-run (completed units
-no-op).
+(if applicable, refreshing `pnpm-lock.yaml` so `--frozen-lockfile` installs
+keep working), bumps versions, promotes the changelog (for units with a
+`changelog` file in the topology — currently handoffkit), runs the unit's
+declared `preflight` command, commits (staging only the files it changed,
+never `git add -A`), pushes, then either creates a published GitHub Release
+(handoffkit, cursorkit, fusionkit-pypi, mlx-lm) or pushes the
+`model-fusion-protocol-v*` tag, and waits for the publish workflow before
+starting dependents. Before mutating each unit it asserts a clean tree, the
+expected branch, up-to-date-with-remote, and no drift from the plan. It stops
+at the first failure and is safe to re-run (completed units no-op).
+
+## Changelog and release notes
+
+Between releases, notes accumulate by hand under the `## Unreleased` heading in
+`CHANGELOG.md`. At release time the `changelog` action promotes that section to
+`## <version> - <date>` (leaving a fresh empty `## Unreleased` on top), uses it
+as the GitHub Release body, and regenerates the docs-site changelog page
+(`apps/docs/content/docs/changelog.mdx`, via
+`scripts/sync-docs-changelog.mjs`) so all three surfaces ship the same notes in
+the same release commit. If nothing accumulated, a fallback "release cut"
+entry is written and a warning is printed — write real notes as you land
+changes. `pnpm check` fails when the docs page drifts from `CHANGELOG.md`.
+
+## Preflight
+
+Each unit's `preflight` command in `release/workspace.release.json` (e.g.
+`pnpm check` for handoffkit, `uv build --all-packages` for fusionkit-pypi) runs
+after the bump and before the commit, so a broken release candidate aborts
+before anything is pushed or published.
 
 ## Agent / scripted usage
 

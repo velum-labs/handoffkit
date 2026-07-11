@@ -27,9 +27,11 @@ export {
   CANDIDATE_ISOLATION_DEFAULTS,
   escapeMarkdownCell,
   markdownTable,
-  RUNTIME_TIMEOUT_MS
+  RUNTIME_TIMEOUT_MS,
+  trimTrailingSlashes
 } from "@fusionkit/runtime-utils";
 export type {
+  FusedEnsembleInfo,
   ToolDashboardLiveSmoke,
   ToolDashboardMetadata,
   ToolDashboardSmoke,
@@ -40,7 +42,13 @@ export type {
 } from "./types.js";
 export { createToolRegistry } from "./registry.js";
 export type { ToolRegistry } from "./registry.js";
-export { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL, LOCAL_MODEL_LABEL } from "./constants.js";
+export {
+  CURSOR_BRIDGE_MODEL_NAME,
+  DEFAULT_ENSEMBLE_NAME,
+  FUSION_PANEL_MODEL,
+  fusionModelId,
+  LOCAL_MODEL_LABEL
+} from "./constants.js";
 export {
   envFlagEnabled,
   HARNESS_DRIVERS_FLAG,
@@ -57,3 +65,13 @@ export {
 } from "./env.js";
 export type { BuildChildEnvInput } from "./env.js";
 export { buildSkippedCandidate } from "./candidate.js";
+export {
+  deriveFusedSubagents,
+  fusedSubagentDescription,
+  fusedSubagentDeveloperInstructions,
+  fusedSubagentMembers
+} from "./fused-subagents.js";
+export type {
+  FusedSubagentDefinition,
+  FusedSubagentDescriptionStyle
+} from "./fused-subagents.js";
